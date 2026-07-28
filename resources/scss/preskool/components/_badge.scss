@@ -1,0 +1,101 @@
+@use "../utils/variables";
+
+.badge {
+    &.badge-primary {
+        background: rgba(variables.$primary, 0.1);
+        box-shadow: 0 1px 1px rgba(variables.$primary, 0.5);
+        color: variables.$primary;
+        
+    }
+}
+@each $color, $value in variables.$theme-colors {
+    .badge {
+        &.badge-#{$color} {
+            background: #{$value};
+            color: variables.$white;
+        }
+        &.badge-soft-#{$color} {
+            background: rgba($value, 0.1);
+            color: $value;
+        }
+    }
+}
+.badge{
+    padding: .25rem .45rem;
+    text-transform:capitalize;
+    font-weight: variables.$font-weight-semibold;
+    letter-spacing: 0.5px;
+    border-radius: variables.$border-radius;
+    &.badge-xs {
+        font-size: 10px;
+        padding: 0px 5px;
+        line-height: 18px;
+    }
+    &.badge-sm {
+        font-size: 11px;
+        padding: 5px 8px;
+        line-height: 11px;
+    }
+    &.badge-md {
+        font-size: 12px;
+        padding: 5px 12px;
+        line-height: 1.5;
+    }
+    &.badge-lg {
+        font-size: variables.$font-size-14;
+        padding: 0px 10px;
+        line-height: 30px;
+    }
+    &.badge-xl {
+        font-size: variables.$font-size-16;
+        padding: 0px 15px;
+        line-height: 35px;
+    }
+    &.badge-soft-skyblue {
+        background: variables.$skyblue-100;
+        color: variables.$skyblue;
+    }
+}
+.badge.arrow {
+    width: 20px;
+    height: 20px;
+    background: variables.$light-200;
+    color: variables.$dark;
+    &:hover {
+        background: variables.$primary;
+        color: variables.$white;
+    }
+}
+.badge.bg-light.arrow:hover {
+    background: variables.$dark !important;
+}
+.badge-primary-hover:hover {
+    background: variables.$primary !important;
+    border-color: variables.$primary !important;
+    color: variables.$white !important;
+}
+.badge-danger-hover:hover {
+    background: variables.$danger !important;
+    border-color: variables.$danger !important;
+    color: variables.$white !important;
+}
+// Outline badge
+@each $state, $value in variables.$theme-colors {
+    .badge-outline-#{$state} {
+        color: $value;
+        border: 1px solid $value;
+        background-color: transparent;
+
+        &[href] {
+            color: $value;
+            text-decoration: none;
+            background-color: rgba($value, 0.1);
+
+            &:is(:hover, :focus) {
+                color: $value;
+                text-decoration: none;
+                background-color: rgba($value, 0.1);
+            }
+        }
+    }
+}

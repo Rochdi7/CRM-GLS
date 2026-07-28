@@ -1,0 +1,21 @@
+@use "../utils/variables";
+
+.class-progress {
+    .progress {
+        height: 26px;
+        border-radius: 70px;
+        .progress-bar {
+            border-radius: 20px;
+            .avatar-list-stacked {
+                margin-left: 5px;
+            }
+        }
+        .badge {
+            padding: 5px;
+            background-color: variables.$light-100;
+            color: variables.$dark;
+            border-radius: 45px;
+            margin: 5px 5px 5px 15px;
+        }
+    }
+}

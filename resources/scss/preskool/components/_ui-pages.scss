@@ -1,0 +1,40 @@
+@use "../utils/variables";
+
+[data-bs-toggle="card-fullscreen"] {
+  svg {
+    width: 15px;
+    height: 15px;
+  }
+} 
+[data-bs-toggle="card-remove"] {
+  svg {
+    width: 15px;
+    height: 15px;
+  }
+} 
+svg {
+  &.collapse-open,&.collapse-close {
+    width: 15px;
+    height: 15px;
+  }
+}
+.btn-icon {
+  &.btn-danger-light {
+    color: variables.$danger-900;
+    background: variables.$danger-100;
+  }
+}
+@media (min-width: 576px) {
+  .mx-sm-7 {
+    margin-inline: 3rem !important;
+  }
+}
+.grid-structure {
+    .grid-container {
+        background-color: variables.$light-900;
+        margin-bottom: 10px;
+        font-size: 0.8rem;
+        font-weight: variables.$font-weight-semibold;
+        padding: 10px 20px;
+    }
+}

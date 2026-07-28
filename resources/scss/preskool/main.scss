@@ -1,0 +1,181 @@
+/*---------------------------------------------------------------------------------
+
+    Template Name: PreSkool - School Management Admin Dashboard Template
+    Version      : 1.8.3
+    Template URI: https://preclinic.dreamstechnologies.com/
+    Author: Dreams Technologies
+    Author URI: https://themeforest.net/user/dreamstechnologies
+
+-----------------------------------------------------------------------------------
+
+/*============================
+[Table of CSS]
+
+variables
+switcher
+accordion
+alerts
+badge
+breadcrumb
+buttons
+cards
+dropdown
+forms
+input_group
+list_group
+modals
+navbar
+navs_tabs
+pagination
+popovers
+progress
+tables
+toast
+tooltips
+authentication
+
+1. General
+    variables
+    switcher
+    base
+    Typography
+2. Components
+3. Layout
+4. Plugins
+5. Pages
+
+
+
+
+
+
+1. General
+2. Table
+3. Helper Class
+4. Bootstrap Classes
+5. Header
+6. Sidebar
+7. Content
+8. Login
+9. Dashboard
+10. Activity
+11. Select2
+12. Nav tabs
+13. Holidays
+14. Edit Profile
+15. Chat
+16. Focus Label
+17. Leave
+18. Employee
+19. Events
+20. Profile
+21. Notifications
+22. Roles & Permissions
+23. Chat Right Sidebar
+24. Invoice
+25. Doctors
+26. Add Doctor
+27. Payslip
+28. Attendance
+29. Inbox
+30. Mail View
+31. Blog
+32. Blog View
+33. UI Kit
+34. Error
+35. Lock Screen
+36. Voice call
+37. Video Call
+38. Incoming call
+39. Notification settings
+40. Chat Sidebar
+41. Gallery
+42. Settings
+43. Responsive
+72. Box layout
+73. RTL
+74. Responsive
+
+========================================*/
+
+
+/****** Utils ******/
+@use "utils/variables";
+@use "utils/mixins";
+
+/******* Base *******/
+@use "base/base";
+@use "base/background";
+
+/****** Layout ******/
+@use "layout/common";
+@use "layout/content";
+@use "layout/header";
+@use "layout/sidebar";
+@use "layout/notification";
+@use "layout/theme-settings";
+
+/******* Components ******/
+@use "components/avatar";
+@use "components/boostrap";
+@use "components/button";
+@use "components/badge";
+@use "components/border";
+@use "components/calendar";
+@use "components/chart";
+@use "components/call";
+@use "components/chat";
+@use "components/dropdown";
+@use "components/email";
+@use "components/file-manager";
+@use "components/file-upload";
+@use "components/icons";
+@use "components/progress";
+@use "components/pagination";
+@use "components/font";
+@use "components/typography";
+@use "components/alerts";
+@use "components/popovers";
+@use "components/forms";
+@use "components/notes";
+@use "components/todo";
+@use "components/tables";
+@use "components/accordion";
+@use "components/breadcrumb";
+@use "components/cards";
+@use "components/tooltips";
+@use "components/navs-tabs";
+@use "components/ui-pages";
+@use "components/popup";
+@use "components/grid";
+@use "components/sweetalert";
+
+/******* Pages ******/
+@use "pages/student";
+@use "pages/student-details";
+@use "pages/notice-board";
+@use "pages/events";
+@use "pages/settings";
+@use "pages/blog";
+@use "pages/dashboard";
+@use "pages/login";
+@use "pages/error";
+@use "pages/invoice";
+@use "pages/student-dashboard";
+@use "pages/parent-dashboard";
+@use "pages/teacher-dashboard";
+@use "pages/themes";
+
+
+/******* Vendors ******/
+@use "vendors/select2";
+@use "vendors/datatables";
+@use "vendors/rangepicker-plugin";
+@use "vendors/simplebar";
+@use "vendors/dragula";
+@use "vendors/sweetalert2";
+
+
+
+
+

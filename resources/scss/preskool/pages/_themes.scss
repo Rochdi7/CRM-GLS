@@ -1,0 +1,2426 @@
+@use "sass:color";
+@use "../utils/mixins";
+@use "../utils/variables";
+
+.layout-box-mode {
+    background: variables.$light-200;
+    .main-wrapper {
+        max-width: 1350px;
+        margin: auto;
+        @include mixins.respond-below(xxl) {
+            max-width: 1170px;
+        }
+        @include mixins.respond-below(xl) {
+            max-width: 950px;
+        }
+        @include mixins.respond-below(lg) {
+            max-width: 100%;
+        }
+    }
+    .header {
+        max-width: 1350px;
+        margin: auto;
+        @include mixins.respond-below(xxl) {
+            max-width: 1170px;
+        }
+        @include mixins.respond-below(xl) {
+            max-width: 950px;
+        }
+        @include mixins.respond-below(lg) {
+            max-width: 100%;
+        }
+    }
+    .sidebar {
+        left: unset;
+    }
+    .page-wrapper {
+        .content {
+            @include mixins.respond-below(lg) {
+                padding-right: 15px;
+            }
+        }  
+    }
+}
+
+body {
+    &.layout-mode-rtl {
+        direction: rtl;
+        .sidebar {
+            right: 0;
+            left: unset;
+            border-right: 0;
+            border-left: 1px solid variables.$light;
+            .sidebar-menu {
+                > ul > li ul li a span  {
+                    margin-right: 10px;
+                    margin-left: 0;
+                }
+                .menu-arrow {
+                    left: 10px;
+                    right: unset;
+                }
+                > ul > li .submenu-hdr::after {
+                    margin-right: 8px;
+                    margin-left: 0;
+                }
+            }
+        }
+        .header-left {
+            float: right;
+            border-right: 0;
+            border-left: 1px solid variables.$light;
+        }
+        .page-wrapper {
+            margin-right: 252px;
+            margin-left: 0;
+        }
+        &.mini-sidebar {
+            .page-wrapper {
+                margin-right: 80px;
+            }
+        }
+        .header {
+            .date-range {
+                padding-right: 30px !important;
+                padding-left: 10px !important;
+            }
+            .cal-icon {
+                right: 10px;
+                left: unset;
+            }
+            .searchinputs input {
+                padding-left: 45px;
+                padding-right: 10px;
+            }
+            .search-addon button {
+                left: 16px;
+                right: unset;
+            }
+        }
+    }
+}
+
+[data-topbar="primary"]{
+    .header {
+        background: variables.$primary;
+        border-bottom-color: variables.$primary-700;
+        .dark-logo {
+            display: block;
+        }
+        .logo-normal {
+            display: none;
+        }
+        #toggle_btn {
+            color: variables.$white;
+        }       
+        .bg-white {
+            background: transparent  !important;
+        }
+        .btn-outline-light {
+            color: variables.$white !important;
+            border-color: variables.$primary-700 !important;  
+        }
+        .header-left {
+            background: variables.$primary;
+            border-color: variables.$primary-700;
+        }
+        .searchinputs {
+            input {
+                background: variables.$primary;
+                color: variables.$white;
+                border-color: variables.$primary-700;
+                &::placeholder {
+                    color: variables.$white;
+                }
+            }
+            .search-addon button{
+                background: variables.$primary;
+                color: variables.$white;
+            }
+        } 
+    }
+    @include mixins.respond-above(lg) {
+        .mini-sidebar .header-left .dark-logo {
+            display: none;
+        }
+        .mini-sidebar.expand-menu .dark-logo {
+            display: block;
+        }
+    }
+}
+
+
+[data-sidebar="dark"]{
+    .sidebar {
+        background: variables.$dark-900;
+        border-color: variables.$dark-700;
+        .sidebar-menu {
+            > ul {
+                > li {
+                    .submenu-hdr::after {
+                        background: variables.$dark-700;                        
+                    }
+                    .submenu {
+                        > a.subdrop {
+                            background: variables.$dark-700;
+                        }
+                    }
+                    &.active {
+                        a {
+                            span {
+                                color: variables.$primary;
+                            }
+                        }
+                    }
+                    ul {
+                        li {
+                            &.active {
+                                a {
+                                    span, i {
+                                        color: variables.$primary;
+                                    }
+                                }
+                            }
+                            a {
+                                color: variables.$dark-300;
+                                &:hover, &.active{
+                                    color:variables.$primary;
+                                }
+                                i {
+                                    background: variables.$dark-700;
+                                    color: variables.$dark-300;
+                                }
+                                span {
+                                    color: variables.$dark-300;
+                                }
+                            }
+                            &.active {
+                                a {
+                                    background: variables.$dark-700;
+                                }
+                            }
+                            .submenu {
+                                > ul {
+                                    li {
+                                        a {
+                                            color: variables.$dark-300;
+                                            &.active {
+                                                color: variables.$primary;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+[data-sidebar="primary"]{
+    .sidebar {
+        background: variables.$primary;
+        border-color: variables.$dark-700;
+        .sidebar-menu {
+            > ul {
+                > li {
+                    .submenu-hdr{
+                        color: variables.$white;
+                        &::after {
+                            background: variables.$primary-100;                        
+                        }
+                    }
+                    .submenu {
+                        > a.subdrop {
+                            background: variables.$primary-700;
+                            span{
+                                color: variables.$white;
+                            }
+                        }
+                        a{
+                            &.active{
+                                .menu-arrow::before{
+                                    border-color:variables.$primary-100;
+                                }
+                            }
+                        }
+                    }
+                    &.active {
+                        a {
+                            span {
+                                color: variables.$white;
+                            }
+                        }
+                        
+                    }
+                    ul {
+                        li {
+                            &.active {
+                                a {
+                                    span, i {
+                                        color: variables.$primary;
+                                    }
+                                }
+                            }
+                            a {
+                                color: variables.$primary-300;
+                                &:hover, &.active{
+                                    color:variables.$white;
+                                }
+                                i {
+                                    background: variables.$primary-100;
+                                    color: variables.$primary;
+                                }
+                                span {
+                                    color: variables.$primary-300;
+                                }
+                            }
+                            &.active {
+                                a {
+                                    background: variables.$primary-700;
+                                }
+                            }
+                            .submenu {
+                                > ul {
+                                    li {
+                                        a {
+                                            color: variables.$primary-300;
+                                            &.active {
+                                                color: variables.$primary;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+[data-sidebar="darkblack"]{
+    .sidebar {
+        background: #39435F;
+        border-color: variables.$dark-700;
+        .sidebar-menu {
+            > ul {
+                > li {
+                    .submenu-hdr{
+                        color: variables.$white;
+                        &::after {
+                            background: variables.$primary-100;                        
+                        }
+                    }
+                    .submenu {
+                        > a.subdrop {
+                            background: variables.$primary-700;
+                            span{
+                                color: variables.$white;
+                            }
+                        }
+                        a{
+                            &.active{
+                                .menu-arrow::before{
+                                    border-color:variables.$primary-100;
+                                }
+                            }
+                        }
+                    }
+                    &.active {
+                        a {
+                            span {
+                                color: variables.$white;
+                            }
+                        }
+                        
+                    }
+                    ul {
+                        li {
+                            &.active {
+                                a {
+                                    span, i {
+                                        color: variables.$primary;
+                                    }
+                                }
+                            }
+                            a {
+                                color: variables.$primary-300;
+                                &:hover, &.active{
+                                    color:variables.$white;
+                                }
+                                i {
+                                    background: variables.$primary-100;
+                                    color: variables.$primary;
+                                }
+                                span {
+                                    color: variables.$primary-300;
+                                }
+                            }
+                            &.active {
+                                a {
+                                    background: variables.$primary-700;
+                                }
+                            }
+                            .submenu {
+                                > ul {
+                                    li {
+                                        a {
+                                            color: variables.$primary-300;
+                                            &.active {
+                                                color: variables.$primary;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+[data-sidebar="darkblue"]{
+    .sidebar {
+        background: variables.$sidebar-blue;
+        border-color: variables.$dark-700;
+        .sidebar-menu {
+            > ul {
+                > li {
+                    .submenu-hdr{
+                        color: variables.$white;
+                        &::after {
+                            background: variables.$primary-100;                        
+                        }
+                    }
+                    .submenu {
+                        > a.subdrop {
+                            background: variables.$primary-700;
+                            span{
+                                color: variables.$white;
+                            }
+                        }
+                        a{
+                            &.active{
+                                .menu-arrow::before{
+                                    border-color:variables.$primary-100;
+                                }
+                            }
+                        }
+                    }
+                    &.active {
+                        a {
+                            span {
+                                color: variables.$white;
+                            }
+                        }
+                        
+                    }
+                    ul {
+                        li {
+                            &.active {
+                                a {
+                                    span, i {
+                                        color: variables.$primary;
+                                    }
+                                }
+                            }
+                            a {
+                                color: variables.$primary-300;
+                                &:hover, &.active{
+                                    color:variables.$white;
+                                }
+                                i {
+                                    background: variables.$primary-100;
+                                    color: variables.$primary;
+                                }
+                                span {
+                                    color: variables.$primary-300;
+                                }
+                            }
+                            &.active {
+                                a {
+                                    background: variables.$primary-700;
+                                }
+                            }
+                            .submenu {
+                                > ul {
+                                    li {
+                                        a {
+                                            color: variables.$primary-300;
+                                            &.active {
+                                                color: variables.$primary;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+[data-topbar="dark"]{
+    .header {
+        background: variables.$dark-900;
+        border-bottom-color: variables.$dark-700;
+        .dark-logo {
+            display: block;
+        }
+        .logo-normal {
+            display: none;
+        }
+        .header-left {
+            background: variables.$dark-900;
+            border-color: variables.$dark-700;
+        }
+        .searchinputs {
+            input {
+                background: variables.$dark-800;
+                border-color: variables.$dark-700;
+                color: variables.$dark-300;
+            }
+            .search-addon button{
+                background: variables.$dark-700;
+                color: variables.$dark-200;
+            }
+        }        
+        .bg-white {
+            background: variables.$dark-800 !important;
+        }
+        .btn-outline-light {
+            border-color: variables.$dark-700 !important;
+            color: variables.$dark-300 !important;
+        }
+        #toggle_btn {
+            color: variables.$dark-300;
+        }
+        
+    }
+    @include mixins.respond-above(lg) {
+        .mini-sidebar .header-left .dark-logo {
+            display: none;
+        }
+        .mini-sidebar.expand-menu .dark-logo {
+            display: block;
+        }
+    }
+}
+
+[data-topbar="grey"]{
+    .header {
+        background: variables.$dark-100;
+        border-bottom-color: variables.$dark-100;
+        .dark-logo {
+            display: none;
+        }
+        .logo-normal {
+            display: block;
+        }
+        .header-left {
+            background: variables.$dark-100;
+            border-color: variables.$dark-300;
+        }
+        .searchinputs {
+            input {
+                background: variables.$dark-100;
+                border-color: variables.$dark-200;
+                color: variables.$dark-300;
+            }
+            .search-addon button{
+                background: variables.$dark-200;
+                color: variables.$dark-700;
+            }
+        }        
+        .bg-white {
+            background: variables.$dark-200 !important;
+        }
+        .btn-outline-light {
+            border-color: variables.$dark-200 !important;
+            color: variables.$dark-700 !important;
+        }
+        #toggle_btn {
+            color: variables.$dark-300;
+        }
+        
+    }
+   
+}
+
+[data-sidebar="light"]  [data-sidebarbg="sidebarbg1"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-01.jpg);
+        background-repeat: no-repeat;
+        background-size: cover;
+        background-position: 50% 50%;
+        background-color: transparent;
+        .sidebar-menu{
+            background: rgba(255,255,255,0.85);
+        }
+    }
+}
+
+[data-sidebar="dark"] [data-sidebarbg="sidebarbg1"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-01.jpg);
+        .sidebar-menu{
+            background: rgba(0,0,0,0.85);
+        }
+    }
+}
+[data-sidebar="primary"] [data-sidebarbg="sidebarbg1"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-01.jpg);
+        .sidebar-menu{
+            background: rgba(80,110,228,0.85);
+        }
+    }
+}
+[data-sidebar="darkblack"] [data-sidebarbg="sidebarbg1"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-01.jpg);
+        .sidebar-menu{
+            background: rgba(7,57,109,0.85);
+        }
+    }
+}
+[data-sidebar="darkblue"] [data-sidebarbg="sidebarbg1"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-01.jpg);
+        .sidebar-menu{
+            background: rgba(57,67,95,0.85);
+        }
+    }
+}
+
+
+[data-sidebar="light"] [data-sidebarbg="sidebarbg2"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-02.jpg);
+        background-repeat: no-repeat;
+        background-size: cover;
+        background-position: 50% 50%;
+        background-color: transparent;
+        .sidebar-menu{
+            background: rgba(255,255,255,0.85);
+        }
+    }
+}
+
+[data-sidebar="dark"] [data-sidebarbg="sidebarbg2"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-02.jpg);
+        .sidebar-menu{
+            background: rgba(0,0,0,0.85);
+        }
+    }
+}
+
+[data-sidebar="primary"] [data-sidebarbg="sidebarbg2"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-02.jpg);
+        .sidebar-menu{
+            background: rgba(80,110,228,0.85);
+        }
+    }
+}
+[data-sidebar="darkblack"] [data-sidebarbg="sidebarbg2"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-02.jpg);
+        .sidebar-menu{
+            background: rgba(7,57,109,0.85);
+        }
+    }
+}
+[data-sidebar="darkblue"] [data-sidebarbg="sidebarbg2"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-02.jpg);
+        .sidebar-menu{
+            background: rgba(57,67,95,0.85);
+        }
+    }
+}
+
+[data-sidebar="light"] [data-sidebarbg="sidebarbg3"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-03.jpg);
+        background-repeat: no-repeat;
+        background-size: cover;
+        background-position: 50% 50%;
+        background-color: transparent;
+        .sidebar-menu{
+            background: rgba(255,255,255,0.85);
+        }
+    }
+}
+
+
+[data-sidebar="dark"] [data-sidebarbg="sidebarbg3"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-03.jpg);
+        .sidebar-menu{
+            background: rgba(0,0,0,0.85);
+        }
+    }
+}
+
+[data-sidebar="primary"] [data-sidebarbg="sidebarbg3"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-03.jpg);
+        .sidebar-menu{
+            background: rgba(80,110,228,0.85);
+        }
+    }
+}
+[data-sidebar="darkblack"] [data-sidebarbg="sidebarbg3"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-03.jpg);
+        .sidebar-menu{
+            background: rgba(7,57,109,0.85);
+        }
+    }
+}
+[data-sidebar="darkblue"] [data-sidebarbg="sidebarbg3"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-03.jpg);
+        .sidebar-menu{
+            background: rgba(57,67,95,0.85);
+        }
+    }
+}
+
+[data-sidebar="light"] [data-sidebarbg="sidebarbg4"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-04.jpg);
+        background-repeat: no-repeat;
+        background-size: cover;
+        background-position: 50% 50%;
+        background-color: transparent;
+        .sidebar-menu{
+            background: rgba(255,255,255,0.85);
+        }
+    }
+}
+
+
+[data-sidebar="dark"] [data-sidebarbg="sidebarbg4"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-04.jpg);
+        .sidebar-menu{
+            background: rgba(0,0,0,0.85);
+        }
+    }
+}
+
+[data-sidebar="primary"] [data-sidebarbg="sidebarbg4"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-04.jpg);
+        .sidebar-menu{
+            background: rgba(80,110,228,0.85);
+        }
+    }
+}
+[data-sidebar="darkblack"] [data-sidebarbg="sidebarbg4"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-04.jpg);
+        .sidebar-menu{
+            background: rgba(7,57,109,0.85);
+        }
+    }
+}
+[data-sidebar="darkblue"] [data-sidebarbg="sidebarbg4"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-04.jpg);
+        .sidebar-menu{
+            background: rgba(57,67,95,0.85);
+        }
+    }
+}
+
+[data-sidebar="light"] [data-sidebarbg="sidebarbg5"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-05.jpg);
+        background-repeat: no-repeat;
+        background-size: cover;
+        background-position: 50% 50%;
+        background-color: transparent;
+        .sidebar-menu{
+            background: rgba(255,255,255,0.85);
+        }
+    }
+}
+
+
+[data-sidebar="dark"] [data-sidebarbg="sidebarbg5"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-04.jpg);
+        .sidebar-menu{
+            background: rgba(0,0,0,0.85);
+        }
+    }
+}
+
+[data-sidebar="primary"] [data-sidebarbg="sidebarbg5"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-05.jpg);
+        .sidebar-menu{
+            background: rgba(80,110,228,0.85);
+        }
+    }
+}
+[data-sidebar="darkblack"] [data-sidebarbg="sidebarbg5"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-05.jpg);
+        .sidebar-menu{
+            background: rgba(7,57,109,0.85);
+        }
+    }
+}
+[data-sidebar="darkblue"] [data-sidebarbg="sidebarbg5"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-05.jpg);
+        .sidebar-menu{
+            background: rgba(57,67,95,0.85);
+        }
+    }
+}
+[data-sidebar="light"] [data-sidebarbg="sidebarbg6"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-06.jpg);
+        background-repeat: no-repeat;
+        background-size: cover;
+        background-position: 50% 50%;
+        background-color: transparent;
+        .sidebar-menu{
+            background: rgba(255,255,255,0.85);
+        }
+    }
+}
+
+
+[data-sidebar="dark"] [data-sidebarbg="sidebarbg6"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-06.jpg);
+        .sidebar-menu{
+            background: rgba(0,0,0,0.85);
+        }
+    }
+}
+
+[data-sidebar="primary"] [data-sidebarbg="sidebarbg6"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-06.jpg);
+        .sidebar-menu{
+            background: rgba(80,110,228,0.85);
+        }
+    }
+}
+[data-sidebar="darkblack"] [data-sidebarbg="sidebarbg6"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-06.jpg);
+        .sidebar-menu{
+            background: rgba(7,57,109,0.85);
+        }
+    }
+}
+[data-sidebar="darkblue"] [data-sidebarbg="sidebarbg6"]{
+    .sidebar {
+        background-image: url(../img/theme/bg-06.jpg);
+        .sidebar-menu{
+            background: rgba(57,67,95,0.85);
+        }
+    }
+}
+
+[data-color="violet"]{
+    $primary: #673AB7;
+    .sidebar .sidebar-menu > ul {
+        &  > li ul li {
+            a {
+                &:hover {
+                    color: $primary;
+                    span {
+                        color: $primary;
+                    }
+                }
+                &.active {
+                    color: $primary;
+                }
+            }
+            &.active {                
+                a {
+                    span, i {
+                        color: $primary;
+                    }
+                }
+            }
+        }
+        li .submenu > a.active {
+            color: $primary;
+            i, span {
+                color: $primary;
+            }
+            .menu-arrow {
+                &::before {
+                    border-color: $primary;
+                }
+            }   
+        }
+    }
+    .btn-primary {
+        background-color: $primary;
+        border: 1px solid $primary;
+        &:hover,
+        &:focus,
+        &.focus,
+        &:active,
+        &.active {
+            background-color: color.adjust($primary, $lightness: -7%);
+            border: 1px solid color.adjust($primary, $lightness: -7%);
+        }
+    }
+    .btn-check:checked+.btn, .btn.active, .btn.show, .btn.show:hover, .btn:first-child:active, :not(.btn-check)+.btn:active {
+        background-color: $primary;
+        border-color: $primary;
+    }
+    .link-primary {
+        color: $primary !important;
+        &:hover,
+        &:focus,
+        &:active {
+          color: color.adjust($primary, $lightness: -7%);
+        }
+    }
+    .text-primary {
+        color: $primary !important;
+    }
+    .badge {
+        &.badge-primary {
+            background: $primary;
+        }
+    }
+    .dataTables_paginate .pagination li.active a.page-link {
+        background: $primary;
+        border-color: $primary;
+    }
+    .bg-primary {
+        background-color: $primary !important;
+        border: 1px solid $primary !important;
+    }
+    .border-bottom.border-primary {
+        border-color: $primary !important;
+    }
+    .border-primary {
+        border-color: $primary !important;
+    }
+    .nav-tabs.nav-tabs-bottom li a.active, .nav-tabs.nav-tabs-bottom li a:hover {
+        border-bottom-color: $primary;
+        color: $primary;
+    }
+    .badge {
+        &.badge-soft-primary {
+            background: rgba($primary, 0.1);
+            color: $primary;
+
+        }
+    }
+    a {
+        &:hover {
+            color: $primary;
+        }
+    }
+    .btn-outline-primary {
+        border: 1px solid $primary !important;
+        color: $primary !important;
+        &:hover,
+        &:focus,
+        &.focus,
+        &:active,
+        &.active {
+            background-color: $primary !important;
+            border:1px solid $primary !important;
+        }
+    }
+    .list-group {
+        a {
+            &.active {
+                background: variables.$primary-100;
+                color: $primary;
+            }
+            &:hover {
+                background: variables.$primary-100;
+                color: $primary;
+            }
+        }
+    }
+    .badge-primary-hover:hover {
+        background: $primary !important;
+        border-color: $primary !important;
+        color: variables.$white !important;
+    }
+    .main-chat-blk .chat .chat-footer form .form-buttons {
+        .btn.send-btn {
+            background: $primary;
+        }
+    }
+    .right-user-side .slime-grp .chat-footer form .send-chat a {
+        background: $primary;
+    }
+    .custom-pagination .paginations {
+        .page-wrap li a {
+            &.active, &:hover {
+                background: $primary;
+            }
+        }
+    }
+    .select2-container--default {
+        &.select2-container--open.select2-container--below .select2-selection--single {
+            border-color: $primary;
+        }
+        .select2-results__option--highlighted[aria-selected] {
+            background: $primary;
+        }
+    }
+    .nav-tabs.nav-tabs-solid.nav-tabs-rounded-fill li a {
+        &.active {
+            background-color: $primary;
+            border-color: $primary;
+        }
+    }
+    .nav-tabs .nav-link {
+        &:hover {
+            color: $primary;
+        }
+    }
+    .form-check-input {
+        &:checked {
+          background-color: $primary;
+          border-color: $primary;
+        }
+    }
+    .profile-uploader.profile-uploader-two .drag-upload-btn .upload-btn span {
+        color: $primary;
+    }
+    .sidebar-contact .toggle-theme {
+        background-color: $primary;
+    }
+    .primary-hover {
+        &:hover {
+          background: $primary !important;
+          color: variables.$white;
+        }
+    }
+}
+[data-color="pink"]{
+    $primary: #E83E8C;
+    .sidebar .sidebar-menu > ul {
+        &  > li ul li {
+            a {
+                &:hover {
+                    color: $primary;
+                    span {
+                        color: $primary;
+                    }
+                }
+                &.active {
+                    color: $primary;
+                }
+            }
+            &.active {                
+                a {
+                    span, i {
+                        color: $primary;
+                    }
+                }
+            }
+        }
+        li .submenu > a.active {
+            color: $primary;
+            i, span {
+                color: $primary;
+            }
+            .menu-arrow {
+                &::before {
+                    border-color: $primary;
+                }
+            }   
+        }
+    }
+    .btn-primary {
+        background-color: $primary;
+        border: 1px solid $primary;
+        &:hover,
+        &:focus,
+        &.focus,
+        &:active,
+        &.active {
+            background-color: color.adjust($primary, $lightness: -7%);
+            border: 1px solid color.adjust($primary, $lightness: -7%);
+        }
+    }
+    .btn-check:checked+.btn, .btn.active, .btn.show, .btn.show:hover, .btn:first-child:active, :not(.btn-check)+.btn:active {
+        background-color: $primary;
+        border-color: $primary;
+    }
+    .link-primary {
+        color: $primary !important;
+        &:hover,
+        &:focus,
+        &:active {
+          color: color.adjust($primary, $lightness: -7%);
+        }
+    }
+    .text-primary {
+        color: $primary !important;
+    }
+    .badge {
+        &.badge-primary {
+            background: $primary;
+        }
+    }
+    .dataTables_paginate .pagination li.active a.page-link {
+        background: $primary;
+        border-color: $primary;
+    }
+    .bg-primary {
+        background-color: $primary !important;
+        border: 1px solid $primary !important;
+    }
+    .border-bottom.border-primary {
+        border-color: $primary !important;
+    }
+    .border-primary {
+        border-color: $primary !important;
+    }
+    .nav-tabs.nav-tabs-bottom li a.active, .nav-tabs.nav-tabs-bottom li a:hover {
+        border-bottom-color: $primary;
+        color: $primary;
+    }
+    .badge {
+        &.badge-soft-primary {
+            background: rgba($primary, 0.1);
+            color: $primary;
+
+        }
+    }
+    a {
+        &:hover {
+            color: $primary;
+        }
+    }
+    .btn-outline-primary {
+        border: 1px solid $primary !important;
+        color: $primary !important;
+        &:hover,
+        &:focus,
+        &.focus,
+        &:active,
+        &.active {
+            background-color: $primary !important;
+            border:1px solid $primary !important;
+        }
+    }
+    .list-group {
+        a {
+            &.active {
+                background: variables.$primary-100;
+                color: $primary;
+            }
+            &:hover {
+                background: variables.$primary-100;
+                color: $primary;
+            }
+        }
+    }
+    .badge-primary-hover:hover {
+        background: $primary !important;
+        border-color: $primary !important;
+        color: variables.$white !important;
+    }
+    .main-chat-blk .chat .chat-footer form .form-buttons {
+        .btn.send-btn {
+            background: $primary;
+        }
+    }
+    .right-user-side .slime-grp .chat-footer form .send-chat a {
+        background: $primary;
+    }
+    .custom-pagination .paginations {
+        .page-wrap li a {
+            &.active, &:hover {
+                background: $primary;
+            }
+        }
+    }
+    .select2-container--default {
+        &.select2-container--open.select2-container--below .select2-selection--single {
+            border-color: $primary;
+        }
+        .select2-results__option--highlighted[aria-selected] {
+            background: $primary;
+        }
+    }
+    .nav-tabs.nav-tabs-solid.nav-tabs-rounded-fill li a {
+        &.active {
+            background-color: $primary;
+            border-color: $primary;
+        }
+    }
+    .nav-tabs .nav-link {
+        &:hover {
+            color: $primary;
+        }
+    }
+    .form-check-input {
+        &:checked {
+          background-color: $primary;
+          border-color: $primary;
+        }
+    }
+    .profile-uploader.profile-uploader-two .drag-upload-btn .upload-btn span {
+        color: $primary;
+    }
+    .sidebar-contact .toggle-theme {
+        background-color: $primary;
+    }    
+    .primary-hover {
+        &:hover {
+          background: $primary !important;
+          color: variables.$white;
+        }
+    }
+}
+[data-color="orange"]{
+    $primary: #FD7E14;
+    .sidebar .sidebar-menu > ul {
+        &  > li ul li {
+            a {
+                &:hover {
+                    color: $primary;
+                    span {
+                        color: $primary;
+                    }
+                }
+                &.active {
+                    color: $primary;
+                }
+            }
+            &.active {                
+                a {
+                    span, i {
+                        color: $primary;
+                    }
+                }
+            }
+        }
+        li .submenu > a.active {
+            color: $primary;
+            i, span {
+                color: $primary;
+            }
+            .menu-arrow {
+                &::before {
+                    border-color: $primary;
+                }
+            }   
+        }
+    }
+    .btn-primary {
+        background-color: $primary;
+        border: 1px solid $primary;
+        &:hover,
+        &:focus,
+        &.focus,
+        &:active,
+        &.active {
+            background-color: color.adjust($primary, $lightness: -7%);
+            border: 1px solid color.adjust($primary, $lightness: -7%);
+        }
+    }
+    .btn-check:checked+.btn, .btn.active, .btn.show, .btn.show:hover, .btn:first-child:active, :not(.btn-check)+.btn:active {
+        background-color: $primary;
+        border-color: $primary;
+    }
+    .link-primary {
+        color: $primary !important;
+        &:hover,
+        &:focus,
+        &:active {
+          color: color.adjust($primary, $lightness: -7%);
+        }
+    }
+    .text-primary {
+        color: $primary !important;
+    }
+    .badge {
+        &.badge-primary {
+            background: $primary;
+        }
+    }
+    .dataTables_paginate .pagination li.active a.page-link {
+        background: $primary;
+        border-color: $primary;
+    }
+    .bg-primary {
+        background-color: $primary !important;
+        border: 1px solid $primary !important;
+    }
+    .border-bottom.border-primary {
+        border-color: $primary !important;
+    }
+    .border-primary {
+        border-color: $primary !important;
+    }
+    .nav-tabs.nav-tabs-bottom li a.active, .nav-tabs.nav-tabs-bottom li a:hover {
+        border-bottom-color: $primary;
+        color: $primary;
+    }
+    .badge {
+        &.badge-soft-primary {
+            background: rgba($primary, 0.1);
+            color: $primary;
+
+        }
+    }
+    a {
+        &:hover {
+            color: $primary;
+        }
+    }
+    .btn-outline-primary {
+        border: 1px solid $primary !important;
+        color: $primary !important;
+        &:hover,
+        &:focus,
+        &.focus,
+        &:active,
+        &.active {
+            background-color: $primary !important;
+            border:1px solid $primary !important;
+        }
+    }
+    .list-group {
+        a {
+            &.active {
+                background: variables.$primary-100;
+                color: $primary;
+            }
+            &:hover {
+                background: variables.$primary-100;
+                color: $primary;
+            }
+        }
+    }
+    .badge-primary-hover:hover {
+        background: $primary !important;
+        border-color: $primary !important;
+        color: variables.$white !important;
+    }
+    .main-chat-blk .chat .chat-footer form .form-buttons {
+        .btn.send-btn {
+            background: $primary;
+        }
+    }
+    .right-user-side .slime-grp .chat-footer form .send-chat a {
+        background: $primary;
+    }
+    .custom-pagination .paginations {
+        .page-wrap li a {
+            &.active, &:hover {
+                background: $primary;
+            }
+        }
+    }
+    .select2-container--default {
+        &.select2-container--open.select2-container--below .select2-selection--single {
+            border-color: $primary;
+        }
+        .select2-results__option--highlighted[aria-selected] {
+            background: $primary;
+        }
+    }
+    .nav-tabs.nav-tabs-solid.nav-tabs-rounded-fill li a {
+        &.active {
+            background-color: $primary;
+            border-color: $primary;
+        }
+    }
+    .nav-tabs .nav-link {
+        &:hover {
+            color: $primary;
+        }
+    }
+    .form-check-input {
+        &:checked {
+          background-color: $primary;
+          border-color: $primary;
+        }
+    }
+    .profile-uploader.profile-uploader-two .drag-upload-btn .upload-btn span {
+        color: $primary;
+    }
+    .sidebar-contact .toggle-theme {
+        background-color: $primary;
+    }
+    .primary-hover {
+        &:hover {
+          background: $primary !important;
+          color: variables.$white;
+        }
+    }
+}
+[data-color="green"]{
+    $primary: #2CA87F;
+    .sidebar .sidebar-menu > ul {
+        &  > li ul li {
+            a {
+                &:hover {
+                    color: $primary;
+                    span {
+                        color: $primary;
+                    }
+                }
+                &.active {
+                    color: $primary;
+                }
+            }
+            &.active {                
+                a {
+                    span, i {
+                        color: $primary;
+                    }
+                }
+            }
+        }
+        li .submenu > a.active {
+            color: $primary;
+            i, span {
+                color: $primary;
+            }
+            .menu-arrow {
+                &::before {
+                    border-color: $primary;
+                }
+            }   
+        }
+    }
+    .btn-primary {
+        background-color: $primary;
+        border: 1px solid $primary;
+        &:hover,
+        &:focus,
+        &.focus,
+        &:active,
+        &.active {
+            background-color: color.adjust($primary, $lightness: -7%);
+            border: 1px solid color.adjust($primary, $lightness: -7%);
+        }
+    }
+    .btn-check:checked+.btn, .btn.active, .btn.show, .btn.show:hover, .btn:first-child:active, :not(.btn-check)+.btn:active {
+        background-color: $primary;
+        border-color: $primary;
+    }
+    .link-primary {
+        color: $primary !important;
+        &:hover,
+        &:focus,
+        &:active {
+          color: color.adjust($primary, $lightness: -7%);
+        }
+    }
+    .text-primary {
+        color: $primary !important;
+    }
+    .badge {
+        &.badge-primary {
+            background: $primary;
+        }
+    }
+    .dataTables_paginate .pagination li.active a.page-link {
+        background: $primary;
+        border-color: $primary;
+    }
+    .bg-primary {
+        background-color: $primary !important;
+        border: 1px solid $primary !important;
+    }
+    .border-bottom.border-primary {
+        border-color: $primary !important;
+    }
+    .border-primary {
+        border-color: $primary !important;
+    }
+    .nav-tabs.nav-tabs-bottom li a.active, .nav-tabs.nav-tabs-bottom li a:hover {
+        border-bottom-color: $primary;
+        color: $primary;
+    }
+    .badge {
+        &.badge-soft-primary {
+            background: rgba($primary, 0.1);
+            color: $primary;
+
+        }
+    }
+    a {
+        &:hover {
+            color: $primary;
+        }
+    }
+    .btn-outline-primary {
+        border: 1px solid $primary !important;
+        color: $primary !important;
+        &:hover,
+        &:focus,
+        &.focus,
+        &:active,
+        &.active {
+            background-color: $primary !important;
+            border:1px solid $primary !important;
+        }
+    }
+    .list-group {
+        a {
+            &.active {
+                background: variables.$primary-100;
+                color: $primary;
+            }
+            &:hover {
+                background: variables.$primary-100;
+                color: $primary;
+            }
+        }
+    }
+    .badge-primary-hover:hover {
+        background: $primary !important;
+        border-color: $primary !important;
+        color: variables.$white !important;
+    }
+    .main-chat-blk .chat .chat-footer form .form-buttons {
+        .btn.send-btn {
+            background: $primary;
+        }
+    }
+    .right-user-side .slime-grp .chat-footer form .send-chat a {
+        background: $primary;
+    }
+    .custom-pagination .paginations {
+        .page-wrap li a {
+            &.active, &:hover {
+                background: $primary;
+            }
+        }
+    }
+    .select2-container--default {
+        &.select2-container--open.select2-container--below .select2-selection--single {
+            border-color: $primary;
+        }
+        .select2-results__option--highlighted[aria-selected] {
+            background: $primary;
+        }
+    }
+    .nav-tabs.nav-tabs-solid.nav-tabs-rounded-fill li a {
+        &.active {
+            background-color: $primary;
+            border-color: $primary;
+        }
+    }
+    .nav-tabs .nav-link {
+        &:hover {
+            color: $primary;
+        }
+    }
+    .form-check-input {
+        &:checked {
+          background-color: $primary;
+          border-color: $primary;
+        }
+    }
+    .profile-uploader.profile-uploader-two .drag-upload-btn .upload-btn span {
+        color: $primary;
+    }
+    .sidebar-contact .toggle-theme {
+        background-color: $primary;
+    }
+    .primary-hover {
+        &:hover {
+          background: $primary !important;
+          color: variables.$white;
+        }
+    }
+}
+[data-color="red"]{
+    $primary: #DC2626;
+    .sidebar .sidebar-menu > ul {
+        &  > li ul li {
+            a {
+                &:hover {
+                    color: $primary;
+                    span {
+                        color: $primary;
+                    }
+                }
+                &.active {
+                    color: $primary;
+                }
+            }
+            &.active {                
+                a {
+                    span, i {
+                        color: $primary;
+                    }
+                }
+            }
+        }
+        li .submenu > a.active {
+            color: $primary;
+            i, span {
+                color: $primary;
+            }
+            .menu-arrow {
+                &::before {
+                    border-color: $primary;
+                }
+            }   
+        }
+    }
+    .btn-primary {
+        background-color: $primary;
+        border: 1px solid $primary;
+        &:hover,
+        &:focus,
+        &.focus,
+        &:active,
+        &.active {
+            background-color: color.adjust($primary, $lightness: -7%);
+            border: 1px solid color.adjust($primary, $lightness: -7%);
+        }
+    }
+    .btn-check:checked+.btn, .btn.active, .btn.show, .btn.show:hover, .btn:first-child:active, :not(.btn-check)+.btn:active {
+        background-color: $primary;
+        border-color: $primary;
+    }
+    .link-primary {
+        color: $primary !important;
+        &:hover,
+        &:focus,
+        &:active {
+          color: color.adjust($primary, $lightness: -7%);
+        }
+    }
+    .text-primary {
+        color: $primary !important;
+    }
+    .badge {
+        &.badge-primary {
+            background: $primary;
+        }
+    }
+    .dataTables_paginate .pagination li.active a.page-link {
+        background: $primary;
+        border-color: $primary;
+    }
+    .bg-primary {
+        background-color: $primary !important;
+        border: 1px solid $primary !important;
+    }
+    .border-bottom.border-primary {
+        border-color: $primary !important;
+    }
+    .border-primary {
+        border-color: $primary !important;
+    }
+    .nav-tabs.nav-tabs-bottom li a.active, .nav-tabs.nav-tabs-bottom li a:hover {
+        border-bottom-color: $primary;
+        color: $primary;
+    }
+    .badge {
+        &.badge-soft-primary {
+            background: rgba($primary, 0.1);
+            color: $primary;
+
+        }
+    }
+    a {
+        &:hover {
+            color: $primary;
+        }
+    }
+    .btn-outline-primary {
+        border: 1px solid $primary !important;
+        color: $primary !important;
+        &:hover,
+        &:focus,
+        &.focus,
+        &:active,
+        &.active {
+            background-color: $primary !important;
+            border:1px solid $primary !important;
+        }
+    }
+    .list-group {
+        a {
+            &.active {
+                background: variables.$primary-100;
+                color: $primary;
+            }
+            &:hover {
+                background: variables.$primary-100;
+                color: $primary;
+            }
+        }
+    }
+    .badge-primary-hover:hover {
+        background: $primary !important;
+        border-color: $primary !important;
+        color: variables.$white !important;
+    }
+    .main-chat-blk .chat .chat-footer form .form-buttons {
+        .btn.send-btn {
+            background: $primary;
+        }
+    }
+    .right-user-side .slime-grp .chat-footer form .send-chat a {
+        background: $primary;
+    }
+    .custom-pagination .paginations {
+        .page-wrap li a {
+            &.active, &:hover {
+                background: $primary;
+            }
+        }
+    }
+    .select2-container--default {
+        &.select2-container--open.select2-container--below .select2-selection--single {
+            border-color: $primary;
+        }
+        .select2-results__option--highlighted[aria-selected] {
+            background: $primary;
+        }
+    }
+    .nav-tabs.nav-tabs-solid.nav-tabs-rounded-fill li a {
+        &.active {
+            background-color: $primary;
+            border-color: $primary;
+        }
+    }
+    .nav-tabs .nav-link {
+        &:hover {
+            color: $primary;
+        }
+    }
+    .form-check-input {
+        &:checked {
+          background-color: $primary;
+          border-color: $primary;
+        }
+    }
+    .profile-uploader.profile-uploader-two .drag-upload-btn .upload-btn span {
+        color: $primary;
+    }
+    .sidebar-contact .toggle-theme {
+        background-color: $primary;
+    }
+    .primary-hover {
+        &:hover {
+          background: $primary !important;
+          color: variables.$white;
+        }
+    }
+}
+
+.student-slider-rtl, .teacher-slider-rtl {
+    &.owl-carousel .owl-stage-outer {
+        height: 100% !important;
+        .owl-stage {
+            height: 100%;
+            .owl-item {
+                height: 100%;
+            }
+        }
+    }
+}
+.student-slider-rtl.owl-carousel  {
+    .owl-nav {
+        position: absolute;
+        left: 50%;
+        top: 30%;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        button {
+            width: 24px;
+            height: 24px;
+            background: variables.$white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: variables.$font-size-12;
+            &.owl-prev {
+                margin-left: 5px;
+            }
+            &:hover {
+                background: variables.$primary;
+                color: variables.$white;
+            }
+        }
+    }
+}
+.teacher-slider-rtl.owl-carousel  {
+    .owl-nav {
+        position: absolute;
+        left: 50%;
+        top: 30%;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        button {
+            width: 24px;
+            height: 24px;
+            background: variables.$white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: variables.$font-size-12;
+            color: variables.$dark;
+            &.owl-prev {
+                margin-left: 5px;
+            }
+            &:hover {
+                background: variables.$primary;
+                color: variables.$white;
+            }
+        }
+    }
+}
+html .darkmode,html[data-theme="dark"] {
+    background: variables.$dark-900;
+    color: variables.$dark-300;
+    body {        
+        background-color: variables.$dark-900;
+        &.mini-sidebar {
+            .dark-logo {
+                display: none !important;
+            }
+            &.expand-menu {
+                .dark-logo {
+                    display: block !important;
+                }
+            }
+        }
+    }
+    h1,h2,h3,h4,h5,h6 {
+        color: variables.$dark-100 !important;
+    }
+    span,p,a {
+        color: variables.$dark-300;
+    }
+    a {
+        &:hover {
+            color: variables.$primary;
+        }
+    }
+    .bg-outline-info {
+        background-color: transparent;
+        color: variables.$info;
+    }
+    .bg-outline-success {
+        background-color: transparent;
+        color: variables.$success;
+    }
+    .bg-outline-warning {
+        background-color: transparent;
+        color: variables.$warning;
+    }
+    .bg-outline-danger {
+        background-color: transparent;
+        color: variables.$danger;
+    }
+    .nav-tabs li a {
+        color: variables.$dark-300;
+    }
+    span.bg-success,span.bg-danger,span.bg-info,span.bg-primary,span.bg-warning,span.bg-secondary,span.bg-skyblue {
+        color: variables.$white;
+    }
+    .accordion-item {
+        border-color: variables.$dark-700;
+    }
+    .accordion-header,.accordion-body,.accordion-button {
+        background: variables.$dark-800;
+        border-color: variables.$dark-700;
+    }
+    .btn.btn-white {
+        background: variables.$dark-800;
+        border-color: variables.$dark-700;
+    }
+    .btn-icon {
+        i {
+            color: variables.$dark-300; 
+        }
+    }
+    header{
+        .btn-outline-light {
+            border-color: variables.$dark-700 !important;
+            color: #B9B7C0 !important;
+        } 
+    }
+    .btn-outline-light {
+        border-color: variables.$dark-700 !important;
+    }
+    .dropdown-menu {
+        background: variables.$dark-800;
+        border-color: variables.$dark-700;
+        .dropdown-item {
+            color: variables.$dark-300 !important;
+        }
+    }
+    .tax-invoice-info, .invoice-popup-head {
+        background: variables.$dark-700;
+    }
+    .bg-dark {
+        background: variables.$dark-800 !important;
+    }
+    .text-dark {
+        color: variables.$dark-300 !important;
+    }
+    .invoice-product-table, .payment-info, .invoice-table {
+        border-color: variables.$dark-700 !important;
+    }
+    .border,.border-end,.border-white,.border-bottom {
+        border-color: variables.$dark-700 !important;
+    }
+    .border-start {
+        border-color: variables.$dark-700 !important;
+    }
+    .border-start.border-skyblue {
+        border-color: variables.$indigo !important;
+    }
+    .border-start.border-info {
+        border-color: variables.$info !important;
+    }
+    .border-start.border-danger {
+        border-color: variables.$danger !important;
+    }
+    .custom-table .table-responsive {
+        border-color: variables.$dark-700;
+    }
+    .shadow-sm {
+        box-shadow: 0px 4.4px 12px -1px rgba(44, 44, 44, 0.361) !important;
+    }
+    .form-control {
+        background: variables.$dark-800;
+        border-color: variables.$dark-700;
+        color: variables.$dark-300;
+    }
+    .form-label {
+        color: variables.$dark-300;
+    }
+    .nav-tabs.nav-tabs-solid {
+        background: variables.$dark-800;
+    }
+    .bg-light-500,.bg-light,.bg-light-400,.bg-light-gray,.bg-light-200 {
+        background: variables.$dark-700 !important;
+        border-color: variables.$dark-700 !important;
+    }
+    .primary-hover {
+        &:hover {
+          background: variables.$primary !important;
+        }
+    }
+    .bg-light-300,.bg-light-100 {
+        background: variables.$dark-700 !important;
+    }
+    .card-dropdown > a {
+        background: variables.$dark-700 !important;
+    }
+    .table {
+        --bs-body-bg: $dark-800;
+        thead {
+            th {
+                background: variables.$dark-800 !important;
+                color: variables.$dark-100 !important;
+                border-color: variables.$dark-700 !important; 
+            }
+        }
+        tbody {
+            td {
+                color: variables.$dark-300 !important;
+                border-color: variables.$dark-700 !important;
+            }
+            th {
+                border-color: variables.$dark-700 !important; 
+            }
+            td {
+                .text-dark {
+                    a {
+                        color: variables.$dark-300;
+                    }
+                }
+            }
+        }
+    }
+    .tab-style-6 {
+        background: variables.$dark-800;
+    }
+    .main-chat-blk {
+        .chat-page-wrapper .left-chat-title {
+            border-color: variables.$dark-700;
+        }
+        .main-wrapper .content .sidebar-group {
+            .sidebar {
+                background: variables.$dark-900;
+                border-right: variables.$dark-300;
+            }
+        }
+        .chat_form {
+            box-shadow: none;
+        }
+        .review-files p {
+            color: variables.$dark-300;
+        }
+        .chat {
+            background: variables.$dark-900;
+            .chat-header {
+                background: variables.$dark-900;
+                border-color: variables.$dark-700;
+            }
+            .chat-body .messages .chats .message-content {
+                background: variables.$dark-700;
+                color: variables.$dark-300;
+                &.chat-award-link a {
+                    color: variables.$dark-300;
+                }
+            }
+            .chat-footer form .smile-foot .action-circle {
+                background: variables.$dark-700;
+                color: variables.$dark-300;
+            }
+        }
+    }
+    .twitter-bs-wizard .twitter-bs-wizard-nav .nav-link::after {
+        background-color: variables.$dark-700;
+    }
+    .btn.btn-white {
+        color: variables.$dark-200;
+        &:hover {
+            color: variables.$white;
+        }
+    }
+    .badge.bg-pending {
+        color: variables.$white !important;
+    }
+    .note-frame {
+        color: variables.$dark-200;
+    }
+    .offcanvas-header,.offcanvas-body {
+        background: variables.$dark-800;
+    }
+    .dropdown-menu .class-hover p {
+        color: variables.$title-color !important;
+    }
+    .bg-success-transparent h6,.bg-primary-transparent h6 {
+        color: variables.$title-color !important;
+    }
+    .link-slider .item p {
+        color: variables.$title-color !important;
+    }
+    .form-check-input {
+        background-color: variables.$dark-500;
+        border-color: variables.$dark-700;
+    }
+    .form-select {
+        background-color: variables.$dark-800;
+        border-color: variables.$dark-700 !important;
+    }
+    .select2-container--default {
+        .select2-selection--single {
+            background: variables.$dark-800 !important;
+            border-color: variables.$dark-700;
+            .select2-selection__rendered {
+                border-color: variables.$dark-700;
+                background: variables.$dark-800;
+                color: variables.$dark-300 !important;
+            }
+        }
+        .select2-results>.select2-results__options {
+            border-color: variables.$dark-700;
+            background: variables.$dark-800;
+        }
+    } 
+    .select2-dropdown {
+        border-color: variables.$dark-700;
+    }
+    .bootstrap-tagsinput {
+        background: variables.$dark-800;
+        border-color: variables.$dark-700;
+    }
+    .modal {
+        .modal-content {
+            background: variables.$dark-800;
+            border-color: variables.$dark-700 !important;
+            .modal-header {
+                border-color: variables.$dark-700 !important;
+            }
+            .modal-footer {
+                border-color: variables.$dark-700 !important;
+            }
+        }
+    }
+    .animate-card {
+        .text-default {
+            color: #5D6369 !important;
+        }
+    }
+    .notice-widget:before {
+        background-color: variables.$dark-700;
+    }
+    .custom-alert1 {
+        background: variables.$dark-800;
+    }
+    .card {
+        background-color: variables.$dark-800;
+        border-color: variables.$dark-700;
+        box-shadow: 0px 4.4px 12px -1px rgba(44, 44, 44, 0.361);
+        .card-header {
+            border-color: variables.$dark-700;
+        }
+        .card-footer {
+            border-color: variables.$dark-700;
+        }
+    }
+    .owl-carousel .owl-nav button {
+        background: variables.$dark-800 !important;
+        color: variables.$dark-200 !important;
+    }
+    .login-or .span-or {
+        background: variables.$dark-800;
+    }
+    .header {
+        background: variables.$dark-900;
+        border-bottom-color: variables.$dark-700;
+        .dark-logo {
+            display: block;
+        }
+        .logo-normal {
+            display: none;
+        }
+        .header-left {
+            background: variables.$dark-900;
+            border-color: variables.$dark-700;
+        }
+        .searchinputs {
+            input {
+                background: variables.$dark-800;
+                border-color: variables.$dark-700;
+                color: variables.$dark-300;
+            }
+            .search-addon button{
+                background: variables.$dark-700;
+                color: variables.$dark-200;
+            }
+        }
+        
+    }
+    .sidebar {
+        background: variables.$dark-900 !important;
+        border-color: variables.$dark-700;
+        .sidebar-menu {
+            background: variables.$dark-900 !important;
+            > ul {
+                > li {
+                    .submenu-hdr::after {
+                        background: variables.$dark-700;                        
+                    }
+                    .submenu {
+                        > a.subdrop {
+                            background: variables.$dark-700;
+                        }
+                    }
+                    ul {
+                        li {
+                            a {
+                                color: variables.$dark-300;
+                                &.active, &:hover {
+                                    color: variables.$primary;
+                                }
+                                i {
+                                    background: variables.$dark-700;
+                                    color: variables.$dark-300;
+                                }
+                                span {
+                                    color: variables.$dark-300;
+                                }
+                                &:hover {
+                                    span {
+                                        color: variables.$primary;
+                                    }
+                                }
+                            }
+                            &.active {
+                                a {
+                                    background: variables.$dark-700;
+                                    span {
+                                        color: variables.$primary;
+                                    }
+                                }
+                            }
+                            .submenu {
+                                > ul {
+                                    li {
+                                        a {
+                                            color: variables.$dark-300;
+                                            &.active {
+                                                color: variables.$primary;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    .page-wrapper {
+        .content {
+            background: variables.$dark-900;
+        }
+        .list-group-item {
+            background: variables.$dark-800;
+            border-color: variables.$dark-700 !important;
+        }
+        .border {
+            border-color: variables.$dark-700 !important;
+        }
+        .border-bottom {
+            border-color: variables.$dark-700 !important;
+        }
+        .border-top {
+            border-color: variables.$dark-700 !important;
+        }
+        .bg-white {
+            background: variables.$dark-800 !important;
+        }
+        .dropdown-menu {
+            background: variables.$dark-800;
+            border-color: variables.$dark-700;
+            .dropdown-item {
+                color: variables.$dark-300 !important;
+            }
+        }
+        .text-dark {
+            color: variables.$dark-300 !important;
+        }
+    }
+    &.main-chat-blk {
+        .main-wrapper {
+            .content {
+                .sidebar-group {
+                    .sidebar {
+                        background: variables.$dark-800;
+                        border-right-color: variables.$dark-700;
+                        .user-list li a:hover {
+                            background: variables.$dark-700;
+                        }
+                    }
+                } 
+                .action-circle {
+                    background: variables.$dark-800 !important;
+                }
+            } 
+            .chat-page-wrapper .left-chat-title {
+                border-bottom-color: variables.$dark-700;
+            }
+        }
+        .right-sidebar .right-sidebar-wrap {
+            background: variables.$dark-800;
+            border-left-color: variables.$dark-700;
+        }
+        .chat {
+            background: variables.$dark-800;
+            .chat-header {
+                background: variables.$dark-800;
+                border-bottom-color: variables.$dark-700;
+            }
+        }
+    } 
+    .part-name.sub-part-name,.more-icon a,.meet-call-menu-blk .video-call-action ul li a {
+        background: variables.$dark-800;
+        border-color: variables.$dark-700;
+    }
+    .card .card-title {
+        color: variables.$dark-100;
+    }
+    .popover .popover-body {
+        background: variables.$dark-800;
+        border-color: variables.$dark-700;
+    }
+    .popover .popover-header {
+        background: variables.$dark-800;
+        border-color: variables.$dark-700;
+    }
+    .popover {
+        border-color: variables.$dark-700;
+    }
+    .swal2-popup,.toast-header,.toast-body {
+        background: variables.$dark-800;
+    }
+    .toast-header .btn-close {
+        color: variables.$dark-100;
+    }
+    .scroll-demo,.icons-list li {
+        border-color: variables.$dark-700;
+    }
+    .select2-container--default .select2-selection--multiple {
+        background: variables.$dark-800;
+        border-color: variables.$dark-700;
+    }
+    .table>:not(caption)>*>* {
+        background: variables.$dark-800;
+    }
+    .breadcrumb .breadcrumb-item.active {
+        color: variables.$dark-200;
+    }
+    .filter-wrapper {
+        border-color: variables.$dark-700;
+    }
+    .list-tab ul {
+        border-color: variables.$dark-700;
+    }
+    .meet-call-menu-blk .video-call-action ul li a {
+        color: variables.$dark-100;
+    }
+    .main-chat-blk .user-list li a {
+        &:hover {
+            background: variables.$dark-800;
+        }
+    }
+    .chat-msg-blk .chats {
+        &.chats-right {
+            .message-content {
+                &::before {
+                    border-left-color: variables.$dark-800;
+                }
+            }
+        }
+        .message-content {
+            background: variables.$dark-800 !important;
+            &::before {
+                border-right-color: variables.$dark-800;
+            }
+        }
+    }
+    .right-user-side .slime-grp .chat-footer {
+        background: variables.$dark-800;
+    }
+    .right-user-side .slime-grp .chat-footer form .chat_form {
+        background: variables.$dark-800;
+        border-color: variables.$dark-700;
+        color: variables.$dark-200;
+    }
+    .chat_form::placeholder {
+        color: variables.$dark-500 !important;
+    }
+    .dropdown-item:not(.active):hover, .dropdown-item:not(.active):focus, .dropdown-item:not(.active):active,
+    .dropdown-item.active {
+        background: variables.$dark-400;
+    }
+    .card-dropdown .dropdown-menu li a:hover {
+        background: variables.$dark-400;
+        color: variables.$dark-100;
+    }
+    .btn-outline-light {
+        color: variables.$dark-300 !important;
+        background: variables.$dark-800 !important;
+    }
+    .bg-white{
+        background: variables.$dark-800 !important;
+    }
+    .user-list-item {
+        background: variables.$dark-700 !important;
+    }
+    .record-time span:before   {
+        background-color: variables.$dark-800;
+    }
+    .nav-control button,.plyr--video .plyr__control {
+        background: variables.$dark-800;
+        border-color: variables.$dark-700;
+    }
+    .dataTables_paginate .pagination li a {
+        color: variables.$dark-200;
+    }
+    .bootstrap-datetimepicker-widget table th {
+        color: variables.$dark-200;
+    }
+    .list-tab ul li a {
+        color: variables.$dark-200;
+    }
+    .accordion .accordion-button.collapsed {
+        background: variables.$dark-800 !important;
+    }
+    .accordion .accordion-button.collapsed:after {
+        background: variables.$dark-800;
+    }
+    .accordion .accordion-button {
+        background: variables.$dark-800 !important;
+    }
+    span.icon-addon,.bookingrange {
+        color: variables.$dark-300;
+    }
+    .daterangepicker {
+        background: variables.$dark-800;
+        border-color: variables.$dark-700;
+    }
+    .daterangepicker:after {
+        border-bottom-color: variables.$dark-500;
+    }
+    .accordion-button:after {
+        background: variables.$dark-800;
+    }
+    .language-setup-table {
+        border-color: variables.$dark-700;
+    }
+    #calendar,#events {
+        .fc-day {
+            background: variables.$dark-700;
+            border-color: variables.$dark-600;
+        }
+        .fc-daygrid-day-number {
+            color: variables.$dark-300;
+        }
+        .fc-scrollgrid {
+            border-color: variables.$dark-600;
+        }
+        .fc-col-header-cell-cushion {
+            color: variables.$dark-100;
+        }
+        .fc-daygrid-day.fc-day-today {
+            background-color: variables.$dark-800;
+        }
+        td, th {
+            border-color: variables.$dark-600;
+        }
+    }
+    #global-loader {
+        background: variables.$dark-900;
+    }
+
+    .invoice-logo-dark {
+        display: none;
+    }
+    .invoice-logo-white {
+        display: block;
+    }
+
+}

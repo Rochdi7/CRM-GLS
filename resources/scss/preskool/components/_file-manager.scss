@@ -1,0 +1,74 @@
+@use "../utils/mixins";
+@use "../utils/variables";
+
+.dropset.btn-icon {
+    height: 45px !important;
+}
+aside {
+    padding: 24px;
+}
+.video-section .item{
+  opacity:0.4;
+  transition:.4s ease all;
+  transform:scale(.8);
+}
+@media(max-width:1000px){
+  .video-section .item{margin:0; transform:scale(.9)}
+}
+.video-section .active .item{
+  opacity:1;
+  transform:scale(1);
+} 
+.video-section .owl-item {
+    -webkit-backface-visibility: hidden;
+    -webkit-transform: translateZ(0) scale(1.0, 1.0);
+}
+.video-section video{
+  max-width:100%;
+  height:100%;
+  @include mixins.rounded(10px 10px 0 0);
+}
+.delete-alert {
+    padding: 10px 20px;
+    background: variables.$danger-200;
+    border:  none;
+    @include mixins.rounded(8px);
+    p {
+        font-size: variables.$font-size-15;
+    }
+    .btn {
+        font-weight: variables.$font-weight-bold;
+    }
+}
+.deleted-info {
+    display: none;
+    .bin-bg {
+        width: 184px;
+        height: 184px;
+        @include mixins.rounded(100%);
+        background: variables.$light;
+        margin: 0 auto;
+    }
+}
+svg {
+    &.feather-16 {
+        width: 16px;
+        height: 16px;
+    }
+    &.feather-14 {
+        width: 14px;
+        height: 14px;
+    }
+}
+.active-dark-btn {
+    a {
+        &.active {
+            background: variables.$dark;
+            color: variables.$white;
+        }
+        &:hover {
+            background: variables.$dark;
+            color: variables.$white;
+        }
+    }
+}

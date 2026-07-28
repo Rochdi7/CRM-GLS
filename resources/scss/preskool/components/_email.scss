@@ -1,0 +1,40 @@
+@use "../utils/variables";
+
+.table-inbox {
+    .starred.fas.fa-star {
+        color: variables.$warning;
+    }
+    .checked {
+        background-color: variables.$gray-300;
+    }
+    th{
+        border-color: variables.$light-700;  
+    }
+    tbody{
+        tr{
+            td{
+                font-size: variables.$font-size-14;
+                color: variables.$secondary;
+                border-color: variables.$light-900;
+            }
+        }
+    }
+}
+.unread{
+    .name,
+    .subject,
+    .mail-date{
+        color: variables.$black;
+        font-weight: variables.$font-weight-bold;
+    }
+}
+.email-header{
+    .btn-white{
+        min-width: auto;
+        height: 38px;
+        border: 1px solid variables.$light-900;
+        i{
+            margin-left:5px;
+        }
+    }
+}

@@ -1,0 +1,434 @@
+@use "../utils/mixins";
+@use "../utils/variables";
+
+.attendance-types {
+    .attendance-type-list {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        li {
+            border: 1px solid variables.$light-900;
+            border-radius: 5px;
+            background: variables.$white;
+            padding: 8px 10px;
+            color: variables.$gray-900;
+            display: flex;
+            align-items: center;
+            margin-right: 5px;
+            margin-bottom: 5px;
+            &:last-child {
+                margin-right: 0;
+            }
+            .attendance-icon {
+                width: 20px;
+                height: 20px;
+                border-radius: 5px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+                margin-right: 5px;
+            }
+        }
+    }
+}
+.student-pomote-note {
+    background: variables.$primary-transparent;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 5px;
+    padding: 6px 10px;
+    border: 1px solid variables.$primary;
+    margin-bottom: 20px;
+    @include mixins.respond-below(sm) {
+        display: block;
+    }
+    .info-icon {
+        color: variables.$primary;
+        margin-right: 5px;
+    }
+    p {
+        color: variables.$primary;
+        display: flex;
+        align-items: center;
+        @include mixins.respond-below(sm) {
+            display: block;
+        }
+        span {
+            font-weight: variables.$font-weight-semibold;
+            margin-right: 3px;
+            @include mixins.respond-below(sm) {
+                display: block;
+            }
+        }
+    }
+}
+.promote-card-main {
+    display: none;
+    &.promote-card-main-show {
+        display: block;
+        margin-bottom: 24px;
+    }
+}
+.promoted-year {
+    p {
+        margin-bottom: 10px;
+        color: variables.$black;
+    }
+}
+#student_promote {
+    .modal-dialog {
+        max-width: 400px;
+        h4 {
+            font-size: variables.$font-size-20;
+            margin-bottom: 5px;
+        }
+        p {
+            margin-bottom: 24px;
+        }
+    }
+}
+.success-msg-toast {
+    top: 70px;
+    right: 30px;
+    .toast {
+        border: 0;
+        .toast-header {
+            padding: 10px;
+            border-radius: 5px;
+            border-left: 2px solid variables.$success;
+            p {
+                margin-bottom: 0;
+                display: inline-flex;
+                align-items: center;
+                color: variables.$gray-900;
+                font-size: variables.$font-size-15;
+                span {
+                    font-size: variables.$font-size-16;
+                    margin-right: 5px;
+                    line-height: normal;
+                }
+            }
+            .toast-close {
+                span {
+                    i {
+                        color: variables.$gray-200;
+                        transition: 0.5s all;
+                        &:hover {
+                            color: variables.$danger;
+                            transition: 0.5s all;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+.date-pic {
+    position: relative;
+    .cal-icon {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+}
+.student-detail-info {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 24px;
+    .student-img {
+        width: 45px;
+        height: 45px;
+        border-radius: 5px;
+        display: flex;
+        flex-shrink: 0;
+        margin-right: 10px;
+        img {
+            width: 100%;
+            border-radius: 5px;
+        }
+    }
+    .name-info {
+        h6 {
+            font-size: variables.$font-size-16;
+            span {
+                display: block;
+                font-weight: variables.$font-weight-normal;
+            }
+        }
+    }
+}
+.year-picker {
+    width: 125px;
+    position: relative;
+    margin-bottom: 10px;
+    margin-right: 5px;
+    input {
+        height: 39px;
+        padding-left: 30px;
+    }
+    .icon {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        line-height: normal;
+        transform: translateY(-50%);
+    }
+    .cal-icon {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        line-height: normal;
+        transform: translateY(-50%);
+    }
+}
+.table-filter-head  {
+    &.attendance-report-head {
+        .filter-head-left {
+            .form-filter {
+                margin-right: 5px;
+            }
+        } 
+        .search-filter-btn {
+            margin-bottom: 10px;
+            .btn {
+                padding: 7px 20px;
+            }
+        }
+    }
+}
+.add-more-timetable {
+    background: variables.$light-900;
+    padding: 24px;
+    border-radius: 5px;
+    .tab-links {
+        margin-bottom: 24px;
+        li {
+            padding: 0;
+            margin-right: 24px;
+            &:last-child {
+                margin-right: 0;
+            }
+            a {
+                background: transparent;
+                font-weight: variables.$font-weight-normal;
+                color: variables.$gray-700;
+                padding: 0 20px 10px;
+                position: relative;
+                &::after {
+                    content: "";
+                    width: 100%;
+                    height: 3px;
+                    border-radius: 5px;
+                    background: variables.$primary;
+                    position: absolute;
+                    left: 0;
+                    bottom: 0;
+                    opacity: 0;
+                    transition: 0.5s all;
+                }
+            }
+            &.active {
+                background: transparent;
+                a {
+                    background: transparent;
+                    &::after {
+                        opacity: 1;
+                        transition: 0.5s all;
+                    }
+                }
+            }
+        }
+    }
+    .delete-time-table {
+        width: 30px;
+        height: 30px;
+        background: variables.$danger-100;
+        color: variables.$danger;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 5px;
+        &:hover {
+            background: variables.$danger;
+            color: variables.$white;
+        }
+    }
+}
+.exam-schedule-add {
+    border-top: 1px solid variables.$light-900;
+    padding-top: 15px;
+    .delete-schedule-table {
+        width: 30px;
+        height: 30px;
+        background: variables.$danger-100;
+        color: variables.$danger;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 5px;
+        &:hover {
+            background: variables.$danger;
+            color: variables.$white;
+        }
+    }
+}
+.percentage-field {
+    display: none;
+    &.percentage-field-show {
+        display: block;
+    }
+}
+.fixed-field {
+    display: none;
+    &.fixed-field-show {
+        display: block;
+    }
+}
+.modal-card-table {
+    border: 1px solid variables.$light-900;
+    padding: 15px;
+    border-radius: 5px;
+    margin-bottom: 24px;
+    .modal-table-head {
+        border-bottom: 1px solid variables.$light-900;
+        margin-bottom: 24px;
+        padding-bottom: 24px;
+    }
+}
+.class-detail-info {
+    margin-bottom: 20px;
+    p {
+        margin-bottom: 5px;
+    }
+    span {
+        color: variables.$gray-900;
+    }
+}
+.content.blank-page {
+    min-height: 100vh;
+    .page-header {
+        border-bottom: 1px solid variables.$light-900;
+    }
+    .page-title {
+        h4 {
+            margin-bottom: 0;
+        }
+    }
+}
+.book-issue-details {
+    border: 1px solid variables.$light-900;
+    border-radius: 5px;
+    padding: 24px 24px 10px;
+    margin-top: 15px;
+    .book-details-head {
+        display: flex;
+        align-items: center;
+        border-bottom: 1px solid variables.$light-900;
+        margin-bottom: 15px;
+        padding-bottom: 15px;
+        justify-content: space-between;
+        h6 {
+            font-weight: variables.$font-weight-normal;
+            span {
+                color: variables.$gray-700;
+            }
+        }
+    }
+}
+.book-taker-info {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    li {
+        margin-right: 24px;
+        margin-bottom: 14px;
+        .student-img {
+            width: 45px;
+            height: 45px;
+            border-radius: 5px;
+            display: flex;
+            flex-shrink: 0;
+            margin-right: 8px;
+            img {
+                border-radius: 5px;
+                width: 100%;
+            }
+        }
+        h6 {
+            font-weight: variables.$font-weight-normal;
+            span {
+                margin-bottom: 0;
+                color: variables.$gray-900;
+            }
+        }
+        span {
+            margin-bottom: 3px;
+            color: variables.$gray-700;
+            display: block;
+        }
+    }
+}
+.live-track-info {
+    background: variables.$white;
+    padding: 24px 24px 10px;
+    border-radius: 5px;
+    margin-bottom: 24px;
+}
+.live-track-map {
+    iframe {
+        width: 100%;
+        height: 300px;
+    }
+}
+.assigned-driver {
+    .assigned-driver-info {
+        display: flex;
+        align-items: center;
+        background: variables.$light-900;
+        border-radius: 5px;
+        padding: 15px;
+        margin-top: 15px;
+        .driver-img {
+            width: 32px;
+            height: 32px;
+            border-radius: 5px;
+            display: flex;
+            margin-right: 8px;
+            flex-shrink: 0;
+            img {
+                width: 100%;
+                border-radius: 5px;
+            }
+        }
+        h5 {
+            font-weight: variables.$font-weight-normal;   
+        }
+    }
+}
+.student-leave-info {
+    ul {
+        display: flex;
+        align-items: center;
+        background: variables.$light-500;
+        border-radius: 5px;
+        padding: 15px 15px 5px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+        li {
+            min-width: 120px;
+            margin-bottom: 10px;
+            h6 {
+                font-weight: variables.$font-weight-normal;   
+                margin-top: 3px;
+            }
+        }
+    }
+}
+.exchange-link {
+    width: 54px;
+    height: 54px;
+    border-radius: 15px;
+}

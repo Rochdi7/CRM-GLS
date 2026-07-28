@@ -1,0 +1,149 @@
+/*
+ * GLS CRM — Backoffice style overrides.
+ *
+ * The full PreSkool theme CSS is served statically from
+ * public/assets/preskool/css/style.css (compiled by the theme authors from
+ * the SCSS preserved at resources/scss/preskool/ — reference only).
+ *
+ * This file is loaded AFTER the theme CSS, so put GLS-specific overrides
+ * here. Do not re-import the theme SCSS (it would duplicate Bootstrap).
+ */
+
+// GLS overrides start here.
+
+// --- Female gender toggle: pink outline → filled pink on hover/checked -----
+$gls-pink: #e83e8c;
+
+.gls-sexe-femme {
+    color: $gls-pink;
+    border: 1px solid $gls-pink;
+    background-color: transparent;
+
+    &:hover {
+        color: #fff;
+        background-color: $gls-pink;
+        border-color: $gls-pink;
+    }
+}
+
+// The <input class="btn-check"> sits right before its label; style the
+// checked state of the female button.
+.btn-check:checked + .gls-sexe-femme,
+.btn-check:active + .gls-sexe-femme {
+    color: #fff;
+    background-color: $gls-pink;
+    border-color: $gls-pink;
+}
+
+.btn-check:focus-visible + .gls-sexe-femme {
+    box-shadow: 0 0 0 0.2rem rgba($gls-pink, 0.35);
+}
+
+// --- Select2 ↔ Livewire fields (<x-backoffice.forms.select2>) -----------
+// The <select> sits inside wire:ignore, so Bootstrap's .is-invalid never
+// reaches it; Livewire instead toggles .is-invalid on the .gls-select2
+// wrapper (which IS morphed) and the Select2 box is tinted from there.
+.gls-select2.is-invalid .select2-container--default .select2-selection--single {
+    border-color: var(--bs-form-invalid-border-color, #dc3545);
+}
+
+// Alpine x-cloak — hide [x-cloak] elements until Alpine has initialised, so
+// modal wrappers don't flash before x-show takes over. (Alpine does not ship
+// this rule; the app must define it.)
+[x-cloak] {
+    display: none !important;
+}
+
+// --- Top-bar context switchers above the sidebar ------------------------
+// The theme sidebar has z-index:1001 while the header is z-index:999, so any
+// header dropdown (our year/center switchers) opens UNDERNEATH the fixed
+// sidebar. Lift the switcher's stacking context and its open menu above it.
+.header .gls-context-switcher {
+    position: relative;
+    z-index: 1002;
+
+    .dropdown-menu.show {
+        z-index: 1002;
+    }
+}
+
+// --- GLS logo sizing in the admin header --------------------------------
+// The theme forces `width: 130px` (140px on mobile) on header logos, which
+// makes our 960x560 logo (~1.7:1) overflow the 56px header. Constrain by
+// HEIGHT instead and let the width follow the aspect ratio.
+.header .header-left {
+    .logo img,
+    .dark-logo img {
+        width: auto;
+        max-height: 50px;
+    }
+}
+
+.header .logo-small img {
+    width: auto;
+    max-height: 34px;
+}
+
+// Center the logo in the 252px sidebar-width strip. The theme lays out
+// header-left as `space-between` (logo left, #toggle_btn right); switch to
+// `center` and take the hamburger out of flow so the logo is truly centered.
+// Desktop + normal sidebar only: on <992px the theme already centers the logo
+// (and hides #toggle_btn), and mini-sidebar mode has its own column layout.
+@media (min-width: 992px) {
+    body:not(.mini-sidebar) .header .header-left {
+        justify-content: center;
+
+        #toggle_btn {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+    }
+}
+
+// --- Bordered inactive tabs (nav-tabs-solid) ----------------------------
+// The theme leaves non-active solid tabs borderless, so they read as plain
+// text. Outline every inactive tab (groups status tabs, modal tabs, settings
+// tabs…) so it is obviously clickable; the active tab keeps the theme's
+// solid primary fill.
+.nav-tabs.nav-tabs-solid .nav-link:not(.active) {
+    border: 1px solid #e9edf4;
+}
+
+html[data-theme="dark"] .nav-tabs.nav-tabs-solid .nav-link:not(.active) {
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+// --- Row action 3-dots menu (x-backoffice.ui.action-menu) ---------------
+// .table-responsive establishes a scroll container that clips the open
+// dropdown; release the clip only while a menu is open.
+.table-responsive:has(.dropdown-menu.show) {
+    overflow: visible;
+}
+
+// --- GLS logo: black in light mode, white in dark mode -----------------
+// Used outside the theme header (e.g. auth pages) where the theme's
+// .logo-normal / .dark-logo switching doesn't apply.
+.gls-auth-logo {
+    max-width: 170px;
+    height: auto;
+}
+
+.gls-logo-light {
+    display: inline-block;
+}
+
+.gls-logo-dark {
+    display: none;
+}
+
+html[data-theme="dark"] {
+    .gls-logo-light {
+        display: none;
+    }
+
+    .gls-logo-dark {
+        display: inline-block;
+    }
+}

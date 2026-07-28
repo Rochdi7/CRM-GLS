@@ -1,0 +1,17 @@
+@use "../utils/mixins";
+@use "../utils/variables";
+
+.board-hover {
+    @include mixins.transition(all 0.5s ease);
+    .board-action {
+        @include mixins.transition(all 0.5s ease);
+        display: none !important;
+    }
+    &:hover {
+        border-color: variables.$primary;
+        @include mixins.transition(all 0.5s ease);
+        .board-action {
+           display: flex !important;
+        }
+    }
+}

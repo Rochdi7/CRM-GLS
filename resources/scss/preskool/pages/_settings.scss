@@ -1,0 +1,97 @@
+@use "../utils/variables";
+
+.profile-uploader.profile-uploader-two {
+    position: relative;
+    width: 100%;
+    border: 1px dashed variables.$gray-300;
+    background-color: transparent;
+    border-radius: 5px;
+    padding: 15px 15px 12px;
+    margin-bottom: 15px;
+    .upload-icon {
+        display: block;
+        text-align: center;
+        font-size: variables.$font-size-24;
+        line-height: 0;
+        margin-bottom: 15px;
+    }
+    input[type=file] {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        cursor: pointer;
+        &.form-control {
+            padding: 0;
+        }
+    }
+    .drag-upload-btn {
+        font-size: variables.$font-size-12;
+        text-align: center;
+        .upload-btn {
+            font-size: variables.$font-size-12;
+            margin-bottom: 5px;
+            span {
+                color: variables.$primary;
+            }
+        }
+        h6 {
+            font-size: variables.$font-size-12;
+            font-weight: variables.$font-weight-normal;
+            margin-bottom: 5px;
+        }
+    }
+}
+.settings-profile-upload {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
+    .profile-pic {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        margin-right: 15px;
+        display: block;
+        flex-shrink: 0;
+        img {
+            width: 100%;
+            border-radius: 50%;
+        }
+    }
+    .title-upload {
+        h5 {
+            margin-bottom: 5px;
+        }
+    }
+}
+.language-setup-table {
+    border: 1px solid variables.$light-900;
+    border-radius: 5px;
+    overflow: auto;
+    .table {
+        thead {
+            background: variables.$light-600;
+            th {
+                background: variables.$light-600;
+            }
+        }
+        tbody {
+            tr {
+                td {
+                    border-bottom: 1px solid variables.$light-900; 
+                    width: 50%;
+                }
+                &:last-child {
+                    td {
+                        border-bottom: 0;
+                    }
+                }
+            }
+        }
+    }
+}
+.tax-group-input {
+    position: relative;
+}

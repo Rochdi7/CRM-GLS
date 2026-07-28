@@ -1,0 +1,14 @@
+@use "../utils/variables";
+
+.dash-select-student {
+    margin-bottom: 10px;
+    .avatar {
+        border: 1px solid transparent;
+        &:hover {
+            border-color: variables.$primary;
+        }
+        &.active {
+            border-color: variables.$primary;
+        }
+    }
+}

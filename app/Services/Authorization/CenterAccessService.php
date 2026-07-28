@@ -1,0 +1,67 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services\Authorization;
+
+use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
+
+/**
+ * Answers "on WHICH center's data may this user act?" — separate from
+ * roles/permissions, which answer "WHAT may this user do?"
+ * (docs/authorization-architecture.md).
+ *
+ * Rules:
+ *  - `centers.access-all` (or super-admin via Gate::before) ⇒ every center;
+ *  - otherwise the employee's single `etablissement_id` (the schema has no
+ *    employee↔center pivot — deliberate simplification);
+ *  - records with a NULL center are global: visible to anyone holding the
+ *    module permission;
+ *  - a user with no employee profile (and no access-all) is confined to
+ *    global records.
+ */
+final class CenterAccessService
+{
+    public function hasGlobalAccess(User $user): bool
+    {
+        return $user->can('centers.access-all');
+    }
+
+    public function canAccessCenter(User $user, ?int $centerId): bool
+    {
+        if ($centerId === null || $this->hasGlobalAccess($user)) {
+            return true;
+        }
+
+        return in_array($centerId, $this->accessibleCenterIds($user), true);
+    }
+
+    /**
+     * Center ids this user is assigned to (empty when none — NOT "all").
+     *
+     * @return list<int>
+     */
+    public function accessibleCenterIds(User $user): array
+    {
+        $centerId = $user->employee?->etablissement_id;
+
+        return $centerId === null ? [] : [(int) $centerId];
+    }
+
+    /**
+     * Constrains a query to accessible centers (global NULL rows included).
+     */
+    public function scopeAccessibleCenters(Builder $query, User $user, string $column = 'etablissement_id'): Builder
+    {
+        if ($this->hasGlobalAccess($user)) {
+            return $query;
+        }
+
+        $ids = $this->accessibleCenterIds($user);
+
+        return $query->where(function (Builder $q) use ($ids, $column): void {
+            $q->whereNull($column)->orWhereIn($column, $ids);
+        });
+    }
+}

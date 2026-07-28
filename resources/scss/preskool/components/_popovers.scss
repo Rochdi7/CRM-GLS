@@ -1,0 +1,493 @@
+@use "../utils/variables";
+
+.custom-popover {
+  --bs-popover-max-width: 12.5rem;
+  --bs-popover-border-color: #{variables.$primary};
+  --bs-popover-header-bg: #{variables.$primary};
+  --bs-popover-header-color: #{variables.$white};
+  --bs-popover-body-padding-x: 1rem;
+  --bs-popover-body-padding-y: 0.5rem;
+}
+.popover {
+  background-color: variables.$white;
+  border: 1px solid variables.$default-border;
+  box-shadow: variables.$box-shadow;
+  font-size: 0.8rem;
+  border-radius: variables.$border-radius;
+  z-index: 999;
+  .popover-header {
+    background-color: variables.$white;
+    border-block-end: 1px solid variables.$default-border;
+  }
+  .popover-body {
+    color: variables.$text-color;
+  }
+  &.only-body {
+    border-radius: 0.3rem;
+  }
+}
+.bs-popover-auto[data-popper-placement^="top"] > .popover-arrow::after,
+.bs-popover-top > .popover-arrow::after,
+.bs-popover-auto[data-popper-placement^="top"] > .popover-arrow::before,
+.bs-popover-top > .popover-arrow::before {
+  border-top-color: variables.$light;
+}
+.bs-popover-auto[data-popper-placement^="right"] > .popover-arrow::after,
+.bs-popover-end > .popover-arrow::after,
+.bs-popover-auto[data-popper-placement^="right"] > .popover-arrow::before,
+.bs-popover-end > .popover-arrow::before {
+  border-right-color: variables.$light;
+}
+.bs-popover-auto[data-popper-placement^="left"] > .popover-arrow::after,
+.bs-popover-start > .popover-arrow::after,
+.bs-popover-auto[data-popper-placement^="left"] > .popover-arrow::before,
+.bs-popover-start > .popover-arrow::before {
+  border-left-color: variables.$light;
+}
+.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::after,
+.bs-popover-bottom > .popover-arrow::after,
+.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::before,
+.bs-popover-bottom > .popover-arrow::before,
+.bs-popover-auto[data-popper-placement^="bottom"] .popover-header::before,
+.bs-popover-bottom .popover-header::before {
+  border-bottom-color: variables.$light;
+}
+
+@mixin pop-header-color($color) {
+  .popover-header {
+    background-color: $color;
+    color: variables.$white;
+  }
+  &.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::after,
+  &.bs-popover-auto[data-popper-placement^="bottom"] .popover-header::before {
+    border-bottom-color: $color;
+  }
+}
+.header-primary {
+  @include pop-header-color(variables.$primary);
+}
+.header-secondary {
+  @include pop-header-color(variables.$secondary);
+}
+.header-warning {
+  @include pop-header-color(variables.$warning);
+}
+.header-info {
+  @include pop-header-color(variables.$info);
+}
+.header-success {
+  @include pop-header-color(variables.$success);
+}
+.header-danger {
+  @include pop-header-color(variables.$danger);
+}
+@mixin pop-bgcolor($color) {
+  &.popover {
+      border: 1px solid $color;
+    .popover-header {
+      background-color: $color;
+      border-block-end: 1px solid rgba(255, 255, 255, 0.1);
+      color: variables.$white;
+      border-radius: 0.3rem 0.3rem 0 0;
+    }
+    .popover-body {
+      background-color: $color;
+      color: variables.$white;
+      border-radius: 0 0 0.3rem 0.3rem;
+    }
+  }
+  &.bs-popover-auto[data-popper-placement^="top"] > .popover-arrow::after,
+  &.bs-popover-top > .popover-arrow::after,
+  &.bs-popover-auto[data-popper-placement^="top"] > .popover-arrow::before,
+  &.bs-popover-top > .popover-arrow::before {
+    border-top-color: $color;
+  }
+  &.bs-popover-auto[data-popper-placement^="right"] > .popover-arrow::after,
+  &.bs-popover-end > .popover-arrow::after,
+  &.bs-popover-auto[data-popper-placement^="right"] > .popover-arrow::before,
+  &.bs-popover-end > .popover-arrow::before {
+    border-right-color: $color;
+  }
+  &.bs-popover-auto[data-popper-placement^="left"] > .popover-arrow::after,
+  &.bs-popover-start > .popover-arrow::after,
+  &.bs-popover-auto[data-popper-placement^="left"] > .popover-arrow::before,
+  &.bs-popover-start > .popover-arrow::before {
+    border-left-color: $color;
+  }
+  &.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::after,
+  &.bs-popover-bottom > .popover-arrow::after,
+  &.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::before,
+  &.bs-popover-bottom > .popover-arrow::before,
+  &.bs-popover-auto[data-popper-placement^="bottom"] .popover-header::before,
+  &.bs-popover-bottom .popover-header::before {
+    border-bottom-color: $color;
+  }
+}
+.popover-primary {
+  @include pop-bgcolor(variables.$primary);
+}
+.popover-secondary {
+  @include pop-bgcolor(variables.$secondary);
+}
+.popover-warning {
+  @include pop-bgcolor(variables.$warning);
+}
+.popover-info {
+  @include pop-bgcolor(variables.$info);
+}
+.popover-success {
+  @include pop-bgcolor(variables.$success);
+}
+.popover-danger {
+  @include pop-bgcolor(variables.$danger);
+}
+.popover-purple {
+  @include pop-bgcolor(variables.$purple);
+}
+.popover-teal {
+  @include pop-bgcolor(variables.$teal);
+}
+
+.popover-primary-light {
+    &.popover {
+        border: 1px solid rgba(variables.$primary, 0.1);
+      .popover-header {
+        background-color: rgba(variables.$primary, 0.1);
+        border-block-end: 1px solid rgba(variables.$primary, 0.1);
+        color: variables.$primary;
+        border-radius: 0;
+      }
+      .popover-body {
+        background-color: rgba(variables.$primary, 0.1);
+        color: variables.$primary;
+      }
+    }
+    &.bs-popover-auto[data-popper-placement^="top"] > .popover-arrow::after,
+    &.bs-popover-top > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="top"] > .popover-arrow::before,
+    &.bs-popover-top > .popover-arrow::before {
+      border-top-color: rgba(variables.$primary, 0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="right"] > .popover-arrow::after,
+    &.bs-popover-end > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="right"] > .popover-arrow::before,
+    &.bs-popover-end > .popover-arrow::before {
+      border-right-color: rgba(variables.$primary, 0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="left"] > .popover-arrow::after,
+    &.bs-popover-start > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="left"] > .popover-arrow::before,
+    &.bs-popover-start > .popover-arrow::before {
+      border-left-color: rgba(variables.$primary, 0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::after,
+    &.bs-popover-bottom > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::before,
+    &.bs-popover-bottom > .popover-arrow::before,
+    &.bs-popover-auto[data-popper-placement^="bottom"] .popover-header::before,
+    &.bs-popover-bottom .popover-header::before {
+      border-bottom-color: rgba(variables.$primary, 0.1);
+    }
+}
+.popover-secondary-light {
+    &.popover {
+        border: 1px solid rgba(variables.$secondary,0.1);
+      .popover-header {
+        background-color: rgba(variables.$secondary,0.1);
+        border-block-end: 1px solid rgba(variables.$secondary,0.1);
+        color: variables.$secondary;
+        border-radius: 0;
+      }
+      .popover-body {
+        background-color: rgba(variables.$secondary,0.1);
+        color: variables.$secondary;
+      }
+    }
+    &.bs-popover-auto[data-popper-placement^="top"] > .popover-arrow::after,
+    &.bs-popover-top > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="top"] > .popover-arrow::before,
+    &.bs-popover-top > .popover-arrow::before {
+      border-top-color: rgba(var(--secondary-rgb),0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="right"] > .popover-arrow::after,
+    &.bs-popover-end > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="right"] > .popover-arrow::before,
+    &.bs-popover-end > .popover-arrow::before {
+      border-right-color: rgba(variables.$secondary,0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="left"] > .popover-arrow::after,
+    &.bs-popover-start > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="left"] > .popover-arrow::before,
+    &.bs-popover-start > .popover-arrow::before {
+      border-left-color: rgba(var(--secondary-rgb),0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::after,
+    &.bs-popover-bottom > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::before,
+    &.bs-popover-bottom > .popover-arrow::before,
+    &.bs-popover-auto[data-popper-placement^="bottom"] .popover-header::before,
+    &.bs-popover-bottom .popover-header::before {
+      border-bottom-color: rgba(var(--secondary-rgb),0.1);
+    }
+}
+.popover-warning-light {
+    &.popover {
+        border: 1px solid rgba(variables.$warning,0.1);
+      .popover-header {
+        background-color: rgba(variables.$warning,0.1);
+        border-block-end: 1px solid rgba(variables.$warning,0.1);
+        color: variables.$warning;
+        border-radius: 0;
+      }
+      .popover-body {
+        background-color: rgba(variables.$warning,0.1);
+        color: variables.$warning;
+      }
+    }
+    &.bs-popover-auto[data-popper-placement^="top"] > .popover-arrow::after,
+    &.bs-popover-top > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="top"] > .popover-arrow::before,
+    &.bs-popover-top > .popover-arrow::before {
+      border-top-color: rgba(variables.$warning,0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="right"] > .popover-arrow::after,
+    &.bs-popover-end > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="right"] > .popover-arrow::before,
+    &.bs-popover-end > .popover-arrow::before {
+      border-right-color: rgba(variables.$warning,0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="left"] > .popover-arrow::after,
+    &.bs-popover-start > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="left"] > .popover-arrow::before,
+    &.bs-popover-start > .popover-arrow::before {
+      border-left-color: rgba(variables.$warning,0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::after,
+    &.bs-popover-bottom > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::before,
+    &.bs-popover-bottom > .popover-arrow::before,
+    &.bs-popover-auto[data-popper-placement^="bottom"] .popover-header::before,
+    &.bs-popover-bottom .popover-header::before {
+      border-bottom-color: rgba(variables.$warning,0.1);
+    }
+}
+.popover-info-light {
+    &.popover {
+        border: 1px solid rgba(variables.$info,0.1);
+      .popover-header {
+        background-color: rgba(variables.$info,0.1);
+        border-block-end: 1px solid rgba(variables.$info,0.1);
+        color: variables.$info;
+        border-radius: 0;
+      }
+      .popover-body {
+        background-color: rgba(variables.$info,0.1);
+        color: variables.$info;
+      }
+    }
+    &.bs-popover-auto[data-popper-placement^="top"] > .popover-arrow::after,
+    &.bs-popover-top > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="top"] > .popover-arrow::before,
+    &.bs-popover-top > .popover-arrow::before {
+      border-top-color: rgba(variables.$info,0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="right"] > .popover-arrow::after,
+    &.bs-popover-end > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="right"] > .popover-arrow::before,
+    &.bs-popover-end > .popover-arrow::before {
+      border-right-color: rgba(variables.$info,0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="left"] > .popover-arrow::after,
+    &.bs-popover-start > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="left"] > .popover-arrow::before,
+    &.bs-popover-start > .popover-arrow::before {
+      border-left-color: rgba(variables.$info,0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::after,
+    &.bs-popover-bottom > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::before,
+    &.bs-popover-bottom > .popover-arrow::before,
+    &.bs-popover-auto[data-popper-placement^="bottom"] .popover-header::before,
+    &.bs-popover-bottom .popover-header::before {
+      border-bottom-color: rgba(variables.$info,0.1);
+    }
+}
+.popover-success-light {
+    &.popover {
+        border: 1px solid rgba(variables.$success,0.1);
+      .popover-header {
+        background-color: rgba(variables.$success,0.1);
+        border-block-end: 1px solid rgba(variables.$success,0.1);
+        color: variables.$success;
+        border-radius: 0;
+      }
+      .popover-body {
+        background-color: rgba(variables.$success,0.1);
+        color: variables.$success;
+      }
+    }
+    &.bs-popover-auto[data-popper-placement^="top"] > .popover-arrow::after,
+    &.bs-popover-top > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="top"] > .popover-arrow::before,
+    &.bs-popover-top > .popover-arrow::before {
+      border-top-color: rgba(variables.$success,0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="right"] > .popover-arrow::after,
+    &.bs-popover-end > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="right"] > .popover-arrow::before,
+    &.bs-popover-end > .popover-arrow::before {
+      border-right-color: rgba(variables.$success,0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="left"] > .popover-arrow::after,
+    &.bs-popover-start > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="left"] > .popover-arrow::before,
+    &.bs-popover-start > .popover-arrow::before {
+      border-left-color: rgba(variables.$success,0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::after,
+    &.bs-popover-bottom > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::before,
+    &.bs-popover-bottom > .popover-arrow::before,
+    &.bs-popover-auto[data-popper-placement^="bottom"] .popover-header::before,
+    &.bs-popover-bottom .popover-header::before {
+      border-bottom-color: rgba(variables.$success,0.1);
+    }
+}
+.popover-danger-light {
+    &.popover {
+        border: 1px solid rgba(variables.$danger,0.1);
+      .popover-header {
+        background-color: rgba(variables.$danger,0.1);
+        border-block-end: 1px solid rgba(variables.$danger,0.1);
+        color: variables.$danger;
+        border-radius: 0;
+      }
+      .popover-body {
+        background-color: rgba(variables.$danger,0.1);
+        color: variables.$danger;
+      }
+    }
+    &.bs-popover-auto[data-popper-placement^="top"] > .popover-arrow::after,
+    &.bs-popover-top > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="top"] > .popover-arrow::before,
+    &.bs-popover-top > .popover-arrow::before {
+      border-top-color: rgba(variables.$danger,0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="right"] > .popover-arrow::after,
+    &.bs-popover-end > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="right"] > .popover-arrow::before,
+    &.bs-popover-end > .popover-arrow::before {
+      border-right-color: rgba(variables.$danger,0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="left"] > .popover-arrow::after,
+    &.bs-popover-start > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="left"] > .popover-arrow::before,
+    &.bs-popover-start > .popover-arrow::before {
+      border-left-color: rgba(variables.$danger,0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::after,
+    &.bs-popover-bottom > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::before,
+    &.bs-popover-bottom > .popover-arrow::before,
+    &.bs-popover-auto[data-popper-placement^="bottom"] .popover-header::before,
+    &.bs-popover-bottom .popover-header::before {
+      border-bottom-color: rgba(variables.$danger,0.1);
+    }
+}
+.popover-purple-light {
+    &.popover {
+        border: 1px solid rgba(var(--purple-rgb),0.1);
+      .popover-header {
+        background-color: rgba(var(--purple-rgb),0.1);
+        border-block-end: 1px solid rgba(var(--purple-rgb),0.1);
+        color: variables.$purple;
+        border-radius: 0;
+      }
+      .popover-body {
+        background-color: rgba(var(--purple-rgb),0.1);
+        color: variables.$purple;
+      }
+    }
+    &.bs-popover-auto[data-popper-placement^="top"] > .popover-arrow::after,
+    &.bs-popover-top > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="top"] > .popover-arrow::before,
+    &.bs-popover-top > .popover-arrow::before {
+      border-top-color: rgba(var(--purple-rgb),0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="right"] > .popover-arrow::after,
+    &.bs-popover-end > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="right"] > .popover-arrow::before,
+    &.bs-popover-end > .popover-arrow::before {
+      border-right-color: rgba(var(--purple-rgb),0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="left"] > .popover-arrow::after,
+    &.bs-popover-start > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="left"] > .popover-arrow::before,
+    &.bs-popover-start > .popover-arrow::before {
+      border-left-color: rgba(var(--purple-rgb),0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::after,
+    &.bs-popover-bottom > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::before,
+    &.bs-popover-bottom > .popover-arrow::before,
+    &.bs-popover-auto[data-popper-placement^="bottom"] .popover-header::before,
+    &.bs-popover-bottom .popover-header::before {
+      border-bottom-color: rgba(var(--purple-rgb),0.1);
+    }
+}
+.popover-teal-light {
+    &.popover {
+        border: 1px solid rgba(var(--teal-rgb),0.1);
+      .popover-header {
+        background-color: rgba(var(--teal-rgb),0.1);
+        border-block-end: 1px solid rgba(var(--teal-rgb),0.1);
+        color: variables.$teal;
+        border-radius: 0;
+      }
+      .popover-body {
+        background-color: rgba(var(--teal-rgb),0.1);
+        color: variables.$teal;
+      }
+    }
+    &.bs-popover-auto[data-popper-placement^="top"] > .popover-arrow::after,
+    &.bs-popover-top > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="top"] > .popover-arrow::before,
+    &.bs-popover-top > .popover-arrow::before {
+      border-top-color: rgba(var(--teal-rgb),0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="right"] > .popover-arrow::after,
+    &.bs-popover-end > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="right"] > .popover-arrow::before,
+    &.bs-popover-end > .popover-arrow::before {
+      border-right-color: rgba(var(--teal-rgb),0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="left"] > .popover-arrow::after,
+    &.bs-popover-start > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="left"] > .popover-arrow::before,
+    &.bs-popover-start > .popover-arrow::before {
+      border-left-color: rgba(var(--teal-rgb),0.1);
+    }
+    &.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::after,
+    &.bs-popover-bottom > .popover-arrow::after,
+    &.bs-popover-auto[data-popper-placement^="bottom"] > .popover-arrow::before,
+    &.bs-popover-bottom > .popover-arrow::before,
+    &.bs-popover-auto[data-popper-placement^="bottom"] .popover-header::before,
+    &.bs-popover-bottom .popover-header::before {
+      border-bottom-color: rgba(var(--teal-rgb),0.1);
+    }
+}
+$popover-placements: top, bottom, left, right;
+.popover-dark {
+          background-color: #0C1C29;
+          border-color: #0C1C29;
+        .popover-header {
+          background-color: rgba(255,255,255, .1) !important;
+          border-color: #0C1C29;
+        }
+        @each $placement in $popover-placements {
+          &.bs-popover-auto[data-popper-placement^=#{$placement}] .popover-arrow::before,
+          &.bs-popover-#{$placement} .popover-arrow::after {
+            border-#{$placement}-color: #0C1C29;
+          }
+        }
+    }

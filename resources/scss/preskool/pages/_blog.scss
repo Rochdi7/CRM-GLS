@@ -1,0 +1,14 @@
+@use "../utils/variables";
+
+.rating {
+    i {
+        &.filled {
+            color: variables.$warning;
+        }
+    }
+
+    .rating-rate {
+        color: variables.$black;
+        margin-left: 5px;
+    }
+}
