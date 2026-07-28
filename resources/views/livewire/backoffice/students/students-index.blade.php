@@ -19,7 +19,7 @@
         <x-slot:tools>
             <div class="d-flex align-items-center gap-2 flex-wrap">
                 <x-backoffice.forms.select2 id="s-niveau-filter" model="niveauFilter" live inline
-                    width="150px" :placeholder="__('All levels')">
+                    width="150px" :placeholder="__('All interests')">
                     @foreach ($niveaux as $niv)
                         <option value="{{ $niv }}">{{ $niv }}</option>
                     @endforeach
@@ -40,7 +40,7 @@
                     <tr>
                         <th>{{ __('Reference') }}</th>
                         <th>{{ __('Name') }}</th>
-                        <th>{{ __('Level') }}</th>
+                        <th>{{ __('Interested in') }}</th>
                         <th>
                             <a href="#" wire:click.prevent="sortByAge" class="text-dark d-inline-flex align-items-center" role="button">
                                 {{ __('Age') }}
@@ -184,7 +184,7 @@
                                      wire:model.live so the sibling appears without leaving the field. --}}
                                 <div class="col-md-6">
                                     <x-backoffice.forms.select2 id="s-niveau" model="niveau" live
-                                        :label="__('Level')" :placeholder="__('Choose…')">
+                                        :label="__('Interested in')" :placeholder="__('Choose…')">
                                         @foreach ($niveaux as $niv)<option value="{{ $niv }}">{{ $niv }}</option>@endforeach
                                     </x-backoffice.forms.select2>
                                 </div>

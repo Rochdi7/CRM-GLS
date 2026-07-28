@@ -161,7 +161,7 @@
                                              ask for a professional field, Studium for an entrance exam. --}}
                                         <div class="col-md-4" wire:key="ins-new-niveau">
                                             <x-backoffice.forms.select2 id="i-niv" model="new_niveau" live
-                                                :label="__('Level')" :placeholder="__('Choose…')">
+                                                :label="__('Interested in')" :placeholder="__('Choose…')">
                                                 @foreach ($niveaux as $niv)<option value="{{ $niv }}">{{ $niv }}</option>@endforeach
                                             </x-backoffice.forms.select2>
                                         </div>
