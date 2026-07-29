@@ -5,14 +5,16 @@ declare(strict_types=1);
 namespace App\Livewire\Backoffice\Remboursements;
 
 use App\Domain\Finance\Actions\EnregistrerRemboursement;
+use App\Livewire\Backoffice\Concerns\WithCaisseSelection;
 use App\Livewire\Backoffice\Concerns\WithCenterContext;
-use App\Models\Caisse;
 use App\Models\Remboursement;
 use App\Models\Student;
 use App\Services\Authorization\CenterAccessService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Collection;
+use Livewire\Attributes\Computed;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -30,6 +32,7 @@ use Livewire\WithPagination;
 final class RemboursementsIndex extends Component
 {
     use AuthorizesRequests;
+    use WithCaisseSelection;
     use WithCenterContext;
     use WithPagination;
 
@@ -115,6 +118,9 @@ final class RemboursementsIndex extends Component
         $this->authorize('create', Remboursement::class);
         $this->resetForm();
         $this->date_remboursement = now()->toDateString();
+        // Preselect the signed-in employee's own till (or the only accessible
+        // one) so the « Solde » box shows the balance as soon as the modal opens.
+        $this->preselectCaisseParDefaut();
         $this->showModal = true;
     }
 
@@ -196,6 +202,22 @@ final class RemboursementsIndex extends Component
         $this->resetValidation();
     }
 
+    /**
+     * @return Collection<int, Student>
+     */
+    #[Computed]
+    public function students(): Collection
+    {
+        $centerAccess = app(CenterAccessService::class);
+        $user = auth()->user();
+
+        return Student::query()
+            ->tap(fn ($q) => $centerAccess->scopeAccessibleCenters($q, $user))
+            ->tap(fn ($q) => $this->scopeToActiveCenter($q))
+            ->orderBy('nom')
+            ->get();
+    }
+
     public function render(): View
     {
         $centerAccess = app(CenterAccessService::class);
@@ -224,20 +246,13 @@ final class RemboursementsIndex extends Component
             ->latest()
             ->paginate(10);
 
-        $caisses = Caisse::query()
-            ->tap(fn ($q) => $centerAccess->scopeAccessibleCenters($q, $user))
-            ->tap(fn ($q) => $this->scopeToActiveCenter($q))
-            ->orderBy('nom')
-            ->get();
-
         return view('livewire.backoffice.remboursements.remboursements-index', [
             'remboursements' => $remboursements,
-            'caisses' => $caisses,
-            'students' => Student::query()
-                ->tap(fn ($q) => $centerAccess->scopeAccessibleCenters($q, $user))
-                ->tap(fn ($q) => $this->scopeToActiveCenter($q))
-                ->orderBy('nom')
-                ->get(),
+            // Tills follow permission + active-center scoping.
+            'caisses' => $this->caissesAccessibles(),
+            // Read-only balance shown next to the till select (« Solde » box).
+            'soldeCaisse' => $this->soldeCaisse(),
+            'students' => $this->students(),
         ]);
     }
 }

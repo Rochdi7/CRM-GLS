@@ -62,9 +62,9 @@
                         <option value="transfert">{{ __('Transfers') }}</option>
                     </x-backoffice.forms.select2>
                     <input type="date" class="form-control" style="min-width: 150px;"
-                        wire:model.live="dateFrom" title="{{ __('From') }}">
+                        wire:model.live.debounce.400ms="dateFrom" title="{{ __('From') }}">
                     <input type="date" class="form-control" style="min-width: 150px;"
-                        wire:model.live="dateTo" title="{{ __('To') }}">
+                        wire:model.live.debounce.400ms="dateTo" title="{{ __('To') }}">
                 </div>
             </x-slot:tools>
 

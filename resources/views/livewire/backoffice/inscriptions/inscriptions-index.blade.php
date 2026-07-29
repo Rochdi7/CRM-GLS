@@ -285,7 +285,7 @@
                                                                 <tr wire:key="fl-{{ $i }}">
                                                                     <td class="fw-medium">{{ $line['nom'] }}</td>
                                                                     <td style="width:110px;">
-                                                                        <input type="number" step="0.01" min="0" wire:model.live="feeLines.{{ $i }}.montant_initial"
+                                                                        <input type="number" step="0.01" min="0" wire:model.live.debounce.400ms="feeLines.{{ $i }}.montant_initial"
                                                                             class="form-control form-control-sm">
                                                                     </td>
                                                                     <td style="width:190px;">

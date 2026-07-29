@@ -23,18 +23,20 @@
     <link rel="stylesheet" href="{{ asset('assets/preskool/css/bootstrap.min.css') }}">
 @endif
 
-{{-- Icon fonts (core) --}}
+{{-- Icon fonts (core). fontawesome.min.css is deliberately NOT loaded here:
+     all.min.css is a strict superset (adds FA5+FA7 Brands, same Free family)
+     — loading both duplicated ~56 KB for nothing. Feather is not loaded
+     globally: zero data-feather nodes exist in our views (see app.js stub). --}}
 <link rel="stylesheet" href="{{ asset('assets/preskool/plugins/tabler-icons/tabler-icons.css') }}">
-<link rel="stylesheet" href="{{ asset('assets/preskool/plugins/fontawesome/css/fontawesome.min.css') }}">
 <link rel="stylesheet" href="{{ asset('assets/preskool/plugins/fontawesome/css/all.min.css') }}">
-<link rel="stylesheet" href="{{ asset('assets/preskool/css/feather.css') }}">
 
-{{-- Core plugin CSS used across the admin (pickers / selects) --}}
-<link rel="stylesheet" href="{{ asset('assets/preskool/plugins/daterangepicker/daterangepicker.css') }}">
+{{-- Select2 — used by CRUD dropdowns across 15+ pages, stays global. --}}
 <link rel="stylesheet" href="{{ asset('assets/preskool/plugins/select2/css/select2.min.css') }}">
-<link rel="stylesheet" href="{{ asset('assets/preskool/css/bootstrap-datetimepicker.min.css') }}">
 
-{{-- Page-specific styles (e.g. DataTables, FullCalendar, Summernote…) --}}
+{{-- Page-specific styles: date-range/date-time pickers, Feather, DataTables,
+     FullCalendar, Summernote… none of the pickers are used anywhere today
+     (grep-verified) so they moved out of the global shell — @push them from
+     the page when a screen actually needs one. --}}
 @stack('styles')
 
 {{-- PreSkool main theme CSS — must come after plugins --}}

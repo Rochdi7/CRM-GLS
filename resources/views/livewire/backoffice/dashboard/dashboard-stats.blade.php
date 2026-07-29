@@ -16,7 +16,7 @@
                             <img src="{{ asset('assets/preskool/img/icons/student.svg') }}" alt="img">
                         </div>
                         <div class="overflow-hidden flex-fill">
-                            <h2 class="counter">{{ $studentsTotal }}</h2>
+                            <h2 class="stat-counter">{{ $studentsTotal }}</h2>
                             <p>{{ __('Students') }}</p>
                         </div>
                     </div>
@@ -33,7 +33,7 @@
                             <img src="{{ asset('assets/preskool/img/icons/teacher.svg') }}" alt="img">
                         </div>
                         <div class="overflow-hidden flex-fill">
-                            <h2 class="counter">{{ $employeesTotal }}</h2>
+                            <h2 class="stat-counter">{{ $employeesTotal }}</h2>
                             <p class="text-gray">{{ __('Employees') }}</p>
                         </div>
                     </div>
@@ -53,7 +53,7 @@
                             <img src="{{ asset('assets/preskool/img/icons/staff.svg') }}" alt="img">
                         </div>
                         <div class="overflow-hidden flex-fill">
-                            <h2 class="counter">{{ $groupsTotal }}</h2>
+                            <h2 class="stat-counter">{{ $groupsTotal }}</h2>
                             <p class="text-gray">{{ __('Groups') }}</p>
                         </div>
                     </div>
@@ -73,7 +73,7 @@
                             <img src="{{ asset('assets/preskool/img/icons/subject.svg') }}" alt="img">
                         </div>
                         <div class="overflow-hidden flex-fill">
-                            <h2 class="counter">{{ $inscriptionsActives }}</h2>
+                            <h2 class="stat-counter">{{ $inscriptionsActives }}</h2>
                             <p class="text-gray">{{ __('Active registrations') }}</p>
                         </div>
                     </div>

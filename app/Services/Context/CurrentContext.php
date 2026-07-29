@@ -26,12 +26,31 @@ final class CurrentContext
 
     private const SESSION_CENTER = 'context.etablissement_id';
 
+    // Request-local memoization only (this class is a per-request singleton —
+    // see AppServiceProvider). Never persisted beyond the request, so it
+    // cannot leak state between users. Must be invalidated by every setter.
+    private bool $yearResolved = false;
+
+    private ?AnneeScolaire $resolvedYear = null;
+
+    private bool $centerResolved = false;
+
+    private ?Etablissement $resolvedCenter = null;
+
+    private ?Collection $resolvedAnnees = null;
+
+    private ?Collection $resolvedCentres = null;
+
     public function __construct(private readonly CenterAccessService $centerAccess) {}
 
     // --- Academic year -----------------------------------------------------
 
     public function anneeScolaire(): ?AnneeScolaire
     {
+        if ($this->yearResolved) {
+            return $this->resolvedYear;
+        }
+
         $id = session(self::SESSION_YEAR);
 
         $year = $id ? AnneeScolaire::find($id) : null;
@@ -43,6 +62,9 @@ final class CurrentContext
                 session([self::SESSION_YEAR => $year->id]);
             }
         }
+
+        $this->resolvedYear = $year;
+        $this->yearResolved = true;
 
         return $year;
     }
@@ -57,13 +79,15 @@ final class CurrentContext
         // Only accept a real year id.
         if (AnneeScolaire::whereKey($id)->exists()) {
             session([self::SESSION_YEAR => $id]);
+            $this->yearResolved = false;
+            $this->resolvedYear = null;
         }
     }
 
     /** @return Collection<int, AnneeScolaire> */
     public function availableAnnees(): Collection
     {
-        return AnneeScolaire::query()->orderByDesc('date_debut')->get();
+        return $this->resolvedAnnees ??= AnneeScolaire::query()->orderByDesc('date_debut')->get();
     }
 
     // --- Center ------------------------------------------------------------
@@ -73,18 +97,27 @@ final class CurrentContext
      */
     public function etablissement(): ?Etablissement
     {
+        if ($this->centerResolved) {
+            return $this->resolvedCenter;
+        }
+
         $user = auth()->user();
 
         // A user confined to one center is always locked to it.
         if ($user !== null && ! $this->centerAccess->hasGlobalAccess($user)) {
             $ids = $this->centerAccess->accessibleCenterIds($user);
 
-            return $ids === [] ? null : Etablissement::find($ids[0]);
+            $center = $ids === [] ? null : Etablissement::find($ids[0]);
+        } else {
+            $id = session(self::SESSION_CENTER);
+
+            $center = $id ? Etablissement::find($id) : null;
         }
 
-        $id = session(self::SESSION_CENTER);
+        $this->resolvedCenter = $center;
+        $this->centerResolved = true;
 
-        return $id ? Etablissement::find($id) : null;
+        return $center;
     }
 
     public function etablissementId(): ?int
@@ -115,12 +148,16 @@ final class CurrentContext
 
         if ($id === null) {
             session()->forget(self::SESSION_CENTER);
+            $this->centerResolved = false;
+            $this->resolvedCenter = null;
 
             return;
         }
 
         if (Etablissement::whereKey($id)->exists()) {
             session([self::SESSION_CENTER => $id]);
+            $this->centerResolved = false;
+            $this->resolvedCenter = null;
         }
     }
 
@@ -131,6 +168,10 @@ final class CurrentContext
      */
     public function availableCentres(): Collection
     {
+        if ($this->resolvedCentres !== null) {
+            return $this->resolvedCentres;
+        }
+
         $user = auth()->user();
 
         $query = Etablissement::query()->orderByDesc('siege_social')->orderBy('nom_centre');
@@ -139,7 +180,7 @@ final class CurrentContext
             $query->whereIn('id', $this->centerAccess->accessibleCenterIds($user) ?: [0]);
         }
 
-        return $query->get();
+        return $this->resolvedCentres = $query->get();
     }
 
     public function canSwitchCenter(): bool

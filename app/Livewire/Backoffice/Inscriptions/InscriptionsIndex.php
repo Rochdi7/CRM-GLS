@@ -17,8 +17,10 @@ use App\Services\Context\CurrentContext;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Livewire\Attributes\Computed;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -514,13 +516,47 @@ final class InscriptionsIndex extends Component
         $this->resetValidation();
     }
 
+    /**
+     * Selectable students respecting center access AND the active center.
+     * Computed: memoized per request — unchanged by unrelated field updates
+     * (search keystrokes, fee-line edits) within the same round trip.
+     *
+     * @return Collection<int, Student>
+     */
+    #[Computed]
+    public function students(): Collection
+    {
+        $centerAccess = app(CenterAccessService::class);
+
+        return Student::query()
+            ->tap(fn ($q) => $centerAccess->scopeAccessibleCenters($q, auth()->user()))
+            ->tap(fn ($q) => $this->scopeToActiveCenter($q))
+            ->orderBy('nom')->get();
+    }
+
+    /**
+     * @return Collection<int, Group>
+     */
+    #[Computed]
+    public function groups(): Collection
+    {
+        $centerAccess = app(CenterAccessService::class);
+        $context = app(CurrentContext::class);
+
+        return Group::query()
+            ->tap(fn ($q) => $centerAccess->scopeAccessibleCenters($q, auth()->user()))
+            ->tap(fn ($q) => $this->scopeToActiveCenter($q))
+            ->when($context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
+            ->orderBy('nom')->get();
+    }
+
     public function render(): View
     {
         $context = app(CurrentContext::class);
         $centerAccess = app(CenterAccessService::class);
 
         $inscriptions = Inscription::query()
-            ->with(['student', 'group', 'anneeScolaire'])
+            ->with(['student', 'group'])
             ->withCount('fees')
             ->tap(fn ($q) => $centerAccess->scopeAccessibleCenters($q, auth()->user()))
             // Scope to the active year + center from the context switcher.
@@ -537,22 +573,10 @@ final class InscriptionsIndex extends Component
             ->latest()
             ->paginate(10);
 
-        // Selectable students/groups respect center access AND the active center.
-        $students = Student::query()
-            ->tap(fn ($q) => $centerAccess->scopeAccessibleCenters($q, auth()->user()))
-            ->tap(fn ($q) => $this->scopeToActiveCenter($q))
-            ->orderBy('nom')->get();
-
-        $groups = Group::query()
-            ->tap(fn ($q) => $centerAccess->scopeAccessibleCenters($q, auth()->user()))
-            ->tap(fn ($q) => $this->scopeToActiveCenter($q))
-            ->when($context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
-            ->orderBy('nom')->get();
-
         return view('livewire.backoffice.inscriptions.inscriptions-index', [
             'inscriptions' => $inscriptions,
-            'students' => $students,
-            'groups' => $groups,
+            'students' => $this->students(),
+            'groups' => $this->groups(),
             'statuts' => Inscription::STATUTS,
             'niveaux' => Student::NIVEAUX,
             'domaines' => Student::DOMAINES,

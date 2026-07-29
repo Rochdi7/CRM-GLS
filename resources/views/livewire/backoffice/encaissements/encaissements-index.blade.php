@@ -119,23 +119,35 @@
                                          conditional siblings and each holds a wire:ignore island —
                                          without keys the morph pairs them positionally and scrambles
                                          the widgets. --}}
-                                    <div class="col-md-4" wire:key="enc-student">
+                                    <div class="col-md-3" wire:key="enc-student">
                                         <x-backoffice.forms.select2 id="e-student" model="student_id" live
                                             :label="__('Student')" required search="always" :placeholder="__('Choose…')">
                                             @foreach ($students as $st)<option value="{{ $st->id }}">{{ $st->nomComplet() }} ({{ $st->reference }})</option>@endforeach
                                         </x-backoffice.forms.select2>
                                     </div>
-                                    <div class="col-md-4" wire:key="enc-inscription-{{ $student_id ?? 0 }}">
+                                    <div class="col-md-3" wire:key="enc-inscription-{{ $student_id ?? 0 }}">
                                         <x-backoffice.forms.select2 id="e-inscription" model="inscription_id" live
                                             :label="__('Registration')" required :placeholder="__('Choose…')">
                                             @foreach ($inscriptions as $ins)<option value="{{ $ins->id }}">{{ $ins->reference }} — {{ $ins->group?->nom ?? '—' }}</option>@endforeach
                                         </x-backoffice.forms.select2>
                                     </div>
-                                    <div class="col-md-4" wire:key="enc-caisse">
-                                        <x-backoffice.forms.select2 id="e-caisse" model="caisse_id"
+                                    <div class="col-md-3" wire:key="enc-caisse">
+                                        {{-- live: the Solde box beside it follows the selection --}}
+                                        <x-backoffice.forms.select2 id="e-caisse" model="caisse_id" live
                                             :label="__('Till')" required :placeholder="__('Choose…')">
                                             @foreach ($caisses as $c)<option value="{{ $c->id }}">{{ $c->nom }}</option>@endforeach
                                         </x-backoffice.forms.select2>
+                                    </div>
+                                    <div class="col-md-3" wire:key="enc-solde">
+                                        {{-- Legacy-app « Solde » box: the selected till's balance --}}
+                                        <div class="mb-3">
+                                            <label class="form-label" for="e-solde">{{ __('Balance') }}</label>
+                                            <div class="input-group">
+                                                <input type="text" id="e-solde" class="form-control" readonly
+                                                    value="{{ $soldeCaisse !== null ? number_format($soldeCaisse, 2) : '—' }}">
+                                                <span class="input-group-text">DH</span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 

@@ -47,10 +47,12 @@ final class DashboardStats extends Component
             ->when($anneeId, fn ($q) => $q->where('annee_scolaire_id', $anneeId))
             ->when($centreId, fn ($q) => $q->where('etablissement_id', $centreId));
 
-        // Payments this month, scoped by center via the till.
+        // Payments this month, scoped by center via the till. A plain range
+        // comparison (not whereMonth/whereYear, which wrap the column in a
+        // SQL function) keeps the encaissements(caisse_id, date_paiement)
+        // index usable.
         $paymentsMonth = Encaissement::query()
-            ->whereMonth('date_paiement', now()->month)
-            ->whereYear('date_paiement', now()->year)
+            ->whereBetween('date_paiement', [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()])
             ->when($centreId, fn ($q) => $q->whereHas('caisse', fn ($c) => $c->where('etablissement_id', $centreId)))
             ->sum('montant');
 

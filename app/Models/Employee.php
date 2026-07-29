@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
  * Master staff record (gls-crm-schema.md §4) — teachers are employees,
@@ -93,6 +94,20 @@ class Employee extends Model implements HasMedia
         $this->addMediaCollection('photo')
             ->singleFile()
             ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/webp']);
+    }
+
+    /**
+     * "thumb": small avatar used in list rows, same rationale as Student.
+     * getFirstMediaUrl('photo') (no conversion name) is untouched.
+     */
+    public function registerMediaConversions(?Media $media = null): void
+    {
+        $this->addMediaConversion('thumb')
+            ->width(96)
+            ->height(96)
+            ->sharpen(10)
+            ->nonQueued()
+            ->performOnCollections('photo');
     }
 
     public function etablissement(): BelongsTo

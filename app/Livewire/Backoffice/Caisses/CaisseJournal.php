@@ -42,8 +42,11 @@ final class CaisseJournal extends Component
     private const PER_PAGE = 10;
 
     public const TYPE_PAIEMENT = 'paiement';
+
     public const TYPE_DEPENSE = 'depense';
+
     public const TYPE_REMBOURSEMENT = 'remboursement';
+
     public const TYPE_TRANSFERT = 'transfert';
 
     /** 'mine' (own till) or 'all' (every accessible till). */
@@ -61,6 +64,17 @@ final class CaisseJournal extends Component
     {
         $this->scope = $scope === 'all' ? 'all' : 'mine';
         $this->authorize('cash-registers.view');
+
+        // Self-healing: every employee owns exactly one till. Accounts
+        // predating the auto-provisioning rule (or restored from old dumps)
+        // get theirs provisioned once here — not on every render.
+        if ($this->scope === 'mine') {
+            $employee = auth()->user()?->employee;
+
+            if ($employee !== null) {
+                app(CaisseProvisioner::class)->provisionFor($employee);
+            }
+        }
     }
 
     public function updatedTypeFilter(): void
@@ -98,11 +112,7 @@ final class CaisseJournal extends Component
                 return [];
             }
 
-            // Self-healing: every employee owns exactly one till. Accounts
-            // predating the auto-provisioning rule (or restored from old
-            // dumps) get theirs on first visit — provisionFor() is idempotent.
-            app(CaisseProvisioner::class)->provisionFor($employee);
-
+            // Provisioning already happened once in mount().
             return $employee->caisses()->pluck('id')->all();
         }
 
@@ -116,7 +126,7 @@ final class CaisseJournal extends Component
     /**
      * One normalized journal row per money movement.
      *
-     * @param array<int, int> $ids
+     * @param  array<int, int>  $ids
      */
     private function rows(array $ids): Collection
     {

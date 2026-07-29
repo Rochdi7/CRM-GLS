@@ -10,11 +10,17 @@
             </x-slot:head>
             <tr><td>…</td></tr>
         </x-backoffice.ui.table>
+
+    Note: deliberately NOT class="datatable" — the vendor script.js calls
+    $('.datatable').DataTable() unconditionally, but the DataTables plugin
+    is never loaded (server-side pagination is used instead per the rule
+    above), so that class threw a TypeError on every page using this
+    component and aborted the rest of script.js's ready handler.
 --}}
 @props(['hover' => true])
 
 <div class="table-responsive">
-    <table {{ $attributes->merge(['class' => 'table datatable'.($hover ? ' table-hover' : '')]) }}>
+    <table {{ $attributes->merge(['class' => 'table'.($hover ? ' table-hover' : '')]) }}>
         @isset($head)
             <thead class="thead-light">
                 {{ $head }}

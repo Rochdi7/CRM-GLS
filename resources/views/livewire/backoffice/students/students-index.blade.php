@@ -58,8 +58,8 @@
                         <td>
                             <a href="{{ route('backoffice.students.show', $student) }}" class="d-flex align-items-center text-dark">
                                 <span class="avatar avatar-sm rounded-circle bg-primary-transparent me-2 d-inline-flex align-items-center justify-content-center overflow-hidden">
-                                    @if ($url = $student->getFirstMediaUrl('photo'))
-                                        <img src="{{ $url }}" alt="" class="w-100 h-100" style="object-fit:cover;">
+                                    @if ($url = $student->getFirstMediaUrl('photo', 'thumb'))
+                                        <img src="{{ $url }}" alt="" class="w-100 h-100" style="object-fit:cover;" loading="lazy">
                                     @else
                                         <span class="fw-bold text-primary">{{ strtoupper(mb_substr($student->prenom, 0, 1)) }}</span>
                                     @endif

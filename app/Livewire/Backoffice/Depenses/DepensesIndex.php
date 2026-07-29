@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Livewire\Backoffice\Depenses;
 
 use App\Domain\Expenses\Actions\EnregistrerDepense;
+use App\Livewire\Backoffice\Concerns\WithCaisseSelection;
 use App\Livewire\Backoffice\Concerns\WithCenterContext;
-use App\Models\Caisse;
 use App\Models\Depense;
 use App\Models\Group;
 use App\Models\TypeDepense;
@@ -14,7 +14,9 @@ use App\Services\Authorization\CenterAccessService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
+use Livewire\Attributes\Computed;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 use Livewire\WithPagination;
@@ -36,6 +38,7 @@ use Livewire\WithPagination;
 final class DepensesIndex extends Component
 {
     use AuthorizesRequests;
+    use WithCaisseSelection;
     use WithCenterContext;
     use WithFileUploads;
     use WithPagination;
@@ -171,6 +174,9 @@ final class DepensesIndex extends Component
         $this->authorize('create', Depense::class);
         $this->resetForm();
         $this->date_depense = now()->toDateString();
+        // Preselect the signed-in employee's own till (or the only accessible
+        // one) so the « Solde » box shows the balance as soon as the modal opens.
+        $this->preselectCaisseParDefaut();
         $this->showModal = true;
     }
 
@@ -296,6 +302,24 @@ final class DepensesIndex extends Component
         }
     }
 
+    /**
+     * Optional class/group link — same scoping as the groups list. Computed:
+     * memoized per request, unaffected by search/filter/date field updates.
+     *
+     * @return Collection<int, Group>
+     */
+    #[Computed]
+    public function groups(): Collection
+    {
+        $centerAccess = app(CenterAccessService::class);
+        $user = auth()->user();
+
+        return Group::query()
+            ->tap(fn ($q) => $centerAccess->scopeAccessibleCenters($q, $user))
+            ->tap(fn ($q) => $this->scopeToActiveCenter($q))
+            ->orderBy('nom')->get();
+    }
+
     public function render(): View
     {
         $centerAccess = app(CenterAccessService::class);
@@ -324,7 +348,7 @@ final class DepensesIndex extends Component
         $montantTotal = (float) (clone $query)->sum('montant');
 
         $depenses = $query
-            ->with(['typeDepense', 'caisse', 'agent', 'media', 'group'])
+            ->with(['typeDepense', 'caisse', 'media', 'group'])
             ->latest()
             ->paginate(10);
 
@@ -335,22 +359,12 @@ final class DepensesIndex extends Component
                 ->where('statut', TypeDepense::STATUT_ACTIF)
                 ->orderBy('nom')->get(),
             // Tills follow permission + active-center scoping.
-            'caisses' => Caisse::query()
-                ->tap(fn ($q) => $centerAccess->scopeAccessibleCenters($q, $user))
-                ->tap(fn ($q) => $this->scopeToActiveCenter($q))
-                ->orderBy('nom')->get(),
+            'caisses' => $this->caissesAccessibles(),
             'methodes' => Depense::METHODES,
-            // Optional class/group link — same scoping as the groups list.
-            'groups' => Group::query()
-                ->tap(fn ($q) => $centerAccess->scopeAccessibleCenters($q, $user))
-                ->tap(fn ($q) => $this->scopeToActiveCenter($q))
-                ->orderBy('nom')->get(),
+            'groups' => $this->groups(),
             // Read-only balance shown next to the till select (legacy-app
-            // « Solde » field). Fetched directly: when editing, the expense's
-            // till may sit outside the filtered list above.
-            'soldeCaisse' => $this->caisse_id !== null
-                ? (float) (Caisse::query()->whereKey($this->caisse_id)->value('solde') ?? 0)
-                : null,
+            // « Solde » field).
+            'soldeCaisse' => $this->soldeCaisse(),
         ]);
     }
 }

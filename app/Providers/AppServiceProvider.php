@@ -9,7 +9,6 @@ use App\Observers\EmployeeObserver;
 use App\Services\Context\CurrentContext;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -46,11 +45,5 @@ class AppServiceProvider extends ServiceProvider
                 'email' => $user->getEmailForPasswordReset(),
             ]),
         );
-
-        // Expose the active context to every view as $context. Resolved lazily
-        // per-render via a view composer so the session is always available.
-        View::composer('*', function ($view): void {
-            $view->with('context', app(CurrentContext::class));
-        });
     }
 }

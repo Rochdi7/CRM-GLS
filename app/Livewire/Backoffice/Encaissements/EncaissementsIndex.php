@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Livewire\Backoffice\Encaissements;
 
 use App\Domain\Payments\Actions\EnregistrerEncaissement;
+use App\Livewire\Backoffice\Concerns\WithCaisseSelection;
 use App\Livewire\Backoffice\Concerns\WithCenterContext;
 use App\Models\Caisse;
 use App\Models\Encaissement;
@@ -15,7 +16,9 @@ use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
+use Livewire\Attributes\Computed;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -39,6 +42,7 @@ use Livewire\WithPagination;
 final class EncaissementsIndex extends Component
 {
     use AuthorizesRequests;
+    use WithCaisseSelection;
     use WithCenterContext;
     use WithPagination;
 
@@ -159,6 +163,9 @@ final class EncaissementsIndex extends Component
         $this->authorize('create', Encaissement::class);
         $this->resetForm();
         $this->date_paiement = now()->toDateString();
+        // Preselect the signed-in employee's own till (or the only accessible
+        // one) so the « Solde » box shows the balance as soon as the modal opens.
+        $this->preselectCaisseParDefaut(activesOnly: true);
         $this->showModal = true;
     }
 
@@ -168,6 +175,7 @@ final class EncaissementsIndex extends Component
         $this->inscription_id = null;
         $this->inscription_fee_id = null;
         $this->montant = '';
+        $this->invalidateSelectedFeeCache();
         $this->resetValidation(['inscription_id', 'inscription_fee_id', 'montant']);
     }
 
@@ -176,15 +184,23 @@ final class EncaissementsIndex extends Component
     {
         $this->inscription_fee_id = null;
         $this->montant = '';
+        $this->invalidateSelectedFeeCache();
         $this->resetValidation(['inscription_fee_id', 'montant']);
     }
 
     /** Picking a fee pre-fills the amount with what is still owed on it. */
     public function updatedInscriptionFeeId(): void
     {
+        $this->invalidateSelectedFeeCache();
         $reste = $this->resteDuFee();
         $this->montant = $reste > 0 ? (string) $reste : '';
         $this->resetValidation('montant');
+    }
+
+    private function invalidateSelectedFeeCache(): void
+    {
+        $this->cachedSelectedFeeResolved = false;
+        $this->cachedSelectedFee = null;
     }
 
     /** Chèque fields only make sense for the Chèque method. */
@@ -210,13 +226,26 @@ final class EncaissementsIndex extends Component
         return round(max(0, (float) $fee->montant - $fee->montantPaye()), 2);
     }
 
+    /**
+     * Memoized per request: rules(), updatedInscriptionFeeId() and render()
+     * can all call resteDuFee() for the same $inscription_fee_id within one
+     * round trip — no need to re-query each time.
+     */
+    private ?InscriptionFee $cachedSelectedFee = null;
+
+    private bool $cachedSelectedFeeResolved = false;
+
     private function selectedFee(): ?InscriptionFee
     {
-        if ($this->inscription_fee_id === null) {
-            return null;
+        if ($this->cachedSelectedFeeResolved) {
+            return $this->cachedSelectedFee;
         }
 
-        return InscriptionFee::find($this->inscription_fee_id);
+        $this->cachedSelectedFeeResolved = true;
+
+        return $this->cachedSelectedFee = $this->inscription_fee_id === null
+            ? null
+            : InscriptionFee::find($this->inscription_fee_id);
     }
 
     /**
@@ -340,6 +369,26 @@ final class EncaissementsIndex extends Component
         $this->resetValidation();
     }
 
+    /**
+     * Selectable students respecting center access AND the active center.
+     * Computed: memoized per request — unaffected by search/filter/date
+     * field updates within the same round trip.
+     *
+     * @return Collection<int, Student>
+     */
+    #[Computed]
+    public function students(): Collection
+    {
+        $centerAccess = app(CenterAccessService::class);
+        $user = auth()->user();
+
+        return Student::query()
+            ->tap(fn ($q) => $centerAccess->scopeAccessibleCenters($q, $user))
+            ->tap(fn ($q) => $this->scopeToActiveCenter($q))
+            ->orderBy('nom')
+            ->get();
+    }
+
     public function render(): View
     {
         $centerAccess = app(CenterAccessService::class);
@@ -348,20 +397,18 @@ final class EncaissementsIndex extends Component
 
         // Tills the user may pay into — center scoped + narrowed to the
         // active center from the top-bar switcher.
-        $caisses = Caisse::query()
-            ->tap(fn ($q) => $centerAccess->scopeAccessibleCenters($q, $user))
-            ->tap(fn ($q) => $this->scopeToActiveCenter($q))
-            ->where('statut', Caisse::STATUT_ACTIVE)
-            ->orderBy('nom')
-            ->get();
+        $caisses = $this->caissesAccessibles(activesOnly: true);
 
+        // Deliberately a second query, not a reuse of $caisses above: this one
+        // is NOT restricted to Active tills (a payment recorded while its till
+        // was still active must stay visible after the till is deactivated).
         $accessibleCaisseIds = Caisse::query()
             ->tap(fn ($q) => $centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
             ->pluck('id');
 
         $encaissements = Encaissement::query()
-            ->with(['student', 'fee.inscription.group', 'caisse', 'agent'])
+            ->with(['student', 'fee', 'caisse'])
             // A payment belongs to the center of its till (EncaissementPolicy).
             ->whereIn('caisse_id', $accessibleCaisseIds)
             ->when($this->caisseFilter !== '', fn ($q) => $q->where('caisse_id', (int) $this->caisseFilter))
@@ -378,13 +425,6 @@ final class EncaissementsIndex extends Component
             })
             ->latest()
             ->paginate(10);
-
-        // Selectable students respect center access AND the active center.
-        $students = Student::query()
-            ->tap(fn ($q) => $centerAccess->scopeAccessibleCenters($q, $user))
-            ->tap(fn ($q) => $this->scopeToActiveCenter($q))
-            ->orderBy('nom')
-            ->get();
 
         // Cascade level 2: the chosen student's enrollments (active year).
         $inscriptions = $this->student_id === null
@@ -420,12 +460,14 @@ final class EncaissementsIndex extends Component
 
         return view('livewire.backoffice.encaissements.encaissements-index', [
             'encaissements' => $encaissements,
-            'students' => $students,
+            'students' => $this->students(),
             'inscriptions' => $inscriptions,
             'fees' => $fees,
             'caisses' => $caisses,
             'methodes' => Encaissement::METHODES,
             'reste' => $this->resteDuFee(),
+            // Read-only balance shown next to the till select (« Solde » box).
+            'soldeCaisse' => $this->soldeCaisse(),
         ])->layout('components.backoffice.layout.app', ['title' => __('Payments')]);
     }
 }

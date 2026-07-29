@@ -1,4 +1,12 @@
 <x-backoffice.layout.app :title="__('Expense management')">
+    {{-- bootstrap-tagsinput: the "Mots-clés" chips field in the expense modal --}}
+    @push('styles')
+        <link rel="stylesheet" href="{{ asset('assets/preskool/plugins/bootstrap-tagsinput/bootstrap-tagsinput.css') }}">
+    @endpush
+    @push('scripts')
+        <script src="{{ asset('assets/preskool/plugins/bootstrap-tagsinput/bootstrap-tagsinput.min.js') }}"></script>
+    @endpush
+
     <x-backoffice.layout.page-header
         :title="__('Expense management')"
         :breadcrumbs="[__('Dashboard') => route('backoffice.dashboard'), __('Expense management') => null]" />

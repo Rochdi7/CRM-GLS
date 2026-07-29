@@ -53,8 +53,8 @@
                         <td>
                             <span class="d-inline-flex align-items-center">
                                 <span class="avatar avatar-sm rounded-circle bg-primary-transparent me-2 d-inline-flex align-items-center justify-content-center overflow-hidden">
-                                    @if ($url = $e->getFirstMediaUrl('photo'))
-                                        <img src="{{ $url }}" alt="" class="w-100 h-100" style="object-fit:cover;">
+                                    @if ($url = $e->getFirstMediaUrl('photo', 'thumb'))
+                                        <img src="{{ $url }}" alt="" class="w-100 h-100" style="object-fit:cover;" loading="lazy">
                                     @else
                                         <span class="fw-bold text-primary">{{ strtoupper(mb_substr($e->prenom, 0, 1)) }}</span>
                                     @endif

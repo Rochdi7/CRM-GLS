@@ -12,6 +12,7 @@ use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
 
 /**
  * Student (gls-crm-schema.md §5). Parent/guardian contact lives inline by
@@ -107,6 +108,24 @@ class Student extends Model implements HasMedia
             ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/webp']);
 
         $this->addMediaCollection('documents');
+    }
+
+    /**
+     * "thumb": small avatar used in list/show rows so they don't download the
+     * full-size upload. nonQueued() because QUEUE_CONNECTION=database has no
+     * guaranteed worker running in dev — generates synchronously on upload,
+     * same as today's behavior. getFirstMediaUrl('photo') (no conversion
+     * name) is untouched and keeps returning the original — no existing URL
+     * changes.
+     */
+    public function registerMediaConversions(?Media $media = null): void
+    {
+        $this->addMediaConversion('thumb')
+            ->width(96)
+            ->height(96)
+            ->sharpen(10)
+            ->nonQueued()
+            ->performOnCollections('photo');
     }
 
     public function getActivitylogOptions(): LogOptions

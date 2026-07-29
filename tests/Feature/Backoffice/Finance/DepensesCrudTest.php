@@ -104,6 +104,32 @@ final class DepensesCrudTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_create_preselects_the_signed_in_employees_till_and_shows_its_balance(): void
+    {
+        $user = $this->admin();
+        // Every employee owns a till, auto-provisioned by EmployeeObserver.
+        $own = Caisse::query()->where('responsable_employee_id', $user->employee->id)->firstOrFail();
+        $own->update(['solde' => 750.5]);
+
+        Livewire::test(DepensesIndex::class)
+            ->call('create')
+            ->assertSet('caisse_id', $own->id)
+            ->assertSee(number_format(750.5, 2));
+    }
+
+    public function test_create_preselects_nothing_when_the_user_has_no_own_till_among_several(): void
+    {
+        $user = $this->admin();
+        // Remove the employee's auto-provisioned till: several remain
+        // accessible and none is "theirs" → the user must choose.
+        Caisse::query()->where('responsable_employee_id', $user->employee->id)->delete();
+        Caisse::factory()->create(['etablissement_id' => $this->centre->id]);
+
+        Livewire::test(DepensesIndex::class)
+            ->call('create')
+            ->assertSet('caisse_id', null);
+    }
+
     // --- Billing fields (legacy-app parity) ---------------------------------
 
     public function test_an_expense_stores_invoice_reference_payment_method_and_group(): void

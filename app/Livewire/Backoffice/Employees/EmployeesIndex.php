@@ -262,7 +262,7 @@ final class EmployeesIndex extends Component
     {
         $employees = Employee::query()
             // `media` eager-loaded for the avatar column (avoids N+1).
-            ->with(['etablissement', 'user', 'media'])
+            ->with(['etablissement', 'media'])
             ->tap(fn ($q) => app(CenterAccessService::class)->scopeAccessibleCenters($q, auth()->user()))
             // Narrow to the center selected in the top-bar switcher.
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))

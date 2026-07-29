@@ -65,6 +65,19 @@ final class RemboursementsCrudTest extends TestCase
         Livewire::test(RemboursementsIndex::class)->assertOk();
     }
 
+    public function test_create_preselects_the_signed_in_employees_till_and_shows_its_balance(): void
+    {
+        $user = $this->admin();
+        // Every employee owns a till, auto-provisioned by EmployeeObserver.
+        $own = Caisse::query()->where('responsable_employee_id', $user->employee->id)->firstOrFail();
+        $own->update(['solde' => 750.5]);
+
+        Livewire::test(RemboursementsIndex::class)
+            ->call('create')
+            ->assertSet('caisse_id', $own->id)
+            ->assertSee(number_format(750.5, 2));
+    }
+
     public function test_the_component_renders_for_an_allowed_user(): void
     {
         $this->admin();

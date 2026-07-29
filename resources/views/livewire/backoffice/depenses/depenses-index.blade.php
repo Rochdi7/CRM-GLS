@@ -210,13 +210,9 @@
                                     </div>
                                 </div>
                                 <div class="col-md-12">
-                                    <div class="mb-3">
-                                        <label class="form-label" for="d-mots-cles">{{ __('Keywords') }}</label>
-                                        <input type="text" id="d-mots-cles" wire:model="mots_cles"
-                                            class="form-control @error('mots_cles') is-invalid @enderror"
-                                            placeholder="{{ __('Comma-separated keywords') }}">
-                                        @error('mots_cles')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                                    </div>
+                                    <x-backoffice.forms.tags-input id="d-mots-cles" model="mots_cles"
+                                        :label="__('Keywords')"
+                                        :placeholder="__('Add a keyword and press Enter')" />
                                 </div>
                                 <div class="col-md-12">
                                     <div class="mb-3">

@@ -68,6 +68,49 @@ document.addEventListener('alpine:init', () => {
     }));
 });
 
+// bootstrap-tagsinput ↔ Livewire bridge, used by <x-backoffice.forms.tags-input>.
+// The input sits inside wire:ignore (the plugin owns that DOM — CLAUDE.md §7).
+// The entangled property stays the stored comma-separated string (mots_cles is
+// free text by design, no tags table) while the user works with chips: Enter
+// or comma adds a tag, × removes it. Plugin assets are pushed by the page.
+document.addEventListener('alpine:init', () => {
+    window.Alpine.data('glsTagsInput', (value) => ({
+        value,
+        // add/removeAll re-fire itemAdded/itemRemoved — muted during
+        // programmatic sync so they don't loop back into `value`.
+        muted: false,
+        init() {
+            const $el = window.jQuery(this.$refs.input);
+            // Theme styling targets `.tag` (style.css), not the plugin's
+            // Bootstrap-3 default label class.
+            $el.tagsinput({ tagClass: 'tag', trimValue: true });
+            const current = () => (this.value ? String(this.value) : '');
+            this.applyTags($el, current());
+            $el.on('itemAdded itemRemoved', () => {
+                if (!this.muted) this.value = $el.val() || '';
+            });
+            this.$watch('value', () => {
+                if (($el.val() || '') !== current()) {
+                    this.applyTags($el, current());
+                }
+            });
+        },
+        applyTags($el, csv) {
+            this.muted = true;
+            $el.tagsinput('removeAll');
+            csv.split(',').map((t) => t.trim()).filter(Boolean)
+                .forEach((t) => $el.tagsinput('add', t));
+            this.muted = false;
+        },
+        destroy() {
+            const $el = window.jQuery(this.$refs.input);
+            if ($el.data('tagsinput')) {
+                $el.tagsinput('destroy');
+            }
+        },
+    }));
+});
+
 // Global toast notifications (<x-backoffice.layout.toasts />). Every
 // create/edit/delete operation reports through here — either a Livewire
 // `toast` event or a session flash rendered as [data-gls-flash-toast].

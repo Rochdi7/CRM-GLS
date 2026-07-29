@@ -104,7 +104,8 @@
                                     </x-backoffice.forms.select2>
                                 </div>
                                 <div class="col-md-6">
-                                    <x-backoffice.forms.select2 id="r-caisse" model="caisse_id"
+                                    {{-- live: the Solde box below follows the selection --}}
+                                    <x-backoffice.forms.select2 id="r-caisse" model="caisse_id" live
                                         :label="__('Cash Register')" required :placeholder="__('Choose…')"
                                         :disabled="(bool) $editingId">
                                         @foreach ($caisses as $caisse)
@@ -112,7 +113,18 @@
                                         @endforeach
                                     </x-backoffice.forms.select2>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-4">
+                                    {{-- Legacy-app « Solde » box: the selected till's balance --}}
+                                    <div class="mb-3">
+                                        <label class="form-label" for="r-solde">{{ __('Balance') }}</label>
+                                        <div class="input-group">
+                                            <input type="text" id="r-solde" class="form-control" readonly
+                                                value="{{ $soldeCaisse !== null ? number_format($soldeCaisse, 2) : '—' }}">
+                                            <span class="input-group-text">DH</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
                                     <div class="mb-3">
                                         <label class="form-label" for="r-montant">{{ __('Amount') }}<span class="text-danger ms-1">*</span></label>
                                         <div class="input-group">
@@ -125,7 +137,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-4">
                                     <div class="mb-3">
                                         <label class="form-label" for="r-date">{{ __('Refund date') }}<span class="text-danger ms-1">*</span></label>
                                         <input type="date" id="r-date" wire:model="date_remboursement"

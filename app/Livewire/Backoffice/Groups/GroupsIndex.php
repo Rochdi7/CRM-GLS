@@ -12,8 +12,10 @@ use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Livewire\Attributes\Computed;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -235,13 +237,37 @@ final class GroupsIndex extends Component
         $this->closeModal();
     }
 
+    /**
+     * Teacher select follows the active center too (global NULL-center staff
+     * stay listed). Computed: memoized per request.
+     *
+     * @return Collection<int, Employee>
+     */
+    #[Computed]
+    public function enseignants(): Collection
+    {
+        return Employee::query()
+            ->where('categorie', Employee::CATEGORIE_ENSEIGNANT)
+            ->tap(fn ($q) => $this->scopeToActiveCenter($q))
+            ->orderBy('nom')->get();
+    }
+
+    /**
+     * @return Collection<int, Frais>
+     */
+    #[Computed]
+    public function fraisCatalog(): Collection
+    {
+        return Frais::query()->where('statut', Frais::STATUT_ACTIF)->orderBy('nom')->get()->keyBy('id');
+    }
+
     public function render(): View
     {
         $centerAccess = app(CenterAccessService::class);
         $context = app(CurrentContext::class);
 
         $groups = Group::query()
-            ->with(['enseignant', 'salle', 'anneeScolaire'])
+            ->with(['enseignant'])
             ->withCount(['inscriptions', 'frais'])
             ->tap(fn ($q) => $centerAccess->scopeAccessibleCenters($q, auth()->user()))
             // Narrow to the center selected in the top-bar switcher.
@@ -266,12 +292,8 @@ final class GroupsIndex extends Component
             'statutCounts' => $statutCounts,
             'niveaux' => Group::NIVEAUX,
             'statuts' => Group::STATUTS,
-            // Teacher select follows the active center too (global NULL-center staff stay listed).
-            'enseignants' => Employee::query()
-                ->where('categorie', Employee::CATEGORIE_ENSEIGNANT)
-                ->tap(fn ($q) => $this->scopeToActiveCenter($q))
-                ->orderBy('nom')->get(),
-            'fraisCatalog' => Frais::query()->where('statut', Frais::STATUT_ACTIF)->orderBy('nom')->get()->keyBy('id'),
+            'enseignants' => $this->enseignants(),
+            'fraisCatalog' => $this->fraisCatalog(),
         ])->layout('components.backoffice.layout.app', ['title' => __('Groups')]);
     }
 }

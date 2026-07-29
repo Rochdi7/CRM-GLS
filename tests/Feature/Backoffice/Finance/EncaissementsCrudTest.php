@@ -81,6 +81,19 @@ final class EncaissementsCrudTest extends TestCase
         return [$student, $inscription, $fee];
     }
 
+    public function test_create_preselects_the_signed_in_employees_till_and_shows_its_balance(): void
+    {
+        $user = $this->globalUser();
+        // Every employee owns a till, auto-provisioned by EmployeeObserver.
+        $own = Caisse::query()->where('responsable_employee_id', $user->employee->id)->firstOrFail();
+        $own->update(['solde' => 750.5]);
+
+        Livewire::test(EncaissementsIndex::class)
+            ->call('create')
+            ->assertSet('caisse_id', $own->id)
+            ->assertSee(number_format(750.5, 2));
+    }
+
     /**
      * The index route still points at the legacy controller (swapping it to
      * this component is the pending routes/backoffice.php patch), so the page
