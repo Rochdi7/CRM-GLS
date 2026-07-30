@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, router } from '@inertiajs/react';
+import ContextSwitcher from '@/Components/Context/ContextSwitcher';
 import type { AuthUser, Context } from '@/Types';
 
 interface HeaderProps {
@@ -80,13 +81,7 @@ export default function Header({ user, context, canManageSettings, onMobileMenuT
 
             <div className="header-user">
                 <div className="nav user-menu">
-                    <div className="nav-item me-auto">
-                        {context && (
-                            <span className="text-muted small ms-2">
-                                {context.isAllCenters ? 'Tous les centres' : `Centre #${context.etablissementId}`}
-                            </span>
-                        )}
-                    </div>
+                    <div className="nav-item me-auto">{context && <ContextSwitcher context={context} />}</div>
 
                     <div className="d-flex align-items-center">
                         <div className="dropdown ms-1" ref={menuRef}>

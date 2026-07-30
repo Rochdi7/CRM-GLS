@@ -4,13 +4,18 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Domain\Reports\Actions\GetDashboardStats;
 use App\Http\Controllers\Controller;
-use Illuminate\Contracts\View\View;
+use App\Services\Context\CurrentContext;
+use Inertia\Inertia;
+use Inertia\Response;
 
 final class DashboardController extends Controller
 {
-    public function __invoke(): View
+    public function __invoke(GetDashboardStats $getDashboardStats, CurrentContext $context): Response
     {
-        return view('backoffice.dashboard.index');
+        return Inertia::render('Backoffice/Dashboard/Index', [
+            'stats' => $getDashboardStats($context)->toArray(),
+        ]);
     }
 }

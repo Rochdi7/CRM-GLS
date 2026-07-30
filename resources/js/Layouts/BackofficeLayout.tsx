@@ -1,5 +1,5 @@
 import { usePage } from '@inertiajs/react';
-import { useEffect, useState, type PropsWithChildren } from 'react';
+import { useEffect, useState, type PropsWithChildren, type ReactNode } from 'react';
 import Header from '@/Components/Theme/Header';
 import Sidebar from '@/Components/Theme/Sidebar';
 import Footer from '@/Components/Theme/Footer';
@@ -11,6 +11,8 @@ import type { Breadcrumb, SharedProps } from '@/Types';
 interface BackofficeLayoutProps extends PropsWithChildren {
     title: string;
     breadcrumbs?: Breadcrumb[];
+    /** Rendered in the page-header's actions slot (top-right), matching components/backoffice/layout/page-header.blade.php's x-slot:actions. */
+    actions?: ReactNode;
 }
 
 /**
@@ -21,7 +23,7 @@ interface BackofficeLayoutProps extends PropsWithChildren {
  * static PreSkool CSS applies unchanged — only the *behavior* (sidebar
  * toggle, dropdowns) is React-owned instead of jQuery/Bootstrap-JS.
  */
-export default function BackofficeLayout({ title, breadcrumbs = [], children }: BackofficeLayoutProps) {
+export default function BackofficeLayout({ title, breadcrumbs = [], actions, children }: BackofficeLayoutProps) {
     const { auth, context, flash } = usePage<SharedProps>().props;
     const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
@@ -67,7 +69,9 @@ export default function BackofficeLayout({ title, breadcrumbs = [], children }: 
             <div className="page-wrapper">
                 <div className="content">
                     <FlashMessages flash={flash} />
-                    <PageHeader title={title} breadcrumbs={breadcrumbs} />
+                    <PageHeader title={title} breadcrumbs={breadcrumbs}>
+                        {actions}
+                    </PageHeader>
                     {children}
                 </div>
                 <Footer />
