@@ -1,14 +1,49 @@
 # PreSkool React Theme — File Map
 
-Status: **Planning document — no files copied yet.** Records, for every
-theme source area inspected during the audit, what it is, whether it's
-reusable, and (once actually copied in a later phase) its destination path.
-Until Phase 2 begins, the "Destination" column is a *proposal*, not a fact —
-update this file at the moment each file is actually copied/adapted, per the
-task instructions ("for each copied theme file, record its source and
-destination").
+Status: **Phase 2 shell components implemented — see §0 for what actually
+shipped.** The rest of this document (§1 onward) is the original Phase 0/1
+screening pass and remains accurate for anything not yet built.
 
 Theme source root: `C:\Users\ASUS\Downloads\themeforest-jeUxtzLq-preskool-bootstrap-admin-html-template\preskool-v1.9.7\react`
+
+---
+
+## 0. Phase 2 — actual adaptations (source → destination)
+
+None of these are copies — every one is authored fresh in TSX, using the
+theme file and/or the existing adapted Blade component as a **structural/
+visual** reference only. Data wiring, state management, and routing are
+GLS/Inertia-specific throughout (no Redux, no React Router, no localStorage
+demo-auth carried over).
+
+| Destination | Adapted from | Copied / Rewritten | Notes |
+|---|---|---|---|
+| `resources/js/Components/Theme/Header.tsx` | Primary reference: `resources/views/components/backoffice/layout/header.blade.php` (the already-GLS-trimmed Blade version — no search/notifications/mega-menu). Secondary reference: theme's `react/src/core/common/header/index.tsx` (markup/class names only). | Rewritten | Dropdown state is `useState` + click-outside/Escape listeners (own implementation), not Bootstrap `data-bs-toggle` DOM-scanning and not Redux (theme's version uses `react-redux` + `react-router-dom`'s `Link`, both removed). Logo images reused as-is from `public/assets/images/logo/`. Context display is read-only (IDs only) per Phase 2 scope — no switcher yet (Phase 4) |
+| `resources/js/Components/Theme/Sidebar.tsx` | `resources/views/components/backoffice/layout/sidebar.blade.php` (exact group/item/permission-gate structure) | Rewritten | Nav data extracted to `Config/backofficeNavigation.ts` instead of inline Blade `@can`; permission filtering done in JS against the shared `auth.permissions` array. Active-state via `useActivePath` hook, not per-component `request()->routeIs()` calls |
+| `resources/js/Components/Theme/Breadcrumbs.tsx` | `resources/views/components/backoffice/layout/breadcrumbs.blade.php` | Rewritten (markup copied exactly: `<nav><ol class="breadcrumb mb-0"><li class="breadcrumb-item">`) | Typed `Breadcrumb[]` prop instead of Blade's `label => url` array convention |
+| `resources/js/Components/Theme/PageHeader.tsx` | `resources/views/components/backoffice/layout/page-header.blade.php` | Rewritten (markup copied exactly) | `children` fills the `actions` slot |
+| `resources/js/Components/Theme/Footer.tsx` | `resources/views/components/backoffice/layout/footer.blade.php` | Rewritten (markup copied exactly) | No theme equivalent — original PreSkool pages have no footer; this project added a minimal one, ported as-is |
+| `resources/js/Components/Theme/MobileSidebarOverlay.tsx` | `public/assets/preskool/js/script.js`'s `.sidebar-overlay`/`opened` class contract (grepped directly, since the React theme's own mobile-overlay handling wasn't separately isolated in the audited files) | Rewritten | React renders/removes the overlay element by state instead of jQuery `.toggleClass('opened')`; click closes, matching existing behavior |
+| `resources/js/Components/Feedback/FlashMessages.tsx` | `resources/views/components/backoffice/ui/alert.blade.php` | Rewritten (markup copied exactly) | Dismiss is `useState`, not `data-bs-dismiss="alert"` (no Bootstrap JS on Inertia pages — see `docs/bootstrap-react-integration-decision.md`) |
+| `resources/js/Components/Shared/Card.tsx` | `resources/views/components/backoffice/ui/card.blade.php` | Rewritten (markup copied exactly) | |
+| `resources/js/Components/Tables/DataTable.tsx` | `resources/views/components/backoffice/ui/table.blade.php` | Rewritten (markup copied exactly) | Visual/structural only — no client-side sort/filter/pagination logic adopted from the theme's own `core/common/dataTable/index.tsx` (that component was screened 🎨 reference-only in §1, and stays that way; CLAUDE.md's DataTables rule applies) |
+| `resources/js/Components/Shared/EmptyState.tsx` | `resources/views/components/backoffice/ui/empty-state.blade.php` | Rewritten (markup copied exactly) | |
+| `resources/js/Components/Navigation/NavLink.tsx` | No direct theme equivalent — theme always uses `react-router-dom`'s `Link` unconditionally | New, GLS-specific | Explicit Inertia-vs-anchor branch per the migration's routing rules; not adapted from any theme file |
+| `resources/js/Hooks/useActivePath.ts` | No theme equivalent — theme derives active state from `react-router-dom`'s `useLocation()` | New, GLS-specific | Reads `usePage().url` instead |
+| `resources/js/Config/backofficeNavigation.ts` | `resources/views/components/backoffice/layout/sidebar.blade.php` (data extracted, not the theme's `all_routes.tsx`) | Rewritten as data | Deliberately NOT sourced from the theme's `feature-module/router/all_routes.tsx` — that file encodes ~200 demo routes for a different app; GLS's own Blade sidebar is the only authoritative source for "what modules actually exist here" |
+
+**Assets**: no new image/font/icon files were copied this phase — the shell
+reuses the exact same static files already serving the Blade/Livewire pages
+(`/assets/images/logo/gls-noir.png`, `/assets/images/logo/gls-blanc.webp`,
+`/assets/preskool/img/profiles/avatar-27.jpg`, and the already-loaded
+`tabler-icons`/`fontawesome` icon-font classes). Confirms the "no duplicate
+asset loading" rule end to end for this phase.
+
+**Theme SCSS**: none imported — `resources/views/app.blade.php` loads the
+exact same static `assets/preskool/css/{bootstrap.min,style}.css` the
+Blade/Livewire shell uses, so every class referenced above (`.card`,
+`.table`, `.sidebar`, `.header`, `.breadcrumb`, `.alert`) resolves from CSS
+that was already being served — zero new stylesheet requests introduced.
 
 ---
 
