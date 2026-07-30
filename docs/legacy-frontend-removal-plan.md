@@ -10,6 +10,33 @@ authorizes deleting anything today.
 
 ---
 
+## 0d. Phase 7 additions to the retained-legacy list
+
+Four medium CRUD modules are now migrated (docs/inertia-react-migration-
+status.md, Phase 7 entry): Employees, Users, Roles, and the per-user
+role/direct-permission assignment screen.
+
+| File | Why retained |
+|---|---|
+| `app/Livewire/Backoffice/Employees/EmployeesIndex.php` | No longer rendered — `backoffice.employees.index` now serves `EmployeeController@index`; kept for rollback |
+| `resources/views/livewire/backoffice/employees/employees-index.blade.php` | Owning view of the above |
+| `app/Livewire/Backoffice/Users/UsersIndex.php` | No longer rendered — `backoffice.users.index` now serves `UserController@index`; kept for rollback |
+| `resources/views/livewire/backoffice/users/users-index.blade.php` | Owning view of the above |
+| `app/Livewire/Backoffice/Users/ManageAuthorization.php` | No longer rendered — `backoffice.users.authorization.edit` now serves `UserAuthorizationController@edit`; kept for rollback |
+| `resources/views/livewire/backoffice/users/manage-authorization.blade.php` | Owning view of the above |
+| `app/Livewire/Backoffice/Roles/RolesIndex.php` | No longer rendered — `backoffice.roles.index` now serves `RoleController@index`; kept for rollback |
+| `resources/views/livewire/backoffice/roles/roles-index.blade.php` | Owning view of the above |
+| `app/Livewire/Backoffice/Roles/RoleForm.php` | No longer rendered — `backoffice.roles.create`/`.edit` now serve `RoleController@create`/`@edit`; kept for rollback |
+| `resources/views/livewire/backoffice/roles/role-form.blade.php` | Owning view of the above |
+
+**`app/Http/Requests/Backoffice/Employees/{Store,Update}EmployeeRequest.php`
+were NOT retired** — unlike the pattern above, these existed before Phase 7
+(serving a legacy, unrouted `EmployeeController`) and are now the ACTIVE
+Form Requests for the new `Employees\EmployeeController`, with their rule
+sets expanded to match the full Livewire form. Nothing to mark unused here.
+
+---
+
 ## 0c. Phase 6 additions to the retained-legacy list
 
 Five simple CRUD modules are now migrated (docs/inertia-react-migration-

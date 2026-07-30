@@ -553,6 +553,8 @@ export interface AuthorizationRoleOption {
     name: string;
     label: string;
     permissionsCount: number;
+    /** Permission machine names this role grants — lets the UI compute "via role" provenance live, before saving. */
+    permissionNames: string[];
 }
 
 /** UserAuthorizationController::edit()'s `targetUser` prop shape. */

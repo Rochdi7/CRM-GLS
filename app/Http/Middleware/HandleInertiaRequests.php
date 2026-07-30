@@ -72,6 +72,35 @@ final class HandleInertiaRequests extends Middleware
                 // flashes a translated string under this key — ForgotPasswordController and
                 // ResetPasswordController already do `->with('status', ...)` unchanged.
                 'status' => fn () => $request->session()->get('status'),
+                // One-time login credentials for a just-created employee
+                // (Backoffice\Employees\EmployeeController::store() →
+                // EmployeeObserver → EmployeeCredentialService). Shown once by
+                // the React modal, never persisted anywhere else, never logged.
+                //
+                // `pull()`, not `get()` — Laravel's flash data otherwise
+                // survives for the ENTIRE next request, not just "the next
+                // render": any subsequent Inertia visit in that window (a
+                // search/filter/pagination reload, a plain back/refresh)
+                // would still see it and the modal would reopen with a
+                // secret the admin already dismissed. `pull()` reads AND
+                // forgets it atomically, so it can only ever render once,
+                // matching the Livewire original's component-instance-scoped
+                // (never session-rebroadcast) equivalent.
+                'newEmployeeCredentials' => function () use ($request): ?array {
+                    $username = $request->session()->pull('new_employee_username');
+                    $password = $request->session()->pull('new_employee_password');
+
+                    return $username === null && $password === null
+                        ? null
+                        : ['username' => $username, 'password' => $password];
+                },
+                // One-time regenerated password for an existing user
+                // (Backoffice\Users\UserController::regeneratePassword()).
+                // Shown once by the React modal, never persisted anywhere
+                // else, never logged in plaintext (only the audit-log entry
+                // "password regenerated" is written, with no password value).
+                // `pull()` for the same one-render-only reason as above.
+                'regeneratedPassword' => fn () => $request->session()->pull('regeneratedPassword'),
             ],
             'locale' => app()->getLocale(),
         ];

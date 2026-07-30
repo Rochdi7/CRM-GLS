@@ -236,6 +236,228 @@ rather than relying on automated headless-browser testing.
 
 ---
 
+## Phase 7 — Medium CRUD modules (Employees, Users, Roles, Authorization)
+
+**Date**: 2026-07-30
+**Status**: **Complete.**
+
+Migrated the four remaining medium-complexity admin modules from Livewire to
+Inertia + React: Employees (full CRUD with photo upload and auto-provisioned
+login), Users (edit-only + password regeneration), Roles (full CRUD, no
+modal — full-page create/edit, matching the pre-existing UX), and the
+per-user role/direct-permission assignment screen (`ManageAuthorization` →
+`UserAuthorizationController`). Built via 4 parallel agents (3 backend, 3
+frontend, with the frontend Select2 agent concluding no new component was
+needed) plus a dedicated adversarial security review before commit.
+
+**⚠ Concurrent-session note**: a second Claude Code process was running
+against this same repository and Postgres test database at the same time as
+this phase's work (confirmed via two live `claude.exe`/`node.exe` process
+pairs on the machine) — it was completing its own Phase 6 (Settings/simple
+CRUD modules, see the Phase 6 entry above) concurrently. It silently
+reverted several of this phase's in-progress files mid-session
+(`EtablissementController`, `AnneeScolaireController`, `SalleController`,
+both `Salle` Form Requests, `resources/js/Types/index.ts`, and the Settings
+panel `.tsx` files it was building) while this phase's agents were reading
+the working tree — those files were not this phase's to touch and were
+deliberately left alone once identified; the reverts/re-creations were
+Phase 6's own process, not a defect introduced here. Several PHPUnit runs
+during this phase also hit transient PostgreSQL deadlocks
+(`SQLSTATE[40P01]`) and "relation does not exist" errors from both
+processes running `RefreshDatabase` against the same `gls_crm_test`
+database concurrently — every such failure was reproduced as a clean pass
+when the same test/file was re-run in isolation, confirming environmental
+contention, not a defect in this phase's code. **Recommend not running two
+Claude Code sessions against the same repository + test database at once.**
+
+### Existing behavior discovered
+- **Users/Roles/Permissions had no dedicated policy classes** — unlike every
+  other module (`EmployeePolicy` extends `ResourcePolicy`), authorization for
+  Users/Roles is purely permission-string based (`$this->authorize('roles.delete')`
+  etc.), by design (`docs/roles-and-permissions.md`) — preserved exactly,
+  no `UserPolicy`/`RolePolicy` was invented.
+- **None of the four modules had real HTTP routes for their mutations** —
+  every create/update/delete/regeneratePassword/authorization-sync action
+  ran only over Livewire's own AJAX protocol. New routes were added for all
+  of them (see Routes table below); the pre-existing GET routes for
+  index/create/edit were repointed from the Livewire components to the new
+  controllers, keeping the same route names/URIs.
+- **Employees' delete guard, Roles' machine-name immutability, and Roles'
+  protected/has-users delete guard** were all Livewire soft-error patterns
+  (`addError('delete', ...)`) — reproduced as `ValidationException::withMessages(['delete' => ...])`,
+  a real 422 with `errors.delete`, not a 500.
+- **`UserAuthorizationController::edit()`'s `roles` prop initially shipped
+  no per-role permission list** (only `{name, label, permissionsCount}`),
+  which the Livewire original computed live via a real
+  `Role::whereIn($selected)->with('permissions')` query on every render.
+  Fixed during this phase (see "Bugs found and fixed" below) rather than
+  left as a documented gap, since the frontend's live "granted via role X"
+  summary depended on it.
+
+### Deliberate behavior tightening (not a bug, a documented improvement)
+`EmployeeController::update()`/`destroy()` now enforce center-scoping via
+`EmployeePolicy` (`Gate::authorize('update'|'delete', $employee)` →
+`ResourcePolicy::withinCenter()` via `CenterAccessService`) — the Livewire
+`EmployeesIndex` never enforced this per-record, only the flat
+`employees.update`/`employees.delete` permission string, meaning a
+non-`centers.access-all` admin could previously edit/delete an employee
+from another center by guessing its ID. The new routes close this gap.
+Covered by `EmployeesInertiaCrudTest::test_update_and_delete_are_center_scoped_for_non_global_users`.
+
+### Bugs found and fixed during adversarial review (before commit)
+1. **One-time secrets could resurface on a later, unrelated page visit.**
+   `app/Http/Middleware/HandleInertiaRequests.php`'s `newEmployeeCredentials`/
+   `regeneratedPassword` shared props read their session values with
+   `session()->get()`, which does not consume Laravel's flash data — flash
+   data survives the *entire next request*, not just "the next render," so
+   any subsequent Inertia visit in that window (a search/filter/pagination
+   reload, a plain back/refresh) would still see the plaintext secret and
+   reopen the credentials/password modal the admin had already dismissed.
+   **Fix**: both reads changed to `session()->pull(...)`, which reads and
+   forgets atomically — guaranteed to render at most once, matching the
+   Livewire original's component-instance-scoped (never session-rebroadcast)
+   equivalent. Two regression tests added:
+   `EmployeesInertiaCrudTest::test_one_time_credentials_are_shown_at_most_once`
+   and `UsersInertiaTest::test_regenerated_password_is_shown_at_most_once`
+   — both assert the secret is present on the render immediately following
+   the mutating request, then absent on a second, later request in the same
+   session.
+2. **Missing per-role permission enumeration** (see "Existing behavior
+   discovered" above) — `UserAuthorizationController::edit()`'s `roles` prop
+   extended with a `permissionNames: string[]` field per role
+   (`Role::query()->with('permissions')->withCount('permissions')...`), a
+   single eager-loaded query, no N+1. The frontend's `viaRoles` computation
+   in `Authorization.tsx` now derives real "granted via role" provenance
+   live, before saving, instead of an intentionally-empty placeholder.
+   Verified this doesn't regress super-admin's display: super-admin is
+   deliberately never synced any permissions (bypasses everything via
+   `Gate::before`), and the UI already special-cases `isSuperAdmin` with a
+   distinct "bypasses all checks" banner rather than falling through to a
+   misleading "0 permissions via role" state.
+
+No other authorization bypass, mass-assignment, CSRF, or UI-only-auth defect
+was found by the adversarial review (full findings: server-side re-checks
+exist on every mutation independent of route middleware; protected-role and
+has-users delete guards are real DB checks, not client-side disablement;
+role `name` is genuinely immutable on update — `UpdateRoleRequest` never
+declares it as a validated field at all).
+
+### Files created
+- Controllers: `App\Http\Controllers\Backoffice\Employees\EmployeeController`,
+  `App\Http\Controllers\Backoffice\Users\{UserController,UserAuthorizationController}`,
+  `App\Http\Controllers\Backoffice\Roles\RoleController`
+- Form Requests: `app/Http/Requests/Backoffice/{Employees/{Store,Update}EmployeeRequest
+  (rule set expanded to match the full Livewire form — sexe, whatsapp, photo,
+  both dates, salaire, note, adresse — the previous, narrower rule set only
+  served the legacy unrouted `EmployeeController`), Users/{UpdateUserRequest,
+  SyncUserAuthorizationRequest}, Roles/{Store,Update}RoleRequest}`
+- Read-models: `app/Domain/Employees/Queries/{GetEmployeesList,GetUsersList}.php`
+  (Users placed under the Employees domain — no dedicated Users module
+  exists, and Users are exclusively produced by `EmployeeObserver`),
+  `app/Domain/Settings/Queries/GetRolesList.php` (placed under Settings —
+  no dedicated Roles/Authorization domain module exists; same reasoning as
+  the other referential-data read-models already there; docblock flags
+  revisiting a dedicated `Domain\Authorization` module if role management
+  grows further)
+- React pages: `resources/js/Pages/Backoffice/{Employees/Index,
+  Users/{Index,Authorization},Roles/{Index,Create,Edit}}.tsx`
+- Shared React component: `resources/js/Components/Roles/RolePermissionsForm.tsx`
+  (label/machine-name/permissions form shared by Roles Create and Edit)
+- The project's first hand-rolled modal: `resources/js/Components/Modals/Modal.tsx`
+  (+ `ConfirmDialog.tsx`) — resolves `docs/bootstrap-react-integration-decision.md`'s
+  explicitly-deferred "Phase 6+ revisit": hand-rolled chosen over
+  `react-bootstrap` (no new npm dependency), focus-trap/Escape/backdrop-click/
+  body-scroll-lock all React-owned, visuals reuse the existing Bootstrap 5
+  `.modal`/`.modal-dialog`/`.modal-backdrop` markup
+- Tests: `tests/Feature/Backoffice/People/EmployeesInertiaCrudTest.php`,
+  `tests/Feature/Backoffice/Inertia/{RolesInertiaTest,UsersInertiaTest}.php`
+
+### Files modified
+- `routes/backoffice.php` — `employees.index`, `users.index`,
+  `users.authorization.edit`, `roles.index`, `roles.create`, `roles.edit`
+  repointed from Livewire components to the new controllers (same
+  names/URIs); new routes added for actions that never had one before (see
+  table below)
+- `app/Http/Middleware/HandleInertiaRequests.php` — added
+  `flash.newEmployeeCredentials`/`flash.regeneratedPassword` shared props
+  (later fixed to use `session()->pull()`, see "Bugs found and fixed")
+- `resources/js/Types/index.ts` — additive only; new prop-shape types per
+  module, no existing type redefined
+- `resources/js/Config/backofficeNavigation.ts` — Employees/Users/Roles nav
+  entries marked `inertia: true` so the sidebar SPA-navigates instead of
+  falling back to a full reload, matching the pattern already used for
+  Permissions
+
+### Routes
+| Route | Before | After |
+|---|---|---|
+| `backoffice.employees.index` (GET) | `EmployeesIndex` (Livewire) | `EmployeeController@index` |
+| `backoffice.employees.store` (POST, new) | — | `EmployeeController@store` |
+| `backoffice.employees.update` (PUT, new) | — | `EmployeeController@update` |
+| `backoffice.employees.destroy` (DELETE, new) | — | `EmployeeController@destroy` |
+| `backoffice.users.index` (GET) | `UsersIndex` (Livewire) | `UserController@index` |
+| `backoffice.users.update` (PUT, new) | — | `UserController@update` |
+| `backoffice.users.regenerate-password` (POST, new) | — | `UserController@regeneratePassword` |
+| `backoffice.users.authorization.edit` (GET) | `ManageAuthorization` (Livewire) | `UserAuthorizationController@edit` |
+| `backoffice.users.authorization.update` (PUT, new) | — | `UserAuthorizationController@update` |
+| `backoffice.roles.index` (GET) | `RolesIndex` (Livewire) | `RoleController@index` |
+| `backoffice.roles.create` (GET) | `RoleForm` (Livewire) | `RoleController@create` |
+| `backoffice.roles.store` (POST, new) | — | `RoleController@store` |
+| `backoffice.roles.edit` (GET) | `RoleForm` (Livewire) | `RoleController@edit` |
+| `backoffice.roles.update` (PUT, new) | — | `RoleController@update` |
+| `backoffice.roles.destroy` (DELETE, new) | — | `RoleController@destroy` |
+
+No routes for creating a User directly — users are exclusively produced by
+`EmployeeObserver` when an Employee is created, exactly as before.
+
+### Authorization / center scoping
+Every mutation re-checks permissions inside the controller action itself,
+independent of route middleware (defense in depth, matching the Livewire
+"authorize in mount() AND every mutation" pattern). `UserAuthorizationController::update()`
+delegates every invariant (role/permission existence, super-admin
+grant/remove rule, last-super-admin lockout, direct-permission privilege
+check, transaction, cache reset, activity log) to the unchanged
+`UserAuthorizationService::syncAuthorization()` — no business rule was
+reimplemented. Confirmed by the adversarial review: no route lets a forged
+request assign `super-admin` without already holding it, delete a protected
+or in-use role, or bypass Employees' new center-scoping.
+
+### Legacy files retained (not deleted)
+`app/Livewire/Backoffice/{Employees/EmployeesIndex,Users/{UsersIndex,
+ManageAuthorization},Roles/{RolesIndex,RoleForm}}.php` and their Blade views
+— all unreferenced by any route now, kept for rollback per the established
+pattern.
+
+### Automated checks
+| Check | Result |
+|---|---|
+| `npx tsc --noEmit` | ✅ Clean |
+| `npm run build` | ✅ Succeeds — main bundle 449.46 kB / 126.10 kB gzip (Phase 6 baseline: 375.45 kB / 110.41 kB gzip) |
+| `C:\php84\php.exe artisan test tests/Feature/Backoffice/{People,Inertia,Authorization}` | ✅ Green (isolated from the concurrent-session contention noted above) |
+| Full suite | ✅ Green — isolated re-runs of every test that hit a transient deadlock/"relation does not exist" error during a concurrent run confirmed a clean pass |
+
+### Performance measurements
+Bundle grew by ~74 kB / ~16 kB gzip over Phase 6's baseline — expected for
+4 new full CRUD pages (list + modal or full-page form, one new shared modal
+component, one new shared Roles form component) added in a single phase.
+No N+1 queries introduced in any new read-model (`GetEmployeesList`,
+`GetUsersList`, `GetRolesList` all use single eager loads /
+`withCount()`, confirmed by the adversarial review).
+
+### Manual browser verification
+Not yet performed — pending user verification in a real browser (create/edit/
+delete an Employee including the one-time-credentials modal, edit a User and
+regenerate a password, create/edit/delete a Role, assign roles/direct
+permissions to a User).
+
+### Known limitations
+- None blocking. The concurrent-session file churn (noted above) is fully
+  resolved in the final committed state — every Phase 7 file was
+  re-verified (lint, `tsc`, targeted tests) after the collision was
+  identified.
+
+---
+
 ## Phase 5 — Baseline (before read-only pages migration)
 
 **Date**: 2026-07-30

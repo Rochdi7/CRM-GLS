@@ -41,7 +41,7 @@ scan for on this root view.
 | Dropdown state (user menu) | React (`useState` in `Header.tsx`, click-outside + Escape via `useEffect`) |
 | Collapse state | Not used in Phase 2 — no collapsible sections shipped yet |
 | Offcanvas / mobile sidebar state | React (`useState` in `BackofficeLayout.tsx`, toggled via `Header`'s mobile-menu button, closed on navigation/Escape/overlay-click) |
-| Future modal state (Phase 6+) | **Not decided yet** — deferred (see below) |
+| Future modal state (Phase 6+) | **Decided in Phase 6** — hand-rolled `Modal.tsx`, no `react-bootstrap` (see "Phase 6 modal decision" below); reused as-is by Phase 7's Employees/Users add-edit modals |
 | `bootstrap.bundle.js` imported on Inertia pages? | **No** |
 | jQuery used on Inertia pages? | **No** |
 | Duplicate-init prevention | N/A this phase — no Bootstrap JS runs on Inertia pages at all, so there is nothing to double-initialize. Existing Blade/Livewire pages keep loading the static Bootstrap JS bundle exactly as before (unchanged, still needed there) |

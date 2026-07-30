@@ -11,15 +11,18 @@ and `gls-crm-laravel-structure.md`. This file is a map, not a rulebook.
 > Livewire-only description are **stale** — both were written before this
 > approved migration started and have not been rewritten yet (deliberately
 > deferred, per `docs/inertia-react-migration-audit.md` §8 "Documentation
-> debt"). Current real state as of Phase 6: **Inertia + React** now serve
+> debt"). Current real state as of Phase 7: **Inertia + React** now serve
 > Permissions, Login, Forgot/Reset Password, Profile, Dashboard, the
 > top-bar Context Switcher, the groups-historique index, the read-only
 > show/detail pages for Students, Groups, Inscriptions, Caisses,
-> Encaissements, Depenses, and Caisse Transfers, and the five simple CRUD
+> Encaissements, Depenses, and Caisse Transfers, the five simple CRUD
 > modules (Établissements, Années scolaires, Salles, Frais, Types de
 > dépenses — the Paramètres/Settings page and its own new Types de
-> dépenses page). Every remaining CRUD index page with add/edit modals
-> (Students, Employees, Users, Roles, Inscriptions, Groups, all Finance
+> dépenses page), and the four medium CRUD modules (Employees — full CRUD
+> with photo upload and auto-provisioned login; Users — edit-only + password
+> regeneration; Roles — full CRUD, full-page create/edit; and the per-user
+> role/direct-permission assignment screen). Every remaining CRUD index
+> page with add/edit modals (Students, Inscriptions, Groups, all Finance
 > mutation screens — Depenses/Remboursements/Encaissements/Caisses/
 > Transfers) and every other module listed in §4 below is still Livewire,
 > unchanged. A permanent, read-only reference copy of the
@@ -147,6 +150,15 @@ Reusable traits: `Concerns\{WithCaisseSelection, WithCenterContext, WithPerPage,
 **Money records never have a destroy route/action** (Encaissements, Depenses,
 Remboursements, CaisseTransfers) — corrections use compensating entries.
 **Groups never delete** — only `archiverCommeTermine()`.
+
+> ⚠ As of Phase 7 (see `docs/inertia-react-migration-status.md`), the
+> `Employees\EmployeesIndex`, `Users\{UsersIndex,ManageAuthorization}`,
+> `Roles\{RolesIndex,RoleForm}`, `Settings\{EtablissementsTab,
+> AnneesScolairesTab,SallesTab,FraisTab}`, and `TypesDepenses\TypesDepensesIndex`
+> rows above are **no longer referenced by any route** — their Inertia/React
+> replacements are live instead. The class/view files are kept, unused, for
+> rollback (removed only in the final cleanup phase); this table otherwise
+> still reflects the full historical component set.
 
 ---
 
