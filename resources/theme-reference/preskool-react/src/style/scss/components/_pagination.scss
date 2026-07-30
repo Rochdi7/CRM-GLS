@@ -1,0 +1,274 @@
+@use "../utils/variables";
+
+.page-link {
+    color: variables.$text-color;
+    background-color: variables.$white;
+    border: 1px solid variables.$border-color;
+    &:focus {
+        box-shadow: none;
+        background-color: variables.$light;
+    }
+    &:hover {
+        color: variables.$primary;
+        background-color: variables.$light;
+        border-color: variables.$border-color;
+    }
+}
+.page-item.active .page-link {
+    color: variables.$white;
+    background-color: variables.$primary;
+    border-color: variables.$primary;
+}
+.disabled>.page-link, .page-link.disabled {
+    color: variables.$text-color;
+    background-color: variables.$white;
+    border-color: variables.$border-color;
+    opacity: 0.7;
+}
+
+[dir="rtl"] { 
+    .pagination{
+        .page-link{
+            .bx-chevron-left::before{
+                content: "\ea50";
+            }
+            .bx-chevron-right::before{
+                content: "\ea4d";
+            }
+            .ri-arrow-right-s-line:before{
+                content: "\ea64";
+            }
+            .ri-arrow-left-s-line:before{
+                content: "\ea6e";
+            }
+        }
+    }
+}
+.pagination-style-1 .pagination {
+    .page-item {
+        margin: 0 0.25rem;
+        .page-link {
+            border: 0;
+            border-radius: variables.$border-radius;
+            font-size: 0.8125rem;
+            i {
+                font-weight: variables.$font-weight-semibold;
+            }
+        }
+        &.active {
+            .page-link {
+                border-radius: variables.$border-radius;
+                background-color: variables.$primary;
+                color: variables.$white;
+            }
+            &:hover {
+                .page-link {
+                    border-radius: variables.$border-radius;
+                    background-color: variables.$primary;
+                    color: variables.$white;
+                }
+            } 
+        }
+        &:hover {
+            .page-link {
+                background-color: variables.$light;
+                color: variables.$primary;
+            }
+        }
+    }
+}
+.pagination-style-2 .pagination {
+    border-radius: variables.$border-radius;
+    .page-item {
+        margin: 0 0.25rem;
+        .page-link {
+            border: 0 !important;
+            font-size: 0.8125rem;
+        }
+        &.active {
+            .page-link {
+                background-color: variables.$white;
+                color: variables.$primary;
+                position: relative;
+                font-weight: bold;
+                &:before {
+                    position: absolute;
+                    content: "";
+                    inset-block-end: 0;
+                    inset-inline-start: 0;
+                    width: 100%;
+                    height: 0.1rem;
+                    background-color: variables.$primary;
+                }
+            }
+        }
+        &:hover {
+            .page-link {
+                background-color: transparent;
+            }
+        }
+    }
+}
+.pagination-style-3 .pagination {
+    border-radius: 50px;
+    padding: 0.25rem;
+    align-items: center;
+    .page-item {
+        margin: 0 0.25rem;
+        .page-link {
+            border: 0;
+            border-radius: 50px;
+            font-size: 0.8125rem;
+            i {
+                font-weight: variables.$font-weight-semibold;
+            }
+        }
+        &.active {
+            .page-link {
+                background-color: variables.$primary;
+                color: variables.$white;
+            }
+            &:hover {
+                .page-link {
+                    background-color: variables.$primary;
+                }
+            }
+        }
+        &:hover {
+            .page-link {
+                background-color: variables.$light;
+            }
+        }
+    }
+}
+.pagination-style-4 .pagination {
+    .page-item {
+        .page-link {
+            border: 0 !important;
+            font-size: 0.8125rem;
+            border-radius: variables.$border-radius;
+            i {
+                font-weight: variables.$font-weight-semibold;
+            }
+        }
+        &.active {
+            .page-link {
+                border: 0;
+                border-radius: variables.$border-radius;
+                background-color: variables.$primary;
+                color: variables.$white;
+            }
+            &:hover {
+                .page-link {
+                    background-color: variables.$primary;
+                }
+            }
+        }
+        &:hover {
+            .page-link {
+                background-color: transparent;
+            }
+        }
+    }
+}
+.pagination-style-4 .pagination {
+    .page-item {
+        .page-link {
+            border: 0 !important;
+            font-size: 0.8125rem;
+            border-radius: variables.$border-radius;
+            i {
+                font-weight: variables.$font-weight-semibold;
+            }
+        }
+        &.active {
+            .page-link {
+                border: 0;
+                border-radius: variables.$border-radius;
+                background-color: variables.$primary;
+                color: variables.$white;
+            }
+            &:hover {
+                .page-link {
+                    background-color: variables.$primary;
+                }
+            }
+        }
+        &:hover {
+            .page-link {
+                background-color: transparent;
+            }
+        }
+    }
+}
+
+
+// Pagination Boxed (Custom)
+.pagination-boxed {
+    .page-link {
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+        margin-left: 0.35rem !important;
+        height: 35px;
+        width: 35px;
+        padding: 0;
+        border-radius: variables.$border-radius;
+    }
+
+    &.pagination-sm {
+        .page-link {
+            height: 31px;
+            width: 31px;
+        }
+    }
+
+    &.pagination-lg {
+        .page-link {
+            font-size: 1.09375rem;
+            height: 53px;
+            width: 53px;
+        }
+    }
+}
+
+// Pagination rounded (Custom)
+.pagination-rounded {
+    .page-link {
+        border-radius: 50% !important;
+    }
+}
+
+// Pagination Color
+@each $color, $value in variables.$theme-colors {
+    .pagination-#{$color} {
+        .page-item {
+            &.active {
+                .page-link {
+                    background-color: $value;
+                    border-color: $value;
+                    color: variables.$white;
+                    &:hover {
+                        background-color: $value;
+                        border-color: $value;
+                        color: variables.$white;
+                    }
+                }
+            }
+            .page-link {
+                &:hover {
+                    background-color: $value;
+                    border-color: $value;
+                    color: variables.$white;
+                }
+            }
+        }
+    }
+}
+
+// Pagination Gradient
+.pagination-gradient {
+    .page-link {
+        background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0));    
+    }
+}

@@ -1,0 +1,516 @@
+@use "../utils/mixins";
+@use "../utils/variables";
+
+.sidebar-contact {
+    position: fixed;
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%); 
+    width: 350px;
+    height: auto;
+    background: #fff;
+    box-sizing: border-box;
+    transition: 0.5s;
+    z-index: 9999;
+    .toggle-theme {
+        position: fixed;
+        width: 48px;
+        text-align: center;
+        cursor: pointer;
+        background: variables.$primary;
+        top: 0;
+        right: 0;
+        padding: 6px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        color: variables.$white;
+        border-top-left-radius: 3px;
+        border-bottom-left-radius: 3px;
+        .fa-spin {
+            -webkit-animation: fa-spin 2s infinite linear;
+            animation: fa-spin 2s infinite linear;
+        }
+    }
+    
+}  
+#theme-settings{
+    width: 26px;
+    height: 26px;
+    border: 1px solid variables.$light-900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50px;
+} 
+.input-themeselect label {
+    width: 100%;
+}       
+                                                        
+.sidebar-themesettings{
+    transition: all 0.5s;
+    width: 400px !important;
+    height: 100vh;
+    z-index: 99999;
+    overflow: auto;
+    max-width: 100%;
+    &.open{
+        right: 0; 
+    }
+    .themesettings-header{
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-bottom: 20px;
+        border-bottom: 1px solid variables.$light-900;
+        h4{
+            color: variables.$gray-900;
+            font-size: 18px;
+        }
+    }
+    .themesettings-inner{
+        .themesettings-content{
+            border-bottom: 1px solid variables.$light-900;
+            margin-bottom: 15px;
+            h6{
+                font-size: 14px;
+                font-weight: 600;
+                color: #000; 
+                margin-bottom: 15px;
+            }
+        }
+    }
+    .input-themeselect{
+        background: variables.$light-500;
+        padding: 10px;
+        border-radius: 10px;
+        border:1px solid variables.$light-900;
+        margin-bottom: 15px;
+        input[type="radio"]{
+            display: none;
+            &:checked{
+                ~ label{
+                    .checkboxs-theme{
+                        &:after{
+                            background-color: variables.$purple;
+                            border-color: variables.$purple;
+                            content: "";
+                        }
+                        &::before{
+                            content: "\f00c";
+                            font-family: "Font Awesome 5 Free";
+                            color: #fff;
+                            font-weight: 700;
+                            font-size: 10px;
+                            right: 4px;
+                            position: absolute;
+                            top: -14px;
+                            z-index: 9;
+                        }
+                    } 
+                }
+            }
+        }
+        img{
+            height: 80px;
+        }
+        .checkboxs-theme{
+            position: relative;
+            width: 100%;
+            display: block;
+            &:after{
+                position: absolute;
+                content: "";
+                border: 1px solid #E8E8E8;
+                width: 16px;
+                height: 16px;
+                border-radius: 5px;
+                right: 0;
+                top: -17px;
+            }
+        }
+    }
+}
+.sidebar-themeoverlay{
+    position: fixed;
+    width: 100%;
+    height: 100vh;
+    background: rgba(0,0,0,0.75);
+    top: 0;
+    left: -100%;
+    z-index: 10000;
+    &.open{
+        left: 0;
+    }
+}
+.sidebar-themesettings.offcanvas.offcanvas-end{
+    width: 400px !important;
+} 
+.custom-themecolor{
+    label{
+        width: 40px;
+        height: 40px;
+        border-radius: 5px;
+        position: relative;
+        border: 1px solid variables.$light-900;
+        position: relative;
+        &::before {
+            width: 40px;
+            height: 40px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            content: "";
+            transform: translate(-50%, -50%);
+            border-radius: 5px;
+        }
+        &.primary-clr{
+            &::before {
+                background: variables.$primary;
+            }
+        }
+        &.bg-primary{
+            &::before {
+                background: variables.$primary;
+            }
+        }
+        &.violet-clr{
+            &::before {
+                background: variables.$violet;
+            }
+        }
+        &.orange-clr{
+            &::before {
+                background: variables.$orange;
+            }
+        }
+        &.pink-clr{
+            &::before {
+                background: variables.$pink;
+            }
+        }
+        &.green-clr{
+            &::before {
+                background: variables.$green;
+            }
+        }
+        &.red-clr{
+            &::before {
+                background: variables.$red;
+            }
+        }
+    }
+    input[type="radio"]{
+        display: none;
+        &:checked{
+            ~ label{
+                &:after{
+                    content: "\f058";
+                    font-family: "Font Awesome 5 Free";
+                    color: variables.$white;
+                    font-weight: 700;
+                    font-size: 12px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%,-50%);
+                    position: absolute;
+                }
+            }
+        }
+    }
+}
+.theme-colorselect {
+    input[type="radio"]{
+        display: none;
+        &:checked{
+            ~ label{
+                outline-color: variables.$primary;
+                &:after{
+                    content: "\f058";
+                    font-family: "Fontawesome";
+                    color: variables.$primary;
+                    font-weight: 700;
+                    font-size: 12px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%,-50%);
+                    position: absolute;
+                }
+                &.primary-topbar,   &.dark-topbar {
+                    &:after{
+                        color: variables.$white;
+                    }
+                }
+            }
+        }
+    }
+    label {
+        width: 40px;
+        height: 40px;
+        border-radius: 5px;
+        position: relative;
+        outline-offset: 3px;
+        outline: 1px solid variables.$light-900;
+        &.white-topbar {
+            background: variables.$white;
+            border: 1px solid variables.$light;
+        }
+        &.dark-topbar {
+            background: variables.$dark;
+        }
+        &.primary-topbar {
+            background: variables.$primary;
+        }
+        &.grey-topbar {
+            background: variables.$gray-100;
+        }
+        &.bg-darkblack {
+            background: variables.$gray-800;
+        }
+        &.bg-darkblue{
+            background: #07396D;
+        }
+    }
+}
+.theme-layout {
+    &.active {
+        img {
+            border: 1px solid variables.$primary;
+            @include mixins.rounded(5px);
+        }
+    }
+    input[type="radio"]{
+        display: none;
+        &:checked{
+            ~ label{
+                .layout-img {
+                    img {
+                        border-color: variables.$primary;
+                    }
+                }
+                .layout-type {
+                    position: relative;
+                    padding-left: 15px;
+                    &:after{
+                        content: "\f058";
+                        font-family: "Fontawesome";
+                        color: variables.$primary;
+                        font-weight: 700;
+                        font-size: 12px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        left: 0;
+                        top: 50%;
+                        transform: translateY(-50%);
+                        position: absolute;
+                        display: block;
+                    }
+                }
+            }
+        }
+    }
+    label {
+        .layout-img {
+            img {
+                border: 1px solid variables.$light-900;
+                @include mixins.rounded(5px);
+            }
+        }
+        &:after {
+            display: none;
+        }
+    }
+}
+.theme-mode {
+    input[type="radio"]{
+        display: none;
+        &:checked{
+            ~ label{
+                border-color: variables.$primary;
+                .avatar {
+                    color: variables.$primary;
+                    background-color: variables.$primary-transparent;
+                }
+            }
+        }
+    }
+    label {
+        border: 1px solid variables.$light-900;
+        .avatar {
+            background-color: variables.$light-900;
+            color: variables.$gray-900;
+        }
+    }
+}
+.theme-sidebarbg {
+    input[type="radio"]{
+        display: none;
+        &:checked{
+            ~ label{   
+                img {        
+                    border-color: variables.$primary !important;
+                }     
+            }
+        }
+    }
+    label { 
+        height: 73px;      
+        img { 
+            width: 46px;
+            height: 73px;
+            object-fit: cover;
+            border: 2px solid variables.$light-900;
+        }
+    }
+}
+.theme-sidebarcolor {
+    input[type="radio"]{
+        display: none;
+        &:checked{
+            ~ label{                
+                border-color: variables.$primary !important;
+                position: relative;
+                &:after{
+                    content: "\f058";
+                    font-family: "Fontawesome";
+                    color: variables.$primary;
+                    font-weight: 700;
+                    font-size: 12px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%,-50%);
+                    position: absolute;
+                }
+                &.bg-dark {
+                    &:after{
+                        color: variables.$white;
+                    }
+                }
+            }
+        }
+    }
+    label {        
+        width: 93px;
+        height: 40px;
+        border: 1px solid variables.$light-900;
+    }
+}
+.custom-btn-close {
+    width: 20px;
+    height: 20px;
+    @include mixins.rounded(50%);
+    background-color: variables.$gray-500;
+    color: variables.$white;
+    margin: 0;
+    padding: 0;
+    background-image: none;
+    &:hover {
+        background-color: variables.$danger;
+    }
+}
+.custom-themecolor.custom-themecolor-rounded {
+    label,.pickr-topbar {
+        width: 40px;
+        height: 40px;
+        border-radius: 5px;
+    }
+    .pickr .pcr-button {
+        width: 25px;
+        height: 25px;
+        border-radius: 5px;
+    }
+    label {
+        &.topbar-bg-1 {
+            background: variables.$light-200;
+        }
+        &.topbar-bg-2 {
+            background: variables.$secondary-transparent;
+        }
+        &.topbar-bg-3 {
+            background: variables.$gray-100;
+        }
+        &.topbar-bg-4 {
+            background: variables.$orange-100;
+        }
+    }
+}
+
+.custom-themecolor,.theme-colorsset {
+    line-height: 0;
+}
+.custom-themecolor .pickr-container-background .pickr .pcr-button::after {
+    line-height: 3.0;
+}
+.custom-themecolor .pickr-topbar .pickr .pcr-button::after {
+    line-height: 1.9;
+}
+.sidebar-header {
+    .avatar.avatar-md {
+        width: 40px;
+        height: 40px;
+    }
+}
+.custom-themecolor {
+    input[type="radio"]{
+        display: none;
+        &:checked{
+            ~ label{
+                &:after{
+                    content: "\f00c";
+                    font-family: "Fontawesome";
+                    color: variables.$white;
+                    font-weight: 700;
+                    font-size: variables.$font-size-8;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    left: 50%;
+                    top: 50%;
+                    transform: translate(-50%,-50%);
+                    position: absolute;
+                    width: 18px;
+                    height: 18px;
+                    background: variables.$success;
+                    border-radius: 50%;
+                }
+                &.primary-topbar,   &.dark-topbar {
+                    &:after{
+                        color: variables.$white;
+                    }
+                }
+            }
+        }
+    }
+    label {
+        width: 40px;
+        height: 40px;
+        border-radius: 5px;
+        position: relative;
+    }
+}
+.custom-themecolor label {
+    width: 40px;
+    height: 40px;
+    border-radius: 5px;
+    position: relative;
+    outline-offset: 3px;
+    outline: 1px solid #BCBFC3;
+}
+.custom-themecolor label.bg-darkblack {
+    background: #39435F;
+}
+.custom-themecolor label.bg-darkblue {
+    background: #07396D;
+}

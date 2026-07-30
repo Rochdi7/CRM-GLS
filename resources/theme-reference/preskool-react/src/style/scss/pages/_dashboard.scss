@@ -1,0 +1,166 @@
+@use "../utils/mixins";
+@use "../utils/variables";
+
+.overlay-img {
+    .shape-01 {
+        position: absolute;
+        left: 40%;
+    }
+    .shape-02 {
+        position: absolute;
+        left: 60%;
+        bottom: 0;
+    }
+    .shape-03 {
+        position: absolute;
+        left: 80%;
+    }
+    .shape-04 {
+        position: absolute;
+        right: 15%;
+        bottom: 0;
+    }
+}
+.event-scroll {
+    max-height: 495px;
+    overflow-y: auto;
+}
+.class-hover {
+    @include mixins.transition(all 0.5s ease);
+    &:hover {
+        @include mixins.transition(all 0.5s ease);
+        .avatar {
+            animation: rotate  1s ease-in-out;
+        }
+    }
+}
+@keyframes rotate {
+    0% {
+      transform: rotateY(0deg);
+    }
+    50% {
+      transform: rotateY(90deg);
+    }
+    100% {
+      transform: rotateY(0deg);
+    }
+  }
+.btn-hover {
+    @include mixins.transition(all 0.5s ease);
+    &:hover {
+        background-color: variables.$dark !important;
+        color: variables.$white !important;
+    }
+}
+.todo-list {
+    .todo-strike-content {
+        h6 {
+            text-decoration-line: line-through;
+        }
+    }
+}
+.dark-hover {
+    &:hover {
+        background: variables.$primary !important;
+        border-color: variables.$primary !important;
+        color: variables.$white;
+    }
+}
+.line-ellipsis {
+    -webkit-line-clamp: 2;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis; 
+}
+.student-slider, .teacher-slider {
+    &.owl-carousel .owl-stage-outer {
+        height: 100% !important;
+        .owl-stage {
+            height: 100%;
+            .owl-item {
+                height: 100%;
+            }
+        }
+    }
+}
+.activity-scroll {
+    max-height: 240px;
+    overflow-y: auto;
+}
+.notice-widget {
+    position: relative;
+    &:before {
+        position: absolute;
+        content: "";
+        width: 1px;
+        height: calc(100% - 25px);
+        background-color: variables.$light-900;
+        top: 20px;
+        inset-inline-start: 16px;
+    }
+}
+.student-slider.owl-carousel  {
+    .owl-nav {
+        position: absolute;
+        left: 50%;
+        top: 30%;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        button {
+            width: 24px;
+            height: 24px;
+            background: variables.$white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: variables.$font-size-12;
+            &.owl-prev {
+                margin-right: 5px;
+            }
+            &:hover {
+                background: variables.$primary;
+                color: variables.$white;
+            }
+        }
+    }
+}
+.teacher-slider.owl-carousel  {
+    .owl-nav {
+        position: absolute;
+        left: 50%;
+        top: 30%;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        button {
+            width: 24px;
+            height: 24px;
+            background: variables.$white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: variables.$font-size-12;
+            color: variables.$dark;
+            &.owl-prev {
+                margin-right: 5px;
+            }
+            &:hover {
+                background: variables.$primary;
+                color: variables.$white;
+            }
+        }
+    }
+}
+.animate-card {
+    @include mixins.transition(all 0.5s ease);
+    &:hover {
+        @include mixins.transition(all 0.5s ease);
+        @include mixins.transform(translateY(-3px));
+    }
+}

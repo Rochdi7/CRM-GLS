@@ -1,0 +1,145 @@
+@use "../utils/variables";
+
+.invoice-info {
+    .note-editable {
+        background: variables.$white;
+        min-height: 80px;
+    }
+}
+.invoice-amount-details {
+    background: variables.$white;
+    padding: 24px;
+    border-radius: 5px;
+    margin-bottom: 24px;
+    ul {
+        li {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            h6 {
+                font-size: variables.$font-size-15;
+            }
+            &:last-child {
+                padding: 15px 0;
+                border-top: 1px solid variables.$light-900;
+                border-bottom: 1px solid variables.$light-900;
+            }
+        }
+    }
+}
+.service-upload {
+    border: 2px dashed variables.$light-900;
+    text-align: center;
+    background-color: variables.$white;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    span {
+        font-size: variables.$font-size-15;
+        color: variables.$gray-700;
+        display: block;
+    }
+    input[type=file] { 
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        cursor: pointer;
+    }
+}
+.invoice-modal {
+    .modal-content {
+        background: variables.$white;
+        padding: 20px;
+    }
+}
+.invoice-popup-head {
+    background: variables.$light-500;
+    padding: 24px 24px 14px;
+    flex-wrap: wrap;
+    img {
+        margin-bottom: 10px;
+    }
+    .popup-title {
+        margin-bottom: 10px;
+        h2 {
+            background: linear-gradient(270.14deg, #7638FF -0.04%, #3698FF 100%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+    }
+}
+.tax-info {
+    margin-top: 30px;
+}
+.tax-invoice-info {
+    background: variables.$light-500;
+    padding: 10px;
+    margin-bottom: 15px;
+    h4 {
+        font-weight: variables.$font-weight-medium;
+    }
+}
+.total-amount-tax {
+    display: flex;
+    justify-content: end;
+    align-items: center;
+    flex-wrap: wrap;
+    ul {
+        min-width: 200px;
+        text-align: right;
+        margin-bottom: 0;
+        li {
+            font-size: variables.$font-size-16;
+            margin-bottom: 8px;
+        }
+        &.total-amount {
+            li {
+                font-size: variables.$font-size-18;
+                font-weight: variables.$font-weight-semibold;
+            }
+        }
+    }
+}
+.payment-info {
+    border-top: 1px solid variables.$light-900;
+    border-bottom: 1px solid variables.$light-900;
+    h6 {
+        margin-bottom: 10px;
+    }
+}
+.term-condition-invoice {
+    border-bottom: 1px solid variables.$light-900;
+    p {
+        font-weight: variables.$font-weight-medium;
+        color: variables.$gray-900;
+    }
+}
+.note-toolbar {
+    background: variables.$white;
+    border-color: variables.$light-900;
+}
+.note-editor.note-airframe, .note-editor.note-frame {
+    border-color: variables.$light-900;
+}
+.note-editor.note-airframe .note-statusbar, .note-editor.note-frame .note-statusbar {
+    border-top: 0;
+    background-color: variables.$white;
+}
+
+.invoice-logo-dark {
+    display: block;
+}
+.invoice-logo-white {
+    display: none;
+    img {
+        height: 42px;
+    }
+}

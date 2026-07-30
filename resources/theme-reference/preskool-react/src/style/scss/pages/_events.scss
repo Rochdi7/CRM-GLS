@@ -1,0 +1,6 @@
+.all-content {
+    display: none;
+    &.active {
+        display: block;
+    }
+}

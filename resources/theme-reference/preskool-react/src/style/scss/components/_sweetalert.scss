@@ -1,0 +1,9 @@
+@use "../utils/variables";
+
+.swal2-actions .swal2-confirm.btn:active {
+    background-color: variables.$primary;
+    border-color: variables.$primary;
+}
+.swal2-confirm{
+    margin-right: 5px;
+}

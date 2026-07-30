@@ -1,0 +1,61 @@
+@use "../utils/variables";
+
+.accordion-button {
+    background-color: variables.$white;
+    color: variables.$text-color;
+    padding: 0.75rem 1rem;
+    font-size: 0.85rem;
+    font-weight: variables.$font-weight-medium;
+    &:not(.collapsed) {
+        color: variables.$text-color;
+        background-color: variables.$default-background;
+        box-shadow: none;
+    }
+    &:focus {
+        border-color: rgba(variables.$primary, 0.3);
+        box-shadow: none;
+    }
+    &:after,&:not(.collapsed)::after {
+        background-image: none;
+    }
+    &:after {
+        content: "\f078";
+        font-family: variables.$font-awesome;
+        font-size: variables.$font-size-12;
+        line-height: 1;
+        background-color: variables.$white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 3.125rem;
+        color: variables.$text-color;
+    }
+}  
+.accordion-body {
+    padding: 1rem;
+    font-size: 0.8125rem;
+    color: variables.$text-muted;
+}
+.accordion-item {
+    color: variables.$text-color;
+    background-color: variables.$white;
+    border: 1px solid variables.$light-900;
+}
+.accordions-items-seperate {
+    .accordion-item:not(:first-of-type) {
+        margin-block-start: 1rem;
+    }
+    .accordion-item {
+        border-block-start: 1px solid variables.$light-900;
+        border-radius: variables.$border-radius;
+        overflow: hidden;
+    }
+}
+.accordion-item:last-of-type {
+    border-bottom-right-radius: 0.35rem;
+    border-bottom-left-radius: 0.35rem;
+}
+.accordion-item:first-of-type {
+    border-top-left-radius: 0.35rem;
+    border-top-right-radius: 0.35rem;
+}

@@ -1,0 +1,372 @@
+@use "../utils/variables";
+
+.alert {
+  padding: 0.625rem 0.85rem;
+  border-radius: variables.$border-radius;
+  font-size: 0.8125rem;
+  &.alert-dismissible {
+    padding: 0.625rem 2.25rem 0.625rem 0.85rem;
+  }
+  i {
+    font-size: variables.$font-size-20;
+  }
+  .btn-close {
+  
+    padding: 0.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    i {
+      font-size: variables.$font-size-18;
+      line-height: 18px;
+    }
+  }
+  &:last-child {
+    margin-bottom: 0;
+  }
+  .alert-link {
+    font-weight: variables.$font-weight-semibold;
+  }
+}
+[dir="rtl"] {
+  .alert.alert-dismissible {
+    padding: 0.625rem 0.85rem 0.625rem 2.25rem;
+  }
+}
+@mixin custom-close($color) {
+  background-color: $color;
+  color: variables.$white;
+  opacity: 1;
+  border-radius: 50px;
+  box-shadow: variables.$box-shadow;
+  padding: 0.85rem;
+}
+.alert-warning {
+  background-color: rgba(variables.$warning, 0.1);
+  color: variables.$warning;
+  border-color: rgba(variables.$warning, 0.1);
+  &.text-bg-warning {
+    background-color: variables.$warning !important;
+    border-color: variables.$warning;
+    color: #fff !important;
+  }
+  .alert-link {
+    color: variables.$warning;
+  }
+  .btn-close {
+    color: variables.$warning;
+    &.custom-close {
+      @include custom-close(variables.$warning);
+    }
+  }
+}
+.alert-primary {
+  background-color: rgba(variables.$primary, 0.1);
+  color: variables.$primary;
+  border-color: rgba(variables.$primary, 0.1);
+  &.text-bg-primary {
+    background-color: variables.$primary !important;
+    border-color: variables.$primary;
+  }
+
+  .alert-link {
+    color: variables.$primary;
+  }
+  .custom-alert-icon {	
+	color: variables.$primary;
+  }
+  .btn-close {
+    color: variables.$primary;
+    &.custom-close {
+      @include custom-close(variables.$primary);
+    }
+  }
+}
+.alert-secondary {
+  background-color: rgba(variables.$secondary, 0.1);
+  color: variables.$secondary;
+  border-color: rgba(variables.$secondary, 0.1);
+  &.text-bg-secondary {
+    background-color: variables.$secondary !important;
+    border-color: variables.$secondary;
+  }
+  .alert-link {
+    color: variables.$secondary;
+  }
+  .btn-close {
+    color: variables.$secondary;
+    &.custom-close {
+      @include custom-close(variables.$secondary);
+    }
+  }
+}
+.alert-success {
+  background-color: rgba(variables.$success, 0.1);
+  color: variables.$success;
+  border-color: rgba(variables.$success, 0.1);
+  &.text-bg-success {
+    background-color: variables.$success !important;
+    border-color: variables.$success;
+  }
+  .alert-link {
+    color: variables.$success;
+  }
+  .btn-close {
+    color: variables.$success;
+    &.custom-close {
+      @include custom-close(variables.$success);
+    }
+  }
+}
+.alert-info {
+  background-color: rgba(variables.$info, 0.1);
+  color: variables.$info;
+  border-color: rgba(variables.$info, 0.1);
+  &.text-bg-info {
+    background-color: variables.$info !important;
+    border-color: variables.$info;
+    color: #fff !important;
+  }
+  .alert-link {
+    color: variables.$info;
+  }
+  .btn-close {
+    color: variables.$info;
+    &.custom-close {
+      @include custom-close(variables.$info);
+    }
+  }
+}
+.alert-danger {
+  background-color: rgba(variables.$danger, 0.1);
+  color: variables.$danger;
+  border-color: rgba(variables.$danger, 0.1);
+  &.text-bg-danger {
+    background-color: variables.$danger !important;
+    border-color: variables.$danger;
+  }
+  .alert-link {
+    color: variables.$danger;
+  }
+  .btn-close {
+    color: variables.$danger;
+    &.custom-close {
+      @include custom-close(variables.$danger);
+    }
+  }
+}
+.alert-light {
+  background-color: variables.$light;
+  color: variables.$text-color;
+  border-color: variables.$light;
+  &.text-bg-light {
+    background-color: variables.$light !important;
+    border-color: variables.$light;
+  }
+  .alert-link {
+    color: variables.$text-color;
+  }
+  .btn-close {
+    color: variables.$text-color;
+    &.custom-close {
+      @include custom-close(variables.$light);
+    }
+  }
+}
+.alert-dark {
+  background-color: rgba(variables.$dark, 0.1);
+  color: variables.$text-color;
+  border-color: rgba(variables.$dark, 0.1);
+  &.text-bg-dark {
+    background-color: variables.$dark !important;
+    border-color: variables.$dark;
+  }
+  .alert-link {
+    color: variables.$text-color;
+  }
+  .btn-close {
+    color: variables.$white;
+    &.custom-close {
+      @include custom-close(variables.$dark);
+    }
+  }
+}
+@mixin alert-solid-color($color) {
+  background-color: $color;
+  color: variables.$white;
+  border-color: $color;
+  .btn-close {
+    color: variables.$white;
+  }
+}
+.alert-solid-primary {
+  @include alert-solid-color(variables.$primary);
+}
+.alert-solid-secondary {
+  @include alert-solid-color(variables.$secondary);
+}
+.alert-solid-warning {
+  @include alert-solid-color(variables.$warning);
+}
+.alert-solid-info {
+  @include alert-solid-color(variables.$info);
+}
+.alert-solid-success {
+  @include alert-solid-color(variables.$success);
+}
+.alert-solid-danger {
+  @include alert-solid-color(variables.$danger);
+}
+.alert-solid-light {
+  background-color: variables.$light;
+  color: variables.$text-color;
+  border-color: variables.$default-border;
+}
+.alert-solid-dark {
+  @include alert-solid-color(variables.$dark);
+}
+@mixin outline-alert($color) {
+  background-color: variables.$white;
+  color: $color;
+  border-color: $color;
+  .btn-close {
+    color: $color;
+  }
+}
+.alert-outline-primary {
+  @include outline-alert(variables.$primary);
+}
+.alert-outline-secondary {
+  @include outline-alert(variables.$secondary);
+}
+.alert-outline-info {
+  @include outline-alert(variables.$info);
+}
+.alert-outline-warning {
+  @include outline-alert(variables.$warning);
+}
+.alert-outline-success {
+  @include outline-alert(variables.$success);
+}
+.alert-outline-danger {
+  @include outline-alert(variables.$danger);
+}
+.alert-outline-light {
+  background-color: variables.$white;
+  color: variables.$text-color;
+  border-color: variables.$light;
+}
+.alert-outline-dark {
+  @include outline-alert(variables.$dark);
+}
+@mixin custom-alert($color) {
+  border-inline-start: 0.313rem solid $color !important;
+  color: variables.$text-muted;
+  background-color: variables.$white;
+  border: 1px solid variables.$default-border;
+  font-size: 0.813rem;
+  .btn-close {
+    color: variables.$text-color;
+  }
+}
+.alert-primary.custom-alert-icon {
+  @include custom-alert(variables.$primary);
+  & > i {
+	color: variables.$primary;
+  }
+}
+.alert-secondary.custom-alert-icon {
+  @include custom-alert(variables.$secondary);
+  & > i {
+	color: variables.$secondary;
+  }
+}
+.alert-warning.custom-alert-icon {
+  @include custom-alert(variables.$warning);
+  & > i {
+	color: variables.$warning;
+  }
+}
+.alert-danger.custom-alert-icon {
+  @include custom-alert(variables.$danger);
+  & > i {
+	color: variables.$danger;
+  }
+}
+.alert-success.custom-alert-icon {
+  @include custom-alert(variables.$success);
+}
+.alert-info.custom-alert-icon {
+  @include custom-alert(variables.$info);
+}
+.alert-light.custom-alert-icon {
+  @include custom-alert(variables.$light);
+}
+.alert-dark.custom-alert-icon {
+  @include custom-alert(variables.$dark);
+}
+.custom-alert1 {
+  margin-block-end: 0;
+  background-color: variables.$white;
+  border: 0;
+  padding: 1.25rem;
+  color: variables.$text-color;
+  p {
+    margin-block-end: 2.5rem;
+    color: variables.$text-muted;
+    font-size: 0.8rem;
+  }
+  .custom-alert-icon {
+	font-size: variables.$font-size-40;
+    margin-bottom: 0.85rem;
+	i {		
+		font-size: variables.$font-size-40;
+	}
+  }
+  .btn-close {
+    padding: 0;
+    margin-block-end: 1rem;
+  }
+  &.alert-primary {
+    border-block-start: 0.313rem solid variables.$primary;	
+	.custom-alert-icon {	
+		color: variables.$primary;
+	}
+  }
+  &.alert-secondary {
+    border-block-start: 0.313rem solid variables.$secondary;	
+	.custom-alert-icon {	
+		color: variables.$secondary;
+	}
+  }
+  &.alert-warning {
+    border-block-start: 0.313rem solid variables.$warning;	
+	.custom-alert-icon {	
+		color: variables.$warning;
+	}
+  }
+  &.alert-danger {
+    border-block-start: 0.313rem solid variables.$danger;	
+	.custom-alert-icon {	
+		color: variables.$danger;
+	}
+  }
+}
+.alert-img {
+  display: flex;
+  align-items: center;
+  .avatar {
+    border: 1px solid rgba(0, 0, 0, 0.1);
+  }
+}
+@media screen and (max-width: 400px) {
+  .btn-close.custom-close {
+    margin: 9px 9px 9px 0;
+  }
+}
+.op-7 {
+    opacity: 0.7;
+}
+.op-8 {
+    opacity: 0.8;
+}

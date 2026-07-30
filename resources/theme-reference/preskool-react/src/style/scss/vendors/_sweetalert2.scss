@@ -1,0 +1,187 @@
+//
+//  sweetalert2.scss
+//
+
+@use "../utils/mixins";
+@use "../utils/variables";
+
+.swal2-container {
+    .swal2-title {
+        font-size: 20px;
+        font-weight: variables.$font-weight-medium;
+        color: variables.$gray-900;
+    }
+}
+
+.swal2-popup {
+    width: 28em;
+    padding: 2rem;
+    border-radius: variables.$border-radius;
+    background-color: variables.$white;
+    color: variables.$gray-600;
+
+    .swal2-html-container {
+        font-size: 16px !important;
+        color: variables.$gray-600;
+    }
+}
+
+.swal2-footer {
+    border-top: 1px solid variables.$border-color;
+    color: variables.$gray-600;
+}
+
+.swal2-icon {
+
+    &.swal2-question {
+        border-color: variables.$info;
+        color: variables.$info;
+    }
+
+    &.swal2-success {
+        [class^=swal2-success-line] {
+            background-color: variables.$success;
+        }
+
+        .swal2-success-ring {
+            border-color: variables.$success;
+        }
+    }
+
+    &.swal2-warning {
+        border-color: variables.$warning;
+        color: variables.$warning;
+    }
+}
+
+div:where(.swal2-icon) {
+    width: 4em;
+    height: 4em;
+    margin: 0.5rem auto;
+
+    .swal2-icon-content {
+        font-size: 3em;
+    }
+
+    &.swal2-info {
+        border-color: variables.$info;
+        color: variables.$info;
+    }
+}
+
+.swal2-styled {
+    &:focus {
+        box-shadow: none;
+    }
+}
+
+.swal2-loader {
+    border-color: variables.$primary transparent variables.$primary transparent;
+}
+
+.swal2-timer-progress-bar {
+    background-color: rgba(variables.$success, 0.4);
+}
+
+.swal2-progress-steps {
+    .swal2-progress-step {
+        background: variables.$primary;
+
+        &.swal2-active-progress-step {
+            background: variables.$primary;
+
+            &~.swal2-progress-step,
+            &~.swal2-progress-step-line {
+                background: rgba(variables.$primary, 0.3);
+            }
+        }
+    }
+
+    .swal2-progress-step-line {
+        background: variables.$primary;
+    }
+}
+
+.swal2-actions.swal2-loading {
+    .swal2-styled.swal2-confirm {
+        border-left-color: variables.$primary !important;
+        border-right-color: variables.$primary !important;
+    }
+}
+
+.swal2-file,
+.swal2-input,
+.swal2-textarea {
+    border: 1px solid variables.$border-color;
+
+    &:focus {
+        box-shadow: none;
+        border-color: variables.$border-color;
+    }
+}
+
+.swal2-input {
+    height: auto;
+    display: block;
+    padding: 8px 12px;
+    font-family: variables.$font-family-primary;
+    font-size: 14px;
+    font-weight: variables.$font-weight-normal;
+    line-height: 1.5;
+    color: variables.$gray-600;
+    background-color: variables.$white;
+    background-clip: padding-box;
+    border: 1px solid variables.$border-color;
+}
+
+.swal2-close {
+    font-family: variables.$font-family-primary;
+    font-size: 42px;
+    width: 1em;
+    height: 1em;
+    position: absolute;
+    top: 5px;
+    right: 5px;
+
+    &:focus {
+        box-shadow: none;
+    }
+
+    &:hover {
+        color: variables.$danger;
+    }
+}
+
+.swal2-validation-message {
+    background-color: transparent;
+}
+
+
+div:where(.swal2-icon).swal2-error [class^=swal2-x-mark-line] {
+    width: 1.9375em;
+    top: 1.95em;
+}
+
+div:where(.swal2-icon).swal2-success [class^=swal2-success-line][class$=tip] {
+    top: 2.4em;
+    width: 1em;
+}
+
+.swal2-icon.swal2-success [class^=swal2-success-line][class$=long] {
+    top: 1.85em;
+    right: .5em;
+    width: 2.25em;
+}
+.toast {
+    box-shadow: variables.$box-shadow;
+    border-color: variables.$border-color;
+    border-radius: variables.$border-radius;
+    .toast-header {
+        border-radius: variables.$border-radius variables.$border-radius 0 0;
+        padding: 0.5rem 0.75rem;
+        color: variables.$gray-600;
+    }
+    .toast-body {
+        padding: 0.75rem;
+    }
+}

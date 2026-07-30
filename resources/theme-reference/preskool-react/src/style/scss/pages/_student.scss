@@ -1,0 +1,181 @@
+@use "../utils/mixins";
+@use "../utils/variables";
+
+.filter-wrapper {
+    border-top: 1px solid variables.$light-900;
+    padding-top: 20px;
+}
+.table-filter-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+    .filter-head-left {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        @include mixins.respond-below(sm) {
+            width: 100%;
+        }
+        h5 {
+            font-size: variables.$font-size-15;
+            font-weight: variables.$font-weight-medium;
+            margin: 0 24px 10px 0;
+        }
+    }
+}
+.list-tab {
+    margin-bottom: 10px;
+    ul {
+        border-bottom: 1px solid variables.$light-900;
+        li {
+            display: inline-block;
+            margin-right: 24px;
+            margin: 0 24px 0 0;
+            a {
+                color: variables.$gray-700;
+                display: inline-block;
+                padding: 5px 0;
+                position: relative;
+                span {
+                    background: variables.$white;
+                    @include mixins.rounded(5px);
+                    margin: 0 0 0 8px;
+                    padding: 5px;
+                    display: inline-block;
+                    font-size: variables.$font-size-12;
+                    color: variables.$gray-900;
+                }
+                &::before {
+                    position: absolute;
+                    bottom: 0;
+                    left: 0;
+                    content: "";
+                    background: transparent;
+                    width: 100%;
+                    height: 3px;
+                }
+                &:hover {
+                    color: variables.$primary;
+                }
+                &.active {
+                    color: variables.$primary;
+                    &::before {
+                        background: variables.$primary;
+                    }
+                }
+            }
+        }
+    }
+}
+.load-more {
+    .btn {
+        display: -webkit-inline-box;
+        display: -ms-inline-flexbox;
+        display: inline-flex;
+        align-items: center;
+        -webkit-box-align: center;
+        -ms-flex-align: center;
+        i {
+            margin-right: 5px;
+            
+        }
+    }
+}
+.profile-uploader {
+    .btn {
+        font-size: variables.$font-size-12;
+        margin: 0 0 10px 0;
+        padding:6px 20px;
+    }
+}
+.profile-wrap {
+    display: -webkit-box;
+    display: -ms-flexbox;
+    display: flex;
+    align-items: center;
+    -webkit-box-align: center;
+    -ms-flex-align: center;
+    @include mixins.respond-below(sm) {
+        display: block;
+    }
+    .frames {
+        width: 100px;
+        height: 100px;
+        @include mixins.rounded(5px);
+        display: -webkit-box;
+        display: -ms-flexbox;
+        display: flex;
+        align-items: center;
+        -webkit-box-align: center;
+        -ms-flex-align: center;
+        justify-content: center;
+        -webkit-justify-content: center;
+        -ms-flex-pack: center;
+        margin-right: 15px;
+        color: variables.$gray-500;
+        font-size: variables.$font-size-24;
+        border: 1px dashed variables.$light-900;
+        img {
+            @include mixins.rounded(5px);
+            width: 80px;
+            height: 80px;
+        }
+        @include mixins.respond-below(sm) {
+            margin: 0 0 10px 0;
+        }
+    }
+    .profile-upload {
+        p {
+            font-size: variables.$font-size-12;
+        }
+    }
+}
+.profile-uploader {
+    .btn {
+        font-size: variables.$font-size-12;
+        margin: 0 0 10px 0;
+        padding: 6px 20px;
+    }
+}
+.drag-upload-btn {
+    font-size: variables.$font-size-12;
+    font-weight: variables.$font-weight-semibold;
+    background: variables.$white;
+    border: 1px dashed variables.$light-900;
+    @include mixins.rounded(5px);
+    margin:0 12px 10px 0 ;
+    padding:6px 16px ;
+    position: relative;
+    transition: all 0.5s;
+    input {
+        opacity: 0;
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+        cursor: pointer;
+    }
+    &:hover {
+        background: variables.$primary;
+        border-color: variables.$primary;
+        color: variables.$white;
+        transition: all 0.5s;
+    }
+}
+.trash-icon {
+    font-size: variables.$font-size-15;
+    color: variables.$danger;
+    &:hover {
+        color: variables.$danger-hover;
+    }
+}
+.drop-width {
+    min-width: 350px;
+    max-width: 100%;
+    @include mixins.respond-below(sm) {
+        min-width: 260px;
+    }
+}
