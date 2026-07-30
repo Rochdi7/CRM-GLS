@@ -10,6 +10,7 @@ use App\Http\Controllers\Backoffice\Auth\ResetPasswordController;
 use App\Http\Controllers\Backoffice\CaisseController;
 use App\Http\Controllers\Backoffice\CaisseManagementController;
 use App\Http\Controllers\Backoffice\CaisseTransferController;
+use App\Http\Controllers\Backoffice\ContextController;
 use App\Http\Controllers\Backoffice\DashboardController;
 use App\Http\Controllers\Backoffice\DepenseController;
 use App\Http\Controllers\Backoffice\DepenseManagementController;
@@ -79,6 +80,14 @@ Route::prefix('backoffice')
         Route::middleware('auth')->group(function (): void {
             Route::get('/dashboard', DashboardController::class)->name('dashboard');
             Route::post('/logout', LogoutController::class)->name('logout');
+
+            // Top-bar academic-year/center switcher (Inertia/React Header;
+            // docs/inertia-react-migration-plan.md Phase 4). CurrentContext
+            // is the single source of truth shared with every still-Livewire
+            // page — no permission gate here beyond `auth`, matching the
+            // Livewire ContextSwitcher's own behavior (authorization happens
+            // inside CurrentContext::setEtablissement(), not the route).
+            Route::post('/context', [ContextController::class, 'update'])->name('context.update');
 
             // The signed-in user's own profile (no permission gate).
             // Inertia/React (docs/inertia-react-migration-plan.md); the

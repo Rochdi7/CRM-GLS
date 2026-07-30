@@ -4,11 +4,26 @@ export interface AuthUser {
     email: string | null;
 }
 
+export interface ContextOption {
+    id: number;
+    name: string;
+}
+
 export interface Context {
     anneeScolaireId: number | null;
     etablissementId: number | null;
     isAllCenters: boolean;
     canSwitchCenter: boolean;
+    currentCenter: ContextOption | null;
+    currentAcademicYear: ContextOption | null;
+    availableCenters: ContextOption[];
+    availableAcademicYears: ContextOption[];
+}
+
+/** POST /backoffice/context payload — null etablissement_id means "all centers". */
+export interface ContextUpdateForm {
+    annee_scolaire_id: number | null;
+    etablissement_id: number | null;
 }
 
 export interface FlashMessages {
@@ -54,4 +69,29 @@ export interface NavItem {
 export interface NavGroup {
     label: string;
     items: NavItem[];
+}
+
+/**
+ * Mirrors App\Domain\Reports\DTOs\DashboardStatsData::toArray() exactly —
+ * see docs/dashboard-livewire-to-inertia-map.md for the full per-stat
+ * source mapping. paymentsMonth is a pre-formatted decimal string (never a
+ * raw float over the wire — CLAUDE.md §17 Money rules), parsed only for
+ * display, never for arithmetic.
+ */
+export interface DashboardStats {
+    studentsTotal: number;
+    employeesTotal: number;
+    employeesActive: number;
+    groupsTotal: number;
+    groupsEnFormation: number;
+    inscriptionsTotal: number;
+    inscriptionsActives: number;
+    paymentsMonth: string;
+    anneeLabel: string | null;
+    centreLabel: string | null;
+}
+
+export interface DashboardPageProps {
+    stats: DashboardStats;
+    [key: string]: unknown;
 }

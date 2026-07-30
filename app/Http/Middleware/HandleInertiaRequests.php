@@ -35,7 +35,11 @@ final class HandleInertiaRequests extends Middleware
                 ],
                 'permissions' => $user === null ? [] : $user->getAllPermissions()->pluck('name')->values(),
             ],
-            'context' => $user === null ? null : (function (): array {
+            // Lazy: only resolved when an Inertia page/partial-reload actually
+            // asks for it, and never at all for guests — CurrentContext's
+            // year/center/available-list queries are real DB round-trips,
+            // not free (migration plan §"Shared Inertia props").
+            'context' => $user === null ? null : fn () => (function (): array {
                 $context = app(CurrentContext::class);
 
                 return [
@@ -43,6 +47,20 @@ final class HandleInertiaRequests extends Middleware
                     'etablissementId' => $context->etablissementId(),
                     'isAllCenters' => $context->isAllCenters(),
                     'canSwitchCenter' => $context->canSwitchCenter(),
+                    'currentCenter' => $context->etablissement() === null ? null : [
+                        'id' => $context->etablissement()->id,
+                        'name' => $context->etablissement()->nom_centre,
+                    ],
+                    'currentAcademicYear' => $context->anneeScolaire() === null ? null : [
+                        'id' => $context->anneeScolaire()->id,
+                        'name' => $context->anneeScolaire()->nom,
+                    ],
+                    'availableCenters' => $context->availableCentres()
+                        ->map(fn ($centre) => ['id' => $centre->id, 'name' => $centre->nom_centre])
+                        ->values(),
+                    'availableAcademicYears' => $context->availableAnnees()
+                        ->map(fn ($annee) => ['id' => $annee->id, 'name' => $annee->nom])
+                        ->values(),
                 ];
             })(),
             'flash' => [
