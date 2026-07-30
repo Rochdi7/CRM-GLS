@@ -6,17 +6,20 @@ namespace App\Http\Controllers\Backoffice\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Auth\LoginRequest;
-use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
+use Inertia\Inertia;
+use Inertia\Response;
 
 final class LoginController extends Controller
 {
     /**
-     * Show the Backoffice login page.
+     * Show the Backoffice login page. `status` (e.g. after a password reset)
+     * reaches the page via the shared `flash.status` prop — see
+     * HandleInertiaRequests.
      */
-    public function show(): View
+    public function show(): Response
     {
-        return view('backoffice.auth.login');
+        return Inertia::render('Backoffice/Auth/Login');
     }
 
     /**
