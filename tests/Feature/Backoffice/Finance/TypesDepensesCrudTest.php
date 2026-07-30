@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Backoffice\Finance;
 
-use App\Livewire\Backoffice\TypesDepenses\TypesDepensesIndex;
 use App\Models\Caisse;
 use App\Models\Depense;
 use App\Models\Employee;
@@ -15,9 +14,15 @@ use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Database\Seeders\TypeDepenseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Livewire\Livewire;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
+/**
+ * Phase 6 (docs/phase-6-simple-crud-inventory.md §Q2) — Types de dépenses is
+ * now its own standalone Inertia page (was the 3rd tab of the Livewire
+ * Gestion des dépenses page). Replaces the retired
+ * Livewire::test(TypesDepensesIndex::class) assertions entirely.
+ */
 final class TypesDepensesCrudTest extends TestCase
 {
     use RefreshDatabase;
@@ -54,40 +59,37 @@ final class TypesDepensesCrudTest extends TestCase
         $this->withPermissions('expense-types.view');
         TypeDepense::create(['nom' => 'Loyer', 'is_system' => false, 'statut' => TypeDepense::STATUT_ACTIF]);
 
-        Livewire::test(TypesDepensesIndex::class)
-            ->assertOk()
-            ->assertSee('Loyer');
+        $this->get(route('backoffice.types-depenses.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/TypesDepenses/Index')
+                ->where('types.data.0.nom', 'Loyer')
+            );
     }
 
     public function test_the_page_is_forbidden_without_the_view_permission(): void
     {
         $this->withPermissions('dashboard.view');
 
-        Livewire::test(TypesDepensesIndex::class)->assertForbidden();
+        $this->get(route('backoffice.types-depenses.index'))->assertForbidden();
     }
 
     public function test_creating_is_forbidden_without_the_create_permission(): void
     {
         $this->withPermissions('expense-types.view');
 
-        Livewire::test(TypesDepensesIndex::class)
-            ->call('create')
+        $this->post(route('backoffice.types-depenses.store'), ['nom' => 'X', 'statut' => TypeDepense::STATUT_ACTIF])
             ->assertForbidden();
     }
 
-    // --- Create / update ----------------------------------------------------
+    // --- Create / update ------------------------------------------------------
 
     public function test_a_custom_expense_type_can_be_created(): void
     {
         $this->withPermissions('expense-types.view', 'expense-types.create');
 
-        Livewire::test(TypesDepensesIndex::class)
-            ->call('create')
-            ->set('nom', 'Fournitures de bureau')
-            ->set('statut', TypeDepense::STATUT_ACTIF)
-            ->call('save')
-            ->assertHasNoErrors()
-            ->assertSet('showModal', false);
+        $this->post(route('backoffice.types-depenses.store'), [
+            'nom' => 'Fournitures de bureau', 'statut' => TypeDepense::STATUT_ACTIF,
+        ])->assertRedirect(route('backoffice.types-depenses.index'));
 
         // The form NEVER creates a system type (schema §12).
         $this->assertDatabaseHas('types_depenses', [
@@ -102,26 +104,19 @@ final class TypesDepensesCrudTest extends TestCase
         $this->admin();
         TypeDepense::create(['nom' => 'Loyer', 'is_system' => false, 'statut' => TypeDepense::STATUT_ACTIF]);
 
-        Livewire::test(TypesDepensesIndex::class)
-            ->call('create')
-            ->set('nom', '')
-            ->call('save')
-            ->assertHasErrors(['nom' => 'required'])
-            ->set('nom', 'Loyer')
-            ->call('save')
-            ->assertHasErrors(['nom' => 'unique']);
+        $this->post(route('backoffice.types-depenses.store'), ['nom' => '', 'statut' => TypeDepense::STATUT_ACTIF])
+            ->assertSessionHasErrors('nom');
+
+        $this->post(route('backoffice.types-depenses.store'), ['nom' => 'Loyer', 'statut' => TypeDepense::STATUT_ACTIF])
+            ->assertSessionHasErrors('nom');
     }
 
     public function test_the_status_must_be_a_known_value(): void
     {
         $this->admin();
 
-        Livewire::test(TypesDepensesIndex::class)
-            ->call('create')
-            ->set('nom', 'Divers')
-            ->set('statut', 'Nimporte')
-            ->call('save')
-            ->assertHasErrors('statut');
+        $this->post(route('backoffice.types-depenses.store'), ['nom' => 'Divers', 'statut' => 'Nimporte'])
+            ->assertSessionHasErrors('statut');
     }
 
     public function test_a_custom_expense_type_can_be_updated(): void
@@ -129,13 +124,9 @@ final class TypesDepensesCrudTest extends TestCase
         $this->withPermissions('expense-types.view', 'expense-types.update');
         $type = TypeDepense::create(['nom' => 'Loyer', 'is_system' => false, 'statut' => TypeDepense::STATUT_ACTIF]);
 
-        Livewire::test(TypesDepensesIndex::class)
-            ->call('edit', $type->id)
-            ->assertSet('nom', 'Loyer')
-            ->set('nom', 'Loyer du centre')
-            ->set('statut', TypeDepense::STATUT_INACTIF)
-            ->call('save')
-            ->assertHasNoErrors();
+        $this->put(route('backoffice.types-depenses.update', $type), [
+            'nom' => 'Loyer du centre', 'statut' => TypeDepense::STATUT_INACTIF,
+        ])->assertRedirect(route('backoffice.types-depenses.index'));
 
         $this->assertDatabaseHas('types_depenses', [
             'id' => $type->id,
@@ -144,7 +135,7 @@ final class TypesDepensesCrudTest extends TestCase
         ]);
     }
 
-    // --- System types are LOCKED -------------------------------------------
+    // --- System types are LOCKED ----------------------------------------------
 
     public function test_a_system_expense_type_cannot_be_edited_even_by_a_super_admin(): void
     {
@@ -152,29 +143,10 @@ final class TypesDepensesCrudTest extends TestCase
         $this->seed(TypeDepenseSeeder::class);
         $system = TypeDepense::where('nom', TypeDepense::SYSTEM_PAIEMENT_PROF)->firstOrFail();
 
-        // Server-side rejection: the policy refuses update on is_system rows.
-        Livewire::test(TypesDepensesIndex::class)
-            ->call('edit', $system->id)
-            ->assertForbidden();
-    }
-
-    public function test_a_system_expense_type_cannot_be_saved_through_a_forged_editing_id(): void
-    {
-        $this->admin();
-        $this->seed(TypeDepenseSeeder::class);
-        $system = TypeDepense::where('nom', TypeDepense::SYSTEM_SALAIRE)->firstOrFail();
-
-        // save() re-authorizes — setting editingId directly is refused.
-        Livewire::test(TypesDepensesIndex::class)
-            ->set('editingId', $system->id)
-            ->set('nom', 'Salaire piraté')
-            ->call('save')
+        $this->put(route('backoffice.types-depenses.update', $system), ['nom' => 'Piraté', 'statut' => TypeDepense::STATUT_ACTIF])
             ->assertForbidden();
 
-        $this->assertDatabaseHas('types_depenses', [
-            'id' => $system->id,
-            'nom' => TypeDepense::SYSTEM_SALAIRE,
-        ]);
+        $this->assertDatabaseHas('types_depenses', ['id' => $system->id, 'nom' => TypeDepense::SYSTEM_PAIEMENT_PROF]);
     }
 
     public function test_a_system_expense_type_cannot_be_deleted(): void
@@ -183,30 +155,35 @@ final class TypesDepensesCrudTest extends TestCase
         $this->seed(TypeDepenseSeeder::class);
         $system = TypeDepense::where('nom', TypeDepense::SYSTEM_TRANSFERT_CAISSE)->firstOrFail();
 
-        Livewire::test(TypesDepensesIndex::class)
-            ->call('delete', $system->id)
-            ->assertForbidden();
+        $this->delete(route('backoffice.types-depenses.destroy', $system))->assertForbidden();
 
         $this->assertDatabaseHas('types_depenses', ['id' => $system->id]);
     }
 
-    public function test_the_system_row_shows_a_lock_badge_and_no_row_actions(): void
+    public function test_system_rows_are_marked_in_the_props_but_expose_no_forgeable_is_system_field(): void
     {
         $this->admin();
         $this->seed(TypeDepenseSeeder::class);
 
-        $component = Livewire::test(TypesDepensesIndex::class)
-            ->assertSee(TypeDepense::SYSTEM_PAIEMENT_PROF)
-            // Lock badge (label goes through __('System') → "Système" in fr.json).
-            ->assertSeeHtml('ti ti-lock');
-
-        // No edit/delete wired for the locked row.
-        $system = TypeDepense::where('nom', TypeDepense::SYSTEM_PAIEMENT_PROF)->firstOrFail();
-        $this->assertStringNotContainsString("edit({$system->id})", $component->html());
-        $this->assertStringNotContainsString("delete({$system->id})", $component->html());
+        $this->get(route('backoffice.types-depenses.index'))
+            ->assertInertia(fn (Assert $page) => $page->where(
+                'types.data',
+                fn ($rows) => collect($rows)->contains(fn ($row) => $row['nom'] === TypeDepense::SYSTEM_PAIEMENT_PROF && $row['isSystem'] === true),
+            ));
     }
 
-    // --- Delete -------------------------------------------------------------
+    public function test_is_system_cannot_be_forged_from_client_input_on_create(): void
+    {
+        $this->withPermissions('expense-types.view', 'expense-types.create');
+
+        $this->post(route('backoffice.types-depenses.store'), [
+            'nom' => 'Faux système', 'statut' => TypeDepense::STATUT_ACTIF, 'is_system' => true,
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('types_depenses', ['nom' => 'Faux système', 'is_system' => false]);
+    }
+
+    // --- Delete ---------------------------------------------------------------
 
     public function test_deleting_is_blocked_when_the_type_is_used_by_expenses(): void
     {
@@ -226,9 +203,7 @@ final class TypesDepensesCrudTest extends TestCase
             'agent_id' => $agent->id,
         ]);
 
-        Livewire::test(TypesDepensesIndex::class)
-            ->call('delete', $type->id)
-            ->assertHasErrors('delete');
+        $this->delete(route('backoffice.types-depenses.destroy', $type))->assertSessionHasErrors('delete');
 
         $this->assertDatabaseHas('types_depenses', ['id' => $type->id]);
     }
@@ -238,9 +213,7 @@ final class TypesDepensesCrudTest extends TestCase
         $this->withPermissions('expense-types.view', 'expense-types.delete');
         $type = TypeDepense::create(['nom' => 'Obsolète', 'is_system' => false, 'statut' => TypeDepense::STATUT_ACTIF]);
 
-        Livewire::test(TypesDepensesIndex::class)
-            ->call('delete', $type->id)
-            ->assertHasNoErrors();
+        $this->delete(route('backoffice.types-depenses.destroy', $type))->assertRedirect();
 
         $this->assertDatabaseMissing('types_depenses', ['id' => $type->id]);
     }
@@ -250,14 +223,12 @@ final class TypesDepensesCrudTest extends TestCase
         $this->withPermissions('expense-types.view');
         $type = TypeDepense::create(['nom' => 'Obsolète', 'is_system' => false, 'statut' => TypeDepense::STATUT_ACTIF]);
 
-        Livewire::test(TypesDepensesIndex::class)
-            ->call('delete', $type->id)
-            ->assertForbidden();
+        $this->delete(route('backoffice.types-depenses.destroy', $type))->assertForbidden();
 
         $this->assertDatabaseHas('types_depenses', ['id' => $type->id]);
     }
 
-    // --- Search -------------------------------------------------------------
+    // --- Search / pagination ---------------------------------------------------
 
     public function test_the_list_can_be_searched_by_name(): void
     {
@@ -265,9 +236,26 @@ final class TypesDepensesCrudTest extends TestCase
         TypeDepense::create(['nom' => 'Loyer', 'is_system' => false, 'statut' => TypeDepense::STATUT_ACTIF]);
         TypeDepense::create(['nom' => 'Électricité', 'is_system' => false, 'statut' => TypeDepense::STATUT_ACTIF]);
 
-        Livewire::test(TypesDepensesIndex::class)
-            ->set('search', 'Loyer')
-            ->assertSee('Loyer')
-            ->assertDontSee('Électricité');
+        $this->get(route('backoffice.types-depenses.index', ['search' => 'Loyer']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('types.data.0.nom', 'Loyer')
+                ->where('types.total', 1)
+            );
+    }
+
+    public function test_types_depenses_index_is_served_by_its_own_controller_not_a_redirect(): void
+    {
+        $action = app('router')->getRoutes()->getByName('backoffice.types-depenses.index')?->getActionName();
+
+        $this->assertSame('App\Http\Controllers\Backoffice\TypeDepenseController@index', $action);
+    }
+
+    public function test_the_depenses_management_page_no_longer_has_a_types_tab(): void
+    {
+        $this->withPermissions('expenses.view');
+
+        $this->get(route('backoffice.depenses.index'))
+            ->assertOk()
+            ->assertDontSee('tab-types', false);
     }
 }
