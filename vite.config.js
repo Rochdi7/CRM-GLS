@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import laravel from 'laravel-vite-plugin';
+import react from '@vitejs/plugin-react';
 
 /*
  * GLS CRM — Vite entries.
@@ -10,6 +11,11 @@ import laravel from 'laravel-vite-plugin';
  *
  * Tailwind was removed from the default Laravel skeleton on purpose:
  * this project uses Bootstrap 5 (PreSkool). Do not re-add Tailwind.
+ *
+ * resources/js/app.tsx is the Inertia + React entry
+ * (docs/inertia-react-migration-plan.md §4). It coexists with the existing
+ * Livewire/Blade entries below throughout the migration — neither replaces
+ * the other until every module is converted (Phase 10).
  */
 export default defineConfig({
     plugins: [
@@ -19,9 +25,11 @@ export default defineConfig({
                 'resources/js/backoffice/app.js',
                 'resources/scss/frontoffice/app.scss',
                 'resources/js/frontoffice/app.js',
+                'resources/js/app.tsx',
             ],
             refresh: true,
         }),
+        react(),
     ],
     server: {
         // Pin to IPv4. Without this the dev server binds to IPv6 on Windows and

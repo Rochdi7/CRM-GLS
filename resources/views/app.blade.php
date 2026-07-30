@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" dir="{{ app()->getLocale() === 'ar' ? 'rtl' : 'ltr' }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+
+    <title inertia>{{ config('app.name', 'GLS CRM') }}</title>
+
+    {{--
+        Same static asset strategy as the Blade/Livewire shell
+        (components/backoffice/layout/head.blade.php) — one Bootstrap CSS
+        instance, one set of icon fonts, never duplicated via npm imports
+        (docs/inertia-react-migration-audit.md §6.8/§6.10).
+    --}}
+    <link rel="icon" type="image/png" sizes="96x96" href="{{ asset('assets/images/favicon/favicon-96x96.png') }}">
+    <link rel="icon" type="image/svg+xml" href="{{ asset('assets/images/favicon/favicon.svg') }}">
+    <link rel="shortcut icon" href="{{ asset('favicon.ico') }}">
+
+    @if (app()->getLocale() === 'ar')
+        <link rel="stylesheet" href="{{ asset('assets/preskool/css/bootstrap.rtl.min.css') }}">
+    @else
+        <link rel="stylesheet" href="{{ asset('assets/preskool/css/bootstrap.min.css') }}">
+    @endif
+
+    <link rel="stylesheet" href="{{ asset('assets/preskool/plugins/tabler-icons/tabler-icons.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/preskool/plugins/fontawesome/css/all.min.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/preskool/css/style.css') }}">
+
+    {{--
+        No @routes/Ziggy yet — not installed (migration plan §"Routing":
+        only add it once a page actually needs client-side named-route
+        generation; the pilot page does not).
+    --}}
+    @viteReactRefresh
+    @vite(['resources/js/app.tsx'])
+    @inertiaHead
+</head>
+<body>
+    @inertia
+</body>
+</html>
