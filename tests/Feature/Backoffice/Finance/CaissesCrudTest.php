@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\CaisseProvisioner;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -182,6 +183,9 @@ final class CaissesCrudTest extends TestCase
 
         $this->get(route('backoffice.caisses.show', $caisse))
             ->assertOk()
-            ->assertSee('Caisse Détail');
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/Caisses/Show')
+                ->where('caisse.nom', 'Caisse Détail')
+            );
     }
 }

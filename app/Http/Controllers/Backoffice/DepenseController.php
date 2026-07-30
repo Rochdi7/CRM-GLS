@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Expenses\Actions\EnregistrerDepense;
+use App\Domain\Expenses\Queries\GetDepenseDetails;
 use App\Http\Controllers\Backoffice\Concerns\ResolvesActingEmployee;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Depenses\StoreDepenseRequest;
@@ -12,6 +13,8 @@ use App\Http\Requests\Backoffice\Depenses\UpdateDepenseRequest;
 use App\Models\Depense;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
+use Inertia\Inertia;
+use Inertia\Response;
 
 /**
  * ⚠ No destroy(): a recorded expense is never deleted (audit trail);
@@ -51,10 +54,10 @@ final class DepenseController extends Controller
             ->with('status', __('Dépense enregistrée.'));
     }
 
-    public function show(Depense $depense): View
+    public function show(Depense $depense, GetDepenseDetails $getDepenseDetails): Response
     {
-        return view('backoffice.depenses.show', [
-            'depense' => $depense->load(['typeDepense', 'caisse', 'agent']),
+        return Inertia::render('Backoffice/Depenses/Show', [
+            'depense' => $getDepenseDetails($depense),
         ]);
     }
 

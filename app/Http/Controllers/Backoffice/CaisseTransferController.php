@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Finance\Actions\DemanderTransfertCaisse;
 use App\Domain\Finance\Actions\ValiderTransfertCaisse;
+use App\Domain\Finance\Queries\GetCaisseTransferDetails;
 use App\Http\Controllers\Backoffice\Concerns\ResolvesActingEmployee;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\CaisseTransfers\StoreCaisseTransferRequest;
@@ -14,6 +15,8 @@ use App\Models\CaisseTransfer;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Inertia\Response;
 
 /**
  * Two-step request/validate flow (structure doc §7):
@@ -54,10 +57,10 @@ final class CaisseTransferController extends Controller
             ->with('status', __('Transfert demandé — en attente de validation.'));
     }
 
-    public function show(CaisseTransfer $caisse_transfer): View
+    public function show(CaisseTransfer $caisse_transfer, GetCaisseTransferDetails $getCaisseTransferDetails): Response
     {
-        return view('backoffice.caisse-transfers.show', [
-            'transfer' => $caisse_transfer->load(['caisseSource', 'caisseDestination', 'requestedBy', 'validatedBy']),
+        return Inertia::render('Backoffice/CaisseTransfers/Show', [
+            'transfer' => $getCaisseTransferDetails($caisse_transfer),
         ]);
     }
 

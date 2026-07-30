@@ -18,6 +18,7 @@ use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -577,9 +578,12 @@ final class EncaissementsCrudTest extends TestCase
 
         $this->get(route('backoffice.encaissements.show', $encaissement))
             ->assertOk()
-            ->assertSee('ENC-SHOW01')
-            ->assertSee('Frais de Juillet')
-            ->assertSee('Premier versement');
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/Encaissements/Show')
+                ->where('encaissement.reference', 'ENC-SHOW01')
+                ->where('encaissement.fee.nom', 'Frais de Juillet')
+                ->where('encaissement.note', 'Premier versement')
+            );
     }
 
     public function test_a_fee_not_belonging_to_the_selected_registration_is_refused(): void

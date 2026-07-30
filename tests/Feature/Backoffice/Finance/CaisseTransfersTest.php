@@ -14,6 +14,7 @@ use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
+use Inertia\Testing\AssertableInertia as Assert;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -406,7 +407,10 @@ final class CaisseTransfersTest extends TestCase
 
         $this->get(route('backoffice.caisse-transfers.show', $transfer))
             ->assertOk()
-            ->assertSee('TRF-000042')
-            ->assertSee($source->nom);
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/CaisseTransfers/Show')
+                ->where('transfer.reference', 'TRF-000042')
+                ->where('transfer.caisseSource', $source->nom)
+            );
     }
 }

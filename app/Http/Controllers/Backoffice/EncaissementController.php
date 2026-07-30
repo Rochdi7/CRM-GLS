@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Payments\Actions\EnregistrerEncaissement;
+use App\Domain\Payments\Queries\GetEncaissementDetails;
 use App\Http\Controllers\Backoffice\Concerns\ResolvesActingEmployee;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Encaissements\StoreEncaissementRequest;
@@ -12,6 +13,8 @@ use App\Http\Requests\Backoffice\Encaissements\UpdateEncaissementRequest;
 use App\Models\Encaissement;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
+use Inertia\Inertia;
+use Inertia\Response;
 
 /**
  * ⚠ No destroy(): a recorded payment is never deleted — corrections go
@@ -51,10 +54,10 @@ final class EncaissementController extends Controller
             ->with('status', __('Paiement enregistré.'));
     }
 
-    public function show(Encaissement $encaissement): View
+    public function show(Encaissement $encaissement, GetEncaissementDetails $getEncaissementDetails): Response
     {
-        return view('backoffice.encaissements.show', [
-            'encaissement' => $encaissement->load(['student', 'fee.inscription.group', 'caisse', 'agent']),
+        return Inertia::render('Backoffice/Encaissements/Show', [
+            'encaissement' => $getEncaissementDetails($encaissement),
         ]);
     }
 
