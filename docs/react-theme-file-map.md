@@ -1,11 +1,22 @@
 # PreSkool React Theme — File Map
 
-Status: **Phase 2 shell + Phase 3 auth/profile pages implemented — see §0
-(Phase 2) and §0b (Phase 3) for what actually shipped.** The rest of this
-document (§1 onward) is the original Phase 0/1 screening pass and remains
-accurate for anything not yet built.
+Status: **Phase 2 shell + Phase 3 auth/profile + Phase 4 dashboard/context
+implemented — see §0 (Phase 2), §0b (Phase 3), §0c (Phase 4) for what
+actually shipped.** The rest of this document (§1 onward) is the original
+Phase 0/1 screening pass and remains accurate for anything not yet built.
 
-Theme source root: `C:\Users\ASUS\Downloads\themeforest-jeUxtzLq-preskool-bootstrap-admin-html-template\preskool-v1.9.7\react`
+Theme source root (original, external — read-only, unchanged):
+`C:\Users\ASUS\Downloads\themeforest-jeUxtzLq-preskool-bootstrap-admin-html-template\preskool-v1.9.7\react`
+
+**Permanent in-repo reference copy** (added Phase 4):
+`resources/theme-reference/preskool-react/` — see
+`docs/preskool-react-reference-inventory.md` for what was copied/excluded
+and `resources/theme-reference/preskool-react/README-GLS.md` for usage
+rules. From Phase 4 onward, source-path references in this file point to
+paths **inside that reference copy**, not the external Downloads folder —
+both contain the same files for anything not excluded (the `eps/` icon-source
+folder and `public/` demo images were the only exclusions, per the
+inventory doc), so either path resolves to the same content.
 
 ---
 
@@ -30,6 +41,19 @@ shortcut, the two-column promo-panel layout, all `react-router-dom`
 imports and `<Link to="...">` usage (replaced by real `<form onSubmit>` +
 Inertia `useForm().post()`, or plain `<a href>` for guest-to-guest
 navigation).
+
+---
+
+## 0c. Phase 4 — dashboard/context adaptations (source → destination)
+
+| Destination | Source inspected | Verdict | Notes |
+|---|---|---|---|
+| `resources/js/Pages/Backoffice/Dashboard/Index.tsx` | Theme's `src/feature-module/mainMenu/adminDashboard/` (in the reference copy) | **Rejected as demo-only** — `resources/views/backoffice/dashboard/index.blade.php` is the real source | The theme's admin dashboard is built around a completely different data model (school-demo KPIs, fake charts/graphs, unrelated widgets) with no GLS equivalent; the existing GLS-adapted Blade page (welcome banner + `@livewire('backoffice.dashboard.dashboard-stats')`) was the sole structural/visual source, matching the established Phase 2/3 convention of preferring the already-adapted Blade markup over the raw theme demo |
+| `resources/js/Components/Dashboard/{StatCard,StatsGrid}.tsx` | Not sourced from the theme — no reusable stat-card component was found isolated from `adminDashboard`'s page-specific markup | **New, adapted from the existing Blade card markup** | `resources/views/livewire/backoffice/dashboard/dashboard-stats.blade.php`'s exact card structure (`.avatar.avatar-xl`, `.stat-counter`, border-top secondary-metric row) is the source, copied class-for-class |
+| `resources/js/Components/Context/ContextSwitcher.tsx` | Theme's header (`src/core/common/header/index.tsx`, already reference-screened in Phase 2 — Redux/`react-router-dom`-dependent) has no equivalent two-dropdown year/center switcher at all — GLS's own context switcher is a project-specific feature the demo theme doesn't model | **Not sourced from the theme** | `resources/views/livewire/backoffice/context/context-switcher.blade.php` is the sole source — exact dropdown markup/classes/badges, React-owned open state instead of Bootstrap `data-bs-toggle` |
+
+No new theme assets, icons, or SCSS were needed for Phase 4 — every visual
+element reuses classes already loaded by the existing static PreSkool CSS.
 
 ---
 

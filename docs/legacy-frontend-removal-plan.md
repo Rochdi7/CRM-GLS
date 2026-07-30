@@ -32,6 +32,25 @@ and `backoffice.profile`.
 
 ---
 
+## 0a. Phase 4 additions to the retained-legacy list
+
+Dashboard and the Context switcher are now migrated
+(docs/inertia-react-migration-status.md, Phase 4 entry):
+
+| File | Why retained |
+|---|---|
+| `app/Livewire/Backoffice/Dashboard/DashboardStats.php` | No route/view points to it anymore (`backoffice.dashboard` now serves `DashboardController` → Inertia); kept for rollback |
+| `resources/views/livewire/backoffice/dashboard/dashboard-stats.blade.php` | Owning view of the above |
+| `resources/views/backoffice/dashboard/index.blade.php` | No longer referenced by `DashboardController`; kept for rollback |
+| `app/Livewire/Backoffice/Context/ContextSwitcher.php` | No longer rendered anywhere (it was only ever included from the Blade header, which Inertia pages don't use); kept for rollback — **do not remove even after Phase 10 review without confirming no Blade page still references it**, since unlike Dashboard/Profile/Auth, this component's Blade usage was header-embedded rather than route-embedded, so a simple route-list check won't surface every caller |
+| `resources/views/livewire/backoffice/context/context-switcher.blade.php` | Owning view of the above |
+
+`GetDashboardStats`/`DashboardStatsData` under `app/Domain/Reports/` are
+**new, permanent** files — not legacy, not candidates for removal; they are
+the active server-side stats computation going forward.
+
+---
+
 ## 1. Hard precondition
 
 Do not execute **any** step in this document until:

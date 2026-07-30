@@ -66,6 +66,16 @@ PreSkool views (categorized; see its README.md).
 - The original download at `C:\Users\ASUS\Downloads\themeforest-…\preskool-v1.9.7\`
   must never be modified.
 
+**PreSkool React theme reference** (added during the Inertia/React
+migration, see `docs/inertia-react-migration-plan.md`):
+`resources/theme-reference/preskool-react/` is a **reference-only** copy of
+the purchased React variant of the same theme. **Never import production
+components directly from it.** Copy and adapt reviewed components into
+`resources/js/` instead, document the mapping in
+`docs/react-theme-file-map.md`, and never run `npm install` inside the
+reference directory. See its own `README-GLS.md` for the full rule set and
+`docs/preskool-react-reference-inventory.md` for what was copied/excluded.
+
 ## 4. Blade component rules
 
 One convention only: **anonymous components** under `resources/views/components/`.

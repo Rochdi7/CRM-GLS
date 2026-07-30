@@ -4,6 +4,173 @@ Running log of verified milestones. Append one entry per phase; do not rewrite h
 
 ---
 
+## Phase 4 — Baseline (before dashboard/context migration)
+
+**Date**: 2026-07-30
+**Branch**: `migration/inertia-react-preskool`, clean tree, Phase 3 commits
+(`ae33482`, `a9029c9`, `befc042`, `73b75bf`, `1de096f`) present and unchanged.
+
+| Check | Result |
+|---|---|
+| `C:\php84\php.exe artisan test` | ✅ **320/320 passing, 1232 assertions** (matches Phase 3's final count exactly) |
+| `npx tsc --noEmit` | ✅ Clean |
+| `npm run build` | ✅ Succeeds — `app-CNxd8NcD.js` 340.92 kB / 104.85 kB gzip (identical to Phase 3) |
+
+No pre-existing failures. Proceeding with Phase 4 implementation.
+
+**Theme reference copy** added in commit `dfdd917` (separate from the
+Dashboard/Context work) — see `docs/preskool-react-reference-inventory.md`.
+Verified byte-identical build output before/after the copy — confirms Vite
+never scans `resources/theme-reference/`.
+
+---
+
+## Phase 4 — Dashboard + Context migration
+
+**Date**: 2026-07-30
+**Status**: **Complete.**
+
+Migrated the Backoffice dashboard and the top-bar academic-year/center
+context switcher from Livewire to Inertia + React. Query semantics,
+center/year scoping, and authorization are unchanged — see
+`docs/dashboard-livewire-to-inertia-map.md` for the full per-stat mapping.
+
+### Dashboard behavior discovered
+- `DashboardController` had **no permission middleware** — only `auth` —
+  even though a `dashboard.view` permission exists in the registry and is
+  used by Context test fixtures. Preserved exactly as-is (ground-truth
+  rule: not a verified bug, not something this migration should "fix").
+- 7 stats + 2 labels, computed by `DashboardStats::render()`:
+  `studentsTotal`/`employeesTotal`/`employeesActive` (center-scoped only),
+  `groupsTotal`/`groupsEnFormation`/`inscriptionsTotal`/`inscriptionsActives`
+  (center- AND year-scoped), `paymentsMonth` (center-scoped via the
+  till/`caisse`, calendar-month range, not academic-year), `anneeLabel`/
+  `centreLabel`. `inscriptionsTotal` is computed but was never actually
+  rendered as its own card in the original Blade view — preserved anyway
+  for parity (dead-but-harmless data, not a scope decision to make).
+- No stat is individually permission-gated — visibility is governed purely
+  by center access, identical for every authenticated user.
+
+### Context behavior discovered
+- `CurrentContext::setAnneeScolaire()`/`setEtablissement()` already own
+  100% of the real authorization/validation (invalid ids and
+  inaccessible-center selections are silently ignored) — confirmed via the
+  pre-existing `CurrentContextTest`. The new HTTP layer
+  (`ContextController`/`UpdateContextRequest`) does format validation only
+  and delegates every authorization decision to the same, single
+  `CurrentContext` service already shared with every Livewire page.
+- "All centers" is representable as `etablissement_id: null`, a real
+  allowed value distinct from "field absent" — the Form Request and
+  controller both treat it as such (`$request->has(...)`, not
+  `$request->filled(...)`, for the center field).
+
+### Files created
+- `app/Domain/Reports/DTOs/DashboardStatsData.php`,
+  `app/Domain/Reports/Actions/GetDashboardStats.php` — first implemented
+  class in the previously-reserved `Reports` domain
+- `app/Http/Controllers/Backoffice/ContextController.php`,
+  `app/Http/Requests/Backoffice/Context/UpdateContextRequest.php`
+- `resources/js/Pages/Backoffice/Dashboard/Index.tsx`,
+  `resources/js/Components/Dashboard/{StatCard,StatsGrid}.tsx`,
+  `resources/js/Components/Context/ContextSwitcher.tsx`
+- `tests/Feature/Backoffice/Inertia/{DashboardInertiaTest,ContextUpdateTest}.php`
+- `docs/dashboard-livewire-to-inertia-map.md`
+
+### Files modified
+- `app/Http/Controllers/Backoffice/DashboardController.php` — Blade view →
+  `Inertia::render()`, delegates to `GetDashboardStats`
+- `app/Http/Middleware/HandleInertiaRequests.php` — `context` shared prop
+  extended with `currentCenter`/`currentAcademicYear`/`availableCenters`/
+  `availableAcademicYears` (lazy-resolved via a closure — real DB queries,
+  never run for guests or when a partial reload doesn't request them)
+- `resources/js/Components/Theme/Header.tsx` — static context placeholder
+  replaced with the real `<ContextSwitcher>`
+- `resources/js/Layouts/BackofficeLayout.tsx` — added an optional `actions`
+  prop (page-header actions slot), needed by the Dashboard's "Ajouter un
+  étudiant" button, not previously exposed
+- `resources/js/Types/index.ts` — `ContextOption`, extended `Context`,
+  `ContextUpdateForm`, `DashboardStats`, `DashboardPageProps`
+- `routes/backoffice.php` — new `backoffice.context.update` (POST); the
+  `backoffice.dashboard` route's name/URI/middleware are unchanged, only
+  its controller's return type changed
+
+### Routes
+| Route | Change |
+|---|---|
+| `backoffice.dashboard` (GET) | Same name/URI/middleware — controller now returns Inertia |
+| `backoffice.context.update` (POST, new) | `auth` middleware only, matching the Livewire switcher's own gate (real authorization is inside `CurrentContext`) |
+
+No duplicate routes or method conflicts — verified via
+`artisan route:list --path=backoffice`.
+
+### Shared context prop shape (final)
+```json
+{
+  "anneeScolaireId": 75, "etablissementId": null,
+  "isAllCenters": true, "canSwitchCenter": true,
+  "currentCenter": null,
+  "currentAcademicYear": { "id": 75, "name": "2025/2026" },
+  "availableCenters": [{ "id": 151, "name": "GLS Marrakech" }, ...],
+  "availableAcademicYears": [{ "id": 75, "name": "2025/2026" }, { "id": 74, "name": "2024/2025" }]
+}
+```
+No full `Etablissement`/`AnneeScolaire` models, no timestamps, no
+unrelated fields — `id`+`name` only, matching the task's required shape
+exactly.
+
+### Mixed Inertia/Livewire context strategy — verified
+The Livewire `ContextSwitcher` component is no longer rendered anywhere
+(removed from `app.blade.php`'s scope entirely, since it was never loaded
+there to begin with — it was only ever in the Blade header, which Inertia
+pages don't use). A new `ContextUpdateTest::
+test_context_change_through_the_new_endpoint_is_observed_by_a_legacy_livewire_page`
+proves: change context via the new POST endpoint → mount `StudentsIndex`
+(Livewire) fresh → it reflects the new center immediately, because both
+read the exact same `CurrentContext`/session — there is only one context
+implementation, never two.
+
+### Legacy files retained (not deleted)
+- `app/Livewire/Backoffice/Dashboard/DashboardStats.php` + its Blade view
+  — unused by any route now, kept for rollback
+- `app/Livewire/Backoffice/Context/ContextSwitcher.php` + its Blade view —
+  still available for any Blade page that might reach for it, though none
+  currently do outside the old dashboard/header
+- `resources/views/backoffice/dashboard/index.blade.php` — unused, kept
+
+### Automated checks
+| Check | Result |
+|---|---|
+| Targeted (`Context/`, `Inertia/`) | ✅ 57/57 passing |
+| `npx tsc --noEmit` | ✅ Clean |
+| `npm run build` | ✅ Succeeds — `app-cDb3tAX-.js` 347.19 kB / 105.99 kB gzip (Phase 3: 340.92 kB / 104.85 kB gzip) |
+| `C:\php84\php.exe artisan test` (full suite) | ✅ **339/339 passing, 1332 assertions** (Phase 3 baseline: 320/320, 1232 assertions) |
+| ESLint | Not run — no ESLint config exists yet (skipped per instructions) |
+
+### Performance measurements
+| Measurement | Value |
+|---|---|
+| Dashboard SQL query count (full request, `GetDashboardStats` + auth/shared props) | **16** |
+| Full initial HTML page response size | **2,850 bytes** |
+| Inertia JSON payload (subsequent visit/partial reload) | **1,136 bytes** |
+| React bundle (gzip) | 105.99 kB (+1.14 kB vs. Phase 3) |
+
+No N+1 pattern found — `(clone $query)->count()` reuses each scoped query
+builder rather than re-querying from scratch per stat.
+
+### Manual browser verification (user, real Chrome, `artisan serve` + `npm run dev`)
+Confirmed working: dashboard welcome banner + 4 real stat cards, context
+switcher (year + center dropdowns) updates stats live, and — critically —
+after changing context via the new switcher, navigating to a legacy
+Livewire page (Students) via a plain anchor shows the same updated
+center's data. No issues reported.
+
+### Known limitations
+- None blocking. The `dashboard.view` permission's non-enforcement is
+  pre-existing behavior, not a Phase 4 regression — flagged above, not
+  fixed (ground-truth rule).
+
+---
+
 ## Phase 3 — Baseline (before auth/profile migration)
 
 **Date**: 2026-07-30
