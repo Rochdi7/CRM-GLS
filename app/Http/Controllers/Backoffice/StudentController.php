@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Domain\Students\Queries\GetStudentDetails;
 use App\Http\Controllers\Controller;
 use App\Models\Student;
-use Illuminate\Contracts\View\View;
+use Inertia\Inertia;
+use Inertia\Response;
 
 /**
  * Student detail page (read-only). The list + add/edit CRUD is the Livewire
@@ -14,18 +16,12 @@ use Illuminate\Contracts\View\View;
  */
 final class StudentController extends Controller
 {
-    public function show(Student $student): View
+    public function show(Student $student, GetStudentDetails $getStudentDetails): Response
     {
         $this->authorize('view', $student);
 
-        return view('backoffice.students.show', [
-            'student' => $student->load([
-                'etablissement',
-                'inscriptions.group',
-                'inscriptions.fees',
-                'encaissements.caisse',
-                'remboursements.caisse',
-            ]),
+        return Inertia::render('Backoffice/Students/Show', [
+            'student' => $getStudentDetails($student),
         ]);
     }
 }

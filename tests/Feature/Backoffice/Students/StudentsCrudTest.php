@@ -15,6 +15,7 @@ use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Inertia\Testing\AssertableInertia as Assert;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -189,7 +190,10 @@ final class StudentsCrudTest extends TestCase
 
         $this->get(route('backoffice.students.show', $student))
             ->assertOk()
-            ->assertSee($student->nomComplet());
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/Students/Show')
+                ->where('student.nomComplet', $student->nomComplet())
+            );
     }
 
     public function test_age_is_computed_from_date_naissance(): void
