@@ -17,6 +17,7 @@ use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -416,7 +417,10 @@ final class InscriptionsCrudTest extends TestCase
 
         $this->get(route('backoffice.inscriptions.show', $inscription))
             ->assertOk()
-            ->assertSee('INS-SHOW')
-            ->assertSee('Frais de Juillet');
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/Inscriptions/Show')
+                ->where('inscription.reference', 'INS-SHOW')
+                ->where('inscription.fees.0.nom', 'Frais de Juillet')
+            );
     }
 }
