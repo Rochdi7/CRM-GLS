@@ -10,6 +10,11 @@ use App\Http\Requests\Backoffice\Salles\UpdateSalleRequest;
 use App\Models\Salle;
 use Illuminate\Http\RedirectResponse;
 
+/**
+ * Salles (rooms) CRUD — Inertia/React (Phase 6), same UI slot as before
+ * (Settings → Salles tab, ?tab=salles). See StoreSalleRequest/
+ * UpdateSalleRequest for the center-access validation fix (§Q3).
+ */
 final class SalleController extends Controller
 {
     public function __construct()
@@ -17,11 +22,6 @@ final class SalleController extends Controller
         $this->authorizeResource(Salle::class, 'salle');
     }
 
-    /**
-     * The Paramètres page (Settings → Salles tab) is the primary UI for this
-     * referential data — these listing/form pages have no view of their own,
-     * so they redirect there while staying permission-protected.
-     */
     public function index(): RedirectResponse
     {
         return redirect()->route('backoffice.settings');
@@ -36,7 +36,7 @@ final class SalleController extends Controller
     {
         Salle::create($request->validated());
 
-        return redirect()->route('backoffice.salles.index')
+        return redirect()->route('backoffice.settings', ['tab' => 'salles'])
             ->with('status', __('Salle créée.'));
     }
 
@@ -49,15 +49,26 @@ final class SalleController extends Controller
     {
         $salle->update($request->validated());
 
-        return redirect()->route('backoffice.salles.index')
+        return redirect()->route('backoffice.settings', ['tab' => 'salles'])
             ->with('status', __('Salle mise à jour.'));
     }
 
+    /**
+     * Guarded like the Livewire tab: a room still assigned to groups cannot
+     * be removed. `delete` field error (not a flash) so the React
+     * confirm-dialog stays open and shows it inline.
+     */
     public function destroy(Salle $salle): RedirectResponse
     {
+        $salle->loadCount('groups');
+
+        if ($salle->groups_count) {
+            return back()->withErrors(['delete' => __('This room is still assigned to groups and cannot be deleted.')]);
+        }
+
         $salle->delete();
 
-        return redirect()->route('backoffice.salles.index')
+        return redirect()->route('backoffice.settings', ['tab' => 'salles'])
             ->with('status', __('Salle supprimée.'));
     }
 }

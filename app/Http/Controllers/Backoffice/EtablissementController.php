@@ -10,6 +10,13 @@ use App\Http\Requests\Backoffice\Etablissements\UpdateEtablissementRequest;
 use App\Models\Etablissement;
 use Illuminate\Http\RedirectResponse;
 
+/**
+ * Établissements (centers) CRUD — Inertia/React (Phase 6), same UI slot as
+ * before (Settings → Établissements tab, ?tab=etablissements). index/create/
+ * show/edit still redirect to Settings (no page of their own — the tab
+ * component IS the UI); store/update/destroy are the real mutation
+ * endpoints the React form/delete-dialog submit to.
+ */
 final class EtablissementController extends Controller
 {
     public function __construct()
@@ -17,11 +24,6 @@ final class EtablissementController extends Controller
         $this->authorizeResource(Etablissement::class, 'etablissement');
     }
 
-    /**
-     * The Paramètres page (Settings → Établissements tab) is the primary UI
-     * for this referential data — these listing/form pages have no view of
-     * their own, so they redirect there while staying permission-protected.
-     */
     public function index(): RedirectResponse
     {
         return redirect()->route('backoffice.settings');
@@ -36,7 +38,7 @@ final class EtablissementController extends Controller
     {
         Etablissement::create($request->validated());
 
-        return redirect()->route('backoffice.etablissements.index')
+        return redirect()->route('backoffice.settings', ['tab' => 'etablissements'])
             ->with('status', __('Établissement créé.'));
     }
 
@@ -54,16 +56,30 @@ final class EtablissementController extends Controller
     {
         $etablissement->update($request->validated());
 
-        return redirect()->route('backoffice.etablissements.index')
+        return redirect()->route('backoffice.settings', ['tab' => 'etablissements'])
             ->with('status', __('Établissement mis à jour.'));
     }
 
+    /**
+     * Guarded in the same way as the Livewire tab: a center still holding
+     * rooms/staff/students cannot be removed. Checked explicitly (not left
+     * to the DB restrict FK) so the user gets the same safe French message
+     * instead of a raw constraint-violation error. Returned as a `delete`
+     * field error (back()->withErrors) rather than a flash message so the
+     * React confirm-dialog can keep itself open and show it inline — same
+     * UX as the Livewire tab's $this->addError('delete', ...).
+     */
     public function destroy(Etablissement $etablissement): RedirectResponse
     {
-        // DB-level restrict FKs (salles…) block deletion of a branch in use.
+        $etablissement->loadCount(['salles', 'employees', 'students']);
+
+        if ($etablissement->salles_count || $etablissement->employees_count || $etablissement->students_count) {
+            return back()->withErrors(['delete' => __('This center is still in use and cannot be deleted.')]);
+        }
+
         $etablissement->delete();
 
-        return redirect()->route('backoffice.etablissements.index')
+        return redirect()->route('backoffice.settings', ['tab' => 'etablissements'])
             ->with('status', __('Établissement supprimé.'));
     }
 }

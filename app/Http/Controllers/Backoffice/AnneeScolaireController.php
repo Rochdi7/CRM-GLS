@@ -11,6 +11,10 @@ use App\Models\AnneeScolaire;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Années scolaires (academic years) CRUD — Inertia/React (Phase 6), same UI
+ * slot as before (Settings → Années scolaires tab, ?tab=annees-scolaires).
+ */
 final class AnneeScolaireController extends Controller
 {
     public function __construct()
@@ -18,11 +22,6 @@ final class AnneeScolaireController extends Controller
         $this->authorizeResource(AnneeScolaire::class, 'annees_scolaire');
     }
 
-    /**
-     * The Paramètres page (Settings → Années scolaires tab) is the primary UI
-     * for this referential data — these listing/form pages have no view of
-     * their own, so they redirect there while staying permission-protected.
-     */
     public function index(): RedirectResponse
     {
         return redirect()->route('backoffice.settings');
@@ -37,7 +36,7 @@ final class AnneeScolaireController extends Controller
     {
         $this->persist($request->validated());
 
-        return redirect()->route('backoffice.annees-scolaires.index')
+        return redirect()->route('backoffice.settings', ['tab' => 'annees-scolaires'])
             ->with('status', __('Année scolaire créée.'));
     }
 
@@ -50,15 +49,26 @@ final class AnneeScolaireController extends Controller
     {
         $this->persist($request->validated(), $annees_scolaire);
 
-        return redirect()->route('backoffice.annees-scolaires.index')
+        return redirect()->route('backoffice.settings', ['tab' => 'annees-scolaires'])
             ->with('status', __('Année scolaire mise à jour.'));
     }
 
+    /**
+     * Guarded like the Livewire tab: an academic year still referenced by
+     * groups/inscriptions cannot be removed. `delete` field error (not a
+     * flash) so the React confirm-dialog stays open and shows it inline.
+     */
     public function destroy(AnneeScolaire $annees_scolaire): RedirectResponse
     {
+        $annees_scolaire->loadCount(['groups', 'inscriptions']);
+
+        if ($annees_scolaire->groups_count || $annees_scolaire->inscriptions_count) {
+            return back()->withErrors(['delete' => __('This academic year is still in use and cannot be deleted.')]);
+        }
+
         $annees_scolaire->delete();
 
-        return redirect()->route('backoffice.annees-scolaires.index')
+        return redirect()->route('backoffice.settings', ['tab' => 'annees-scolaires'])
             ->with('status', __('Année scolaire supprimée.'));
     }
 
