@@ -8,12 +8,13 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Auth\ResetPasswordRequest;
 use App\Models\User;
 use Illuminate\Auth\Events\PasswordReset;
-use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
+use Inertia\Inertia;
+use Inertia\Response;
 
 /**
  * Reset the password from an emailed token. On success the account is no
@@ -21,9 +22,9 @@ use Illuminate\Support\Str;
  */
 final class ResetPasswordController extends Controller
 {
-    public function show(Request $request, string $token): View
+    public function show(Request $request, string $token): Response
     {
-        return view('backoffice.auth.reset-password', [
+        return Inertia::render('Backoffice/Auth/ResetPassword', [
             'token' => $token,
             'email' => (string) $request->query('email', ''),
         ]);

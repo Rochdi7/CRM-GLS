@@ -6,9 +6,10 @@ namespace App\Http\Controllers\Backoffice\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Auth\ForgotPasswordRequest;
-use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Password;
+use Inertia\Inertia;
+use Inertia\Response;
 
 /**
  * "Forgot password" — emails a reset link (backoffice-scoped, `users` broker).
@@ -16,9 +17,9 @@ use Illuminate\Support\Facades\Password;
  */
 final class ForgotPasswordController extends Controller
 {
-    public function show(): View
+    public function show(): Response
     {
-        return view('backoffice.auth.forgot-password');
+        return Inertia::render('Backoffice/Auth/ForgotPassword');
     }
 
     public function store(ForgotPasswordRequest $request): RedirectResponse
