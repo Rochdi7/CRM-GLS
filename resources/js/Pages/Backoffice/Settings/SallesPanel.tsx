@@ -89,13 +89,14 @@ export default function SallesPanel({ salles, centerOptions, permissions }: Sall
         setDeleting(true);
         setDeleteError(undefined);
 
-        form.transform(() => ({})).delete(`/backoffice/salles/${deleteTarget.id}`, {
+        form.transform(() => ({}));
+        form.delete(`/backoffice/salles/${deleteTarget.id}`, {
             preserveScroll: true,
             onSuccess: () => {
                 setDeleteTarget(null);
                 setDeleting(false);
             },
-            onError: (errors) => {
+            onError: (errors: Record<string, string>) => {
                 setDeleteError(errors.delete ?? 'Suppression impossible.');
                 setDeleting(false);
             },

@@ -33,6 +33,15 @@ export interface FlashMessages {
     info: string | null;
     /** Laravel's password-broker flash convention (`->with('status', ...)`) — rendered like `success`. */
     status: string | null;
+    /**
+     * One-time login credentials for a just-created employee
+     * (EmployeeController::store() → EmployeeObserver). Shown once by the
+     * Employees add/edit modal, driven off this shared prop (not a
+     * sentinel form-state id) — never persisted, never re-shown on reload.
+     */
+    newEmployeeCredentials?: { username: string; password: string } | null;
+    /** One-time regenerated password for an existing user (Users module) — not consumed by the Employees page. */
+    regeneratedPassword?: string | null;
 }
 
 export interface SharedProps {
@@ -341,4 +350,297 @@ export interface CaisseTransferDetails {
     soldeSourceApres: MoneyDisplay | null;
     soldeDestAvant: MoneyDisplay | null;
     soldeDestApres: MoneyDisplay | null;
+}
+
+// --- Shared form/CRUD primitives -------------------------------------------
+
+export interface SelectOption {
+    value: string | number;
+    label: string;
+}
+
+/** Machine-readable subset of Laravel validation errors (Inertia's `errors` shared prop shape). */
+export type LaravelValidationErrors = Record<string, string>;
+
+/** Lightweight action-availability flags — UI convenience only; every endpoint re-authorizes server-side. */
+export interface CrudPermissions {
+    create: boolean;
+    update: boolean;
+    delete: boolean;
+}
+
+// --- Phase 6: simple CRUD modules ------------------------------------------
+
+export type SettingsTab = 'etablissements' | 'annees-scolaires' | 'salles' | 'frais';
+
+export interface EtablissementRow {
+    id: number;
+    nomCentre: string;
+    ville: string;
+    telephone: string | null;
+    email: string | null;
+    siegeSocial: boolean;
+    sallesCount: number;
+}
+
+export interface EtablissementForm {
+    nom_centre: string;
+    ville: string;
+    telephone: string;
+    email: string;
+    siege_social: boolean;
+}
+
+export interface AnneeScolaireRow {
+    id: number;
+    nom: string;
+    dateDebut: string;
+    dateFin: string;
+    parDefaut: boolean;
+    inscriptionOuverte: boolean;
+}
+
+export interface AnneeScolaireForm {
+    nom: string;
+    date_debut: string;
+    date_fin: string;
+    par_defaut: boolean;
+    inscription_ouverte: boolean;
+}
+
+export interface SalleRow {
+    id: number;
+    nom: string;
+    centre: string | null;
+    capacite: number | null;
+    statut: string;
+}
+
+export interface SalleForm {
+    nom: string;
+    etablissement_id: number | '';
+    capacite: number | '';
+    statut: string;
+}
+
+export interface FraisRow {
+    id: number;
+    nom: string;
+    statut: string;
+    groupsCount: number;
+}
+
+export interface FraisForm {
+    nom: string;
+    statut: string;
+}
+
+export interface TypeDepenseRow {
+    id: number;
+    nom: string;
+    statut: string;
+    isSystem: boolean;
+    depensesCount: number;
+}
+
+export interface TypeDepenseForm {
+    nom: string;
+    statut: string;
+}
+
+export interface SettingsPageProps {
+    activeTab: SettingsTab;
+    availableTabs: SettingsTab[];
+    permissions: Record<SettingsTab, CrudPermissions>;
+    etablissements?: PaginatedData<EtablissementRow>;
+    anneesScolaires?: PaginatedData<AnneeScolaireRow>;
+    salles?: PaginatedData<SalleRow>;
+    centerOptions?: SelectOption[];
+    frais?: PaginatedData<FraisRow>;
+    [key: string]: unknown;
+}
+
+export interface TypesDepensesPageProps {
+    types: PaginatedData<TypeDepenseRow>;
+    filters: { search: string };
+    permissions: CrudPermissions;
+    [key: string]: unknown;
+}
+
+// --- Phase 7: Roles & Permissions (full-page create/edit, no modal) -------
+
+/** Mirrors App\Domain\Settings\Queries\GetRolesList::present() exactly. */
+export interface RoleRow {
+    id: number;
+    name: string;
+    label: string;
+    isProtected: boolean;
+    permissionsCount: number;
+    usersCount: number;
+}
+
+export interface RolesIndexPageProps {
+    roles: PaginatedData<RoleRow>;
+    search: string;
+    perPage: number;
+    [key: string]: unknown;
+}
+
+/** `{ [groupLabel]: { [permissionName]: frenchLabel } }` — PermissionRegistry::grouped(). */
+export type PermissionGroups = Record<string, Record<string, string>>;
+
+export interface RoleCreatePageProps {
+    permissionGroups: PermissionGroups;
+    [key: string]: unknown;
+}
+
+/** RoleController@edit's `role` prop shape — id/name/label only, no permissions embedded (those come separately as selectedPermissions). */
+export interface RoleEditSummary {
+    id: number;
+    name: string;
+    label: string;
+}
+
+export interface RoleEditPageProps {
+    role: RoleEditSummary;
+    selectedPermissions: string[];
+    permissionGroups: PermissionGroups;
+    [key: string]: unknown;
+}
+
+/** Payload submitted to backoffice.roles.store / backoffice.roles.update. */
+export interface RoleFormPayload {
+    label: string;
+    name: string;
+    permissions: string[];
+}
+
+// --- Phase 7: Users list + authorization -----------------------------------
+
+/** One row of App\Domain\Employees\Queries\GetUsersList — see UserController::index(). */
+export interface UserRow {
+    id: number;
+    name: string;
+    email: string;
+    username: string | null;
+    isActive: boolean;
+    mustChangePassword: boolean;
+    roles: string[];
+    employee: {
+        reference: string;
+        nomComplet: string;
+        etablissement: string | null;
+    } | null;
+}
+
+export interface UsersIndexPageProps {
+    users: PaginatedData<UserRow>;
+    filters: { search: string; perPage: number };
+    perPageOptions: number[];
+    [key: string]: unknown;
+}
+
+/** Edit-modal form fields — matches UpdateUserRequest::rules() exactly. */
+export interface UserEditForm {
+    name: string;
+    email: string;
+    username: string;
+    is_active: boolean;
+}
+
+/** One selectable role — matches UserAuthorizationController::edit()'s `roles` prop shape. */
+export interface AuthorizationRoleOption {
+    name: string;
+    label: string;
+    permissionsCount: number;
+}
+
+/** UserAuthorizationController::edit()'s `targetUser` prop shape. */
+export interface AuthorizationTargetUser {
+    id: number;
+    name: string;
+    email: string;
+}
+
+/**
+ * Full props for Backoffice/Users/Authorization.tsx — mirrors
+ * UserAuthorizationController::edit() + App\Livewire\Backoffice\Users\ManageAuthorization
+ * exactly (roles/groups/labels all come from PermissionRegistry, see
+ * app/Support/Authorization/PermissionRegistry.php).
+ */
+export interface UsersAuthorizationPageProps {
+    targetUser: AuthorizationTargetUser;
+    selectedRoles: string[];
+    directPermissions: string[];
+    roles: AuthorizationRoleOption[];
+    roleLabels: Record<string, string>;
+    /** [French group label => [permission name => French label]] — PermissionRegistry::grouped(). */
+    groups: Record<string, Record<string, string>>;
+    totalPermissions: number;
+    isSuperAdmin: boolean;
+    canAssignDirect: boolean;
+    [key: string]: unknown;
+}
+
+/** useForm() payload for the authorization Save action — matches SyncUserAuthorizationRequest::rules(). */
+export interface SyncUserAuthorizationForm {
+    roles: string[];
+    directPermissions: string[];
+}
+
+// --- Phase 7: Employees (Inertia/React list + modal CRUD) -------------------
+
+/** One row of the Employees list — mirrors GetEmployeesList's ->through() mapping exactly. */
+export interface EmployeeRow {
+    id: number;
+    reference: string;
+    nom: string;
+    prenom: string;
+    nomComplet: string;
+    sexe: string | null;
+    categorie: string;
+    statut: string;
+    telephone: string | null;
+    whatsapp: string | null;
+    email: string | null;
+    adresse: string | null;
+    note: string | null;
+    dateNaissance: string | null;
+    dateEmbauche: string | null;
+    salaire: MoneyDisplay | null;
+    etablissementId: number | null;
+    etablissement: string | null;
+    photoUrl: string | null;
+    photoThumbUrl: string | null;
+}
+
+export interface EmployeesFilters {
+    search: string;
+    categorieFilter: string;
+    perPage: number;
+}
+
+/** One entry of App\Support\Phone\Countries::all() — ISO2 => { nom, dial }. */
+export type CountryCatalog = Record<string, { nom: string; dial: string }>;
+
+export interface EmployeesPageProps {
+    employees: PaginatedData<EmployeeRow>;
+    filters: EmployeesFilters;
+    perPageOptions: number[];
+    categories: string[];
+    statuts: string[];
+    sexes: string[];
+    countries: CountryCatalog;
+    defaultCountry: string;
+    etablissements: Array<{ id: number; nom_centre: string }>;
+    centerLocked: boolean;
+    contextCenterId: number | null;
+    contextCenterName: string | null;
+    [key: string]: unknown;
+}
+
+/** One-time login credentials for a just-created employee — shown once, never persisted (see HandleInertiaRequests). */
+export interface NewEmployeeCredentials {
+    username: string;
+    password: string;
 }

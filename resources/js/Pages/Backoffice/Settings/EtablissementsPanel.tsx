@@ -93,10 +93,12 @@ export default function EtablissementsPanel({ etablissements, permissions }: Eta
             onSuccess: () => closeModal(),
         };
 
+        form.transform(() => payload);
+
         if (editingId) {
-            form.transform(() => payload).put(`/backoffice/etablissements/${editingId}`, options);
+            form.put(`/backoffice/etablissements/${editingId}`, options);
         } else {
-            form.transform(() => payload).post('/backoffice/etablissements', options);
+            form.post('/backoffice/etablissements', options);
         }
     }
 
@@ -108,13 +110,14 @@ export default function EtablissementsPanel({ etablissements, permissions }: Eta
         setDeleting(true);
         setDeleteError(undefined);
 
-        form.transform(() => ({})).delete(`/backoffice/etablissements/${deleteTarget.id}`, {
+        form.transform(() => ({}));
+        form.delete(`/backoffice/etablissements/${deleteTarget.id}`, {
             preserveScroll: true,
             onSuccess: () => {
                 setDeleteTarget(null);
                 setDeleting(false);
             },
-            onError: (errors) => {
+            onError: (errors: Record<string, string>) => {
                 setDeleteError(errors.delete ?? 'Suppression impossible.');
                 setDeleting(false);
             },
@@ -222,7 +225,7 @@ export default function EtablissementsPanel({ etablissements, permissions }: Eta
                                 national={form.data.national}
                                 onCountryChange={(iso) => form.setData('countryIso', iso)}
                                 onNationalChange={(value) => form.setData('national', value)}
-                                error={form.errors.telephone}
+                                error={(form.errors as Record<string, string>).telephone}
                             />
                         </div>
                         <div className="col-md-6">

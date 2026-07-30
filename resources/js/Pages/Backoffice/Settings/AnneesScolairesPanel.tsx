@@ -90,13 +90,14 @@ export default function AnneesScolairesPanel({ anneesScolaires, permissions }: A
         setDeleting(true);
         setDeleteError(undefined);
 
-        form.transform(() => ({})).delete(`/backoffice/annees-scolaires/${deleteTarget.id}`, {
+        form.transform(() => ({}));
+        form.delete(`/backoffice/annees-scolaires/${deleteTarget.id}`, {
             preserveScroll: true,
             onSuccess: () => {
                 setDeleteTarget(null);
                 setDeleting(false);
             },
-            onError: (errors) => {
+            onError: (errors: Record<string, string>) => {
                 setDeleteError(errors.delete ?? 'Suppression impossible.');
                 setDeleting(false);
             },
