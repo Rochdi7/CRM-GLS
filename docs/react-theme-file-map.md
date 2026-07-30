@@ -1,10 +1,31 @@
 # PreSkool React Theme — File Map
 
 Status: **Phase 2 shell + Phase 3 auth/profile + Phase 4 dashboard/context +
-Phase 5 read-only pages implemented — see §0 (Phase 2), §0b (Phase 3), §0c
-(Phase 4), §0d (Phase 5) for what actually shipped.** The rest of this
-document (§1 onward) is the original Phase 0/1 screening pass and remains
-accurate for anything not yet built.
+Phase 5 read-only pages + Phase 6 simple CRUD implemented — see §0 (Phase 2),
+§0b (Phase 3), §0c (Phase 4), §0d (Phase 5), §0e (Phase 6) for what actually
+shipped.** The rest of this document (§1 onward) is the original Phase 0/1
+screening pass and remains accurate for anything not yet built.
+
+## 0e. Phase 6 — simple CRUD modules + modal architecture (source → destination)
+
+Inspected `resources/theme-reference/preskool-react/src/core/modals/*.tsx`
+and `src/feature-module/uiInterface/base-ui/modals.tsx` for modal/settings-
+table/action-menu patterns before building anything.
+
+| Destination | Theme file(s) inspected | Verdict | Notes |
+|---|---|---|---|
+| `resources/js/Components/Modals/Modal.tsx` | `src/feature-module/uiInterface/base-ui/modals.tsx` | **Rejected as demo-only** — GLS-adapted Blade markup used instead | Lorem-ipsum demo content wired to `data-bs-toggle`/`data-bs-target` and a full `react-router-dom` import; not a controlled component. The real source is the existing Alpine-driven modal markup already shipping in `resources/views/livewire/backoffice/settings/*.blade.php` (`.modal-dialog-centered` + `.modal-backdrop` structure), translated from `x-data="{ show: @entangle(...) }"` to React `useState` — see `docs/bootstrap-react-integration-decision.md`'s "Phase 6 modal decision" |
+| `resources/js/Components/Tables/RowActions.tsx` | `theme-reference/preskool/students/students.blade.php` pattern (eye button + dropdown), referenced via `components/backoffice/ui/action-menu.blade.php` | **GLS Blade markup adapted, not the raw theme demo** | Same visual structure (`.btn-outline-light` eye button + `.dropdown`/`.dropdown-menu`), `data-bs-toggle="dropdown"` replaced with React `useState` + click-outside/Escape (same technique as Phase 2's `Header.tsx` user-menu dropdown) |
+| `resources/js/Pages/Backoffice/Settings/{EtablissementsPanel,AnneesScolairesPanel,SallesPanel,FraisPanel}.tsx` | No close theme analog (theme demo tables are generic kitchen-sink CRUD, not GLS's referential-data domain) | **Not sourced from the theme** | Built from the existing Livewire tab views (`resources/views/livewire/backoffice/settings/*-tab.blade.php`) — same fields, same validation, same delete-guard messages, same table columns |
+| `resources/js/Pages/Backoffice/TypesDepenses/Index.tsx` | No theme analog | **Not sourced from the theme** | Built from the retired `resources/views/livewire/backoffice/types-depenses/types-depenses-index.blade.php` — same search/pagination/lock-badge behavior, now a standalone page instead of a tab (docs/phase-6-simple-crud-inventory.md §Q2) |
+| `resources/js/Components/Forms/{SelectField,TextareaField,CheckboxField,PhoneField,FormActions,FormErrorsSummary}.tsx` | No theme analog (theme repeats raw inline markup per page, same finding as Phase 3) | **New, GLS-specific** | `SelectField` is a plain native `<select>` — no Select2/jQuery on Inertia pages; `PhoneField` ports `App\Support\Phone\Countries`' split/join logic to TypeScript (`resources/js/Data/countries.ts`), keeping the country-dial + national-number two-part UX the Livewire `WithPhoneCountry` trait provides |
+| `resources/js/Components/Tables/{TableToolbar,SearchInput}.tsx` | `components/backoffice/ui/filter-bar.blade.php` | **GLS Blade markup adapted** | Same `.gls-filter-bar` row layout and debounced-search convention (400ms, matching `wire:model.live.debounce.400ms`) |
+
+**Demo-specific code explicitly NOT carried over** (same stop list as prior
+phases): `data-bs-toggle`/`data-bs-target` modal attributes,
+`react-router-dom` imports, lorem-ipsum placeholder content. No new npm
+package was installed for the modal (see the integration-decision doc for
+why `react-bootstrap` was reconsidered and still not adopted).
 
 ## 0d. Phase 5 — read-only pages (source → destination)
 

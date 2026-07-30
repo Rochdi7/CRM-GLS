@@ -1,7 +1,8 @@
 # Bootstrap / React Integration Decision
 
 Status: **Decided for Phase 2's scope (dropdowns, mobile sidebar). Modal
-strategy formally revisited before the first real modal ships (Phase 6+).**
+strategy formally revisited and decided in Phase 6 — see §"Phase 6 modal
+decision" below.**
 
 ---
 
@@ -62,7 +63,7 @@ this decision only governs the Inertia/React root (`app.blade.php`) and its
 component tree. The two stacks stay isolated (migration plan's "keep each
 frontend root isolated" rule).
 
-## Revisit trigger
+## Revisit trigger (resolved)
 
 Before Phase 6 (first CRUD modal), re-examine this decision explicitly:
 - If a modal needs complex focus-trapping/accessibility behavior beyond what
@@ -72,3 +73,36 @@ Before Phase 6 (first CRUD modal), re-examine this decision explicitly:
 - Whatever is chosen, it must be the **single** ownership model for every
   future Inertia modal — no mixing hand-rolled and `react-bootstrap` modals
   in the same page tree.
+
+## Phase 6 modal decision
+
+**Package used**: still none. `resources/js/Components/Modals/Modal.tsx` is a
+small hand-rolled component — role="dialog", aria-modal="true", an
+aria-labelledby'd title, a manual focus trap (Tab/Shift+Tab cycling within
+the dialog's own focusable elements, computed fresh on every open), focus
+restore to the triggering element on close, Escape-to-close (disabled while
+`processing`), backdrop-click-to-close (also disabled while `processing`,
+so a destructive request in flight cannot be dismissed mid-air), and a
+body-scroll lock (`document.body.style.overflow`) for the duration it's
+open. `ConfirmDialog.tsx` (delete confirmations) is built on top of it, not
+a separate implementation.
+
+**Why not `react-bootstrap` after all**: the focus-trap/ARIA requirements
+turned out to be straightforward to hand-roll correctly (no nested-modal
+scenarios, no complex composition needs) — introducing a ~30 KB dependency
+for behavior that fits in under 150 lines wasn't justified. If a future
+phase needs nested modals, nested focus traps, or nested transitions,
+revisit this again; `Modal.tsx`'s single-modal-at-a-time assumption would
+need to change or be replaced.
+
+**Visuals**: the theme's own Bootstrap classes (`.modal`, `.modal-dialog`,
+`.modal-dialog-centered`, `.modal-content`, `.modal-header`, `.modal-body`,
+`.modal-footer`, `.modal-backdrop`) are reused as-is, matching the existing
+Alpine-driven Livewire modals' markup exactly (`resources/views/livewire/
+backoffice/settings/*.blade.php`) — only the interactivity model changed
+(`x-data="{ show: @entangle(...) }"` → React `useState`).
+
+**Row-action dropdowns** (`resources/js/Components/Tables/RowActions.tsx`)
+follow the same pattern established in Phase 2's `Header.tsx` user-menu
+dropdown: `useState` + click-outside/Escape listeners, no
+`data-bs-toggle="dropdown"`.

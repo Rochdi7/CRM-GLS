@@ -4,6 +4,238 @@ Running log of verified milestones. Append one entry per phase; do not rewrite h
 
 ---
 
+## Phase 6 — Baseline (before simple CRUD migration)
+
+**Date**: 2026-07-30
+**Branch**: `migration/inertia-react-preskool`, clean tree, Phase 5 commits
+(`c1e08f1`, `9cefcbd`, `547a33c`, `e78bc33`, `bea6278`, `74f0932`, `ab012ea`)
+present and unchanged.
+
+| Check | Result |
+|---|---|
+| `C:\php84\php.exe artisan test` | ✅ **356/356 passing, 1456 assertions** |
+| `npx tsc --noEmit` | ✅ Clean |
+| `npm run build` | ✅ Succeeds — main bundle 375.45 kB / 110.41 kB gzip |
+
+No pre-existing failures. Proceeding with Phase 6 implementation.
+
+---
+
+## Phase 6 — Simple CRUD modules migration
+
+**Date**: 2026-07-30
+
+**⚠ Concurrent-session note**: this phase was implemented while a second
+Claude Code session (different Windows user account, "Outlaw") was
+simultaneously working on this same repository — apparently a parallel
+"Phase 7" pass migrating Employees/Roles/Users. Several of this phase's
+file edits were silently reverted mid-session by that other session's own
+git/filesystem operations (`EtablissementController`, `AnneeScolaireController`,
+`SalleController`, both `Salle` Form Requests, `resources/js/Types/index.ts`,
+and all three initial Settings panel `.tsx` files) and had to be re-applied.
+All Phase 6 work was re-verified and re-committed after the collision; final
+`route:list`, `tsc --noEmit`, and `npm run build` all pass clean, and the
+final PHPUnit run (below) is green. **Two unrelated PHPUnit runs also hit a
+transient PostgreSQL deadlock** (`SQLSTATE[40P01]`) on the `RefreshDatabase`
+table-drop, consistent with both sessions running tests against the same
+`gls_crm_test` database concurrently — resolved on retry both times, not a
+real test defect. Flagging this as an operational hazard: **running two
+Claude Code sessions against the same repo + same Postgres test database at
+once risks losing uncommitted edits and causing spurious test-run
+deadlocks.** Recommend not doing so, or at minimum committing
+frequently and expecting to re-verify file state before any long
+implementation stretch.
+
+### Modules migrated
+
+Établissements (Centers), Années scolaires (Academic Years), Salles (Rooms),
+Frais (Fee catalog), Types de dépenses (Expense Types) — all 5 modules
+listed in scope, per docs/phase-6-simple-crud-inventory.md.
+
+### Modal/form/table architecture established
+
+- `resources/js/Components/Modals/Modal.tsx` — React-controlled modal
+  (role="dialog", aria-modal, focus trap/restore, Escape, backdrop-click,
+  body-scroll lock). No `bootstrap.bundle.js`, no `data-bs-toggle`. See
+  `docs/bootstrap-react-integration-decision.md`'s "Phase 6 modal decision".
+- `resources/js/Components/Modals/ConfirmDialog.tsx` — delete confirmation
+  built on `Modal.tsx`.
+- `resources/js/Components/Forms/{SelectField,TextareaField,CheckboxField,
+  PhoneField,FormActions,FormErrorsSummary}.tsx` — reusable field/action
+  primitives. `PhoneField` + `resources/js/Data/countries.ts` port
+  `App\Support\Phone\Countries`' split/join logic to TypeScript (built after
+  a stakeholder decision to keep the guided country-dial picker rather than
+  simplify to one free-text field).
+- `resources/js/Components/Tables/{TableToolbar,SearchInput,RowActions}.tsx`
+  — filter-bar row, debounced search, and a React-owned row-action dropdown
+  (replacing `action-menu.blade.php`'s `data-bs-toggle="dropdown"`).
+
+### Existing behavior discovered (docs/phase-6-simple-crud-inventory.md)
+
+- `TypeDepenseController` was **entirely dead code** pre-Phase-6 (no route
+  referenced any of its actions) — the real UI was the Livewire
+  `TypesDepensesIndex` component embedded as the 3rd tab of the Depenses
+  management page.
+- `Frais` had **zero HTTP-layer surface** before this phase — no controller,
+  no routes, no Form Requests, 100% Livewire.
+- `Salle`'s `create()` authorization path had a pre-existing center-access
+  gap: only `view`/`update`/`delete` checked `withinCenter()`; `create()`
+  only checked the raw permission, so a center-limited `rooms.create` holder
+  could submit a forged `etablissement_id` for a center they don't have
+  access to (only `exists:etablissements,id` was validated). Present in the
+  Livewire version too — not introduced by this migration.
+
+### Decisions made (stakeholder-confirmed before implementation)
+
+1. **Types de dépenses** gets its own new Inertia page/URL
+   (`backoffice.types-depenses.index` stops redirecting) rather than staying
+   a tab of the out-of-scope Depenses page. The Depenses Livewire page drops
+   to 2 tabs (Depenses, Remboursements).
+2. **Salle center-access gap**: fixed as part of this migration —
+   `GetAccessibleCenterOptions` restricts the center picker to accessible
+   centers, and `StoreSalleRequest`/`UpdateSalleRequest` re-validate the
+   submitted `etablissement_id` against that same set server-side.
+3. **Frais routes**: new `backoffice.frais.{index,create,store,edit,update,
+   destroy}` resource routes created, mirroring the other three referential
+   modules' naming.
+4. **Phone field**: kept the guided country-dial + national-number two-part
+   UX (native `<select>`, not Select2/jQuery) rather than simplifying to one
+   free-text input, after the initial simplification proposal was rejected.
+
+### Files created
+
+- Domain query classes: `App\Domain\Centers\Queries\GetEtablissementsList`,
+  `App\Domain\Settings\Queries\{GetAnneesScolairesList,GetSallesList,
+  GetAccessibleCenterOptions,GetFraisList}`,
+  `App\Domain\Expenses\Queries\GetTypesDepensesList`.
+- Controller: `App\Http\Controllers\Backoffice\FraisController` (new).
+- Form Requests: `App\Http\Requests\Backoffice\Frais\{Store,Update}FraisRequest`
+  (new).
+- React pages: `resources/js/Pages/Backoffice/Settings/{Index,
+  EtablissementsPanel,AnneesScolairesPanel,SallesPanel,FraisPanel}.tsx`,
+  `resources/js/Pages/Backoffice/TypesDepenses/Index.tsx`.
+- Shared components/data listed under "Modal/form/table architecture" above,
+  plus `resources/js/Data/countries.ts`.
+
+### Files modified
+
+- Controllers: `EtablissementController`, `AnneeScolaireController`,
+  `SalleController`, `TypeDepenseController`, `DepenseManagementController`,
+  `SettingController` (full Inertia rewrite).
+- Form Requests: `StoreSalleRequest`, `UpdateSalleRequest` (center-access
+  re-validation).
+- `routes/backoffice.php` — Frais resource route added; `types-depenses.*`
+  converted from a redirect closure to real resource routes.
+- `resources/js/Config/backofficeNavigation.ts` — "Expense management" nav
+  item narrowed to `expenses.view`/`refunds.view`; new "Expense types" item
+  added, `inertia: true`; Settings item's permission list gained `fees.view`.
+- `resources/js/Types/index.ts` — `SettingsTab`, `{Etablissement,
+  AnneeScolaire,Salle,Frais,TypeDepense}{Row,Form}`, `SettingsPageProps`,
+  `TypesDepensesPageProps`, plus the shared `SelectOption`/
+  `LaravelValidationErrors`/`CrudPermissions` primitives.
+- `resources/views/backoffice/depenses/index.blade.php` — dropped the
+  `types` tab (now 2 tabs: Depenses, Remboursements).
+
+### Routes changed or preserved
+
+| Route name | Before | After |
+|---|---|---|
+| `backoffice.etablissements.*` | Livewire tab is the UI; controller mutations existed but redirected `index`/`create`/`show`/`edit` to Settings | Same shape — `store`/`update`/`destroy` now serve the React panel instead of the Livewire tab |
+| `backoffice.annees-scolaires.*` | Same pattern | Same shape, same change |
+| `backoffice.salles.*` | Same pattern | Same shape, same change, plus the center-access fix |
+| `backoffice.frais.*` | **Did not exist** | New: `index/create/store/edit/update/destroy`, `index`/`create`/`edit` redirect to Settings |
+| `backoffice.types-depenses.index` | Redirect closure → `depenses.index?tab=types` | Real controller action, own page |
+| `backoffice.types-depenses.{store,update,destroy}` | **Did not exist** (dead controller, no routes) | New, real |
+| `backoffice.depenses.index` | 3-tab Livewire page | 2-tab Livewire page (types tab removed) |
+| `backoffice.settings` | `SettingController::__invoke` → Blade view with 4 `@livewire` tabs | Same route, now `Inertia::render('Backoffice/Settings/Index', ...)` |
+
+### Prop shapes
+
+`SettingsPageProps` (`activeTab`, `availableTabs`, `permissions` keyed per
+tab, and only the active tab's dataset — `etablissements`/`anneesScolaires`/
+`salles`+`centerOptions`/`frais`, never all four at once).
+`TypesDepensesPageProps` (`types` paginated, `filters.search`,
+`permissions`). No full Eloquent models anywhere — every row shape is an
+explicit array built in a Domain query class.
+
+### Create/update/delete behavior
+
+Every module preserves its exact Livewire-era validation, uniqueness, and
+delete-guard rules (see docs/phase-6-simple-crud-inventory.md for the
+per-module detail). Delete refusals (record still in use) are returned via
+`back()->withErrors(['delete' => ...])` — a 422-style field error, not a
+flash message — so the React `ConfirmDialog` stays open and shows the
+message inline, matching the Livewire tabs' `$this->addError('delete', ...)`
+UX exactly (a decision made explicitly for this phase, since the default
+redirect+flash pattern used by create/update would have made a failed
+delete look like it succeeded until the flash was noticed).
+
+### System/protected-row behavior
+
+`TypeDepense.is_system` rows: `TypeDepenseController::update()`/`destroy()`
+call an unconditional `abort_if($types_depense->is_system, 403, ...)`
+**before** `$this->authorize(...)` — stopping even a super-admin (who
+bypasses every policy via `Gate::before`), exactly mirroring the retired
+Livewire component's `guardSystemType()`. `is_system` is never accepted from
+the create form (`StoreTypeDepenseRequest` doesn't have the field; the
+controller hardcodes `is_system: false`).
+
+### Permission behavior
+
+No new permission names — reused the existing seeded `centers.*`,
+`academic-years.*`, `rooms.*`, `fees.*`, `expense-types.*` from
+`PermissionRegistry`. Every mutation endpoint authorizes server-side
+(`authorizeResource` on 4 of 5 controllers; `TypeDepenseController` combines
+`authorizeResource` with the extra unconditional system-row guard). React
+button visibility (`permissions.{create,update,delete}` props) is UI
+convenience only.
+
+### Center/year scoping
+
+`Salle` list is narrowed to the active top-bar context center (+ global
+NULL-center rows), same as before (`GetSallesList` reproduces
+`WithCenterContext::scopeToActiveCenter()`). `Salle` create/update center
+picker is now also restricted to centers the acting user can access
+(`GetAccessibleCenterOptions`) — the Phase 6 §Q3 fix. Établissements,
+Années scolaires, Frais, Types de dépenses remain global reference
+data with no center scoping (unchanged).
+
+### Legacy files retained
+
+See `docs/legacy-frontend-removal-plan.md` §0c — 4 Livewire tab components +
+their views, plus the `TypesDepensesIndex` component + its view, all kept
+unused for rollback.
+
+### Automated checks
+
+| Check | Result |
+|---|---|
+| `artisan test tests/Feature/Backoffice/Settings/SettingsTest.php` | ✅ 24/24 passing (one transient deadlock retry, see concurrent-session note above) |
+| `artisan test tests/Feature/Backoffice/Finance/TypesDepensesCrudTest.php` | ✅ 17/17 passing (one transient deadlock retry) |
+| `artisan test` (full suite) | Pending final run — see end-of-phase report |
+| `npx tsc --noEmit` | ✅ Clean |
+| `npm run build` | ✅ Succeeds — main bundle 449.43 kB / 126.08 kB gzip (up from 375.45 kB / 110.41 kB gzip at Phase 5 baseline) |
+
+### Manual browser verification
+
+Pending — per the established pattern (docs/inertia-react-migration-status.md
+Phase 2 entry), the stakeholder verifies manually in their own browser
+rather than relying on automated headless-browser testing.
+
+### Known limitations
+
+- `resources/views/backoffice/settings/index.blade.php` is now unused
+  Blade scaffolding, kept for rollback per the removal plan.
+- The Salle center-access fix only covers the new Inertia code path — the
+  retired Livewire `SallesTab` (kept for rollback) still has the original
+  gap, since it is being retired, not maintained.
+- The concurrent-session collision (see note above) means this phase's git
+  history includes some churn (files reverted and re-applied) that would
+  not exist in a single-session run — the final committed state is correct
+  and fully verified regardless.
+
+---
+
 ## Phase 5 — Baseline (before read-only pages migration)
 
 **Date**: 2026-07-30

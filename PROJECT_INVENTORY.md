@@ -11,15 +11,18 @@ and `gls-crm-laravel-structure.md`. This file is a map, not a rulebook.
 > Livewire-only description are **stale** — both were written before this
 > approved migration started and have not been rewritten yet (deliberately
 > deferred, per `docs/inertia-react-migration-audit.md` §8 "Documentation
-> debt"). Current real state as of Phase 5: **Inertia + React** now serve
+> debt"). Current real state as of Phase 6: **Inertia + React** now serve
 > Permissions, Login, Forgot/Reset Password, Profile, Dashboard, the
-> top-bar Context Switcher, the groups-historique index, and the read-only
+> top-bar Context Switcher, the groups-historique index, the read-only
 > show/detail pages for Students, Groups, Inscriptions, Caisses,
-> Encaissements, Depenses, and Caisse Transfers. Every CRUD index page with
-> add/edit modals (Students, Employees, Users, Roles, Inscriptions, Groups,
-> Settings tabs, all Finance mutation screens) and every other module listed
-> in §4 below is still Livewire, unchanged — only the 8 read-only pages above
-> moved. A permanent, read-only reference copy of the
+> Encaissements, Depenses, and Caisse Transfers, and the five simple CRUD
+> modules (Établissements, Années scolaires, Salles, Frais, Types de
+> dépenses — the Paramètres/Settings page and its own new Types de
+> dépenses page). Every remaining CRUD index page with add/edit modals
+> (Students, Employees, Users, Roles, Inscriptions, Groups, all Finance
+> mutation screens — Depenses/Remboursements/Encaissements/Caisses/
+> Transfers) and every other module listed in §4 below is still Livewire,
+> unchanged. A permanent, read-only reference copy of the
 > purchased PreSkool React theme also now lives at
 > `resources/theme-reference/preskool-react/` (see
 > `docs/preskool-react-reference-inventory.md`) — never a build input,

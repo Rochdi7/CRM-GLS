@@ -10,6 +10,37 @@ authorizes deleting anything today.
 
 ---
 
+## 0c. Phase 6 additions to the retained-legacy list
+
+Five simple CRUD modules are now migrated (docs/inertia-react-migration-
+status.md, Phase 6 entry): Établissements, Années scolaires, Salles, Frais,
+Types de dépenses.
+
+| File | Why retained |
+|---|---|
+| `app/Livewire/Backoffice/Settings/EtablissementsTab.php` | No longer rendered — `resources/views/backoffice/settings/index.blade.php` no longer exists (replaced by the Inertia `Backoffice/Settings/Index` page); kept for rollback |
+| `resources/views/livewire/backoffice/settings/etablissements-tab.blade.php` | Owning view of the above |
+| `app/Livewire/Backoffice/Settings/AnneesScolairesTab.php` | Same — no longer rendered |
+| `resources/views/livewire/backoffice/settings/annees-scolaires-tab.blade.php` | Owning view of the above |
+| `app/Livewire/Backoffice/Settings/SallesTab.php` | Same — no longer rendered |
+| `resources/views/livewire/backoffice/settings/salles-tab.blade.php` | Owning view of the above |
+| `app/Livewire/Backoffice/Settings/FraisTab.php` | Same — no longer rendered |
+| `resources/views/livewire/backoffice/settings/frais-tab.blade.php` | Owning view of the above |
+| `resources/views/backoffice/settings/index.blade.php` | No longer referenced by `SettingController` (now returns `Inertia::render()`); kept, unused, for rollback — same as every other retained file in this plan, no deletion happens outside Phase 10 |
+| `app/Livewire/Backoffice/TypesDepenses/TypesDepensesIndex.php` | No longer rendered — was the 3rd tab of `resources/views/backoffice/depenses/index.blade.php`, now removed (docs/phase-6-simple-crud-inventory.md §Q2); kept for rollback |
+| `resources/views/livewire/backoffice/types-depenses/types-depenses-index.blade.php` | Owning view of the above |
+
+**`app/Http/Controllers/Backoffice/{Etablissement,AnneeScolaire,Salle,Frais,
+TypeDepense}Controller.php` were NOT retired** — unlike every prior phase's
+pattern (retire the Livewire component, keep the old controller as dead
+code), these controllers are the ACTIVE Inertia mutation endpoints now.
+`EtablissementController`/`AnneeScolaireController`/`SalleController` were
+converted in place (their `store`/`update`/`destroy` already existed and
+now serve the React forms); `FraisController`/`TypeDepenseController` are
+new/rewritten. Nothing to mark unused here.
+
+---
+
 ## 0b. Phase 5 additions to the retained-legacy list
 
 8 read-only pages are now migrated (docs/inertia-react-migration-status.md,

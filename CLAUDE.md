@@ -76,6 +76,16 @@ components directly from it.** Copy and adapt reviewed components into
 reference directory. See its own `README-GLS.md` for the full rule set and
 `docs/preskool-react-reference-inventory.md` for what was copied/excluded.
 
+**React/Inertia modals are controlled by React state.** Do not use Bootstrap
+modal JavaScript, jQuery modal initialization, or Livewire browser events on
+Inertia pages — no `bootstrap.bundle.js`, no `data-bs-toggle`/`data-bs-dismiss`,
+no `wire:` attributes. Open/close state, Escape, backdrop-click, focus
+trap/restore, and body-scroll lock are all owned by
+`resources/js/Components/Modals/Modal.tsx` (established Phase 6,
+`docs/bootstrap-react-integration-decision.md`). Visuals reuse the existing
+Bootstrap 5 `.modal`/`.modal-dialog`/`.modal-backdrop` markup/classes; only
+the behavior layer differs from the Livewire/Alpine pages.
+
 ## 4. Blade component rules
 
 One convention only: **anonymous components** under `resources/views/components/`.
