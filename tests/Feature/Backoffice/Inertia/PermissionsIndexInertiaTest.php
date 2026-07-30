@@ -68,4 +68,47 @@ final class PermissionsIndexInertiaTest extends TestCase
                 ->where('auth.permissions', fn (Collection $permissions) => $permissions->contains('permissions.view'))
             );
     }
+
+    public function test_shared_auth_user_does_not_expose_sensitive_fields(): void
+    {
+        $user = User::factory()->create();
+        $user->givePermissionTo('permissions.view');
+
+        $this->actingAs($user)
+            ->get(route('backoffice.permissions.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('auth.user', fn (Collection $authUser) => $authUser->keys()->all() === ['id', 'name', 'email'])
+            );
+    }
+
+    public function test_shared_context_props_are_present_for_authenticated_user(): void
+    {
+        $user = User::factory()->create();
+        $user->givePermissionTo('permissions.view');
+
+        $this->actingAs($user)
+            ->get(route('backoffice.permissions.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('context.anneeScolaireId')
+                ->has('context.etablissementId')
+                ->has('context.isAllCenters')
+                ->has('context.canSwitchCenter')
+            );
+    }
+
+    public function test_shared_flash_props_expose_all_four_message_types(): void
+    {
+        $user = User::factory()->create();
+        $user->givePermissionTo('permissions.view');
+
+        $this->actingAs($user)
+            ->get(route('backoffice.permissions.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('flash.success')
+                ->has('flash.error')
+                ->has('flash.warning')
+                ->has('flash.info')
+            );
+    }
+
 }

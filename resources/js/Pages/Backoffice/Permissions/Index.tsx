@@ -1,4 +1,7 @@
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
+import Card from '@/Components/Shared/Card';
+import DataTable from '@/Components/Tables/DataTable';
+import EmptyState from '@/Components/Shared/EmptyState';
 
 interface PermissionsIndexProps {
     groups: Record<string, Record<string, string>>;
@@ -6,48 +9,58 @@ interface PermissionsIndexProps {
 }
 
 export default function PermissionsIndex({ groups, seededCount }: PermissionsIndexProps) {
+    const groupEntries = Object.entries(groups);
+
     return (
-        <BackofficeLayout>
-            <div className="page-header">
-                <h4>Permissions</h4>
+        <BackofficeLayout
+            title="Permissions"
+            breadcrumbs={[
+                { label: 'Tableau de bord', href: '/backoffice/dashboard' },
+                { label: 'Rôles & Permissions', href: '/backoffice/roles' },
+                { label: 'Permissions' },
+            ]}
+        >
+            <div className="alert alert-info d-flex align-items-center justify-content-between" role="alert">
+                <div className="d-flex align-items-center">
+                    Les permissions sont définies par l'application et ne peuvent pas être créées depuis l'interface. (
+                    {seededCount} initialisées)
+                </div>
             </div>
 
-            <div className="alert alert-info" role="alert">
-                Permissions are defined by the application and cannot be created from the
-                interface. ({seededCount} seeded)
-            </div>
-
-            <div className="row">
-                {Object.entries(groups).map(([group, permissions]) => (
-                    <div className="col-lg-6" key={group}>
-                        <div className="card">
-                            <div className="card-header">
-                                <h5 className="card-title mb-0">{group}</h5>
-                            </div>
-                            <div className="card-body p-0">
-                                <table className="table mb-0">
-                                    <thead>
+            {groupEntries.length === 0 ? (
+                <EmptyState
+                    title="Aucune permission trouvée"
+                    message="Exécutez le seeder des rôles et permissions pour initialiser le catalogue."
+                    icon="ti ti-key-off"
+                />
+            ) : (
+                <div className="row">
+                    {groupEntries.map(([group, permissions]) => (
+                        <div className="col-lg-6" key={group}>
+                            <Card title={group}>
+                                <DataTable
+                                    hover={false}
+                                    head={
                                         <tr>
                                             <th>Permission</th>
-                                            <th>Machine name</th>
+                                            <th>Nom technique</th>
                                         </tr>
-                                    </thead>
-                                    <tbody>
-                                        {Object.entries(permissions).map(([name, label]) => (
-                                            <tr key={name}>
-                                                <td>{label}</td>
-                                                <td>
-                                                    <code>{name}</code>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
+                                    }
+                                >
+                                    {Object.entries(permissions).map(([name, label]) => (
+                                        <tr key={name}>
+                                            <td>{label}</td>
+                                            <td>
+                                                <code>{name}</code>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </DataTable>
+                            </Card>
                         </div>
-                    </div>
-                ))}
-            </div>
+                    ))}
+                </div>
+            )}
         </BackofficeLayout>
     );
 }
