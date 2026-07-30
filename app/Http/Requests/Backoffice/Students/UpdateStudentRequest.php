@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Requests\Backoffice\Students;
 
 use App\Models\Student;
+use App\Support\Phone\Countries;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -25,6 +26,7 @@ final class UpdateStudentRequest extends FormRequest
             'prenom' => ['required', 'string', 'max:100'],
             'sexe' => ['nullable', Rule::in(Student::SEXES)],
             'date_naissance' => ['nullable', 'date', 'before:today'],
+            'phone_pays' => ['required', Rule::in(array_keys(Countries::LIST))],
             'telephone' => ['nullable', 'string', 'max:20'],
             'whatsapp' => ['nullable', 'string', 'max:20'],
             'email' => ['nullable', 'email', 'max:255'],
@@ -50,6 +52,7 @@ final class UpdateStudentRequest extends FormRequest
             'parent_telephone' => ['nullable', 'string', 'max:20'],
             'parent_whatsapp' => ['nullable', 'string', 'max:20'],
             'note' => ['nullable', 'string'],
+            'photo' => ['nullable', 'image', 'max:2048'],
         ];
     }
 }

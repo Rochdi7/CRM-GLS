@@ -31,6 +31,7 @@ export const backofficeNavigation: NavGroup[] = [
                 icon: 'ti ti-school',
                 permissions: ['students.view'],
                 matchPaths: ['/backoffice/students'],
+                inertia: true,
             },
             {
                 label: 'Employees',
@@ -58,6 +59,7 @@ export const backofficeNavigation: NavGroup[] = [
                 icon: 'ti ti-users-group',
                 permissions: ['groups.view'],
                 matchPaths: ['/backoffice/groups'],
+                inertia: true,
             },
         ],
     },

@@ -641,6 +641,114 @@ export interface EmployeesPageProps {
     [key: string]: unknown;
 }
 
+// --- Phase 8: Students (Inertia/React list + modal CRUD) --------------------
+
+/** One row of the Students list — mirrors GetStudentsList's ->through() mapping exactly. */
+export interface StudentRow {
+    id: number;
+    reference: string;
+    nomComplet: string;
+    prenom: string;
+    nom: string;
+    sexe: string | null;
+    dateNaissance: string | null;
+    age: number | null;
+    cin: string | null;
+    telephone: string | null;
+    whatsapp: string | null;
+    email: string | null;
+    adresse: string | null;
+    niveau: string | null;
+    orientation: string | null;
+    domaine: string | null;
+    examenType: string | null;
+    etablissementId: number | null;
+    etablissement: string | null;
+    parentNom: string | null;
+    parentRelation: string | null;
+    parentSexe: string | null;
+    parentCin: string | null;
+    parentTelephone: string | null;
+    parentWhatsapp: string | null;
+    note: string | null;
+    photoUrl: string | null;
+    photoThumbUrl: string | null;
+}
+
+export interface StudentsFilters {
+    search: string;
+    niveauFilter: string;
+    ageSort: string;
+    perPage: number;
+}
+
+export interface StudentsPageProps {
+    students: PaginatedData<StudentRow>;
+    filters: StudentsFilters;
+    perPageOptions: number[];
+    niveaux: string[];
+    domaines: string[];
+    examenTypes: string[];
+    sexes: string[];
+    parentRelations: string[];
+    niveauxAvecDomaine: string[];
+    niveauStudium: string;
+    countries: CountryCatalog;
+    defaultCountry: string;
+    etablissements: Array<{ id: number; nom_centre: string }>;
+    centerLocked: boolean;
+    contextCenterId: number | null;
+    [key: string]: unknown;
+}
+
+// --- Phase 8: Groups (Inertia/React list + modal CRUD with fee lines) ------
+
+/** One row of the Groups list — mirrors GetGroupsList's ->through() mapping exactly. */
+export interface GroupRow {
+    id: number;
+    nom: string;
+    niveau: string;
+    enseignant: string | null;
+    enseignantId: number | null;
+    dateDebutFormation: string | null;
+    dateFinFormation: string | null;
+    statut: string;
+    inscriptionsCount: number;
+    fraisCount: number;
+    showUrl: string;
+    /** Keyed by frais_id — prefills the edit modal's fee-lines table without a second request. */
+    fraisLignes: Record<number, { montant: string; dateEcheance: string; classification: string }>;
+}
+
+export interface GroupFraisLigne {
+    montant: string;
+    date_echeance: string;
+    classification: string;
+}
+
+export interface GroupsFilters {
+    search: string;
+    statutFilter: string;
+    perPage: number;
+}
+
+export interface GroupFormOption {
+    id: number;
+    nom: string;
+}
+
+export interface GroupsPageProps {
+    groups: PaginatedData<GroupRow>;
+    statutCounts: Record<string, number>;
+    filters: GroupsFilters;
+    perPageOptions: number[];
+    niveaux: string[];
+    statuts: string[];
+    enseignants: GroupFormOption[];
+    fraisCatalog: GroupFormOption[];
+    [key: string]: unknown;
+}
+
 /** One-time login credentials for a just-created employee — shown once, never persisted (see HandleInertiaRequests). */
 export interface NewEmployeeCredentials {
     username: string;

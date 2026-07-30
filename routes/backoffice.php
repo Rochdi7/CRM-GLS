@@ -32,9 +32,7 @@ use App\Http\Controllers\Backoffice\TypeDepenseController;
 use App\Http\Controllers\Backoffice\Users\UserAuthorizationController;
 use App\Http\Controllers\Backoffice\Users\UserController;
 use App\Livewire\Backoffice\Encaissements\EncaissementsIndex;
-use App\Livewire\Backoffice\Groups\GroupsIndex;
 use App\Livewire\Backoffice\Inscriptions\InscriptionsIndex;
-use App\Livewire\Backoffice\Students\StudentsIndex;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -132,18 +130,34 @@ Route::prefix('backoffice')
                 ->middleware('permission:employees.update')->name('employees.update');
             Route::delete('employees/{employee}', [EmployeeController::class, 'destroy'])
                 ->middleware('permission:employees.delete')->name('employees.destroy');
-            // Students — Livewire list + modal CRUD; controller serves the
-            // read-only detail page only.
-            Route::get('students', StudentsIndex::class)
+            // Students — Inertia/React list + modal add/edit (Phase 8,
+            // docs/phase-8-students-groups-inventory.md). The Livewire
+            // StudentsIndex component + its route registration are retired
+            // here but the class/view files are kept, unused, for rollback.
+            Route::get('students', [StudentController::class, 'index'])
                 ->middleware('permission:students.view')->name('students.index');
+            Route::post('students', [StudentController::class, 'store'])
+                ->middleware('permission:students.create')->name('students.store');
+            Route::put('students/{student}', [StudentController::class, 'update'])
+                ->middleware('permission:students.update')->name('students.update');
+            Route::delete('students/{student}', [StudentController::class, 'destroy'])
+                ->middleware('permission:students.delete')->name('students.destroy');
             Route::get('students/{student}', [StudentController::class, 'show'])
                 ->name('students.show');
 
             // Academic — groups are NEVER deleted (schema §6)
-            // Groups — Livewire list + modal CRUD (with fee assignment).
-            // Never deletable; "Fin de formation" archives via the detail page.
-            Route::get('groups', GroupsIndex::class)
+            // Groups — Inertia/React list + modal add/edit with per-group fee
+            // assignment (Phase 8). Migrated exactly as the current Livewire
+            // form exists — no room/capacity/schedule fields (confirmed
+            // absent from the live UI, docs/phase-8-students-groups-
+            // inventory.md). Never deletable; "Fin de formation" archives via
+            // the detail page (Phase 5, unchanged).
+            Route::get('groups', [GroupController::class, 'index'])
                 ->middleware('permission:groups.view')->name('groups.index');
+            Route::post('groups', [GroupController::class, 'store'])
+                ->middleware('permission:groups.create')->name('groups.store');
+            Route::put('groups/{group}', [GroupController::class, 'update'])
+                ->middleware('permission:groups.update')->name('groups.update');
             Route::get('groups/{group}', [GroupController::class, 'show'])->name('groups.show');
             Route::post('groups/{group}/archive', [GroupController::class, 'archive'])->name('groups.archive');
             Route::get('groups-historique', [GroupHistoriqueController::class, 'index'])
