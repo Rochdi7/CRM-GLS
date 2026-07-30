@@ -4,6 +4,22 @@ Running log of verified milestones. Append one entry per phase; do not rewrite h
 
 ---
 
+## Phase 8 — Baseline (before Students/Groups migration)
+
+**Date**: 2026-07-30
+**Branch**: `migration/inertia-react-preskool`, clean tree, Phase 7 commit
+(`8c9854f`) present and unchanged.
+
+| Check | Result |
+|---|---|
+| `C:\php84\php.exe artisan test` | ✅ **411/411 passing, 1849 assertions** |
+| `npx tsc --noEmit` | ✅ Clean |
+| `npm run build` | ✅ Succeeds — main bundle 449.46 kB / 126.10 kB gzip (matches Phase 7's final count exactly) |
+
+No pre-existing failures. Proceeding with Phase 8 implementation.
+
+---
+
 ## Phase 6 — Baseline (before simple CRUD migration)
 
 **Date**: 2026-07-30
