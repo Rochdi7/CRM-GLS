@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Domain\Groups\Queries\GetGroupsHistorique;
 use App\Http\Controllers\Controller;
-use App\Models\GroupHistorique;
-use Illuminate\Contracts\View\View;
+use Inertia\Inertia;
+use Inertia\Response;
 
 /**
  * Read-only archive (schema §7): rows are created exclusively by
@@ -14,15 +15,12 @@ use Illuminate\Contracts\View\View;
  */
 final class GroupHistoriqueController extends Controller
 {
-    public function index(): View
+    public function index(GetGroupsHistorique $getGroupsHistorique): Response
     {
         $this->authorize('groups.view');
 
-        return view('backoffice.groups-historique.index', [
-            'historiques' => GroupHistorique::query()
-                ->with(['group', 'enseignant', 'etablissement', 'anneeScolaire', 'archivedBy'])
-                ->orderByDesc('archived_at')
-                ->paginate(15),
+        return Inertia::render('Backoffice/GroupsHistorique/Index', [
+            'historiques' => $getGroupsHistorique(),
         ]);
     }
 }

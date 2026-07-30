@@ -11,6 +11,7 @@ use App\Models\Role;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 final class GroupsHistoriqueTest extends TestCase
@@ -47,7 +48,11 @@ final class GroupsHistoriqueTest extends TestCase
 
         $this->actingAs($u)->get(route('backoffice.groups-historique.index'))
             ->assertOk()
-            ->assertSee(__('No archived groups yet'));
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/GroupsHistorique/Index')
+                ->where('historiques.data', [])
+                ->where('historiques.total', 0)
+            );
     }
 
     public function test_archived_group_is_listed(): void
@@ -67,6 +72,9 @@ final class GroupsHistoriqueTest extends TestCase
 
         $this->actingAs($u)->get(route('backoffice.groups-historique.index'))
             ->assertOk()
-            ->assertSee('Groupe A1 Intensif');
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('historiques.data.0.nom', 'Groupe A1 Intensif')
+                ->where('historiques.data.0.groupShowUrl', route('backoffice.groups.show', $group))
+            );
     }
 }
