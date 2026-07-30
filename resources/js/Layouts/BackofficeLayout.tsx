@@ -1,28 +1,76 @@
-import { Link, usePage } from '@inertiajs/react';
-import type { PropsWithChildren } from 'react';
-import type { SharedProps } from '@/Types';
+import { usePage } from '@inertiajs/react';
+import { useEffect, useState, type PropsWithChildren } from 'react';
+import Header from '@/Components/Theme/Header';
+import Sidebar from '@/Components/Theme/Sidebar';
+import Footer from '@/Components/Theme/Footer';
+import MobileSidebarOverlay from '@/Components/Theme/MobileSidebarOverlay';
+import PageHeader from '@/Components/Theme/PageHeader';
+import FlashMessages from '@/Components/Feedback/FlashMessages';
+import type { Breadcrumb, SharedProps } from '@/Types';
+
+interface BackofficeLayoutProps extends PropsWithChildren {
+    title: string;
+    breadcrumbs?: Breadcrumb[];
+}
 
 /**
- * First-cut Backoffice shell for the Inertia pilot (Phase 1).
- *
- * Deliberately minimal — the full PreSkool header/sidebar/theme-settings
- * adaptation happens in Phase 2 (docs/inertia-react-migration-plan.md §4).
- * This exists only so the pilot page has somewhere to render real shared
- * props (auth user, permissions) end-to-end.
+ * PreSkool Backoffice shell (docs/inertia-react-migration-plan.md §4,
+ * docs/react-theme-file-map.md §3). Structural markup mirrors
+ * components/backoffice/layout/app.blade.php exactly (.main-wrapper >
+ * header + sidebar + .page-wrapper > .content + footer) so the existing
+ * static PreSkool CSS applies unchanged — only the *behavior* (sidebar
+ * toggle, dropdowns) is React-owned instead of jQuery/Bootstrap-JS.
  */
-export default function BackofficeLayout({ children }: PropsWithChildren) {
-    const { auth } = usePage<SharedProps>().props;
+export default function BackofficeLayout({ title, breadcrumbs = [], children }: BackofficeLayoutProps) {
+    const { auth, context, flash } = usePage<SharedProps>().props;
+    const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+    // Close the mobile sidebar on every navigation (migration plan §"Sidebar state").
+    const currentUrl = usePage().url;
+    useEffect(() => {
+        setMobileSidebarOpen(false);
+    }, [currentUrl]);
+
+    useEffect(() => {
+        function handleEscape(event: KeyboardEvent) {
+            if (event.key === 'Escape') {
+                setMobileSidebarOpen(false);
+            }
+        }
+
+        document.addEventListener('keydown', handleEscape);
+
+        return () => document.removeEventListener('keydown', handleEscape);
+    }, []);
+
+    const canManageSettings = ['centers.view', 'academic-years.view', 'rooms.view'].some((permission) =>
+        auth.permissions.includes(permission),
+    );
 
     return (
-        <div className="page-wrapper">
-            <div className="content container-fluid">
-                <div className="d-flex justify-content-between align-items-center mb-4">
-                    <Link href="/backoffice/dashboard" className="fw-bold text-decoration-none">
-                        GLS CRM
-                    </Link>
-                    {auth.user && <span className="text-muted">{auth.user.name}</span>}
+        <div className={`main-wrapper${mobileSidebarOpen ? ' slide-nav' : ''}`}>
+            <Header
+                user={auth.user}
+                context={context}
+                canManageSettings={canManageSettings}
+                onMobileMenuToggle={() => setMobileSidebarOpen((open) => !open)}
+            />
+
+            <Sidebar
+                permissions={auth.permissions}
+                mobileOpen={mobileSidebarOpen}
+                onNavigate={() => setMobileSidebarOpen(false)}
+            />
+
+            <MobileSidebarOverlay visible={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
+
+            <div className="page-wrapper">
+                <div className="content">
+                    <FlashMessages flash={flash} />
+                    <PageHeader title={title} breadcrumbs={breadcrumbs} />
+                    {children}
                 </div>
-                {children}
+                <Footer />
             </div>
         </div>
     );
