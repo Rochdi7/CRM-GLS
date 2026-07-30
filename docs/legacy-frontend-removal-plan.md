@@ -10,6 +10,28 @@ authorizes deleting anything today.
 
 ---
 
+## 0b. Phase 5 additions to the retained-legacy list
+
+8 read-only pages are now migrated (docs/inertia-react-migration-status.md,
+Phase 5 entry):
+
+| File | Why retained |
+|---|---|
+| `resources/views/backoffice/groups-historique/index.blade.php` | No longer referenced by `GroupHistoriqueController::index()` |
+| `resources/views/backoffice/students/show.blade.php` | No longer referenced by `StudentController::show()` |
+| `resources/views/backoffice/groups/show.blade.php` | No longer referenced by `GroupController::show()`; `archive()` itself is UNCHANGED and still targets `backoffice.groups.show` as its redirect — that route now serves Inertia, so the redirect lands on the new page, not this retained Blade file |
+| `resources/views/backoffice/inscriptions/show.blade.php` | No longer referenced by `InscriptionController::show()` |
+| `resources/views/backoffice/caisses/show.blade.php` | No longer referenced by `CaisseController::show()`. **Note**: `caisses/{index,create,edit}.blade.php` were never touched this phase — those views back controller methods (`index`/`create`/`edit`) that have **no registered route** at all (dead code, confirmed in the Phase 5 inventory); they were already effectively orphaned before this phase, not newly orphaned by it |
+| `resources/views/backoffice/encaissements/show.blade.php` | No longer referenced by `EncaissementController::show()`. Same dead-code caveat applies to `encaissements/{create,edit}.blade.php` |
+| `resources/views/backoffice/depenses/show.blade.php` | No longer referenced by `DepenseController::show()`. Same dead-code caveat applies to `depenses/{create,edit}.blade.php` |
+| `resources/views/backoffice/caisse-transfers/show.blade.php` | No longer referenced by `CaisseTransferController::show()`. `caisse-transfers/{create}.blade.php` remains dead code as before |
+
+**Employee and Remboursement show views were never touched** — they don't
+exist (Remboursement) or were already unreachable dead code before this
+phase (Employee) — nothing changed for either.
+
+---
+
 ## 0. Phase 3 additions to the retained-legacy list
 
 Auth and Profile are now migrated (docs/inertia-react-migration-status.md,

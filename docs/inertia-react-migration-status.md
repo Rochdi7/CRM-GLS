@@ -20,6 +20,159 @@ No pre-existing failures. Proceeding with Phase 5 implementation.
 
 ---
 
+## Phase 5 — Read-only pages migration
+
+**Date**: 2026-07-30
+**Status**: **Complete.**
+
+Migrated 8 read-only Backoffice pages to Inertia + React: groups-historique
+index, and show pages for students, groups, inscriptions, caisses,
+encaissements, dépenses, and caisse-transfers. Full audit in
+`docs/phase-5-read-pages-inventory.md`; per-controller behavior discovered
+during that audit informed every decision below.
+
+### Existing behavior discovered
+- `EmployeeController::show()` and `RemboursementController::show()` are
+  **dead code** — no route registers either, and the Remboursement view
+  directory doesn't even exist. Both excluded, per "don't invent missing
+  pages."
+- `CaisseController`/`EncaissementController`/`DepenseController`/
+  `CaisseTransferController` are all **full resource controllers** with
+  live `create`/`store`/`edit`/`update`/(`destroy`) methods — but **only
+  their `show()` route is actually registered** in
+  `routes/backoffice.php`. Those other methods are untouched, unreachable
+  dead code (the real CRUD is the Livewire tabbed pages, per CLAUDE.md
+  §11) — confirmed via `artisan route:list`, not assumed.
+- `caisses/show.blade.php` ran its own inline `@php` query block (4
+  relation queries, `limit(10)` each) rather than the controller — that
+  logic moved into `GetCaisseDetails`, eliminating the Blade-embedded
+  query while preserving the exact same queries/limits/ordering.
+- `Group::show`'s "End training" (Fin de formation) archive action is a
+  real, reachable, state-changing form — preserved as a **plain HTML
+  `<form>`** in the React page (CSRF token read from the existing meta
+  tag), posting to the unconverted `backoffice.groups.archive` route. Not
+  migrated to a React mutation, per Phase 5's explicit scope.
+- Several eager-loaded relations were unused by their Blade view
+  (`Group::historique`, `Inscription::createdBy`, `Student::remboursements`)
+  — dropped from the new read-models since "preserve only what's currently
+  displayed" is the rule, not "preserve every eager load regardless of
+  use."
+
+### Files created
+- 8 Domain read-model classes: `GetGroupsHistorique`, `GetStudentDetails`,
+  `GetGroupDetails`, `GetInscriptionDetails`, `GetCaisseDetails`,
+  `GetEncaissementDetails`, `GetDepenseDetails`, `GetCaisseTransferDetails`
+  (first implemented classes in `Domain/{Groups,Students,Registrations,
+  Finance,Payments,Expenses}/Queries/`)
+- 8 Inertia pages (`GroupsHistorique/Index`, `Students/Show`,
+  `Groups/Show`, `Inscriptions/Show`, `Caisses/Show`,
+  `Encaissements/Show`, `Depenses/Show`, `CaisseTransfers/Show`)
+- Reusable components: `Tables/Pagination.tsx`, `Details/{DetailRow,
+  StatusBadge,RelatedRecordsTable}.tsx`, `Media/DocumentLink.tsx`
+- `tests/Feature/Backoffice/Inertia/ReadOnlyPagesInertiaTest.php` (17 tests)
+- `docs/phase-5-read-pages-inventory.md`,
+  `docs/dashboard-authorization-audit.md`
+
+### Files modified
+- 7 controllers converted to `Inertia::render()` for `show()`/`index()`
+  only — every other action on the resource controllers (`create`/
+  `store`/`edit`/`update`/`destroy`/`archive`/`validate`) is byte-for-byte
+  unchanged
+- `resources/js/Types/index.ts` — `PaginatedData<T>`, `PaginationLink`,
+  `MoneyDisplay`, `SafeMediaFile`, and one details-page type per migrated
+  page
+- 4 existing test files updated only where their `assertSee()` string-match
+  broke against the Inertia JSON payload (`GroupsHistoriqueTest`,
+  `StudentsCrudTest`, `InscriptionsCrudTest`, `CaissesCrudTest`,
+  `EncaissementsCrudTest`, `CaisseTransfersTest`) — every other assertion
+  (authorization, center scoping, credentials) untouched
+
+### Routes
+All 8 routes kept their exact name/URI — only the controller action's
+return type changed (Blade view → `Inertia::render()`). No new routes
+added. `backofficeNavigation.ts` **not modified** — none of these 8 pages
+are sidebar entries (they're reached via in-page links from still-Livewire
+index pages), so no nav config changes were needed.
+
+### Prop shapes
+Every controller passes an explicit array from its read-model — never a
+raw Eloquent model. Money values are pre-formatted 2-decimal strings
+(`number_format($value, 2, '.', '')`), never raw floats. Media exposed
+only as `{name, url, mimeType, size}` — confirmed via test
+(`test_depense_show_media_props_are_safely_shaped`) that no Spatie Media
+internals leak.
+
+### Authorization / center scoping
+Unchanged in every case — `$this->authorize('view', $model)` or the
+implicit `authorizeResource()` → policy mapping, both already
+center-scoped via `ResourcePolicy::withinCenter()`. Verified by new
+cross-center-denial tests for every migrated model (Student, Group,
+Inscription, Caisse, Encaissement, Depense, CaisseTransfer).
+
+### Pagination/filter strategy
+`groups-historique` uses the new `Pagination.tsx` component
+(`router.get(url, {}, {preserveState: true, replace: true})`) — server-side
+only, matches Laravel's paginator JSON shape exactly. No filters exist on
+this index today (none were added — ground-truth rule). Detail pages'
+related-record lists remain unpaginated, matching the original Blade
+behavior exactly (including Caisse's hardcoded `limit(10)` per movement type).
+
+### Financial display
+Every total (inscription due/paid/remaining, encaissement fee summary) is
+computed server-side in the read-model, identical to the original Blade
+`@php` block's logic — verified by
+`test_inscription_show_does_not_recompute_totals_incorrectly`. React only
+formats (`Number(value).toFixed(2)`), never recalculates.
+
+### Media/receipt strategy
+`Depense`'s receipt gallery uses the real, already-authorized Spatie Media
+URL (`$media->getUrl()`) — same `/media/<uuid8>/…` convention as before,
+never a filesystem path, never the full Media model.
+
+### Legacy files retained
+All 8 original Blade views (`groups-historique/index`, `students/show`,
+`groups/show`, `inscriptions/show`, `caisses/show`, `encaissements/show`,
+`depenses/show`, `caisse-transfers/show`) — unused by any route now, kept
+for rollback per the established pattern.
+
+### Dashboard authorization audit result
+See `docs/dashboard-authorization-audit.md` — the missing
+`dashboard.view` route gate is **intentional-by-test**
+(`AuthTest::test_authenticated_users_can_view_dashboard` explicitly uses a
+permission-less user and asserts success). Left unchanged; none of the
+5 required conditions for changing it were met.
+
+### Automated checks
+| Check | Result |
+|---|---|
+| Targeted (Students/Groups/Inscriptions/Finance/Inertia) | ✅ 87 + 106 + 17 = 210 relevant tests, all passing |
+| `npx tsc --noEmit` | ✅ Clean |
+| `npm run build` | ✅ Succeeds — `app-CvEEUDbo.js` 375.45 kB / 110.41 kB gzip (Phase 4: 347.19 kB / 105.99 kB gzip) |
+| `C:\php84\php.exe artisan test` (full suite) | ✅ **356/356 passing, 1456 assertions** (Phase 4 baseline: 339/339, 1332 assertions) |
+| ESLint | Not run — no ESLint config exists yet |
+
+### Performance measurements
+| Page | Full page response | Inertia payload | Query count (read-model) |
+|---|---|---|---|
+| Groups historique (empty, local dev) | 3,255 bytes | 1,541 bytes | — |
+| Student show (real record, id 71) | 3,737 bytes | 2,023 bytes | 8 |
+| Caisse show (real record, id 177) | 3,043 bytes | 1,329 bytes | 9 |
+
+No N+1 pattern in any read-model — every relation list uses a single eager
+load, not per-row queries.
+
+### Manual browser verification (user, real Chrome)
+Confirmed working: groups-historique, student detail (identity/
+inscriptions/payments), group detail (fees/students, "End training" form
+still a normal POST), caisse/encaissement/depense detail pages. No
+console errors reported.
+
+### Known limitations
+- None blocking. Employee and Remboursement detail pages remain
+  unreachable exactly as before — no route was invented for either.
+
+---
+
 ## Phase 4 — Baseline (before dashboard/context migration)
 
 **Date**: 2026-07-30

@@ -1,9 +1,25 @@
 # PreSkool React Theme — File Map
 
-Status: **Phase 2 shell + Phase 3 auth/profile + Phase 4 dashboard/context
-implemented — see §0 (Phase 2), §0b (Phase 3), §0c (Phase 4) for what
-actually shipped.** The rest of this document (§1 onward) is the original
-Phase 0/1 screening pass and remains accurate for anything not yet built.
+Status: **Phase 2 shell + Phase 3 auth/profile + Phase 4 dashboard/context +
+Phase 5 read-only pages implemented — see §0 (Phase 2), §0b (Phase 3), §0c
+(Phase 4), §0d (Phase 5) for what actually shipped.** The rest of this
+document (§1 onward) is the original Phase 0/1 screening pass and remains
+accurate for anything not yet built.
+
+## 0d. Phase 5 — read-only pages (source → destination)
+
+No new theme components were adapted this phase. Every one of the 8
+migrated pages (groups-historique index; students/groups/inscriptions/
+caisses/encaissements/depenses/caisse-transfers show pages) used its
+**existing, already-adapted Blade view** as the sole markup/structure
+source — consistent with every prior phase's pattern of preferring the
+real GLS-adapted page over the raw theme demo, since none of these pages
+have a close analog in the theme's own demo verticals (which model a
+generic school/CRM/HR kitchen-sink, not GLS's specific center/caisse/
+inscription domain model). `Components/Tables/Pagination.tsx` and the
+`Details/*` components are new, GLS-specific, authored from the existing
+Blade `pagination.blade.php` / detail-page `d-flex justify-content-between`
+row conventions — not adapted from the theme reference copy.
 
 Theme source root (original, external — read-only, unchanged):
 `C:\Users\ASUS\Downloads\themeforest-jeUxtzLq-preskool-bootstrap-admin-html-template\preskool-v1.9.7\react`
