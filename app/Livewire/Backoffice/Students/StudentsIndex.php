@@ -6,6 +6,7 @@ namespace App\Livewire\Backoffice\Students;
 
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Livewire\Backoffice\Concerns\WithCenterContext;
+use App\Livewire\Backoffice\Concerns\WithPerPage;
 use App\Livewire\Backoffice\Concerns\WithPhoneCountry;
 use App\Models\Etablissement;
 use App\Models\Student;
@@ -28,6 +29,7 @@ final class StudentsIndex extends Component
     use WithCenterContext;
     use WithFileUploads;
     use WithPagination;
+    use WithPerPage;
     use WithPhoneCountry;
 
     private const PHONE_FIELDS = ['telephone', 'whatsapp', 'parent_telephone', 'parent_whatsapp'];
@@ -296,11 +298,11 @@ final class StudentsIndex extends Component
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
             ->when($this->search !== '', function ($q): void {
                 $q->where(function ($sub): void {
-                    $sub->where('nom', 'like', "%{$this->search}%")
-                        ->orWhere('prenom', 'like', "%{$this->search}%")
-                        ->orWhere('reference', 'like', "%{$this->search}%")
-                        ->orWhere('cin', 'like', "%{$this->search}%")
-                        ->orWhere('telephone', 'like', "%{$this->search}%");
+                    $sub->where('nom', 'ilike', "%{$this->search}%")
+                        ->orWhere('prenom', 'ilike', "%{$this->search}%")
+                        ->orWhere('reference', 'ilike', "%{$this->search}%")
+                        ->orWhere('cin', 'ilike', "%{$this->search}%")
+                        ->orWhere('telephone', 'ilike', "%{$this->search}%");
                 });
             })
             ->when($this->niveauFilter !== '', fn ($q) => $q->where('niveau', $this->niveauFilter))
@@ -311,7 +313,7 @@ final class StudentsIndex extends Component
                     ->orderBy('date_naissance', $this->ageSort === 'asc' ? 'desc' : 'asc'),
                 fn ($q) => $q->latest(),
             )
-            ->paginate(10);
+            ->paginate($this->perPage);
 
         $context = app(CurrentContext::class);
 

@@ -1,5 +1,16 @@
 # GLS CRM Backoffice — Performance Audit
 
+> Measurement context: These benchmarks were captured against the former local
+> SQLite demo environment. The application is now PostgreSQL-only (migration
+> completed July 29, 2026 — see `POSTGRES_AUDIT.md` and
+> `POSTGRES_MIGRATION_REPORT.md`). Query-count findings remain useful, but
+> timings must be re-measured on PostgreSQL before making production
+> conclusions. The SQLite-vs-MySQL index-behavior notes below (§3.x) are
+> superseded by `CLAUDE.md` § "Database Standard — PostgreSQL Only": PostgreSQL,
+> like SQLite, does not auto-index plain FK columns — this audit's index
+> additions were carried forward and supplemented for PostgreSQL in
+> `database/migrations/2026_07_29_120000_add_missing_foreign_key_indexes_for_postgres.php`.
+
 Date: 2026-07-29. Scope: `/backoffice/*` (admin area only). Method: static code
 audit (4 parallel read-only agents covering Livewire components, context/auth
 services, database schema/indexes, and views/assets) + an in-process HTTP

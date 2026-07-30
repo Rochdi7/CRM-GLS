@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Backoffice\TypesDepenses;
 
+use App\Livewire\Backoffice\Concerns\WithPerPage;
 use App\Models\TypeDepense;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -23,6 +24,7 @@ final class TypesDepensesIndex extends Component
 {
     use AuthorizesRequests;
     use WithPagination;
+    use WithPerPage;
 
     protected $paginationTheme = 'bootstrap';
 
@@ -149,11 +151,11 @@ final class TypesDepensesIndex extends Component
     {
         $types = TypeDepense::query()
             ->withCount('depenses')
-            ->when($this->search !== '', fn ($q) => $q->where('nom', 'like', "%{$this->search}%"))
+            ->when($this->search !== '', fn ($q) => $q->where('nom', 'ilike', "%{$this->search}%"))
             // System types first, then custom ones alphabetically.
             ->orderByDesc('is_system')
             ->orderBy('nom')
-            ->paginate(10);
+            ->paginate($this->perPage);
 
         return view('livewire.backoffice.types-depenses.types-depenses-index', [
             'types' => $types,

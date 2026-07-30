@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Livewire\Backoffice\Groups;
 
 use App\Livewire\Backoffice\Concerns\WithCenterContext;
+use App\Livewire\Backoffice\Concerns\WithPerPage;
 use App\Models\Employee;
 use App\Models\Frais;
 use App\Models\Group;
@@ -32,6 +33,7 @@ final class GroupsIndex extends Component
     use AuthorizesRequests;
     use WithCenterContext;
     use WithPagination;
+    use WithPerPage;
 
     protected $paginationTheme = 'bootstrap';
 
@@ -274,9 +276,9 @@ final class GroupsIndex extends Component
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
             ->when($context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
             ->when($this->statutFilter !== '', fn ($q) => $q->where('statut', $this->statutFilter))
-            ->when($this->search !== '', fn ($q) => $q->where('nom', 'like', "%{$this->search}%"))
+            ->when($this->search !== '', fn ($q) => $q->where('nom', 'ilike', "%{$this->search}%"))
             ->latest()
-            ->paginate(10);
+            ->paginate($this->perPage);
 
         // Per-status counts for the tab badges (same center/year scope, ignores search).
         $statutCounts = Group::query()

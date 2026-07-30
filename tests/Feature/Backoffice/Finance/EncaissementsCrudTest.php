@@ -81,17 +81,19 @@ final class EncaissementsCrudTest extends TestCase
         return [$student, $inscription, $fee];
     }
 
-    public function test_create_preselects_the_signed_in_employees_till_and_shows_its_balance(): void
+    public function test_create_locks_the_till_to_the_signed_in_employees_own_caisse(): void
     {
         $user = $this->globalUser();
         // Every employee owns a till, auto-provisioned by EmployeeObserver.
+        // The modal has no till picker: caisse_id is always the employee's
+        // own till, set server-side, never chosen from a dropdown.
         $own = Caisse::query()->where('responsable_employee_id', $user->employee->id)->firstOrFail();
-        $own->update(['solde' => 750.5]);
 
         Livewire::test(EncaissementsIndex::class)
             ->call('create')
             ->assertSet('caisse_id', $own->id)
-            ->assertSee(number_format(750.5, 2));
+            ->assertDontSee('id="e-caisse"', escape: false)
+            ->assertDontSee(__('Balance'));
     }
 
     /**
@@ -154,7 +156,7 @@ final class EncaissementsCrudTest extends TestCase
         $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $fees->first()['statut']);
     }
 
-    public function test_picking_a_fee_prefills_the_amount_with_the_remaining_balance(): void
+    public function test_selecting_a_registration_prefills_one_payment_row_per_unpaid_fee(): void
     {
         $this->globalUser();
         [$student, $inscription, $fee] = $this->enrolledStudentWithFee();
@@ -162,10 +164,13 @@ final class EncaissementsCrudTest extends TestCase
         $component = Livewire::test(EncaissementsIndex::class)
             ->call('create')
             ->set('student_id', $student->id)
-            ->set('inscription_id', $inscription->id)
-            ->set('inscription_fee_id', $fee->id);
+            ->set('inscription_id', $inscription->id);
 
-        $this->assertSame('1500', $component->get('montant'));
+        $lines = $component->get('paymentLines');
+        $this->assertArrayHasKey($fee->id, $lines);
+        // Amount is left blank — a row is a no-op unless the user fills it in.
+        $this->assertSame('', $lines[$fee->id]['montant']);
+        $this->assertSame(Encaissement::METHODE_ESPECES, $lines[$fee->id]['methode']);
     }
 
     public function test_a_payment_goes_through_the_domain_action_and_increases_the_till_balance(): void
@@ -178,10 +183,9 @@ final class EncaissementsCrudTest extends TestCase
             ->call('create')
             ->set('student_id', $student->id)
             ->set('inscription_id', $inscription->id)
-            ->set('inscription_fee_id', $fee->id)
-            ->set('montant', '500')
-            ->set('methode', Encaissement::METHODE_ESPECES)
-            ->set('date_paiement', '2025-09-20')
+            ->set("paymentLines.{$fee->id}.montant", '500')
+            ->set("paymentLines.{$fee->id}.methode", Encaissement::METHODE_ESPECES)
+            ->set("paymentLines.{$fee->id}.date_paiement", '2025-09-20')
             ->set('caisse_id', $caisse->id)
             ->call('save')
             ->assertHasNoErrors();
@@ -209,9 +213,8 @@ final class EncaissementsCrudTest extends TestCase
             ->call('create')
             ->set('student_id', $student->id)
             ->set('inscription_id', $inscription->id)
-            ->set('inscription_fee_id', $fee->id)
-            ->set('montant', '1500')
-            ->set('date_paiement', '2025-09-20')
+            ->set("paymentLines.{$fee->id}.montant", '1500')
+            ->set("paymentLines.{$fee->id}.date_paiement", '2025-09-20')
             ->set('caisse_id', $caisse->id)
             ->call('save')
             ->assertHasNoErrors();
@@ -230,12 +233,11 @@ final class EncaissementsCrudTest extends TestCase
             ->call('create')
             ->set('student_id', $student->id)
             ->set('inscription_id', $inscription->id)
-            ->set('inscription_fee_id', $fee->id)
-            ->set('montant', '1600') // more than the 1500 owed
-            ->set('date_paiement', '2025-09-20')
+            ->set("paymentLines.{$fee->id}.montant", '1600') // more than the 1500 owed
+            ->set("paymentLines.{$fee->id}.date_paiement", '2025-09-20')
             ->set('caisse_id', $caisse->id)
             ->call('save')
-            ->assertHasErrors(['montant']);
+            ->assertHasErrors(["paymentLines.{$fee->id}.montant"]);
 
         $this->assertSame(0, Encaissement::count());
         $this->assertSame('0.00', (string) $caisse->fresh()->solde);
@@ -260,12 +262,11 @@ final class EncaissementsCrudTest extends TestCase
             ->call('create')
             ->set('student_id', $student->id)
             ->set('inscription_id', $inscription->id)
-            ->set('inscription_fee_id', $fee->id)
-            ->set('montant', '600')
-            ->set('date_paiement', '2025-09-20')
+            ->set("paymentLines.{$fee->id}.montant", '600')
+            ->set("paymentLines.{$fee->id}.date_paiement", '2025-09-20')
             ->set('caisse_id', $caisse->id)
             ->call('save')
-            ->assertHasErrors(['montant']);
+            ->assertHasErrors(["paymentLines.{$fee->id}.montant"]);
     }
 
     public function test_required_fields_are_validated(): void
@@ -276,12 +277,129 @@ final class EncaissementsCrudTest extends TestCase
             ->call('create')
             ->set('student_id', null)
             ->set('inscription_id', null)
-            ->set('inscription_fee_id', null)
             ->set('caisse_id', null)
-            ->set('montant', '')
-            ->set('date_paiement', '')
             ->call('save')
-            ->assertHasErrors(['student_id', 'inscription_id', 'inscription_fee_id', 'caisse_id', 'montant', 'date_paiement']);
+            ->assertHasErrors(['student_id', 'inscription_id', 'caisse_id', 'paymentLines']);
+    }
+
+    public function test_submitting_with_every_row_empty_is_rejected(): void
+    {
+        $this->globalUser();
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee();
+        $caisse = $this->caisse();
+
+        Livewire::test(EncaissementsIndex::class)
+            ->call('create')
+            ->set('student_id', $student->id)
+            ->set('inscription_id', $inscription->id)
+            ->set('caisse_id', $caisse->id)
+            // Every row's montant left blank — nothing to submit.
+            ->call('save')
+            ->assertHasErrors(['paymentLines']);
+
+        $this->assertSame(0, Encaissement::count());
+        $this->assertSame('0.00', (string) $caisse->fresh()->solde);
+    }
+
+    public function test_a_single_submit_can_record_payments_for_several_fees_at_once(): void
+    {
+        $this->globalUser();
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $group = Group::factory()->create(['etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id]);
+        $inscription = Inscription::create([
+            'reference' => 'INS-'.fake()->unique()->numerify('#####'),
+            'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => Inscription::STATUT_ACTIVE, 'date_inscription' => '2025-09-15',
+            'montant_total' => 3000,
+        ]);
+        $feeA = InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => 'Frais A',
+            'montant_initial' => 1000, 'montant' => 1000,
+            'date_echeance' => '2025-07-31', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+        $feeB = InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => 'Frais B',
+            'montant_initial' => 2000, 'montant' => 2000,
+            'date_echeance' => '2025-08-31', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+        $feeC = InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => 'Frais C',
+            'montant_initial' => 500, 'montant' => 500,
+            'date_echeance' => '2025-09-30', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+        $caisse = $this->caisse();
+
+        Livewire::test(EncaissementsIndex::class)
+            ->call('create')
+            ->set('student_id', $student->id)
+            ->set('inscription_id', $inscription->id)
+            ->set("paymentLines.{$feeA->id}.montant", '1000')
+            ->set("paymentLines.{$feeA->id}.date_paiement", '2025-09-20')
+            ->set("paymentLines.{$feeB->id}.montant", '500')
+            ->set("paymentLines.{$feeB->id}.methode", Encaissement::METHODE_TPE)
+            ->set("paymentLines.{$feeB->id}.date_paiement", '2025-09-20')
+            // Fee C's row left blank — must NOT create a payment.
+            ->set('caisse_id', $caisse->id)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertSame(2, Encaissement::count());
+        $this->assertNotNull(Encaissement::where('inscription_fee_id', $feeA->id)->first());
+        $this->assertNotNull(Encaissement::where('inscription_fee_id', $feeB->id)->first());
+        $this->assertNull(Encaissement::where('inscription_fee_id', $feeC->id)->first());
+
+        // caisses.solde incremented by the sum of both rows.
+        $this->assertSame('1500.00', (string) $caisse->fresh()->solde);
+
+        // Each fee's statut recalculated independently.
+        $this->assertSame(InscriptionFee::STATUT_PAYE, $feeA->fresh()->statut);
+        $this->assertSame(InscriptionFee::STATUT_PAYE_PARTIELLEMENT, $feeB->fresh()->statut);
+        $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $feeC->fresh()->statut);
+    }
+
+    public function test_an_invalid_row_rolls_back_the_whole_multi_row_submit(): void
+    {
+        $this->globalUser();
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $group = Group::factory()->create(['etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id]);
+        $inscription = Inscription::create([
+            'reference' => 'INS-'.fake()->unique()->numerify('#####'),
+            'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => Inscription::STATUT_ACTIVE, 'date_inscription' => '2025-09-15',
+            'montant_total' => 1600,
+        ]);
+        $feeA = InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => 'Frais A',
+            'montant_initial' => 1000, 'montant' => 1000,
+            'date_echeance' => '2025-07-31', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+        $feeB = InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => 'Frais B',
+            'montant_initial' => 600, 'montant' => 600,
+            'date_echeance' => '2025-08-31', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+        $caisse = $this->caisse();
+
+        Livewire::test(EncaissementsIndex::class)
+            ->call('create')
+            ->set('student_id', $student->id)
+            ->set('inscription_id', $inscription->id)
+            // Row 1 is valid on its own...
+            ->set("paymentLines.{$feeA->id}.montant", '1000')
+            ->set("paymentLines.{$feeA->id}.date_paiement", '2025-09-20')
+            // ...row 2 exceeds what's owed on fee B.
+            ->set("paymentLines.{$feeB->id}.montant", '700')
+            ->set("paymentLines.{$feeB->id}.date_paiement", '2025-09-20')
+            ->set('caisse_id', $caisse->id)
+            ->call('save')
+            ->assertHasErrors(["paymentLines.{$feeB->id}.montant"]);
+
+        // Row 1 must NOT have been persisted — the whole submit rolls back.
+        $this->assertSame(0, Encaissement::count());
+        $this->assertSame('0.00', (string) $caisse->fresh()->solde);
+        $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $feeA->fresh()->statut);
     }
 
     public function test_cheque_fields_are_required_when_the_method_is_cheque(): void
@@ -294,11 +412,10 @@ final class EncaissementsCrudTest extends TestCase
             ->call('create')
             ->set('student_id', $student->id)
             ->set('inscription_id', $inscription->id)
-            ->set('inscription_fee_id', $fee->id)
-            ->set('montant', '500')
-            ->set('date_paiement', '2025-09-20')
+            ->set("paymentLines.{$fee->id}.montant", '500')
+            ->set("paymentLines.{$fee->id}.date_paiement", '2025-09-20')
+            ->set("paymentLines.{$fee->id}.methode", Encaissement::METHODE_CHEQUE)
             ->set('caisse_id', $caisse->id)
-            ->set('methode', Encaissement::METHODE_CHEQUE)
             ->call('save')
             ->assertHasErrors(['numero_cheque', 'banque', 'date_echeance_cheque']);
     }
@@ -376,9 +493,8 @@ final class EncaissementsCrudTest extends TestCase
             ->call('create')
             ->set('student_id', $student->id)
             ->set('inscription_id', $inscription->id)
-            ->set('inscription_fee_id', $fee->id)
-            ->set('montant', '500')
-            ->set('date_paiement', '2025-09-20')
+            ->set("paymentLines.{$fee->id}.montant", '500')
+            ->set("paymentLines.{$fee->id}.date_paiement", '2025-09-20')
             ->set('caisse_id', $caisse->id)
             ->call('save')
             ->assertHasErrors('caisse_id');
@@ -477,13 +593,17 @@ final class EncaissementsCrudTest extends TestCase
             ->call('create')
             ->set('student_id', $student->id)
             ->set('inscription_id', $inscription->id)
-            // Tampered: a fee of ANOTHER registration.
-            ->set('inscription_fee_id', $otherFee->id)
-            ->set('montant', '100')
-            ->set('date_paiement', '2025-09-20')
+            // Tampered: inject a row for a fee of ANOTHER registration
+            // (loadPaymentLines() would never produce this on its own).
+            ->set("paymentLines.{$otherFee->id}", [
+                'fee_id' => $otherFee->id,
+                'montant' => '100',
+                'methode' => Encaissement::METHODE_ESPECES,
+                'date_paiement' => '2025-09-20',
+            ])
             ->set('caisse_id', $caisse->id)
             ->call('save')
-            ->assertHasErrors('inscription_fee_id');
+            ->assertHasErrors('paymentLines');
 
         $this->assertSame(0, Encaissement::count());
     }

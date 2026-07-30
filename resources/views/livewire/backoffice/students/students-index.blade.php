@@ -16,20 +16,20 @@
     @error('delete')<x-backoffice.ui.alert variant="danger">{{ $message }}</x-backoffice.ui.alert>@enderror
 
     <x-backoffice.ui.card :title="__('Students')">
-        <x-slot:tools>
-            <div class="d-flex align-items-center gap-2 flex-wrap">
-                <x-backoffice.forms.select2 id="s-niveau-filter" model="niveauFilter" live inline
-                    width="150px" :placeholder="__('All interests')">
-                    @foreach ($niveaux as $niv)
-                        <option value="{{ $niv }}">{{ $niv }}</option>
-                    @endforeach
-                </x-backoffice.forms.select2>
+        <x-backoffice.ui.filter-bar>
+            <x-backoffice.forms.select2 id="s-niveau-filter" model="niveauFilter" live
+                :label="__('Level')" width="150px" :placeholder="__('All interests')">
+                @foreach ($niveaux as $niv)
+                    <option value="{{ $niv }}">{{ $niv }}</option>
+                @endforeach
+            </x-backoffice.forms.select2>
+            <x-slot:search>
                 <div class="input-icon-start position-relative">
                     <span class="input-icon-addon"><i class="ti ti-search"></i></span>
                     <input type="text" class="form-control" wire:model.live.debounce.400ms="search" placeholder="{{ __('Search') }}">
                 </div>
-            </div>
-        </x-slot:tools>
+            </x-slot:search>
+        </x-backoffice.ui.filter-bar>
 
         @if ($students->isEmpty())
             <x-backoffice.ui.empty-state :title="__('No students yet')"
@@ -99,12 +99,20 @@
                     </tr>
                 @endforeach
             </x-backoffice.ui.table>
-            <x-backoffice.ui.pagination :paginator="$students" />
+            <x-backoffice.ui.pagination :paginator="$students">
+                <x-backoffice.ui.per-page-select />
+            </x-backoffice.ui.pagination>
         @endif
     </x-backoffice.ui.card>
 
     {{-- Add/Edit modal (Alpine-driven) --}}
-    <div x-data="{ show: @entangle('showModal') }">
+    <div
+        x-data="{ show: @entangle('showModal') }"
+        x-effect="
+            const modal = $el.querySelector('.modal');
+            $dispatch(show ? 'gls-select2-modal-opened' : 'gls-select2-modal-closed', { modal });
+        "
+    >
         <div x-cloak class="modal fade show" tabindex="-1" role="dialog"
             :style="show ? 'display:block; z-index:1060;' : 'display:none;'">
             <div class="modal-dialog modal-dialog-centered modal-xl">
@@ -182,21 +190,21 @@
                                 {{-- Level drives the orientation select next to it: Arbeit/Ausbildung
                                      ask for a professional field, Studium for an entrance exam.
                                      wire:model.live so the sibling appears without leaving the field. --}}
-                                <div class="col-md-6">
+                                <div class="col-md-6" wire:key="stu-new-niveau">
                                     <x-backoffice.forms.select2 id="s-niveau" model="niveau" live
                                         :label="__('Interested in')" :placeholder="__('Choose…')">
                                         @foreach ($niveaux as $niv)<option value="{{ $niv }}">{{ $niv }}</option>@endforeach
                                     </x-backoffice.forms.select2>
                                 </div>
                                 @if (in_array($niveau, \App\Models\Student::NIVEAUX_AVEC_DOMAINE, true))
-                                    <div class="col-md-6">
+                                    <div class="col-md-6" wire:key="stu-new-domaine">
                                         <x-backoffice.forms.select2 id="s-domaine" model="domaine" required
                                             :label="__('Field')" :placeholder="__('Choose…')">
                                             @foreach ($domaines as $dom)<option value="{{ $dom }}">{{ __($dom) }}</option>@endforeach
                                         </x-backoffice.forms.select2>
                                     </div>
                                 @elseif ($niveau === \App\Models\Student::NIVEAU_STUDIUM)
-                                    <div class="col-md-6">
+                                    <div class="col-md-6" wire:key="stu-new-examen">
                                         <x-backoffice.forms.select2 id="s-examen" model="examen_type" required
                                             :label="__('Entrance exam')" :placeholder="__('Choose…')">
                                             @foreach ($examenTypes as $ex)<option value="{{ $ex }}">{{ $ex }}</option>@endforeach
@@ -243,7 +251,7 @@
                                         {{-- A specific center active in the top bar assigns the record
                                              automatically — the field only shows on « Tous les centres ». --}}
                                         @unless ($centerLocked)
-                                            <div class="col-md-4">
+                                            <div class="col-md-4" wire:key="stu-etab-wrap">
                                                 <div class="mb-3">
                                                     <label class="form-label" for="s-etab">{{ __('Center') }}</label>
                                                     <x-backoffice.forms.select2 id="s-etab" model="etablissement_id"

@@ -2,6 +2,13 @@
 
 Date: 2026-07-24 · Audited before implementing roles & permissions.
 
+> Historical note: This document describes the project before the PostgreSQL-only
+> migration completed on July 29, 2026 (it was audited while the app still ran on
+> SQLite locally). For the current database rules, see `CLAUDE.md`
+> § "Database Standard — PostgreSQL Only", `POSTGRES_AUDIT.md`, and
+> `POSTGRES_MIGRATION_REPORT.md`. The authorization/permissions findings below
+> remain current — only the "Environment" row about the database is outdated.
+
 ## Environment
 
 | Item | Finding |

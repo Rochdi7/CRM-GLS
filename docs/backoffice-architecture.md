@@ -25,7 +25,7 @@ redirects to the backoffice login.
 
 **Stack:** Laravel 13 · PHP 8.4 · Livewire 4 (with its bundled Alpine.js) ·
 Bootstrap 5 via the **PreSkool** admin theme (jQuery-based) · Vite for our own
-JS/SCSS only · MySQL target (SQLite in local dev). UI language is **French**
+JS/SCSS only · PostgreSQL (local dev and production). UI language is **French**
 (`__('English key')` → `lang/fr.json`).
 
 ### One sentence per layer

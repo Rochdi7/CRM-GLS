@@ -104,17 +104,25 @@ final class DepensesCrudTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_create_preselects_the_signed_in_employees_till_and_shows_its_balance(): void
+    public function test_create_locks_the_till_to_the_signed_in_employees_own_caisse(): void
     {
         $user = $this->admin();
         // Every employee owns a till, auto-provisioned by EmployeeObserver.
+        // The Select2 is shown disabled and lists only that till — no other
+        // accessible caisse (e.g. $this->caisse from setUp()) is selectable.
         $own = Caisse::query()->where('responsable_employee_id', $user->employee->id)->firstOrFail();
         $own->update(['solde' => 750.5]);
 
-        Livewire::test(DepensesIndex::class)
+        $component = Livewire::test(DepensesIndex::class)
             ->call('create')
             ->assertSet('caisse_id', $own->id)
             ->assertSee(number_format(750.5, 2));
+
+        preg_match('/id="d-caisse".*?<\/select>/s', $component->html(), $matches);
+        $this->assertNotEmpty($matches, 'The till <select> was not found in the modal.');
+        $this->assertStringContainsString('disabled', $matches[0]);
+        $this->assertSame(1, substr_count($matches[0], '<option'), 'The modal must list only the employee\'s own till.');
+        $this->assertStringContainsString($own->nom, $matches[0]);
     }
 
     public function test_create_preselects_nothing_when_the_user_has_no_own_till_among_several(): void

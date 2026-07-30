@@ -35,10 +35,74 @@ function select2SearchThreshold(el) {
 document.addEventListener('alpine:init', () => {
     window.Alpine.data('glsSelect2', (value) => ({
         value,
+        selectElement: null,
+        $select: null,
+        select2Instance: null,
+        optionsObserver: null,
+
+        modalOpenedHandler: null,
+
         init() {
+            this.mountSelect2();
+
+            // Every modal in the app is mounted once and toggled via
+            // display:none (Alpine `show`), so this Select2 island first
+            // initializes while its ancestor is hidden. Select2 reads
+            // offsetWidth/computed styles at init time to size its selection
+            // box; against a display:none ancestor that yields 0, leaving a
+            // blank/broken selection render that showing the modal
+            // afterwards does not repair on its own. Rebuilding once on the
+            // paired gls-select2-modal-opened event (dispatched by the same
+            // modal shell that already dispatches gls-select2-modal-closed)
+            // fixes the geometry once the element is actually visible.
+            this.modalOpenedHandler = (event) => {
+                const currentEl = this.rawSelectElement();
+                const currentJq = this.rawJQuerySelect();
+
+                if (!currentEl || !this.ownsSelect2(currentEl, currentJq) || !event.detail?.modal?.contains(currentEl)) {
+                    return;
+                }
+
+                this.mountSelect2();
+            };
+
+            window.addEventListener('gls-select2-modal-opened', this.modalOpenedHandler);
+        },
+
+        mountSelect2() {
+            this.teardownSelect2();
+
             const el = this.$refs.select;
+
+            if (!el || !el.isConnected || !window.jQuery?.fn?.select2) {
+                return;
+            }
+
             const $el = window.jQuery(el);
+
+            // A previous Alpine instance may have been removed by a Livewire
+            // morph before its destroy hook ran. Clean up only this element.
+            this.destroySelect2($el);
+
+            // Belt-and-braces: if an earlier Select2 instance on this exact
+            // element lost track of its own container (e.g. two initialisers
+            // raced on first mount before either had attached select2 data),
+            // destroySelect2() above finds nothing to clean up via jQuery's
+            // instance cache and a stray `.select2-container` is left behind
+            // as a dead sibling — rendering as a second, empty dropdown next
+            // to the real one. Sweep any leftovers by position instead of by
+            // instance reference before creating the real widget.
+            const parent = el.parentNode;
+
+            if (parent) {
+                Array.from(parent.querySelectorAll(':scope > .select2-container')).forEach((node) => node.remove());
+            }
+
             const $modal = $el.closest('.modal');
+
+            this.selectElement = el;
+            this.$select = $el;
+
             $el.select2({
                 width: '100%',
                 minimumResultsForSearch: select2SearchThreshold(el),
@@ -46,23 +110,196 @@ document.addEventListener('alpine:init', () => {
                 // dropdown would stack underneath them.
                 dropdownParent: $modal.length ? $modal : window.jQuery(document.body),
             });
+
+            this.select2Instance = $el.data('select2') ?? null;
+
             const current = () => (this.value === null || this.value === undefined ? '' : String(this.value));
+
             $el.val(current()).trigger('change.select2');
-            // select2:* events fire only on user interaction — no feedback
-            // loop with the $watch below.
-            $el.on('select2:select select2:clear', () => {
-                this.value = $el.val();
-            });
+            this.watchOptionChanges(el, $el, current);
+
+            // User picks can arrive as select2:* or as a native change,
+            // depending on the Select2 path used by the theme/browser.
+            // Programmatic sync uses change.select2 and will not hit this
+            // .glsSelect2 handler, so it does not feed back into the watcher.
+            $el
+                .off('.glsSelect2')
+                .on('change.glsSelect2 select2:select.glsSelect2 select2:clear.glsSelect2', () => {
+                    if (!this.ownsSelect2(el, $el)) {
+                        return;
+                    }
+
+                    this.value = $el.val();
+                });
+
+            // Livewire's bundled Alpine registers $watch cleanup for this
+            // component, but its $watch magic does not return that callback.
+            // This watcher is therefore created once per Alpine component and
+            // verifies the exact element and instance before doing any work.
             this.$watch('value', () => {
-                if ($el.val() !== current()) {
-                    $el.val(current()).trigger('change.select2');
+                if (!this.ownsSelect2(el, $el)) {
+                    return;
+                }
+
+                const expected = current();
+                const actual = String($el.val() ?? '');
+
+                if (actual !== expected) {
+                    $el.val(expected).trigger('change.select2');
                 }
             });
         },
-        destroy() {
-            const $el = window.jQuery(this.$refs.select);
-            if ($el.hasClass('select2-hidden-accessible')) {
+
+        ownsSelect2(el, $el) {
+            return this.rawSelectElement() === el
+                && this.rawJQuerySelect() === $el
+                && this.$refs.select === el
+                && el.isConnected
+                && this.select2Instance !== null
+                && $el.data('select2') === this.rawSelect2Instance();
+        },
+
+        raw(value) {
+            return typeof window.Alpine.raw === 'function'
+                ? window.Alpine.raw(value)
+                : value;
+        },
+
+        rawSelectElement() {
+            return this.raw(this.selectElement);
+        },
+
+        rawJQuerySelect() {
+            return this.raw(this.$select);
+        },
+
+        rawSelect2Instance() {
+            return this.raw(this.select2Instance);
+        },
+
+        watchOptionChanges(el, $el, current) {
+            this.disconnectOptionsObserver();
+
+            this.optionsObserver = new MutationObserver(() => {
+                if (!this.ownsSelect2(el, $el)) {
+                    return;
+                }
+
+                const expected = current();
+
+                if (expected !== '' && !el.querySelector(`option[value="${CSS.escape(expected)}"]`)) {
+                    this.value = '';
+                }
+
+                $el.val(this.value === null || this.value === undefined ? '' : String(this.value))
+                    .trigger('change.select2');
+            });
+
+            this.optionsObserver.observe(el, {
+                childList: true,
+                subtree: true,
+                characterData: true,
+            });
+        },
+
+        disconnectOptionsObserver() {
+            const observer = this.raw(this.optionsObserver);
+
+            if (observer) {
+                observer.disconnect();
+            }
+
+            this.optionsObserver = null;
+        },
+
+        closeForModal(modal) {
+            const el = this.rawSelectElement();
+
+            if (!modal || !el || !modal.contains(el)) {
+                return;
+            }
+
+            this.closeSelect2();
+        },
+
+        closeSelect2() {
+            const $el = this.rawJQuerySelect();
+
+            if (!$el || $el.data('select2') !== this.rawSelect2Instance()) {
+                return;
+            }
+
+            try {
+                $el.select2('close');
+            } catch (error) {
+                // The element may already have been removed by a morph.
+            }
+        },
+
+        destroySelect2($el) {
+            if (!$el || !($el.hasClass('select2-hidden-accessible') || $el.data('select2'))) {
+                return;
+            }
+
+            const instance = $el.data('select2');
+            const artifacts = {
+                $container: instance?.$container,
+                $dropdown: instance?.dropdown?.$dropdown,
+                $dropdownContainer: instance?.dropdown?.$dropdownContainer,
+            };
+            let destroyed = false;
+
+            try {
+                $el.select2('close');
+            } catch (error) {
+                // Continue to destroy the exact element even if it is detached.
+            }
+
+            try {
                 $el.select2('destroy');
+                destroyed = true;
+            } catch (error) {
+                // The conservative fallback below removes only Select2 state.
+            }
+
+            // Select2 normally removes these itself. Retaining the exact
+            // references also clears a dropdown left behind by an interrupted
+            // destroy without touching any other Select2 on the page.
+            artifacts.$container?.remove();
+            artifacts.$dropdown?.remove();
+            artifacts.$dropdownContainer?.remove();
+
+            if (!destroyed) {
+                $el
+                    .off('.select2')
+                    .removeClass('select2-hidden-accessible')
+                    .removeData('select2')
+                    .removeAttr('data-select2-id')
+                    .attr('aria-hidden', 'false');
+            }
+        },
+
+        teardownSelect2() {
+            const $el = this.rawJQuerySelect();
+
+            this.disconnectOptionsObserver();
+
+            if ($el) {
+                $el.off('.glsSelect2');
+                this.destroySelect2($el);
+            }
+
+            this.selectElement = null;
+            this.$select = null;
+            this.select2Instance = null;
+        },
+
+        destroy() {
+            this.teardownSelect2();
+
+            if (this.modalOpenedHandler) {
+                window.removeEventListener('gls-select2-modal-opened', this.modalOpenedHandler);
+                this.modalOpenedHandler = null;
             }
         },
     }));

@@ -14,14 +14,14 @@
     </x-backoffice.layout.page-header>
 
     <x-backoffice.ui.card :title="__('Groups')">
-        <x-slot:tools>
-            <div class="d-flex align-items-center gap-2 flex-wrap">
+        <x-backoffice.ui.filter-bar>
+            <x-slot:search>
                 <div class="input-icon-start position-relative">
                     <span class="input-icon-addon"><i class="ti ti-search"></i></span>
                     <input type="text" class="form-control" wire:model.live.debounce.400ms="search" placeholder="{{ __('Search') }}">
                 </div>
-            </div>
-        </x-slot:tools>
+            </x-slot:search>
+        </x-backoffice.ui.filter-bar>
 
         {{-- Status tabs: En formation / Pré-inscription / Historique (groups ended) --}}
         <ul class="nav nav-tabs nav-tabs-solid mb-3" role="tablist">
@@ -90,12 +90,20 @@
                     </tr>
                 @endforeach
             </x-backoffice.ui.table>
-            <x-backoffice.ui.pagination :paginator="$groups" />
+            <x-backoffice.ui.pagination :paginator="$groups">
+                <x-backoffice.ui.per-page-select />
+            </x-backoffice.ui.pagination>
         @endif
     </x-backoffice.ui.card>
 
     {{-- Add/Edit modal --}}
-    <div x-data="{ show: @entangle('showModal') }">
+    <div
+        x-data="{ show: @entangle('showModal') }"
+        x-effect="
+            const modal = $el.querySelector('.modal');
+            $dispatch(show ? 'gls-select2-modal-opened' : 'gls-select2-modal-closed', { modal });
+        "
+    >
         <div x-cloak class="modal fade show" tabindex="-1" role="dialog"
             :style="show ? 'display:block; z-index:1060;' : 'display:none;'">
             <div class="modal-dialog modal-dialog-centered modal-xl">

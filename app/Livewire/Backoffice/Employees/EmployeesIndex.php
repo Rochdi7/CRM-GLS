@@ -6,6 +6,7 @@ namespace App\Livewire\Backoffice\Employees;
 
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Livewire\Backoffice\Concerns\WithCenterContext;
+use App\Livewire\Backoffice\Concerns\WithPerPage;
 use App\Livewire\Backoffice\Concerns\WithPhoneCountry;
 use App\Models\Employee;
 use App\Models\Etablissement;
@@ -30,6 +31,7 @@ final class EmployeesIndex extends Component
     use WithCenterContext;
     use WithFileUploads;
     use WithPagination;
+    use WithPerPage;
     use WithPhoneCountry;
 
     protected $paginationTheme = 'bootstrap';
@@ -268,16 +270,16 @@ final class EmployeesIndex extends Component
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
             ->when($this->search !== '', function ($q): void {
                 $q->where(function ($sub): void {
-                    $sub->where('nom', 'like', "%{$this->search}%")
-                        ->orWhere('prenom', 'like', "%{$this->search}%")
-                        ->orWhere('reference', 'like', "%{$this->search}%")
-                        ->orWhere('adresse', 'like', "%{$this->search}%")
-                        ->orWhere('email', 'like', "%{$this->search}%");
+                    $sub->where('nom', 'ilike', "%{$this->search}%")
+                        ->orWhere('prenom', 'ilike', "%{$this->search}%")
+                        ->orWhere('reference', 'ilike', "%{$this->search}%")
+                        ->orWhere('adresse', 'ilike', "%{$this->search}%")
+                        ->orWhere('email', 'ilike', "%{$this->search}%");
                 });
             })
             ->when($this->categorieFilter !== '', fn ($q) => $q->where('categorie', $this->categorieFilter))
             ->latest()
-            ->paginate(10);
+            ->paginate($this->perPage);
 
         $context = app(CurrentContext::class);
 

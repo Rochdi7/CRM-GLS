@@ -278,9 +278,13 @@ $(document).ready(function(){
 		setCountdown()
 	}
 
-	// Select 2	
-	if ($('.select2').length > 0) {
-	 	$(".select2").select2();
+	// Select 2
+	// Select2's own generated wrapper reuses the 'select2' class on a
+	// <span>, not a <select> -- scope this to real, not-yet-initialised
+	// <select> elements so it can't re-init an already-built widget
+	// (e.g. GLS CRM's Livewire-bound <x-backoffice.forms.select2> fields).
+	if ($("select.select2:not(.select2-hidden-accessible)").length > 0) {
+	 	$("select.select2:not(.select2-hidden-accessible)").select2();
 	}
 	
 	if ($('.select').length > 0) {

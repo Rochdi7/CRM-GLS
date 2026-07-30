@@ -15,8 +15,8 @@ return new class extends Migration
             $table->nullableMorphs('subject', 'subject');
             $table->string('event')->nullable();
             $table->nullableMorphs('causer', 'causer');
-            $table->json('attribute_changes')->nullable();
-            $table->json('properties')->nullable();
+            $table->jsonb('attribute_changes')->nullable();
+            $table->jsonb('properties')->nullable();
             $table->timestamps();
         });
     }

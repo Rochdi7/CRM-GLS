@@ -7,6 +7,7 @@ namespace App\Livewire\Backoffice\Depenses;
 use App\Domain\Expenses\Actions\EnregistrerDepense;
 use App\Livewire\Backoffice\Concerns\WithCaisseSelection;
 use App\Livewire\Backoffice\Concerns\WithCenterContext;
+use App\Livewire\Backoffice\Concerns\WithPerPage;
 use App\Models\Depense;
 use App\Models\Group;
 use App\Models\TypeDepense;
@@ -42,6 +43,7 @@ final class DepensesIndex extends Component
     use WithCenterContext;
     use WithFileUploads;
     use WithPagination;
+    use WithPerPage;
 
     /** Accepted receipt types — mirrors Depense::registerMediaCollections(). */
     private const JUSTIFICATIF_MIMES = ['jpeg', 'jpg', 'png', 'webp', 'pdf'];
@@ -174,9 +176,9 @@ final class DepensesIndex extends Component
         $this->authorize('create', Depense::class);
         $this->resetForm();
         $this->date_depense = now()->toDateString();
-        // Preselect the signed-in employee's own till (or the only accessible
-        // one) so the « Solde » box shows the balance as soon as the modal opens.
-        $this->preselectCaisseParDefaut();
+        // An expense always comes out of the signed-in employee's own till —
+        // the field is shown locked (disabled Select2), not a free picker.
+        $this->caisse_id = auth()->user()?->employee?->caisses()->value('id');
         $this->showModal = true;
     }
 
@@ -338,9 +340,9 @@ final class DepensesIndex extends Component
             ->when($this->dateTo !== '', fn ($q) => $q->whereDate('date_depense', '<=', $this->dateTo))
             ->when($this->search !== '', function ($q): void {
                 $q->where(function ($sub): void {
-                    $sub->where('reference', 'like', "%{$this->search}%")
-                        ->orWhere('description', 'like', "%{$this->search}%")
-                        ->orWhere('mots_cles', 'like', "%{$this->search}%");
+                    $sub->where('reference', 'ilike', "%{$this->search}%")
+                        ->orWhere('description', 'ilike', "%{$this->search}%")
+                        ->orWhere('mots_cles', 'ilike', "%{$this->search}%");
                 });
             });
 
@@ -350,7 +352,7 @@ final class DepensesIndex extends Component
         $depenses = $query
             ->with(['typeDepense', 'caisse', 'media', 'group'])
             ->latest()
-            ->paginate(10);
+            ->paginate($this->perPage);
 
         return view('livewire.backoffice.depenses.depenses-index', [
             'depenses' => $depenses,

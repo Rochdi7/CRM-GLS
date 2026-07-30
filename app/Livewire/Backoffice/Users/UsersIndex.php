@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Livewire\Backoffice\Users;
 
 use App\Livewire\Backoffice\Concerns\WithCenterContext;
+use App\Livewire\Backoffice\Concerns\WithPerPage;
 use App\Models\User;
 use App\Services\Context\CurrentContext;
 use Illuminate\Contracts\View\View;
@@ -24,6 +25,7 @@ final class UsersIndex extends Component
     use AuthorizesRequests;
     use WithCenterContext;
     use WithPagination;
+    use WithPerPage;
 
     protected $paginationTheme = 'bootstrap';
 
@@ -134,13 +136,13 @@ final class UsersIndex extends Component
             })
             ->when($this->search !== '', function ($query): void {
                 $query->where(function ($q): void {
-                    $q->where('name', 'like', "%{$this->search}%")
-                        ->orWhere('email', 'like', "%{$this->search}%")
-                        ->orWhere('username', 'like', "%{$this->search}%");
+                    $q->where('name', 'ilike', "%{$this->search}%")
+                        ->orWhere('email', 'ilike', "%{$this->search}%")
+                        ->orWhere('username', 'ilike', "%{$this->search}%");
                 });
             })
             ->orderBy('name')
-            ->paginate(10);
+            ->paginate($this->perPage);
 
         return view('livewire.backoffice.users.users-index', ['users' => $users])
             ->layout('components.backoffice.layout.app', ['title' => __('Users')]);

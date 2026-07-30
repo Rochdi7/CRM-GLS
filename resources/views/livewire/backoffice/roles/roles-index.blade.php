@@ -16,13 +16,15 @@
     @enderror
 
     <x-backoffice.ui.card :title="__('Roles')">
-        <x-slot:tools>
-            <div class="input-icon-start position-relative">
-                <span class="input-icon-addon"><i class="ti ti-search"></i></span>
-                <input type="text" class="form-control" wire:model.live.debounce.400ms="search"
-                    placeholder="{{ __('Search') }}">
-            </div>
-        </x-slot:tools>
+        <x-backoffice.ui.filter-bar>
+            <x-slot:search>
+                <div class="input-icon-start position-relative">
+                    <span class="input-icon-addon"><i class="ti ti-search"></i></span>
+                    <input type="text" class="form-control" wire:model.live.debounce.400ms="search"
+                        placeholder="{{ __('Search') }}">
+                </div>
+            </x-slot:search>
+        </x-backoffice.ui.filter-bar>
 
         @if ($roles->count() === 0)
             <x-backoffice.ui.empty-state :title="__('No roles found')" icon="ti ti-shield-off" />
@@ -73,7 +75,9 @@
                     </tr>
                 @endforeach
             </x-backoffice.ui.table>
-            <x-backoffice.ui.pagination :paginator="$roles" />
+            <x-backoffice.ui.pagination :paginator="$roles">
+                <x-backoffice.ui.per-page-select />
+            </x-backoffice.ui.pagination>
         @endif
     </x-backoffice.ui.card>
 </div>

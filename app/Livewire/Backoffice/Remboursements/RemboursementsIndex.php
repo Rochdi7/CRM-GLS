@@ -7,6 +7,7 @@ namespace App\Livewire\Backoffice\Remboursements;
 use App\Domain\Finance\Actions\EnregistrerRemboursement;
 use App\Livewire\Backoffice\Concerns\WithCaisseSelection;
 use App\Livewire\Backoffice\Concerns\WithCenterContext;
+use App\Livewire\Backoffice\Concerns\WithPerPage;
 use App\Models\Remboursement;
 use App\Models\Student;
 use App\Services\Authorization\CenterAccessService;
@@ -35,6 +36,7 @@ final class RemboursementsIndex extends Component
     use WithCaisseSelection;
     use WithCenterContext;
     use WithPagination;
+    use WithPerPage;
 
     protected $paginationTheme = 'bootstrap';
 
@@ -118,9 +120,9 @@ final class RemboursementsIndex extends Component
         $this->authorize('create', Remboursement::class);
         $this->resetForm();
         $this->date_remboursement = now()->toDateString();
-        // Preselect the signed-in employee's own till (or the only accessible
-        // one) so the « Solde » box shows the balance as soon as the modal opens.
-        $this->preselectCaisseParDefaut();
+        // A refund always comes out of the signed-in employee's own till —
+        // the field is shown locked (disabled Select2), not a free picker.
+        $this->caisse_id = auth()->user()?->employee?->caisses()->value('id');
         $this->showModal = true;
     }
 
@@ -237,14 +239,14 @@ final class RemboursementsIndex extends Component
             ->when($this->search !== '', function ($q): void {
                 $term = "%{$this->search}%";
                 $q->where(function ($sub) use ($term): void {
-                    $sub->where('reference', 'like', $term)
+                    $sub->where('reference', 'ilike', $term)
                         ->orWhereHas('beneficiaire', fn ($s) => $s
-                            ->where('nom', 'like', $term)
-                            ->orWhere('prenom', 'like', $term));
+                            ->where('nom', 'ilike', $term)
+                            ->orWhere('prenom', 'ilike', $term));
                 });
             })
             ->latest()
-            ->paginate(10);
+            ->paginate($this->perPage);
 
         return view('livewire.backoffice.remboursements.remboursements-index', [
             'remboursements' => $remboursements,

@@ -33,7 +33,7 @@ final class DemoDataSeeder extends Seeder
 {
     public function run(): void
     {
-        if (Student::query()->where('reference', 'like', 'ETU-DEMO%')->exists()) {
+        if (Student::query()->where('reference', 'ilike', 'ETU-DEMO%')->exists()) {
             $this->command?->warn('Demo data already present — skipping.');
 
             return;
@@ -136,8 +136,8 @@ final class DemoDataSeeder extends Seeder
      */
     private function createGroups(AnneeScolaire $annee, array $teachers): array
     {
-        $inscription = Frais::query()->where('nom', 'like', 'Frais d\'inscription%')->first();
-        $mois = Frais::query()->where('nom', 'like', 'Frais de %')->orderBy('id')->take(3)->get();
+        $inscription = Frais::query()->where('nom', 'ilike', 'Frais d\'inscription%')->first();
+        $mois = Frais::query()->where('nom', 'ilike', 'Frais de %')->orderBy('id')->take(3)->get();
 
         $defs = [
             ['Herr Driss 13h - Intensifs', 'B1.1', Group::STATUT_EN_FORMATION],

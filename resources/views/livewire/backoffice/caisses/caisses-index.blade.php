@@ -7,26 +7,26 @@
 --}}
 <div>
     <x-backoffice.ui.card :title="__('Cash Registers')">
-        <x-slot:tools>
-            <div class="d-flex align-items-center gap-2 flex-wrap">
-                <x-backoffice.forms.select2 id="c-etab-filter" model="etablissementFilter" live inline
-                    width="180px" :placeholder="__('All centers')">
-                    @foreach ($etablissements as $etab)
-                        <option value="{{ $etab->id }}">{{ $etab->nom_centre }}</option>
-                    @endforeach
-                </x-backoffice.forms.select2>
-                <x-backoffice.forms.select2 id="c-statut-filter" model="statutFilter" live inline
-                    width="150px" :placeholder="__('All statuses')">
-                    @foreach ($statuts as $st)
-                        <option value="{{ $st }}">{{ $st }}</option>
-                    @endforeach
-                </x-backoffice.forms.select2>
+        <x-backoffice.ui.filter-bar>
+            <x-backoffice.forms.select2 id="c-etab-filter" model="etablissementFilter" live
+                :label="__('Center')" width="180px" :placeholder="__('All centers')">
+                @foreach ($etablissements as $etab)
+                    <option value="{{ $etab->id }}">{{ $etab->nom_centre }}</option>
+                @endforeach
+            </x-backoffice.forms.select2>
+            <x-backoffice.forms.select2 id="c-statut-filter" model="statutFilter" live
+                :label="__('Status')" width="150px" :placeholder="__('All statuses')">
+                @foreach ($statuts as $st)
+                    <option value="{{ $st }}">{{ $st }}</option>
+                @endforeach
+            </x-backoffice.forms.select2>
+            <x-slot:search>
                 <div class="input-icon-start position-relative">
                     <span class="input-icon-addon"><i class="ti ti-search"></i></span>
                     <input type="text" class="form-control" wire:model.live.debounce.400ms="search" placeholder="{{ __('Search') }}">
                 </div>
-            </div>
-        </x-slot:tools>
+            </x-slot:search>
+        </x-backoffice.ui.filter-bar>
 
         <x-backoffice.ui.alert variant="info" :dismissible="false">
             {{ __('Each employee owns one cash register, created automatically with them. Balances only move through payments, expenses, refunds and validated transfers.') }}
@@ -68,7 +68,9 @@
                     </tr>
                 @endforeach
             </x-backoffice.ui.table>
-            <x-backoffice.ui.pagination :paginator="$caisses" />
+            <x-backoffice.ui.pagination :paginator="$caisses">
+                <x-backoffice.ui.per-page-select />
+            </x-backoffice.ui.pagination>
         @endif
     </x-backoffice.ui.card>
 </div>

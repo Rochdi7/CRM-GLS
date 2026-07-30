@@ -2,31 +2,31 @@
      (backoffice/depenses/index.blade.php) — the page owns the header. --}}
 <div>
     <x-backoffice.ui.card :title="__('Refunds')">
-        <x-slot:tools>
-            <div class="d-flex align-items-center gap-2 flex-wrap">
-                <x-backoffice.forms.select2 id="r-caisse-filter" model="caisseFilter" live inline
-                    width="180px" :placeholder="__('All cash registers')">
-                    @foreach ($caisses as $caisse)
-                        <option value="{{ $caisse->id }}">{{ $caisse->nom }}</option>
-                    @endforeach
-                </x-backoffice.forms.select2>
-                <input type="date" class="form-control" style="min-width: 150px;"
-                    wire:model.live="dateFrom" title="{{ __('From') }}">
-                <input type="date" class="form-control" style="min-width: 150px;"
-                    wire:model.live="dateTo" title="{{ __('To') }}">
+        <x-backoffice.ui.filter-bar>
+            <x-backoffice.forms.select2 id="r-caisse-filter" model="caisseFilter" live
+                :label="__('Cash register')" width="180px" :placeholder="__('All cash registers')">
+                @foreach ($caisses as $caisse)
+                    <option value="{{ $caisse->id }}">{{ $caisse->nom }}</option>
+                @endforeach
+            </x-backoffice.forms.select2>
+            <x-backoffice.ui.filter-bar.date-field :label="__('From date')" model="dateFrom" />
+            <x-backoffice.ui.filter-bar.date-field :label="__('To date')" model="dateTo" />
+            <x-slot:search>
                 <div class="input-icon-start position-relative">
                     <span class="input-icon-addon"><i class="ti ti-search"></i></span>
                     <input type="text" class="form-control" wire:model.live.debounce.400ms="search" placeholder="{{ __('Search') }}">
                 </div>
-                @can('create', \App\Models\Remboursement::class)
+            </x-slot:search>
+            @can('create', \App\Models\Remboursement::class)
+                <x-slot:actions>
                     <button type="button" class="btn btn-primary d-flex align-items-center" wire:click="create"
                         wire:loading.attr="disabled" wire:target="create">
                         <span class="spinner-border spinner-border-sm me-2" wire:loading wire:target="create" role="status" aria-hidden="true"></span>
                         <i class="ti ti-square-rounded-plus me-2" wire:loading.remove wire:target="create"></i>{{ __('Add Refund') }}
                     </button>
-                @endcan
-            </div>
-        </x-slot:tools>
+                </x-slot:actions>
+            @endcan
+        </x-backoffice.ui.filter-bar>
 
         @if ($remboursements->isEmpty())
             <x-backoffice.ui.empty-state :title="__('No refunds yet')"
@@ -70,12 +70,20 @@
                     </tr>
                 @endforeach
             </x-backoffice.ui.table>
-            <x-backoffice.ui.pagination :paginator="$remboursements" />
+            <x-backoffice.ui.pagination :paginator="$remboursements">
+                <x-backoffice.ui.per-page-select />
+            </x-backoffice.ui.pagination>
         @endif
     </x-backoffice.ui.card>
 
     {{-- Add/Edit modal --}}
-    <div x-data="{ show: @entangle('showModal') }">
+    <div
+        x-data="{ show: @entangle('showModal') }"
+        x-effect="
+            const modal = $el.querySelector('.modal');
+            $dispatch(show ? 'gls-select2-modal-opened' : 'gls-select2-modal-closed', { modal });
+        "
+    >
         <div x-cloak class="modal fade show" tabindex="-1" role="dialog"
             :style="show ? 'display:block; z-index:1060;' : 'display:none;'">
             <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -104,11 +112,12 @@
                                     </x-backoffice.forms.select2>
                                 </div>
                                 <div class="col-md-6">
-                                    {{-- live: the Solde box below follows the selection --}}
-                                    <x-backoffice.forms.select2 id="r-caisse" model="caisse_id" live
-                                        :label="__('Cash Register')" required :placeholder="__('Choose…')"
-                                        :disabled="(bool) $editingId">
-                                        @foreach ($caisses as $caisse)
+                                    {{-- Always the signed-in employee's own till — locked, never a
+                                         free picker (every employee owns exactly one, CaisseProvisioner);
+                                         only that one till is listed. --}}
+                                    <x-backoffice.forms.select2 id="r-caisse" model="caisse_id"
+                                        :label="__('Cash Register')" required disabled>
+                                        @foreach ($caisses->where('id', $caisse_id) as $caisse)
                                             <option value="{{ $caisse->id }}">{{ $caisse->nom }}</option>
                                         @endforeach
                                     </x-backoffice.forms.select2>

@@ -4,12 +4,14 @@
         :breadcrumbs="[__('Dashboard') => route('backoffice.dashboard'), __('Users') => null]" />
 
     <x-backoffice.ui.card :title="__('Users')">
-        <x-slot:tools>
-            <div class="input-icon-start position-relative">
-                <span class="input-icon-addon"><i class="ti ti-search"></i></span>
-                <input type="text" class="form-control" wire:model.live.debounce.400ms="search" placeholder="{{ __('Search') }}">
-            </div>
-        </x-slot:tools>
+        <x-backoffice.ui.filter-bar>
+            <x-slot:search>
+                <div class="input-icon-start position-relative">
+                    <span class="input-icon-addon"><i class="ti ti-search"></i></span>
+                    <input type="text" class="form-control" wire:model.live.debounce.400ms="search" placeholder="{{ __('Search') }}">
+                </div>
+            </x-slot:search>
+        </x-backoffice.ui.filter-bar>
 
         @if ($users->count() === 0)
             <x-backoffice.ui.empty-state :title="__('No users found')" icon="ti ti-user-off" />
@@ -61,12 +63,20 @@
                     </tr>
                 @endforeach
             </x-backoffice.ui.table>
-            <x-backoffice.ui.pagination :paginator="$users" />
+            <x-backoffice.ui.pagination :paginator="$users">
+                <x-backoffice.ui.per-page-select />
+            </x-backoffice.ui.pagination>
         @endif
     </x-backoffice.ui.card>
 
     {{-- Edit modal (Alpine-driven) --}}
-    <div x-data="{ show: @entangle('showModal') }">
+    <div
+        x-data="{ show: @entangle('showModal') }"
+        x-effect="
+            const modal = $el.querySelector('.modal');
+            $dispatch(show ? 'gls-select2-modal-opened' : 'gls-select2-modal-closed', { modal });
+        "
+    >
         <div x-cloak class="modal fade show" tabindex="-1" role="dialog"
             :style="show ? 'display:block; z-index:1060;' : 'display:none;'">
             <div class="modal-dialog modal-dialog-centered">

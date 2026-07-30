@@ -1,5 +1,14 @@
 # GLS CRM — Starter Database Schema (v4, Approved)
 
+> Historical note: this document's stack line (Laravel 11 + MySQL) reflects the
+> plan at design time, before the project was actually built on Laravel 13 and
+> before the PostgreSQL-only migration completed on July 29, 2026. The **table
+> design, relationships, and invariants below are still the approved schema and
+> remain current** — only the engine name is outdated. For the current database
+> rules (PostgreSQL-only, `ILIKE`, FK indexing, JSONB, etc.), see `CLAUDE.md`
+> § "Database Standard — PostgreSQL Only", `POSTGRES_AUDIT.md`, and
+> `POSTGRES_MIGRATION_REPORT.md`.
+
 This is the schema GLS decided to build with, after simplifying and adapting the WimSchool reverse-engineering research (see `architecture.md`, `database-schema.md`, `startup-mvp.md`) into something buildable from scratch on the existing Laravel 11 + MySQL stack.
 
 **This is not the full WimSchool reconstruction.** It's a deliberately reduced, from-scratch design: 15 tables, no `wimschool_id` migration columns, no approval-workflow bloat beyond what's actually needed for cash-handling fraud traceability. If you're looking for "what does WimSchool itself do," read `database-schema.md` instead — this file is "what GLS is actually building."

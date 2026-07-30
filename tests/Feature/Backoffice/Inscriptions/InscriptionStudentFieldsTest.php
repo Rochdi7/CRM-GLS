@@ -55,6 +55,52 @@ final class InscriptionStudentFieldsTest extends TestCase
         ]);
     }
 
+    public function test_mode_select_remains_a_single_native_select_through_conditional_branch_changes(): void
+    {
+        $component = Livewire::test(InscriptionsIndex::class)
+            ->call('create');
+
+        foreach (['new', 'existing', 'new', 'existing', 'new'] as $mode) {
+            $html = $component
+                ->set('inscriptionMode', $mode)
+                ->html();
+
+            // i-mode is a plain wire:model.live select — no Select2/Alpine
+            // island, so no wire:ignore and no gls-select2-* wrapper key.
+            $this->assertSame(1, substr_count($html, 'id="i-mode"'));
+            $this->assertSame(0, substr_count($html, 'wire:key="gls-select2-i-mode-'));
+            $this->assertMatchesRegularExpression(
+                '/<select[^>]*id="i-mode"[^>]*wire:model\.live="inscriptionMode"[^>]*>\s*<option value="new">.*?<\/option>\s*<option value="existing">.*?<\/option>\s*<\/select>/s',
+                $html,
+            );
+
+            if ($mode === 'existing') {
+                $this->assertSame(1, substr_count($html, 'id="i-student"'));
+                $this->assertStringContainsString('wire:key="ins-existing-student"', $html);
+            } else {
+                $this->assertSame(0, substr_count($html, 'id="i-student"'));
+                $this->assertStringContainsString('wire:key="ins-new-nom"', $html);
+            }
+        }
+    }
+
+    public function test_group_select_renders_the_available_group_options_inside_the_livewire_updatable_select(): void
+    {
+        $group = $this->makeGroup();
+
+        $html = Livewire::test(InscriptionsIndex::class)
+            ->call('create')
+            ->html();
+
+        $this->assertSame(1, substr_count($html, 'id="i-group"'));
+        $this->assertSame(1, substr_count($html, 'wire:key="gls-select2-i-group-'));
+        $this->assertStringContainsString('wire:ignore', $html);
+        $this->assertMatchesRegularExpression(
+            '/<select[^>]*id="i-group"[^>]*>.*?<option value="'.$group->id.'">.*?<\/option>.*?<\/select>/s',
+            $html,
+        );
+    }
+
     public function test_a_new_student_is_created_with_cin_and_a_professional_field(): void
     {
         $group = $this->makeGroup();

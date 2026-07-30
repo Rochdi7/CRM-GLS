@@ -57,7 +57,13 @@
     @endif
 
     {{-- Add/Edit modal (Alpine-driven) --}}
-    <div x-data="{ show: @entangle('showModal') }">
+    <div
+        x-data="{ show: @entangle('showModal') }"
+        x-effect="
+            const modal = $el.querySelector('.modal');
+            $dispatch(show ? 'gls-select2-modal-opened' : 'gls-select2-modal-closed', { modal });
+        "
+    >
         <div x-cloak class="modal fade show" tabindex="-1" role="dialog"
             :style="show ? 'display:block; z-index:1060;' : 'display:none;'">
             <div class="modal-dialog modal-dialog-centered">

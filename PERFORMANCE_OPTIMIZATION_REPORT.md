@@ -1,5 +1,12 @@
 # GLS CRM Backoffice — Performance Optimization Report
 
+> Measurement context: These benchmarks were captured against the former local
+> SQLite demo environment. The application is now PostgreSQL-only (migration
+> completed July 29, 2026 — see `POSTGRES_AUDIT.md` and
+> `POSTGRES_MIGRATION_REPORT.md`). Query-count and query-shape findings remain
+> useful, but timings must be re-measured on PostgreSQL before making
+> production conclusions.
+
 Companion to `PERFORMANCE_AUDIT.md` (baseline + plan). This report records
 what was actually implemented and the measured before/after. Method: an
 in-process HTTP probe (`scratchpad/probe.php`) that logs in as the local

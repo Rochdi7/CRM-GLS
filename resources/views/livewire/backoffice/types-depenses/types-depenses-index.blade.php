@@ -2,21 +2,23 @@
      (backoffice/depenses/index.blade.php) — the page owns the header. --}}
 <div>
     <x-backoffice.ui.card :title="__('Expense types')">
-        <x-slot:tools>
-            <div class="d-flex align-items-center gap-2 flex-wrap">
+        <x-backoffice.ui.filter-bar>
+            <x-slot:search>
                 <div class="input-icon-start position-relative">
                     <span class="input-icon-addon"><i class="ti ti-search"></i></span>
                     <input type="text" class="form-control" wire:model.live.debounce.400ms="search" placeholder="{{ __('Search') }}">
                 </div>
-                @can('create', \App\Models\TypeDepense::class)
+            </x-slot:search>
+            @can('create', \App\Models\TypeDepense::class)
+                <x-slot:actions>
                     <button type="button" class="btn btn-primary d-flex align-items-center" wire:click="create"
                         wire:loading.attr="disabled" wire:target="create">
                         <span class="spinner-border spinner-border-sm me-2" wire:loading wire:target="create" role="status" aria-hidden="true"></span>
                         <i class="ti ti-square-rounded-plus me-2" wire:loading.remove wire:target="create"></i>{{ __('Add Expense type') }}
                     </button>
-                @endcan
-            </div>
-        </x-slot:tools>
+                </x-slot:actions>
+            @endcan
+        </x-backoffice.ui.filter-bar>
 
         @error('delete')<x-backoffice.ui.alert variant="danger">{{ $message }}</x-backoffice.ui.alert>@enderror
 
@@ -74,12 +76,20 @@
                     </tr>
                 @endforeach
             </x-backoffice.ui.table>
-            <x-backoffice.ui.pagination :paginator="$types" />
+            <x-backoffice.ui.pagination :paginator="$types">
+                <x-backoffice.ui.per-page-select />
+            </x-backoffice.ui.pagination>
         @endif
     </x-backoffice.ui.card>
 
     {{-- Add/Edit modal (Alpine-driven) --}}
-    <div x-data="{ show: @entangle('showModal') }">
+    <div
+        x-data="{ show: @entangle('showModal') }"
+        x-effect="
+            const modal = $el.querySelector('.modal');
+            $dispatch(show ? 'gls-select2-modal-opened' : 'gls-select2-modal-closed', { modal });
+        "
+    >
         <div x-cloak class="modal fade show" tabindex="-1" role="dialog"
             :style="show ? 'display:block; z-index:1060;' : 'display:none;'">
             <div class="modal-dialog modal-dialog-centered">

@@ -7,6 +7,7 @@ namespace App\Livewire\Backoffice\Encaissements;
 use App\Domain\Payments\Actions\EnregistrerEncaissement;
 use App\Livewire\Backoffice\Concerns\WithCaisseSelection;
 use App\Livewire\Backoffice\Concerns\WithCenterContext;
+use App\Livewire\Backoffice\Concerns\WithPerPage;
 use App\Models\Caisse;
 use App\Models\Encaissement;
 use App\Models\Inscription;
@@ -17,7 +18,9 @@ use App\Services\Context\CurrentContext;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -45,6 +48,7 @@ final class EncaissementsIndex extends Component
     use WithCaisseSelection;
     use WithCenterContext;
     use WithPagination;
+    use WithPerPage;
 
     protected $paginationTheme = 'bootstrap';
 
@@ -85,6 +89,19 @@ final class EncaissementsIndex extends Component
 
     public string $note = '';
 
+    /**
+     * One row per unpaid fee of the chosen registration, keyed by the fee's
+     * id (not a plain 0-based index) so the Blade view can pair each row's
+     * inputs with the matching entry of $fees (built separately in render()
+     * with the full dû/payé/reste display data) without relying on both
+     * collections staying in the same order. Filled in only for rows the
+     * user actually pays in this submit — every touched row becomes its own
+     * Encaissement (see save()). Not used in edit mode.
+     *
+     * @var array<int, array{fee_id: int, montant: string, methode: string, date_paiement: string}>
+     */
+    public array $paymentLines = [];
+
     public function mount(): void
     {
         $this->authorize('viewAny', Encaissement::class);
@@ -116,34 +133,66 @@ final class EncaissementsIndex extends Component
     }
 
     /**
-     * Creation mirrors StoreEncaissementRequest; edition mirrors
-     * UpdateEncaissementRequest (montant/caisse_id absent on purpose).
+     * Edition mirrors UpdateEncaissementRequest (montant/caisse_id absent on
+     * purpose) and validates the single frozen row's methode/date/cheque
+     * fields. Creation validates one or more rows of $paymentLines instead —
+     * only rows the user actually filled in (StoreEncaissementRequest's
+     * shape applied per touched row).
      *
      * @return array<string, mixed>
      */
     protected function rules(): array
     {
-        $cheque = ['nullable', 'required_if:methode,'.Encaissement::METHODE_CHEQUE];
-
-        $rules = [
-            'methode' => ['required', Rule::in(Encaissement::METHODES)],
-            'date_paiement' => ['required', 'date'],
-            'numero_cheque' => [...$cheque, 'string', 'max:50'],
-            'banque' => [...$cheque, 'string', 'max:100'],
-            'date_echeance_cheque' => [...$cheque, 'date'],
-            'note' => ['nullable', 'string'],
-        ];
-
         if ($this->editingId !== null) {
-            return $rules;
+            $cheque = ['nullable', 'required_if:methode,'.Encaissement::METHODE_CHEQUE];
+
+            return [
+                'methode' => ['required', Rule::in(Encaissement::METHODES)],
+                'date_paiement' => ['required', 'date'],
+                'numero_cheque' => [...$cheque, 'string', 'max:50'],
+                'banque' => [...$cheque, 'string', 'max:100'],
+                'date_echeance_cheque' => [...$cheque, 'date'],
+                'note' => ['nullable', 'string'],
+            ];
         }
 
-        $rules['student_id'] = ['required', 'exists:students,id'];
-        $rules['inscription_id'] = ['required', 'exists:inscriptions,id'];
-        $rules['inscription_fee_id'] = ['required', 'exists:inscription_fees,id'];
-        $rules['caisse_id'] = ['required', 'exists:caisses,id'];
-        // Never accept more than what is still owed on the selected fee.
-        $rules['montant'] = ['required', 'numeric', 'min:0.01', 'max:'.max(0.01, $this->resteDuFee())];
+        $rules = [
+            'student_id' => ['required', 'exists:students,id'],
+            'inscription_id' => ['required', 'exists:inscriptions,id'],
+            'caisse_id' => ['required', 'exists:caisses,id'],
+            'note' => ['nullable', 'string'],
+            // At least one row must be touched — fails before reaching save()'s
+            // own empty-lines guard, so the "paymentLines" error key is always
+            // populated together with the other required-field errors.
+            'paymentLines' => [function (string $attribute, mixed $value, \Closure $fail): void {
+                $touched = collect($this->paymentLines)->contains(fn (array $line) => ($line['montant'] ?? '') !== '');
+                if (! $touched) {
+                    $fail(__('Enter an amount for at least one fee.'));
+                }
+            }],
+        ];
+
+        $anyCheque = false;
+
+        foreach ($this->paymentLines as $i => $line) {
+            if (($line['montant'] ?? '') === '') {
+                // Untouched row — not part of this submit, no rules needed.
+                continue;
+            }
+
+            $reste = $this->resteDuFeeById((int) ($line['fee_id'] ?? 0));
+            $rules["paymentLines.$i.montant"] = ['required', 'numeric', 'min:0.01', 'max:'.max(0.01, $reste)];
+            $rules["paymentLines.$i.methode"] = ['required', Rule::in(Encaissement::METHODES)];
+            $rules["paymentLines.$i.date_paiement"] = ['required', 'date'];
+            $anyCheque = $anyCheque || $line['methode'] === Encaissement::METHODE_CHEQUE;
+        }
+
+        // Shared « Détails du chèque » block: required once, if ANY touched
+        // row uses Chèque — applies the same cheque to every Chèque row.
+        $cheque = ['nullable', Rule::requiredIf($anyCheque)];
+        $rules['numero_cheque'] = [...$cheque, 'string', 'max:50'];
+        $rules['banque'] = [...$cheque, 'string', 'max:100'];
+        $rules['date_echeance_cheque'] = [...$cheque, 'date'];
 
         return $rules;
     }
@@ -163,44 +212,51 @@ final class EncaissementsIndex extends Component
         $this->authorize('create', Encaissement::class);
         $this->resetForm();
         $this->date_paiement = now()->toDateString();
-        // Preselect the signed-in employee's own till (or the only accessible
-        // one) so the « Solde » box shows the balance as soon as the modal opens.
-        $this->preselectCaisseParDefaut(activesOnly: true);
+        // A payment always hits the signed-in employee's own till — there is
+        // no till picker in this modal (every employee owns exactly one,
+        // CaisseProvisioner).
+        $this->caisse_id = auth()->user()?->employee?->caisses()->value('id');
         $this->showModal = true;
     }
 
-    /** Changing the student drops the inscription/fee selection below it. */
+    /** Changing the student drops the enrollment/payment rows below it. */
     public function updatedStudentId(): void
     {
         $this->inscription_id = null;
-        $this->inscription_fee_id = null;
-        $this->montant = '';
-        $this->invalidateSelectedFeeCache();
-        $this->resetValidation(['inscription_id', 'inscription_fee_id', 'montant']);
+        $this->paymentLines = [];
+        $this->resetValidation(['inscription_id', 'paymentLines']);
     }
 
-    /** Changing the enrollment drops the fee selection below it. */
+    /** Changing the enrollment reloads its fees as fresh payment rows. */
     public function updatedInscriptionId(): void
     {
-        $this->inscription_fee_id = null;
-        $this->montant = '';
-        $this->invalidateSelectedFeeCache();
-        $this->resetValidation(['inscription_fee_id', 'montant']);
+        $this->loadPaymentLines();
+        $this->resetValidation('paymentLines');
     }
 
-    /** Picking a fee pre-fills the amount with what is still owed on it. */
-    public function updatedInscriptionFeeId(): void
+    /** One row per unpaid fee of the chosen registration, amount left blank. */
+    private function loadPaymentLines(): void
     {
-        $this->invalidateSelectedFeeCache();
-        $reste = $this->resteDuFee();
-        $this->montant = $reste > 0 ? (string) $reste : '';
-        $this->resetValidation('montant');
-    }
+        $this->paymentLines = [];
 
-    private function invalidateSelectedFeeCache(): void
-    {
-        $this->cachedSelectedFeeResolved = false;
-        $this->cachedSelectedFee = null;
+        if ($this->inscription_id === null) {
+            return;
+        }
+
+        $this->paymentLines = InscriptionFee::query()
+            ->where('inscription_id', $this->inscription_id)
+            ->orderBy('date_echeance')
+            ->get()
+            ->filter(fn (InscriptionFee $fee) => $this->resteDuFeeById($fee->id) > 0)
+            ->mapWithKeys(fn (InscriptionFee $fee) => [
+                $fee->id => [
+                    'fee_id' => $fee->id,
+                    'montant' => '',
+                    'methode' => Encaissement::METHODE_ESPECES,
+                    'date_paiement' => now()->toDateString(),
+                ],
+            ])
+            ->all();
     }
 
     /** Chèque fields only make sense for the Chèque method. */
@@ -214,10 +270,10 @@ final class EncaissementsIndex extends Component
         }
     }
 
-    /** Amount still owed on the selected fee (montant − payments already in). */
-    public function resteDuFee(): float
+    /** Amount still owed on a given fee (montant − payments already in). */
+    public function resteDuFeeById(int $feeId): float
     {
-        $fee = $this->selectedFee();
+        $fee = InscriptionFee::find($feeId);
 
         if ($fee === null) {
             return 0.0;
@@ -226,26 +282,12 @@ final class EncaissementsIndex extends Component
         return round(max(0, (float) $fee->montant - $fee->montantPaye()), 2);
     }
 
-    /**
-     * Memoized per request: rules(), updatedInscriptionFeeId() and render()
-     * can all call resteDuFee() for the same $inscription_fee_id within one
-     * round trip — no need to re-query each time.
-     */
-    private ?InscriptionFee $cachedSelectedFee = null;
-
-    private bool $cachedSelectedFeeResolved = false;
-
-    private function selectedFee(): ?InscriptionFee
+    /** Whether any touched payment row uses Chèque (drives the shared cheque-details block). */
+    public function anyLineIsCheque(): bool
     {
-        if ($this->cachedSelectedFeeResolved) {
-            return $this->cachedSelectedFee;
-        }
-
-        $this->cachedSelectedFeeResolved = true;
-
-        return $this->cachedSelectedFee = $this->inscription_fee_id === null
-            ? null
-            : InscriptionFee::find($this->inscription_fee_id);
+        return collect($this->paymentLines)->contains(
+            fn (array $line) => ($line['montant'] ?? '') !== '' && ($line['methode'] ?? null) === Encaissement::METHODE_CHEQUE
+        );
     }
 
     /**
@@ -323,30 +365,47 @@ final class EncaissementsIndex extends Component
             return;
         }
 
-        // The fee must belong to the selected enrollment (a tampered id must
-        // not let a payment land on someone else's fee).
-        $fee = InscriptionFee::find($data['inscription_fee_id']);
+        // Re-read from the live component array, not $data: rules() only
+        // declares rules for touched rows' montant/methode/date_paiement, so
+        // Livewire's validate() would strip the untouched fee_id key out of
+        // $data['paymentLines'] entirely. rules()'s own 'paymentLines' rule
+        // already guarantees at least one row is touched by this point.
+        $touchedLines = collect($this->paymentLines)
+            ->filter(fn (array $line) => ($line['montant'] ?? '') !== '');
 
-        if ($fee === null || $fee->inscription_id !== (int) $data['inscription_id']) {
-            $this->addError('inscription_fee_id', __('This fee does not belong to the selected registration.'));
+        // One Encaissement per touched row, all inside one transaction: if
+        // any row is invalid or its fee doesn't belong to the selected
+        // enrollment, every row in this submit rolls back together.
+        DB::transaction(function () use ($touchedLines, $data, $agent, $action): void {
+            foreach ($touchedLines as $line) {
+                $fee = InscriptionFee::find($line['fee_id']);
 
-            return;
-        }
+                if ($fee === null || $fee->inscription_id !== (int) $data['inscription_id']) {
+                    throw ValidationException::withMessages([
+                        'paymentLines' => __('One of the fees does not belong to the selected registration.'),
+                    ]);
+                }
 
-        // ⚠ Domain action ONLY: it creates the payment, increments
-        // caisses.solde and recomputes the fee statut in one transaction.
-        $action->handle([
-            'student_id' => $data['student_id'],
-            'inscription_fee_id' => $data['inscription_fee_id'],
-            'montant' => $data['montant'],
-            'methode' => $data['methode'],
-            'date_paiement' => $data['date_paiement'],
-            'caisse_id' => $data['caisse_id'],
-            'numero_cheque' => $this->methode === Encaissement::METHODE_CHEQUE ? ($this->numero_cheque ?: null) : null,
-            'banque' => $this->methode === Encaissement::METHODE_CHEQUE ? ($this->banque ?: null) : null,
-            'date_echeance_cheque' => $this->methode === Encaissement::METHODE_CHEQUE ? ($this->date_echeance_cheque ?: null) : null,
-            'note' => $this->note ?: null,
-        ], $agent);
+                $isCheque = $line['methode'] === Encaissement::METHODE_CHEQUE;
+
+                // ⚠ Domain action ONLY: it creates the payment, increments
+                // caisses.solde and recomputes the fee statut in one transaction.
+                $action->handle([
+                    'student_id' => $data['student_id'],
+                    'inscription_fee_id' => $fee->id,
+                    'montant' => $line['montant'],
+                    'methode' => $line['methode'],
+                    'date_paiement' => $line['date_paiement'],
+                    'caisse_id' => $data['caisse_id'],
+                    // Shared « Détails du chèque » block: same numéro/banque/
+                    // échéance applied to every Chèque row in this submit.
+                    'numero_cheque' => $isCheque ? ($this->numero_cheque ?: null) : null,
+                    'banque' => $isCheque ? ($this->banque ?: null) : null,
+                    'date_echeance_cheque' => $isCheque ? ($this->date_echeance_cheque ?: null) : null,
+                    'note' => $this->note ?: null,
+                ], $agent);
+            }
+        });
 
         $this->closeModal();
         $this->dispatch('toast', type: 'success', message: __('Payment recorded.'));
@@ -362,7 +421,7 @@ final class EncaissementsIndex extends Component
     {
         $this->reset([
             'editingId', 'student_id', 'inscription_id', 'inscription_fee_id',
-            'montant', 'caisse_id', 'date_paiement',
+            'montant', 'caisse_id', 'date_paiement', 'paymentLines',
             'numero_cheque', 'banque', 'date_echeance_cheque', 'note',
         ]);
         $this->methode = Encaissement::METHODE_ESPECES;
@@ -417,14 +476,14 @@ final class EncaissementsIndex extends Component
             ->when($this->dateTo !== '', fn ($q) => $q->whereDate('date_paiement', '<=', $this->dateTo))
             ->when($this->search !== '', function ($q): void {
                 $q->where(function ($sub): void {
-                    $sub->where('reference', 'like', "%{$this->search}%")
-                        ->orWhereHas('student', fn ($s) => $s->where('nom', 'like', "%{$this->search}%")
-                            ->orWhere('prenom', 'like', "%{$this->search}%")
-                            ->orWhere('reference', 'like', "%{$this->search}%"));
+                    $sub->where('reference', 'ilike', "%{$this->search}%")
+                        ->orWhereHas('student', fn ($s) => $s->where('nom', 'ilike', "%{$this->search}%")
+                            ->orWhere('prenom', 'ilike', "%{$this->search}%")
+                            ->orWhere('reference', 'ilike', "%{$this->search}%"));
                 });
             })
             ->latest()
-            ->paginate(10);
+            ->paginate($this->perPage);
 
         // Cascade level 2: the chosen student's enrollments (active year).
         $inscriptions = $this->student_id === null
@@ -451,6 +510,7 @@ final class EncaissementsIndex extends Component
                     return [
                         'id' => $fee->id,
                         'nom' => $fee->nom,
+                        'date_echeance' => $fee->date_echeance,
                         'du' => $du,
                         'paye' => $paye,
                         'reste' => round(max(0, $du - $paye), 2),
@@ -465,9 +525,6 @@ final class EncaissementsIndex extends Component
             'fees' => $fees,
             'caisses' => $caisses,
             'methodes' => Encaissement::METHODES,
-            'reste' => $this->resteDuFee(),
-            // Read-only balance shown next to the till select (« Solde » box).
-            'soldeCaisse' => $this->soldeCaisse(),
         ])->layout('components.backoffice.layout.app', ['title' => __('Payments')]);
     }
 }

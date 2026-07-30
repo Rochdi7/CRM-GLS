@@ -7,6 +7,7 @@ namespace App\Livewire\Backoffice\CaisseTransfers;
 use App\Domain\Finance\Actions\DemanderTransfertCaisse;
 use App\Domain\Finance\Actions\ValiderTransfertCaisse;
 use App\Livewire\Backoffice\Concerns\WithCenterContext;
+use App\Livewire\Backoffice\Concerns\WithPerPage;
 use App\Models\Caisse;
 use App\Models\CaisseTransfer;
 use App\Services\Authorization\CenterAccessService;
@@ -36,6 +37,7 @@ final class CaisseTransfersIndex extends Component
     use AuthorizesRequests;
     use WithCenterContext;
     use WithPagination;
+    use WithPerPage;
 
     protected $paginationTheme = 'bootstrap';
 
@@ -267,12 +269,12 @@ final class CaisseTransfersIndex extends Component
             ->when($this->search !== '', function ($q): void {
                 $term = "%{$this->search}%";
                 $q->where(function ($sub) use ($term): void {
-                    $sub->where('reference', 'like', $term)
-                        ->orWhere('note', 'like', $term);
+                    $sub->where('reference', 'ilike', $term)
+                        ->orWhere('note', 'ilike', $term);
                 });
             })
             ->latest()
-            ->paginate(10);
+            ->paginate($this->perPage);
 
         // Per-status counts for the tab badges (same center scope, ignores search).
         $statutCounts = CaisseTransfer::query()

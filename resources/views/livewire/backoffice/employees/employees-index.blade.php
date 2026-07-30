@@ -16,20 +16,20 @@
     @error('delete')<x-backoffice.ui.alert variant="danger">{{ $message }}</x-backoffice.ui.alert>@enderror
 
     <x-backoffice.ui.card :title="__('Employees')">
-        <x-slot:tools>
-            <div class="d-flex align-items-center gap-2 flex-wrap">
-                <x-backoffice.forms.select2 id="emp-cat-filter" model="categorieFilter" live inline
-                    width="180px" :placeholder="__('All categories')">
-                    @foreach ($categories as $cat)
-                        <option value="{{ $cat }}">{{ $cat }}</option>
-                    @endforeach
-                </x-backoffice.forms.select2>
+        <x-backoffice.ui.filter-bar>
+            <x-backoffice.forms.select2 id="emp-cat-filter" model="categorieFilter" live
+                :label="__('Category')" width="180px" :placeholder="__('All categories')">
+                @foreach ($categories as $cat)
+                    <option value="{{ $cat }}">{{ $cat }}</option>
+                @endforeach
+            </x-backoffice.forms.select2>
+            <x-slot:search>
                 <div class="input-icon-start position-relative">
                     <span class="input-icon-addon"><i class="ti ti-search"></i></span>
                     <input type="text" class="form-control" wire:model.live.debounce.400ms="search" placeholder="{{ __('Search') }}">
                 </div>
-            </div>
-        </x-slot:tools>
+            </x-slot:search>
+        </x-backoffice.ui.filter-bar>
 
         @if ($employees->isEmpty())
             <x-backoffice.ui.empty-state :title="__('No employees yet')" icon="ti ti-users" />
@@ -91,14 +91,22 @@
                     </tr>
                 @endforeach
             </x-backoffice.ui.table>
-            <x-backoffice.ui.pagination :paginator="$employees" />
+            <x-backoffice.ui.pagination :paginator="$employees">
+                <x-backoffice.ui.per-page-select />
+            </x-backoffice.ui.pagination>
         @endif
     </x-backoffice.ui.card>
 
     {{-- Add/Edit modal — Alpine-driven so open/close stays in sync with Livewire.
          x-show alone controls display (no static .show / inline display that would
          fight it); explicit z-index keeps it above the backdrop and the sidebar. --}}
-    <div x-data="{ show: @entangle('showModal') }">
+    <div
+        x-data="{ show: @entangle('showModal') }"
+        x-effect="
+            const modal = $el.querySelector('.modal');
+            $dispatch(show ? 'gls-select2-modal-opened' : 'gls-select2-modal-closed', { modal });
+        "
+    >
         <div x-cloak class="modal fade show" tabindex="-1" aria-modal="true" role="dialog"
             :style="show ? 'display:block; z-index:1060;' : 'display:none;'">
             {{-- Compact dialog for the credentials confirmation, XL only for the form --}}
@@ -243,7 +251,7 @@
                                     {{-- A specific center active in the top bar assigns the record
                                          automatically — the field only shows on « Tous les centres ». --}}
                                     @unless ($centerLocked)
-                                        <div class="col-md-6">
+                                        <div class="col-md-6" wire:key="emp-etab-wrap">
                                             <div class="mb-3">
                                                 <label class="form-label" for="emp-etab">{{ __('Center') }}</label>
                                                 <x-backoffice.forms.select2 id="emp-etab" model="etablissement_id"

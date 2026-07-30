@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Backoffice\Roles;
 
+use App\Livewire\Backoffice\Concerns\WithPerPage;
 use App\Models\Role;
 use Illuminate\Contracts\View\View;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -19,6 +20,7 @@ final class RolesIndex extends Component
 {
     use AuthorizesRequests;
     use WithPagination;
+    use WithPerPage;
 
     protected $paginationTheme = 'bootstrap';
 
@@ -72,12 +74,12 @@ final class RolesIndex extends Component
             ->withCount(['permissions', 'users'])
             ->when($this->search !== '', function ($query): void {
                 $query->where(function ($q): void {
-                    $q->where('name', 'like', "%{$this->search}%")
-                        ->orWhere('label', 'like', "%{$this->search}%");
+                    $q->where('name', 'ilike', "%{$this->search}%")
+                        ->orWhere('label', 'ilike', "%{$this->search}%");
                 });
             })
             ->orderBy('name')
-            ->paginate(10);
+            ->paginate($this->perPage);
 
         return view('livewire.backoffice.roles.roles-index', ['roles' => $roles])
             ->layout('components.backoffice.layout.app', ['title' => __('Roles & Permissions')]);

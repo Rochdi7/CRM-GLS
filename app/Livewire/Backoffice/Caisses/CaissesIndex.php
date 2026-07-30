@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Livewire\Backoffice\Caisses;
 
 use App\Livewire\Backoffice\Concerns\WithCenterContext;
+use App\Livewire\Backoffice\Concerns\WithPerPage;
 use App\Models\Caisse;
 use App\Models\Etablissement;
 use App\Services\Authorization\CenterAccessService;
@@ -28,6 +29,7 @@ final class CaissesIndex extends Component
     use AuthorizesRequests;
     use WithCenterContext;
     use WithPagination;
+    use WithPerPage;
 
     protected $paginationTheme = 'bootstrap';
 
@@ -71,13 +73,13 @@ final class CaissesIndex extends Component
             ->when($this->etablissementFilter !== '', fn ($q) => $q->where('etablissement_id', (int) $this->etablissementFilter))
             ->when($this->statutFilter !== '', fn ($q) => $q->where('statut', $this->statutFilter))
             ->when($this->search !== '', fn ($q) => $q->where(function ($q): void {
-                $q->where('nom', 'like', "%{$this->search}%")
+                $q->where('nom', 'ilike', "%{$this->search}%")
                     ->orWhereHas('responsable', fn ($r) => $r
-                        ->where('nom', 'like', "%{$this->search}%")
-                        ->orWhere('prenom', 'like', "%{$this->search}%"));
+                        ->where('nom', 'ilike', "%{$this->search}%")
+                        ->orWhere('prenom', 'ilike', "%{$this->search}%"));
             }))
             ->latest()
-            ->paginate(10);
+            ->paginate($this->perPage);
 
         return view('livewire.backoffice.caisses.caisses-index', [
             'caisses' => $caisses,

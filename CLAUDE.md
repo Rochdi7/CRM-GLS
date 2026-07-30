@@ -21,7 +21,9 @@ employees, registrations, groups, attendance, payments, expenses, stock, reports
 - Blade components (anonymous) for all reusable UI
 - **Bootstrap 5** via the **PreSkool v1.9.7** admin theme (UI source of truth)
 - Vite (own code only) + static PreSkool assets
-- MySQL is the target production database (local dev currently runs SQLite until the schema phase)
+- **PostgreSQL is the only supported database** — see §17 "Database Standard —
+  PostgreSQL Only" for the full rule set (search, indexing, JSON, migrations,
+  tests, deployment). Read §17 before touching anything database-related.
 - Architecture: **modular monolith** — future business logic in `app/Domain/<Module>/`
 
 **Forbidden:** React, Vue, Angular, Inertia, Next.js, Tailwind CSS, second Alpine
@@ -71,7 +73,8 @@ One convention only: **anonymous components** under `resources/views/components/
 - `<x-backoffice.layout.app>` — admin shell (header+sidebar+footer+theme-settings).
   Also: `…layout.guest` (auth/error pages), `…layout.print` (printables),
   `…layout.page-header`, `…layout.breadcrumbs`.
-- `<x-backoffice.ui.*>` — card, button, badge, alert, modal, table, empty-state, pagination.
+- `<x-backoffice.ui.*>` — card, button, badge, alert, modal, table, empty-state,
+  pagination, filter-bar (+ `filter-bar.date-field`).
 - `<x-backoffice.forms.*>` — input, select, textarea, error (all render validation errors).
 - `<x-frontoffice.layout.*>` — independent public shell (app, guest, header, footer).
 - `<x-shared.*>` — only for genuinely cross-area components.
@@ -133,6 +136,26 @@ bootstrap-datetimepicker, feather, slimscroll, `script.js`.
   `<x-backoffice.layout.theme-settings />` component. The original
   `theme-script.js` is kept as reference in `public/assets/preskool/js/` but is
   **not loaded** — don't load it (it injects markup with broken paths).
+- **Select2 double-init fix (both parts load-bearing)**: every
+  `<x-backoffice.forms.select2>` field (modal fields AND `live inline` index
+  filters, app-wide) used to render a second, empty Select2 widget stacked
+  under the real one, on first page load, no interaction needed. Root cause:
+  `public/assets/preskool/js/script.js`'s generic on-ready initializer used
+  the selector `$('.select2')` — but Select2's own generated wrapper `<span>`
+  also carries the class `select2` (`<span class="select2 select2-container
+  ...">`), so once Alpine's `glsSelect2` (`resources/js/backoffice/app.js`)
+  had already built the real widget, that vendor script matched the freshly
+  built wrapper and called `.select2()` on it again. Fixed by narrowing that
+  selector to `select.select2:not(.select2-hidden-accessible)` (real,
+  not-yet-initialized `<select>`s only — no production view uses class
+  `select2` on a `<select>` today, only `theme-reference/`). This is a rare
+  sanctioned edit to the vendor copy in `public/assets/preskool/` (normally
+  read-only, §3) — a needed correction, not a redesign; re-apply it if the
+  theme assets are ever re-synced. `mountSelect2()` in `app.js` also sweeps
+  stray `:scope > .select2-container` siblings before every `$el.select2()`
+  call as defense-in-depth against any other double-init path. If a Select2
+  field ever shows a duplicate empty dropdown again, check `script.js`'s
+  selector first before touching `app.js`.
 
 ### DataTables rule
 
@@ -140,6 +163,47 @@ Large CRM lists (students, registrations, payments, employees, attendance,
 expenses) must use **Livewire server-side** pagination/search/sort/filtering with
 the PreSkool **table design** (`<x-backoffice.ui.table>`). Client-side DataTables
 is allowed only for small, genuinely static demo tables.
+
+### List filter rule
+
+Every index page's filters (select2 dropdowns, date-range inputs, search box,
+create button) render via **`<x-backoffice.ui.filter-bar>`**
+(`resources/views/components/backoffice/ui/filter-bar.blade.php`) as its own
+labeled, full-width row inside the card body — **never** cram them into
+`<x-backoffice.ui.card>`'s `x-slot:tools` (that slot sits in the card header
+next to the `<h4>` title, fighting it for space; with 2+ filters it wraps into
+an unlabeled, uneven stack — especially inside a narrower nested tab, e.g.
+Gestion des dépenses' tab panes). Pattern:
+
+```blade
+<x-backoffice.ui.card :title="__('Expenses')">
+    <x-backoffice.ui.filter-bar>
+        <x-backoffice.forms.select2 id="d-type-filter" model="typeFilter" live
+            :label="__('Expense type')" :placeholder="__('All expense types')">
+            …
+        </x-backoffice.forms.select2>
+        <x-backoffice.ui.filter-bar.date-field :label="__('From date')" model="dateFrom" />
+        <x-slot:search>
+            <div class="input-icon-start position-relative">
+                <span class="input-icon-addon"><i class="ti ti-search"></i></span>
+                <input type="text" class="form-control" wire:model.live.debounce.400ms="search" placeholder="{{ __('Search') }}">
+            </div>
+        </x-slot:search>
+        @can('create', \App\Models\Depense::class)
+            <x-slot:actions>…create button…</x-slot:actions>
+        @endcan
+    </x-backoffice.ui.filter-bar>
+```
+
+Every direct default-slot child is one labeled filter (select2 **without**
+`inline` — keep its own label; `filter-bar.date-field` for dates); `search`
+and `actions` are optional named slots rendered at the row's end, aligned
+right on desktop. Already applied to all 13 real list pages (Depenses,
+Remboursements, Encaissements, Students, Employees, Inscriptions, Users,
+Types de dépenses, Groups, Caisse Transfers, Roles, Caisses, Caisse Journal).
+Not used on `role-form.blade.php` / `manage-authorization.blade.php` — those
+are single-record edit forms, not lists, and their `tools` slots hold static
+badges, not filters.
 
 ## 8. Route naming rules
 
@@ -431,3 +495,211 @@ Teams OFF (employees have ONE center). Non-negotiable rules:
   (Livewire 4 + PreSkool; permissions page is read-only Blade).
 - Tests live in `tests/Feature/Backoffice/Authorization/` — keep green; never
   weaken a 403 assertion to make a feature pass.
+
+## 17. Database Standard — PostgreSQL Only
+
+This project uses PostgreSQL as its only supported database engine.
+
+- Local development: PostgreSQL
+- Automated tests: PostgreSQL
+- Staging: PostgreSQL
+- Production: PostgreSQL
+- Laravel connection: `pgsql`
+- Target PostgreSQL version: PostgreSQL 17
+- Minimum acceptable production version: PostgreSQL 16+
+
+The full audit and migration history (what changed, why, and what was verified)
+lives in `POSTGRES_AUDIT.md` and `POSTGRES_MIGRATION_REPORT.md` — read those
+before any further database-layer work.
+
+### Database compatibility
+
+- Do not add SQLite compatibility.
+- Do not add MySQL or MariaDB compatibility.
+- Do not add database-driver conditional branches (`DB::getDriverName()` checks
+  etc.) — `config/database.php` declares only the `pgsql` connection; keep it
+  that way.
+- Do not use SQLite `:memory:` for tests.
+- Do not test database behavior against a different engine than production.
+- All migrations, seeders, tests, and queries must run against PostgreSQL.
+
+### Search rules
+
+All case-insensitive user-facing searches must use PostgreSQL `ILIKE`.
+
+Correct:
+
+```php
+$query->where('nom', 'ilike', "%{$search}%");
+```
+
+Incorrect:
+
+```php
+$query->where('nom', 'like', "%{$search}%");
+```
+
+PostgreSQL `LIKE` is case-sensitive (unlike MySQL's default collation) —
+replacing `ilike` with `like` silently reintroduces a search regression users
+will notice immediately (e.g. searching "dupont" no longer finding "Dupont").
+
+For large datasets, do not automatically introduce full-text or fuzzy search.
+First measure search performance. If needed, consider `pg_trgm`, GIN trigram
+indexes, or PostgreSQL full-text search (see § PostgreSQL extensions below).
+Preserve existing search behavior unless a feature specifically requests fuzzy
+search.
+
+### Foreign-key index rules
+
+PostgreSQL does **not** automatically create an index on the referencing side
+of a foreign key (unlike MySQL/InnoDB). Whenever adding:
+
+```php
+$table->foreignId('student_id')->constrained();
+```
+
+verify whether a standalone or composite index already covers `student_id`.
+Add an index when the column is used for filtering, joins, eager loading,
+center scoping, sorting, or finance queries. Do not add a redundant
+single-column index when an existing composite index already begins with that
+column (e.g. `encaissements.caisse_id` is covered by the
+`(caisse_id, date_paiement)` composite — no separate index needed).
+
+### JSON rules
+
+Prefer `jsonb()` over `json()` for application JSON data unless exact textual
+JSON representation, key order, or whitespace preservation is explicitly
+required.
+
+Correct default:
+
+```php
+$table->jsonb('properties')->nullable();
+```
+
+Only add GIN indexes when the application actually filters or searches inside
+JSONB data — don't add them speculatively.
+
+### Migration rules
+
+- Before the first production deployment, existing project-owned migrations
+  may still be corrected in place (this is what happened during the
+  PostgreSQL migration — see `POSTGRES_MIGRATION_REPORT.md` §2 for the two
+  `json()`→`jsonb()` edits made to already-applied local migrations).
+- After a migration has run in **production**: never edit it — create a new
+  migration instead.
+- Never use `migrate:fresh` in production.
+- Production uses `php artisan migrate --force`.
+
+### Query rules
+
+Review every use of `DB::raw()`, `selectRaw()`, `whereRaw()`, `havingRaw()`,
+`orderByRaw()` — queries must use PostgreSQL-compatible syntax. Do not
+introduce MySQL-only functions such as `GROUP_CONCAT`, `IFNULL`,
+`DATE_FORMAT`, `FIND_IN_SET`, `FIELD`. Prefer Laravel query-builder methods
+where practical.
+
+### Money rules
+
+Keep financial columns as fixed precision:
+
+```php
+$table->decimal('montant', 12, 2);
+```
+
+Never use floating-point columns for monetary amounts. Do not change existing
+finance behavior during database optimizations (see §11's Finance invariants —
+those rules are independent of and unaffected by the database engine).
+
+### Date-query rules
+
+Prefer sargable date ranges:
+
+```php
+$query->whereBetween('date_paiement', [$start, $end]);
+```
+
+Avoid wrapping indexed date columns in SQL functions when a direct range can
+produce the same result.
+
+### Test rules
+
+Tests must use:
+
+```env
+DB_CONNECTION=pgsql
+DB_DATABASE=gls_crm_test
+```
+
+The test database must be separate from local development, staging, and
+production. **Never point PHPUnit at `gls_crm`.** Commands using
+`migrate:fresh`, `RefreshDatabase`, truncation, or destructive seeders must
+only run against `gls_crm_test`.
+
+### Environment defaults
+
+Standard local environment:
+
+```env
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=gls_crm
+DB_USERNAME=postgres
+DB_PASSWORD=postgres
+DB_SSLMODE=prefer
+```
+
+(Local dev currently uses the `postgres` superuser role for simplicity —
+production must use a dedicated non-superuser role, see below.)
+
+Standard production environment:
+
+```env
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=gls_crm
+DB_USERNAME=gls_crm_app
+DB_PASSWORD=<secure-password>
+DB_SSLMODE=prefer
+```
+
+When PostgreSQL is remote, use `DB_SSLMODE=require`, or preferably
+`verify-full` with a CA certificate.
+
+### Production security
+
+When Laravel and PostgreSQL run on the same VPS:
+
+- PostgreSQL should listen only on localhost.
+- Port `5432` should not be publicly exposed.
+- Laravel must use a dedicated application role (`gls_crm_app`), never the
+  `postgres` superuser.
+- Production credentials must not be committed.
+
+### Performance rules
+
+PostgreSQL does not automatically solve application-level inefficiencies.
+Continue to measure query counts, duplicate queries, Livewire renders,
+unpaginated collections, eager component mounting, large Select2 option
+lists, and PHP-side sorting/merging — see `PERFORMANCE_AUDIT.md` and
+`PERFORMANCE_OPTIMIZATION_REPORT.md` for the established methodology.
+
+The known remaining bottleneck is `CaisseJournal`
+(`app/Livewire/Backoffice/Caisses/CaisseJournal.php`), which currently merges
+four tables' finance records in PHP with no SQL-level pagination and should
+eventually move to a PostgreSQL `UNION ALL` with database pagination — flagged
+in both performance documents, intentionally deferred as out-of-scope for
+those passes.
+
+### PostgreSQL extensions (not currently installed — future tools only)
+
+Do not add these to migrations without a measured need:
+
+- **`pg_trgm`** — useful for measured fuzzy or substring-search bottlenecks
+  (trigram GIN indexes on `nom`/`prenom`/`reference`).
+- **`unaccent`** — useful for accent-insensitive text search (relevant for
+  French/German/Arabic names).
+- **`pgcrypto`** — useful for PostgreSQL-generated UUIDs or cryptographic
+  functions, not currently needed (all PKs are bigint identity).

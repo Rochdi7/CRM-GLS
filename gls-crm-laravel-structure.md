@@ -1,5 +1,13 @@
 # GLS CRM — Laravel Project Structure (New, Standalone Project)
 
+> Historical note: this document was written as a Laravel 11 build plan before
+> the project was actually built (on Laravel 13) and before the PostgreSQL-only
+> migration completed on July 29, 2026. Any MySQL references below (e.g. the
+> audit-log security note) are historical design rationale, not current setup
+> instructions. For the current database rules, see `CLAUDE.md`
+> § "Database Standard — PostgreSQL Only", `POSTGRES_AUDIT.md`, and
+> `POSTGRES_MIGRATION_REPORT.md`.
+
 Companion to `gls-crm-schema.md`. This document maps the 15-table `gls_full_v4` schema onto an actual Laravel 11 folder/file structure — models, migrations, controllers, Livewire components, routes — for a **brand-new, standalone Laravel project**, separate from the existing GLS website/backoffice repo. Nothing here assumes or reuses any existing code; this is a from-scratch build plan.
 
 **Auth requirement locked in for this project:** staff-only login (no student/parent portal in this phase). Creating an `employees` record **auto-generates its login credentials** (username + password) — this is a specific, non-default Laravel behavior and is designed explicitly below, not just "add Breeze and move on."

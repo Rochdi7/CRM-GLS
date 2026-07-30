@@ -14,26 +14,24 @@
     </x-backoffice.layout.page-header>
 
     <x-backoffice.ui.card :title="__('Payments')">
-        <x-slot:tools>
-            <div class="d-flex align-items-center gap-2 flex-wrap">
-                <x-backoffice.forms.select2 id="e-caisse-filter" model="caisseFilter" live inline
-                    width="160px" :placeholder="__('All tills')">
-                    @foreach ($caisses as $c)<option value="{{ $c->id }}">{{ $c->nom }}</option>@endforeach
-                </x-backoffice.forms.select2>
-                <x-backoffice.forms.select2 id="e-methode-filter" model="methodeFilter" live inline
-                    width="150px" :placeholder="__('All methods')">
-                    @foreach ($methodes as $m)<option value="{{ $m }}">{{ $m }}</option>@endforeach
-                </x-backoffice.forms.select2>
-                <input type="date" class="form-control" style="min-width: 150px;"
-                    wire:model.live="dateFrom" title="{{ __('From date') }}">
-                <input type="date" class="form-control" style="min-width: 150px;"
-                    wire:model.live="dateTo" title="{{ __('To date') }}">
+        <x-backoffice.ui.filter-bar>
+            <x-backoffice.forms.select2 id="e-caisse-filter" model="caisseFilter" live
+                :label="__('Till')" width="160px" :placeholder="__('All tills')">
+                @foreach ($caisses as $c)<option value="{{ $c->id }}">{{ $c->nom }}</option>@endforeach
+            </x-backoffice.forms.select2>
+            <x-backoffice.forms.select2 id="e-methode-filter" model="methodeFilter" live
+                :label="__('Method')" width="150px" :placeholder="__('All methods')">
+                @foreach ($methodes as $m)<option value="{{ $m }}">{{ $m }}</option>@endforeach
+            </x-backoffice.forms.select2>
+            <x-backoffice.ui.filter-bar.date-field :label="__('From date')" model="dateFrom" />
+            <x-backoffice.ui.filter-bar.date-field :label="__('To date')" model="dateTo" />
+            <x-slot:search>
                 <div class="input-icon-start position-relative">
                     <span class="input-icon-addon"><i class="ti ti-search"></i></span>
                     <input type="text" class="form-control" wire:model.live.debounce.400ms="search" placeholder="{{ __('Search') }}">
                 </div>
-            </div>
-        </x-slot:tools>
+            </x-slot:search>
+        </x-backoffice.ui.filter-bar>
 
         @if ($encaissements->isEmpty())
             <x-backoffice.ui.empty-state :title="__('No payments yet')" icon="ti ti-cash-banknote" />
@@ -88,12 +86,20 @@
                     </tr>
                 @endforeach
             </x-backoffice.ui.table>
-            <x-backoffice.ui.pagination :paginator="$encaissements" />
+            <x-backoffice.ui.pagination :paginator="$encaissements">
+                <x-backoffice.ui.per-page-select />
+            </x-backoffice.ui.pagination>
         @endif
     </x-backoffice.ui.card>
 
     {{-- Add/Edit modal --}}
-    <div x-data="{ show: @entangle('showModal') }">
+    <div
+        x-data="{ show: @entangle('showModal') }"
+        x-effect="
+            const modal = $el.querySelector('.modal');
+            $dispatch(show ? 'gls-select2-modal-opened' : 'gls-select2-modal-closed', { modal });
+        "
+    >
         <div x-cloak class="modal fade show" tabindex="-1" role="dialog"
             :style="show ? 'display:block; z-index:1060;' : 'display:none;'">
             <div class="modal-dialog modal-dialog-centered modal-xl">
@@ -119,146 +125,89 @@
                                          conditional siblings and each holds a wire:ignore island —
                                          without keys the morph pairs them positionally and scrambles
                                          the widgets. --}}
-                                    <div class="col-md-3" wire:key="enc-student">
+                                    <div class="col-md-6" wire:key="enc-student">
                                         <x-backoffice.forms.select2 id="e-student" model="student_id" live
                                             :label="__('Student')" required search="always" :placeholder="__('Choose…')">
                                             @foreach ($students as $st)<option value="{{ $st->id }}">{{ $st->nomComplet() }} ({{ $st->reference }})</option>@endforeach
                                         </x-backoffice.forms.select2>
                                     </div>
-                                    <div class="col-md-3" wire:key="enc-inscription-{{ $student_id ?? 0 }}">
+                                    <div class="col-md-6" wire:key="enc-inscription-{{ $student_id ?? 0 }}">
                                         <x-backoffice.forms.select2 id="e-inscription" model="inscription_id" live
                                             :label="__('Registration')" required :placeholder="__('Choose…')">
                                             @foreach ($inscriptions as $ins)<option value="{{ $ins->id }}">{{ $ins->reference }} — {{ $ins->group?->nom ?? '—' }}</option>@endforeach
                                         </x-backoffice.forms.select2>
                                     </div>
-                                    <div class="col-md-3" wire:key="enc-caisse">
-                                        {{-- live: the Solde box beside it follows the selection --}}
-                                        <x-backoffice.forms.select2 id="e-caisse" model="caisse_id" live
-                                            :label="__('Till')" required :placeholder="__('Choose…')">
-                                            @foreach ($caisses as $c)<option value="{{ $c->id }}">{{ $c->nom }}</option>@endforeach
-                                        </x-backoffice.forms.select2>
-                                    </div>
-                                    <div class="col-md-3" wire:key="enc-solde">
-                                        {{-- Legacy-app « Solde » box: the selected till's balance --}}
-                                        <div class="mb-3">
-                                            <label class="form-label" for="e-solde">{{ __('Balance') }}</label>
-                                            <div class="input-group">
-                                                <input type="text" id="e-solde" class="form-control" readonly
-                                                    value="{{ $soldeCaisse !== null ? number_format($soldeCaisse, 2) : '—' }}">
-                                                <span class="input-group-text">DH</span>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    {{-- No till picker: a payment always hits the signed-in
+                                         employee's own till (server-set in create()); no Solde
+                                         box either — matches the requested modal layout. --}}
                                 </div>
 
-                                {{-- Step 2 — the fee lines of the chosen registration --}}
+                                {{-- Step 2 — pay any subset of the registration's fees, each
+                                     with its own amount / method / date --}}
                                 <div class="border-top pt-3">
                                     <h6 class="mb-1">{{ __('Fees of this registration') }}</h6>
-                                    <p class="text-muted fs-13 mb-3">{{ __('Pick the fee this payment settles — the amount defaults to what is still owed on it.') }}</p>
+                                    <p class="text-muted fs-13 mb-3">{{ __('Enter an amount on every fee this payment settles — leave the others blank.') }}</p>
 
                                     @if ($inscription_id === null)
                                         <x-backoffice.ui.alert variant="info" :dismissible="false">
                                             {{ __('Select a student and a registration to see its fees.') }}
                                         </x-backoffice.ui.alert>
-                                    @elseif (count($fees) === 0)
+                                    @elseif (count($paymentLines) === 0)
                                         <x-backoffice.ui.alert variant="warning" :dismissible="false">
-                                            {{ __('This registration has no fee lines.') }}
+                                            {{ __('Every fee of this registration is already fully paid.') }}
                                         </x-backoffice.ui.alert>
                                     @else
                                         <div class="table-responsive">
                                             <table class="table table-bordered table-sm align-middle text-center mb-0">
                                                 <thead class="table-light">
                                                     <tr>
-                                                        <th class="text-center" style="width: 8%;"></th>
-                                                        <th class="text-center" style="width: 30%;">{{ __('Fee') }}</th>
-                                                        <th class="text-center" style="width: 16%;">{{ __('Due') }}</th>
-                                                        <th class="text-center" style="width: 16%;">{{ __('Already paid') }}</th>
-                                                        <th class="text-center" style="width: 16%;">{{ __('Remaining') }}</th>
-                                                        <th class="text-center" style="width: 14%;">{{ __('Status') }}</th>
+                                                        <th class="text-start">{{ __('Fee') }}</th>
+                                                        <th>{{ __('Due date') }}</th>
+                                                        <th>{{ __('Amount') }}</th>
+                                                        <th>{{ __('Remaining') }}</th>
+                                                        <th style="width:130px;">{{ __('Payment amount') }}</th>
+                                                        <th style="width:150px;">{{ __('Method') }}</th>
+                                                        <th style="width:150px;">{{ __('Date') }}</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     @foreach ($fees as $fee)
-                                                        <tr wire:key="enc-fee-{{ $fee['id'] }}"
-                                                            class="{{ (int) $inscription_fee_id === $fee['id'] ? 'table-active' : '' }}">
-                                                            <td>
-                                                                <input class="form-check-input" type="radio"
-                                                                    id="e-fee-{{ $fee['id'] }}"
-                                                                    value="{{ $fee['id'] }}"
-                                                                    wire:model.live="inscription_fee_id"
-                                                                    @disabled($fee['reste'] <= 0)>
-                                                            </td>
-                                                            <td class="text-start">
-                                                                <label class="form-label mb-0" for="e-fee-{{ $fee['id'] }}">{{ $fee['nom'] }}</label>
-                                                            </td>
+                                                        @continue(! isset($paymentLines[$fee['id']]))
+                                                        <tr wire:key="enc-pl-{{ $fee['id'] }}">
+                                                            <td class="text-start">{{ $fee['nom'] }}</td>
+                                                            <td>{{ $fee['date_echeance']?->format('d/m/Y') }}</td>
                                                             <td>{{ number_format($fee['du'], 2) }} MAD</td>
-                                                            <td class="text-success">{{ number_format($fee['paye'], 2) }} MAD</td>
-                                                            <td class="{{ $fee['reste'] > 0 ? 'text-danger fw-semibold' : 'text-success' }}">
-                                                                {{ number_format($fee['reste'], 2) }} MAD
+                                                            <td class="text-danger fw-semibold">{{ number_format($fee['reste'], 2) }} MAD</td>
+                                                            <td>
+                                                                <input type="number" step="0.01" min="0" max="{{ $fee['reste'] }}"
+                                                                    wire:model="paymentLines.{{ $fee['id'] }}.montant"
+                                                                    class="form-control form-control-sm @error("paymentLines.{$fee['id']}.montant") is-invalid @enderror"
+                                                                    placeholder="0">
+                                                                @error("paymentLines.{$fee['id']}.montant")<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
                                                             </td>
                                                             <td>
-                                                                <x-backoffice.ui.badge :variant="$fee['statut'] === \App\Models\InscriptionFee::STATUT_PAYE ? 'success' : ($fee['statut'] === \App\Models\InscriptionFee::STATUT_PAYE_PARTIELLEMENT ? 'warning' : 'danger')">
-                                                                    {{ $fee['statut'] }}
-                                                                </x-backoffice.ui.badge>
+                                                                <select wire:model="paymentLines.{{ $fee['id'] }}.methode" class="form-select form-select-sm">
+                                                                    @foreach ($methodes as $m)<option value="{{ $m }}">{{ $m }}</option>@endforeach
+                                                                </select>
+                                                            </td>
+                                                            <td>
+                                                                <input type="date" wire:model="paymentLines.{{ $fee['id'] }}.date_paiement"
+                                                                    class="form-control form-control-sm @error("paymentLines.{$fee['id']}.date_paiement") is-invalid @enderror">
                                                             </td>
                                                         </tr>
                                                     @endforeach
                                                 </tbody>
                                             </table>
                                         </div>
-                                        @error('inscription_fee_id')<div class="text-danger fs-13 mt-2">{{ $message }}</div>@enderror
+                                        @error('paymentLines')<div class="text-danger fs-13 mt-2">{{ $message }}</div>@enderror
                                     @endif
                                 </div>
-                            @else
-                                {{-- Edit: the payment target is frozen, shown read-only. --}}
-                                <div class="row">
-                                    <div class="col-md-4">
-                                        <div class="mb-3">
-                                            <label class="form-label">{{ __('Amount') }}</label>
-                                            <input type="text" class="form-control" value="{{ number_format((float) $montant, 2) }} MAD" disabled>
-                                        </div>
-                                    </div>
-                                </div>
-                            @endif
 
-                            {{-- Step 3 — payment details --}}
-                            <div class="border-top pt-3">
-                                <div class="row">
-                                    @unless ($editingId)
-                                        <div class="col-md-4">
-                                            <div class="mb-3">
-                                                <label class="form-label" for="e-montant">{{ __('Amount') }}<span class="text-danger ms-1">*</span></label>
-                                                <div class="input-group">
-                                                    <input type="number" step="0.01" min="0.01" max="{{ $reste > 0 ? $reste : '' }}" id="e-montant"
-                                                        wire:model="montant" class="form-control @error('montant') is-invalid @enderror"
-                                                        placeholder="0">
-                                                    <span class="input-group-text">MAD</span>
-                                                    @error('montant')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                                                </div>
-                                                @if ($reste > 0)
-                                                    <small class="text-muted">{{ __('Remaining on this fee:') }} {{ number_format($reste, 2) }} MAD</small>
-                                                @endif
-                                            </div>
-                                        </div>
-                                    @endunless
-                                    <div class="col-md-4" wire:key="enc-methode">
-                                        <x-backoffice.forms.select2 id="e-methode" model="methode" live
-                                            :label="__('Payment method')" required>
-                                            @foreach ($methodes as $m)<option value="{{ $m }}">{{ $m }}</option>@endforeach
-                                        </x-backoffice.forms.select2>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="mb-3">
-                                            <label class="form-label" for="e-date">{{ __('Payment date') }}<span class="text-danger ms-1">*</span></label>
-                                            <input type="date" id="e-date" wire:model="date_paiement"
-                                                class="form-control @error('date_paiement') is-invalid @enderror">
-                                            @error('date_paiement')<div class="invalid-feedback">{{ $message }}</div>@enderror
-                                        </div>
-                                    </div>
-                                </div>
-
-                                @if ($methode === \App\Models\Encaissement::METHODE_CHEQUE)
-                                    <div class="row">
+                                {{-- Shared cheque details: applied to every row paid by
+                                     Chèque in this submit (one physical cheque per row is
+                                     not supported — use separate submits for that). --}}
+                                @if ($this->anyLineIsCheque())
+                                    <div class="row border-top pt-3 mt-3">
                                         <div class="col-md-4">
                                             <div class="mb-3">
                                                 <label class="form-label" for="e-cheque">{{ __('Cheque number') }}<span class="text-danger ms-1">*</span></label>
@@ -286,7 +235,7 @@
                                     </div>
                                 @endif
 
-                                <div class="row">
+                                <div class="row border-top pt-3 mt-3">
                                     <div class="col-12">
                                         <div class="mb-3">
                                             <label class="form-label" for="e-note">{{ __('Note') }}</label>
@@ -294,7 +243,74 @@
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            @else
+                                {{-- Edit: the payment target is frozen, shown read-only. --}}
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label class="form-label">{{ __('Amount') }}</label>
+                                            <input type="text" class="form-control" value="{{ number_format((float) $montant, 2) }} MAD" disabled>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="border-top pt-3">
+                                    <div class="row">
+                                        <div class="col-md-4" wire:key="enc-methode">
+                                            <x-backoffice.forms.select2 id="e-methode" model="methode" live
+                                                :label="__('Payment method')" required>
+                                                @foreach ($methodes as $m)<option value="{{ $m }}">{{ $m }}</option>@endforeach
+                                            </x-backoffice.forms.select2>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="mb-3">
+                                                <label class="form-label" for="e-date">{{ __('Payment date') }}<span class="text-danger ms-1">*</span></label>
+                                                <input type="date" id="e-date" wire:model="date_paiement"
+                                                    class="form-control @error('date_paiement') is-invalid @enderror">
+                                                @error('date_paiement')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    @if ($methode === \App\Models\Encaissement::METHODE_CHEQUE)
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <div class="mb-3">
+                                                    <label class="form-label" for="e-cheque">{{ __('Cheque number') }}<span class="text-danger ms-1">*</span></label>
+                                                    <input type="text" id="e-cheque" wire:model="numero_cheque"
+                                                        class="form-control @error('numero_cheque') is-invalid @enderror">
+                                                    @error('numero_cheque')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="mb-3">
+                                                    <label class="form-label" for="e-banque">{{ __('Bank') }}<span class="text-danger ms-1">*</span></label>
+                                                    <input type="text" id="e-banque" wire:model="banque"
+                                                        class="form-control @error('banque') is-invalid @enderror">
+                                                    @error('banque')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="mb-3">
+                                                    <label class="form-label" for="e-cheque-echeance">{{ __('Cheque due date') }}<span class="text-danger ms-1">*</span></label>
+                                                    <input type="date" id="e-cheque-echeance" wire:model="date_echeance_cheque"
+                                                        class="form-control @error('date_echeance_cheque') is-invalid @enderror">
+                                                    @error('date_echeance_cheque')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                                </div>
+                                            </div>
+                                        </div>
+                                    @endif
+
+                                    <div class="row">
+                                        <div class="col-12">
+                                            <div class="mb-3">
+                                                <label class="form-label" for="e-note">{{ __('Note') }}</label>
+                                                <textarea id="e-note" rows="2" wire:model="note" class="form-control"></textarea>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            @endif
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-light" wire:click="closeModal">{{ __('Cancel') }}</button>

@@ -67,6 +67,7 @@
     // Callers build their <option>s with @foreach, which leaves the same morph
     // markers inside the slot — strip every comment node.
     $optionsHtml = preg_replace('/<!--.*?-->/s', '', $optionsHtml);
+    $selectKey = 'gls-select2-'.$id.'-'.substr(sha1($optionsHtml), 0, 12);
 @endphp
 
 <div @class(['mb-3' => ! $inline]) @if ($width) style="min-width: {{ $width }};" @endif>
@@ -78,7 +79,12 @@
     {{-- This wrapper is still morphed by Livewire → validation state stays fresh --}}
     <div @class(['gls-select2', 'is-invalid' => $errors->has($errorKey)])>
         {{-- wire:ignore: Select2 owns this DOM; sync handled by glsSelect2 --}}
-        <div wire:ignore x-data="glsSelect2(@entangle($model){{ $live ? '.live' : '' }})">
+        <div
+            wire:key="{{ $selectKey }}"
+            wire:ignore
+            x-data="glsSelect2(@entangle($model){{ $live ? '.live' : '' }})"
+            x-on:gls-select2-modal-closed.window="closeForModal($event.detail.modal)"
+        >
             <select
                 x-ref="select"
                 id="{{ $id }}"

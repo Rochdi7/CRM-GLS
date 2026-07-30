@@ -17,8 +17,8 @@ The project is a multi-center school CRM built with:
 - Blade
 - Bootstrap
 - PreSkool UI theme
-- MySQL or PostgreSQL
-- Pest or PHPUnit
+- PostgreSQL (only supported database engine — see `CLAUDE.md` § Database Standard)
+- PHPUnit
 
 Prioritize correctness, maintainability, security, database integrity, and scalability.
 

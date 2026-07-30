@@ -6,6 +6,7 @@ namespace App\Livewire\Backoffice\Inscriptions;
 
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Livewire\Backoffice\Concerns\WithCenterContext;
+use App\Livewire\Backoffice\Concerns\WithPerPage;
 use App\Livewire\Backoffice\Concerns\WithPhoneCountry;
 use App\Models\Frais;
 use App\Models\Group;
@@ -35,6 +36,7 @@ final class InscriptionsIndex extends Component
     use AuthorizesRequests;
     use WithCenterContext;
     use WithPagination;
+    use WithPerPage;
     use WithPhoneCountry;
 
     private const PHONE_FIELDS = ['new_telephone', 'new_whatsapp', 'new_parent_telephone', 'new_parent_whatsapp'];
@@ -565,13 +567,13 @@ final class InscriptionsIndex extends Component
             ->when($this->statutFilter !== '', fn ($q) => $q->where('statut', $this->statutFilter))
             ->when($this->search !== '', function ($q): void {
                 $q->where(function ($sub): void {
-                    $sub->where('reference', 'like', "%{$this->search}%")
-                        ->orWhereHas('student', fn ($s) => $s->where('nom', 'like', "%{$this->search}%")
-                            ->orWhere('prenom', 'like', "%{$this->search}%"));
+                    $sub->where('reference', 'ilike', "%{$this->search}%")
+                        ->orWhereHas('student', fn ($s) => $s->where('nom', 'ilike', "%{$this->search}%")
+                            ->orWhere('prenom', 'ilike', "%{$this->search}%"));
                 });
             })
             ->latest()
-            ->paginate(10);
+            ->paginate($this->perPage);
 
         return view('livewire.backoffice.inscriptions.inscriptions-index', [
             'inscriptions' => $inscriptions,

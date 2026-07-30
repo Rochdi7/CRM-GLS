@@ -52,21 +52,17 @@
         </div>
 
         <x-backoffice.ui.card :title="$scope === 'mine' ? __('My cash register') : __('Transactions journal')">
-            <x-slot:tools>
-                <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <x-backoffice.forms.select2 id="cj-type-{{ $scope }}" model="typeFilter" live inline
-                        width="190px" :placeholder="__('All transaction types')">
-                        <option value="paiement">{{ __('Payments') }}</option>
-                        <option value="depense">{{ __('Expenses') }}</option>
-                        <option value="remboursement">{{ __('Refunds') }}</option>
-                        <option value="transfert">{{ __('Transfers') }}</option>
-                    </x-backoffice.forms.select2>
-                    <input type="date" class="form-control" style="min-width: 150px;"
-                        wire:model.live.debounce.400ms="dateFrom" title="{{ __('From') }}">
-                    <input type="date" class="form-control" style="min-width: 150px;"
-                        wire:model.live.debounce.400ms="dateTo" title="{{ __('To') }}">
-                </div>
-            </x-slot:tools>
+            <x-backoffice.ui.filter-bar>
+                <x-backoffice.forms.select2 id="cj-type-{{ $scope }}" model="typeFilter" live
+                    :label="__('Transaction type')" width="190px" :placeholder="__('All transaction types')">
+                    <option value="paiement">{{ __('Payments') }}</option>
+                    <option value="depense">{{ __('Expenses') }}</option>
+                    <option value="remboursement">{{ __('Refunds') }}</option>
+                    <option value="transfert">{{ __('Transfers') }}</option>
+                </x-backoffice.forms.select2>
+                <x-backoffice.ui.filter-bar.date-field :label="__('From date')" model="dateFrom" debounce="400ms" />
+                <x-backoffice.ui.filter-bar.date-field :label="__('To date')" model="dateTo" debounce="400ms" />
+            </x-backoffice.ui.filter-bar>
 
             @if ($scope === 'mine')
                 <div class="text-muted mb-1">{{ $caissesInScope->pluck('nom')->implode(', ') }}</div>

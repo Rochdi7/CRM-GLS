@@ -13,10 +13,10 @@
 ![Livewire](https://img.shields.io/badge/Livewire_4-4E56A6?style=for-the-badge&logo=livewire&logoColor=white)
 ![Alpine.js](https://img.shields.io/badge/Alpine.js-8BC0D0?style=for-the-badge&logo=alpinedotjs&logoColor=black)
 ![Bootstrap](https://img.shields.io/badge/Bootstrap_5-7952B3?style=for-the-badge&logo=bootstrap&logoColor=white)
-![MySQL](https://img.shields.io/badge/MySQL-4479A1?style=for-the-badge&logo=mysql&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)
 
-![Tests](https://img.shields.io/badge/tests-289_passed_·_1006_assertions-brightgreen?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-293_passed_·_1014_assertions-brightgreen?style=flat-square)
 ![Permissions](https://img.shields.io/badge/permissions-65_across_6_roles-blue?style=flat-square)
 ![Language](https://img.shields.io/badge/UI-Français_🇫🇷-informational?style=flat-square)
 
@@ -64,18 +64,60 @@ flowchart LR
 
 ## 🚀 Quick start
 
+### Requirements
+
+```text
+PHP 8.4+
+PostgreSQL 16+ (17 used in development)
+Composer
+Node.js and npm
+```
+
+**Required PHP extensions:** `pdo_pgsql`, `pgsql`. Verify they're enabled:
+
+```powershell
+# Windows
+C:\php84\php.exe -m | findstr /I "pgsql pdo_pgsql"
+```
+
+```bash
+# Linux / macOS
+php -m | grep -E 'pgsql|pdo_pgsql'
+```
+
+### Local database
+
+PostgreSQL is the **only** supported database — no SQLite, no MySQL. Create a
+dedicated application role rather than using the `postgres` superuser:
+
+```sql
+CREATE ROLE gls_crm_app WITH LOGIN PASSWORD '<strong-local-password>';
+CREATE DATABASE gls_crm OWNER gls_crm_app;
+
+-- separate database for the test suite — never point tests at gls_crm
+CREATE ROLE gls_crm_test_app WITH LOGIN PASSWORD '<strong-test-password>';
+CREATE DATABASE gls_crm_test OWNER gls_crm_test_app;
+```
+
+### Setup
+
 ```bash
 git clone https://github.com/Rochdi7/CRM-GLS.git && cd CRM-GLS
 composer install && npm install
-cp .env.example .env
+cp .env.example .env               # set DB_USERNAME/DB_PASSWORD to gls_crm_app
 php artisan key:generate
 php artisan migrate --seed        # full demo dataset, idempotent
 php artisan storage:link
+npm run build
+php artisan test
 php artisan serve                 # http://127.0.0.1:8000 → backoffice login
 npm run dev                       # Vite watch (our JS/SCSS only)
 ```
 
-> SQLite out of the box for local dev; point `.env` at MySQL for production.
+> See `CLAUDE.md` § "Database Standard — PostgreSQL Only" for the full set of
+> PostgreSQL rules (search must use `ILIKE`, FK columns need explicit indexes,
+> `.env` conventions, etc.) and `POSTGRES_MIGRATION_REPORT.md` for deployment
+> instructions.
 
 ### 🔑 Demo accounts (local only — password: `password`)
 
@@ -111,10 +153,15 @@ routes/backoffice.php ── auth + permission middleware
 ## 🧪 Tests
 
 ```bash
-php artisan test        # 289 tests, 1006 assertions
+php artisan test        # 293 tests, 1014 assertions
 ```
 
 Feature tests cover every module: allowed **and** denied (403) paths, center scoping, money invariants (balances move exactly once, self-validation refused), Livewire modal flows and upload rules.
+
+Tests run against a real PostgreSQL database, `gls_crm_test` (`phpunit.xml`),
+kept separate from the local dev database `gls_crm`. **Never point PHPUnit at
+`gls_crm`** — `RefreshDatabase` and any destructive seeder must only ever run
+against `gls_crm_test`.
 
 ---
 
