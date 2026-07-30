@@ -14,12 +14,13 @@
     @php
         // Tab set mirrors the Paramètres page pattern: one tab per module,
         // shown only when its own view permission is held. `?tab=` deep-links
-        // (used by the legacy remboursements / types-depenses redirects);
-        // otherwise the first allowed tab is active.
+        // (used by the legacy remboursements redirect); otherwise the first
+        // allowed tab is active. Types de dépenses moved to its own Inertia
+        // page in Phase 6 (docs/phase-6-simple-crud-inventory.md §Q2) — no
+        // longer a tab here.
         $tabs = collect([
             'depenses' => ['perm' => 'expenses.view', 'label' => __('Expenses'), 'icon' => 'ti ti-receipt'],
             'remboursements' => ['perm' => 'refunds.view', 'label' => __('Refunds'), 'icon' => 'ti ti-arrow-back-up'],
-            'types' => ['perm' => 'expense-types.view', 'label' => __('Expense types'), 'icon' => 'ti ti-receipt-tax'],
         ])->filter(fn ($t) => auth()->user()->can($t['perm']));
         $requested = request()->query('tab');
         $first = $tabs->has($requested) ? $requested : $tabs->keys()->first();
@@ -47,11 +48,6 @@
                 @can('refunds.view')
                     <div class="tab-pane fade {{ $first === 'remboursements' ? 'show active' : '' }}" id="tab-remboursements" role="tabpanel">
                         @livewire('backoffice.remboursements.remboursements-index')
-                    </div>
-                @endcan
-                @can('expense-types.view')
-                    <div class="tab-pane fade {{ $first === 'types' ? 'show active' : '' }}" id="tab-types" role="tabpanel">
-                        @livewire('backoffice.types-depenses.types-depenses-index')
                     </div>
                 @endcan
             </div>
