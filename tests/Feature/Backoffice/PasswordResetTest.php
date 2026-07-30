@@ -10,6 +10,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 final class PasswordResetTest extends TestCase
@@ -20,7 +21,7 @@ final class PasswordResetTest extends TestCase
     {
         $this->get(route('backoffice.password.request'))
             ->assertOk()
-            ->assertSee('backoffice/forgot-password');
+            ->assertInertia(fn (Assert $page) => $page->component('Backoffice/Auth/ForgotPassword'));
     }
 
     public function test_authenticated_users_are_redirected_away_from_forgot_password(): void
@@ -71,7 +72,11 @@ final class PasswordResetTest extends TestCase
     {
         $this->get(route('backoffice.password.reset', ['token' => 'sometoken', 'email' => 'x@gls.test']))
             ->assertOk()
-            ->assertSee('backoffice/reset-password');
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/Auth/ResetPassword')
+                ->where('token', 'sometoken')
+                ->where('email', 'x@gls.test')
+            );
     }
 
     public function test_password_can_be_reset_with_a_valid_token(): void

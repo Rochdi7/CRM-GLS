@@ -6,6 +6,7 @@ namespace Tests\Feature\Backoffice;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 final class AuthTest extends TestCase
@@ -16,7 +17,7 @@ final class AuthTest extends TestCase
     {
         $this->get(route('backoffice.login'))
             ->assertOk()
-            ->assertSee('backoffice/login');
+            ->assertInertia(fn (Assert $page) => $page->component('Backoffice/Auth/Login'));
     }
 
     public function test_root_url_redirects_to_login_for_guests(): void

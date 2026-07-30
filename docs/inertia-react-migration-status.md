@@ -4,6 +4,137 @@ Running log of verified milestones. Append one entry per phase; do not rewrite h
 
 ---
 
+## Phase 3 — Baseline (before auth/profile migration)
+
+**Date**: 2026-07-30
+**Branch**: `migration/inertia-react-preskool`, clean tree, Phase 2 commits
+(`ca356ef`, `a38da4b`, `2d2ebab`, `69df093`) present and unchanged.
+
+| Check | Result |
+|---|---|
+| `C:\php84\php.exe artisan test` | ✅ **305/305 passing, 1123 assertions** (matches Phase 2's final count exactly) |
+| `npx tsc --noEmit` | ✅ Clean |
+| `npm run build` | ✅ Succeeds — `app-CrpMxtFV.js` 325.16 kB / 101.55 kB gzip (identical to Phase 2, no changes yet) |
+
+No pre-existing failures. Proceeding with Phase 3 implementation.
+
+---
+
+## Phase 3 — Auth + Profile migration
+
+**Date**: 2026-07-30
+**Status**: **Complete.**
+
+Migrated Backoffice login, forgot-password, reset-password, and the
+signed-in profile page from Blade/Livewire to Inertia + React. Every
+authentication rule (email-or-username, rate limiting, `is_active` gate,
+session regeneration, CSRF, password broker) is unchanged — only the
+GET-page rendering layer moved.
+
+### Routes now served by Inertia
+- `backoffice.login` (GET), `backoffice.password.request` (GET),
+  `backoffice.password.reset` (GET) — unchanged names/URIs/methods, now
+  `Inertia::render()` instead of Blade views
+- `backoffice.profile` (GET) — new `ProfileController@show`, replacing the
+  Livewire `ProfilePage` route component (route name/URI unchanged)
+- **New routes**: `backoffice.profile.update` (POST),
+  `backoffice.profile.password.update` (POST) — split from the Livewire
+  component's two actions (`updateProfile`/`updatePassword`)
+
+### Routes still served by Blade/Livewire (unchanged)
+Every POST auth action (`login.store`, `password.email`, `password.update`,
+`logout`) was already a plain controller action, not Blade — no change
+needed there. All Dashboard/Settings/Students/Employees/Groups/Inscriptions/
+Finance/Users/Roles modules remain Livewire, untouched.
+
+### Profile logic moved out of Livewire
+`ProfilePage::updateProfile()`/`updatePassword()` logic is now
+`ProfileController@updateProfile`/`@updatePassword`, validated by new
+`UpdateProfileRequest`/`UpdatePasswordRequest` Form Requests instead of
+inline `$this->validate()`. Same rules preserved exactly: own-email
+uniqueness (ignoring self), `current_password` re-check, `Password::defaults()`,
+employee phone/whatsapp sync via `Countries::join()`.
+
+### Legacy files retained (not deleted)
+- `app/Livewire/Backoffice/Profile/ProfilePage.php` + its Blade view —
+  unused by any route now, kept for rollback per the task's explicit
+  instruction; Phase 10 removes it once the migration is fully verified in
+  production use
+- `resources/views/backoffice/auth/{login,forgot-password,reset-password}.blade.php`
+  — unused, kept for rollback
+- `resources/views/components/backoffice/layout/guest.blade.php` — unused by
+  Inertia pages (which use the new `GuestLayout.tsx`), still used by any
+  other guest-facing Blade page that might exist; left untouched
+
+### Auth security invariants (unchanged, verified by tests)
+- Email-or-username login, rate limiting (5 attempts), `is_active` gate,
+  generic `auth.failed` message (no account enumeration) — `LoginRequest`
+  untouched
+- Session regeneration on login, invalidation + token regeneration on
+  logout — controllers untouched
+- Password reset: Laravel's broker owns token validation/expiry; no custom
+  token logic added
+- CSRF: session-based, no manual token duplication; Inertia's `useForm`
+  posts through the normal Laravel session/CSRF flow
+- No JWT/Sanctum/localStorage tokens/second auth system introduced
+
+### Mixed navigation strategy (unchanged from Phase 2, extended)
+Header's Profile link already used Inertia `<Link>` (Phase 2) — now valid,
+since Profile is a real Inertia page. Guest pages use plain anchors between
+each other (login ↔ forgot-password ↔ reset-password) — none of those
+cross-navigations were converted to `<Link>` since a fresh guest-session
+page load has no benefit from client-side routing here and keeps the guest
+root fully isolated from the authenticated shell's bundle.
+
+### A note on Livewire's global asset auto-injection
+Livewire 4 auto-injects its scripts/styles into **any** HTML response
+during a request where `SupportAutoInjectedAssets::$hasRenderedAComponentThisRequest`
+is true — this is a static, per-request flag, not something scoped to a
+specific view. Running `AuthTest`+`PasswordResetTest`+`ProfileTest` together
+in one PHPUnit process transiently showed Livewire's `<script>`/`<style>`
+tags inside an Inertia response's captured output; re-running the Profile
+test in isolation showed **zero** Livewire injection — confirming this was
+PHPUnit-process state bleed between adjacent tests, not a real per-request
+leak. No code change was needed; flagged here in case it resurfaces.
+
+### Test coverage
+- `AuthTest.php`, `PasswordResetTest.php`, `ProfileTest.php` — updated only
+  where their rendering assertion legitimately changed (`assertSee('backoffice/…')`
+  string-match → `assertInertia(...)->component(...)`), all other assertions
+  (credentials, rate limiting, `is_active`, session state) untouched
+- New `tests/Feature/Backoffice/Inertia/AuthInertiaTest.php` (10 tests):
+  guest-null shared props, no password in props, old-input preserved on
+  failure (identifier yes, password no), minimal `auth.user` shape, reset
+  page exposes only token+email, GET logout rejected at the HTTP-method
+  level
+- New `tests/Feature/Backoffice/Inertia/ProfileInertiaTest.php` (5 tests):
+  no sensitive fields in `user` prop, `is_active`/roles/center cannot be
+  changed via profile update, cannot edit another user's record
+
+### Automated checks
+| Check | Result |
+|---|---|
+| Targeted (`AuthTest`, `PasswordResetTest`, `ProfileTest`, `Inertia/`) | ✅ 46/46 passing |
+| `npx tsc --noEmit` | ✅ Clean |
+| `npm run build` | ✅ Succeeds — `app-CNxd8NcD.js` 340.92 kB / 104.85 kB gzip (Phase 2: 325.16 kB / 101.55 kB gzip) |
+| `C:\php84\php.exe artisan test` (full suite) | ✅ **320/320 passing, 1232 assertions** (Phase 2 baseline: 305/305, 1123 assertions) |
+| ESLint | Not run — no ESLint config exists yet (skipped per instructions) |
+
+### Manual browser verification (user, real Chrome, `artisan serve` + `npm run dev`)
+Confirmed working: login (wrong-password error, correct login, password
+visibility toggle, remember-me), forgot-password submission, profile page
+(own data display, name update, password-change form). No issues reported.
+
+### Known limitations
+- No profile photo upload — the Livewire `ProfilePage` never had one
+  (verified during audit: no `HasMedia`, no media collection reference
+  anywhere in that component or its view); none was added, per the task's
+  "do not assume fields" rule
+- Guest pages do not use Inertia `<Link>` between each other (see Mixed
+  navigation strategy above) — deliberate, not an oversight
+
+---
+
 ## Phase 1 — Inertia foundation + Permissions pilot
 
 Status: **Complete**, committed `2d3aa38` on `migration/inertia-react-preskool`.

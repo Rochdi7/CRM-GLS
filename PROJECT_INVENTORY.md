@@ -5,6 +5,16 @@ implemented CRUD/module. Generated from a live scan of the repository.
 For architecture rationale and invariants, see `CLAUDE.md`, `gls-crm-schema.md`,
 and `gls-crm-laravel-structure.md`. This file is a map, not a rulebook.
 
+> ⚠ **Frontend migration in progress** (branch `migration/inertia-react-preskool`,
+> see `docs/inertia-react-migration-status.md` for the authoritative running
+> log). CLAUDE.md's "Forbidden: React... Inertia" line below and §1's
+> Livewire-only description are **stale** — both were written before this
+> approved migration started and have not been rewritten yet (deliberately
+> deferred, per `docs/inertia-react-migration-audit.md` §8 "Documentation
+> debt"). Current real state as of Phase 3: **Inertia + React** now serve
+> Permissions, Login, Forgot/Reset Password, and Profile; every other module
+> listed in §4 below is still Livewire, unchanged.
+
 ---
 
 ## 1. Stack

@@ -10,6 +10,28 @@ authorizes deleting anything today.
 
 ---
 
+## 0. Phase 3 additions to the retained-legacy list
+
+Auth and Profile are now migrated (docs/inertia-react-migration-status.md,
+Phase 3 entry). The following are **retained, unused by any route**, exactly
+per this plan's rules — do not delete them yet:
+
+| File | Why retained |
+|---|---|
+| `app/Livewire/Backoffice/Profile/ProfilePage.php` | No route points to it anymore (`backoffice.profile` now serves `ProfileController@show`); kept for rollback until Phase 10 |
+| `resources/views/livewire/backoffice/profile/profile-page.blade.php` | Owning view of the above — removed together, never separately |
+| `resources/views/backoffice/auth/login.blade.php` | No route points to it anymore (`backoffice.login` now serves `Inertia::render()`); kept for rollback |
+| `resources/views/backoffice/auth/forgot-password.blade.php` | Same — `backoffice.password.request` now Inertia |
+| `resources/views/backoffice/auth/reset-password.blade.php` | Same — `backoffice.password.reset` now Inertia |
+| `resources/views/components/backoffice/layout/guest.blade.php` | No longer used by any of the three auth pages above (they used it before Phase 3); check for other callers before ever removing — do not assume it's fully orphaned without a fresh repo-wide grep at Phase 10 time |
+
+None of these appear in any route file anymore — confirmed via
+`artisan route:list` showing only the new controller actions for
+`backoffice.login`, `backoffice.password.request`, `backoffice.password.reset`,
+and `backoffice.profile`.
+
+---
+
 ## 1. Hard precondition
 
 Do not execute **any** step in this document until:

@@ -1,10 +1,35 @@
 # PreSkool React Theme — File Map
 
-Status: **Phase 2 shell components implemented — see §0 for what actually
-shipped.** The rest of this document (§1 onward) is the original Phase 0/1
-screening pass and remains accurate for anything not yet built.
+Status: **Phase 2 shell + Phase 3 auth/profile pages implemented — see §0
+(Phase 2) and §0b (Phase 3) for what actually shipped.** The rest of this
+document (§1 onward) is the original Phase 0/1 screening pass and remains
+accurate for anything not yet built.
 
 Theme source root: `C:\Users\ASUS\Downloads\themeforest-jeUxtzLq-preskool-bootstrap-admin-html-template\preskool-v1.9.7\react`
+
+---
+
+## 0b. Phase 3 — auth/profile adaptations (source → destination)
+
+| Destination | Theme file(s) inspected | Verdict | Notes |
+|---|---|---|---|
+| `resources/js/Pages/Backoffice/Auth/Login.tsx` | `react/src/feature-module/auth/login/login.tsx` (+ `login-2.tsx`, `login-3.tsx`) | **Rejected as demo-only for logic; markup structure not adapted either** — primary source is the existing `resources/views/backoffice/auth/login.blade.php` instead | Theme's `login.tsx` is a two-column layout (promo panel + form) with social-login buttons, a `Sign In` `<Link>` that navigates to a hardcoded dashboard route instead of submitting a form, `localStorage.setItem('menuOpened', ...)`, and full `react-router-dom` dependency. The existing GLS Blade login page had already chosen the theme's alternate **centered single-column** variant (`login-3.blade.php` per its own comment) with real form POST — that adapted-Blade structure is the actual visual/markup source for the Inertia page, not the raw demo file. Password-visibility *pattern* (state-driven `ti-eye`/`ti-eye-off` class swap) was reused as a technique, not the surrounding demo markup |
+| `resources/js/Pages/Backoffice/Auth/ForgotPassword.tsx` | `react/src/feature-module/auth/forgotPassword/forgotPassword.tsx` (+ `-2`, `-3` variants) | **Rejected as demo-only** — same reasoning; `resources/views/backoffice/auth/forgot-password.blade.php` is the real source | Theme file has no `localStorage`/mock-API logic, but is fully `react-router-dom`-dependent (7 references) and uses the two-column layout family, not the GLS centered-card variant already established |
+| `resources/js/Pages/Backoffice/Auth/ResetPassword.tsx` | `react/src/feature-module/auth/resetPassword/resetPassword.tsx` (+ `-2`, `-3` variants) | **Rejected as demo-only** — same reasoning; `resources/views/backoffice/auth/reset-password.blade.php` is the real source | Same profile as ForgotPassword: no demo-auth/localStorage, but `react-router-dom`-dependent, wrong layout family for this project |
+| `resources/js/Pages/Backoffice/Profile/Index.tsx` | Not sourced from the theme at all | **Not copied — no theme equivalent audited** | The theme's `feature-module/peoples`/generic profile pages (if any) were not the closest match; the existing `resources/views/livewire/backoffice/profile/profile-page.blade.php` (already a GLS-specific adaptation of the theme's card/table conventions) is the sole structural source |
+| `resources/js/Layouts/GuestLayout.tsx` | `react/src/feature-module/auth/*` layout wrappers (implicit — no dedicated guest-layout component found; each demo page inlines its own wrapper) | **Rejected — no reusable theme component to adapt** | Built from `resources/views/components/backoffice/layout/guest.blade.php` + the shared structural pattern already present in all three existing Blade auth pages (`vh-100` flex column, centered card, GLS light/dark logo pair) |
+| `resources/js/Components/Forms/{FormField,PasswordField,FormError,SubmitButton}.tsx` | Password-toggle technique only, from `login.tsx`'s `togglePasswordVisibility` state pattern; `public/assets/preskool/js/script.js`'s `.toggle-password`/`ti-eye`/`ti-eye-off` class contract (grepped directly) | **Technique reused, markup authored fresh** | No direct theme component for these — the theme repeats raw `<input>`/`<label>` markup inline on every page rather than extracting reusable field components |
+| `resources/js/Components/Feedback/AuthStatus.tsx` | No theme equivalent (theme has no `session('status')`-style flash concept — it's a demo with no real backend) | **New, GLS-specific** | Sourced from the existing Blade `@if (session('status'))` pattern |
+
+**Demo-specific code explicitly NOT carried over** (per this phase's stop
+list): social-login buttons (Facebook/Google/Apple), the "Or" divider,
+register/create-account links (no public registration exists or is
+planned), `localStorage.setItem('menuOpened', ...)`, hardcoded
+`Link to={routes.adminDashboard}` acting as a fake successful-login
+shortcut, the two-column promo-panel layout, all `react-router-dom`
+imports and `<Link to="...">` usage (replaced by real `<form onSubmit>` +
+Inertia `useForm().post()`, or plain `<a href>` for guest-to-guest
+navigation).
 
 ---
 
