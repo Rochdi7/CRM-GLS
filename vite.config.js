@@ -27,7 +27,11 @@ export default defineConfig({
                 'resources/js/frontoffice/app.js',
                 'resources/js/app.tsx',
             ],
-            refresh: true,
+            // Blade-file full-reload only — scoped away from resources/js/**
+            // so laravel-vite-plugin's own refresh mechanism never fights
+            // @vitejs/plugin-react's Fast Refresh preamble on .tsx files
+            // (that collision is what threw "can't detect preamble").
+            refresh: ['resources/views/**'],
         }),
         react(),
     ],
