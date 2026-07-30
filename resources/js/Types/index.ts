@@ -16,6 +16,8 @@ export interface FlashMessages {
     error: string | null;
     warning: string | null;
     info: string | null;
+    /** Laravel's password-broker flash convention (`->with('status', ...)`) — rendered like `success`. */
+    status: string | null;
 }
 
 export interface SharedProps {

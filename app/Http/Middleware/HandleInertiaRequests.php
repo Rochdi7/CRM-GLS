@@ -50,6 +50,10 @@ final class HandleInertiaRequests extends Middleware
                 'error' => fn () => $request->session()->get('error'),
                 'warning' => fn () => $request->session()->get('warning'),
                 'info' => fn () => $request->session()->get('info'),
+                // Laravel's password-broker convention ($status = Password::sendResetLink(...))
+                // flashes a translated string under this key — ForgotPasswordController and
+                // ResetPasswordController already do `->with('status', ...)` unchanged.
+                'status' => fn () => $request->session()->get('status'),
             ],
             'locale' => app()->getLocale(),
         ];
