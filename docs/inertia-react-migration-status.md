@@ -4,6 +4,22 @@ Running log of verified milestones. Append one entry per phase; do not rewrite h
 
 ---
 
+## Phase 5 — Baseline (before read-only pages migration)
+
+**Date**: 2026-07-30
+**Branch**: `migration/inertia-react-preskool`, clean tree, Phase 4 commits
+(`dfdd917`, `745302f`, `4f9beb7`, `fdf1a11`, `43e2a9f`) present and unchanged.
+
+| Check | Result |
+|---|---|
+| `C:\php84\php.exe artisan test` | ✅ **339/339 passing, 1332 assertions** (matches Phase 4's final count exactly) |
+| `npx tsc --noEmit` | ✅ Clean |
+| `npm run build` | ✅ Succeeds — `app-cDb3tAX-.js` 347.19 kB / 105.99 kB gzip (identical to Phase 4) |
+
+No pre-existing failures. Proceeding with Phase 5 implementation.
+
+---
+
 ## Phase 4 — Baseline (before dashboard/context migration)
 
 **Date**: 2026-07-30
