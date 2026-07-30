@@ -8,6 +8,13 @@ use App\Models\Group;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
+/**
+ * Validates exactly the fields the current Livewire GroupsIndex form exposes
+ * (docs/phase-8-students-groups-inventory.md) — no salle_id/capacite_max,
+ * which do not appear anywhere in the live UI. etablissement_id/
+ * annee_scolaire_id are never form inputs: the controller always inherits
+ * them from CurrentContext, matching GroupsIndex::save().
+ */
 final class StoreGroupRequest extends FormRequest
 {
     public function authorize(): bool
@@ -24,14 +31,14 @@ final class StoreGroupRequest extends FormRequest
             'nom' => ['required', 'string', 'max:150'],
             'niveau' => ['required', Rule::in(Group::NIVEAUX)],
             'enseignant_id' => ['nullable', 'exists:employees,id'],
-            'salle_id' => ['nullable', 'exists:salles,id'],
-            'etablissement_id' => ['nullable', 'exists:etablissements,id'],
-            'annee_scolaire_id' => ['nullable', 'exists:annees_scolaires,id'],
-            'capacite_max' => ['nullable', 'integer', 'min:1'],
             // A new group always starts at the beginning of its lifecycle.
             'statut' => ['required', Rule::in([Group::STATUT_PRE_INSCRIPTION, Group::STATUT_EN_FORMATION])],
             'date_debut_formation' => ['nullable', 'date'],
             'date_fin_formation' => ['nullable', 'date', 'after_or_equal:date_debut_formation'],
+            'fraisLignes' => ['nullable', 'array'],
+            'fraisLignes.*.montant' => ['required', 'numeric', 'min:0'],
+            'fraisLignes.*.date_echeance' => ['nullable', 'date'],
+            'fraisLignes.*.classification' => ['nullable', Rule::in(Group::NIVEAUX)],
         ];
     }
 }

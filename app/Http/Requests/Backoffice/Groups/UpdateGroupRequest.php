@@ -9,8 +9,13 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 /**
- * ⚠ Transition to "Fin de formation" is allowed here but the controller MUST
- * route it through Group::archiverCommeTermine() — never a raw update — so
+ * Validates exactly the fields the current Livewire GroupsIndex form exposes
+ * (docs/phase-8-students-groups-inventory.md) — no salle_id/capacite_max.
+ *
+ * ⚠ A raw `statut` of "Fin de formation" is accepted here (same subset as
+ * the Livewire form's edit-mode select) but GroupController::update() MUST
+ * silently revert it to the group's current status unless the transition
+ * happens through Group::archiverCommeTermine() — never a raw update — so
  * the groups_historique snapshot is written in the same transaction.
  */
 final class UpdateGroupRequest extends FormRequest
@@ -29,13 +34,13 @@ final class UpdateGroupRequest extends FormRequest
             'nom' => ['required', 'string', 'max:150'],
             'niveau' => ['required', Rule::in(Group::NIVEAUX)],
             'enseignant_id' => ['nullable', 'exists:employees,id'],
-            'salle_id' => ['nullable', 'exists:salles,id'],
-            'etablissement_id' => ['nullable', 'exists:etablissements,id'],
-            'annee_scolaire_id' => ['nullable', 'exists:annees_scolaires,id'],
-            'capacite_max' => ['nullable', 'integer', 'min:1'],
             'statut' => ['required', Rule::in(Group::STATUTS)],
             'date_debut_formation' => ['nullable', 'date'],
             'date_fin_formation' => ['nullable', 'date', 'after_or_equal:date_debut_formation'],
+            'fraisLignes' => ['nullable', 'array'],
+            'fraisLignes.*.montant' => ['required', 'numeric', 'min:0'],
+            'fraisLignes.*.date_echeance' => ['nullable', 'date'],
+            'fraisLignes.*.classification' => ['nullable', Rule::in(Group::NIVEAUX)],
         ];
     }
 }
