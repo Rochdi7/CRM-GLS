@@ -1,10 +1,37 @@
 # PreSkool React Theme — File Map
 
 Status: **Phase 2 shell + Phase 3 auth/profile + Phase 4 dashboard/context +
-Phase 5 read-only pages + Phase 6 simple CRUD implemented — see §0 (Phase 2),
-§0b (Phase 3), §0c (Phase 4), §0d (Phase 5), §0e (Phase 6) for what actually
-shipped.** The rest of this document (§1 onward) is the original Phase 0/1
-screening pass and remains accurate for anything not yet built.
+Phase 5 read-only pages + Phase 6 simple CRUD + Phase 8 Students/Groups
+implemented — see §0 (Phase 2), §0b (Phase 3), §0c (Phase 4), §0d (Phase 5),
+§0e (Phase 6), §0f (Phase 8) for what actually shipped.** (Phase 7 —
+Employees/Users/Roles/Authorization — also shipped, per
+docs/inertia-react-migration-status.md, but did not add its own section to
+this file; not backfilled here.) The rest of this document (§1 onward) is
+the original Phase 0/1 screening pass and remains accurate for anything not
+yet built.
+
+## 0f. Phase 8 — Students & Groups (source → destination)
+
+No new theme components were adapted this phase — same finding as every
+prior phase past Phase 2: the theme's own demo verticals (generic school/
+CRM/HR kitchen-sink) have no close analog to GLS's specific Student
+(CEFR level + German-track orientation + inline parent/guardian fields) or
+Group (fee-catalog assignment, teacher scoping, status-lifecycle tabs)
+domain models.
+
+| Destination | Source | Verdict |
+|---|---|---|
+| `resources/js/Pages/Backoffice/Students/Index.tsx` | `resources/views/livewire/backoffice/students/students-index.blade.php` | GLS-adapted Blade markup used as the structural source (tabbed modal: Contact/Parent/Autres informations; photo upload UI; conditional domaine/examen_type fields) — same pattern as every prior phase |
+| `resources/js/Pages/Backoffice/Groups/Index.tsx` | `resources/views/livewire/backoffice/groups/groups-index.blade.php` | Same — status tabs, fee-lines table markup (`<table class="table-bordered table-sm">`) ported directly |
+
+No new shared components were needed — the Phase 6/7 library (`Modal`,
+`ConfirmDialog`, `FormField`, `SelectField`, `TextareaField`, `PhoneField`,
+`FormActions`, `TableToolbar`, `SearchInput`, `RowActions`, `DataTable`,
+`Pagination`, `Card`, `EmptyState`) covered every UI need this phase,
+including the Students photo-upload flow (same pattern as Phase 7's
+Employees) and the Groups fee-lines sub-table (plain `<table>` markup
+inside the modal — not a new abstraction, since every row is fixed to one
+catalog fee and never user-added/removed).
 
 ## 0e. Phase 6 — simple CRUD modules + modal architecture (source → destination)
 

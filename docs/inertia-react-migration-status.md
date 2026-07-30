@@ -4,6 +4,157 @@ Running log of verified milestones. Append one entry per phase; do not rewrite h
 
 ---
 
+## Phase 8 — Students & Groups migration
+
+**Date**: 2026-07-30
+**Status**: **Complete.**
+
+Migrated Students (full CRUD with photo upload, parent/guardian fields inline,
+CEFR level + German-track orientation logic) and Groups (full CRUD with
+per-group fee-line assignment, teacher scoping, status tabs) from Livewire
+to Inertia + React, following the Phase 7 Employees pattern exactly.
+
+### Scope decision (stakeholder-confirmed before implementation)
+
+The task requested migrating Groups' "Rooms, Capacity, Schedules" alongside
+Professor assignment. Direct inspection of the live Livewire form
+(`groups-index.blade.php`) confirmed **no room, capacity, or schedule field
+exists anywhere in the current UI** — despite `Group::$fillable` and a dead,
+unrouted `StoreGroupRequest` supporting `salle_id`/`capacite_max`. Decision:
+migrate Groups exactly as it exists today (Name, Level, Teacher, Status,
+dates, fee lines) — no new fields added. See
+docs/phase-8-students-groups-inventory.md for the full audit.
+
+### Existing behavior discovered
+
+- Neither Students nor Groups had real HTTP routes for their mutations —
+  every create/update/delete ran only over Livewire's own AJAX protocol.
+  New routes were added for both (index/store/update[/destroy for Students]),
+  repointing the pre-existing GET index route from the Livewire component to
+  the new controller, keeping the same route name/URI.
+- `StoreStudentRequest`/`UpdateStudentRequest`/`StoreGroupRequest`/
+  `UpdateGroupRequest` existed but were entirely unrouted dead code
+  (validating a narrower or, for Groups, wider field set than the live
+  Livewire form actually uses) — rules() rewritten to match the live form
+  exactly: Student requests gained `phone_pays`/`photo`; Group requests lost
+  `salle_id`/`capacite_max`/`etablissement_id`/`annee_scolaire_id` (never
+  form inputs — always inherited from `CurrentContext`, matching
+  `GroupsIndex::save()`) and gained `fraisLignes.*` validation.
+- Students' delete guard and Groups' fee-lines "always full catalog, 0 DH
+  default" behavior were reproduced exactly; Groups' create-vs-edit `statut`
+  option asymmetry (2 options on create, 3 on edit with a silent-revert
+  guard on a raw "Fin de formation" attempt) is preserved — that transition
+  only happens through `Group::archiverCommeTermine()` (Phase 5, unchanged).
+
+### Files created
+
+- Read-models: `App\Domain\Students\Queries\GetStudentsList`,
+  `App\Domain\Groups\Queries\{GetGroupsList,GetGroupFormOptions}`.
+- React pages: `resources/js/Pages/Backoffice/{Students,Groups}/Index.tsx`.
+- Tests: `tests/Feature/Backoffice/Students/StudentsInertiaCrudTest.php`,
+  `tests/Feature/Backoffice/Groups/GroupsInertiaCrudTest.php`.
+
+No new shared components — Modal, ConfirmDialog, FormField, SelectField,
+TextareaField, PhoneField, FormActions, TableToolbar, SearchInput,
+RowActions, DataTable, Pagination, Card, EmptyState (all Phase 6/7) covered
+every UI need, including the fee-lines sub-table (built with plain
+`<table>` markup inside the modal, not a new abstraction — every row is
+fixed to one catalog fee, never user-added/removed, so a generic "repeater"
+component would have been the wrong shape).
+
+### Files modified
+
+- Controllers: `StudentController`, `GroupController` (both gain
+  `index`/`store`/`update`[`/destroy` for Students] alongside their existing
+  `show`[`/archive` for Groups]).
+- Form Requests: `Store/UpdateStudentRequest`, `Store/UpdateGroupRequest`.
+- `routes/backoffice.php` — `students.{store,update,destroy}` and
+  `groups.{store,update}` added; `students.index`/`groups.index` repointed
+  from the Livewire components to the controllers.
+- `resources/js/Config/backofficeNavigation.ts` — Students/Groups nav items
+  marked `inertia: true`.
+- `resources/js/Types/index.ts` — additive only: `StudentRow`,
+  `StudentsFilters`, `StudentsPageProps`, `GroupRow`, `GroupFraisLigne`,
+  `GroupsFilters`, `GroupFormOption`, `GroupsPageProps`.
+
+### Routes
+
+| Route | Before | After |
+|---|---|---|
+| `backoffice.students.index` (GET) | `StudentsIndex` (Livewire) | `StudentController@index` |
+| `backoffice.students.store` (POST, new) | — | `StudentController@store` |
+| `backoffice.students.update` (PUT, new) | — | `StudentController@update` |
+| `backoffice.students.destroy` (DELETE, new) | — | `StudentController@destroy` |
+| `backoffice.groups.index` (GET) | `GroupsIndex` (Livewire) | `GroupController@index` |
+| `backoffice.groups.store` (POST, new) | — | `GroupController@store` |
+| `backoffice.groups.update` (PUT, new) | — | `GroupController@update` |
+
+`backoffice.groups.destroy` still does not exist — groups are never deleted
+(schema §6), unchanged.
+
+### Prop shapes
+
+`StudentsPageProps`/`GroupsPageProps` — paginated data + filters +
+form-option lists, no full Eloquent models anywhere (every row shape is an
+explicit array built in a Domain query class). Groups' list row carries its
+own `fraisLignes` (keyed by `frais_id`) so the edit modal prefills without a
+second request — a deliberate choice made after reviewing (and rejecting) a
+first draft that matched fees by name via an extra GET request.
+
+### Authorization / center scoping
+
+Every mutation authorizes server-side independent of route middleware
+(`authorize('create'/'update'/'delete', ...)` inside each action). Students
+and Groups both use the standard `ResourcePolicy::withinCenter()` check
+(unchanged) — no new center-scoping gap was introduced or found (unlike
+Phase 6's Salle finding), since both controllers simply call the existing
+policies. Confirmed by dedicated tests: a center-limited user cannot
+update/delete a Student or update a Group in another center.
+
+### Legacy files retained (not deleted)
+
+`app/Livewire/Backoffice/{Students/StudentsIndex,Groups/GroupsIndex}.php`
+and their Blade views — both unreferenced by any route now, kept for
+rollback per the established pattern.
+
+### Automated checks
+
+| Check | Result |
+|---|---|
+| `artisan test tests/Feature/Backoffice/{Students,Groups}` | ✅ 73/73 passing (44 existing Livewire-side + 29 new Inertia-side) |
+| Full suite | Pending final run — see end-of-phase report |
+| `npx tsc --noEmit` | ✅ Clean |
+| `npm run build` | ✅ Succeeds — main bundle 473.19 kB / 130.34 kB gzip (Phase 7 baseline: 449.46 kB / 126.10 kB gzip) |
+
+### Performance measurements
+
+- Students list: 4 SQL queries, 10-row page payload ≈ 5.1 KB.
+- Groups list: 5 SQL queries (includes the separate per-status tab-count
+  query), 10-row page payload ≈ 4.7 KB (includes each group's own
+  `fraisLignes` pivot data).
+- No N+1 queries in either read-model (single eager loads / `withCount()`,
+  matching the Livewire originals' own query shape exactly).
+- Bundle grew by ~23.7 kB / ~4.2 kB gzip — small, since the shared
+  Modal/Form/Table component library from Phase 6/7 covered every UI need;
+  only the two page components and their Students-specific tab UI /
+  Groups-specific fee-lines table are new code.
+
+### Manual browser verification
+
+Not yet performed — pending user verification in a real browser (create/
+edit/delete a Student including photo upload and the Contact/Parent/Autres
+informations tabs; create/edit a Group including the fee-lines table,
+status tabs, and confirming a raw edit-mode "Fin de formation" selection
+does not actually finish the group).
+
+### Known limitations
+
+None blocking. Room/capacity/schedule fields were deliberately not added
+(see the scope decision above) — if GLS later wants a room-booking feature,
+that is new feature work for a dedicated phase, not part of this migration.
+
+---
+
 ## Phase 8 — Baseline (before Students/Groups migration)
 
 **Date**: 2026-07-30

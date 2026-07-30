@@ -10,6 +10,29 @@ authorizes deleting anything today.
 
 ---
 
+## 0e. Phase 8 additions to the retained-legacy list
+
+Students and Groups are now migrated (docs/inertia-react-migration-
+status.md, Phase 8 entry).
+
+| File | Why retained |
+|---|---|
+| `app/Livewire/Backoffice/Students/StudentsIndex.php` | No longer rendered — `backoffice.students.index` now serves `StudentController@index`; kept for rollback |
+| `resources/views/livewire/backoffice/students/students-index.blade.php` | Owning view of the above |
+| `app/Livewire/Backoffice/Groups/GroupsIndex.php` | No longer rendered — `backoffice.groups.index` now serves `GroupController@index`; kept for rollback |
+| `resources/views/livewire/backoffice/groups/groups-index.blade.php` | Owning view of the above |
+
+**`app/Http/Requests/Backoffice/{Students,Groups}/{Store,Update}*Request.php`
+were NOT retired** — like Phase 7's Employees requests, these existed
+before Phase 8 (serving legacy, unrouted controllers) and are now the
+ACTIVE Form Requests for the new controller actions, with their rule sets
+corrected to match the live Livewire form exactly (Student requests gained
+`phone_pays`/`photo`; Group requests lost `salle_id`/`capacite_max`/
+`etablissement_id`/`annee_scolaire_id`, which were never real form fields).
+Nothing to mark unused here.
+
+---
+
 ## 0d. Phase 7 additions to the retained-legacy list
 
 Four medium CRUD modules are now migrated (docs/inertia-react-migration-
