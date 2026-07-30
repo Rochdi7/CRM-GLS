@@ -20,12 +20,12 @@ use App\Http\Controllers\Backoffice\GroupHistoriqueController;
 use App\Http\Controllers\Backoffice\InscriptionController;
 use App\Http\Controllers\Backoffice\InscriptionFeeController;
 use App\Http\Controllers\Backoffice\PermissionController;
+use App\Http\Controllers\Backoffice\ProfileController;
 use App\Http\Controllers\Backoffice\SettingController;
 use App\Http\Controllers\Backoffice\SalleController;
 use App\Http\Controllers\Backoffice\StudentController;
 use App\Livewire\Backoffice\Employees\EmployeesIndex;
 use App\Livewire\Backoffice\Encaissements\EncaissementsIndex;
-use App\Livewire\Backoffice\Profile\ProfilePage;
 use App\Livewire\Backoffice\Groups\GroupsIndex;
 use App\Livewire\Backoffice\Inscriptions\InscriptionsIndex;
 use App\Livewire\Backoffice\Roles\RoleForm;
@@ -81,7 +81,12 @@ Route::prefix('backoffice')
             Route::post('/logout', LogoutController::class)->name('logout');
 
             // The signed-in user's own profile (no permission gate).
-            Route::get('/profile', ProfilePage::class)->name('profile');
+            // Inertia/React (docs/inertia-react-migration-plan.md); the
+            // Livewire ProfilePage this replaces is kept, unused, for
+            // rollback (Phase 10 removes it).
+            Route::get('/profile', [ProfileController::class, 'show'])->name('profile');
+            Route::post('/profile', [ProfileController::class, 'updateProfile'])->name('profile.update');
+            Route::post('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
 
             // Referential data — managed through the tabbed Settings page
             // (Livewire CRUD tabs: établissements, années scolaires, salles).
