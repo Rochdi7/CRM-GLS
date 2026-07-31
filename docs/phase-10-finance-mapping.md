@@ -68,59 +68,56 @@ not decided in this document.**
 
 ---
 
-## Open questions requiring sign-off before implementation
+## Open questions — resolved (user sign-off obtained before implementation)
 
-These are the audit's stop-condition candidates. Per the task's own
-instructions ("Ask before changing business or accounting semantics," "Stop
-immediately if... a business rule must be invented"), none of these are
-decided in this document — implementation will not proceed on them until you
-answer.
+These were the audit's stop-condition candidates. All six were put to the
+user via AskUserQuestion before any implementation code was written, per
+this phase's own instructions ("Ask before changing business or accounting
+semantics," "Stop immediately if... a business rule must be invented"). All
+six were answered with the recommended, most-conservative option —
+**preserve current behavior exactly, no new business rules invented.**
 
-**Q1 — Insufficient-balance / maximum-refund checks.** Today, nothing in the
-Domain layer prevents a Dépense, Remboursement, or validated Transfer from
-driving a till's `solde` negative, and nothing caps a refund's amount against
-what the beneficiary previously paid. This is confirmed current, real,
-long-standing behavior — not a bug introduced anywhere. Should Phase 10:
-(a) preserve this exactly (no new checks, matching "migrate as-is"), or
-(b) add one or both checks as new, explicitly-requested business rules?
+**Q1 — Insufficient-balance / maximum-refund checks.** ✅ **Decided: preserve
+exactly.** No new insufficient-balance check is added for Dépense/
+Remboursement/validated-Transfer, and no maximum-refund-amount check is
+added. The Domain actions (`EnregistrerDepense`, `EnregistrerRemboursement`,
+`ValiderTransfertCaisse`) are ported with their exact current guard set —
+`min:0.01` remains the only numeric constraint on a refund anywhere in the
+stack.
 
-**Q2 — Remboursements detail/show page.** No Remboursement show page exists
-anywhere today (no route, no view). Should Phase 10:
-(a) leave this exactly as-is (no detail page, matching CaisseJournal's
-`url: null` for these rows), or (b) add one as net-new capability for parity
-with the other four modules?
+**Q2 — Remboursements detail/show page.** ✅ **Decided: do not add one.**
+Remboursements stays the one module with zero detail page anywhere in the
+app — no new route, no new Inertia page, no new Blade view for this.
+`CaisseJournal`'s remboursement rows keep `url: null`.
 
-**Q3 — `CaisseTransferController::validate()`'s Directeur-level TODO.** This
-action has never been reachable by any route until Phase 10 makes it live
-for the first time. Should the implementation:
-(a) leave the TODO exactly as unaddressed technical debt (ship with only the
-existing `cash-transfers.validate` permission check, matching current
-Livewire behavior), or (b) act on the TODO now since it's finally being
-wired up?
+**Q3 — `CaisseTransferController::validate()`'s Directeur-level TODO.**
+✅ **Decided: leave as unaddressed technical debt.** The action ships gated
+by the existing `cash-transfers.validate` permission only, exactly matching
+current Livewire behavior — the TODO comment is carried forward unresolved,
+not acted on mid-migration.
 
-**Q4 — `CaisseJournal` performance bottleneck.** Confirmed real and still
-unaddressed (4 unpaginated collections merged/sorted in PHP, mounted twice
-per page load). Should Phase 10:
-(a) port the existing PHP-merge/slice logic as-is (preserves exact current
-sort/pagination semantics, keeps the known bottleneck), or (b) rewrite it as
-a real paginated query (e.g., SQL `UNION` or per-type endpoints with
-server-side pagination) as part of this migration — a deliberate behavior
-change to sort/pagination semantics, not a silent side effect?
+**Q4 — `CaisseJournal` performance bottleneck.** ✅ **Decided: port as-is.**
+The new React journal page reproduces the exact current PHP-merge/sort/
+`slice()`-pagination semantics (4 independent queries merged in the
+controller/read-model, not a SQL `UNION`). The confirmed bottleneck is
+preserved, not fixed, as part of this migration — a performance rewrite
+remains a candidate for a focused, separate follow-up.
 
-**Q5 — Currency suffix ("DH" vs "MAD").** Pre-existing inconsistency across
-both already-migrated Show pages and current Blade views. Should the new
-Encaissements/Dépenses/Remboursements/CaisseTransfers pages standardize on
-one suffix (and if so, which), or preserve the exact per-page suffix each
-already-migrated Show page currently uses?
+**Q5 — Currency suffix ("DH" vs "MAD").** ✅ **Decided: preserve each page's
+existing suffix.** New Encaissements/Dépenses pages use "MAD" (matching
+their own already-migrated Show pages); new Caisses/CaisseTransfers pages
+use "DH" (matching theirs). No existing screen's display changes; the
+inconsistency is preserved exactly, not unified as an incidental
+side-effect of this migration.
 
-**Q6 — Sidebar Blade/React reconciliation for "Expense types."** The React
-nav config already gives Types de dépenses its own item; the Blade sidebar
-still folds it into "Expense management." Since Phase 10 migrates the
-remaining Livewire finance pages to Inertia, should the Blade sidebar
-component simply stop being rendered at all once every finance page is
-Inertia (i.e., is the unified `<x-backoffice.layout.app>` shell + React nav
-config already the sole sidebar for migrated pages, making this divergence
-moot), or is there a transitional state this phase needs to handle?
+**Q6 — Sidebar Blade/React reconciliation for "Expense types."** ✅
+**Decided: no action needed**, pending confirmation during implementation.
+Once every finance page is Inertia, the Blade sidebar component is not
+rendered for these pages at all — the React nav config is already the sole
+sidebar wherever the Inertia shell is used, so the divergence becomes moot
+without a code change. This will be verified (not assumed) once the finance
+pages are wired up; `sidebar.blade.php` will only be touched if it turns out
+still reachable somewhere in the migrated flow.
 
 ---
 
