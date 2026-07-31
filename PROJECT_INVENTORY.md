@@ -11,29 +11,35 @@ and `gls-crm-laravel-structure.md`. This file is a map, not a rulebook.
 > Livewire-only description are **stale** — both were written before this
 > approved migration started and have not been rewritten yet (deliberately
 > deferred, per `docs/inertia-react-migration-audit.md` §8 "Documentation
-> debt"). Current real state as of Phase 9: **Inertia + React** now serve
+> debt"). Current real state as of Phase 10: **Inertia + React** now serve
 > Permissions, Login, Forgot/Reset Password, Profile, Dashboard, the
-> top-bar Context Switcher, the groups-historique index, the read-only
-> show/detail pages for Caisses, Encaissements, Depenses, and
-> Caisse Transfers, the five simple CRUD modules (Établissements, Années
-> scolaires, Salles, Frais, Types de dépenses — the Paramètres/Settings page
-> and its own new Types de dépenses page), the four medium CRUD modules
-> (Employees — full CRUD with photo upload and auto-provisioned login;
-> Users — edit-only + password regeneration; Roles — full CRUD, full-page
-> create/edit; and the per-user role/direct-permission assignment screen),
-> **Students** (full CRUD with photo upload, parent/guardian fields,
-> CEFR level + German-track orientation), **Groups** (full CRUD with
-> per-group fee-line assignment, teacher scoping, status tabs — deliberately
-> no room/capacity/schedule fields, since none exist in the current UI), and
-> now **Inscriptions** (full CRUD — modal create/edit with an inline
-> new-student mode, group-driven active-fee-catalog billing, a repeatable
-> fee-lines editor with live percentage/fixed-DH discount preview, and the
-> create-vs-edit date/fee asymmetry preserved exactly; its read-only show/
-> detail page was already Inertia since an earlier phase).
-> Every remaining CRUD index page with add/edit modals (all
-> Finance mutation screens — Depenses/Remboursements/Encaissements/Caisses/
-> Transfers) and every other module listed in §4 below is still Livewire,
-> unchanged. A permanent, read-only reference copy of the
+> top-bar Context Switcher, the groups-historique index, the five simple
+> CRUD modules (Établissements, Années scolaires, Salles, Frais, Types de
+> dépenses — the Paramètres/Settings page and its own new Types de dépenses
+> page), the four medium CRUD modules (Employees — full CRUD with photo
+> upload and auto-provisioned login; Users — edit-only + password
+> regeneration; Roles — full CRUD, full-page create/edit; and the per-user
+> role/direct-permission assignment screen), **Students** (full CRUD with
+> photo upload, parent/guardian fields, CEFR level + German-track
+> orientation), **Groups** (full CRUD with per-group fee-line assignment,
+> teacher scoping, status tabs), **Inscriptions** (full CRUD — modal
+> create/edit with an inline new-student mode, group-driven
+> active-fee-catalog billing, a repeatable fee-lines editor with live
+> percentage/fixed-DH discount preview), and now the entire **Finance**
+> domain: **Caisses** ("Gestion de la caisse" tabbed page — Ma caisse/
+> Journal des transactions/Transferts/Comptes de caisse, auto-provisioned
+> tills with zero manual CRUD by design), **Encaissements** (Payments, with
+> the cascading student→inscription→fee-lines multi-row payment form and
+> its multi-row single-submit transaction), **Dépenses** (with justificatif
+> receipt uploads) and **Remboursements** ("Gestion des dépenses" tabbed
+> page — deliberately still has zero detail page, matching current
+> behavior), and **Transferts de caisse** (the two-step request→validate
+> workflow with pessimistic row locking and triple-layered self-validation
+> defense). This completes every module in the migration order
+> (docs/inertia-react-migration-plan.md §5) — only Phase 11 (final Livewire/
+> Blade/Alpine cleanup) remains, and it has NOT begun; every legacy
+> component/view for every migrated module above is still on disk,
+> unreferenced, for rollback. A permanent, read-only reference copy of the
 > purchased PreSkool React theme also now lives at
 > `resources/theme-reference/preskool-react/` (see
 > `docs/preskool-react-reference-inventory.md`) — never a build input,
@@ -159,16 +165,20 @@ Reusable traits: `Concerns\{WithCaisseSelection, WithCenterContext, WithPerPage,
 Remboursements, CaisseTransfers) — corrections use compensating entries.
 **Groups never delete** — only `archiverCommeTermine()`.
 
-> ⚠ As of Phase 9 (see `docs/inertia-react-migration-status.md`), the
+> ⚠ As of Phase 10 (see `docs/inertia-react-migration-status.md`), the
 > `Employees\EmployeesIndex`, `Users\{UsersIndex,ManageAuthorization}`,
 > `Roles\{RolesIndex,RoleForm}`, `Settings\{EtablissementsTab,
 > AnneesScolairesTab,SallesTab,FraisTab}`, `TypesDepenses\TypesDepensesIndex`,
-> `Students\StudentsIndex`, `Groups\GroupsIndex`, and
-> `Inscriptions\InscriptionsIndex` rows above are **no longer referenced by
-> any route** — their Inertia/React replacements are live instead. The
-> class/view files are kept, unused, for rollback (removed only in the final
-> cleanup phase); this table otherwise still reflects the full historical
-> component set.
+> `Students\StudentsIndex`, `Groups\GroupsIndex`,
+> `Inscriptions\InscriptionsIndex`, `Caisses\{CaissesIndex,CaisseJournal}`,
+> `CaisseTransfers\CaisseTransfersIndex`, `Encaissements\EncaissementsIndex`,
+> `Depenses\DepensesIndex`, and `Remboursements\RemboursementsIndex` rows
+> above are **no longer referenced by any route** — their Inertia/React
+> replacements are live instead. This is now every Livewire component in
+> the migration order (docs/inertia-react-migration-plan.md §5) except none
+> remain — the class/view files are kept, unused, for rollback (removed
+> only in the final Phase 11 cleanup, which has not begun); this table
+> otherwise still reflects the full historical component set.
 
 ---
 

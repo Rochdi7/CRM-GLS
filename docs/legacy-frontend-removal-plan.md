@@ -1,12 +1,60 @@
 # Legacy Frontend (Livewire/Blade/Alpine) — Removal Plan
 
-Status: **Not scheduled to run. This is Phase 10 only, and Phase 10 does not
-begin until every module in the migration order (plan doc §5) has an Inertia
-replacement that is built, tested, and confirmed in production use.**
+Status: **Not scheduled to run. This is Phase 11 (final cleanup) only, and
+it does not begin until every module in the migration order (plan doc §5)
+has an Inertia replacement that is built, tested, and confirmed in
+production use.** Phase 10 (Finance) completed the last module in that
+order — see §0g below — but per its own instructions, Phase 10 explicitly
+does not begin Phase 11 cleanup either; every file in this document remains
+retained until the user separately approves the cleanup phase.
 
 This document exists now (Phase 0) purely so the *criteria* for safe removal
 are agreed upfront — not because removal is imminent. Nothing in this file
 authorizes deleting anything today.
+
+---
+
+## 0g. Phase 10 additions to the retained-legacy list
+
+Caisses, Encaissements, Dépenses, Remboursements, and CaisseTransfers are
+now migrated (docs/inertia-react-migration-status.md, Phase 10 entry) — the
+last modules in the migration order (plan doc §5).
+
+| File | Why retained |
+|---|---|
+| `app/Livewire/Backoffice/Caisses/CaissesIndex.php` | No longer rendered — `backoffice.caisses.index` now serves `CaisseController@index`; kept for rollback |
+| `app/Livewire/Backoffice/Caisses/CaisseJournal.php` | No longer rendered — the journal tab now fetches `CaisseController@journal`; kept for rollback |
+| `resources/views/livewire/backoffice/caisses/{caisses-index,caisse-journal}.blade.php` | Owning views of the above |
+| `app/Livewire/Backoffice/CaisseTransfers/CaisseTransfersIndex.php` | No longer rendered — the transfers tab now uses `CaisseController@index`'s `transfers` prop + `CaisseTransferController`; kept for rollback |
+| `resources/views/livewire/backoffice/caisse-transfers/caisse-transfers-index.blade.php` | Owning view of the above |
+| `app/Livewire/Backoffice/Encaissements/EncaissementsIndex.php` | No longer rendered — `backoffice.encaissements.index` now serves `EncaissementController@index`; kept for rollback |
+| `resources/views/livewire/backoffice/encaissements/encaissements-index.blade.php` | Owning view of the above |
+| `app/Livewire/Backoffice/Depenses/DepensesIndex.php` | No longer rendered — `backoffice.depenses.index` now serves `DepenseController@index`; kept for rollback |
+| `resources/views/livewire/backoffice/depenses/depenses-index.blade.php` | Owning view of the above |
+| `app/Livewire/Backoffice/Remboursements/RemboursementsIndex.php` | No longer rendered — the remboursements tab now uses `DepenseController@index`'s `remboursements` prop + `RemboursementController`; kept for rollback |
+| `resources/views/livewire/backoffice/remboursements/remboursements-index.blade.php` | Owning view of the above |
+| `app/Http/Controllers/Backoffice/CaisseManagementController.php` | Superseded — its `abort_unless(canAny(...))` gate now lives inline in `CaisseController::index()`; kept for rollback |
+| `app/Http/Controllers/Backoffice/DepenseManagementController.php` | Superseded — same pattern, gate now lives inline in `DepenseController::index()`; kept for rollback |
+| `resources/views/backoffice/{caisses,depenses}/index.blade.php` | Owning Blade shells of the two superseded controllers above |
+
+**`app/Http/Requests/Backoffice/{Caisses,Encaissements,Depenses,
+Remboursements,CaisseTransfers}/{Store,Update}*Request.php` were NOT
+retired** — like every prior phase's equivalent requests, these existed
+before Phase 10 (validating either a dead/divergent field set or, for
+Caisses, a capability with no live UI at all) and most are now the ACTIVE
+Form Requests for the new controller actions. Two exceptions, consistent
+with the resolved open questions:
+
+- `Caisses\{Store,Update}CaisseRequest` remain fully dead — no manual Caisse
+  CRUD was added (auto-provisioning only, Q-equivalent decision in the
+  mapping doc), so `CaisseController` still has no routed `store`/`update`.
+- `StoreEncaissementRequest` was rewritten (not merely re-routed) to the
+  real multi-row cascade shape — its pre-Phase-10 single-fee shape never
+  matched the live Livewire form and would have been actively wrong if
+  reused as-is (see the audit's §7 finding).
+
+Nothing to mark unused for the other eight Form Requests — they are now
+genuinely live.
 
 ---
 

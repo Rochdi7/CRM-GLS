@@ -4,6 +4,279 @@ Running log of verified milestones. Append one entry per phase; do not rewrite h
 
 ---
 
+## Phase 10 — Finance migration (Caisses, Encaissements, Dépenses, Remboursements, Transferts)
+
+**Date**: 2026-07-31
+**Status**: **Complete.**
+
+Migrated the entire Finance domain from Livewire to Inertia + React: the
+"Gestion de la caisse" tabbed page (Ma caisse / Journal des transactions /
+Transferts / Comptes de caisse), Payments (Encaissements, with the
+cascading student→inscription→fee-lines payment form), and the "Gestion
+des dépenses" tabbed page (Dépenses with justificatif uploads /
+Remboursements). Full audit in `docs/phase-10-finance-audit.md` and
+implementation mapping (including 6 open questions resolved with the user
+before any code was written) in `docs/phase-10-finance-mapping.md`. All
+legacy Livewire components and Blade views are left completely untouched as
+the unreferenced rollback fallback.
+
+### Audit findings and resolved open questions
+
+The audit found the same dead-code shape Phase 9 found for
+`inscription-fees.*`: every Store/Update Form Request and most controller
+mutation methods for these five modules existed in code but were entirely
+unrouted — the Livewire components' own hand-written `rules()`/`save()`
+were the real source of truth and were read in full rather than assumed
+from the (sometimes subtly diverging) dead controllers.
+
+Six genuine open questions were surfaced to the user before implementation,
+all resolved with the recommended, most-conservative option (**preserve
+current behavior exactly, invent no new business rules** — see the mapping
+doc for full detail):
+
+1. **No insufficient-balance / no maximum-refund-amount check** exists
+   anywhere (a Dépense, Remboursement, or validated Transfer can drive a
+   till negative; a refund is capped only at `min:0.01`) — preserved as-is.
+2. **Remboursements has zero detail/show page** anywhere in the live app —
+   not added.
+3. **`CaisseTransferController::validateAction()`'s Directeur-level-role
+   TODO** (never acted on, and never reachable until this phase) — left as
+   unaddressed technical debt, gated by `cash-transfers.validate` only.
+4. **`CaisseJournal`'s confirmed performance bottleneck** (4 unpaginated
+   collections merged/sorted in PHP per scope, mounted twice per page load)
+   — ported as-is; a rewrite is deferred to a dedicated follow-up.
+5. **Currency-suffix inconsistency ("DH" vs "MAD")** — preserved per-page
+   exactly as each already-migrated Show page uses it (Caisses/
+   CaisseTransfers: "DH"; Encaissements/Dépenses: "MAD").
+6. **Sidebar Blade/React divergence for "Expense types"** — no code change;
+   the Blade sidebar is not rendered once every finance page is Inertia.
+
+### A real bug found and fixed during controller rewrite
+
+The dead `CaisseTransferController::update()` used a hard `abort_unless(...,
+403)` for the "not pending" guard and relied on `ResolvesActingEmployee`'s
+hard 403 for "no employee record" — but the live Livewire
+`CaisseTransfersIndex::save()`/`validateTransfer()` have always used a
+**soft form error** for both (no exception, modal stays open with an inline
+message). Reproducing the dead controller's hard-abort behavior verbatim
+would have been a real UX regression (a full-page 403 instead of an inline
+error) invisible until this phase actually routed these actions for the
+first time. Fixed by using `ValidationException::withMessages()` instead of
+`abort_unless()`/`ResolvesActingEmployee` throughout all five new
+Inertia-facing action methods (`EncaissementController::store()`,
+`DepenseController::store()`, `RemboursementController::store()`,
+`CaisseTransferController::store()`/`update()`/`validateAction()`).
+
+### Files created
+
+- Read-models: `App\Domain\Finance\Queries\{GetCaissesList,GetCaisseJournal,
+  GetCaisseTransfersList,GetRemboursementsList}`,
+  `App\Domain\Expenses\Queries\GetDepensesList`,
+  `App\Domain\Payments\Queries\{GetEncaissementsList,
+  GetInscriptionUnpaidFees}`.
+- React pages: `resources/js/Pages/Backoffice/{Caisses,Encaissements,
+  Depenses}/Index.tsx` (Caisses hosts Journal + Transferts + Comptes as
+  client-side tabs; Depenses hosts Remboursements as a client-side tab).
+- Tests: `tests/Feature/Backoffice/Finance/{CaissesInertiaCrudTest,
+  EncaissementsInertiaCrudTest,DepensesInertiaCrudTest,
+  RemboursementsInertiaCrudTest,CaisseTransfersInertiaCrudTest}.php`.
+
+No new shared components — every modal/table/filter reuses the Phase 6-9
+component library (Modal, Card, DataTable, TableToolbar, SearchInput,
+Pagination, RowActions, SelectField, FormField, TextareaField, FormActions,
+StatusBadge, EmptyState).
+
+### Files modified
+
+- Controllers: `CaisseController` (gained `index`/`journal`, `show`
+  unchanged), `EncaissementController` (gained `index`/`store`/`update`/
+  `studentInscriptions`/`inscriptionFees`, `show` unchanged),
+  `DepenseController` (gained `index`/`store`/`update`/
+  `removeJustificatif`, `show` unchanged), `RemboursementController`
+  (rewritten to `store`/`update` only — its list is now served by
+  `DepenseController::index()`), `CaisseTransferController` (gained
+  `store`/`update`/`validateAction` — renamed from `validate()`, which
+  collided with the inherited `ValidatesRequests::validate()` helper method;
+  `show` unchanged). `CaisseManagementController`/
+  `DepenseManagementController` are now unreferenced (their `abort_unless`
+  gate logic moved into `CaisseController::index()`/`DepenseController::
+  index()` directly).
+- Form Requests: `Store/UpdateDepenseRequest` gained `justificatifs.*`
+  validation (previously undeclared — dead code never exercised a file
+  upload); `StoreEncaissementRequest` fully rewritten to the real multi-row
+  cascade shape (`payment_lines.*`, with a closure rule enforcing the
+  per-row remaining-balance cap, mirroring the Livewire component's dynamic
+  `max:reste` rule exactly — the pre-Phase-10 version validated a
+  single-fee shape that never matched the live form).
+- `routes/backoffice.php` — added `caisses.journal`,
+  `encaissements.{store,update}`, `students.inscriptions-for-payment`,
+  `inscriptions.unpaid-fees`, `depenses.{store,update,
+  justificatifs.destroy}`, `remboursements.{store,update}`,
+  `caisse-transfers.{store,update,validate}`; removed the
+  `EncaissementsIndex` Livewire route import.
+- `resources/js/Config/backofficeNavigation.ts` — Cash management, Payments,
+  Expense management nav items marked `inertia: true`.
+- `resources/js/Types/index.ts` — additive only: `FinanceOption,
+  CaisseRow, CaisseJournalRow, CaisseJournalData, CaisseTransferRow,
+  CaisseTransferFormOption, CaissesPageProps, EncaissementRow,
+  EncaissementsFilters, EncaissementsPageProps, UnpaidFee, PaymentLine,
+  DepenseRow, DepensesFilters, RemboursementRow, DepensesPageProps`.
+
+### Routes
+
+| Route | Before | After |
+|---|---|---|
+| `backoffice.caisses.index` (GET) | `CaisseManagementController` (Blade shell) | `CaisseController@index` |
+| `backoffice.caisses.journal/{scope}` (GET, new) | — | `CaisseController@journal` (AJAX partial for tab filters) |
+| `backoffice.encaissements.index` (GET) | `EncaissementsIndex` (Livewire) | `EncaissementController@index` |
+| `backoffice.encaissements.store` (POST, new) | — | `EncaissementController@store` |
+| `backoffice.encaissements.update` (PUT, new) | — | `EncaissementController@update` |
+| `backoffice.students.{student}.inscriptions-for-payment` (GET, new) | — | `EncaissementController@studentInscriptions` |
+| `backoffice.inscriptions.{inscription}.unpaid-fees` (GET, new) | — | `EncaissementController@inscriptionFees` |
+| `backoffice.depenses.index` (GET) | `DepenseManagementController` (Blade shell) | `DepenseController@index` |
+| `backoffice.depenses.store` / `.update` (new) | — | `DepenseController@store` / `@update` |
+| `backoffice.depenses.justificatifs.destroy` (DELETE, new) | — | `DepenseController@removeJustificatif` |
+| `backoffice.remboursements.store` / `.update` (new) | — | `RemboursementController@store` / `@update` |
+| `backoffice.caisse-transfers.store` / `.update` (new) | — | `CaisseTransferController@store` / `@update` |
+| `backoffice.caisse-transfers.validate` (PUT, new) | — | `CaisseTransferController@validateAction` |
+
+`backoffice.remboursements.index`/`backoffice.caisse-transfers.index` remain
+the same intentional redirect stubs (deep-link to the tab, clean 403 for
+unauthorized visitors) — unchanged. No destroy route anywhere in this
+domain — money records are never deleted.
+
+### Prop shapes
+
+Every list page's props are explicit arrays from a Domain Query class, no
+raw Eloquent models. `CaissesPageProps` conditionally nulls out
+`caisses`/`journalMine`/`journalAll` vs `transfers`/`transferStatutCounts`
+depending on which of the two view permissions the user holds (mirrors the
+Blade shell's own per-tab `@can` gating). `DepensesPageProps` does the same
+for `depenses` vs `remboursements`. Money always crosses the wire as
+`number_format($x, 2, '.', '')` strings (the established `MoneyDisplay`
+convention), never raw floats.
+
+### Business rules preserved
+
+Auto-provisioned tills with zero manual CRUD; the cascading payment form
+(student→inscription→one row per unpaid fee, no till picker, the acting
+employee's own till always used); the multi-row single-submit
+`DB::transaction` with per-row fee-ownership verification and full rollback
+on any invalid row; every create-vs-edit field-freeze asymmetry (montant/
+caisse_id frozen after creation for Encaissements/Dépenses/Remboursements;
+tills/amount frozen for Transfers); the two-step transfer request→validate
+workflow with `lockForUpdate()` pessimistic locking and the triple-layered
+self-validation defense (UI hide, policy gate, Domain-action refusal); the
+justificatif upload mime/size contract; the deliberate absence of balance
+floor and refund-cap checks.
+
+### Financial rules preserved
+
+All server-side money math stays in the existing, unmodified Domain actions
+(`EnregistrerEncaissement`, `EnregistrerDepense`, `EnregistrerRemboursement`,
+`DemanderTransfertCaisse`, `ValiderTransfertCaisse`) — none of their
+transaction boundaries, locking, or arithmetic were touched. Every React
+preview (payment-line running totals, remaining-balance caps) is
+display-only; the server independently re-validates and recomputes on save,
+including the per-row `max:reste` cap and the cross-registration
+fee-ownership guard.
+
+### PostgreSQL transaction safety
+
+Reviewed every new mutation for the Phase-9-class bug (a failed statement
+aborting the whole request transaction, not just itself). No new delete
+capability was added for any of the four money-movement modules in this
+phase (per the preservation list in the mapping doc), so no new
+FK-restrict-on-delete exposure was introduced. The multi-row Encaissement
+submit's `DB::transaction()` wrap was verified to roll back completely (zero
+rows persisted, balance unchanged) when a later row is invalid — covered by
+`test_an_invalid_row_rolls_back_the_whole_multi_row_submit`.
+
+### Tests added
+
+150 Finance tests total after this phase (108 existing Livewire-side +
+42 new Inertia-side across 5 files): `CaissesInertiaCrudTest` (5),
+`EncaissementsInertiaCrudTest` (10, including the multi-row rollback and
+tampered-fee-ownership cases), `DepensesInertiaCrudTest` (8, including
+receipt upload/mime-rejection/removal), `RemboursementsInertiaCrudTest` (6,
+including an explicit test asserting the deliberate absence of a
+maximum-refund cap), `CaisseTransfersInertiaCrudTest` (13, including
+cross-employee validation, self-validation refusal, double-validation
+prevention, and cross-center denial).
+
+### Test results
+
+| Check | Result |
+|---|---|
+| `artisan test tests/Feature/Backoffice/Finance/` | ✅ 150/150 passing (108 existing Livewire-side + 42 new Inertia-side) |
+| Every other test directory, run individually | ✅ All passing — Unit 4/4, Authorization 44/44, Context 16/16, Groups 30/30, Inertia 88/88, Inscriptions 43/43, People 31/31, Settings 24/24, Students 43/43 (473/473 total across all directories) |
+| Full suite in one combined `artisan test` invocation | ⚠️ Not completed — see note below |
+| `npx tsc --noEmit` | ✅ Clean |
+| `npm run build` | ✅ Succeeds — main bundle 529.14 kB / 139.91 kB gzip (Phase 9 baseline: 492.86 kB / 133.58 kB gzip) |
+
+**Full-suite invocation note**: multiple attempts to run the complete suite
+in one `artisan test` (or `phpunit`) invocation stalled partway through —
+each time the PHP process dropped to near-zero CPU usage with a Postgres
+connection left `idle in transaction` on a `DEALLOCATE pdo_stmt_...`
+statement, never recovering. This was investigated at length: it is not a
+concurrent-session collision (verified via process creation timestamps —
+no other session was touching this repository or database), not a
+`RefreshDatabase` deadlock in the normal sense (one specific instance of
+that real, transient deadlock class *was* captured while investigating —
+the same pre-existing operational hazard documented in this file's own
+Phase 6 entry above — but re-running that same directory alone immediately
+afterward passed cleanly, confirming it was transient contention from
+overlapping diagnostic commands during investigation, not a permanent
+defect), and reproduced identically whether
+piping through `tail`, redirecting straight to a file, or invoking every
+directory explicitly by name in one command. Every individual test
+directory — including `Finance` in full — passes cleanly and quickly on
+its own; the stall appears tied specifically to chaining many directories
+together in a single long-running PHPUnit process in this environment, not
+to any code from this phase. This is reported honestly as an unresolved
+environment limitation rather than a claimed-but-unverified full-suite
+pass — the 473 individually-verified tests plus 150 Finance tests
+(counted once, not twice — Finance is included in both figures) are the
+real regression evidence for this phase.
+
+### Performance measurements
+
+- Caisses list: 5 SQL queries.
+- Caisse journal (one scope): 12 SQL queries (the 4-table PHP merge,
+  confirmed unchanged per Q4) — ~24 on initial "Gestion de la caisse" page
+  load (both `mine` and `all` scopes fetched together), consistent with the
+  audit's own characterization of this as the heaviest single component in
+  the app.
+- Caisse Transfers list: 1 query.
+- Encaissements list: 8 queries.
+- Dépenses list: 2 queries (list + separate full-filtered-set total).
+- Remboursements list: 1 query.
+- Bundle grew by ~36.3 kB / ~6.3 kB gzip over Phase 9 — the largest
+  multi-page addition yet (3 substantial pages, one with the most complex
+  cascading form in the app), still using only the existing shared
+  component library.
+
+### Manual browser verification
+
+Not yet performed — pending user verification in a real browser (per the
+checklist in the phase instructions: Caisse tabs and journal filters,
+Encaissement create with the full cascade + receipt-free chèque fields,
+Dépense create/edit with justificatif upload and removal, Remboursement
+create/edit, Transfer request/validate/reject/cancel, same-caisse and
+insufficient-balance-adjacent behavior, flash messages, modal focus,
+mobile responsiveness).
+
+### Known limitations
+
+None blocking. All limitations are the deliberately-preserved absences
+documented in the 6 resolved open questions above (no balance floor, no
+refund cap, no Remboursement detail page, the unaddressed validate() TODO,
+the unaddressed CaisseJournal performance bottleneck, the DH/MAD
+inconsistency) — every one a considered "preserve exactly" decision, not an
+oversight.
+
+---
+
 ## Phase 9 — Inscriptions (registrations) migration
 
 **Date**: 2026-07-31
