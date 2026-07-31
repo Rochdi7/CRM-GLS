@@ -60,6 +60,7 @@ export default function BackofficeLayout({ title, breadcrumbs = [], actions, chi
 
             <Sidebar
                 permissions={auth.permissions}
+                isSuperAdmin={auth.isSuperAdmin}
                 mobileOpen={mobileSidebarOpen}
                 onNavigate={() => setMobileSidebarOpen(false)}
             />

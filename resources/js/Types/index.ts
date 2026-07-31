@@ -48,6 +48,7 @@ export interface SharedProps {
     auth: {
         user: AuthUser | null;
         permissions: string[];
+        isSuperAdmin: boolean;
     };
     context: Context | null;
     flash: FlashMessages;

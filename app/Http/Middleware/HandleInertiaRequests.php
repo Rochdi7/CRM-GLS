@@ -34,6 +34,12 @@ final class HandleInertiaRequests extends Middleware
                     'email' => $user->email,
                 ],
                 'permissions' => $user === null ? [] : $user->getAllPermissions()->pluck('name')->values(),
+                // super-admin bypasses every permission check via Gate::before
+                // and therefore holds no permissions directly (see CLAUDE.md
+                // §16) — the frontend nav needs this explicit flag to show
+                // every gated item, the same way Blade's @can already
+                // resolves true for this role server-side.
+                'isSuperAdmin' => $user !== null && $user->hasRole('super-admin'),
             ],
             // Lazy: only resolved when an Inertia page/partial-reload actually
             // asks for it, and never at all for guests — CurrentContext's
