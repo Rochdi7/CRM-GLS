@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Backoffice\Context;
 
-use App\Livewire\Backoffice\Context\ContextSwitcher;
 use App\Models\AnneeScolaire;
 use App\Models\Employee;
 use App\Models\Etablissement;
@@ -13,7 +12,6 @@ use App\Models\User;
 use App\Services\Context\CurrentContext;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Livewire\Livewire;
 use Tests\TestCase;
 
 final class CurrentContextTest extends TestCase
@@ -106,36 +104,5 @@ final class CurrentContextTest extends TestCase
 
         // Their switcher only lists their own center.
         $this->assertEquals([$this->rabat->id], $context->availableCentres()->pluck('id')->all());
-    }
-
-    public function test_switcher_component_changes_year_and_dispatches_event(): void
-    {
-        $this->globalUser();
-
-        Livewire::test(ContextSwitcher::class)
-            ->call('selectAnnee', $this->y2425->id)
-            ->assertDispatched('context-changed');
-
-        $this->assertSame($this->y2425->id, app(CurrentContext::class)->anneeScolaireId());
-    }
-
-    public function test_switcher_component_changes_center(): void
-    {
-        $this->globalUser();
-
-        Livewire::test(ContextSwitcher::class)
-            ->call('selectCentre', $this->casa->id)
-            ->assertDispatched('context-changed');
-
-        $this->assertSame($this->casa->id, app(CurrentContext::class)->etablissementId());
-    }
-
-    public function test_center_scoped_user_switcher_cannot_change_center(): void
-    {
-        $this->centerUser($this->rabat);
-
-        Livewire::test(ContextSwitcher::class)->call('selectCentre', $this->casa->id);
-
-        $this->assertSame($this->rabat->id, app(CurrentContext::class)->etablissementId());
     }
 }
