@@ -12,12 +12,11 @@ interface SelectFieldProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>,
 }
 
 /**
- * Plain native <select> styled like the theme's .form-select — used inside
- * modals for a handful of known options (status, center picker). Not
- * Select2: CLAUDE.md's Select2 rule targets jQuery-plugin dropdowns on
- * always-on Blade/Livewire pages; Inertia modals load no jQuery/Select2
- * assets at all (docs/bootstrap-react-integration-decision.md), so a native
- * select is the only option here without introducing a new dependency.
+ * Plain native <select> styled like the theme's .form-select — the standard
+ * dropdown for every React form (CLAUDE.md §5: never Select2 or any jQuery
+ * plugin; no jQuery/Select2 assets load on any backoffice page). If a page
+ * ever genuinely needs async/searchable options, that means a new
+ * React-native combobox component — not a jQuery bridge.
  */
 export default function SelectField({
     id,
