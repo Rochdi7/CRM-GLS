@@ -4,6 +4,7 @@ import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
+import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import TableToolbar from '@/Components/Tables/TableToolbar';
 import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
@@ -127,6 +128,7 @@ export default function InscriptionsIndex({
     students,
     groups,
 }: InscriptionsPageProps) {
+    const isLoading = useInertiaLoading();
     const [showModal, setShowModal] = useState(false);
     const [editingInscription, setEditingInscription] = useState<InscriptionRow | null>(null);
     const [activeTab, setActiveTab] = useState<'affectation' | 'contact' | 'parent' | 'autre'>('affectation');
@@ -356,6 +358,7 @@ export default function InscriptionsIndex({
                 ) : (
                     <>
                         <DataTable
+                            loading={isLoading}
                             head={
                                 <tr>
                                     <th>Référence</th>
