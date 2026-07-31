@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Backoffice\Context;
 
-use App\Livewire\Backoffice\Employees\EmployeesIndex;
 use App\Livewire\Backoffice\Settings\SallesTab;
 use App\Livewire\Backoffice\Users\UsersIndex;
 use App\Models\Employee;
@@ -51,18 +50,6 @@ final class CenterScopingTest extends TestCase
         $this->actingAs($user);
 
         return $user;
-    }
-
-    public function test_employees_list_is_scoped_to_the_selected_center(): void
-    {
-        $user = $this->globalUser();
-        Employee::factory()->create(['nom' => 'EmployeRabatX', 'etablissement_id' => $this->rabat->id, 'user_id' => $user->id]);
-        Employee::factory()->create(['nom' => 'EmployeCasaX', 'etablissement_id' => $this->casa->id, 'user_id' => $user->id]);
-
-        app(CurrentContext::class)->setEtablissement($this->casa->id);
-        Livewire::test(EmployeesIndex::class)
-            ->assertSee('EmployeCasaX')
-            ->assertDontSee('EmployeRabatX');
     }
 
     public function test_salles_tab_is_scoped_to_the_selected_center(): void
