@@ -23,6 +23,7 @@ use App\Http\Controllers\Backoffice\GroupHistoriqueController;
 use App\Http\Controllers\Backoffice\InscriptionController;
 use App\Http\Controllers\Backoffice\PermissionController;
 use App\Http\Controllers\Backoffice\ProfileController;
+use App\Http\Controllers\Backoffice\RemboursementController;
 use App\Http\Controllers\Backoffice\Roles\RoleController;
 use App\Http\Controllers\Backoffice\SettingController;
 use App\Http\Controllers\Backoffice\SalleController;
@@ -30,7 +31,6 @@ use App\Http\Controllers\Backoffice\StudentController;
 use App\Http\Controllers\Backoffice\TypeDepenseController;
 use App\Http\Controllers\Backoffice\Users\UserAuthorizationController;
 use App\Http\Controllers\Backoffice\Users\UserController;
-use App\Livewire\Backoffice\Encaissements\EncaissementsIndex;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -190,33 +190,52 @@ Route::prefix('backoffice')
             // create transaction (InscriptionController::store()), never
             // standalone.
 
-            // Finance — money records are never deleted (audit trail)
-            // Gestion de la caisse — ONE tabbed page (Paramètres pattern):
+            // Finance (Phase 10, docs/phase-10-finance-audit.md +
+            // docs/phase-10-finance-mapping.md) — money records are never
+            // deleted (audit trail). Migrated from Livewire to Inertia+React;
+            // legacy Livewire components/Blade views retained unreferenced
+            // for rollback (docs/legacy-frontend-removal-plan.md §0g).
+            //
+            // Gestion de la caisse — ONE Inertia page (Paramètres pattern):
             // Ma caisse + journal des transactions + transferts + comptes de
-            // caisse as Livewire tabs. Access = ANY of the two view
-            // permissions (checked in CaisseManagementController); each tab
-            // is gated by its own permission in the view AND in each component.
-            Route::get('caisses', CaisseManagementController::class)
-                ->name('caisses.index');
+            // caisse as client-side React tabs, same as the former Livewire
+            // tabs. Access = ANY of the two view permissions (checked in
+            // CaisseController@index); each tab's data/actions are still
+            // gated by their own permission server-side.
+            Route::get('caisses', [CaisseController::class, 'index'])->name('caisses.index');
             Route::get('caisses/{caisse}', [CaisseController::class, 'show'])->name('caisses.show');
-            // Payments — Livewire list + modal CRUD; controller serves the
-            // read-only receipt page only.
-            // ⚠ NEVER add a destroy route: a payment is never deleted.
-            Route::get('encaissements', EncaissementsIndex::class)
+            Route::get('caisses/journal/{scope}', [CaisseController::class, 'journal'])
+                ->where('scope', 'mine|all')->name('caisses.journal');
+
+            // Payments — Inertia list + modal add/edit (the cascading
+            // multi-row payment form). Controller serves both the list and
+            // the read-only receipt page. ⚠ NEVER add a destroy route.
+            Route::get('encaissements', [EncaissementController::class, 'index'])
                 ->middleware('permission:payments.view')->name('encaissements.index');
+            Route::post('encaissements', [EncaissementController::class, 'store'])
+                ->middleware('permission:payments.create')->name('encaissements.store');
+            Route::put('encaissements/{encaissement}', [EncaissementController::class, 'update'])
+                ->middleware('permission:payments.update')->name('encaissements.update');
             Route::get('encaissements/{encaissement}', [EncaissementController::class, 'show'])
                 ->name('encaissements.show');
-            // Gestion des dépenses — ONE tabbed page (Paramètres pattern)
-            // hosting dépenses + remboursements as Livewire tabs (Types de
-            // dépenses moved OUT to its own Inertia page in Phase 6 — see
-            // docs/phase-6-simple-crud-inventory.md §Q2 — this page is now
-            // 2 tabs only). Access = ANY of the two remaining view
-            // permissions (checked in DepenseManagementController); each tab
-            // is gated by its own permission in the view AND inside each
-            // component. ⚠ NEVER add a destroy route: an expense is never
-            // deleted.
-            Route::get('depenses', DepenseManagementController::class)
-                ->name('depenses.index');
+            Route::get('students/{student}/inscriptions-for-payment', [EncaissementController::class, 'studentInscriptions'])
+                ->name('students.inscriptions-for-payment');
+            Route::get('inscriptions/{inscription}/unpaid-fees', [EncaissementController::class, 'inscriptionFees'])
+                ->name('inscriptions.unpaid-fees');
+
+            // Gestion des dépenses — ONE Inertia page hosting dépenses +
+            // remboursements as client-side React tabs (Types de dépenses
+            // moved OUT to its own Inertia page in Phase 6 — this page is 2
+            // tabs only). Access = ANY of the two remaining view permissions
+            // (checked in DepenseController@index). ⚠ NEVER add a destroy
+            // route: an expense is never deleted.
+            Route::get('depenses', [DepenseController::class, 'index'])->name('depenses.index');
+            Route::post('depenses', [DepenseController::class, 'store'])
+                ->middleware('permission:expenses.create')->name('depenses.store');
+            Route::put('depenses/{depense}', [DepenseController::class, 'update'])
+                ->middleware('permission:expenses.update')->name('depenses.update');
+            Route::delete('depenses/{depense}/justificatifs/{media}', [DepenseController::class, 'removeJustificatif'])
+                ->middleware('permission:expenses.update')->name('depenses.justificatifs.destroy');
             Route::get('depenses/{depense}', [DepenseController::class, 'show'])
                 ->name('depenses.show');
             // Types de dépenses — Inertia/React page (Phase 6). Real
@@ -226,15 +245,28 @@ Route::prefix('backoffice')
             // TypeDepenseController's docblock).
             Route::resource('types-depenses', TypeDepenseController::class)
                 ->except(['show', 'create', 'edit']);
+
             Route::get('remboursements', fn () => redirect()->route('backoffice.depenses.index', ['tab' => 'remboursements']))
                 ->middleware('permission:refunds.view')->name('remboursements.index');
+            Route::post('remboursements', [RemboursementController::class, 'store'])
+                ->middleware('permission:refunds.create')->name('remboursements.store');
+            Route::put('remboursements/{remboursement}', [RemboursementController::class, 'update'])
+                ->middleware('permission:refunds.update')->name('remboursements.update');
+            // No remboursements.show — zero detail page anywhere in the live
+            // app, preserved (docs/phase-10-finance-mapping.md Q2).
 
-            // Till transfers — two-step request/validate flow (structure doc §7)
-            // now lives in the « Transferts » tab of Gestion de la caisse; the
-            // legacy URL deep-links there (middleware kept so unauthorized
-            // users get 403, not a redirect). Controller = read-only detail.
+            // Till transfers — two-step request/validate flow, now lives in
+            // the « Transferts » tab of Gestion de la caisse; the legacy URL
+            // deep-links there (middleware kept so unauthorized users get
+            // 403, not a redirect).
             Route::get('caisse-transfers', fn () => redirect()->route('backoffice.caisses.index', ['tab' => 'transferts']))
                 ->middleware('permission:cash-transfers.view')->name('caisse-transfers.index');
+            Route::post('caisse-transfers', [CaisseTransferController::class, 'store'])
+                ->middleware('permission:cash-transfers.create')->name('caisse-transfers.store');
+            Route::put('caisse-transfers/{caisse_transfer}', [CaisseTransferController::class, 'update'])
+                ->middleware('permission:cash-transfers.update')->name('caisse-transfers.update');
+            Route::put('caisse-transfers/{caisse_transfer}/validate', [CaisseTransferController::class, 'validateAction'])
+                ->middleware('permission:cash-transfers.validate')->name('caisse-transfers.validate');
             Route::get('caisse-transfers/{caisse_transfer}', [CaisseTransferController::class, 'show'])
                 ->name('caisse-transfers.show');
 

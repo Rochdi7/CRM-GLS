@@ -825,3 +825,207 @@ export interface InscriptionsPageProps {
     groups: InscriptionFormOption[];
     [key: string]: unknown;
 }
+
+// --- Phase 10: Finance (Caisses, Encaissements, Depenses, Remboursements, CaisseTransfers) ---
+
+export interface FinanceOption {
+    id: number;
+    nom: string;
+}
+
+/** One row of the Caisses list — mirrors GetCaissesList's ->through() mapping exactly. */
+export interface CaisseRow {
+    id: number;
+    nom: string;
+    centre: string | null;
+    responsable: string | null;
+    solde: MoneyDisplay;
+    statut: string;
+    showUrl: string;
+}
+
+/** One journal row — mirrors GetCaisseJournal's rows() mapping exactly. */
+export interface CaisseJournalRow {
+    type: 'paiement' | 'depense' | 'remboursement' | 'transfert';
+    reference: string;
+    libelle: string | null;
+    tiers: string | null;
+    montant: MoneyDisplay;
+    sens: 1 | -1;
+    date: string | null;
+    note: string | null;
+    agent: string | null;
+    url: string | null;
+}
+
+/** GetCaisseJournal's full return shape for one scope ('mine'|'all'). */
+export interface CaisseJournalData {
+    caissesInScope: Array<{ id: number; nom: string }>;
+    totalEncaissements: MoneyDisplay;
+    totalDepenses: MoneyDisplay;
+    solde: MoneyDisplay;
+    totauxParType: Record<string, MoneyDisplay>;
+    total: number;
+    lastPage: number;
+    page: number;
+    rows: CaisseJournalRow[];
+}
+
+/** One row of the Caisse Transfers list — mirrors GetCaisseTransfersList's ->through() mapping exactly. */
+export interface CaisseTransferRow {
+    id: number;
+    reference: string;
+    caisseSource: string | null;
+    caisseSourceId: number | null;
+    caisseDestination: string | null;
+    montant: MoneyDisplay;
+    dateTransfert: string | null;
+    statut: string;
+    requestedBy: string | null;
+    requestedById: number | null;
+    validatedBy: string | null;
+    note: string | null;
+    isPending: boolean;
+    showUrl: string;
+}
+
+export interface CaisseTransferFormOption extends FinanceOption {
+    solde: MoneyDisplay;
+}
+
+export interface CaissesPageProps {
+    canViewCaisses: boolean;
+    canViewTransfers: boolean;
+    journalMine: CaisseJournalData | null;
+    journalAll: CaisseJournalData | null;
+    caisses: PaginatedData<CaisseRow> | null;
+    etablissements: FinanceOption[];
+    statuts: string[];
+    transfers: PaginatedData<CaisseTransferRow> | null;
+    transferStatutCounts: Record<string, number>;
+    transferCaisses: CaisseTransferFormOption[];
+    transferStatuts: string[];
+    currentEmployeeId: number | null;
+    [key: string]: unknown;
+}
+
+/** One row of the Encaissements list — mirrors GetEncaissementsList's ->through() mapping exactly. */
+export interface EncaissementRow {
+    id: number;
+    reference: string;
+    student: string | null;
+    studentId: number | null;
+    inscriptionId: number | null;
+    feeNom: string | null;
+    caisse: string | null;
+    caisseId: number | null;
+    montant: MoneyDisplay;
+    methode: string;
+    datePaiement: string | null;
+    numeroCheque: string | null;
+    banque: string | null;
+    dateEcheanceCheque: string | null;
+    note: string | null;
+    agent: string | null;
+    showUrl: string;
+}
+
+export interface EncaissementsFilters {
+    search: string;
+    caisseFilter: string;
+    methodeFilter: string;
+    dateFrom: string;
+    dateTo: string;
+    perPage: number;
+}
+
+export interface EncaissementsPageProps {
+    encaissements: PaginatedData<EncaissementRow>;
+    caisses: FinanceOption[];
+    students: FinanceOption[];
+    methodes: string[];
+    filters: EncaissementsFilters;
+    [key: string]: unknown;
+}
+
+/** One "Frais disponible" line loaded from the selected inscription (GetInscriptionUnpaidFees). */
+export interface UnpaidFee {
+    id: number;
+    nom: string;
+    montantInitial: MoneyDisplay;
+    paye: MoneyDisplay;
+    reste: MoneyDisplay;
+    statut: string;
+    dateEcheance: string | null;
+}
+
+/** One editable payment line in the create-form's cascade table — mirrors Livewire's $paymentLines shape. */
+export interface PaymentLine {
+    feeId: number;
+    nom: string;
+    reste: string;
+    montant: string;
+    methode: string;
+    datePaiement: string;
+}
+
+/** One row of the Depenses list — mirrors GetDepensesList's ->through() mapping exactly. */
+export interface DepenseRow {
+    id: number;
+    reference: string;
+    typeDepense: string | null;
+    typeDepenseId: number | null;
+    caisse: string | null;
+    caisseId: number | null;
+    groupId: number | null;
+    montant: MoneyDisplay;
+    methodePaiement: string | null;
+    dateDepense: string | null;
+    referenceFacture: string | null;
+    description: string | null;
+    motsCles: string | null;
+    note: string | null;
+    agent: string | null;
+    receiptsCount: number;
+    showUrl: string;
+}
+
+export interface DepensesFilters {
+    search: string;
+    typeFilter: string;
+    caisseFilter: string;
+    dateFrom: string;
+    dateTo: string;
+    perPage: number;
+}
+
+/** One row of the Remboursements list — mirrors GetRemboursementsList's ->through() mapping exactly. */
+export interface RemboursementRow {
+    id: number;
+    reference: string;
+    beneficiaire: string | null;
+    beneficiaireId: number | null;
+    caisse: string | null;
+    caisseId: number | null;
+    montant: MoneyDisplay;
+    dateRemboursement: string | null;
+    motif: string | null;
+    note: string | null;
+    agent: string | null;
+}
+
+export interface DepensesPageProps {
+    canViewDepenses: boolean;
+    canViewRemboursements: boolean;
+    depenses: PaginatedData<DepenseRow> | null;
+    montantTotal: MoneyDisplay | null;
+    typesDepenses: FinanceOption[];
+    groups: FinanceOption[];
+    methodes: string[];
+    justificatifMimes: string[];
+    justificatifMaxKb: number;
+    remboursements: PaginatedData<RemboursementRow> | null;
+    students: FinanceOption[];
+    filters: DepensesFilters;
+    [key: string]: unknown;
+}

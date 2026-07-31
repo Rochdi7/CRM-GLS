@@ -73,6 +73,7 @@ export const backofficeNavigation: NavGroup[] = [
                 icon: 'ti ti-cash',
                 permissions: ['cash-registers.view', 'cash-transfers.view'],
                 matchPaths: ['/backoffice/caisses', '/backoffice/caisse-transfers'],
+                inertia: true,
             },
             {
                 label: 'Payments',
@@ -80,6 +81,7 @@ export const backofficeNavigation: NavGroup[] = [
                 icon: 'ti ti-cash-banknote',
                 permissions: ['payments.view'],
                 matchPaths: ['/backoffice/encaissements'],
+                inertia: true,
             },
             {
                 label: 'Expense management',
@@ -87,6 +89,7 @@ export const backofficeNavigation: NavGroup[] = [
                 icon: 'ti ti-receipt',
                 permissions: ['expenses.view', 'refunds.view'],
                 matchPaths: ['/backoffice/depenses', '/backoffice/remboursements'],
+                inertia: true,
             },
             {
                 label: 'Expense types',
