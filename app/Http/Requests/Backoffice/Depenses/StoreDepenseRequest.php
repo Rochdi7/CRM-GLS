@@ -31,7 +31,7 @@ final class StoreDepenseRequest extends FormRequest
     {
         return [
             'type_depense_id' => ['required', 'exists:types_depenses,id'],
-            'caisse_id' => ['required', 'exists:caisses,id'],
+            'caisse_id' => ['required', 'exists:caisses,id', new \App\Rules\AccessibleCaisse],
             'group_id' => ['nullable', 'exists:groups,id'],
             'montant' => ['required', 'numeric', 'min:0.01'],
             'methode_paiement' => ['required', Rule::in(Depense::METHODES)],

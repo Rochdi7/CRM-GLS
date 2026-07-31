@@ -42,7 +42,7 @@ final class StoreEncaissementRequest extends FormRequest
         $rules = [
             'student_id' => ['required', 'exists:students,id'],
             'inscription_id' => ['required', 'exists:inscriptions,id'],
-            'caisse_id' => ['required', 'exists:caisses,id'],
+            'caisse_id' => ['required', 'exists:caisses,id', new \App\Rules\AccessibleCaisse],
             'date_paiement' => ['required', 'date'],
             'note' => ['nullable', 'string'],
             'payment_lines' => ['required', 'array', function (string $attribute, mixed $value, \Closure $fail): void {

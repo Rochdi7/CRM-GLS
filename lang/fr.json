@@ -532,6 +532,8 @@
     "Temporary Redirect": "Redirection temporaire",
     "The given data was invalid.": "La donnée renseignée est incorrecte.",
     "The machine name cannot be changed after creation.": "Le nom technique ne peut pas être modifié après la création.",
+    "The selected till is invalid.": "La caisse sélectionnée est invalide.",
+    "The selected till is not accessible from your center.": "La caisse sélectionnée n'est pas accessible depuis votre centre.",
     "Theme Colors": "Couleurs du thème",
     "Theme Customizer": "Personnalisation du thème",
     "The response is not a streamed response.": "La réponse n'est pas une réponse diffusée.",

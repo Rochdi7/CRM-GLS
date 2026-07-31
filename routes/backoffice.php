@@ -63,7 +63,11 @@ Route::prefix('backoffice')
             // `backoffice.password.reset` (see AppServiceProvider).
             Route::get('/forgot-password', [ForgotPasswordController::class, 'show'])
                 ->name('password.request');
+            // Throttled: prevents reset-email bombing of a known address
+            // (Phase 12 security hardening). Login POST throttles itself in
+            // LoginRequest (5/min per login+IP).
             Route::post('/forgot-password', [ForgotPasswordController::class, 'store'])
+                ->middleware('throttle:5,1')
                 ->name('password.email');
             Route::get('/reset-password/{token}', [ResetPasswordController::class, 'show'])
                 ->name('password.reset');
@@ -301,8 +305,11 @@ Route::prefix('backoffice')
                 ->middleware('permission:users.view')->name('users.index');
             Route::put('users/{user}', [UserController::class, 'update'])
                 ->middleware('permission:users.assign-roles')->name('users.update');
+            // Throttled (Phase 12): admin-only, but regenerating a password
+            // disconnects the target user — cap the churn rate.
             Route::post('users/{user}/regenerate-password', [UserController::class, 'regeneratePassword'])
-                ->middleware('permission:users.assign-roles')->name('users.regenerate-password');
+                ->middleware(['permission:users.assign-roles', 'throttle:10,1'])
+                ->name('users.regenerate-password');
             Route::get('users/{user}/authorization', [UserAuthorizationController::class, 'edit'])
                 ->middleware('permission:users.assign-roles')->name('users.authorization.edit');
             Route::put('users/{user}/authorization', [UserAuthorizationController::class, 'update'])

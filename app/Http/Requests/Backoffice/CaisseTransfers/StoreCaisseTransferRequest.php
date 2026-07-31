@@ -24,8 +24,11 @@ final class StoreCaisseTransferRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'caisse_source_id' => ['required', 'exists:caisses,id'],
-            'caisse_destination_id' => ['required', 'exists:caisses,id', 'different:caisse_source_id'],
+            // Both ends must be accessible tills — the form's options are
+            // already center-scoped (GetCaisseTransfersList::caisseOptions);
+            // this closes the tampered-request path (Phase 12 security).
+            'caisse_source_id' => ['required', 'exists:caisses,id', new \App\Rules\AccessibleCaisse],
+            'caisse_destination_id' => ['required', 'exists:caisses,id', 'different:caisse_source_id', new \App\Rules\AccessibleCaisse],
             'montant' => ['required', 'numeric', 'min:0.01'],
             'note' => ['nullable', 'string'],
         ];

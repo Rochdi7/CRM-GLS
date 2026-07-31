@@ -24,7 +24,7 @@ final class StoreRemboursementRequest extends FormRequest
     {
         return [
             'beneficiaire_id' => ['required', 'exists:students,id'],
-            'caisse_id' => ['required', 'exists:caisses,id'],
+            'caisse_id' => ['required', 'exists:caisses,id', new \App\Rules\AccessibleCaisse],
             'montant' => ['required', 'numeric', 'min:0.01'],
             'date_remboursement' => ['required', 'date'],
             'motif' => ['nullable', 'string', 'max:255'],
