@@ -67,15 +67,14 @@ export const backofficeNavigation: NavGroup[] = [
     {
         label: t('Finance'),
         items: [
-            // Hidden for now — re-enable when ready to expose Cash management.
-            // {
-            //     label: t('Cash management'),
-            //     href: '/backoffice/caisses',
-            //     icon: 'ti ti-cash',
-            //     permissions: ['cash-registers.view', 'cash-transfers.view'],
-            //     matchPaths: ['/backoffice/caisses', '/backoffice/caisse-transfers'],
-            //     inertia: true,
-            // },
+            {
+                label: t('Cash management'),
+                href: '/backoffice/caisses',
+                icon: 'ti ti-cash',
+                permissions: ['cash-registers.view', 'cash-transfers.view'],
+                matchPaths: ['/backoffice/caisses', '/backoffice/caisse-transfers'],
+                inertia: true,
+            },
             {
                 label: t('Payments'),
                 href: '/backoffice/encaissements',
@@ -84,24 +83,22 @@ export const backofficeNavigation: NavGroup[] = [
                 matchPaths: ['/backoffice/encaissements'],
                 inertia: true,
             },
-            // Hidden for now — re-enable when ready to expose Expense management.
-            // {
-            //     label: t('Expense management'),
-            //     href: '/backoffice/depenses',
-            //     icon: 'ti ti-receipt',
-            //     permissions: ['expenses.view', 'refunds.view'],
-            //     matchPaths: ['/backoffice/depenses', '/backoffice/remboursements'],
-            //     inertia: true,
-            // },
-            // Hidden for now — re-enable when ready to expose Expense types.
-            // {
-            //     label: t('Expense types'),
-            //     href: '/backoffice/types-depenses',
-            //     icon: 'ti ti-receipt-tax',
-            //     permissions: ['expense-types.view'],
-            //     matchPaths: ['/backoffice/types-depenses'],
-            //     inertia: true,
-            // },
+            {
+                label: t('Expense management'),
+                href: '/backoffice/depenses',
+                icon: 'ti ti-receipt',
+                permissions: ['expenses.view', 'refunds.view'],
+                matchPaths: ['/backoffice/depenses', '/backoffice/remboursements'],
+                inertia: true,
+            },
+            {
+                label: t('Expense types'),
+                href: '/backoffice/types-depenses',
+                icon: 'ti ti-receipt-tax',
+                permissions: ['expense-types.view'],
+                matchPaths: ['/backoffice/types-depenses'],
+                inertia: true,
+            },
         ],
     },
     {
