@@ -79,6 +79,9 @@ export default function FraisPanel({ frais, permissions }: FraisPanelProps) {
         form.transform(() => ({}));
         form.delete(`/backoffice/frais/${deleteTarget.id}`, {
             preserveScroll: true,
+            // Reset the transform so a later create/update on this shared
+            // form doesn't submit an empty payload (Phase 12 UX fix).
+            onFinish: () => form.transform((data) => data),
             onSuccess: () => {
                 setDeleteTarget(null);
                 setDeleting(false);

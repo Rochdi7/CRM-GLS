@@ -64,6 +64,11 @@ final class GetInscriptionsList
         $inscriptions->through(fn (Inscription $inscription): array => [
             'id' => $inscription->id,
             'reference' => $inscription->reference,
+            // Raw ids so the edit modal preselects by id, not by matching
+            // display labels (two same-named students used to be ambiguous —
+            // Phase 12 UX fix).
+            'studentId' => $inscription->student_id,
+            'groupId' => $inscription->group_id,
             'student' => $inscription->student?->nomComplet(),
             'studentShowUrl' => $inscription->student ? route('backoffice.students.show', $inscription->student) : null,
             'groupe' => $inscription->group?->nom,

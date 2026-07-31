@@ -172,6 +172,9 @@ export default function DepensesIndex({
                 forceFormData: true,
                 preserveScroll: true,
                 onSuccess: () => closeDepenseModal(),
+                // Reset the transform so a later create on this shared form
+                // doesn't POST with a stale _method=put (Phase 12 UX fix).
+                onFinish: () => depenseForm.transform((data) => data),
             });
 
             return;
@@ -445,7 +448,7 @@ export default function DepensesIndex({
                 onClose={closeDepenseModal}
                 processing={depenseForm.processing}
                 size="lg"
-                footer={<FormActions onCancel={closeDepenseModal} processing={depenseForm.processing} />}
+                footer={<FormActions form="depense-form" onCancel={closeDepenseModal} processing={depenseForm.processing} />}
             >
                 <form id="depense-form" onSubmit={submitDepense}>
                     {editingDepense && (
@@ -562,7 +565,7 @@ export default function DepensesIndex({
                 title={editingRemboursement ? 'Modifier le remboursement' : 'Ajouter un remboursement'}
                 onClose={closeRemboursementModal}
                 processing={remboursementForm.processing}
-                footer={<FormActions onCancel={closeRemboursementModal} processing={remboursementForm.processing} />}
+                footer={<FormActions form="remboursement-form" onCancel={closeRemboursementModal} processing={remboursementForm.processing} />}
             >
                 <form id="remboursement-form" onSubmit={submitRemboursement}>
                     {editingRemboursement && (

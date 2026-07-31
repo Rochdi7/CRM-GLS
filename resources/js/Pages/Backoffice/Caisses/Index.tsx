@@ -624,7 +624,7 @@ export default function CaissesIndex({
                 title={editingTransfer ? 'Modifier le transfert' : 'Demander un transfert'}
                 onClose={closeTransferModal}
                 processing={transferForm.processing}
-                footer={<FormActions onCancel={closeTransferModal} processing={transferForm.processing} />}
+                footer={<FormActions form="transfer-form" onCancel={closeTransferModal} processing={transferForm.processing} />}
             >
                 <form id="transfer-form" onSubmit={submitTransfer}>
                     <div className="alert alert-info">

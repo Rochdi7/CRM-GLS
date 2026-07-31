@@ -297,7 +297,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                 processing={createForm.processing}
                 size="lg"
                 footer={
-                    <FormActions onCancel={closeModal} processing={createForm.processing} submitLabel="Enregistrer" />
+                    <FormActions form="encaissement-create-form" onCancel={closeModal} processing={createForm.processing} submitLabel="Enregistrer" />
                 }
             >
                 <form id="encaissement-create-form" onSubmit={submitCreate}>
@@ -441,7 +441,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                 title={editingRow ? `Modifier le paiement ${editingRow.reference}` : ''}
                 onClose={closeModal}
                 processing={editForm.processing}
-                footer={<FormActions onCancel={closeModal} processing={editForm.processing} submitLabel="Enregistrer" />}
+                footer={<FormActions form="encaissement-edit-form" onCancel={closeModal} processing={editForm.processing} submitLabel="Enregistrer" />}
             >
                 {editingRow && (
                     <form id="encaissement-edit-form" onSubmit={submitEdit}>

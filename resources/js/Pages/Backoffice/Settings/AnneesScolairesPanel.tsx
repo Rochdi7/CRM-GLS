@@ -93,6 +93,9 @@ export default function AnneesScolairesPanel({ anneesScolaires, permissions }: A
         form.transform(() => ({}));
         form.delete(`/backoffice/annees-scolaires/${deleteTarget.id}`, {
             preserveScroll: true,
+            // Reset the transform so a later create/update on this shared
+            // form doesn't submit an empty payload (Phase 12 UX fix).
+            onFinish: () => form.transform((data) => data),
             onSuccess: () => {
                 setDeleteTarget(null);
                 setDeleting(false);

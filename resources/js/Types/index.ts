@@ -757,6 +757,8 @@ export interface NewEmployeeCredentials {
 export interface InscriptionRow {
     id: number;
     reference: string;
+    studentId: number | null;
+    groupId: number | null;
     student: string | null;
     studentShowUrl: string | null;
     groupe: string | null;

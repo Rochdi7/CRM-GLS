@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FlashMessages as FlashMessagesType } from '@/Types';
 
 interface FlashMessagesProps {
@@ -22,6 +22,14 @@ const VARIANTS: Record<'success' | 'error' | 'warning' | 'info', string> = {
  */
 export default function FlashMessages({ flash }: FlashMessagesProps) {
     const [dismissed, setDismissed] = useState<Record<string, boolean>>({});
+
+    // A fresh flash payload (new save on the same page, preserveState visit)
+    // must re-show its alert even if the user dismissed a previous one of
+    // the same type — reset dismissals whenever the messages change
+    // (Phase 12 UX fix: dismissal used to stick until a full navigation).
+    useEffect(() => {
+        setDismissed({});
+    }, [flash.success, flash.error, flash.warning, flash.info]);
 
     const entries = (Object.keys(VARIANTS) as Array<keyof typeof VARIANTS>)
         .map((key) => ({ key, message: flash[key] }))

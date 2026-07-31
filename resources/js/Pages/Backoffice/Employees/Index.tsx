@@ -207,6 +207,9 @@ export default function EmployeesIndex({
                 forceFormData: true,
                 preserveScroll: true,
                 onSuccess: () => closeModal(),
+                // Reset the transform so a later create on this shared form
+                // doesn't POST with a stale _method=put (Phase 12 UX fix).
+                onFinish: () => form.transform((data) => data),
             });
 
             return;
