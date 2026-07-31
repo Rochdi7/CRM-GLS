@@ -15,7 +15,7 @@ use Illuminate\Validation\Rule;
  * `photo` validated separately from the mass-assignable fields (media library
  * upload, not a DB column) — same as StudentsIndex::rules()'s `photo` rule.
  */
-final class StoreStudentRequest extends FormRequest
+class StoreStudentRequest extends FormRequest
 {
     public function authorize(): bool
     {

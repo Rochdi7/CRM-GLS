@@ -20,12 +20,6 @@ export interface Context {
     availableAcademicYears: ContextOption[];
 }
 
-/** POST /backoffice/context payload — null etablissement_id means "all centers". */
-export interface ContextUpdateForm {
-    annee_scolaire_id: number | null;
-    etablissement_id: number | null;
-}
-
 export interface FlashMessages {
     success: string | null;
     error: string | null;
@@ -142,12 +136,6 @@ export interface SafeMediaFile {
     url: string;
     mimeType: string;
     size: number;
-}
-
-export interface RelatedRecordLink {
-    label: string;
-    href: string;
-    inertia: boolean;
 }
 
 export interface GroupsHistoriqueRow {
@@ -743,12 +731,6 @@ export interface GroupsPageProps {
     enseignants: GroupFormOption[];
     fraisCatalog: GroupFormOption[];
     [key: string]: unknown;
-}
-
-/** One-time login credentials for a just-created employee — shown once, never persisted (see HandleInertiaRequests). */
-export interface NewEmployeeCredentials {
-    username: string;
-    password: string;
 }
 
 // --- Phase 9: Inscriptions (Inertia/React list + modal CRUD with fee lines) -

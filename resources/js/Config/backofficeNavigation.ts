@@ -62,6 +62,16 @@ export const backofficeNavigation: NavGroup[] = [
                 matchPaths: ['/backoffice/groups'],
                 inertia: true,
             },
+            {
+                // Archived-group snapshots (Group::archiverCommeTermine) —
+                // the page existed but nothing linked to it (Phase 12 audit).
+                label: t('Groups History'),
+                href: '/backoffice/groups-historique',
+                icon: 'ti ti-archive',
+                permissions: ['groups.view'],
+                matchPaths: ['/backoffice/groups-historique'],
+                inertia: true,
+            },
         ],
     },
     {
