@@ -62,29 +62,33 @@ export const backofficeNavigation: NavGroup[] = [
                 matchPaths: ['/backoffice/groups'],
                 inertia: true,
             },
-            {
-                // Archived-group snapshots (Group::archiverCommeTermine) —
-                // the page existed but nothing linked to it (Phase 12 audit).
-                label: t('Groups History'),
-                href: '/backoffice/groups-historique',
-                icon: 'ti ti-archive',
-                permissions: ['groups.view'],
-                matchPaths: ['/backoffice/groups-historique'],
-                inertia: true,
-            },
+            // Hidden by product decision — the page stays reachable at
+            // /backoffice/groups-historique (groups.view); re-enable when
+            // it should appear in the sidebar.
+            // {
+            //     label: t('Groups History'),
+            //     href: '/backoffice/groups-historique',
+            //     icon: 'ti ti-archive',
+            //     permissions: ['groups.view'],
+            //     matchPaths: ['/backoffice/groups-historique'],
+            //     inertia: true,
+            // },
         ],
     },
     {
         label: t('Finance'),
         items: [
-            {
-                label: t('Cash management'),
-                href: '/backoffice/caisses',
-                icon: 'ti ti-cash',
-                permissions: ['cash-registers.view', 'cash-transfers.view'],
-                matchPaths: ['/backoffice/caisses', '/backoffice/caisse-transfers'],
-                inertia: true,
-            },
+            // Hidden by product decision — routes stay active and
+            // permission-gated; re-enable when ready to expose Cash
+            // management in the sidebar.
+            // {
+            //     label: t('Cash management'),
+            //     href: '/backoffice/caisses',
+            //     icon: 'ti ti-cash',
+            //     permissions: ['cash-registers.view', 'cash-transfers.view'],
+            //     matchPaths: ['/backoffice/caisses', '/backoffice/caisse-transfers'],
+            //     inertia: true,
+            // },
             {
                 label: t('Payments'),
                 href: '/backoffice/encaissements',
@@ -93,22 +97,26 @@ export const backofficeNavigation: NavGroup[] = [
                 matchPaths: ['/backoffice/encaissements'],
                 inertia: true,
             },
-            {
-                label: t('Expense management'),
-                href: '/backoffice/depenses',
-                icon: 'ti ti-receipt',
-                permissions: ['expenses.view', 'refunds.view'],
-                matchPaths: ['/backoffice/depenses', '/backoffice/remboursements'],
-                inertia: true,
-            },
-            {
-                label: t('Expense types'),
-                href: '/backoffice/types-depenses',
-                icon: 'ti ti-receipt-tax',
-                permissions: ['expense-types.view'],
-                matchPaths: ['/backoffice/types-depenses'],
-                inertia: true,
-            },
+            // Hidden by product decision — re-enable when ready to expose
+            // Expense management in the sidebar.
+            // {
+            //     label: t('Expense management'),
+            //     href: '/backoffice/depenses',
+            //     icon: 'ti ti-receipt',
+            //     permissions: ['expenses.view', 'refunds.view'],
+            //     matchPaths: ['/backoffice/depenses', '/backoffice/remboursements'],
+            //     inertia: true,
+            // },
+            // Hidden by product decision — re-enable when ready to expose
+            // Expense types in the sidebar.
+            // {
+            //     label: t('Expense types'),
+            //     href: '/backoffice/types-depenses',
+            //     icon: 'ti ti-receipt-tax',
+            //     permissions: ['expense-types.view'],
+            //     matchPaths: ['/backoffice/types-depenses'],
+            //     inertia: true,
+            // },
         ],
     },
     {
