@@ -89,15 +89,18 @@ final class InscriptionController extends Controller
      * lookup (docs/phase-9-inscriptions-mapping.md's confirmed decision: a
      * dedicated endpoint, not embedding every group's fees in the initial
      * options payload). Gated the same as creating a registration
-     * (`registrations.create` — a user who can enroll a student must be
-     * able to see a group's fees to pick them), not
+     * (`registrations.create` only — mirrors InscriptionsIndex::
+     * updatedGroupId(), which loads a group's fees with no separate
+     * groups.view check; the `groups` options list passed to the page is
+     * already center-scoped by GetInscriptionFormOptions::groups(), so
+     * requiring groups.view here too would be a stricter gate than the
+     * Livewire source of truth, not a matching one), not
      * `registrations.manage-fees` (audit doc §12 point 1 — that permission
      * is not part of the live create workflow).
      */
     public function groupFees(Group $group, GetGroupInscriptionFees $getGroupInscriptionFees): JsonResponse
     {
         $this->authorize('create', Inscription::class);
-        $this->authorize('view', $group);
 
         return response()->json([
             'fees' => $getGroupInscriptionFees($group),
@@ -232,14 +235,21 @@ final class InscriptionController extends Controller
      * InscriptionsIndex::delete() (a try/catch around the raw delete, not
      * a pre-count guard) — preserved exactly, not "upgraded" (see audit
      * doc §4.8 for why a pre-count guard would be a subtle behavior
-     * change, not just a refactor).
+     * change, not just a refactor). The delete is wrapped in its own
+     * DB::transaction() so PostgreSQL uses a savepoint: without it, the
+     * constraint violation aborts the whole request-scoped transaction
+     * (RefreshDatabase's outer transaction in tests, or the connection's
+     * implicit transaction in production), leaving the catch block
+     * running against a connection Postgres refuses further queries on.
+     * This same fix is worth carrying back to the Livewire component if
+     * it is ever revisited — it has the identical latent gap.
      */
     public function destroy(Inscription $inscription): RedirectResponse
     {
         $this->authorize('delete', $inscription);
 
         try {
-            $inscription->delete();
+            DB::transaction(fn () => $inscription->delete());
         } catch (QueryException) {
             throw ValidationException::withMessages([
                 'delete' => __('This registration has payments and cannot be deleted.'),
