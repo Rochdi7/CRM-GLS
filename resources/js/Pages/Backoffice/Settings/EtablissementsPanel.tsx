@@ -190,7 +190,7 @@ export default function EtablissementsPanel({ etablissements, permissions }: Eta
                     </tr>
                 ))}
             </RelatedRecordsTable>
-            <Pagination paginator={etablissements} />
+            <Pagination paginator={etablissements} showJumpToPage />
 
             <Modal show={showModal} title={editingId ? 'Modifier le centre' : 'Ajouter un centre'} onClose={closeModal} processing={form.processing} size="lg">
                 <form onSubmit={handleSubmit}>

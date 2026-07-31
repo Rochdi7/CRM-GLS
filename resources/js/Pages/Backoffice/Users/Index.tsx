@@ -12,6 +12,7 @@ import StatusBadge from '@/Components/Details/StatusBadge';
 import Modal from '@/Components/Modals/Modal';
 import FormField from '@/Components/Forms/FormField';
 import AuthStatus from '@/Components/Feedback/AuthStatus';
+import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import type { SharedProps, UserEditForm, UserRow, UsersIndexPageProps } from '@/Types';
 
 /**
@@ -24,6 +25,7 @@ import type { SharedProps, UserEditForm, UserRow, UsersIndexPageProps } from '@/
  */
 export default function UsersIndex({ users, filters, perPageOptions }: UsersIndexPageProps) {
     const { flash } = usePage<SharedProps>().props;
+    const isLoading = useInertiaLoading();
 
     const [editingUser, setEditingUser] = useState<UserRow | null>(null);
     const [confirmingRegenerate, setConfirmingRegenerate] = useState(false);
@@ -146,6 +148,7 @@ export default function UsersIndex({ users, filters, perPageOptions }: UsersInde
                 ) : (
                     <>
                         <DataTable
+                            loading={isLoading}
                             head={
                                 <tr>
                                     <th>Nom</th>
@@ -211,7 +214,7 @@ export default function UsersIndex({ users, filters, perPageOptions }: UsersInde
                                 </select>
                             </div>
                         </div>
-                        <Pagination paginator={users} />
+                        <Pagination paginator={users} showJumpToPage />
                     </>
                 )}
             </Card>

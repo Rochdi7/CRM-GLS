@@ -17,6 +17,7 @@ import PhoneField from '@/Components/Forms/PhoneField';
 import FormActions from '@/Components/Forms/FormActions';
 import FormErrorsSummary from '@/Components/Forms/FormErrorsSummary';
 import { splitPhone } from '@/Data/countries';
+import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import type { EmployeeRow, EmployeesPageProps, SelectOption } from '@/Types';
 
 /** Gender icon, matching components/backoffice/ui/sexe-icon.blade.php. */
@@ -91,6 +92,7 @@ export default function EmployeesIndex({
     contextCenterId,
 }: EmployeesPageProps) {
     const { props } = usePage<{ flash: { newEmployeeCredentials?: { username: string; password: string } | null } }>();
+    const isLoading = useInertiaLoading();
 
     const [showModal, setShowModal] = useState(false);
     const [editingEmployee, setEditingEmployee] = useState<EmployeeRow | null>(null);
@@ -277,6 +279,7 @@ export default function EmployeesIndex({
                 ) : (
                     <>
                         <DataTable
+                            loading={isLoading}
                             head={
                                 <tr>
                                     <th>Référence</th>
@@ -361,7 +364,7 @@ export default function EmployeesIndex({
                                 </select>
                             </div>
                         </div>
-                        <Pagination paginator={employees} />
+                        <Pagination paginator={employees} showJumpToPage />
                     </>
                 )}
             </Card>

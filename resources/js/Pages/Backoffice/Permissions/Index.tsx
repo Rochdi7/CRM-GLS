@@ -2,6 +2,7 @@ import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import DataTable from '@/Components/Tables/DataTable';
 import EmptyState from '@/Components/Shared/EmptyState';
+import { t } from '@/Lib/i18n';
 
 interface PermissionsIndexProps {
     groups: Record<string, Record<string, string>>;
@@ -13,7 +14,7 @@ export default function PermissionsIndex({ groups, seededCount }: PermissionsInd
 
     return (
         <BackofficeLayout
-            title="Permissions"
+            title={t('Permissions')}
             breadcrumbs={[
                 { label: 'Tableau de bord', href: '/backoffice/dashboard' },
                 { label: 'Rôles & Permissions', href: '/backoffice/roles' },
@@ -42,8 +43,8 @@ export default function PermissionsIndex({ groups, seededCount }: PermissionsInd
                                     hover={false}
                                     head={
                                         <tr>
-                                            <th>Permission</th>
-                                            <th>Nom technique</th>
+                                            <th>{t('Permission')}</th>
+                                            <th>{t('Nom technique')}</th>
                                         </tr>
                                     }
                                 >

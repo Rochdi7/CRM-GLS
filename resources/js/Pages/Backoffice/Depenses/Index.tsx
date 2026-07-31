@@ -13,6 +13,7 @@ import SelectField from '@/Components/Forms/SelectField';
 import FormField from '@/Components/Forms/FormField';
 import TextareaField from '@/Components/Forms/TextareaField';
 import FormActions from '@/Components/Forms/FormActions';
+import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import type { DepenseRow, DepensesPageProps, RemboursementRow, SelectOption } from '@/Types';
 
 type Tab = 'depenses' | 'remboursements';
@@ -89,6 +90,7 @@ export default function DepensesIndex({
     students,
     filters,
 }: DepensesPageProps) {
+    const isLoading = useInertiaLoading();
     const initialTab: Tab = new URLSearchParams(window.location.search).get('tab') === 'remboursements' && canViewRemboursements
         ? 'remboursements'
         : canViewDepenses
@@ -316,6 +318,7 @@ export default function DepensesIndex({
                     ) : (
                         <>
                             <DataTable
+                                loading={isLoading}
                                 head={
                                     <tr>
                                         <th>Référence</th>
@@ -364,7 +367,7 @@ export default function DepensesIndex({
                                     </tr>
                                 ))}
                             </DataTable>
-                            <Pagination paginator={depenses} />
+                            <Pagination paginator={depenses} showJumpToPage />
                         </>
                     )}
                 </Card>
@@ -389,6 +392,7 @@ export default function DepensesIndex({
                     ) : (
                         <>
                             <DataTable
+                                loading={isLoading}
                                 head={
                                     <tr>
                                         <th>Référence</th>
@@ -428,7 +432,7 @@ export default function DepensesIndex({
                                     </tr>
                                 ))}
                             </DataTable>
-                            <Pagination paginator={remboursements} />
+                            <Pagination paginator={remboursements} showJumpToPage />
                         </>
                     )}
                 </Card>

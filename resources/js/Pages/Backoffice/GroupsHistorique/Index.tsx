@@ -65,7 +65,7 @@ export default function GroupsHistoriqueIndex({ historiques }: GroupsHistoriqueI
                         </tr>
                     ))}
                 </RelatedRecordsTable>
-                <Pagination paginator={historiques} />
+                <Pagination paginator={historiques} showJumpToPage />
             </Card>
         </BackofficeLayout>
     );

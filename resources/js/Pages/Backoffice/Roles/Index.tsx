@@ -9,6 +9,7 @@ import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import ConfirmDialog from '@/Components/Modals/ConfirmDialog';
+import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import type { RoleRow, RolesIndexPageProps } from '@/Types';
 
 /**
@@ -21,6 +22,7 @@ import type { RoleRow, RolesIndexPageProps } from '@/Types';
  * Blade view's `@if (! $role->isProtected())` guard.
  */
 export default function RolesIndex({ roles, search }: RolesIndexPageProps) {
+    const isLoading = useInertiaLoading();
     const [deleteTarget, setDeleteTarget] = useState<RoleRow | null>(null);
     const [deleteError, setDeleteError] = useState<string>();
     const [deleting, setDeleting] = useState(false);
@@ -78,6 +80,7 @@ export default function RolesIndex({ roles, search }: RolesIndexPageProps) {
                 ) : (
                     <>
                         <DataTable
+                            loading={isLoading}
                             head={
                                 <tr>
                                     <th>Libellé</th>
@@ -125,7 +128,7 @@ export default function RolesIndex({ roles, search }: RolesIndexPageProps) {
                                 </tr>
                             ))}
                         </DataTable>
-                        <Pagination paginator={roles} />
+                        <Pagination paginator={roles} showJumpToPage />
                     </>
                 )}
             </Card>

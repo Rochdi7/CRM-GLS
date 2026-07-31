@@ -12,6 +12,7 @@ import Modal from '@/Components/Modals/Modal';
 import FormField from '@/Components/Forms/FormField';
 import SelectField from '@/Components/Forms/SelectField';
 import FormActions from '@/Components/Forms/FormActions';
+import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import type { GroupFraisLigne, GroupRow, GroupsPageProps, SelectOption } from '@/Types';
 
 const STATUT_TABS: Array<{ key: string; icon: string; label: string }> = [
@@ -69,6 +70,7 @@ export default function GroupsIndex({
     enseignants,
     fraisCatalog,
 }: GroupsPageProps) {
+    const isLoading = useInertiaLoading();
     const [showModal, setShowModal] = useState(false);
     const [editingGroup, setEditingGroup] = useState<GroupRow | null>(null);
 
@@ -200,6 +202,7 @@ export default function GroupsIndex({
                 ) : (
                     <>
                         <DataTable
+                            loading={isLoading}
                             head={
                                 <tr>
                                     <th>Nom</th>
@@ -264,7 +267,7 @@ export default function GroupsIndex({
                                 </select>
                             </div>
                         </div>
-                        <Pagination paginator={groups} />
+                        <Pagination paginator={groups} showJumpToPage />
                     </>
                 )}
             </Card>

@@ -16,6 +16,7 @@ import TextareaField from '@/Components/Forms/TextareaField';
 import PhoneField from '@/Components/Forms/PhoneField';
 import FormActions from '@/Components/Forms/FormActions';
 import { splitPhone } from '@/Data/countries';
+import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import type { SelectOption, StudentRow, StudentsPageProps } from '@/Types';
 
 interface StudentFormState {
@@ -92,6 +93,7 @@ export default function StudentsIndex({
     centerLocked,
     contextCenterId,
 }: StudentsPageProps) {
+    const isLoading = useInertiaLoading();
     const [showModal, setShowModal] = useState(false);
     const [editingStudent, setEditingStudent] = useState<StudentRow | null>(null);
     const [existingPhotoUrl, setExistingPhotoUrl] = useState<string | null>(null);
@@ -284,6 +286,7 @@ export default function StudentsIndex({
                 ) : (
                     <>
                         <DataTable
+                            loading={isLoading}
                             head={
                                 <tr>
                                     <th>Référence</th>
@@ -381,7 +384,7 @@ export default function StudentsIndex({
                                 </select>
                             </div>
                         </div>
-                        <Pagination paginator={students} />
+                        <Pagination paginator={students} showJumpToPage />
                     </>
                 )}
             </Card>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, router } from '@inertiajs/react';
 import ContextSwitcher from '@/Components/Context/ContextSwitcher';
 import type { AuthUser, Context } from '@/Types';
+import { t } from '@/Lib/i18n';
 
 interface HeaderProps {
     user: AuthUser | null;
@@ -70,7 +71,7 @@ export default function Header({ user, context, canManageSettings, onMobileMenuT
                 id="mobile_btn"
                 className="mobile_btn border-0 bg-transparent"
                 onClick={onMobileMenuToggle}
-                aria-label="Toggle menu"
+                aria-label={t('Toggle menu')}
             >
                 <span className="bar-icon">
                     <span />

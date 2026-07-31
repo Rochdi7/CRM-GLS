@@ -13,6 +13,7 @@ import SelectField from '@/Components/Forms/SelectField';
 import FormField from '@/Components/Forms/FormField';
 import TextareaField from '@/Components/Forms/TextareaField';
 import FormActions from '@/Components/Forms/FormActions';
+import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import type { EncaissementRow, EncaissementsPageProps, PaymentLine, SelectOption, UnpaidFee } from '@/Types';
 
 interface CreateFormState {
@@ -61,6 +62,7 @@ function emptyCreateForm(): CreateFormState {
  * fee->inscription_id ownership check) on save.
  */
 export default function EncaissementsIndex({ encaissements, caisses, students, methodes, filters }: EncaissementsPageProps) {
+    const isLoading = useInertiaLoading();
     const [showModal, setShowModal] = useState(false);
     const [editingRow, setEditingRow] = useState<EncaissementRow | null>(null);
     const [inscriptionOptions, setInscriptionOptions] = useState<SelectOption[]>([]);
@@ -238,6 +240,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                 ) : (
                     <>
                         <DataTable
+                            loading={isLoading}
                             head={
                                 <tr>
                                     <th>Référence</th>
@@ -281,7 +284,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                 </tr>
                             ))}
                         </DataTable>
-                        <Pagination paginator={encaissements} />
+                        <Pagination paginator={encaissements} showJumpToPage />
                     </>
                 )}
             </Card>

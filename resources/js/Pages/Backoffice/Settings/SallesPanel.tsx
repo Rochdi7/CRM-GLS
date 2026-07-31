@@ -9,6 +9,7 @@ import RelatedRecordsTable from '@/Components/Details/RelatedRecordsTable';
 import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import type { CrudPermissions, PaginatedData, SalleForm, SalleRow, SelectOption } from '@/Types';
+import { t } from '@/Lib/i18n';
 
 interface SallesPanelProps {
     salles: PaginatedData<SalleRow>;
@@ -17,8 +18,8 @@ interface SallesPanelProps {
 }
 
 const STATUT_OPTIONS: SelectOption[] = [
-    { value: 'Active', label: 'Active' },
-    { value: 'Inactive', label: 'Inactive' },
+    { value: 'Active', label: t('Active') },
+    { value: 'Inactive', label: t('Inactive') },
 ];
 
 const EMPTY_FORM: SalleForm = {
@@ -138,7 +139,7 @@ export default function SallesPanel({ salles, centerOptions, permissions }: Sall
                         <td>{row.capacite ?? '—'}</td>
                         <td>
                             <span className={`badge badge-soft-${row.statut === 'Active' ? 'success' : 'secondary'}`}>
-                                {row.statut === 'Active' ? 'Active' : 'Inactive'}
+                                {row.statut === 'Active' ? t('Active') : t('Inactive')}
                             </span>
                         </td>
                         <td className="text-end">
@@ -165,7 +166,7 @@ export default function SallesPanel({ salles, centerOptions, permissions }: Sall
                     </tr>
                 ))}
             </RelatedRecordsTable>
-            <Pagination paginator={salles} />
+            <Pagination paginator={salles} showJumpToPage />
 
             <Modal show={showModal} title={editingId ? 'Modifier la salle' : 'Ajouter une salle'} onClose={closeModal} processing={form.processing}>
                 {noCenters ? (

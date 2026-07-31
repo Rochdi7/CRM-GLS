@@ -1,32 +1,32 @@
 import type { NavGroup } from '@/Types';
+import { t } from '@/Lib/i18n';
 
 /**
- * Mirrors resources/views/components/backoffice/layout/sidebar.blade.php
- * exactly (same groups, same items, same permission gates, same icons) —
- * keep both in sync until the Blade sidebar is retired (Phase 10).
- *
- * `inertia: true` marks the only item with a real Inertia page today
- * (Permissions, Phase 2 pilot). Every other item is a real, working link
- * to its existing Livewire/Blade route — plain anchor navigation, never
- * Inertia-intercepted, until that module gets its own Phase.
+ * The backoffice sidebar navigation. Every module is now a real Inertia
+ * page (Phase 11 completed the Livewire→Inertia migration — see
+ * docs/phase-11-final-verification.md) — every item below carries
+ * `inertia: true` so NavLink renders an Inertia `<Link>` (SPA navigation)
+ * instead of a plain anchor (full page reload). Add `inertia: true` to any
+ * new item once its route is confirmed to return a real Inertia response.
  */
 export const backofficeNavigation: NavGroup[] = [
     {
-        label: 'Main',
+        label: t('Main'),
         items: [
             {
-                label: 'Dashboard',
+                label: t('Dashboard'),
                 href: '/backoffice/dashboard',
                 icon: 'ti ti-layout-dashboard',
                 matchPaths: ['/backoffice/dashboard'],
+                inertia: true,
             },
         ],
     },
     {
-        label: 'People',
+        label: t('People'),
         items: [
             {
-                label: 'Students',
+                label: t('Students'),
                 href: '/backoffice/students',
                 icon: 'ti ti-school',
                 permissions: ['students.view'],
@@ -34,7 +34,7 @@ export const backofficeNavigation: NavGroup[] = [
                 inertia: true,
             },
             {
-                label: 'Employees',
+                label: t('Employees'),
                 href: '/backoffice/employees',
                 icon: 'ti ti-users',
                 permissions: ['employees.view'],
@@ -44,10 +44,10 @@ export const backofficeNavigation: NavGroup[] = [
         ],
     },
     {
-        label: 'Academic',
+        label: t('Academic'),
         items: [
             {
-                label: 'Registrations',
+                label: t('Registrations'),
                 href: '/backoffice/inscriptions',
                 icon: 'ti ti-clipboard-list',
                 permissions: ['registrations.view'],
@@ -55,7 +55,7 @@ export const backofficeNavigation: NavGroup[] = [
                 inertia: true,
             },
             {
-                label: 'Groups',
+                label: t('Groups'),
                 href: '/backoffice/groups',
                 icon: 'ti ti-users-group',
                 permissions: ['groups.view'],
@@ -65,54 +65,58 @@ export const backofficeNavigation: NavGroup[] = [
         ],
     },
     {
-        label: 'Finance',
+        label: t('Finance'),
         items: [
+            // Hidden for now — re-enable when ready to expose Cash management.
+            // {
+            //     label: t('Cash management'),
+            //     href: '/backoffice/caisses',
+            //     icon: 'ti ti-cash',
+            //     permissions: ['cash-registers.view', 'cash-transfers.view'],
+            //     matchPaths: ['/backoffice/caisses', '/backoffice/caisse-transfers'],
+            //     inertia: true,
+            // },
             {
-                label: 'Cash management',
-                href: '/backoffice/caisses',
-                icon: 'ti ti-cash',
-                permissions: ['cash-registers.view', 'cash-transfers.view'],
-                matchPaths: ['/backoffice/caisses', '/backoffice/caisse-transfers'],
-                inertia: true,
-            },
-            {
-                label: 'Payments',
+                label: t('Payments'),
                 href: '/backoffice/encaissements',
                 icon: 'ti ti-cash-banknote',
                 permissions: ['payments.view'],
                 matchPaths: ['/backoffice/encaissements'],
                 inertia: true,
             },
-            {
-                label: 'Expense management',
-                href: '/backoffice/depenses',
-                icon: 'ti ti-receipt',
-                permissions: ['expenses.view', 'refunds.view'],
-                matchPaths: ['/backoffice/depenses', '/backoffice/remboursements'],
-                inertia: true,
-            },
-            {
-                label: 'Expense types',
-                href: '/backoffice/types-depenses',
-                icon: 'ti ti-receipt-tax',
-                permissions: ['expense-types.view'],
-                matchPaths: ['/backoffice/types-depenses'],
-                inertia: true,
-            },
+            // Hidden for now — re-enable when ready to expose Expense management.
+            // {
+            //     label: t('Expense management'),
+            //     href: '/backoffice/depenses',
+            //     icon: 'ti ti-receipt',
+            //     permissions: ['expenses.view', 'refunds.view'],
+            //     matchPaths: ['/backoffice/depenses', '/backoffice/remboursements'],
+            //     inertia: true,
+            // },
+            // Hidden for now — re-enable when ready to expose Expense types.
+            // {
+            //     label: t('Expense types'),
+            //     href: '/backoffice/types-depenses',
+            //     icon: 'ti ti-receipt-tax',
+            //     permissions: ['expense-types.view'],
+            //     matchPaths: ['/backoffice/types-depenses'],
+            //     inertia: true,
+            // },
         ],
     },
     {
-        label: 'Administration',
+        label: t('Administration'),
         items: [
             {
-                label: 'Settings',
+                label: t('Settings'),
                 href: '/backoffice/settings',
                 icon: 'ti ti-settings',
                 permissions: ['centers.view', 'academic-years.view', 'rooms.view', 'fees.view'],
                 matchPaths: ['/backoffice/settings'],
+                inertia: true,
             },
             {
-                label: 'Users',
+                label: t('Users'),
                 href: '/backoffice/users',
                 icon: 'ti ti-user-cog',
                 permissions: ['users.view'],
@@ -120,7 +124,7 @@ export const backofficeNavigation: NavGroup[] = [
                 inertia: true,
             },
             {
-                label: 'Roles & Permissions',
+                label: t('Roles & Permissions'),
                 href: '/backoffice/roles',
                 icon: 'ti ti-shield-lock',
                 permissions: ['roles.view'],
@@ -128,7 +132,7 @@ export const backofficeNavigation: NavGroup[] = [
                 inertia: true,
             },
             {
-                label: 'Permissions',
+                label: t('Permissions'),
                 href: '/backoffice/permissions',
                 icon: 'ti ti-key',
                 permissions: ['permissions.view'],

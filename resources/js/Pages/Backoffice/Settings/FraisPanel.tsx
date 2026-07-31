@@ -150,7 +150,7 @@ export default function FraisPanel({ frais, permissions }: FraisPanelProps) {
                     </tr>
                 ))}
             </RelatedRecordsTable>
-            <Pagination paginator={frais} />
+            <Pagination paginator={frais} showJumpToPage />
 
             <Modal show={showModal} title={editingId ? 'Modifier le frais' : 'Ajouter un frais'} onClose={closeModal} processing={form.processing}>
                 <form onSubmit={handleSubmit}>

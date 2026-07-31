@@ -14,6 +14,7 @@ import FormField from '@/Components/Forms/FormField';
 import TextareaField from '@/Components/Forms/TextareaField';
 import FormActions from '@/Components/Forms/FormActions';
 import StatusBadge from '@/Components/Details/StatusBadge';
+import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import type { CaissesPageProps, CaisseJournalData, CaisseTransferRow, SelectOption } from '@/Types';
 
 type Tab = 'ma-caisse' | 'journal' | 'transferts' | 'comptes';
@@ -276,6 +277,7 @@ export default function CaissesIndex({
     transferStatuts,
     currentEmployeeId,
 }: CaissesPageProps) {
+    const isLoading = useInertiaLoading();
     const availableTabs: Tab[] = [
         ...(canViewCaisses ? (['ma-caisse', 'journal'] as Tab[]) : []),
         ...(canViewTransfers ? (['transferts'] as Tab[]) : []),
@@ -460,6 +462,7 @@ export default function CaissesIndex({
                     ) : (
                         <>
                             <DataTable
+                                loading={isLoading}
                                 head={
                                     <tr>
                                         <th>Nom</th>
@@ -490,7 +493,7 @@ export default function CaissesIndex({
                                     </tr>
                                 ))}
                             </DataTable>
-                            <Pagination paginator={caisses} />
+                            <Pagination paginator={caisses} showJumpToPage />
                         </>
                     )}
                 </Card>
@@ -540,6 +543,7 @@ export default function CaissesIndex({
                     ) : (
                         <>
                             <DataTable
+                                loading={isLoading}
                                 head={
                                     <tr>
                                         <th>Référence</th>
@@ -609,7 +613,7 @@ export default function CaissesIndex({
                                     </tr>
                                 ))}
                             </DataTable>
-                            <Pagination paginator={transfers} />
+                            <Pagination paginator={transfers} showJumpToPage />
                         </>
                     )}
                 </Card>

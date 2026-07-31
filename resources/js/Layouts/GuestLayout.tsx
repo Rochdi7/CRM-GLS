@@ -1,5 +1,6 @@
 import { Head } from '@inertiajs/react';
 import type { PropsWithChildren } from 'react';
+import { t } from '@/Lib/i18n';
 
 interface GuestLayoutProps extends PropsWithChildren {
     title: string;
@@ -39,7 +40,9 @@ export default function GuestLayout({ title, children }: GuestLayoutProps) {
                             </div>
 
                             <div className="p-4 text-center">
-                                <p className="mb-0">Copyright &copy; {new Date().getFullYear()} — GLS CRM</p>
+                                <p className="mb-0">
+                                    {t('Copyright')} &copy; {new Date().getFullYear()} — GLS CRM
+                                </p>
                             </div>
                         </div>
                     </div>

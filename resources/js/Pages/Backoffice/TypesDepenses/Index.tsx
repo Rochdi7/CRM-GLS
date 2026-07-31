@@ -180,7 +180,7 @@ export default function TypesDepensesIndex({ types, filters, permissions }: Type
                         </tr>
                     ))}
                 </RelatedRecordsTable>
-                <Pagination paginator={types} />
+                <Pagination paginator={types} showJumpToPage />
             </Card>
 
             <Modal
