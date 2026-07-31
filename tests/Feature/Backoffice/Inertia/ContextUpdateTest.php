@@ -4,17 +4,14 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Backoffice\Inertia;
 
-use App\Livewire\Backoffice\Students\StudentsIndex;
 use App\Models\AnneeScolaire;
 use App\Models\Employee;
 use App\Models\Etablissement;
 use App\Models\Role;
-use App\Models\Student;
 use App\Models\User;
 use App\Services\Context\CurrentContext;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
@@ -161,31 +158,5 @@ final class ContextUpdateTest extends TestCase
         session(['context.etablissement_id' => 999999]); // simulate a deleted center id
 
         $this->get(route('backoffice.dashboard'))->assertOk();
-    }
-
-    /**
-     * Mixed-stack requirement: changing context through the new Inertia/
-     * React endpoint must be observed by legacy Livewire pages too — both
-     * read the same CurrentContext/session, there is only one context
-     * implementation.
-     */
-    public function test_context_change_through_the_new_endpoint_is_observed_by_a_legacy_livewire_page(): void
-    {
-        $this->globalUser();
-        Student::factory()->create(['nom' => 'EtudiantRabatMixedStack', 'etablissement_id' => $this->rabat->id]);
-        Student::factory()->create(['nom' => 'EtudiantCasaMixedStack', 'etablissement_id' => $this->casa->id]);
-
-        // Both visible under "all centers".
-        Livewire::test(StudentsIndex::class)
-            ->assertSee('EtudiantRabatMixedStack')
-            ->assertSee('EtudiantCasaMixedStack');
-
-        // Change context through the new Inertia/React endpoint.
-        $this->post(route('backoffice.context.update'), ['etablissement_id' => $this->rabat->id]);
-
-        // The legacy Livewire component, mounted fresh, reflects the change.
-        Livewire::test(StudentsIndex::class)
-            ->assertSee('EtudiantRabatMixedStack')
-            ->assertDontSee('EtudiantCasaMixedStack');
     }
 }

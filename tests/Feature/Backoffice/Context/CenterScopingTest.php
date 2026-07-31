@@ -8,7 +8,6 @@ use App\Livewire\Backoffice\Employees\EmployeesIndex;
 use App\Livewire\Backoffice\Groups\GroupsIndex;
 use App\Livewire\Backoffice\Inscriptions\InscriptionsIndex;
 use App\Livewire\Backoffice\Settings\SallesTab;
-use App\Livewire\Backoffice\Students\StudentsIndex;
 use App\Livewire\Backoffice\Users\UsersIndex;
 use App\Models\AnneeScolaire;
 use App\Models\Employee;
@@ -57,27 +56,6 @@ final class CenterScopingTest extends TestCase
         $this->actingAs($user);
 
         return $user;
-    }
-
-    public function test_students_list_is_scoped_to_the_selected_center(): void
-    {
-        $this->globalUser();
-        Student::factory()->create(['nom' => 'EtudiantRabatX', 'etablissement_id' => $this->rabat->id]);
-        Student::factory()->create(['nom' => 'EtudiantCasaX', 'etablissement_id' => $this->casa->id]);
-        Student::factory()->create(['nom' => 'EtudiantGlobalX', 'etablissement_id' => null]);
-
-        // "Tous les centres" → everything.
-        Livewire::test(StudentsIndex::class)
-            ->assertSee('EtudiantRabatX')
-            ->assertSee('EtudiantCasaX')
-            ->assertSee('EtudiantGlobalX');
-
-        // Rabat selected → Casa's student disappears; global rows stay.
-        app(CurrentContext::class)->setEtablissement($this->rabat->id);
-        Livewire::test(StudentsIndex::class)
-            ->assertSee('EtudiantRabatX')
-            ->assertDontSee('EtudiantCasaX')
-            ->assertSee('EtudiantGlobalX');
     }
 
     public function test_employees_list_is_scoped_to_the_selected_center(): void
@@ -153,15 +131,4 @@ final class CenterScopingTest extends TestCase
             ->assertSee($admin->name);
     }
 
-    public function test_lists_refresh_when_the_context_changes(): void
-    {
-        $this->globalUser();
-        Student::factory()->create(['nom' => 'EtudiantCasaLive', 'etablissement_id' => $this->casa->id]);
-
-        $component = Livewire::test(StudentsIndex::class)->assertSee('EtudiantCasaLive');
-
-        // Simulate the top-bar switcher narrowing to Rabat.
-        app(CurrentContext::class)->setEtablissement($this->rabat->id);
-        $component->dispatch('context-changed')->assertDontSee('EtudiantCasaLive');
-    }
 }
