@@ -55,7 +55,6 @@ final class ProfileController
             'phonePays' => $phonePays,
             'telephone' => $telephone,
             'whatsapp' => $whatsapp,
-            'countries' => Countries::all(),
         ]);
     }
 

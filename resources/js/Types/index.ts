@@ -623,9 +623,6 @@ export interface EmployeesFilters {
     perPage: number;
 }
 
-/** One entry of App\Support\Phone\Countries::all() — ISO2 => { nom, dial }. */
-export type CountryCatalog = Record<string, { nom: string; dial: string }>;
-
 export interface EmployeesPageProps {
     employees: PaginatedData<EmployeeRow>;
     filters: EmployeesFilters;
@@ -633,7 +630,6 @@ export interface EmployeesPageProps {
     categories: string[];
     statuts: string[];
     sexes: string[];
-    countries: CountryCatalog;
     defaultCountry: string;
     etablissements: Array<{ id: number; nom_centre: string }>;
     centerLocked: boolean;
@@ -694,7 +690,6 @@ export interface StudentsPageProps {
     parentRelations: string[];
     niveauxAvecDomaine: string[];
     niveauStudium: string;
-    countries: CountryCatalog;
     defaultCountry: string;
     etablissements: Array<{ id: number; nom_centre: string }>;
     centerLocked: boolean;
@@ -820,7 +815,6 @@ export interface InscriptionsPageProps {
     parentRelations: string[];
     niveauxAvecDomaine: string[];
     niveauStudium: string;
-    countries: CountryCatalog;
     defaultCountry: string;
     students: InscriptionFormOption[];
     groups: InscriptionFormOption[];

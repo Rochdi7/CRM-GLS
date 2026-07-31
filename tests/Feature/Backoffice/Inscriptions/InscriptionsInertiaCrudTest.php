@@ -99,7 +99,10 @@ final class InscriptionsInertiaCrudTest extends TestCase
                 ->has('groups')
                 ->has('statuts')
                 ->has('niveaux')
-                ->has('countries')
+                // The phone-country catalog is client-side now
+                // (resources/js/Data/countries.ts) — no server prop
+                // (Phase 12 payload optimization).
+                ->missing('countries')
             );
     }
 

@@ -57,7 +57,6 @@ final class StudentController extends Controller
             'parentRelations' => Student::PARENT_RELATIONS,
             'niveauxAvecDomaine' => Student::NIVEAUX_AVEC_DOMAINE,
             'niveauStudium' => Student::NIVEAU_STUDIUM,
-            'countries' => Countries::all(),
             'defaultCountry' => Countries::DEFAULT,
             'etablissements' => Etablissement::query()->orderBy('nom_centre')->get(['id', 'nom_centre']),
             'centerLocked' => ! $context->isAllCenters(),

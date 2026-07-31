@@ -59,7 +59,6 @@ final class EmployeeController extends Controller
             'categories' => Employee::CATEGORIES,
             'statuts' => Employee::STATUTS,
             'sexes' => Employee::SEXES,
-            'countries' => Countries::all(),
             'defaultCountry' => Countries::DEFAULT,
             'etablissements' => Etablissement::query()->orderBy('nom_centre')->get(['id', 'nom_centre']),
             'centerLocked' => ! $context->isAllCenters(),

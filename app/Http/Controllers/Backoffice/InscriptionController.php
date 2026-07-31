@@ -68,7 +68,6 @@ final class InscriptionController extends Controller
             'parentRelations' => Student::PARENT_RELATIONS,
             'niveauxAvecDomaine' => Student::NIVEAUX_AVEC_DOMAINE,
             'niveauStudium' => Student::NIVEAU_STUDIUM,
-            'countries' => Countries::all(),
             'defaultCountry' => Countries::DEFAULT,
             'students' => $getInscriptionFormOptions->students($request->user()),
             'groups' => $getInscriptionFormOptions->groups($request->user()),

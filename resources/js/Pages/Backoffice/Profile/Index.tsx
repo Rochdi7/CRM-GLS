@@ -5,6 +5,14 @@ import Card from '@/Components/Shared/Card';
 import FormField from '@/Components/Forms/FormField';
 import PasswordField from '@/Components/Forms/PasswordField';
 import SubmitButton from '@/Components/Forms/SubmitButton';
+import { COUNTRIES } from '@/Data/countries';
+
+// Client-side catalog (mirrors App\Support\Phone\Countries — see
+// Data/countries.ts) keyed by ISO for the dial-code lookup + select options;
+// replaces the 8 KB `countries` prop the server used to send on every load.
+const countries: Record<string, { nom: string; dial: string }> = Object.fromEntries(
+    COUNTRIES.map((c) => [c.iso, { nom: c.nom, dial: c.dial }]),
+);
 
 interface EmployeeSummary {
     reference: string;
@@ -27,7 +35,6 @@ interface ProfileIndexProps {
     phonePays: string;
     telephone: string;
     whatsapp: string;
-    countries: Record<string, { nom: string; dial: string }>;
 }
 
 function SexeIcon({ sexe }: { sexe: string | null }) {
@@ -58,7 +65,7 @@ function SexeIcon({ sexe }: { sexe: string | null }) {
  * Two independent forms post to ProfileController::updateProfile() and
  * ::updatePassword() (Form Requests own validation, not this component).
  */
-export default function ProfileIndex({ user, employee, phonePays, telephone, whatsapp, countries }: ProfileIndexProps) {
+export default function ProfileIndex({ user, employee, phonePays, telephone, whatsapp }: ProfileIndexProps) {
     const profileForm = useForm({
         name: user.name,
         email: user.email,
