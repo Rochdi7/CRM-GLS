@@ -4,6 +4,224 @@ Running log of verified milestones. Append one entry per phase; do not rewrite h
 
 ---
 
+## Phase 9 — Inscriptions (registrations) migration
+
+**Date**: 2026-07-31
+**Status**: **Complete.**
+
+Migrated Inscriptions — the most business-critical module — from Livewire to
+Inertia + React: list + modal create/edit, inline new-student creation, and
+the repeatable fee-lines editor with live percentage/fixed-DH discount
+preview. `App\Livewire\Backoffice\Inscriptions\InscriptionsIndex` and its
+view are left completely untouched as the unreferenced rollback fallback.
+Full audit in `docs/phase-9-inscriptions-audit.md` and field-by-field mapping
+in `docs/phase-9-inscriptions-mapping.md` (both written before any code, per
+the task's own requirement).
+
+### Existing behavior discovered
+
+- The create/edit form has a genuine, deliberate asymmetry: on **create**,
+  `date_debut`/`date_fin` and the center/academic year are always re-derived
+  from the selected **group** (readonly in the UI; a tampered client value is
+  silently overridden server-side), while on **edit** those same two date
+  fields are trusted directly from the request — only 6 columns
+  (student/group/statut/date_inscription/date_debut/date_fin/note) are ever
+  written on update, fees/totals/center/year are never touched again.
+  Preserved exactly, not "fixed" into a symmetric behavior.
+- A new registration always starts `Inscription::STATUT_ACTIVE` server-side —
+  `StoreInscriptionRequest` has no `statut` field at all, matching
+  `InscriptionsIndex::save()`'s `!$editing` branch.
+- Only the group's **active** catalog fees are ever offered as "Frais
+  disponibles"; every fee the group carries is billed (no opt-out checkbox),
+  each fee line's due date is pre-filled from the group's own per-fee pivot
+  `date_echeance`, and `InscriptionFee::computeMontant()` applies percentage
+  discount with priority over a fixed-DH discount when both are present —
+  all reproduced exactly, including the priority rule.
+- Delete is a try/catch around the raw `->delete()` (not a pre-count guard) —
+  a registration with payments hits the `encaissements.inscription_fee_id`
+  restrict FK via the `inscription_fees` cascade and surfaces as a 422
+  ("This registration has payments and cannot be deleted."). **A real,
+  previously-latent bug was found and fixed while testing this path (new,
+  never exercised by the Livewire test suite either): the delete must run
+  inside its own `DB::transaction()`.** Without it, PostgreSQL aborts the
+  entire request-scoped transaction on the constraint violation, not just
+  the statement — the PHP `catch` block still runs, but every later query in
+  that same request/test then fails with "current transaction is aborted."
+  Fixed in `InscriptionController::destroy()`; `InscriptionsIndex::delete()`
+  has the identical latent gap and should get the same fix if it is ever
+  revisited (currently untouched, per the phase's own scope).
+- `registrations.manage-fees` is not enforced anywhere on the live create
+  path (audit doc §12 point 1) — the group-fee-lookup endpoint is gated by
+  `registrations.create` only, matching `InscriptionsIndex::updatedGroupId()`
+  exactly (no separate group-view check either — see next point).
+- `InscriptionFeeController` and its `inscription-fees.{store,update,destroy}`
+  routes were confirmed genuinely dead (registered, working, zero callers
+  anywhere in the app) — removed from `routes/backoffice.php` with explicit
+  user sign-off (unlike prior phases' dead code, which had no routes at all,
+  making this a more consequential removal). The controller and its Form
+  Requests are left in place, now fully unreferenced.
+
+### A design bug caught by the new test suite (fixed before commit)
+
+The first draft of `InscriptionController::groupFees()` additionally called
+`$this->authorize('view', $group)`, requiring `groups.view` on top of
+`registrations.create`. `GroupPolicy` has no `view` override, so this fell
+through to `ResourcePolicy::view()`'s default `groups.view` + center check —
+a stricter gate than the Livewire source of truth, which loads a group's fees
+in `updatedGroupId()` with no separate group-view authorization at all (the
+`groups` options list is already center-scoped by
+`GetInscriptionFormOptions::groups()`). A user who can create registrations
+but lacks `groups.view` would have been unable to see any group's fees when
+enrolling a student — caught by
+`test_group_fees_endpoint_returns_only_active_catalog_fees_with_dates`
+failing with 403. Removed the extra check.
+
+### Files created
+
+- Read-models: `App\Domain\Registrations\Queries\{GetInscriptionsList,
+  GetInscriptionFormOptions,GetGroupInscriptionFees}`.
+- React page: `resources/js/Pages/Backoffice/Inscriptions/Index.tsx`.
+- Tests: `tests/Feature/Backoffice/Inscriptions/InscriptionsInertiaCrudTest.php`.
+
+No new shared components — the fee-lines sub-table reuses the same
+plain-`<table>`-inside-modal pattern established for Groups in Phase 8; the
+mode toggle (new/existing student) and inline student form reuse Phase 8's
+Students Contact/Parent tab fields and `PhoneField`/`splitPhone`/`joinPhone`
+helpers directly.
+
+### Files modified
+
+- `App\Http\Controllers\Backoffice\InscriptionController` — gained
+  `index`/`store`/`update`/`destroy`/`groupFees` alongside its existing
+  `show`.
+- `App\Http\Requests\Backoffice\Inscriptions\{Store,Update}InscriptionRequest`
+  — fully rewritten to match the live Livewire field set exactly (previous
+  version validated a different, dead field set — see audit doc §5).
+- `routes/backoffice.php` — added `inscriptions.{index,store,update,destroy,
+  show}` and `groups.inscription-fees`; removed the dead
+  `InscriptionsIndex` Livewire route and the dead `inscription-fees.*`
+  resource routes.
+- `resources/js/Config/backofficeNavigation.ts` — Registrations nav item
+  marked `inertia: true`.
+- `resources/js/Types/index.ts` — additive only: `InscriptionRow`,
+  `InscriptionFormOption`, `InscriptionGroupFee`,
+  `InscriptionGroupFeesResponse`, `InscriptionFeeLine`,
+  `InscriptionsFilters`, `InscriptionsPageProps`.
+
+### Routes
+
+| Route | Before | After |
+|---|---|---|
+| `backoffice.inscriptions.index` (GET) | `InscriptionsIndex` (Livewire) | `InscriptionController@index` |
+| `backoffice.inscriptions.store` (POST, new) | — | `InscriptionController@store` |
+| `backoffice.inscriptions.update` (PUT, new) | — | `InscriptionController@update` |
+| `backoffice.inscriptions.destroy` (DELETE, new) | — | `InscriptionController@destroy` |
+| `backoffice.groups.inscription-fees` (GET, new) | — | `InscriptionController@groupFees` |
+| `backoffice.inscriptions.show` (GET) | unchanged | unchanged |
+
+`inscription-fees.{index,store,update,destroy}` (dead, unrouted-in-practice
+`InscriptionFeeController`) removed from the route file entirely — see the
+"dead code" note above.
+
+### Prop shapes
+
+`InscriptionsPageProps` — paginated list + filters + all the Student
+enum/option lists needed for inline new-student creation (niveaux, domaines,
+examenTypes, sexes, parentRelations, countries) + `students`/`groups` select
+options, no full Eloquent models. The per-group fee list is deliberately
+**not** embedded in the initial payload (unlike Phase 8's Groups
+`fraisLignes`, which is embedded) — group count × fee count made a
+per-selection lookup the better-scaling choice here, a tradeoff surfaced to
+and confirmed by the user before implementation.
+
+### Business rules preserved
+
+Group-derived dates and center/year on create; forced `Active` status on
+create; active-only catalog fee filtering; full-catalog-always-billed fee
+lines with per-fee due-date inheritance; percentage-priority discount math
+(`InscriptionFee::computeMontant()`, unchanged, called server-side only);
+edit-mode's 6-field-only / no-fee-line-re-derivation asymmetry;
+QueryException-based delete guard (now transaction-safe); center scoping via
+the standard `ResourcePolicy::withinCenter()` on the existing
+`InscriptionPolicy`.
+
+### Financial rules preserved
+
+All money crosses the wire as server-formatted fixed 2-decimal strings
+(`MoneyDisplay` type, `number_format(..., 2, '.', '')`), never raw floats.
+The fee-lines table's live pct↔DH sync and running-total preview in React is
+display-only (`computeLineMontant()` mirrors `InscriptionFee::computeMontant()`
+exactly, including the same priority rule) — the server independently
+recomputes every fee line's final `montant` from the raw
+initial/pct/DH inputs on save via the real `InscriptionFee::computeMontant()`,
+and that server-computed value is what persists. Verified directly by
+`test_a_registration_bills_the_selected_group_fees_with_discount`,
+`test_dh_discount_takes_effect_when_percentage_is_absent`, and
+`test_percentage_discount_takes_priority_over_fixed_amount_when_both_present`.
+
+### Tests added
+
+`tests/Feature/Backoffice/Inscriptions/InscriptionsInertiaCrudTest.php` — 17
+tests: index authorization + page shape; group-fee-lookup endpoint (active-
+fee filtering, montant/date shape, permission gate); create with an existing
+student (fee billing + both discount directions + priority rule + group-
+derived dates ignoring tampered input + required-field validation +
+permission gate); create with inline new-student mode (student creation +
+scoping + contact/parent fields with combined phone + name-required-not-id
+validation); update (6-field-only + date asymmetry + permission gate);
+delete (success case + payments-blocked 422 case); center scoping (a
+center-locked user cannot update another center's registration).
+
+### Test results
+
+| Check | Result |
+|---|---|
+| `artisan test tests/Feature/Backoffice/Inscriptions/` | ✅ 43/43 passing (26 existing Livewire-side + 17 new Inertia-side) |
+| Full suite | ✅ See end-of-phase report for final count |
+| `npx tsc --noEmit` | ✅ Clean |
+| `npm run build` | ✅ Succeeds — main bundle 492.86 kB / 133.58 kB gzip (Phase 8 baseline: 473.19 kB / 130.34 kB gzip) |
+
+### Performance measurements
+
+- Inscriptions list: 6 SQL queries (pagination count + eager loads), payload
+  scales with page size, not with the student enum/option lists (those are
+  fixed-size and sent once per page load, same as every other Inertia page).
+- Group-fee-lookup endpoint: 1 SQL query (`Group::loadMissing('frais')` with
+  the active-only constraint baked into the relation query), ~186 bytes for
+  a 2-fee group — trivially small per-selection cost, confirming the
+  dedicated-endpoint design decision over embedding every group's fees in
+  the initial options payload.
+- Bundle grew by ~19.7 kB / ~3.2 kB gzip over Phase 8 — the largest
+  single-page addition so far (mode toggle, inline student form, fee-lines
+  editor), still using only Phase 6/7/8's shared component library.
+
+### Manual browser verification
+
+Not yet performed — pending user verification in a real browser (create a
+registration for an existing student with discounted fee lines in both
+directions; create one with a brand-new student including contact/parent
+tabs; edit a registration and confirm only the 6 fields are editable with no
+fee-line UI at all; attempt to delete a registration that has a payment and
+confirm the inline 422 message; switch centers and confirm registrations
+list/create are properly scoped).
+
+### Known limitations
+
+None blocking. `registrations.manage-fees` remains unenforced on the create
+path, matching the Livewire original exactly — introducing that check is new
+authorization work, out of scope for a like-for-like migration.
+
+---
+
+## Phase 9 — Baseline (before Inscriptions migration)
+
+**Date**: 2026-07-31
+
+Full suite green before starting (previous Phase 8 end state: all Students/
+Groups/Livewire/Inertia tests passing). Proceeding with Phase 9 implementation.
+
+---
+
 ## Phase 8 — Students & Groups migration
 
 **Date**: 2026-07-30

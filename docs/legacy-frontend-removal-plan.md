@@ -10,6 +10,43 @@ authorizes deleting anything today.
 
 ---
 
+## 0f. Phase 9 additions to the retained-legacy list
+
+Inscriptions is now migrated (docs/inertia-react-migration-status.md,
+Phase 9 entry).
+
+| File | Why retained |
+|---|---|
+| `app/Livewire/Backoffice/Inscriptions/InscriptionsIndex.php` | No longer rendered — `backoffice.inscriptions.index` now serves `InscriptionController@index`; kept for rollback |
+| `resources/views/livewire/backoffice/inscriptions/inscriptions-index.blade.php` | Owning view of the above |
+
+**`app/Http/Requests/Backoffice/Inscriptions/{Store,Update}InscriptionRequest.php`
+were NOT retired** — like Phase 7/8's equivalent requests, these existed
+before Phase 9 (validating a different, dead field set) and are now the
+ACTIVE Form Requests for the new controller actions, fully rewritten to
+match the live Livewire form exactly. Nothing to mark unused here.
+
+**New for this phase — a working, routed controller became dead code as
+part of the migration itself, not before it.** Unlike every prior phase
+(where the *Livewire* component became unreferenced while its Form
+Requests/controller stayed live), `App\Http\Controllers\Backoffice\
+InscriptionFeeController` and its `inscription-fees.{index,store,update,
+destroy}` routes were confirmed to have **zero callers anywhere in the
+app** (audit doc §12 point 3) — not the create/edit fee-line flow, which
+has always gone through `InscriptionsIndex::save()`/now
+`InscriptionController::store()` writing `inscription_fees` rows directly,
+never through this controller's own endpoints. The routes were removed from
+`routes/backoffice.php` with explicit user sign-off (a more consequential
+removal than simply not building on top of already-unrouted dead code, since
+these routes previously worked and could in theory have had an external
+caller). The controller class and its Form Requests
+(`app/Http/Requests/Backoffice/InscriptionFees/` if present, or inline
+validation — see the controller itself) are left on disk, now fully
+unreferenced, for the same rollback-safety reason as every other retained
+file in this document.
+
+---
+
 ## 0e. Phase 8 additions to the retained-legacy list
 
 Students and Groups are now migrated (docs/inertia-react-migration-
