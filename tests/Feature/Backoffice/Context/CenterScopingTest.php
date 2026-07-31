@@ -5,13 +5,10 @@ declare(strict_types=1);
 namespace Tests\Feature\Backoffice\Context;
 
 use App\Livewire\Backoffice\Employees\EmployeesIndex;
-use App\Livewire\Backoffice\Groups\GroupsIndex;
 use App\Livewire\Backoffice\Settings\SallesTab;
 use App\Livewire\Backoffice\Users\UsersIndex;
-use App\Models\AnneeScolaire;
 use App\Models\Employee;
 use App\Models\Etablissement;
-use App\Models\Group;
 use App\Models\Role;
 use App\Models\Salle;
 use App\Models\User;
@@ -24,13 +21,15 @@ use Tests\TestCase;
 /**
  * Every CRUD list must follow the center selected in the top-bar context
  * switcher: only the active center's rows (plus global NULL-center rows)
- * may appear, and the lists must refresh on `context-changed`.
+ * may appear. Covers only the modules whose Inertia-side test suite does
+ * not yet independently assert this (Employees/Salles/Users) — Students/
+ * Groups/Inscriptions had their own scenarios here superseded and removed
+ * once their Livewire components were deleted (docs/phase-11-test-
+ * coverage-mapping.md).
  */
 final class CenterScopingTest extends TestCase
 {
     use RefreshDatabase;
-
-    private AnneeScolaire $annee;
 
     private Etablissement $rabat;
 
@@ -40,7 +39,6 @@ final class CenterScopingTest extends TestCase
     {
         parent::setUp();
         $this->seed(RolesAndPermissionsSeeder::class);
-        $this->annee = AnneeScolaire::create(['nom' => '2025/2026', 'date_debut' => '2025-09-01', 'date_fin' => '2026-08-31', 'par_defaut' => true, 'inscription_ouverte' => true]);
 
         $this->rabat = Etablissement::factory()->create(['nom_centre' => 'GLS Rabat']);
         $this->casa = Etablissement::factory()->create(['nom_centre' => 'GLS Casablanca']);
@@ -65,18 +63,6 @@ final class CenterScopingTest extends TestCase
         Livewire::test(EmployeesIndex::class)
             ->assertSee('EmployeCasaX')
             ->assertDontSee('EmployeRabatX');
-    }
-
-    public function test_groups_list_and_tab_counts_are_scoped_to_the_selected_center(): void
-    {
-        $this->globalUser();
-        Group::factory()->create(['nom' => 'GroupeRabatX', 'statut' => Group::STATUT_EN_FORMATION, 'etablissement_id' => $this->rabat->id, 'annee_scolaire_id' => $this->annee->id]);
-        Group::factory()->create(['nom' => 'GroupeCasaX', 'statut' => Group::STATUT_EN_FORMATION, 'etablissement_id' => $this->casa->id, 'annee_scolaire_id' => $this->annee->id]);
-
-        app(CurrentContext::class)->setEtablissement($this->rabat->id);
-        Livewire::test(GroupsIndex::class)
-            ->assertSee('GroupeRabatX')
-            ->assertDontSee('GroupeCasaX');
     }
 
     public function test_salles_tab_is_scoped_to_the_selected_center(): void
