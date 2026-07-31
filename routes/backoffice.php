@@ -12,7 +12,6 @@ use App\Http\Controllers\Backoffice\CaisseTransferController;
 use App\Http\Controllers\Backoffice\ContextController;
 use App\Http\Controllers\Backoffice\DashboardController;
 use App\Http\Controllers\Backoffice\DepenseController;
-use App\Http\Controllers\Backoffice\DepenseManagementController;
 use App\Http\Controllers\Backoffice\Employees\EmployeeController;
 use App\Http\Controllers\Backoffice\EncaissementController;
 use App\Http\Controllers\Backoffice\EtablissementController;
