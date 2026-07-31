@@ -52,10 +52,9 @@ Two separate questions, two separate mechanisms:
 | Layer | Mechanism |
 |---|---|
 | Routes (role-management module) | `permission:` middleware aliases registered in `bootstrap/app.php` |
-| Existing resource controllers | Policies (`app/Policies`, one per model, shared `ResourcePolicy` base mapping viewAny/view/create/update/delete → `module.*` permissions) + `AuthorizesRequests` on the base controller |
-| Livewire components | `authorize()` in `mount()` **and again in every mutation method** |
+| Existing resource controllers | Policies (`app/Policies`, one per model, shared `ResourcePolicy` base mapping viewAny/view/create/update/delete → `module.*` permissions) + `AuthorizesRequests` on the base controller, `authorize()` called again in every mutation action |
 | Sensitive role operations | `App\Services\Authorization\UserAuthorizationService` (transactions, super-admin invariants, activitylog) |
-| Blade/menus | `@can` / `@canany` — UI convenience only, never the security boundary |
+| React pages | Client-side `permissions`/`auth.permissions` Inertia props — UI convenience only (hide/disable), never the security boundary |
 | Super-admin | `Gate::before`; role protected from rename/delete; last-super-admin lockout prevention |
 
 ## Role catalogue

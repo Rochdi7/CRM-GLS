@@ -6,18 +6,18 @@ Add or adapt these rules in the project's root `CLAUDE.md`.
 
 - Laravel 13
 - PHP 8.4+
-- Livewire 4
-- Blade
+- Inertia.js + React + TypeScript (or Livewire 4, if that's still your stack)
+- Blade (for whatever isn't Inertia-rendered)
 - Bootstrap
 - PreSkool theme
 
 ## Architecture
 
-- Keep backoffice and frontoffice separated in controllers, requests, Livewire components, routes, and views.
+- Keep backoffice and frontoffice separated in controllers, requests, pages/components, routes, and views.
 - Reuse the project's established structure.
 - Use Actions or Services for multi-model business workflows.
 - Use policies for resource authorization.
-- Use Form Requests or Livewire Form Objects for validation.
+- Use Form Requests for validation.
 
 ## PreSkool
 

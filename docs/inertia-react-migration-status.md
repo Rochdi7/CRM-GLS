@@ -2,7 +2,56 @@
 
 Running log of verified milestones. Append one entry per phase; do not rewrite history.
 
+> **Migration status: COMPLETE.** As of Phase 11
+> (`docs/phase-11-final-verification.md`), the backoffice is 100% Inertia +
+> React + TypeScript and Livewire has been entirely removed from the
+> codebase — no `livewire/livewire` package, no `app/Livewire/`, no
+> `resources/views/livewire/`. Every phase entry below is a historical
+> record of work as it stood *at that point in time* — many older entries
+> correctly describe modules as "still Livewire" or "coexisting," which was
+> true when written and is superseded by later entries (and finally by
+> Phase 11) further down/up this log. Read entries as a changelog, not as
+> a description of the current architecture.
+
 ---
+
+## Phase 11 — Livewire removal and final cleanup
+
+**Date**: 2026-07-31
+**Status**: **Complete.**
+
+Closed 2 confirmed test-coverage gaps (Salles tab center scoping, Users list
+center-following-with-admin-visibility) plus 13 further gaps discovered
+during the audit, all documented in `docs/phase-11-test-coverage-mapping.md`,
+before any deletion began. Classified every remaining Livewire-era file in
+`docs/phase-11-dependency-graph.md` (SAFE TO DELETE / STILL ACTIVE / SHARED
+WITH INERTIA / UNCERTAIN — all UNCERTAIN items independently re-verified and
+closed). Deleted, module by module, with a focused test run and a commit
+after each group: Students, Inscriptions, Groups, Employees (+ the old
+un-namespaced `EmployeeController`), Users/Authorization, Settings tabs,
+Roles, Caisses (+ `CaisseManagementController`), Encaissements, Depenses
+(+ `DepenseManagementController`), Remboursements, CaisseTransfers
+(+ `WithCaisseSelection`), then the shared Livewire components
+(DashboardStats, ProfilePage, ContextSwitcher, the missed
+`TypesDepensesIndex`), the 3 remaining Concerns traits, the entire old admin
+Blade layout shell, the backoffice JS/SCSS bundle, and the shared Blade
+widget library (`forms/*`, `ui/*`). Removed `livewire/livewire` from
+`composer.json` once zero real references remained anywhere in the
+repository (confirmed via repeated repo-wide greps). Ran a final whole-
+application verification pass (routes, TypeScript, build, full test suite —
+both per-directory and one successful combined run, 307/307 passing) and a
+performance baseline against the current PostgreSQL dev database — see
+`docs/phase-11-final-verification.md` and `docs/phase-11-performance-baseline.md`.
+Rewrote `CLAUDE.md` §1/§4-7/§11/§16/§17, `README.md`, and
+`docs/backoffice-architecture.md` to describe the current Inertia+React
+architecture instead of the retired Livewire one; added superseded-banners
+to this log and to `docs/inertia-react-migration-{plan,audit}.md`; fixed
+`resources/js/Config/backofficeNavigation.ts`'s stale header comment and
+restored the `inertia: true` flag / previously-hidden Finance nav items
+(Cash management, Expense management, Expense types) that were leftover
+from earlier phases despite their routes being fully working Inertia pages.
+Manual browser verification (`docs/phase-11-manual-browser-checklist.md`)
+remains explicitly PENDING — no browser access in this session.
 
 ## Phase 10 — Finance migration (Caisses, Encaissements, Dépenses, Remboursements, Transferts)
 
@@ -1489,11 +1538,13 @@ GET-page rendering layer moved.
   `backoffice.profile.password.update` (POST) — split from the Livewire
   component's two actions (`updateProfile`/`updatePassword`)
 
-### Routes still served by Blade/Livewire (unchanged)
+### Routes still served by Blade/Livewire (as of Phase 3 — superseded)
 Every POST auth action (`login.store`, `password.email`, `password.update`,
 `logout`) was already a plain controller action, not Blade — no change
-needed there. All Dashboard/Settings/Students/Employees/Groups/Inscriptions/
-Finance/Users/Roles modules remain Livewire, untouched.
+needed there. As of *this phase* (Phase 3), all Dashboard/Settings/Students/
+Employees/Groups/Inscriptions/Finance/Users/Roles modules were still
+Livewire — each was migrated in its own later phase (see Phase 4 through
+Phase 11 above), and as of Phase 11 none of them are Livewire anymore.
 
 ### Profile logic moved out of Livewire
 `ProfilePage::updateProfile()`/`updatePassword()` logic is now

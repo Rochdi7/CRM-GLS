@@ -1,24 +1,28 @@
 # Claude Code Skills for a Laravel School CRM
 
-This package contains six project skills:
+This package contains five project skills:
 
 1. `architecture-reviewer`
 2. `laravel-feature-generator`
 3. `database-designer`
-4. `livewire-component-builder`
-5. `preskool-theme-converter`
-6. `code-review`
+4. `preskool-theme-converter`
+5. `code-review`
 
 They are tailored to:
 
 - Laravel 13
 - PHP 8.4+
-- Livewire 4
-- Blade
+- Inertia.js + React + TypeScript (backoffice frontend)
 - Bootstrap
 - PreSkool
 - Multi-center school management
 - Students, inscriptions, groups, attendance, finance, employees, inventory, roles, permissions, and reports
+
+> A sixth skill, `livewire-component-builder`, existed while the backoffice
+> was Livewire-based. It was removed once the Livewire→Inertia+React
+> migration completed (`docs/phase-11-final-verification.md`) — Livewire no
+> longer exists anywhere in this codebase, so a skill instructing Claude to
+> build new Livewire components would actively contradict the project.
 
 ## Installation
 
@@ -33,8 +37,6 @@ your-project/
         ├── laravel-feature-generator/
         │   └── SKILL.md
         ├── database-designer/
-        │   └── SKILL.md
-        ├── livewire-component-builder/
         │   └── SKILL.md
         ├── preskool-theme-converter/
         │   └── SKILL.md
@@ -78,10 +80,6 @@ Use database-designer to design students, inscriptions, guardians, and student a
 
 ```text
 Use laravel-feature-generator to implement employee management in the backoffice.
-```
-
-```text
-Use livewire-component-builder to create a searchable and filterable students table.
 ```
 
 ```text

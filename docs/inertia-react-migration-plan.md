@@ -1,9 +1,18 @@
 # Inertia + React Migration — Plan
 
-Status: **Phase 0 — plan proposed, awaiting explicit approval to implement.**
-Companion to `docs/inertia-react-migration-audit.md` (read that first — this
-document assumes its findings). Do not begin Phase 1 file changes until this
-plan, the dependency classification, and the pilot module are approved.
+> **SUPERSEDED — migration complete.** This plan was fully executed through
+> Phase 10 (Finance) and Phase 11 (Livewire removal + cleanup); Livewire has
+> been entirely removed from the codebase. Kept as historical record of the
+> original decision process — see `docs/inertia-react-migration-status.md`
+> for the phase-by-phase execution log and
+> `docs/phase-11-final-verification.md` for final verification that the
+> migration is complete. Do not treat any "Livewire is not removed until…"
+> or "both stacks coexist" language below as describing current-state code.
+
+Status: ~~Phase 0 — plan proposed, awaiting explicit approval to implement.~~
+**All phases complete.**
+Companion to `docs/inertia-react-migration-audit.md` (also superseded — read
+both as history, not as a description of the current architecture).
 
 ---
 

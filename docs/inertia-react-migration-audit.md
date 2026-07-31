@@ -1,15 +1,18 @@
 # Inertia + React Migration — Repository Audit
 
-Status: **Phase 0 — audit only. No code changed.**
-Scope: read-only inspection of the Laravel project and the PreSkool v1.9.7
-React theme source, to ground the migration plan in facts rather than
-assumptions.
+> **SUPERSEDED — migration complete.** This was the Phase 0 origin audit
+> that justified overriding the then-current CLAUDE.md (which forbade React/
+> Inertia and mandated Livewire). The migration it proposed has since been
+> fully executed through Phase 11, CLAUDE.md has been rewritten to describe
+> the current Inertia+React architecture, and Livewire has been entirely
+> removed. Kept as historical record only — see
+> `docs/inertia-react-migration-status.md` for execution history and
+> `docs/phase-11-final-verification.md` for final verification.
 
-> ⚠ This migration **overrides** the current CLAUDE.md rule set, which as of
-> this writing forbids React/Inertia/Next.js and mandates Livewire+Blade+
-> Alpine. That override was explicitly confirmed by the project owner before
-> this audit was produced. CLAUDE.md itself has **not** been edited yet — see
-> "Documentation debt" at the end of this file.
+Status: ~~Phase 0 — audit only. No code changed.~~ **All phases complete.**
+Scope (at the time): read-only inspection of the Laravel project and the
+PreSkool v1.9.7 React theme source, to ground the migration plan in facts
+rather than assumptions.
 
 ---
 

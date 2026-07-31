@@ -10,13 +10,14 @@
 
 ![Laravel](https://img.shields.io/badge/Laravel_13-FF2D20?style=for-the-badge&logo=laravel&logoColor=white)
 ![PHP](https://img.shields.io/badge/PHP_8.4-777BB4?style=for-the-badge&logo=php&logoColor=white)
-![Livewire](https://img.shields.io/badge/Livewire_4-4E56A6?style=for-the-badge&logo=livewire&logoColor=white)
-![Alpine.js](https://img.shields.io/badge/Alpine.js-8BC0D0?style=for-the-badge&logo=alpinedotjs&logoColor=black)
+![Inertia](https://img.shields.io/badge/Inertia.js_3-9553E9?style=for-the-badge&logo=inertia&logoColor=white)
+![React](https://img.shields.io/badge/React_19-61DAFB?style=for-the-badge&logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)
 ![Bootstrap](https://img.shields.io/badge/Bootstrap_5-7952B3?style=for-the-badge&logo=bootstrap&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)
 
-![Tests](https://img.shields.io/badge/tests-293_passed_·_1014_assertions-brightgreen?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-307_passed_·_1531_assertions-brightgreen?style=flat-square)
 ![Permissions](https://img.shields.io/badge/permissions-65_across_6_roles-blue?style=flat-square)
 ![Language](https://img.shields.io/badge/UI-Français_🇫🇷-informational?style=flat-square)
 
@@ -28,7 +29,7 @@
 
 A complete **staff backoffice** for a multi-center German-language school in Morocco: from the first phone call to the last dirham — student records, enrollments with per-group fee schedules, cash collection, expense tracking and a fraud-resistant till system — all in a French UI on the PreSkool admin theme.
 
-Built as a **modular monolith**: Laravel 13 + Livewire 4 server-driven screens, business rules isolated in a Domain layer, and a strict Backoffice / Frontoffice separation (the public student portal is a future phase).
+Built as a **modular monolith**: Laravel 13 API + an Inertia.js/React/TypeScript backoffice, business rules isolated in a Domain layer, and a strict Backoffice / Frontoffice separation (the public student portal is a future phase).
 
 ## 🧩 Modules
 
@@ -57,7 +58,7 @@ The finance layer is designed so that **fraud leaves a trail and mistakes can't 
 
 ```mermaid
 flowchart LR
-    A[Route<br><small>permission middleware</small>] --> B[Livewire component<br><small>authorize in mount + every mutation</small>]
+    A[Route<br><small>permission middleware</small>] --> B[Controller<br><small>authorize + validate, every mutation</small>]
     B --> C[Domain action<br><small>one transaction</small>]
     C --> D[(caisses.solde<br>+ audit log)]
 ```
@@ -136,14 +137,15 @@ The seeders also create 7 GLS branches with rooms, a fee catalog, students, grou
 
 ```
 routes/backoffice.php ── auth + permission middleware
-   └─ Livewire full-page component (list + modal CRUD)   ← most screens
-      or thin controller (detail pages, tabbed hosts)
-         └─ <x-backoffice.layout.app> Blade shell (PreSkool theme)
-            └─ app/Domain/<Module>/Actions ── the real business rules
+   └─ Thin controller (authorize, validate via Form Request, call Domain)
+         └─ Inertia::render('Backoffice/<Module>/Index', [...typed props])
+            └─ resources/js/Pages/Backoffice/<Module>/Index.tsx (React)
+               └─ BackofficeLayout.tsx shell (PreSkool theme, Bootstrap 5)
+      app/Domain/<Module>/Actions ── the real business rules, called by the controller
 ```
 
-- **Livewire only where server dynamics are needed** — static UI is plain Blade, client-only state is Alpine (bundled with Livewire, never installed twice)
-- **Select2 on every CRUD dropdown**, bridged to Livewire through a `wire:ignore` island + Alpine `@entangle`
+- **Inertia + React on every backoffice screen** — no Livewire, no Alpine, no jQuery plugins anywhere in the app (fully removed, Phase 11)
+- **Native `<select>` on every CRUD dropdown** (`resources/js/Components/Forms/SelectField.tsx`) — no Select2, no jQuery bridge
 - **Center scoping is authorization**: policies combine the permission with `CenterAccessService`
 - **French first**: every visible string goes through `__()` with translations in `lang/fr.json`
 - **Uploads** via spatie/medialibrary on a dedicated disk, served from `/media/<uuid8>/…`
@@ -153,10 +155,10 @@ routes/backoffice.php ── auth + permission middleware
 ## 🧪 Tests
 
 ```bash
-php artisan test        # 293 tests, 1014 assertions
+php artisan test        # 307 tests, 1531 assertions
 ```
 
-Feature tests cover every module: allowed **and** denied (403) paths, center scoping, money invariants (balances move exactly once, self-validation refused), Livewire modal flows and upload rules.
+Feature tests cover every module: allowed **and** denied (403) paths, center scoping, money invariants (balances move exactly once, self-validation refused), Inertia page/modal flows and upload rules.
 
 Tests run against a real PostgreSQL database, `gls_crm_test` (`phpunit.xml`),
 kept separate from the local dev database `gls_crm`. **Never point PHPUnit at

@@ -17,17 +17,28 @@ employees, registrations, groups, attendance, payments, expenses, stock, reports
   In the user's interactive PowerShell, `php`/`composer` are directory-aware
   functions (defined in `~\Documents\WindowsPowerShell\profile.ps1`) that select
   PHP 8.4 automatically inside this project — do not remove that override.
-- Livewire **4** (server-driven UI) with its **bundled Alpine.js**
-- Blade components (anonymous) for all reusable UI
-- **Bootstrap 5** via the **PreSkool v1.9.7** admin theme (UI source of truth)
-- Vite (own code only) + static PreSkool assets
+- **Inertia.js v3 + React 19 + TypeScript** — the entire backoffice frontend
+  (migrated off Livewire; see `docs/inertia-react-migration-plan.md` and
+  `docs/inertia-react-migration-status.md` for the full history). Livewire
+  has been **fully removed** — no `livewire/livewire` package, no
+  `app/Livewire/`, no `resources/views/livewire/`, no Alpine.
+- Blade components (anonymous) for the Inertia root shell
+  (`resources/views/app.blade.php`) and the still-Blade Frontoffice only —
+  **not** for backoffice pages, which are React components under
+  `resources/js/Pages/Backoffice/`.
+- **Bootstrap 5** via the **PreSkool v1.9.7** admin theme (UI source of truth) —
+  visuals/markup/classes are reused as-is in React (see §4); no CSS framework
+  change, only the templating layer changed from Blade to JSX.
+- Vite (own code only, incl. the React/Inertia bundle) + static PreSkool assets
 - **PostgreSQL is the only supported database** — see §17 "Database Standard —
   PostgreSQL Only" for the full rule set (search, indexing, JSON, migrations,
   tests, deployment). Read §17 before touching anything database-related.
 - Architecture: **modular monolith** — future business logic in `app/Domain/<Module>/`
 
-**Forbidden:** React, Vue, Angular, Inertia, Next.js, Tailwind CSS, second Alpine
-instance, redesigning the PreSkool look, client-side DataTables for large lists.
+**Forbidden:** Livewire, Alpine.js, jQuery plugins (Select2, moment,
+daterangepicker, bootstrap-datetimepicker, feather, slimscroll — all removed;
+never reintroduce them), Vue, Angular, Next.js, Tailwind CSS, redesigning the
+PreSkool look, client-side DataTables for large lists.
 
 ## 2. Backoffice / Frontoffice separation (non-negotiable)
 
@@ -40,12 +51,11 @@ Everything is split into two areas — never mix them:
 | Route names | `backoffice.*` | `frontoffice.*` |
 | Controllers | `App\Http\Controllers\Backoffice` | `App\Http\Controllers\Frontoffice` |
 | Form Requests | `App\Http\Requests\Backoffice\<Module>` | `App\Http\Requests\Frontoffice\<Module>` |
-| Livewire | `App\Livewire\Backoffice\…` | `App\Livewire\Frontoffice\…` |
-| Page views | `resources/views/backoffice/…` | `resources/views/frontoffice/…` |
-| Livewire views | `resources/views/livewire/backoffice/…` | `resources/views/livewire/frontoffice/…` |
-| Components | `resources/views/components/backoffice/…` | `resources/views/components/frontoffice/…` |
-| JS | `resources/js/backoffice/…` | `resources/js/frontoffice/…` |
-| SCSS | `resources/scss/backoffice/…` | `resources/scss/frontoffice/…` |
+| Pages (React) | `resources/js/Pages/Backoffice/…` | — (still Blade, see below) |
+| Frontoffice views | — | `resources/views/frontoffice/…` |
+| Components | `resources/js/Components/…` (shared across backoffice pages) | `resources/views/components/frontoffice/…` |
+| JS | `resources/js/Pages/Backoffice/…`, `resources/js/Components/…`, `resources/js/Layouts/…` | `resources/js/frontoffice/…` |
+| SCSS | — (Bootstrap 5 loaded statically; no backoffice SCSS bundle) | `resources/scss/frontoffice/…` |
 | Tests | `tests/Feature/Backoffice/…` | `tests/Feature/Frontoffice/…` |
 
 Cross-area shared components go to `resources/views/components/shared/` only.
@@ -76,154 +86,123 @@ components directly from it.** Copy and adapt reviewed components into
 reference directory. See its own `README-GLS.md` for the full rule set and
 `docs/preskool-react-reference-inventory.md` for what was copied/excluded.
 
-**React/Inertia modals are controlled by React state.** Do not use Bootstrap
-modal JavaScript, jQuery modal initialization, or Livewire browser events on
-Inertia pages — no `bootstrap.bundle.js`, no `data-bs-toggle`/`data-bs-dismiss`,
-no `wire:` attributes. Open/close state, Escape, backdrop-click, focus
-trap/restore, and body-scroll lock are all owned by
-`resources/js/Components/Modals/Modal.tsx` (established Phase 6,
-`docs/bootstrap-react-integration-decision.md`). Visuals reuse the existing
-Bootstrap 5 `.modal`/`.modal-dialog`/`.modal-backdrop` markup/classes; only
-the behavior layer differs from the Livewire/Alpine pages.
+**All modals are controlled by React state** — this is the only modal
+architecture in the app (Livewire/Alpine modals no longer exist). Never use
+Bootstrap modal JavaScript, jQuery modal initialization, or `wire:` attributes
+— no `bootstrap.bundle.js`, no `data-bs-toggle`/`data-bs-dismiss`. Open/close
+state, Escape, backdrop-click, focus trap/restore, and body-scroll lock are
+all owned by `resources/js/Components/Modals/Modal.tsx` (props: `show`,
+`title`, `onClose`, `processing`, `size`; established Phase 6,
+`docs/bootstrap-react-integration-decision.md`), with
+`resources/js/Components/Modals/ConfirmDialog.tsx` built on top of it for
+delete confirmations. Visuals reuse the existing Bootstrap 5
+`.modal`/`.modal-dialog`/`.modal-backdrop` markup/classes — only the
+behavior layer is React, never Bootstrap's own JS.
 
-## 4. Blade component rules
+## 4. Blade component rules (Frontoffice + Inertia root shell only)
 
-One convention only: **anonymous components** under `resources/views/components/`.
+Backoffice pages are React (`resources/js/Pages/Backoffice/…`) — see §5.
+Blade anonymous components under `resources/views/components/` are still the
+convention for whatever remains Blade-rendered:
 
-- `<x-backoffice.layout.app>` — admin shell (header+sidebar+footer+theme-settings).
-  Also: `…layout.guest` (auth/error pages), `…layout.print` (printables),
-  `…layout.page-header`, `…layout.breadcrumbs`.
-- `<x-backoffice.ui.*>` — card, button, badge, alert, modal, table, empty-state,
-  pagination, filter-bar (+ `filter-bar.date-field`).
-- `<x-backoffice.forms.*>` — input, select, textarea, error (all render validation errors).
+- `resources/views/app.blade.php` — the Inertia root template (loads
+  `resources/js/app.tsx`; do not confuse with the old, deleted
+  `x-backoffice.layout.app` admin shell).
 - `<x-frontoffice.layout.*>` — independent public shell (app, guest, header, footer).
 - `<x-shared.*>` — only for genuinely cross-area components.
 
-Canonical page skeleton:
-
-```blade
-<x-backoffice.layout.app :title="__('Students')">
-    <x-backoffice.layout.page-header
-        :title="__('Students')"
-        :breadcrumbs="[__('Dashboard') => route('backoffice.dashboard'), __('Students') => null]" />
-    {{-- content --}}
-</x-backoffice.layout.app>
-```
-
 Never duplicate layout HTML in a page; never create a second layout system.
 
-## 5. Livewire rules
+## 5. React/Inertia frontend rules (backoffice)
 
-Use Livewire **only** where server-side dynamics are needed: searchable/paginated
-tables, filters, forms with validation, payment allocation, attendance entry,
-dashboard filters, dependent selects, uploads, bulk actions, backend-driven modals.
+The backoffice is **100% Inertia + React + TypeScript** — Livewire has been
+fully removed (Phase 11, `docs/phase-11-final-verification.md`). Pages live
+in `resources/js/Pages/Backoffice/<Module>/{Index,Create,Edit,Show}.tsx`,
+backed by a thin Laravel controller (`App\Http\Controllers\Backoffice\…`)
+that authorizes, validates via Form Requests, and returns
+`Inertia::render(...)` with typed props. Server-side pagination/search/sort/
+filtering is standard for every list page — Laravel's paginator, serialized
+as Inertia props (`PaginatedData<T>` in `resources/js/Types/index.ts`), never
+a client-side dataset.
 
-Do **not** use Livewire for static UI: layouts, navigation, headers/footers,
-info pages, design-only widgets — plain Blade there.
+Shared components (reuse these — do not re-invent per page):
 
-Use Alpine (via Livewire) for frontend-only state: dropdowns, tabs, show/hide,
-password visibility, small modal state.
+- `resources/js/Layouts/BackofficeLayout.tsx` — the admin shell
+  (header+sidebar+footer+theme toggle), analogous to the old
+  `x-backoffice.layout.app`.
+- `resources/js/Components/Modals/{Modal,ConfirmDialog}.tsx` — see §3.
+- `resources/js/Components/Tables/{DataTable,SearchInput,TableToolbar,Pagination,RowActions}.tsx`
+  — list-page building blocks. `SearchInput` debounces (~400ms) before
+  calling the page's own `reload(filters)`, which does
+  `router.get(url, filters, { preserveState: true, preserveScroll: true, replace: true })`
+  — an Inertia partial reload driven entirely by server-side filtering, not
+  a client-side hook. `TableToolbar` is the filter-bar layout (labeled filter
+  slots + `search` slot + optional `actions` slot), the direct successor to
+  the old `<x-backoffice.ui.filter-bar>`. `Pagination` renders the same
+  Bootstrap `.pagination` markup but navigates via `router.get(...)` instead
+  of `<a href>`, so query-string filters persist across pages.
+- `resources/js/Components/Forms/SelectField.tsx` — a plain native `<select>`
+  styled with Bootstrap's `.form-select`. **Never Select2 or any jQuery
+  plugin** — Inertia pages load no jQuery/Select2 assets at all; native
+  `<select>` (or, if a future page genuinely needs async/searchable options,
+  a new React-native combobox — not a jQuery bridge) is the only pattern.
+- `resources/js/Components/Forms/{PhoneField,PhoneCountry,PasswordField,SubmitButton}.tsx`
+  and other `Components/Forms/*` — the React equivalents of the old
+  `<x-backoffice.forms.*>` widgets.
+- **i18n**: `t()` from `resources/js/Lib/i18n.ts` (or the
+  `useTranslation()` hook wrapper) — reads `lang/fr.json` directly, the
+  SAME English-key/French-value dictionary Laravel's `__()` uses, so both
+  sides always agree. Every user-visible string in a React component goes
+  through `t('English key')`; add the French value to `lang/fr.json` in
+  the same change (missing keys fall back to the English key, never
+  throw).
+- **Loading states**: `useInertiaLoading()`
+  (`resources/js/Hooks/useInertiaLoading.ts`) — true while any Inertia
+  visit is in flight (global router start/finish listener, 200ms
+  minimum-visible floor); pass it as `DataTable`'s `loading` prop on list
+  pages so search/filter/pagination reloads show busy feedback.
 
-Livewire classes live in `App\Livewire\<Area>\<Module>\…`, views in
-`resources/views/livewire/<area>/…`.
+Client-side authorization is **UI convenience only** — hiding a nav item or
+disabling a button. Nav items filter on the shared `auth.permissions: string[]`
+Inertia prop (`resources/js/Config/backofficeNavigation.ts`), with
+`auth.isSuperAdmin` short-circuiting visibility for super-admins (who hold no
+direct permissions — Gate::before grants everything server-side); per-resource
+`CrudPermissions { create, update, delete }` are computed server-side per
+controller and passed as page props. Real enforcement is always the backend
+policy/`$user->can()` check inside the controller — never trust the client
+prop for anything security-relevant.
 
-## 6. Alpine rules
+## 6. No Alpine, no jQuery plugins
 
-Alpine is **bundled with Livewire 4 and auto-injected**. Therefore:
+Alpine.js, Select2, moment, daterangepicker, bootstrap-datetimepicker,
+feather, slimscroll — all were Livewire-era dependencies and have been fully
+removed (Phase 11). They must never come back:
 
-- Never `npm install alpinejs`, never `import Alpine`, never `Alpine.start()`,
-  never add an Alpine CDN `<script>`.
-- Never add `@livewireScripts`/`@livewireStyles` manually — auto-injection handles it.
-- Before adding any Alpine-related code, search the repo for existing
-  `import Alpine|Alpine.start|alpinejs` — there must be **zero** results outside vendor.
+- Never `npm install alpinejs`, never `import Alpine`, never add an Alpine
+  CDN `<script>`.
+- Never import jQuery or any jQuery plugin into `resources/js/` (backoffice
+  or frontoffice).
+- Before adding any Alpine/jQuery-flavored code, grep the repo for
+  `import Alpine|Alpine.start|alpinejs|jquery|select2|\$\(` under
+  `resources/js/` — there must be **zero** real results (doc-comment
+  mentions explaining they're intentionally absent are fine; actual imports
+  or calls are not).
 
-## 7. JavaScript plugin rules
+## 7. Frontoffice JavaScript rules
 
-The theme is jQuery-based (loaded statically by `<x-backoffice.layout.scripts />`).
-Core always-on plugins: jQuery, Bootstrap bundle, moment, daterangepicker, select2,
-bootstrap-datetimepicker, feather, slimscroll, `script.js`.
-
-- Page-specific plugin assets go through `@push('styles')` / `@push('scripts')`
-  in the page — never add more always-on scripts without need.
-- All initialisation goes through `initializeBackofficePlugins()` in
-  `resources/js/backoffice/app.js`, which runs on `DOMContentLoaded` **and**
-  `livewire:navigated`. Every initialiser must guard against double-init
-  (instance checks / `data-*` flags / `select2-hidden-accessible`).
-- Use `wire:ignore` only where a plugin must own its DOM (e.g. Select2 inside a
-  Livewire component) and **add a comment explaining why** at the usage site.
-- Theme appearance (dark mode, sidebar color, layout, localStorage persistence)
-  lives in `resources/js/backoffice/theme.js` + the
-  `<x-backoffice.layout.theme-settings />` component. The original
-  `theme-script.js` is kept as reference in `public/assets/preskool/js/` but is
-  **not loaded** — don't load it (it injects markup with broken paths).
-- **Select2 double-init fix (both parts load-bearing)**: every
-  `<x-backoffice.forms.select2>` field (modal fields AND `live inline` index
-  filters, app-wide) used to render a second, empty Select2 widget stacked
-  under the real one, on first page load, no interaction needed. Root cause:
-  `public/assets/preskool/js/script.js`'s generic on-ready initializer used
-  the selector `$('.select2')` — but Select2's own generated wrapper `<span>`
-  also carries the class `select2` (`<span class="select2 select2-container
-  ...">`), so once Alpine's `glsSelect2` (`resources/js/backoffice/app.js`)
-  had already built the real widget, that vendor script matched the freshly
-  built wrapper and called `.select2()` on it again. Fixed by narrowing that
-  selector to `select.select2:not(.select2-hidden-accessible)` (real,
-  not-yet-initialized `<select>`s only — no production view uses class
-  `select2` on a `<select>` today, only `theme-reference/`). This is a rare
-  sanctioned edit to the vendor copy in `public/assets/preskool/` (normally
-  read-only, §3) — a needed correction, not a redesign; re-apply it if the
-  theme assets are ever re-synced. `mountSelect2()` in `app.js` also sweeps
-  stray `:scope > .select2-container` siblings before every `$el.select2()`
-  call as defense-in-depth against any other double-init path. If a Select2
-  field ever shows a duplicate empty dropdown again, check `script.js`'s
-  selector first before touching `app.js`.
+The Frontoffice stays Blade + a minimal Vite entry
+(`resources/js/frontoffice/app.js`) — Bootstrap 5 (static) plus whatever
+Frontoffice-specific behavior is added as that area grows. No Alpine, no
+jQuery plugins there either. Theme appearance for the backoffice (dark mode,
+sidebar color, layout, localStorage persistence) now lives in the React
+`BackofficeLayout`/theme components, not a Blade `theme-settings` component.
 
 ### DataTables rule
 
 Large CRM lists (students, registrations, payments, employees, attendance,
-expenses) must use **Livewire server-side** pagination/search/sort/filtering with
-the PreSkool **table design** (`<x-backoffice.ui.table>`). Client-side DataTables
-is allowed only for small, genuinely static demo tables.
-
-### List filter rule
-
-Every index page's filters (select2 dropdowns, date-range inputs, search box,
-create button) render via **`<x-backoffice.ui.filter-bar>`**
-(`resources/views/components/backoffice/ui/filter-bar.blade.php`) as its own
-labeled, full-width row inside the card body — **never** cram them into
-`<x-backoffice.ui.card>`'s `x-slot:tools` (that slot sits in the card header
-next to the `<h4>` title, fighting it for space; with 2+ filters it wraps into
-an unlabeled, uneven stack — especially inside a narrower nested tab, e.g.
-Gestion des dépenses' tab panes). Pattern:
-
-```blade
-<x-backoffice.ui.card :title="__('Expenses')">
-    <x-backoffice.ui.filter-bar>
-        <x-backoffice.forms.select2 id="d-type-filter" model="typeFilter" live
-            :label="__('Expense type')" :placeholder="__('All expense types')">
-            …
-        </x-backoffice.forms.select2>
-        <x-backoffice.ui.filter-bar.date-field :label="__('From date')" model="dateFrom" />
-        <x-slot:search>
-            <div class="input-icon-start position-relative">
-                <span class="input-icon-addon"><i class="ti ti-search"></i></span>
-                <input type="text" class="form-control" wire:model.live.debounce.400ms="search" placeholder="{{ __('Search') }}">
-            </div>
-        </x-slot:search>
-        @can('create', \App\Models\Depense::class)
-            <x-slot:actions>…create button…</x-slot:actions>
-        @endcan
-    </x-backoffice.ui.filter-bar>
-```
-
-Every direct default-slot child is one labeled filter (select2 **without**
-`inline` — keep its own label; `filter-bar.date-field` for dates); `search`
-and `actions` are optional named slots rendered at the row's end, aligned
-right on desktop. Already applied to all 13 real list pages (Depenses,
-Remboursements, Encaissements, Students, Employees, Inscriptions, Users,
-Types de dépenses, Groups, Caisse Transfers, Roles, Caisses, Caisse Journal).
-Not used on `role-form.blade.php` / `manage-authorization.blade.php` — those
-are single-record edit forms, not lists, and their `tools` slots hold static
-badges, not filters.
+expenses) must use **Inertia server-side** pagination/search/sort/filtering
+(§5) with the PreSkool **table markup** (`resources/js/Components/Tables/DataTable.tsx`).
+Client-side DataTables (the jQuery plugin) is not used anywhere in the app.
 
 ## 8. Route naming rules
 
@@ -231,8 +210,7 @@ badges, not filters.
   `backoffice.students.create`, `backoffice.payments.index`, …
 - Frontoffice: `frontoffice.home`, `frontoffice.student.login`, …
 - Always link with `route('…')` — never hard-coded URLs.
-- Route files stay thin; no business logic in closures; controllers or Livewire
-  route components only.
+- Route files stay thin; no business logic in closures; controllers only.
 
 ## 9. Controller namespaces
 
@@ -249,8 +227,7 @@ controllers, Blade, or routes.
   `App\Http\Requests\Backoffice\Students\StoreStudentRequest`
 - `App\Http\Requests\Frontoffice\<Module>\…`
 
-All validation goes through Form Requests (or Livewire validation) — never inline
-in controllers.
+All validation goes through Form Requests — never inline in controllers.
 
 ## 11. Domain architecture
 
@@ -265,7 +242,7 @@ app/Domain/
 
 Inside a module, prefer `Actions` (single-purpose classes), `DTOs`, `Enums`,
 `Models`, `Services`. No premature repository pattern, no microservices.
-HTTP layer (controllers/requests/Livewire) calls Domain code — never the reverse.
+HTTP layer (controllers/requests) calls Domain code — never the reverse.
 
 ### Database layer (implemented — read the architecture docs first)
 
@@ -318,78 +295,86 @@ the database layer. Non-negotiable invariants already enforced in code:
 - Route naming: French resource slugs (`backoffice.etablissements.index`,
   `backoffice.annees-scolaires.*`, `backoffice.caisse-transfers.validate`…).
   ⚠ `caisses` needs `->parameters(['caisses' => 'caisse'])` (bad singularization).
-- CRUD Blade/Livewire screens for these resources are the NEXT phase — routes,
-  controllers, requests, models, seeders are done; controllers reference
-  `backoffice.<resource>.<action>` views that do not exist yet.
-- **Employees & Users CRUD are Livewire pages with modal add/edit** (not
-  separate create/edit pages). Employees: `backoffice.employees.index`
-  (`Employees\EmployeesIndex`) — modal add/edit, the one-time login credentials
-  are shown after creation (EmployeeObserver auto-creates the User), delete is
-  blocked when the employee has activity. `Employee::CATEGORIES` is the 10-value
-  screenshot list (Directeur, Commercial, Enseignant, Comptable, Responsable
-  Marketing, Assistante administrative, Directeur des opérations, Directrice
-  pédagogique, Directeur Qualité et Amélioration continue, Autre). Users:
-  `backoffice.users.index` (`Users\UsersIndex`) — edit-only modal (name/email/
-  username, `is_active` toggle, password regeneration); users are NEVER created
-  here (they come from employees). Role assignment stays on
-  `backoffice.users.authorization.edit`. Own profile:
-  `backoffice.profile` (`Profile\ProfilePage`) — the signed-in user edits their
-  own info + changes password (behind `auth`, no permission gate); the header
-  "Profil" link points here. Livewire modals are Alpine-driven
-  (`x-data="{ show: @entangle('showModal') }"`), not Bootstrap-JS. Tests:
-  `tests/Feature/Backoffice/People/`, `ProfileTest`.
+- **Every CRUD module is an Inertia+React list page with a modal add/edit**
+  (not separate create/edit pages) — routes, controllers, requests, models,
+  seeders, and the React `Index.tsx` pages are all done (Phase 11 completed
+  the full Livewire→Inertia migration; no Livewire remains anywhere).
+  Employees: `backoffice.employees.index`
+  (`Backoffice\Employees\EmployeeController`) — modal add/edit
+  (`resources/js/Pages/Backoffice/Employees/Index.tsx`), the one-time login
+  credentials are shown after creation (EmployeeObserver auto-creates the
+  User), delete is blocked when the employee has activity.
+  `Employee::CATEGORIES` is the 10-value screenshot list (Directeur,
+  Commercial, Enseignant, Comptable, Responsable Marketing, Assistante
+  administrative, Directeur des opérations, Directrice pédagogique, Directeur
+  Qualité et Amélioration continue, Autre). Users: `backoffice.users.index`
+  (`Backoffice\Users\UserController`) — edit-only modal (name/email/username,
+  `is_active` toggle, password regeneration); users are NEVER created here
+  (they come from employees). Role assignment stays on
+  `backoffice.users.authorization.edit`
+  (`Backoffice\Users\UserAuthorizationController`). Own profile:
+  `backoffice.profile` (`Backoffice\ProfileController`) — the signed-in user
+  edits their own info + changes password (behind `auth`, no permission
+  gate); the header "Profil" link points here. Modals are React state, not
+  Alpine/Bootstrap-JS (§3/§5). Tests: `tests/Feature/Backoffice/People/`,
+  `tests/Feature/Backoffice/Inertia/ProfileInertiaTest.php`.
 - **Frais catalog → Groups → Inscriptions fee chain** (the pic-3 flow):
-  a managed **`frais`** catalog (Paramètres → Frais tab, `Settings\FraisTab`,
+  a managed **`frais`** catalog (Paramètres → Frais tab, `FraisController`,
   `fees.*` permissions, `FraisPolicy`) holds predefined fees with a default
-  amount. **Groups** (`backoffice.groups.index`, `Groups\GroupsIndex` — modal
+  amount. **Groups** (`backoffice.groups.index`, `GroupController` — modal
   CRUD; detail `groups.show`; archive via POST `groups.archive` →
   `Group::archiverCommeTermine`, never deleted) **assign catalog fees** via the
   **`group_frais`** pivot (per-group `montant` **and `date_echeance`** — same
   fee can have a different amount + due date per group). When enrolling
-  (`InscriptionsIndex`), selecting a group loads **its** assigned fees as
+  (Inscriptions `Index.tsx`), selecting a group loads **its** assigned fees as
   "Frais disponibles" (checkbox + montant_initial + **remise %/DH** + note +
   a due date pre-filled from the group's per-fee `date_echeance` +
   final montant + échéance); `inscription_fees` carries
   `frais_id/montant_initial/remise_pct/remise_montant/note` and
   `InscriptionFee::computeMontant()` derives the final `montant`
   (pct first, else fixed DH). Starter catalog: `FraisSeeder`. Tests:
-  `tests/Feature/Backoffice/Groups/`, updated `Inscriptions/`.
-- **Étudiants & Inscriptions CRUD are Livewire pages with modal add/edit**
-  (same Alpine modal pattern as Employees). Students:
-  `backoffice.students.index` (`Students\StudentsIndex`) — modal with photo
-  upload (media `photo` collection, `/media/<uuid8>/…` URLs), niveau (CEFR) +
-  center filters, center-scoped via `CenterAccessService`/`StudentPolicy`; the
-  read-only detail page is `backoffice.students.show`
-  (`StudentController@show`) showing info + inscriptions + payments. Inscriptions:
-  `backoffice.inscriptions.index` (`Inscriptions\InscriptionsIndex`) — modal with
-  student+group selects and **manual fee lines** (repeatable rows added in one
-  transaction; `montant_total` = sum of fees; `etablissement_id`/`annee_scolaire_id`
-  inherited from the group); list is scoped to the active academic year from the
-  context switcher; detail page `backoffice.inscriptions.show` shows fee lines +
-  payment summary (dû/payé/reste). Both pages have no destroy route surprises —
-  delete is guarded (activity history / payments block it). Tests:
-  `tests/Feature/Backoffice/Students/`, `tests/Feature/Backoffice/Inscriptions/`.
-- **Active working context** (selected académic year + center): every screen is
-  scoped to `App\Services\Context\CurrentContext` (session-backed singleton,
-  shared to all views as `$context`). Top-bar switchers
-  (`App\Livewire\Backoffice\Context\ContextSwitcher`) persist the choice and
-  dispatch `context-changed`; context-aware widgets (e.g.
-  `Dashboard\DashboardStats`) listen via `#[On('context-changed')]` and refresh
-  live. Center switching is permission-aware — only `centers.access-all` users
-  can change center or pick "Tous les centres"; others are locked to their
-  employee's `etablissement_id`. The header no longer has the language or
-  notification dropdowns. Seed data: `ReferentialDataSeeder` (years 2024/2025 +
-  2025/2026-default, 7 GLS branches, 2 rooms each). Tests:
-  `tests/Feature/Backoffice/Context/`.
+  `tests/Feature/Backoffice/Groups/`, `Inscriptions/`.
+- **Étudiants & Inscriptions CRUD** (same React modal pattern as Employees).
+  Students: `backoffice.students.index` (`Backoffice\StudentController`) —
+  modal with photo upload (media `photo` collection, `/media/<uuid8>/…`
+  URLs), niveau (CEFR) + center filters, center-scoped via
+  `CenterAccessService`/`StudentPolicy`; the read-only detail page is
+  `backoffice.students.show` (`StudentController@show`) showing info +
+  inscriptions + payments. Inscriptions: `backoffice.inscriptions.index`
+  (`Backoffice\InscriptionController`) — modal with student+group selects and
+  **manual fee lines** (repeatable rows added in one transaction;
+  `montant_total` = sum of fees; `etablissement_id`/`annee_scolaire_id`
+  inherited from the group); list is scoped to the active academic year from
+  the context switcher; detail page `backoffice.inscriptions.show` shows fee
+  lines + payment summary (dû/payé/reste). Both pages have no destroy route
+  surprises — delete is guarded (activity history / payments block it).
+  Tests: `tests/Feature/Backoffice/Students/`, `Inscriptions/`.
+- **Active working context** (selected académic year + center): every screen
+  is scoped to `App\Services\Context\CurrentContext` (session-backed
+  singleton, shared to every Inertia page via the `context` shared prop, see
+  `App\Http\Middleware\HandleInertiaRequests`). The top-bar switcher
+  (`resources/js/Components/Context/ContextSwitcher.tsx`) posts to
+  `backoffice.context.update` (`ContextController@update`), which persists
+  the choice through `CurrentContext` and redirects back; context-aware
+  widgets (e.g. the dashboard stat cards,
+  `resources/js/Pages/Backoffice/Dashboard/Index.tsx`) simply re-render on
+  the next Inertia navigation/reload, since context lives server-side in the
+  session, not in client state. Center switching is permission-aware — only
+  `centers.access-all` users can change center or pick "Tous les centres";
+  others are locked to their employee's `etablissement_id`. The header no
+  longer has the language or notification dropdowns. Seed data:
+  `ReferentialDataSeeder` (years 2024/2025 + 2025/2026-default, 7 GLS
+  branches, 2 rooms each). Tests: `tests/Feature/Backoffice/Context/`,
+  `tests/Feature/Backoffice/Inertia/ContextUpdateTest.php`.
 - **Referential data (établissements, années scolaires, salles) is managed via
   the tabbed Paramètres page** — route `backoffice.settings`
-  (`SettingController`), view `backoffice/settings/index.blade.php`, one Livewire
-  CRUD tab each under `App\Livewire\Backoffice\Settings\*Tab`. Access = ANY of
-  `centers.view`/`academic-years.view`/`rooms.view`; each tab + its mutations are
-  gated by that resource's own permissions (authorize in `mount()` AND every
-  mutation). The old `backoffice.{etablissements,annees-scolaires,salles}.*`
-  resource routes are kept as permission-protected endpoints but the Settings
-  tabs are the primary UI. Tests: `tests/Feature/Backoffice/Settings/`.
+  (`SettingController`), one React panel per tab under
+  `resources/js/Pages/Backoffice/Settings/{Etablissements,AnneesScolaires,Salles,Frais}Panel.tsx`.
+  Access = ANY of `centers.view`/`academic-years.view`/`rooms.view`; each tab
+  + its mutations are gated by that resource's own permissions (authorize in
+  the controller AND every mutation). The `backoffice.{etablissements,
+  annees-scolaires,salles}.*` resource routes remain as permission-protected
+  endpoints the Settings tabs call into. Tests: `tests/Feature/Backoffice/Settings/`.
 
 ## 12. Theme design preservation
 
@@ -441,7 +426,8 @@ C:\php84\php.exe artisan make:…
 3. `C:\php84\php.exe artisan route:list` shows correctly named routes.
 4. Affected pages render (serve + open, or HTTP-request the route) with theme
    CSS/JS/img URLs resolving (no 404s in the network tab / no broken `build/…` paths).
-5. No duplicate-Alpine console errors; no JS errors introduced.
+5. No console errors introduced (React warnings, hydration mismatches, etc.).
+   Also run `npx tsc --noEmit` — no TypeScript errors.
 6. New files are in the correct area (Backoffice vs Frontoffice) and namespace.
 7. `theme-reference/` untouched (`git status` shows no changes there).
 8. User-facing strings wrapped in `__('…')`.
@@ -489,9 +475,10 @@ Teams OFF (employees have ONE center). Non-negotiable rules:
 
 - **Authorization is server-side**: routes use `permission:` middleware,
   resource controllers use policies (`authorizeResource` — base Controller
-  extends `Illuminate\Routing\Controller` for this), Livewire components
-  authorize in `mount()` AND in every mutation method. `@can` in Blade is
-  UI convenience only.
+  extends `Illuminate\Routing\Controller` for this) and authorize again in
+  every mutation method. Any permission/role data passed to a React page as
+  an Inertia prop (e.g. `CrudPermissions`, `auth.permissions`) is UI
+  convenience only — it hides/disables affordances, never a real gate.
 - **Check permissions, never role names** (`can('students.view')`). The only
   `hasRole()` usages allowed: the `Gate::before` super-admin bypass and the
   super-admin invariants in `UserAuthorizationService`.
@@ -511,8 +498,8 @@ Teams OFF (employees have ONE center). Non-negotiable rules:
   immutable after creation. Role/permission mutations go through
   `UserAuthorizationService` (transaction + activity log `authorization`).
 - UI: `backoffice.roles.*`, `backoffice.users.index`,
-  `backoffice.users.authorization.edit`, `backoffice.permissions.index`
-  (Livewire 4 + PreSkool; permissions page is read-only Blade).
+  `backoffice.users.authorization.edit`, `backoffice.permissions.index` —
+  all Inertia + React + PreSkool; permissions page is read-only.
 - Tests live in `tests/Feature/Backoffice/Authorization/` — keep green; never
   weaken a 403 assertion to make a feature pass.
 
@@ -701,17 +688,22 @@ When Laravel and PostgreSQL run on the same VPS:
 ### Performance rules
 
 PostgreSQL does not automatically solve application-level inefficiencies.
-Continue to measure query counts, duplicate queries, Livewire renders,
-unpaginated collections, eager component mounting, large Select2 option
-lists, and PHP-side sorting/merging — see `PERFORMANCE_AUDIT.md` and
-`PERFORMANCE_OPTIMIZATION_REPORT.md` for the established methodology.
+Continue to measure query counts, duplicate queries, unpaginated
+collections, and PHP-side sorting/merging — see `PERFORMANCE_AUDIT.md`,
+`PERFORMANCE_OPTIMIZATION_REPORT.md`, and
+`docs/phase-11-performance-baseline.md` for the established methodology
+(the first two predate the Inertia+React migration and use Livewire-era
+terminology like "Livewire renders"/"Select2 option lists" in their own
+historical measurements — read them as a record of what was measured then,
+not as current-state facts).
 
-The known remaining bottleneck is `CaisseJournal`
-(`app/Livewire/Backoffice/Caisses/CaisseJournal.php`), which currently merges
-four tables' finance records in PHP with no SQL-level pagination and should
-eventually move to a PostgreSQL `UNION ALL` with database pagination — flagged
-in both performance documents, intentionally deferred as out-of-scope for
-those passes.
+The known remaining bottleneck is `CaisseController::journal()`
+(`app/Http/Controllers/Backoffice/CaisseController.php`, the Inertia
+successor to the old `CaisseJournal` Livewire component), which currently
+merges four tables' finance records in PHP with no SQL-level pagination and
+should eventually move to a PostgreSQL `UNION ALL` with database pagination
+— flagged in both performance documents, intentionally deferred as
+out-of-scope for those passes and for Phase 11.
 
 ### PostgreSQL extensions (not currently installed — future tools only)
 
