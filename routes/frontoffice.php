@@ -17,8 +17,8 @@ use Illuminate\Support\Facades\Route;
 | phase). The public home page lives at /home; when the Frontoffice is
 | launched, swap the redirect for the home page again.
 |
-| Keep this file thin: point to controllers or Livewire route components.
-| Never place business logic in closures.
+| Keep this file thin: point to controllers only. Never place business
+| logic in closures.
 |
 */
 

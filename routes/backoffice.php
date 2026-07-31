@@ -40,12 +40,12 @@ use Illuminate\Support\Facades\Route;
 | URL prefix : /backoffice
 | Name prefix: backoffice.
 |
-| Keep this file thin: point to controllers or Livewire route components.
-| Never place business logic in closures.
+| Keep this file thin: point to controllers only. Never place business
+| logic in closures.
 |
-| Pattern: each module is a Livewire index (list + modal CRUD); controllers
-| serve read-only detail pages only. Money records (encaissements, depenses,
-| remboursements, transferts) have NO destroy route — ever.
+| Pattern: each module is an Inertia+React list/modal CRUD page backed by
+| a thin controller. Money records (encaissements, depenses, remboursements,
+| transferts) have NO destroy route — ever.
 |
 */
 

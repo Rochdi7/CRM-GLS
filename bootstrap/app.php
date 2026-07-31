@@ -26,9 +26,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
         ]);
 
-        // Inertia + React migration (docs/inertia-react-migration-plan.md).
-        // Coexists with Livewire/Blade throughout the migration — this only
-        // shares props on requests Inertia actually serves.
+        // Inertia + React (docs/inertia-react-migration-plan.md) — shares
+        // props on requests Inertia actually serves.
         $middleware->web(append: [
             HandleInertiaRequests::class,
         ]);
