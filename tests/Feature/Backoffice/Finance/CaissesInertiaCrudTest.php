@@ -50,6 +50,9 @@ final class CaissesInertiaCrudTest extends TestCase
             ->get(route('backoffice.caisses.index'))
             ->assertForbidden();
 
+        // Phase 12: only the ACTIVE tab's heavy dataset is computed per
+        // request (every tab switch is a real ?tab=… visit). Default tab
+        // for a cash-registers viewer is "ma-caisse" → journalMine only.
         $this->actingAs($this->userWith('cash-registers.view'))
             ->get(route('backoffice.caisses.index'))
             ->assertOk()
@@ -57,12 +60,24 @@ final class CaissesInertiaCrudTest extends TestCase
                 ->component('Backoffice/Caisses/Index', false)
                 ->where('canViewCaisses', true)
                 ->where('canViewTransfers', false)
-                ->has('caisses')
                 ->has('journalMine')
-                ->has('journalAll')
+                ->where('journalAll', null)
+                ->where('caisses', null)
                 ->where('transfers', null)
             );
 
+        // Each other tab computes exactly its own dataset.
+        $this->actingAs($this->userWith('cash-registers.view'))
+            ->get(route('backoffice.caisses.index', ['tab' => 'journal']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('journalMine', null)->has('journalAll')->where('caisses', null));
+
+        $this->actingAs($this->userWith('cash-registers.view'))
+            ->get(route('backoffice.caisses.index', ['tab' => 'comptes']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('journalMine', null)->where('journalAll', null)->has('caisses'));
+
+        // A transfers-only user defaults to the transferts tab.
         $this->actingAs($this->userWith('cash-transfers.view'))
             ->get(route('backoffice.caisses.index'))
             ->assertOk()
@@ -86,7 +101,8 @@ final class CaissesInertiaCrudTest extends TestCase
         Caisse::factory()->create(['nom' => 'Caisse Ici', 'etablissement_id' => $this->centre->id]);
         Caisse::factory()->create(['nom' => 'Caisse Ailleurs', 'etablissement_id' => $autre->id]);
 
-        $response = $this->get(route('backoffice.caisses.index'));
+        // The tills dataset is only computed on its own tab (Phase 12).
+        $response = $this->get(route('backoffice.caisses.index', ['tab' => 'comptes']));
         $names = collect($response->viewData('page')['props']['caisses']['data'])->pluck('nom');
         $this->assertTrue($names->contains('Caisse Ici'));
         $this->assertFalse($names->contains('Caisse Ailleurs'));

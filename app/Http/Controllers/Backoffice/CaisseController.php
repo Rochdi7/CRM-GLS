@@ -42,33 +42,52 @@ final class CaisseController extends Controller
         GetCaisseTransfersList $getCaisseTransfersList,
     ): Response {
         $user = $request->user();
-        abort_unless($user->canAny(['cash-registers.view', 'cash-transfers.view']), 403);
+        $canViewCaisses = $user->can('cash-registers.view');
+        $canViewTransfers = $user->can('cash-transfers.view');
+        abort_unless($canViewCaisses || $canViewTransfers, 403);
 
         $activeCenterId = app(CurrentContext::class)->etablissementId();
 
+        // Every tab switch is a real Inertia visit (?tab=…, the React page's
+        // switchTab), so only the ACTIVE tab's heavy dataset is computed per
+        // request — the four panels each null-guard their prop client-side.
+        // Before this gating the page ran ~40 queries per load/switch (both
+        // journal scopes + tills + transfers at once); now ~15
+        // (Phase 12, docs/phase12-performance-report.md).
+        $tab = (string) $request->query('tab', $canViewCaisses ? 'ma-caisse' : 'transferts');
+        $validTabs = [
+            ...($canViewCaisses ? ['ma-caisse', 'journal', 'comptes'] : []),
+            ...($canViewTransfers ? ['transferts'] : []),
+        ];
+        if (! in_array($tab, $validTabs, true)) {
+            $tab = $canViewCaisses ? 'ma-caisse' : 'transferts';
+        }
+
         return Inertia::render('Backoffice/Caisses/Index', [
-            'canViewCaisses' => $user->can('cash-registers.view'),
-            'canViewTransfers' => $user->can('cash-transfers.view'),
-            'journalMine' => $user->can('cash-registers.view')
+            'canViewCaisses' => $canViewCaisses,
+            'canViewTransfers' => $canViewTransfers,
+            'journalMine' => $canViewCaisses && $tab === 'ma-caisse'
                 ? $getCaisseJournal($user, 'mine', '', '', '', 1)
                 : null,
-            'journalAll' => $user->can('cash-registers.view')
+            'journalAll' => $canViewCaisses && $tab === 'journal'
                 ? $getCaisseJournal($user, 'all', '', '', '', 1)
                 : null,
-            'caisses' => $user->can('cash-registers.view')
+            'caisses' => $canViewCaisses && $tab === 'comptes'
                 ? $getCaissesList($user, $activeCenterId)
                 : null,
-            'etablissements' => $user->can('cash-registers.view')
+            // Small option lists stay unconditional — the page reads them at
+            // component top level (not inside a tab panel).
+            'etablissements' => $canViewCaisses
                 ? $getCaissesList->etablissementOptions($user)
                 : [],
             'statuts' => Caisse::STATUTS,
-            'transfers' => $user->can('cash-transfers.view')
+            'transfers' => $canViewTransfers && $tab === 'transferts'
                 ? $getCaisseTransfersList($user)
                 : null,
-            'transferStatutCounts' => $user->can('cash-transfers.view')
+            'transferStatutCounts' => $canViewTransfers && $tab === 'transferts'
                 ? $getCaisseTransfersList->statutCounts($user)
                 : [],
-            'transferCaisses' => $user->can('cash-transfers.view')
+            'transferCaisses' => $canViewTransfers
                 ? $getCaisseTransfersList->caisseOptions($user)
                 : [],
             'transferStatuts' => CaisseTransfer::STATUTS,
