@@ -50,8 +50,19 @@ to this log and to `docs/inertia-react-migration-{plan,audit}.md`; fixed
 restored the `inertia: true` flag / previously-hidden Finance nav items
 (Cash management, Expense management, Expense types) that were leftover
 from earlier phases despite their routes being fully working Inertia pages.
-Manual browser verification (`docs/phase-11-manual-browser-checklist.md`)
-remains explicitly PENDING — no browser access in this session.
+**Wrap-up addendum (same date):** the concurrent UX/i18n frontend refactor
+was reviewed, verified, and committed as three focused commits (`9538a9a`
+i18n + loading states, `8505777` super-admin nav visibility, `ec6f5bc`
+seeder/faker-locale); the three Finance sidebar items (Cash management /
+Expense management / Expense types) were re-exposed after verifying every
+enablement condition (`b080265`); the final combined test suite passed
+**307/307 (1531 assertions)** in a single process with no stall; and a
+real-browser Playwright/Chromium smoke pass covered every module — 25/25
+checks as super-admin (0 console errors, 0 failed requests) and 7/7 as a
+limited-role teacher (sidebar gating + real 403s confirmed). Only
+visual-only checklist items (dark mode, RTL, mobile widths) remain manual
+— see `docs/phase-11-manual-browser-checklist.md`. Final report:
+`docs/phase-11-livewire-cleanup-report.md` — **PHASE 11 COMPLETE**.
 
 ## Phase 10 — Finance migration (Caisses, Encaissements, Dépenses, Remboursements, Transferts)
 

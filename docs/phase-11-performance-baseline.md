@@ -115,6 +115,13 @@ performance pass, not a Phase 11 cleanup task.
 | app-*.js (main bundle) | 529.14 KB | 139.91 KB |
 | app-*.css | ~0 KB (Tailwind-free, Bootstrap loaded statically) | — |
 
+**Post-wrap-up update:** after the UX/i18n refactor landed (commit
+`9538a9a` — `lang/fr.json` is now bundled into the JS for the client-side
+`t()` helper, plus the loading/jump-to-page hooks), the main bundle is
+**566.91 KB / 152.76 KB gzip** (+12.9 KB gzip vs. the figure above). The
+delta is almost entirely the French dictionary; if it ever matters,
+splitting the dictionary into its own chunk is the obvious lever.
+
 No pre-Livewire-removal Inertia-only bundle size was recorded in earlier
 phases to compare against (Phase 9/10's bundle-size figures were for the
 Blade/Livewire asset shell, a different measurement — see

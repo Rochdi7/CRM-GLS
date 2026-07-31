@@ -1,14 +1,35 @@
 # Phase 11J — Manual Browser Checklist
 
-**Status: PENDING — not performed.** This session has no browser access (no
-`artisan serve` + interactive browser, no Playwright/headless runner wired
-in). This document is the checklist a human (or a future session with
-browser tooling) must run through before Phase 11 can be considered fully
-signed off end-to-end. Automated coverage (PHPUnit/Inertia assertions,
-TypeScript compilation, Vite build) has already confirmed correctness at
-the HTTP/data layer — see `docs/phase-11-final-verification.md` — but none
-of that observes actual rendering, client-side interactivity, or visual
-regressions, which is exactly what this checklist is for.
+**Status: SMOKE-VERIFIED via headless Chromium (Playwright); visual/theme
+items remain manual.** A real-browser smoke pass was executed against
+`artisan serve` + the production build (2026-07-31, final Phase 11
+wrap-up):
+
+- **Super-admin walk (25/25 checks passing, 0 console errors, 0 failed
+  requests):** login → dashboard redirect; all 13 module pages load
+  (Dashboard, Students, Inscriptions, Groups, Employees, Users, Settings,
+  Roles, Permissions, Caisses, Encaissements, Dépenses, Types de
+  dépenses) with hydrated React content and no error text; all 3
+  newly-exposed Finance sidebar items visible; sidebar SPA navigation
+  confirmed (in-page JS state survives a nav — no full reload); Students
+  debounced search reaches the server and renders the empty-result state;
+  Students create modal opens, closes on Escape, and reopens; direct
+  refresh on a deep page re-hydrates; browser back/forward restores the
+  right pages; the legacy `/backoffice/caisse-transfers` URL lands on
+  `/backoffice/caisses?tab=transferts`.
+- **Limited-role walk (teacher account, 7/7 checks passing):** login
+  works; sidebar hides Roles and the entire Finance group; sidebar shows
+  Groups; direct navigation to `/backoffice/roles` and
+  `/backoffice/caisses` returns real 403s; Groups page loads normally.
+  (The only console entries were the browser logging those two
+  deliberately-triggered 403 responses — expected denial behavior.)
+
+**Still genuinely manual (not smoke-covered):** dark-mode rendering, RTL
+(Arabic) layout, mobile-width sidebar behavior, and pixel-level visual
+regressions — a headless functional pass does not judge visuals. The
+checklist below remains the reference for that human pass; the functional
+rows it contains are now additionally backed by the automated smoke run
+described above.
 
 ## How to run this checklist
 
