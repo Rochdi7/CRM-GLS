@@ -6,52 +6,130 @@ namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Payments\Actions\EnregistrerEncaissement;
 use App\Domain\Payments\Queries\GetEncaissementDetails;
-use App\Http\Controllers\Backoffice\Concerns\ResolvesActingEmployee;
+use App\Domain\Payments\Queries\GetEncaissementsList;
+use App\Domain\Payments\Queries\GetInscriptionUnpaidFees;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Encaissements\StoreEncaissementRequest;
 use App\Http\Requests\Backoffice\Encaissements\UpdateEncaissementRequest;
 use App\Models\Encaissement;
-use Illuminate\Contracts\View\View;
+use App\Models\Inscription;
+use App\Models\InscriptionFee;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * ⚠ No destroy(): a recorded payment is never deleted — corrections go
- * through a remboursement + new encaissement so the money trail stays intact.
+ * Payments list + create/edit with the cascading multi-row payment form
+ * (Phase 10, docs/phase-10-finance-audit.md §2.4) — mirrors
+ * EncaissementsIndex one-for-one, including the multi-row single-submit
+ * DB::transaction (an invalid row rolls back every row already processed in
+ * this submit) and the per-row `fee->inscription_id === inscription_id`
+ * ownership check. No destroy(): a recorded payment is never deleted —
+ * corrections go through a remboursement + new encaissement.
  */
 final class EncaissementController extends Controller
 {
-    use ResolvesActingEmployee;
-
     public function __construct()
     {
         $this->authorizeResource(Encaissement::class, 'encaissement');
     }
 
-    public function index(): View
-    {
-        return view('backoffice.encaissements.index', [
-            'encaissements' => Encaissement::query()
-                ->with(['student', 'fee.inscription', 'caisse', 'agent'])
-                ->latest()
-                ->paginate(15),
+    public function index(
+        Request $request,
+        GetEncaissementsList $getEncaissementsList,
+    ): Response {
+        $search = (string) $request->string('search');
+        $caisseFilter = (string) $request->string('caisseFilter');
+        $methodeFilter = (string) $request->string('methodeFilter');
+        $dateFrom = (string) $request->string('dateFrom');
+        $dateTo = (string) $request->string('dateTo');
+        $perPage = (int) $request->integer('perPage', GetEncaissementsList::DEFAULT_PER_PAGE);
+
+        return Inertia::render('Backoffice/Encaissements/Index', [
+            'encaissements' => $getEncaissementsList($request->user(), $search, $caisseFilter, $methodeFilter, $dateFrom, $dateTo, $perPage),
+            'caisses' => $getEncaissementsList->caisseOptions($request->user()),
+            'students' => $getEncaissementsList->studentOptions($request->user()),
+            'methodes' => Encaissement::METHODES,
+            'filters' => [
+                'search' => $search,
+                'caisseFilter' => $caisseFilter,
+                'methodeFilter' => $methodeFilter,
+                'dateFrom' => $dateFrom,
+                'dateTo' => $dateTo,
+                'perPage' => $perPage,
+            ],
         ]);
     }
 
-    public function create(): View
+    /**
+     * Cascade step 1→2 lookup: a student's registrations, then (via
+     * inscriptionFees()) one row per unpaid fee — mirrors
+     * EncaissementsIndex::updatedStudentId()/updatedInscriptionId().
+     */
+    public function studentInscriptions(Request $request, int $student, GetEncaissementsList $getEncaissementsList): JsonResponse
     {
-        return view('backoffice.encaissements.create');
+        $this->authorize('create', Encaissement::class);
+
+        return response()->json(['inscriptions' => $getEncaissementsList->studentInscriptions($student)]);
+    }
+
+    public function inscriptionFees(Inscription $inscription, GetInscriptionUnpaidFees $getInscriptionUnpaidFees): JsonResponse
+    {
+        $this->authorize('create', Encaissement::class);
+
+        return response()->json(['fees' => $getInscriptionUnpaidFees($inscription)]);
     }
 
     public function store(StoreEncaissementRequest $request, EnregistrerEncaissement $action): RedirectResponse
     {
-        // Domain action: creates the payment, increments caisses.solde and
-        // recomputes the fee statut in ONE transaction.
-        $action->handle($request->validated(), $this->actingEmployee($request));
+        $agent = $request->user()->employee;
+
+        if ($agent === null) {
+            throw ValidationException::withMessages([
+                'caisse_id' => __('Your account is not linked to any employee record.'),
+            ]);
+        }
+
+        $data = $request->validated();
+        $inscriptionId = (int) $data['inscription_id'];
+
+        $touchedLines = collect($data['payment_lines'])->filter(fn ($l) => ($l['montant'] ?? '') !== '');
+
+        DB::transaction(function () use ($touchedLines, $data, $inscriptionId, $agent, $action): void {
+            foreach ($touchedLines as $line) {
+                $fee = InscriptionFee::findOrFail($line['fee_id']);
+
+                // A tampered client could inject a fee id belonging to a
+                // different registration — refused exactly like
+                // EncaissementsIndex::save()'s own inline guard, rolling
+                // back every row already processed in this submit.
+                if ($fee->inscription_id !== $inscriptionId) {
+                    throw ValidationException::withMessages([
+                        'payment_lines' => __('One of the selected fees does not belong to this registration.'),
+                    ]);
+                }
+
+                $action->handle([
+                    'student_id' => $data['student_id'],
+                    'inscription_fee_id' => $fee->id,
+                    'montant' => $line['montant'],
+                    'methode' => $line['methode'],
+                    'date_paiement' => $line['date_paiement'],
+                    'caisse_id' => $data['caisse_id'],
+                    'numero_cheque' => $line['methode'] === Encaissement::METHODE_CHEQUE ? ($data['numero_cheque'] ?? null) : null,
+                    'banque' => $line['methode'] === Encaissement::METHODE_CHEQUE ? ($data['banque'] ?? null) : null,
+                    'date_echeance_cheque' => $line['methode'] === Encaissement::METHODE_CHEQUE ? ($data['date_echeance_cheque'] ?? null) : null,
+                    'note' => $data['note'] ?? null,
+                ], $agent);
+            }
+        });
 
         return redirect()->route('backoffice.encaissements.index')
-            ->with('status', __('Paiement enregistré.'));
+            ->with('success', __('Payment recorded.'));
     }
 
     public function show(Encaissement $encaissement, GetEncaissementDetails $getEncaissementDetails): Response
@@ -61,11 +139,6 @@ final class EncaissementController extends Controller
         ]);
     }
 
-    public function edit(Encaissement $encaissement): View
-    {
-        return view('backoffice.encaissements.edit', ['encaissement' => $encaissement]);
-    }
-
     public function update(UpdateEncaissementRequest $request, Encaissement $encaissement): RedirectResponse
     {
         // montant / caisse_id are not editable (see UpdateEncaissementRequest);
@@ -73,6 +146,6 @@ final class EncaissementController extends Controller
         $encaissement->update($request->validated());
 
         return redirect()->route('backoffice.encaissements.index')
-            ->with('status', __('Paiement mis à jour.'));
+            ->with('success', __('Payment updated.'));
     }
 }
