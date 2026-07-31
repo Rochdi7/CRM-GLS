@@ -8,7 +8,6 @@ use App\Http\Controllers\Backoffice\Auth\LoginController;
 use App\Http\Controllers\Backoffice\Auth\LogoutController;
 use App\Http\Controllers\Backoffice\Auth\ResetPasswordController;
 use App\Http\Controllers\Backoffice\CaisseController;
-use App\Http\Controllers\Backoffice\CaisseManagementController;
 use App\Http\Controllers\Backoffice\CaisseTransferController;
 use App\Http\Controllers\Backoffice\ContextController;
 use App\Http\Controllers\Backoffice\DashboardController;
