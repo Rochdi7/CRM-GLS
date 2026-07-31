@@ -72,8 +72,10 @@ final class DemoDataSeeder extends Seeder
         $teachers = [];
 
         foreach ($names as $i => [$prenom, $nom]) {
-            // user_id is set so the observer does NOT auto-create a login for demo staff.
-            $teachers[] = Employee::query()->create([
+            // user_id left null: EmployeeObserver auto-creates a login whose
+            // name/username/email are derived from the employee's own name
+            // (EmployeeCredentialService) — never a randomized Faker identity.
+            $employee = Employee::query()->create([
                 'reference' => ReferenceGenerator::make('EMP', 'employees'),
                 'nom' => $nom,
                 'prenom' => $prenom,
@@ -82,8 +84,13 @@ final class DemoDataSeeder extends Seeder
                 'statut' => Employee::STATUT_ACTIF,
                 'telephone' => '06'.random_int(10000000, 99999999),
                 'etablissement_id' => $centres[$i % count($centres)],
-                'user_id' => \App\Models\User::factory()->create()->id,
             ]);
+
+            // Grant the 'teacher' role so this demo login's sidebar isn't
+            // empty — the observer creates the User but assigns no role.
+            $employee->user?->syncRoles(['teacher']);
+
+            $teachers[] = $employee;
         }
 
         return $teachers;
