@@ -35,6 +35,7 @@ final class UpdateDepenseRequest extends FormRequest
             'description' => ['nullable', 'string', 'max:255'],
             'mots_cles' => ['nullable', 'string', 'max:255'],
             'note' => ['nullable', 'string'],
+            'justificatifs.*' => ['file', 'mimes:jpeg,jpg,png,webp,pdf', 'max:5120'],
         ];
     }
 }

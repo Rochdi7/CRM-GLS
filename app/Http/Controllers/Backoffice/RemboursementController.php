@@ -5,69 +5,56 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Finance\Actions\EnregistrerRemboursement;
-use App\Http\Controllers\Backoffice\Concerns\ResolvesActingEmployee;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Remboursements\StoreRemboursementRequest;
 use App\Http\Requests\Backoffice\Remboursements\UpdateRemboursementRequest;
 use App\Models\Remboursement;
-use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Validation\ValidationException;
 
 /**
- * ⚠ No destroy(): a recorded refund is never deleted (audit trail).
+ * Refund create/edit (Phase 10, docs/phase-10-finance-audit.md §2.6) —
+ * mirrors RemboursementsIndex one-for-one. The list itself is served by
+ * DepenseController@index (Remboursements shares its tabbed page with
+ * Dépenses, matching the former Livewire-tab Blade shell exactly) — this
+ * controller only handles the two mutations. No destroy(): a recorded
+ * refund is never deleted (audit trail). No show(): Remboursements has zero
+ * detail page anywhere in the live app and this phase does not add one
+ * (docs/phase-10-finance-mapping.md Q2). No maximum-refund-amount check is
+ * added either (Q1) — `min:0.01` remains the only numeric constraint,
+ * matching current behavior exactly.
  */
 final class RemboursementController extends Controller
 {
-    use ResolvesActingEmployee;
-
-    public function __construct()
-    {
-        $this->authorizeResource(Remboursement::class, 'remboursement');
-    }
-
-    public function index(): View
-    {
-        return view('backoffice.remboursements.index', [
-            'remboursements' => Remboursement::query()
-                ->with(['beneficiaire', 'caisse', 'agent'])
-                ->latest()
-                ->paginate(15),
-        ]);
-    }
-
-    public function create(): View
-    {
-        return view('backoffice.remboursements.create');
-    }
-
     public function store(StoreRemboursementRequest $request, EnregistrerRemboursement $action): RedirectResponse
     {
-        // Domain action: creates the refund and decrements caisses.solde
-        // in ONE transaction.
-        $action->handle($request->validated(), $this->actingEmployee($request));
+        $this->authorize('create', Remboursement::class);
 
-        return redirect()->route('backoffice.remboursements.index')
-            ->with('status', __('Remboursement enregistré.'));
-    }
+        $agent = $request->user()->employee;
 
-    public function show(Remboursement $remboursement): View
-    {
-        return view('backoffice.remboursements.show', [
-            'remboursement' => $remboursement->load(['beneficiaire', 'caisse', 'agent']),
-        ]);
-    }
+        if ($agent === null) {
+            throw ValidationException::withMessages([
+                'caisse_id' => __('Your account is not linked to any employee record.'),
+            ]);
+        }
 
-    public function edit(Remboursement $remboursement): View
-    {
-        return view('backoffice.remboursements.edit', ['remboursement' => $remboursement]);
+        // Domain action: creates the refund AND decrements caisses.solde in
+        // ONE transaction.
+        $action->handle($request->validated(), $agent);
+
+        return redirect()->route('backoffice.depenses.index', ['tab' => 'remboursements'])
+            ->with('success', __('Refund recorded.'));
     }
 
     public function update(UpdateRemboursementRequest $request, Remboursement $remboursement): RedirectResponse
     {
-        // montant / caisse_id are not editable (see UpdateRemboursementRequest).
+        $this->authorize('update', $remboursement);
+
+        // montant / caisse_id / beneficiaire_id are not editable — the till
+        // balance already moved (UpdateRemboursementRequest excludes them).
         $remboursement->update($request->validated());
 
-        return redirect()->route('backoffice.remboursements.index')
-            ->with('status', __('Remboursement mis à jour.'));
+        return redirect()->route('backoffice.depenses.index', ['tab' => 'remboursements'])
+            ->with('success', __('Refund updated.'));
     }
 }
