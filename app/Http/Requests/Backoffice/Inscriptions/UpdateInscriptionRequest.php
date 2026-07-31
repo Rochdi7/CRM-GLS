@@ -8,6 +8,16 @@ use App\Models\Inscription;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
+/**
+ * Validates exactly the fields the current Livewire InscriptionsIndex form
+ * exposes on EDIT (docs/phase-9-inscriptions-audit.md §4.7/§4.9) — only 6
+ * columns are ever updated, never fees/totals. `date_debut`/`date_fin` are
+ * taken directly from the request (NOT re-derived from the group on
+ * update, unlike create — a confirmed, deliberate asymmetry preserved
+ * exactly per the audit doc §12 point 2). No etablissement_id/
+ * annee_scolaire_id/montant_total — never form inputs, never changed on
+ * update either.
+ */
 final class UpdateInscriptionRequest extends FormRequest
 {
     public function authorize(): bool
@@ -23,13 +33,10 @@ final class UpdateInscriptionRequest extends FormRequest
         return [
             'student_id' => ['required', 'exists:students,id'],
             'group_id' => ['required', 'exists:groups,id'],
-            'etablissement_id' => ['nullable', 'exists:etablissements,id'],
-            'annee_scolaire_id' => ['nullable', 'exists:annees_scolaires,id'],
             'statut' => ['required', Rule::in(Inscription::STATUTS)],
             'date_inscription' => ['required', 'date'],
             'date_debut' => ['nullable', 'date'],
             'date_fin' => ['nullable', 'date', 'after_or_equal:date_debut'],
-            'montant_total' => ['nullable', 'numeric', 'min:0'],
             'note' => ['nullable', 'string'],
         ];
     }

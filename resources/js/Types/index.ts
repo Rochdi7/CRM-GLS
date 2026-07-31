@@ -754,3 +754,74 @@ export interface NewEmployeeCredentials {
     username: string;
     password: string;
 }
+
+// --- Phase 9: Inscriptions (Inertia/React list + modal CRUD with fee lines) -
+
+/** One row of the Inscriptions list — mirrors GetInscriptionsList's ->through() mapping exactly. */
+export interface InscriptionRow {
+    id: number;
+    reference: string;
+    student: string | null;
+    studentShowUrl: string | null;
+    groupe: string | null;
+    date: string | null;
+    montantTotal: MoneyDisplay | null;
+    feesCount: number;
+    statut: string;
+    showUrl: string;
+}
+
+export interface InscriptionFormOption {
+    id: number;
+    label: string;
+}
+
+/** One "Frais disponible" line loaded from the selected group (GetGroupInscriptionFees). */
+export interface InscriptionGroupFee {
+    fraisId: number;
+    nom: string;
+    montantInitial: MoneyDisplay;
+    dateEcheance: string;
+}
+
+export interface InscriptionGroupFeesResponse {
+    fees: InscriptionGroupFee[];
+    dateDebut: string | null;
+    dateFin: string | null;
+}
+
+/** One editable fee line in the create-form's "Frais disponibles" table — mirrors Livewire's $feeLines shape. */
+export interface InscriptionFeeLine {
+    fraisId: number | null;
+    nom: string;
+    montantInitial: string;
+    remisePct: string;
+    remiseMontant: string;
+    note: string;
+    dateEcheance: string;
+}
+
+export interface InscriptionsFilters {
+    search: string;
+    statutFilter: string;
+    perPage: number;
+}
+
+export interface InscriptionsPageProps {
+    inscriptions: PaginatedData<InscriptionRow>;
+    filters: InscriptionsFilters;
+    perPageOptions: number[];
+    statuts: string[];
+    niveaux: string[];
+    domaines: string[];
+    examenTypes: string[];
+    sexes: string[];
+    parentRelations: string[];
+    niveauxAvecDomaine: string[];
+    niveauStudium: string;
+    countries: CountryCatalog;
+    defaultCountry: string;
+    students: InscriptionFormOption[];
+    groups: InscriptionFormOption[];
+    [key: string]: unknown;
+}

@@ -21,7 +21,6 @@ use App\Http\Controllers\Backoffice\FraisController;
 use App\Http\Controllers\Backoffice\GroupController;
 use App\Http\Controllers\Backoffice\GroupHistoriqueController;
 use App\Http\Controllers\Backoffice\InscriptionController;
-use App\Http\Controllers\Backoffice\InscriptionFeeController;
 use App\Http\Controllers\Backoffice\PermissionController;
 use App\Http\Controllers\Backoffice\ProfileController;
 use App\Http\Controllers\Backoffice\Roles\RoleController;
@@ -32,7 +31,6 @@ use App\Http\Controllers\Backoffice\TypeDepenseController;
 use App\Http\Controllers\Backoffice\Users\UserAuthorizationController;
 use App\Http\Controllers\Backoffice\Users\UserController;
 use App\Livewire\Backoffice\Encaissements\EncaissementsIndex;
-use App\Livewire\Backoffice\Inscriptions\InscriptionsIndex;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -163,14 +161,34 @@ Route::prefix('backoffice')
             Route::get('groups-historique', [GroupHistoriqueController::class, 'index'])
                 ->name('groups-historique.index');
 
-            // Enrollments — Livewire list + modal CRUD (with manual fee lines);
-            // controller serves the read-only detail page only.
-            Route::get('inscriptions', InscriptionsIndex::class)
+            // Enrollments — Inertia/React list + modal add/edit with manual
+            // fee lines (Phase 9, docs/phase-9-inscriptions-audit.md +
+            // docs/phase-9-inscriptions-mapping.md). Fee lines only apply on
+            // create — editing an inscription never touches fees/totals,
+            // matching the live Livewire form's own asymmetry exactly.
+            Route::get('inscriptions', [InscriptionController::class, 'index'])
                 ->middleware('permission:registrations.view')->name('inscriptions.index');
+            Route::post('inscriptions', [InscriptionController::class, 'store'])
+                ->middleware('permission:registrations.create')->name('inscriptions.store');
+            Route::put('inscriptions/{inscription}', [InscriptionController::class, 'update'])
+                ->middleware('permission:registrations.update')->name('inscriptions.update');
+            Route::delete('inscriptions/{inscription}', [InscriptionController::class, 'destroy'])
+                ->middleware('permission:registrations.delete')->name('inscriptions.destroy');
             Route::get('inscriptions/{inscription}', [InscriptionController::class, 'show'])
                 ->name('inscriptions.show');
-            Route::resource('inscription-fees', InscriptionFeeController::class)
-                ->only(['store', 'update', 'destroy']);
+            // "Frais disponibles" for a group — the create form's live
+            // group-fee lookup (docs/phase-9-inscriptions-mapping.md's
+            // confirmed decision: a dedicated endpoint, not embedding every
+            // group's fees in the initial options payload).
+            Route::get('groups/{group}/inscription-fees', [InscriptionController::class, 'groupFees'])
+                ->name('groups.inscription-fees');
+            // inscription-fees.* (store/update/destroy) intentionally NOT
+            // routed here — genuinely dead code pre-Phase-9 (zero callers in
+            // any view/React page, confirmed by the audit) and still not
+            // part of the live workflow: fee lines are only ever
+            // created/edited as part of the parent Inscription's own
+            // create transaction (InscriptionController::store()), never
+            // standalone.
 
             // Finance — money records are never deleted (audit trail)
             // Gestion de la caisse — ONE tabbed page (Paramètres pattern):

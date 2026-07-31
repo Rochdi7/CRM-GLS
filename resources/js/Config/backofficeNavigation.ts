@@ -52,6 +52,7 @@ export const backofficeNavigation: NavGroup[] = [
                 icon: 'ti ti-clipboard-list',
                 permissions: ['registrations.view'],
                 matchPaths: ['/backoffice/inscriptions'],
+                inertia: true,
             },
             {
                 label: 'Groups',
