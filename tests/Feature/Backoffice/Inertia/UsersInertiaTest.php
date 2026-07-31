@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Backoffice\Inertia;
 
+use App\Models\Employee;
+use App\Models\Etablissement;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\Context\CurrentContext;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -84,6 +87,50 @@ final class UsersInertiaTest extends TestCase
         $this->actingAs($viewer);
 
         $this->get(route('backoffice.users.index'))->assertForbidden();
+    }
+
+    /**
+     * Ports CenterScopingTest::test_users_list_follows_the_employee_center_
+     * but_keeps_admin_accounts (Livewire) — the Users list follows the
+     * active top-bar context center via each account's Employee profile,
+     * but accounts with NO Employee profile (pure admin logins) must stay
+     * visible in every center. GetUsersList already implements this exact
+     * rule (whereDoesntHave('employee') OR employee in the active center);
+     * this test asserts it at the HTTP level so the behavior stays covered
+     * once CenterScopingTest.php (and the Livewire UsersIndex it tests) are
+     * removed (docs/phase-11-livewire-cleanup-audit.md §G.5).
+     */
+    public function test_index_follows_the_employee_center_but_keeps_admin_accounts(): void
+    {
+        // centers.access-all is required to switch the active context center
+        // at all (CurrentContext::setEtablissement() is a no-op otherwise) —
+        // this account has no Employee profile, so it stays visible in every
+        // center regardless.
+        $admin = $this->manager();
+        $admin->givePermissionTo('centers.access-all');
+        $this->actingAs($admin->fresh());
+
+        $rabat = Etablissement::factory()->create(['nom_centre' => 'GLS Rabat']);
+        $casa = Etablissement::factory()->create(['nom_centre' => 'GLS Casablanca']);
+
+        $rUser = User::factory()->create(['name' => 'CompteRabatX']);
+        Employee::factory()->create(['etablissement_id' => $rabat->id, 'user_id' => $rUser->id]);
+        $cUser = User::factory()->create(['name' => 'CompteCasaX']);
+        Employee::factory()->create(['etablissement_id' => $casa->id, 'user_id' => $cUser->id]);
+
+        app(CurrentContext::class)->setEtablissement($rabat->id);
+
+        $this->get(route('backoffice.users.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('users.data', function ($rows) use ($admin) {
+                    $names = collect($rows)->pluck('name');
+
+                    return $names->contains('CompteRabatX')
+                        && ! $names->contains('CompteCasaX')
+                        && $names->contains($admin->name);
+                })
+            );
     }
 
     // --- Update ----------------------------------------------------------
@@ -273,6 +320,45 @@ final class UsersInertiaTest extends TestCase
         ])->assertSessionHasErrors('roles');
 
         $this->assertFalse($target->fresh()->hasRole(Role::SUPER_ADMIN));
+    }
+
+    /**
+     * Ports SuperAdminProtectionTest::test_the_last_super_admin_cannot_
+     * lose_the_role (Livewire) — UserAuthorizationService's own invariant
+     * (not a Livewire-specific rule), reachable identically through the
+     * real HTTP endpoint.
+     */
+    public function test_the_last_super_admin_cannot_lose_the_role(): void
+    {
+        $admin = $this->superAdmin();
+        $this->assertSame(1, User::role(Role::SUPER_ADMIN)->count());
+        $this->actingAs($admin);
+
+        $this->put(route('backoffice.users.authorization.update', $admin), [
+            'roles' => ['director'],
+            'directPermissions' => [],
+        ])->assertSessionHasErrors('roles');
+
+        $this->assertTrue($admin->fresh()->hasRole(Role::SUPER_ADMIN));
+    }
+
+    /**
+     * Ports SuperAdminProtectionTest::test_a_super_admin_can_be_demoted_
+     * when_another_remains (Livewire).
+     */
+    public function test_a_super_admin_can_be_demoted_when_another_remains(): void
+    {
+        $first = $this->superAdmin();
+        $second = $this->superAdmin();
+        $this->actingAs($first);
+
+        $this->put(route('backoffice.users.authorization.update', $second), [
+            'roles' => ['director'],
+            'directPermissions' => [],
+        ])->assertSessionDoesntHaveErrors();
+
+        $this->assertFalse($second->fresh()->hasRole(Role::SUPER_ADMIN));
+        $this->assertSame(1, User::role(Role::SUPER_ADMIN)->count());
     }
 
     public function test_direct_permissions_require_the_dedicated_permission(): void

@@ -199,6 +199,73 @@ final class EmployeesInertiaCrudTest extends TestCase
         $this->assertCount(1, $employee->getMedia('photo'));
     }
 
+    /**
+     * Ports EmployeeProfileFieldsTest::test_uploading_a_new_photo_replaces_
+     * the_previous_one (Livewire) — "photo" is a single-file media
+     * collection: a second upload on edit replaces the first, never adds a
+     * second image.
+     */
+    public function test_uploading_a_new_photo_replaces_the_previous_one(): void
+    {
+        Storage::fake('media');
+        $this->actingAs($this->userWith('employees.view', 'employees.update'));
+        $employee = Employee::factory()->create();
+        $employee->addMedia(UploadedFile::fake()->image('old.jpg'))->toMediaCollection('photo');
+
+        $this->put(route('backoffice.employees.update', $employee), [
+            'nom' => $employee->nom,
+            'prenom' => $employee->prenom,
+            'sexe' => $employee->sexe,
+            'categorie' => $employee->categorie,
+            'statut' => $employee->statut,
+            'photo' => UploadedFile::fake()->image('new.jpg'),
+        ])->assertSessionDoesntHaveErrors();
+
+        $media = $employee->fresh()->getMedia('photo');
+        $this->assertCount(1, $media);
+    }
+
+    /**
+     * Ports EmployeeProfileFieldsTest::test_an_oversized_photo_is_rejected
+     * (Livewire) — the server-side `max:2048` KB rule is the one line of
+     * defense that still applies over a real HTTP upload (Livewire's own
+     * client-side preview_mimes rejection, tested by the Livewire-only
+     * test_a_non_image_upload_is_refused_before_saving, is a Livewire
+     * temporary-upload-layer concept with no Inertia equivalent — not
+     * ported).
+     */
+    public function test_an_oversized_photo_is_rejected(): void
+    {
+        Storage::fake('media');
+        $this->actingAs($this->userWith('employees.view', 'employees.create'));
+
+        $this->post(route('backoffice.employees.store'), [
+            'nom' => 'Idrissi',
+            'prenom' => 'Omar',
+            'sexe' => 'Homme',
+            'categorie' => Employee::CATEGORIE_ENSEIGNANT,
+            'statut' => Employee::STATUT_ACTIF,
+            'photo' => UploadedFile::fake()->image('huge.jpg')->size(3000),
+        ])->assertSessionHasErrors('photo');
+    }
+
+    /**
+     * Ports EmployeeProfileFieldsTest::test_employees_can_be_searched_by_
+     * address (Livewire).
+     */
+    public function test_employees_can_be_searched_by_address(): void
+    {
+        $this->actingAs($this->userWith('employees.view', 'centers.access-all'));
+        Employee::factory()->create(['nom' => 'Bennani', 'adresse' => 'Avenue Hassan II']);
+        Employee::factory()->create(['nom' => 'Cherkaoui', 'adresse' => 'Rue de Safi']);
+
+        $this->get(route('backoffice.employees.index', ['search' => 'Hassan II']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('employees.data.0.nom', 'Bennani')
+                ->count('employees.data', 1)
+            );
+    }
+
     public function test_an_employee_can_be_updated(): void
     {
         $this->actingAs($this->userWith('employees.view', 'employees.update'));

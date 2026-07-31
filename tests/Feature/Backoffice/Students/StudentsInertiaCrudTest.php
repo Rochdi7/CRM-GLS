@@ -149,6 +149,61 @@ final class StudentsInertiaCrudTest extends TestCase
         ])->assertSessionDoesntHaveErrors();
     }
 
+    /**
+     * Ports StudentOrientationTest::test_a_stale_orientation_is_not_
+     * persisted_after_a_level_change (Livewire) — changing niveau away from
+     * a track that needs domaine/examen_type must drop the stale value
+     * server-side, not just in the live component's in-memory form state
+     * (the Livewire test's sibling method, test_changing_the_level_clears_
+     * the_stale_orientation, asserts exactly that in-memory-only behavior
+     * via assertSet() before any save — a Livewire-reactivity concept with
+     * no Inertia equivalent, correctly not ported). StoreStudentRequest/
+     * UpdateStudentRequest's Rule::excludeIf() already enforces this
+     * server-side identically on create and update.
+     */
+    public function test_changing_the_level_away_from_an_orientation_track_drops_the_stale_value(): void
+    {
+        $this->actingAs($this->userWith('students.view', 'students.create', 'students.update'));
+
+        $this->post(route('backoffice.students.store'), [
+            'nom' => 'Tazi', 'prenom' => 'Hind', 'niveau' => 'Studium', 'examen_type' => 'STK', 'phone_pays' => 'MA',
+        ])->assertSessionDoesntHaveErrors();
+
+        $student = Student::where('nom', 'Tazi')->firstOrFail();
+        $this->assertSame('STK', $student->examen_type);
+
+        $this->put(route('backoffice.students.update', $student), [
+            'nom' => 'Tazi', 'prenom' => 'Hind', 'niveau' => 'B2.1', 'phone_pays' => 'MA',
+            // Tampered: still submitting the old exam value — the server
+            // must drop it since B2.1 doesn't ask for one, not persist it.
+            'examen_type' => 'STK',
+        ])->assertSessionDoesntHaveErrors();
+
+        $fresh = $student->fresh();
+        $this->assertNull($fresh->examen_type);
+        $this->assertNull($fresh->domaine);
+    }
+
+    /**
+     * Ports StudentOrientationTest::test_the_student_cin_is_stored_and_
+     * searchable (Livewire).
+     */
+    public function test_the_student_cin_is_stored_and_searchable(): void
+    {
+        $this->actingAs($this->userWith('students.view', 'students.create'));
+
+        $this->post(route('backoffice.students.store'), [
+            'nom' => 'Alami', 'prenom' => 'Karim', 'cin' => 'AB123456', 'phone_pays' => 'MA',
+        ])->assertSessionDoesntHaveErrors();
+
+        $this->assertSame('AB123456', Student::where('nom', 'Alami')->firstOrFail()->cin);
+
+        $this->get(route('backoffice.students.index', ['search' => 'AB123456']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('students.data.0.nom', 'Alami')
+            );
+    }
+
     public function test_a_photo_can_be_attached(): void
     {
         Storage::fake('media');

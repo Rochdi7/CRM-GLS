@@ -132,6 +132,64 @@ final class CaissesInertiaCrudTest extends TestCase
         $this->assertFalse($references->contains('ENC-OTHER'));
     }
 
+    /**
+     * Ports CaisseManagementPageTest::test_all_scope_shows_every_
+     * accessible_till (Livewire).
+     */
+    public function test_journal_all_scope_shows_every_accessible_till(): void
+    {
+        $this->actingAs($this->userWith('cash-registers.view'));
+        $caisse = Caisse::factory()->create(['etablissement_id' => $this->centre->id]);
+
+        Encaissement::create([
+            'reference' => 'ENC-ALL', 'student_id' => \App\Models\Student::factory()->create(['etablissement_id' => $this->centre->id])->id,
+            'inscription_fee_id' => $this->makeFee()->id, 'caisse_id' => $caisse->id,
+            'agent_id' => Employee::factory()->create(['etablissement_id' => $this->centre->id])->id,
+            'montant' => 100, 'methode' => 'Espèces', 'date_paiement' => '2025-09-15',
+        ]);
+
+        $response = $this->get(route('backoffice.caisses.journal', ['scope' => 'all']))->json();
+
+        $this->assertTrue(collect($response['rows'])->pluck('reference')->contains('ENC-ALL'));
+    }
+
+    /**
+     * Ports CaisseManagementPageTest::test_mine_scope_self_heals_a_
+     * missing_till (Livewire) — an employee account predating the
+     * auto-provisioning rule gets its till provisioned on first "Ma caisse"
+     * visit, matching CaisseProvisioner::provisionFor() being called from
+     * GetCaisseJournal (ported from CaisseJournal::mount()).
+     */
+    public function test_journal_mine_scope_self_heals_a_missing_till(): void
+    {
+        $user = $this->userWith('cash-registers.view');
+        $employee = Employee::factory()->create(['user_id' => $user->id, 'etablissement_id' => $this->centre->id]);
+        $employee->caisses()->delete();
+        $this->assertSame(0, $employee->caisses()->count());
+        $this->actingAs($user);
+
+        $this->get(route('backoffice.caisses.journal', ['scope' => 'mine']))->assertOk();
+
+        $this->assertSame(1, $employee->fresh()->caisses()->count());
+    }
+
+    /**
+     * Ports CaisseManagementPageTest::test_a_transfers_only_user_can_
+     * open_the_page + test_the_legacy_transfers_url_deep_links_to_its_tab
+     * (Livewire).
+     */
+    public function test_a_transfers_only_user_can_open_the_page_and_the_legacy_url_redirects(): void
+    {
+        $user = User::factory()->create();
+        $user->givePermissionTo('cash-transfers.view');
+        $this->actingAs($user);
+
+        $this->get(route('backoffice.caisses.index'))->assertOk();
+
+        $this->get(route('backoffice.caisse-transfers.index'))
+            ->assertRedirect(route('backoffice.caisses.index', ['tab' => 'transferts']));
+    }
+
     public function test_journal_type_and_date_filters_narrow_the_rows(): void
     {
         $user = $this->userWith('cash-registers.view');

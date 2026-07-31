@@ -339,6 +339,99 @@ final class InscriptionsInertiaCrudTest extends TestCase
         ])->assertForbidden();
     }
 
+    /**
+     * Ports InscriptionStudentFieldsTest::test_a_new_student_is_created_
+     * with_cin_and_a_professional_field (Livewire).
+     */
+    public function test_new_student_mode_saves_cin_and_a_professional_field(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.create'));
+        $group = $this->makeGroup();
+
+        $this->post(route('backoffice.inscriptions.store'), [
+            'inscription_mode' => 'new',
+            'new_nom' => 'Bennani',
+            'new_prenom' => 'Yassine',
+            'new_cin' => 'AB123456',
+            'new_niveau' => 'Ausbildung',
+            'new_domaine' => 'Mécanique automobile',
+            'phone_pays' => 'MA',
+            'group_id' => $group->id,
+            'date_inscription' => '2025-09-20',
+        ])->assertSessionDoesntHaveErrors();
+
+        $student = Student::where('nom', 'Bennani')->firstOrFail();
+        $this->assertSame('AB123456', $student->cin);
+        $this->assertSame('Ausbildung', $student->niveau);
+        $this->assertSame('Mécanique automobile', $student->domaine);
+        $this->assertNull($student->examen_type);
+    }
+
+    /**
+     * Ports InscriptionStudentFieldsTest::test_a_new_student_can_be_
+     * created_with_an_entrance_exam (Livewire).
+     */
+    public function test_new_student_mode_saves_an_entrance_exam(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.create'));
+        $group = $this->makeGroup();
+
+        $this->post(route('backoffice.inscriptions.store'), [
+            'inscription_mode' => 'new',
+            'new_nom' => 'Cherkaoui',
+            'new_prenom' => 'Nada',
+            'new_niveau' => 'Studium',
+            'new_examen_type' => 'STK',
+            'phone_pays' => 'MA',
+            'group_id' => $group->id,
+            'date_inscription' => '2025-09-20',
+        ])->assertSessionDoesntHaveErrors();
+
+        $student = Student::where('nom', 'Cherkaoui')->firstOrFail();
+        $this->assertSame('STK', $student->examen_type);
+        $this->assertNull($student->domaine);
+    }
+
+    /**
+     * Ports InscriptionStudentFieldsTest::test_the_field_is_required_when_
+     * the_track_asks_for_it (Livewire).
+     */
+    public function test_new_student_mode_requires_domaine_for_arbeit(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.create'));
+        $group = $this->makeGroup();
+
+        $this->post(route('backoffice.inscriptions.store'), [
+            'inscription_mode' => 'new',
+            'new_nom' => 'Idrissi',
+            'new_prenom' => 'Omar',
+            'new_niveau' => 'Arbeit',
+            'phone_pays' => 'MA',
+            'group_id' => $group->id,
+            'date_inscription' => '2025-09-20',
+        ])->assertSessionHasErrors('new_domaine');
+    }
+
+    /**
+     * Ports InscriptionStudentFieldsTest::test_an_unknown_parent_relation_
+     * is_rejected (Livewire).
+     */
+    public function test_new_student_mode_rejects_an_unknown_parent_relation(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.create'));
+        $group = $this->makeGroup();
+
+        $this->post(route('backoffice.inscriptions.store'), [
+            'inscription_mode' => 'new',
+            'new_nom' => 'Idrissi',
+            'new_prenom' => 'Omar',
+            'new_parent_relation' => 'Le voisin',
+            'phone_pays' => 'MA',
+            'group_id' => $group->id,
+            'date_inscription' => '2025-09-20',
+        ])->assertSessionHasErrors('new_parent_relation');
+    }
+
     // --- update --------------------------------------------------------
 
     public function test_update_only_touches_the_six_editable_fields(): void

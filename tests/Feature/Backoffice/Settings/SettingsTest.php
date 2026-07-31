@@ -13,6 +13,7 @@ use App\Models\Role;
 use App\Models\Salle;
 use App\Models\Student;
 use App\Models\User;
+use App\Services\Context\CurrentContext;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -278,6 +279,41 @@ final class SettingsTest extends TestCase
         $this->delete(route('backoffice.salles.destroy', $room))->assertSessionHasErrors('delete');
 
         $this->assertDatabaseHas('salles', ['id' => $room->id]);
+    }
+
+    /**
+     * Ports CenterScopingTest::test_salles_tab_is_scoped_to_the_selected_center
+     * (Livewire) — the Salles tab's list must follow the active top-bar
+     * context center exactly like every other module's list, narrowing to
+     * that center's rows (+ global NULL-center rows) once one is selected.
+     * GetSallesList already implements this (same scopeToActiveCenter logic
+     * as the retired SallesTab component); this test asserts it at the HTTP
+     * level so the behavior stays covered once the Livewire component and
+     * its own test are removed (docs/phase-11-livewire-cleanup-audit.md
+     * §G.5).
+     */
+    public function test_salles_tab_is_scoped_to_the_selected_center(): void
+    {
+        $this->userWith('rooms.view', 'centers.access-all');
+        $rabat = Etablissement::factory()->create(['nom_centre' => 'GLS Rabat']);
+        $casa = Etablissement::factory()->create(['nom_centre' => 'GLS Casablanca']);
+        Salle::factory()->create(['nom' => 'SalleRabatX', 'etablissement_id' => $rabat->id]);
+        Salle::factory()->create(['nom' => 'SalleCasaX', 'etablissement_id' => $casa->id]);
+
+        // "Tous les centres" → both rooms visible.
+        $this->get(route('backoffice.settings', ['tab' => 'salles']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('salles.data', fn ($rows) => collect($rows)->pluck('nom')->contains('SalleRabatX')
+                    && collect($rows)->pluck('nom')->contains('SalleCasaX'))
+            );
+
+        // Rabat selected → Casa's room disappears from the tab.
+        app(CurrentContext::class)->setEtablissement($rabat->id);
+        $this->get(route('backoffice.settings', ['tab' => 'salles']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('salles.data', fn ($rows) => collect($rows)->pluck('nom')->contains('SalleRabatX')
+                    && ! collect($rows)->pluck('nom')->contains('SalleCasaX'))
+            );
     }
 
     // --- Frais tab -----------------------------------------------------------
