@@ -4,7 +4,7 @@ import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
-import TableToolbar from '@/Components/Tables/TableToolbar';
+import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
@@ -12,6 +12,7 @@ import Modal from '@/Components/Modals/Modal';
 import FormField from '@/Components/Forms/FormField';
 import SelectField from '@/Components/Forms/SelectField';
 import FormActions from '@/Components/Forms/FormActions';
+import StatusBadge from '@/Components/Details/StatusBadge';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import type { GroupFraisLigne, GroupRow, GroupsPageProps, SelectOption } from '@/Types';
 
@@ -176,10 +177,15 @@ export default function GroupsIndex({
                 </button>
             }
         >
-            <Card title="Groupes">
-                <TableToolbar search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} placeholder="Rechercher" />} />
+            <Card title="Groupes" bodyClassName="p-0 py-3">
+                <TableLengthRow
+                    perPage={filters.perPage}
+                    perPageOptions={perPageOptions}
+                    onPerPageChange={(perPage) => reload({ perPage })}
+                    search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} placeholder="Rechercher" />}
+                />
 
-                <ul className="nav nav-tabs nav-tabs-solid mb-3" role="tablist">
+                <ul className="nav nav-tabs nav-tabs-solid mb-3 px-3" role="tablist">
                     {STATUT_TABS.map((tab) => (
                         <li className="nav-item" role="presentation" key={tab.key}>
                             <button
@@ -229,11 +235,17 @@ export default function GroupsIndex({
                                         <span className="badge badge-soft-secondary">{group.fraisCount}</span>
                                     </td>
                                     <td>
-                                        <span
-                                            className={`badge ${group.statut === 'En formation' ? 'badge-soft-success' : group.statut === 'Fin de formation' ? 'badge-soft-secondary' : 'badge-soft-warning'}`}
-                                        >
-                                            {group.statut}
-                                        </span>
+                                        <StatusBadge
+                                            label={group.statut}
+                                            variant={
+                                                group.statut === 'En formation'
+                                                    ? 'success'
+                                                    : group.statut === 'Fin de formation'
+                                                      ? 'secondary'
+                                                      : 'warning'
+                                            }
+                                            dot
+                                        />
                                     </td>
                                     <td className="text-end">
                                         <RowActions view={group.showUrl}>
@@ -247,26 +259,6 @@ export default function GroupsIndex({
                                 </tr>
                             ))}
                         </DataTable>
-                        <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 px-3">
-                            <div className="d-flex align-items-center gap-2">
-                                <label className="text-muted mb-0" htmlFor="grp-per-page">
-                                    Par page
-                                </label>
-                                <select
-                                    id="grp-per-page"
-                                    className="form-select form-select-sm"
-                                    style={{ width: 90 }}
-                                    value={filters.perPage}
-                                    onChange={(event) => reload({ perPage: Number(event.target.value) })}
-                                >
-                                    {perPageOptions.map((option) => (
-                                        <option key={option} value={option}>
-                                            {option}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
                         <Pagination paginator={groups} showJumpToPage />
                     </>
                 )}

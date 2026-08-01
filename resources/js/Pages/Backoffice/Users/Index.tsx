@@ -4,7 +4,7 @@ import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import DataTable from '@/Components/Tables/DataTable';
 import EmptyState from '@/Components/Shared/EmptyState';
-import TableToolbar from '@/Components/Tables/TableToolbar';
+import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
@@ -140,8 +140,13 @@ export default function UsersIndex({ users, filters, perPageOptions }: UsersInde
         >
             <AuthStatus status={flash.status} />
 
-            <Card title="Utilisateurs">
-                <TableToolbar search={<SearchInput value={filters.search} onSearch={search} placeholder="Rechercher" />} />
+            <Card title="Utilisateurs" bodyClassName="p-0 py-3">
+                <TableLengthRow
+                    perPage={filters.perPage}
+                    perPageOptions={perPageOptions}
+                    onPerPageChange={changePerPage}
+                    search={<SearchInput value={filters.search} onSearch={search} placeholder="Rechercher" />}
+                />
 
                 {users.data.length === 0 ? (
                     <EmptyState title="Aucun utilisateur trouvé" icon="ti ti-user-off" />
@@ -182,6 +187,7 @@ export default function UsersIndex({ users, filters, perPageOptions }: UsersInde
                                         <StatusBadge
                                             label={user.isActive ? 'Actif' : 'Inactif'}
                                             variant={user.isActive ? 'success' : 'secondary'}
+                                            dot
                                         />
                                     </td>
                                     <td className="text-end">
@@ -197,23 +203,6 @@ export default function UsersIndex({ users, filters, perPageOptions }: UsersInde
                                 </tr>
                             ))}
                         </DataTable>
-                        <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 px-3 pb-3">
-                            <div className="d-flex align-items-center gap-2">
-                                <span className="text-muted">Lignes par page</span>
-                                <select
-                                    className="form-select form-select-sm"
-                                    style={{ width: 'auto' }}
-                                    value={filters.perPage}
-                                    onChange={(event) => changePerPage(Number(event.target.value))}
-                                >
-                                    {perPageOptions.map((option) => (
-                                        <option value={option} key={option}>
-                                            {option}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
                         <Pagination paginator={users} showJumpToPage />
                     </>
                 )}

@@ -5,7 +5,8 @@ import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
-import TableToolbar from '@/Components/Tables/TableToolbar';
+import FilterDropdown from '@/Components/Tables/FilterDropdown';
+import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
@@ -16,6 +17,7 @@ import SelectField from '@/Components/Forms/SelectField';
 import TextareaField from '@/Components/Forms/TextareaField';
 import PhoneField from '@/Components/Forms/PhoneField';
 import FormActions from '@/Components/Forms/FormActions';
+import StatusBadge from '@/Components/Details/StatusBadge';
 import type {
     InscriptionFeeLine,
     InscriptionGroupFeesResponse,
@@ -339,19 +341,31 @@ export default function InscriptionsIndex({
                 </button>
             }
         >
-            <Card title="Inscriptions">
-                <TableToolbar search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} placeholder="Rechercher" />}>
-                    <div style={{ width: 200 }}>
-                        <SelectField
-                            id="ins-statut-filter"
-                            label="Statut"
-                            options={statutFilterOptions}
-                            placeholder="Tous les statuts"
-                            value={filters.statutFilter}
-                            onChange={(event) => reload({ statutFilter: event.target.value })}
-                        />
-                    </div>
-                </TableToolbar>
+            <Card
+                title="Inscriptions"
+                bodyClassName="p-0 py-3"
+                tools={
+                    <FilterDropdown
+                        fields={[
+                            {
+                                name: 'statutFilter',
+                                label: 'Statut',
+                                value: filters.statutFilter,
+                                options: statutFilterOptions,
+                                placeholder: 'Tous les statuts',
+                            },
+                        ]}
+                        onApply={(values) => reload(values)}
+                        onReset={() => reload({ statutFilter: '' })}
+                    />
+                }
+            >
+                <TableLengthRow
+                    perPage={filters.perPage}
+                    perPageOptions={perPageOptions}
+                    onPerPageChange={(perPage) => reload({ perPage })}
+                    search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} placeholder="Rechercher" />}
+                />
 
                 {inscriptions.data.length === 0 ? (
                     <EmptyState title="Aucune inscription pour le moment" icon="ti ti-clipboard-list" />
@@ -385,7 +399,7 @@ export default function InscriptionsIndex({
                                         <span className="badge badge-soft-secondary">{inscription.feesCount}</span>
                                     </td>
                                     <td>
-                                        <span className="badge badge-soft-info">{inscription.statut}</span>
+                                        <StatusBadge label={inscription.statut} variant="info" dot />
                                     </td>
                                     <td className="text-end">
                                         <RowActions view={inscription.showUrl}>
@@ -400,27 +414,7 @@ export default function InscriptionsIndex({
                                 </tr>
                             ))}
                         </DataTable>
-                        <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 px-3">
-                            <div className="d-flex align-items-center gap-2">
-                                <label className="text-muted mb-0" htmlFor="ins-per-page">
-                                    Par page
-                                </label>
-                                <select
-                                    id="ins-per-page"
-                                    className="form-select form-select-sm"
-                                    style={{ width: 90 }}
-                                    value={filters.perPage}
-                                    onChange={(event) => reload({ perPage: Number(event.target.value) })}
-                                >
-                                    {perPageOptions.map((option) => (
-                                        <option key={option} value={option}>
-                                            {option}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-                        <Pagination paginator={inscriptions} />
+                        <Pagination paginator={inscriptions} showJumpToPage />
                     </>
                 )}
             </Card>

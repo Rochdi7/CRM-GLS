@@ -4,7 +4,8 @@ import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
-import TableToolbar from '@/Components/Tables/TableToolbar';
+import FilterDropdown from '@/Components/Tables/FilterDropdown';
+import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
@@ -16,6 +17,7 @@ import TextareaField from '@/Components/Forms/TextareaField';
 import PhoneField from '@/Components/Forms/PhoneField';
 import FormActions from '@/Components/Forms/FormActions';
 import FormErrorsSummary from '@/Components/Forms/FormErrorsSummary';
+import StatusBadge from '@/Components/Details/StatusBadge';
 import { splitPhone } from '@/Data/countries';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import type { EmployeeRow, EmployeesPageProps, SelectOption } from '@/Types';
@@ -263,19 +265,31 @@ export default function EmployeesIndex({
                 </button>
             }
         >
-            <Card title="Employés">
-                <TableToolbar search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} placeholder="Rechercher" />}>
-                    <div style={{ width: 220 }}>
-                        <SelectField
-                            id="emp-cat-filter"
-                            label="Catégorie"
-                            options={categorieFilterOptions}
-                            placeholder="Toutes les catégories"
-                            value={filters.categorieFilter}
-                            onChange={(event) => reload({ categorieFilter: event.target.value })}
-                        />
-                    </div>
-                </TableToolbar>
+            <Card
+                title="Employés"
+                bodyClassName="p-0 py-3"
+                tools={
+                    <FilterDropdown
+                        fields={[
+                            {
+                                name: 'categorieFilter',
+                                label: 'Catégorie',
+                                value: filters.categorieFilter,
+                                options: categorieFilterOptions,
+                                placeholder: 'Toutes les catégories',
+                            },
+                        ]}
+                        onApply={(values) => reload(values)}
+                        onReset={() => reload({ categorieFilter: '' })}
+                    />
+                }
+            >
+                <TableLengthRow
+                    perPage={filters.perPage}
+                    perPageOptions={perPageOptions}
+                    onPerPageChange={(perPage) => reload({ perPage })}
+                    search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} placeholder="Rechercher" />}
+                />
 
                 {employees.data.length === 0 ? (
                     <EmptyState title="Aucun employé" icon="ti ti-users" />
@@ -330,9 +344,11 @@ export default function EmployeesIndex({
                                     <td>{employee.etablissement ?? '—'}</td>
                                     <td>{employee.telephone ?? '—'}</td>
                                     <td>
-                                        <span className={`badge ${employee.statut === 'Actif' ? 'badge-soft-success' : 'badge-soft-secondary'}`}>
-                                            {employee.statut}
-                                        </span>
+                                        <StatusBadge
+                                            label={employee.statut}
+                                            variant={employee.statut === 'Actif' ? 'success' : 'secondary'}
+                                            dot
+                                        />
                                     </td>
                                     <td className="text-end">
                                         <RowActions>
@@ -347,26 +363,6 @@ export default function EmployeesIndex({
                                 </tr>
                             ))}
                         </DataTable>
-                        <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 px-3">
-                            <div className="d-flex align-items-center gap-2">
-                                <label className="text-muted mb-0" htmlFor="emp-per-page">
-                                    Par page
-                                </label>
-                                <select
-                                    id="emp-per-page"
-                                    className="form-select form-select-sm"
-                                    style={{ width: 90 }}
-                                    value={filters.perPage}
-                                    onChange={(event) => reload({ perPage: Number(event.target.value) })}
-                                >
-                                    {perPageOptions.map((option) => (
-                                        <option key={option} value={option}>
-                                            {option}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
                         <Pagination paginator={employees} showJumpToPage />
                     </>
                 )}
