@@ -29,7 +29,19 @@ export default function Sidebar({ permissions, isSuperAdmin, mobileOpen, onNavig
     const currentPath = useCurrentPath();
 
     return (
-        <div className={`sidebar${mobileOpen ? ' sidebar-mobile-open' : ''}`} id="sidebar">
+        <div
+            className={`sidebar${mobileOpen ? ' sidebar-mobile-open' : ''}`}
+            id="sidebar"
+            // PreSkool mini-sidebar hover-expand (theme script.js behavior):
+            // while body.mini-sidebar is active, hovering the rail expands it
+            // via body.expand-menu. No-ops when the sidebar isn't collapsed.
+            onMouseEnter={() => {
+                if (document.body.classList.contains('mini-sidebar')) {
+                    document.body.classList.add('expand-menu');
+                }
+            }}
+            onMouseLeave={() => document.body.classList.remove('expand-menu')}
+        >
             <div className="sidebar-inner slimscroll">
                 <div id="sidebar-menu" className="sidebar-menu">
                     <ul>

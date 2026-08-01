@@ -9,6 +9,12 @@ interface ModalProps extends PropsWithChildren {
     processing?: boolean;
     size?: 'default' | 'lg';
     footer?: ReactNode;
+    /**
+     * Headerless variant — the PreSkool delete-confirmation modal
+     * (students.html #delete-modal) has no .modal-header; the body carries
+     * icon+title+buttons itself. `title` still labels the dialog for AT.
+     */
+    hideHeader?: boolean;
 }
 
 /**
@@ -32,7 +38,7 @@ interface ModalProps extends PropsWithChildren {
  * data-bs-toggle/data-bs-target and react-router-dom, not a real
  * controlled component (docs/react-theme-file-map.md).
  */
-export default function Modal({ show, title, onClose, processing = false, size = 'default', children, footer }: ModalProps) {
+export default function Modal({ show, title, onClose, processing = false, size = 'default', children, footer, hideHeader = false }: ModalProps) {
     const dialogRef = useRef<HTMLDivElement>(null);
     const triggerRef = useRef<Element | null>(null);
 
@@ -100,7 +106,8 @@ export default function Modal({ show, title, onClose, processing = false, size =
                 tabIndex={-1}
                 role="dialog"
                 aria-modal="true"
-                aria-labelledby="modal-title"
+                aria-labelledby={hideHeader ? undefined : 'modal-title'}
+                aria-label={hideHeader ? title : undefined}
                 style={{ display: 'block', zIndex: 1060 }}
                 onMouseDown={(event) => {
                     if (event.target === event.currentTarget) {
@@ -113,20 +120,22 @@ export default function Modal({ show, title, onClose, processing = false, size =
                     className={`modal-dialog modal-dialog-centered${size === 'lg' ? ' modal-lg' : ''}`}
                 >
                     <div className="modal-content">
-                        <div className="modal-header">
-                            <h4 className="modal-title" id="modal-title">
-                                {title}
-                            </h4>
-                            <button
-                                type="button"
-                                className="btn-close custom-btn-close"
-                                onClick={onClose}
-                                disabled={processing}
-                                aria-label="Fermer"
-                            >
-                                <i className="ti ti-x" />
-                            </button>
-                        </div>
+                        {!hideHeader && (
+                            <div className="modal-header">
+                                <h4 className="modal-title" id="modal-title">
+                                    {title}
+                                </h4>
+                                <button
+                                    type="button"
+                                    className="btn-close custom-btn-close"
+                                    onClick={onClose}
+                                    disabled={processing}
+                                    aria-label="Fermer"
+                                >
+                                    <i className="ti ti-x" />
+                                </button>
+                            </div>
+                        )}
                         <div className="modal-body">{children}</div>
                         {footer && <div className="modal-footer">{footer}</div>}
                     </div>

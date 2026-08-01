@@ -20,7 +20,25 @@ interface HeaderProps {
  */
 export default function Header({ user, context, canManageSettings, onMobileMenuToggle }: HeaderProps) {
     const [userMenuOpen, setUserMenuOpen] = useState(false);
+    const [darkMode, setDarkMode] = useState(() => localStorage.getItem('gls-theme') === 'dark');
+    const [miniSidebar, setMiniSidebar] = useState(() => localStorage.getItem('gls-mini-sidebar') === '1');
     const menuRef = useRef<HTMLDivElement>(null);
+
+    // PreSkool dark mode: <html data-theme="dark"> (mainlayout.blade.php
+    // variant) — the theme CSS handles everything else. Persisted like the
+    // old Blade theme-settings component did (Phase 13 header parity).
+    useEffect(() => {
+        document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
+        localStorage.setItem('gls-theme', darkMode ? 'dark' : 'light');
+    }, [darkMode]);
+
+    // PreSkool collapsed sidebar: body.mini-sidebar (#toggle_btn in the
+    // theme header); Sidebar.tsx adds body.expand-menu on hover while
+    // collapsed, matching the theme JS behavior.
+    useEffect(() => {
+        document.body.classList.toggle('mini-sidebar', miniSidebar);
+        localStorage.setItem('gls-mini-sidebar', miniSidebar ? '1' : '0');
+    }, [miniSidebar]);
 
     useEffect(() => {
         if (!userMenuOpen) {
@@ -64,6 +82,16 @@ export default function Header({ user, context, canManageSettings, onMobileMenuT
                 <a href="/backoffice/dashboard" className="dark-logo">
                     <img src="/assets/images/logo/gls-blanc.webp" alt="GLS CRM" />
                 </a>
+                <button
+                    type="button"
+                    id="toggle_btn"
+                    className="border-0 bg-transparent p-0"
+                    onClick={() => setMiniSidebar((v) => !v)}
+                    aria-label={t('Collapse sidebar')}
+                    aria-pressed={miniSidebar}
+                >
+                    <i className="ti ti-menu-deep" aria-hidden="true" />
+                </button>
             </div>
 
             <button
@@ -85,6 +113,17 @@ export default function Header({ user, context, canManageSettings, onMobileMenuT
                     <div className="nav-item me-auto">{context && <ContextSwitcher context={context} />}</div>
 
                     <div className="d-flex align-items-center">
+                        <div className="pe-1">
+                            <button
+                                type="button"
+                                className="btn btn-outline-light bg-white btn-icon me-1"
+                                onClick={() => setDarkMode((v) => !v)}
+                                aria-label={darkMode ? t('Switch to light mode') : t('Switch to dark mode')}
+                                aria-pressed={darkMode}
+                            >
+                                <i className={darkMode ? 'ti ti-brightness-up' : 'ti ti-moon'} aria-hidden="true" />
+                            </button>
+                        </div>
                         <div className="dropdown ms-1" ref={menuRef}>
                             <button
                                 type="button"
