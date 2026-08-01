@@ -4,7 +4,8 @@ import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import DataTable from '@/Components/Tables/DataTable';
 import EmptyState from '@/Components/Shared/EmptyState';
-import TableToolbar from '@/Components/Tables/TableToolbar';
+import StatusBadge from '@/Components/Details/StatusBadge';
+import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
@@ -66,14 +67,15 @@ export default function RolesIndex({ roles, search }: RolesIndexPageProps) {
                 { label: 'Tableau de bord', href: '/backoffice/dashboard' },
                 { label: 'Rôles & Permissions' },
             ]}
+            actions={
+                <Link href="/backoffice/roles/create" className="btn btn-primary d-flex align-items-center">
+                    <i className="ti ti-square-rounded-plus me-2" />
+                    Nouveau rôle
+                </Link>
+            }
         >
-            <Card title="Rôles">
-                <TableToolbar search={<SearchInput value={search} onSearch={handleSearch} placeholder="Rechercher" />}>
-                    <Link href="/backoffice/roles/create" className="btn btn-primary d-flex align-items-center">
-                        <i className="ti ti-square-rounded-plus me-2" />
-                        Nouveau rôle
-                    </Link>
-                </TableToolbar>
+            <Card title="Rôles" bodyClassName="p-0 py-3">
+                <TableLengthRow search={<SearchInput value={search} onSearch={handleSearch} placeholder="Rechercher" />} />
 
                 {roles.data.length === 0 ? (
                     <EmptyState title="Aucun rôle trouvé" icon="ti ti-shield-off" />
@@ -109,7 +111,7 @@ export default function RolesIndex({ roles, search }: RolesIndexPageProps) {
                                     </td>
                                     <td className="text-end">
                                         {role.isProtected ? (
-                                            <span className="badge badge-soft-danger">Protégé</span>
+                                            <StatusBadge label="Protégé" variant="danger" dot />
                                         ) : (
                                             <RowActions>
                                                 <RowActionItem icon="ti-edit" href={`/backoffice/roles/${role.id}/edit`}>

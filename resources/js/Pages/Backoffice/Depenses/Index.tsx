@@ -4,10 +4,11 @@ import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
-import TableToolbar from '@/Components/Tables/TableToolbar';
+import FilterDropdown from '@/Components/Tables/FilterDropdown';
+import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
-import RowActions from '@/Components/Tables/RowActions';
+import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
 import SelectField from '@/Components/Forms/SelectField';
 import FormField from '@/Components/Forms/FormField';
@@ -40,6 +41,9 @@ interface RemboursementFormState {
     motif: string;
     note: string;
 }
+
+/** Local list — the controller sends no perPageOptions prop (default perPage is 15, unclamped server-side). */
+const PER_PAGE_OPTIONS = [15, 25, 50, 100];
 
 function emptyDepenseForm(): DepenseFormState {
     return {
@@ -268,52 +272,44 @@ export default function DepensesIndex({
             {tab === 'depenses' && canViewDepenses && depenses && (
                 <Card
                     title="Dépenses"
+                    bodyClassName="p-0 py-3"
                     tools={
-                        <button type="button" className="btn btn-primary" onClick={openCreateDepense}>
-                            <i className="ti ti-plus me-1" />
-                            Ajouter une dépense
-                        </button>
+                        <>
+                            <FilterDropdown
+                                fields={[
+                                    {
+                                        name: 'typeFilter',
+                                        label: 'Type',
+                                        value: filters.typeFilter,
+                                        options: typeOptions,
+                                        placeholder: 'Tous les types',
+                                    },
+                                    { name: 'dateFrom', label: 'Du', type: 'date', value: filters.dateFrom },
+                                    { name: 'dateTo', label: 'Au', type: 'date', value: filters.dateTo },
+                                ]}
+                                onApply={(values) => reload(values)}
+                                onReset={() => reload({ typeFilter: '', dateFrom: '', dateTo: '' })}
+                            />
+                            <button
+                                type="button"
+                                className="btn btn-primary d-flex align-items-center mb-3"
+                                onClick={openCreateDepense}
+                            >
+                                <i className="ti ti-square-rounded-plus me-2" />
+                                Ajouter une dépense
+                            </button>
+                        </>
                     }
                 >
-                    <TableToolbar
+                    <TableLengthRow
+                        perPage={filters.perPage}
+                        perPageOptions={PER_PAGE_OPTIONS}
+                        onPerPageChange={(perPage) => reload({ perPage })}
                         search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} />}
-                    >
-                        <SelectField
-                            id="d-type-filter"
-                            label="Type"
-                            options={typeOptions}
-                            placeholder="Tous les types"
-                            value={filters.typeFilter}
-                            onChange={(e) => reload({ typeFilter: e.target.value })}
-                        />
-                        <div style={{ width: 160 }}>
-                            <label className="form-label" htmlFor="d-date-from">
-                                Du
-                            </label>
-                            <input
-                                id="d-date-from"
-                                type="date"
-                                className="form-control"
-                                value={filters.dateFrom}
-                                onChange={(e) => reload({ dateFrom: e.target.value })}
-                            />
-                        </div>
-                        <div style={{ width: 160 }}>
-                            <label className="form-label" htmlFor="d-date-to">
-                                Au
-                            </label>
-                            <input
-                                id="d-date-to"
-                                type="date"
-                                className="form-control"
-                                value={filters.dateTo}
-                                onChange={(e) => reload({ dateTo: e.target.value })}
-                            />
-                        </div>
-                    </TableToolbar>
+                    />
 
                     {montantTotal !== null && (
-                        <p className="fw-medium mb-3">Montant total : {Number(montantTotal).toFixed(2)} MAD</p>
+                        <p className="fw-medium px-3 mb-3">Montant total : {Number(montantTotal).toFixed(2)} MAD</p>
                     )}
 
                     {depenses.data.length === 0 ? (
@@ -355,16 +351,9 @@ export default function DepensesIndex({
                                         </td>
                                         <td>
                                             <RowActions view={row.showUrl}>
-                                                <li>
-                                                    <button
-                                                        type="button"
-                                                        className="dropdown-item rounded-1 w-100 text-start border-0 bg-transparent"
-                                                        onClick={() => openEditDepense(row)}
-                                                    >
-                                                        <i className="ti ti-edit me-2" />
-                                                        Modifier
-                                                    </button>
-                                                </li>
+                                                <RowActionItem icon="ti-edit" onClick={() => openEditDepense(row)}>
+                                                    Modifier
+                                                </RowActionItem>
                                             </RowActions>
                                         </td>
                                     </tr>
@@ -379,14 +368,19 @@ export default function DepensesIndex({
             {tab === 'remboursements' && canViewRemboursements && remboursements && (
                 <Card
                     title="Remboursements"
+                    bodyClassName="p-0 py-3"
                     tools={
-                        <button type="button" className="btn btn-primary" onClick={openCreateRemboursement}>
-                            <i className="ti ti-plus me-1" />
+                        <button
+                            type="button"
+                            className="btn btn-primary d-flex align-items-center mb-3"
+                            onClick={openCreateRemboursement}
+                        >
+                            <i className="ti ti-square-rounded-plus me-2" />
                             Ajouter un remboursement
                         </button>
                     }
                 >
-                    <TableToolbar
+                    <TableLengthRow
                         search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} />}
                     />
 
@@ -420,16 +414,9 @@ export default function DepensesIndex({
                                         <td>{row.dateRemboursement ?? '—'}</td>
                                         <td>
                                             <RowActions>
-                                                <li>
-                                                    <button
-                                                        type="button"
-                                                        className="dropdown-item rounded-1 w-100 text-start border-0 bg-transparent"
-                                                        onClick={() => openEditRemboursement(row)}
-                                                    >
-                                                        <i className="ti ti-edit me-2" />
-                                                        Modifier
-                                                    </button>
-                                                </li>
+                                                <RowActionItem icon="ti-edit" onClick={() => openEditRemboursement(row)}>
+                                                    Modifier
+                                                </RowActionItem>
                                             </RowActions>
                                         </td>
                                     </tr>

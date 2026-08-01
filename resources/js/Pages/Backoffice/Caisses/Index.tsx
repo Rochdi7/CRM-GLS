@@ -5,9 +5,11 @@ import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
 import TableToolbar from '@/Components/Tables/TableToolbar';
+import FilterDropdown from '@/Components/Tables/FilterDropdown';
+import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
-import RowActions from '@/Components/Tables/RowActions';
+import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
 import SelectField from '@/Components/Forms/SelectField';
 import FormField from '@/Components/Forms/FormField';
@@ -430,29 +432,37 @@ export default function CaissesIndex({
             {tab === 'journal' && canViewCaisses && journalAll && <JournalPanel scope="all" data={journalAll} />}
 
             {tab === 'comptes' && canViewCaisses && caisses && (
-                <Card title="Comptes de caisse">
-                    <TableToolbar
+                <Card
+                    title="Comptes de caisse"
+                    bodyClassName="p-0 py-3"
+                    tools={
+                        <FilterDropdown
+                            fields={[
+                                {
+                                    name: 'etablissementFilter',
+                                    label: 'Centre',
+                                    value: caissesFilters.etablissementFilter,
+                                    options: etablissementOptions,
+                                    placeholder: 'Tous les centres',
+                                },
+                                {
+                                    name: 'statutFilter',
+                                    label: 'Statut',
+                                    value: caissesFilters.statutFilter,
+                                    options: statutOptions,
+                                    placeholder: 'Tous les statuts',
+                                },
+                            ]}
+                            onApply={(values) => reloadCaisses(values)}
+                            onReset={() => reloadCaisses({ etablissementFilter: '', statutFilter: '' })}
+                        />
+                    }
+                >
+                    <TableLengthRow
                         search={<SearchInput value={caissesFilters.search} onSearch={(value) => reloadCaisses({ search: value })} />}
-                    >
-                        <SelectField
-                            id="c-etab-filter"
-                            label="Centre"
-                            options={etablissementOptions}
-                            placeholder="Tous les centres"
-                            value={caissesFilters.etablissementFilter}
-                            onChange={(e) => reloadCaisses({ etablissementFilter: e.target.value })}
-                        />
-                        <SelectField
-                            id="c-statut-filter"
-                            label="Statut"
-                            options={statutOptions}
-                            placeholder="Tous les statuts"
-                            value={caissesFilters.statutFilter}
-                            onChange={(e) => reloadCaisses({ statutFilter: e.target.value })}
-                        />
-                    </TableToolbar>
+                    />
 
-                    <div className="alert alert-info">
+                    <div className="alert alert-info mx-3">
                         Chaque employé possède une caisse, créée automatiquement avec lui. Les soldes ne bougent qu'à
                         travers les paiements, dépenses, remboursements et transferts validés.
                     </div>
@@ -485,7 +495,7 @@ export default function CaissesIndex({
                                         <td>{row.responsable ?? '—'}</td>
                                         <td className="text-end fw-medium">{Number(row.solde).toFixed(2)} DH</td>
                                         <td>
-                                            <StatusBadge label={row.statut} variant={row.statut === 'Active' ? 'success' : 'secondary'} />
+                                            <StatusBadge label={row.statut} variant={row.statut === 'Active' ? 'success' : 'secondary'} dot />
                                         </td>
                                         <td>
                                             <RowActions view={row.showUrl} />
@@ -502,14 +512,34 @@ export default function CaissesIndex({
             {tab === 'transferts' && canViewTransfers && transfers && (
                 <Card
                     title="Transferts de caisse"
+                    bodyClassName="p-0 py-3"
                     tools={
-                        <button type="button" className="btn btn-primary" onClick={openCreateTransfer}>
-                            <i className="ti ti-plus me-1" />
-                            Demander un transfert
-                        </button>
+                        <>
+                            <FilterDropdown
+                                fields={[
+                                    {
+                                        name: 'caisseFilter',
+                                        label: 'Caisse source',
+                                        value: transferFilters.caisseFilter,
+                                        options: transferCaisseOptions,
+                                        placeholder: 'Toutes les caisses',
+                                    },
+                                ]}
+                                onApply={(values) => reloadTransfers(values)}
+                                onReset={() => reloadTransfers({ caisseFilter: '' })}
+                            />
+                            <button
+                                type="button"
+                                className="btn btn-primary d-flex align-items-center mb-3"
+                                onClick={openCreateTransfer}
+                            >
+                                <i className="ti ti-square-rounded-plus me-2" />
+                                Demander un transfert
+                            </button>
+                        </>
                     }
                 >
-                    <ul className="nav nav-pills mb-3">
+                    <ul className="nav nav-pills px-3 mb-3">
                         {transferStatuts.map((statut) => (
                             <li className="nav-item" key={statut}>
                                 <button
@@ -523,20 +553,11 @@ export default function CaissesIndex({
                         ))}
                     </ul>
 
-                    <TableToolbar
+                    <TableLengthRow
                         search={<SearchInput value={transferFilters.search} onSearch={(value) => reloadTransfers({ search: value })} />}
-                    >
-                        <SelectField
-                            id="ct-caisse-filter"
-                            label="Caisse source"
-                            options={transferCaisseOptions}
-                            placeholder="Toutes les caisses"
-                            value={transferFilters.caisseFilter}
-                            onChange={(e) => reloadTransfers({ caisseFilter: e.target.value })}
-                        />
-                    </TableToolbar>
+                    />
 
-                    {validateError && <div className="alert alert-danger">{validateError}</div>}
+                    {validateError && <div className="alert alert-danger mx-3">{validateError}</div>}
 
                     {transfers.data.length === 0 ? (
                         <EmptyState title="Aucun transfert" icon="ti ti-arrows-exchange" />
@@ -564,49 +585,31 @@ export default function CaissesIndex({
                                         <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} DH</td>
                                         <td>{row.dateTransfert ?? '—'}</td>
                                         <td>
-                                            <StatusBadge label={row.statut} variant={TRANSFER_STATUT_BADGE[row.statut] ?? 'warning'} />
+                                            <StatusBadge label={row.statut} variant={TRANSFER_STATUT_BADGE[row.statut] ?? 'warning'} dot />
                                         </td>
                                         <td>
                                             <RowActions view={row.showUrl}>
                                                 {row.isPending && (
-                                                    <li>
-                                                        <button
-                                                            type="button"
-                                                            className="dropdown-item rounded-1 w-100 text-start border-0 bg-transparent"
-                                                            onClick={() => openEditTransfer(row)}
-                                                        >
-                                                            <i className="ti ti-edit me-2" />
-                                                            Modifier
-                                                        </button>
-                                                    </li>
+                                                    <RowActionItem icon="ti-edit" onClick={() => openEditTransfer(row)}>
+                                                        Modifier
+                                                    </RowActionItem>
                                                 )}
                                                 {row.isPending && (
-                                                    <li>
-                                                        <button
-                                                            type="button"
-                                                            className="dropdown-item rounded-1 w-100 text-start border-0 bg-transparent"
-                                                            onClick={() => cancelTransfer(row)}
-                                                        >
-                                                            <i className="ti ti-x me-2" />
-                                                            Annuler
-                                                        </button>
-                                                    </li>
+                                                    <RowActionItem icon="ti-x" onClick={() => cancelTransfer(row)}>
+                                                        Annuler
+                                                    </RowActionItem>
                                                 )}
                                                 {row.isPending && row.requestedById !== currentEmployeeId && (
-                                                    <li>
-                                                        <button
-                                                            type="button"
-                                                            className="dropdown-item rounded-1 w-100 text-start border-0 bg-transparent"
-                                                            onClick={() => {
-                                                                if (window.confirm('Valider ce transfert ? Les soldes vont bouger.')) {
-                                                                    validateTransfer(row);
-                                                                }
-                                                            }}
-                                                        >
-                                                            <i className="ti ti-check me-2" />
-                                                            Valider
-                                                        </button>
-                                                    </li>
+                                                    <RowActionItem
+                                                        icon="ti-check"
+                                                        onClick={() => {
+                                                            if (window.confirm('Valider ce transfert ? Les soldes vont bouger.')) {
+                                                                validateTransfer(row);
+                                                            }
+                                                        }}
+                                                    >
+                                                        Valider
+                                                    </RowActionItem>
                                                 )}
                                             </RowActions>
                                         </td>

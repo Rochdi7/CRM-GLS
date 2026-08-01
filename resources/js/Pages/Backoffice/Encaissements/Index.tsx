@@ -4,10 +4,11 @@ import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
-import TableToolbar from '@/Components/Tables/TableToolbar';
+import FilterDropdown from '@/Components/Tables/FilterDropdown';
+import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
-import RowActions from '@/Components/Tables/RowActions';
+import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
 import SelectField from '@/Components/Forms/SelectField';
 import FormField from '@/Components/Forms/FormField';
@@ -36,6 +37,9 @@ interface EditFormState {
     date_echeance_cheque: string;
     note: string;
 }
+
+/** Local list — the controller sends no perPageOptions prop (default perPage is 15, unclamped server-side). */
+const PER_PAGE_OPTIONS = [15, 25, 50, 100];
 
 function emptyCreateForm(): CreateFormState {
     return {
@@ -198,17 +202,43 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
         <BackofficeLayout
             title="Paiements"
             breadcrumbs={[{ label: 'Tableau de bord', href: '/backoffice/dashboard' }, { label: 'Paiements' }]}
+            actions={
+                <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
+                    <i className="ti ti-square-rounded-plus me-2" />
+                    Enregistrer un paiement
+                </button>
+            }
         >
             <Card
                 title="Paiements"
+                bodyClassName="p-0 py-3"
                 tools={
-                    <button type="button" className="btn btn-primary" onClick={openCreate}>
-                        <i className="ti ti-plus me-1" />
-                        Enregistrer un paiement
-                    </button>
+                    <FilterDropdown
+                        fields={[
+                            {
+                                name: 'caisseFilter',
+                                label: 'Caisse',
+                                value: filters.caisseFilter,
+                                options: caisseOptions,
+                                placeholder: 'Toutes les caisses',
+                            },
+                            {
+                                name: 'methodeFilter',
+                                label: 'Méthode',
+                                value: filters.methodeFilter,
+                                options: methodeOptions,
+                                placeholder: 'Toutes les méthodes',
+                            },
+                        ]}
+                        onApply={(values) => reload(values)}
+                        onReset={() => reload({ caisseFilter: '', methodeFilter: '' })}
+                    />
                 }
             >
-                <TableToolbar
+                <TableLengthRow
+                    perPage={filters.perPage}
+                    perPageOptions={PER_PAGE_OPTIONS}
+                    onPerPageChange={(perPage) => reload({ perPage })}
                     search={
                         <SearchInput
                             value={filters.search}
@@ -216,24 +246,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                             placeholder="Rechercher"
                         />
                     }
-                >
-                    <SelectField
-                        id="e-caisse-filter"
-                        label="Caisse"
-                        options={caisseOptions}
-                        placeholder="Toutes les caisses"
-                        value={filters.caisseFilter}
-                        onChange={(e) => reload({ caisseFilter: e.target.value })}
-                    />
-                    <SelectField
-                        id="e-methode-filter"
-                        label="Méthode"
-                        options={methodeOptions}
-                        placeholder="Toutes les méthodes"
-                        value={filters.methodeFilter}
-                        onChange={(e) => reload({ methodeFilter: e.target.value })}
-                    />
-                </TableToolbar>
+                />
 
                 {encaissements.data.length === 0 ? (
                     <EmptyState title="Aucun paiement" icon="ti ti-cash-banknote" />
@@ -269,16 +282,9 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                     <td>{row.datePaiement ?? '—'}</td>
                                     <td>
                                         <RowActions view={row.showUrl}>
-                                            <li>
-                                                <button
-                                                    type="button"
-                                                    className="dropdown-item rounded-1 w-100 text-start border-0 bg-transparent"
-                                                    onClick={() => openEdit(row)}
-                                                >
-                                                    <i className="ti ti-edit me-2" />
-                                                    Modifier
-                                                </button>
-                                            </li>
+                                            <RowActionItem icon="ti-edit" onClick={() => openEdit(row)}>
+                                                Modifier
+                                            </RowActionItem>
                                         </RowActions>
                                     </td>
                                 </tr>

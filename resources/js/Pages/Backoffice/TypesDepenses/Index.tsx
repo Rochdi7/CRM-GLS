@@ -8,8 +8,9 @@ import FormField from '@/Components/Forms/FormField';
 import SelectField from '@/Components/Forms/SelectField';
 import FormActions from '@/Components/Forms/FormActions';
 import RelatedRecordsTable from '@/Components/Details/RelatedRecordsTable';
+import StatusBadge from '@/Components/Details/StatusBadge';
 import Pagination from '@/Components/Tables/Pagination';
-import TableToolbar from '@/Components/Tables/TableToolbar';
+import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import type { CrudPermissions, PaginatedData, SelectOption, TypeDepenseForm, TypeDepenseRow } from '@/Types';
@@ -111,19 +112,17 @@ export default function TypesDepensesIndex({ types, filters, permissions }: Type
                 { label: 'Tableau de bord', href: '/backoffice/dashboard' },
                 { label: 'Types de dépenses' },
             ]}
+            actions={
+                permissions.create && (
+                    <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
+                        <i className="ti ti-square-rounded-plus me-2" />
+                        Ajouter un type de dépense
+                    </button>
+                )
+            }
         >
-            <Card title="Types de dépenses">
-                <TableToolbar
-                    search={<SearchInput value={filters.search} onSearch={handleSearch} placeholder="Rechercher" />}
-                    actions={
-                        permissions.create && (
-                            <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                                <i className="ti ti-square-rounded-plus me-2" />
-                                Ajouter un type de dépense
-                            </button>
-                        )
-                    }
-                />
+            <Card title="Types de dépenses" bodyClassName="p-0 py-3">
+                <TableLengthRow search={<SearchInput value={filters.search} onSearch={handleSearch} placeholder="Rechercher" />} />
 
                 <RelatedRecordsTable
                     isEmpty={types.data.length === 0}
@@ -143,9 +142,8 @@ export default function TypesDepensesIndex({ types, filters, permissions }: Type
                             <td className="fw-medium">
                                 {row.nom}
                                 {row.isSystem && (
-                                    <span className="badge badge-soft-secondary ms-2">
-                                        <i className="ti ti-lock me-1" />
-                                        Système
+                                    <span className="ms-2">
+                                        <StatusBadge label="Système" variant="secondary" dot />
                                     </span>
                                 )}
                             </td>
@@ -153,9 +151,11 @@ export default function TypesDepensesIndex({ types, filters, permissions }: Type
                                 <span className="badge badge-soft-secondary">{row.depensesCount}</span>
                             </td>
                             <td>
-                                <span className={`badge badge-soft-${row.statut === 'Actif' ? 'success' : 'secondary'}`}>
-                                    {row.statut === 'Actif' ? 'Actif' : 'Inactif'}
-                                </span>
+                                <StatusBadge
+                                    label={row.statut === 'Actif' ? 'Actif' : 'Inactif'}
+                                    variant={row.statut === 'Actif' ? 'success' : 'secondary'}
+                                    dot
+                                />
                             </td>
                             <td className="text-end">
                                 {!row.isSystem && (
