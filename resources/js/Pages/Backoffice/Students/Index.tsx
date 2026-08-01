@@ -4,7 +4,8 @@ import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
-import TableToolbar from '@/Components/Tables/TableToolbar';
+import FilterDropdown from '@/Components/Tables/FilterDropdown';
+import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
@@ -270,19 +271,31 @@ export default function StudentsIndex({
                 </button>
             }
         >
-            <Card title="Étudiants">
-                <TableToolbar search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} placeholder="Rechercher" />}>
-                    <div style={{ width: 200 }}>
-                        <SelectField
-                            id="stu-niveau-filter"
-                            label="Niveau"
-                            options={niveauFilterOptions}
-                            placeholder="Tous les niveaux"
-                            value={filters.niveauFilter}
-                            onChange={(event) => reload({ niveauFilter: event.target.value })}
-                        />
-                    </div>
-                </TableToolbar>
+            <Card
+                title="Étudiants"
+                bodyClassName="p-0 py-3"
+                tools={
+                    <FilterDropdown
+                        fields={[
+                            {
+                                name: 'niveauFilter',
+                                label: 'Niveau',
+                                value: filters.niveauFilter,
+                                options: niveauFilterOptions,
+                                placeholder: 'Tous les niveaux',
+                            },
+                        ]}
+                        onApply={(values) => reload(values)}
+                        onReset={() => reload({ niveauFilter: '' })}
+                    />
+                }
+            >
+                <TableLengthRow
+                    perPage={filters.perPage}
+                    perPageOptions={perPageOptions}
+                    onPerPageChange={(perPage) => reload({ perPage })}
+                    search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} placeholder="Rechercher" />}
+                />
 
                 {students.data.length === 0 ? (
                     <EmptyState title="Aucun étudiant" message="Ajoutez votre premier étudiant pour commencer." icon="ti ti-school" />
@@ -367,26 +380,6 @@ export default function StudentsIndex({
                                 </tr>
                             ))}
                         </DataTable>
-                        <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 px-3">
-                            <div className="d-flex align-items-center gap-2">
-                                <label className="text-muted mb-0" htmlFor="stu-per-page">
-                                    Par page
-                                </label>
-                                <select
-                                    id="stu-per-page"
-                                    className="form-select form-select-sm"
-                                    style={{ width: 90 }}
-                                    value={filters.perPage}
-                                    onChange={(event) => reload({ perPage: Number(event.target.value) })}
-                                >
-                                    {perPageOptions.map((option) => (
-                                        <option key={option} value={option}>
-                                            {option}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
                         <Pagination paginator={students} showJumpToPage />
                     </>
                 )}
