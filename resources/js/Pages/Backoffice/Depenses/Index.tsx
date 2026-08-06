@@ -248,7 +248,7 @@ export default function DepensesIndex({
         >
             {/* wimschool-style page tabs: the module's own sub-views, plus
                 Types de dépenses as a sibling page (its own route). */}
-            <ul className="nav nav-tabs mb-4" role="tablist">
+            <ul className="nav nav-tabs p-0 border-bottom rounded-0 mb-4" role="tablist">
                 {canViewDepenses && (
                     <li className="nav-item" role="presentation">
                         <button

@@ -222,7 +222,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
             }
         >
             {/* wimschool-style view tabs — server-side read-only filters on the same list. */}
-            <ul className="nav nav-tabs mb-4" role="tablist">
+            <ul className="nav nav-tabs p-0 border-bottom rounded-0 mb-4" role="tablist">
                 {[
                     { view: '', label: 'Paiements', icon: 'ti ti-cash-banknote' },
                     { view: 'avance', label: 'Avances', icon: 'ti ti-clock-dollar' },

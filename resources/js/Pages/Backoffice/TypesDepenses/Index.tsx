@@ -127,7 +127,7 @@ export default function TypesDepensesIndex({ types, filters, permissions }: Type
         >
             {/* wimschool-style page tabs — mirrors the Gestion des dépenses
                 page's bar with this page as the active tab. */}
-            <ul className="nav nav-tabs mb-4" role="tablist">
+            <ul className="nav nav-tabs p-0 border-bottom rounded-0 mb-4" role="tablist">
                 {canViewDepenses && (
                     <li className="nav-item" role="presentation">
                         <Link href="/backoffice/depenses" className="nav-link d-inline-flex align-items-center">

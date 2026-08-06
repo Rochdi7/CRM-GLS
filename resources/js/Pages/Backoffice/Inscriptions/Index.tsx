@@ -599,7 +599,7 @@ export default function InscriptionsIndex({
                         )}
                     </div>
 
-                    <ul className="nav nav-tabs mt-2 mb-4" role="tablist">
+                    <ul className="nav nav-tabs p-0 border-bottom rounded-0 mt-2 mb-4" role="tablist">
                         <li className="nav-item">
                             <button
                                 type="button"

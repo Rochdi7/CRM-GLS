@@ -38,7 +38,7 @@ export default function PageTabs({ tabs }: { tabs: PageTabDef[] }) {
     }
 
     return (
-        <ul className="nav nav-tabs mb-4" role="tablist">
+        <ul className="nav nav-tabs p-0 border-bottom rounded-0 mb-4" role="tablist">
             {visible.map((tab) => {
                 const active = (tab.matchPaths ?? [tab.href]).some(
                     (path) => currentPath === path || currentPath.startsWith(`${path}/`),
