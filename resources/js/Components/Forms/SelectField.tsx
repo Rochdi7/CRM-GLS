@@ -38,9 +38,12 @@ export default function SelectField({
 }: SelectFieldProps) {
     const [open, setOpen] = useState(false);
     const [highlight, setHighlight] = useState(0);
+    const [query, setQuery] = useState('');
     const wrapperRef = useRef<HTMLDivElement>(null);
 
     const selected = options.find((o) => String(o.value) === String(value));
+    const norm = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const shown = query === '' ? options : options.filter((o) => norm(o.label).includes(norm(query)));
 
     function emit(next: string) {
         onChange?.({ target: { value: next } } as unknown as React.ChangeEvent<HTMLSelectElement>);
@@ -49,6 +52,7 @@ export default function SelectField({
     function choose(option: SelectOption | null) {
         emit(option === null ? '' : String(option.value));
         setOpen(false);
+        setQuery('');
     }
 
     useEffect(() => {
@@ -61,6 +65,7 @@ export default function SelectField({
         function handleOutside(event: MouseEvent) {
             if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
                 setOpen(false);
+                setQuery('');
             }
         }
 
@@ -77,16 +82,23 @@ export default function SelectField({
         if (event.key === 'Escape') {
             event.stopPropagation();
             setOpen(false);
+            setQuery('');
         } else if (event.key === 'ArrowDown') {
             event.preventDefault();
-            setHighlight((h) => Math.min(h + 1, options.length - 1));
+            setHighlight((h) => Math.min(h + 1, shown.length - 1));
         } else if (event.key === 'ArrowUp') {
             event.preventDefault();
             setHighlight((h) => Math.max(h - 1, 0));
+        } else if (event.key === 'Backspace') {
+            setQuery((q) => q.slice(0, -1));
+            setHighlight(0);
+        } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
+            setQuery((q) => q + event.key);
+            setHighlight(0);
         } else if (event.key === 'Enter') {
             event.preventDefault();
-            if (options[highlight]) {
-                choose(options[highlight]);
+            if (shown[highlight]) {
+                choose(shown[highlight]);
             }
         }
     }
@@ -123,7 +135,9 @@ export default function SelectField({
                             }}
                         >
                             <span className="select2-selection__rendered">
-                                {selected ? (
+                                {open && query !== '' ? (
+                                    <>{query}<span className="text-muted">|</span></>
+                                ) : selected ? (
                                     selected.label
                                 ) : (
                                     <span className="select2-selection__placeholder">{placeholder ?? 'Choisir…'}</span>
@@ -157,10 +171,10 @@ export default function SelectField({
                                             {placeholder}
                                         </li>
                                     )}
-                                    {options.length === 0 && (
+                                    {shown.length === 0 && (
                                         <li className="select2-results__option select2-results__message">Aucun résultat</li>
                                     )}
-                                    {options.map((option, index) => (
+                                    {shown.map((option, index) => (
                                         <li
                                             key={option.value}
                                             className={`select2-results__option${index === highlight ? ' select2-results__option--highlighted' : ''}`}
