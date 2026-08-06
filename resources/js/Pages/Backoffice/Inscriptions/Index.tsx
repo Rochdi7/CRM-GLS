@@ -599,11 +599,11 @@ export default function InscriptionsIndex({
                         )}
                     </div>
 
-                    <ul className="nav nav-tabs nav-tabs-solid mt-2 mb-3" role="tablist">
+                    <ul className="nav nav-tabs mt-2 mb-4" role="tablist">
                         <li className="nav-item">
                             <button
                                 type="button"
-                                className={`nav-link border-0 bg-transparent${activeTab === 'affectation' ? ' active' : ''}`}
+                                className={`nav-link d-inline-flex align-items-center${activeTab === 'affectation' ? ' active' : ''}`}
                                 onClick={() => setActiveTab('affectation')}
                             >
                                 <i className="ti ti-calendar-event me-1" />
@@ -615,7 +615,7 @@ export default function InscriptionsIndex({
                                 <li className="nav-item">
                                     <button
                                         type="button"
-                                        className={`nav-link border-0 bg-transparent${activeTab === 'contact' ? ' active' : ''}`}
+                                        className={`nav-link d-inline-flex align-items-center${activeTab === 'contact' ? ' active' : ''}`}
                                         onClick={() => setActiveTab('contact')}
                                     >
                                         <i className="ti ti-mail me-1" />
@@ -625,7 +625,7 @@ export default function InscriptionsIndex({
                                 <li className="nav-item">
                                     <button
                                         type="button"
-                                        className={`nav-link border-0 bg-transparent${activeTab === 'parent' ? ' active' : ''}`}
+                                        className={`nav-link d-inline-flex align-items-center${activeTab === 'parent' ? ' active' : ''}`}
                                         onClick={() => setActiveTab('parent')}
                                     >
                                         <i className="ti ti-user me-1" />
@@ -637,7 +637,7 @@ export default function InscriptionsIndex({
                         <li className="nav-item">
                             <button
                                 type="button"
-                                className={`nav-link border-0 bg-transparent${activeTab === 'autre' ? ' active' : ''}`}
+                                className={`nav-link d-inline-flex align-items-center${activeTab === 'autre' ? ' active' : ''}`}
                                 onClick={() => setActiveTab('autre')}
                             >
                                 <i className="ti ti-info-circle me-1" />
