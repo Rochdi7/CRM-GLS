@@ -1,0 +1,26 @@
+/*
+ * App-level tweaks for the React backoffice, loaded through the Vite
+ * bundle (after the static PreSkool css, so equal-specificity rules here
+ * win). Keep this file tiny — theme classes stay the source of truth.
+ */
+
+/*
+ * Bordered nav-tabs (wimschool file-folder style, used by every page/modal
+ * tab bar): the theme's own .nav-tabs override paints the ACTIVE tab black
+ * with a grey line running under it — the intended look (blue label, white
+ * card whose bottom border fuses into the panel) only appeared on hover.
+ */
+.nav-tabs .nav-link.active,
+.nav-tabs .nav-link.active:hover,
+.nav-tabs .nav-link.active:focus {
+    color: #3d5ee1;
+    background-color: #fff;
+    border-color: #e9edf4 #e9edf4 #fff;
+}
+
+html[data-theme='dark'] .nav-tabs .nav-link.active,
+html[data-theme='dark'] .nav-tabs .nav-link.active:hover,
+html[data-theme='dark'] .nav-tabs .nav-link.active:focus {
+    background-color: transparent;
+    border-bottom-color: transparent;
+}

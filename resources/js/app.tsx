@@ -1,6 +1,7 @@
 import { createInertiaApp } from '@inertiajs/react';
 import type { ComponentType } from 'react';
 import { createRoot } from 'react-dom/client';
+import './app.css';
 
 // Lazy glob (no `eager`) → every page becomes its own Vite chunk, fetched on
 // first visit and then browser-cached. The initial bundle carries only
