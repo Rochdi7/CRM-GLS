@@ -1,4 +1,6 @@
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
+import PageTabs from '@/Components/Navigation/PageTabs';
+import { GROUPS_TABS } from '@/Config/pageTabs';
 import Card from '@/Components/Shared/Card';
 import RelatedRecordsTable from '@/Components/Details/RelatedRecordsTable';
 import StatusBadge from '@/Components/Details/StatusBadge';
@@ -24,6 +26,8 @@ export default function GroupsHistoriqueIndex({ historiques }: GroupsHistoriqueI
                 { label: 'Historique' },
             ]}
         >
+            <PageTabs tabs={GROUPS_TABS} />
+
             <Card title="Groupes archivés">
                 <RelatedRecordsTable
                     isEmpty={historiques.data.length === 0}

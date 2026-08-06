@@ -1,6 +1,8 @@
 import { router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
+import PageTabs from '@/Components/Navigation/PageTabs';
+import { FINANCE_TABS } from '@/Config/pageTabs';
 import Card from '@/Components/Shared/Card';
 import Modal from '@/Components/Modals/Modal';
 import ConfirmDialog from '@/Components/Modals/ConfirmDialog';
@@ -121,6 +123,8 @@ export default function TypesDepensesIndex({ types, filters, permissions }: Type
                 )
             }
         >
+            <PageTabs tabs={FINANCE_TABS} />
+
             <Card title="Types de dépenses" bodyClassName="p-0 py-3">
                 <TableLengthRow search={<SearchInput value={filters.search} onSearch={handleSearch} placeholder="Rechercher" />} />
 

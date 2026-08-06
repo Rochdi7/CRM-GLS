@@ -1,6 +1,8 @@
 import { router, useForm } from '@inertiajs/react';
 import { useRef, useState, type FormEvent } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
+import PageTabs from '@/Components/Navigation/PageTabs';
+import { FINANCE_TABS } from '@/Config/pageTabs';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
@@ -242,6 +244,8 @@ export default function DepensesIndex({
             title="Gestion des dépenses"
             breadcrumbs={[{ label: 'Tableau de bord', href: '/backoffice/dashboard' }, { label: 'Gestion des dépenses' }]}
         >
+            <PageTabs tabs={FINANCE_TABS} />
+
             <ul className="nav nav-tabs nav-tabs-solid mb-4" role="tablist">
                 {canViewDepenses && (
                     <li className="nav-item">

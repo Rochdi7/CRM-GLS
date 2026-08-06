@@ -1,6 +1,8 @@
 import { router, useForm } from '@inertiajs/react';
 import { useState, type FormEvent } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
+import PageTabs from '@/Components/Navigation/PageTabs';
+import { GROUPS_TABS } from '@/Config/pageTabs';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
@@ -177,6 +179,8 @@ export default function GroupsIndex({
                 </button>
             }
         >
+            <PageTabs tabs={GROUPS_TABS} />
+
             <Card title="Groupes" bodyClassName="p-0 py-3">
                 <TableLengthRow
                     perPage={filters.perPage}
