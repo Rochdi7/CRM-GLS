@@ -23,14 +23,18 @@ export default function GuestLayout({ title, children }: GuestLayoutProps) {
                     <div className="col-md-5 mx-auto">
                         <div className="d-flex flex-column justify-content-between vh-100">
                             <div className="mx-auto p-4 text-center">
+                                {/*
+                                 * One light logo only, sized like the theme's auth
+                                 * pages (mirrors the old .gls-auth-logo rule — that
+                                 * SCSS bundle was removed in Phase 11, which left
+                                 * BOTH logos rendering full-width and stacked).
+                                 * Guest pages are always light: html[data-theme] is
+                                 * set by the authenticated header, never here.
+                                 */}
                                 <img
                                     src="/assets/images/logo/gls-noir.png"
-                                    className="img-fluid gls-auth-logo gls-logo-light"
-                                    alt="GLS CRM"
-                                />
-                                <img
-                                    src="/assets/images/logo/gls-blanc.webp"
-                                    className="img-fluid gls-auth-logo gls-logo-dark"
+                                    className="img-fluid"
+                                    style={{ maxWidth: 170 }}
                                     alt="GLS CRM"
                                 />
                             </div>
