@@ -20,7 +20,6 @@ import type { EncaissementRow, EncaissementsPageProps, PaymentLine, SelectOption
 interface CreateFormState {
     student_id: number | '';
     inscription_id: number | '';
-    caisse_id: number | '';
     date_paiement: string;
     note: string;
     payment_lines: PaymentLine[];
@@ -45,7 +44,6 @@ function emptyCreateForm(): CreateFormState {
     return {
         student_id: '',
         inscription_id: '',
-        caisse_id: '',
         date_paiement: new Date().toISOString().slice(0, 10),
         note: '',
         payment_lines: [],
@@ -183,6 +181,20 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
 
     function submitCreate(event: FormEvent) {
         event.preventDefault();
+        // The rows live in camelCase client state (PaymentLine) but the
+        // server validates snake_case (payment_lines.*.fee_id /
+        // .date_paiement) — without this mapping every submit failed
+        // validation invisibly. Same transform on every create submit, so
+        // no cross-submission transform leakage.
+        createForm.transform((data) => ({
+            ...data,
+            payment_lines: data.payment_lines.map((line) => ({
+                fee_id: line.feeId,
+                montant: line.montant,
+                methode: line.methode,
+                date_paiement: line.datePaiement,
+            })),
+        }));
         createForm.post('/backoffice/encaissements', {
             preserveScroll: true,
             onSuccess: () => closeModal(),
@@ -420,17 +432,12 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                         </div>
                     )}
 
-                    <SelectField
-                        id="e-caisse"
-                        label="Caisse"
-                        options={caisseOptions}
-                        placeholder="Votre caisse"
-                        value={createForm.data.caisse_id}
-                        onChange={() => undefined}
-                        disabled
-                        error={createForm.errors.caisse_id}
-                    />
-
+                    {/*
+                     * No Caisse field: the server derives the till from the
+                     * signed-in employee's own caisse (EncaissementController
+                     * @store + CaisseProvisioner self-heal) — never chosen
+                     * client-side, for any role.
+                     */}
                     <TextareaField
                         id="e-note"
                         label="Note"

@@ -42,7 +42,9 @@ final class StoreEncaissementRequest extends FormRequest
         $rules = [
             'student_id' => ['required', 'exists:students,id'],
             'inscription_id' => ['required', 'exists:inscriptions,id'],
-            'caisse_id' => ['required', 'exists:caisses,id', new \App\Rules\AccessibleCaisse],
+            // No caisse_id rule: the till is server-derived from the acting
+            // employee's own caisse (see the class docblock) — any submitted
+            // caisse_id is ignored by the controller.
             'date_paiement' => ['required', 'date'],
             'note' => ['nullable', 'string'],
             'payment_lines' => ['required', 'array', function (string $attribute, mixed $value, \Closure $fail): void {

@@ -90,16 +90,23 @@ final class EncaissementController extends Controller
 
         if ($agent === null) {
             throw ValidationException::withMessages([
-                'caisse_id' => __('Your account is not linked to any employee record.'),
+                'payment_lines' => __('Your account is not linked to any employee record.'),
             ]);
         }
+
+        // The till is ALWAYS the acting employee's own caisse — never chosen
+        // client-side, for any role (the modal shows no caisse field). Same
+        // self-heal as the journal's "mine" scope for pre-provisioner
+        // accounts (CaisseProvisioner is idempotent).
+        $caisse = $agent->caisses()->first()
+            ?? app(\App\Services\CaisseProvisioner::class)->provisionFor($agent);
 
         $data = $request->validated();
         $inscriptionId = (int) $data['inscription_id'];
 
         $touchedLines = collect($data['payment_lines'])->filter(fn ($l) => ($l['montant'] ?? '') !== '');
 
-        DB::transaction(function () use ($touchedLines, $data, $inscriptionId, $agent, $action): void {
+        DB::transaction(function () use ($touchedLines, $data, $inscriptionId, $agent, $caisse, $action): void {
             foreach ($touchedLines as $line) {
                 $fee = InscriptionFee::findOrFail($line['fee_id']);
 
@@ -119,7 +126,7 @@ final class EncaissementController extends Controller
                     'montant' => $line['montant'],
                     'methode' => $line['methode'],
                     'date_paiement' => $line['date_paiement'],
-                    'caisse_id' => $data['caisse_id'],
+                    'caisse_id' => $caisse->id,
                     'numero_cheque' => $line['methode'] === Encaissement::METHODE_CHEQUE ? ($data['numero_cheque'] ?? null) : null,
                     'banque' => $line['methode'] === Encaissement::METHODE_CHEQUE ? ($data['banque'] ?? null) : null,
                     'date_echeance_cheque' => $line['methode'] === Encaissement::METHODE_CHEQUE ? ($data['date_echeance_cheque'] ?? null) : null,

@@ -151,39 +151,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame(InscriptionFee::STATUT_PAYE, $fee->fresh()->statut);
     }
 
-    /**
-     * Phase 12 security hardening (AccessibleCaisse rule): a center-scoped
-     * user tampering the request with another center's till id must get a
-     * validation error, not money moved through a till they can't access.
-     */
-    public function test_another_centers_caisse_id_is_rejected_at_validation(): void
-    {
-        // NOT the userWith() helper — that grants centers.access-all, which
-        // legitimately passes the rule. This user is locked to one center.
-        $user = User::factory()->create();
-        $user->givePermissionTo('payments.view');
-        $user->givePermissionTo('payments.create');
-        Employee::factory()->create(['user_id' => $user->id, 'etablissement_id' => $this->centre->id]);
-        $user = $user->fresh();
-        $this->actingAs($user);
-        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1500);
-        $foreignCaisse = Caisse::factory()->create([
-            'etablissement_id' => Etablissement::factory()->create()->id,
-        ]);
 
-        $this->post(route('backoffice.encaissements.store'), [
-            'student_id' => $student->id,
-            'inscription_id' => $inscription->id,
-            'caisse_id' => $foreignCaisse->id,
-            'date_paiement' => '2025-09-20',
-            'payment_lines' => [
-                ['fee_id' => $fee->id, 'montant' => '1500', 'methode' => 'Espèces', 'date_paiement' => '2025-09-20'],
-            ],
-        ])->assertSessionHasErrors('caisse_id');
-
-        $this->assertSame(0, Encaissement::count());
-        $this->assertSame('0.00', (string) $foreignCaisse->fresh()->solde);
-    }
 
     public function test_amount_above_remaining_balance_is_rejected_with_zero_side_effects(): void
     {
@@ -278,7 +246,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
             'payment_lines' => [
                 ['fee_id' => $fee->id, 'montant' => '1500', 'methode' => 'Espèces', 'date_paiement' => '2025-09-20'],
             ],
-        ])->assertSessionHasErrors('caisse_id');
+        ])->assertSessionHasErrors('payment_lines');
 
         $this->assertSame(0, Encaissement::count());
     }
