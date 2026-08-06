@@ -11,6 +11,7 @@ import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
 import SelectField from '@/Components/Forms/SelectField';
+import DateField from '@/Components/Forms/DateField';
 import FormField from '@/Components/Forms/FormField';
 import TextareaField from '@/Components/Forms/TextareaField';
 import FormActions from '@/Components/Forms/FormActions';
@@ -506,10 +507,9 @@ export default function DepensesIndex({
                         onChange={(e) => depenseForm.setData('methode_paiement', e.target.value)}
                         error={depenseForm.errors.methode_paiement}
                     />
-                    <FormField
+                    <DateField
                         id="d-date"
                         label="Date"
-                        type="date"
                         required
                         value={depenseForm.data.date_depense}
                         onChange={(e) => depenseForm.setData('date_depense', e.target.value)}
@@ -607,10 +607,9 @@ export default function DepensesIndex({
                             error={remboursementForm.errors.montant}
                         />
                     )}
-                    <FormField
+                    <DateField
                         id="r-date"
                         label="Date"
-                        type="date"
                         required
                         value={remboursementForm.data.date_remboursement}
                         onChange={(e) => remboursementForm.setData('date_remboursement', e.target.value)}

@@ -11,6 +11,7 @@ import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
 import SelectField from '@/Components/Forms/SelectField';
+import DateField from '@/Components/Forms/DateField';
 import FormField from '@/Components/Forms/FormField';
 import TextareaField from '@/Components/Forms/TextareaField';
 import FormActions from '@/Components/Forms/FormActions';
@@ -469,15 +470,12 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                                     <label className="form-label" htmlFor={`pl-date-${index}`}>
                                                         Date
                                                     </label>
-                                                    <input
+                                                    <DateField
                                                         id={`pl-date-${index}`}
-                                                        type="date"
-                                                        className={`form-control${dateError ? ' is-invalid' : ''}`}
                                                         value={line.datePaiement}
                                                         onChange={(e) => setLine(index, { datePaiement: e.target.value })}
-                                                        aria-invalid={dateError ? true : undefined}
+                                                        error={dateError}
                                                     />
-                                                    {dateError && <div className="text-danger fs-12 mt-1">{dateError}</div>}
                                                 </div>
                                             </div>
                                         </div>
@@ -508,10 +506,9 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                 onChange={(e) => createForm.setData('banque', e.target.value)}
                                 error={createForm.errors.banque}
                             />
-                            <FormField
+                            <DateField
                                 id="e-date-echeance-cheque"
                                 label="Échéance du chèque"
-                                type="date"
                                 required
                                 value={createForm.data.date_echeance_cheque}
                                 onChange={(e) => createForm.setData('date_echeance_cheque', e.target.value)}
@@ -560,10 +557,9 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                             onChange={(e) => editForm.setData('methode', e.target.value)}
                             error={editForm.errors.methode}
                         />
-                        <FormField
+                        <DateField
                             id="e-edit-date"
                             label="Date de paiement"
-                            type="date"
                             required
                             value={editForm.data.date_paiement}
                             onChange={(e) => editForm.setData('date_paiement', e.target.value)}
@@ -587,10 +583,9 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                     onChange={(e) => editForm.setData('banque', e.target.value)}
                                     error={editForm.errors.banque}
                                 />
-                                <FormField
+                                <DateField
                                     id="e-edit-date-echeance-cheque"
                                     label="Échéance du chèque"
-                                    type="date"
                                     required
                                     value={editForm.data.date_echeance_cheque}
                                     onChange={(e) => editForm.setData('date_echeance_cheque', e.target.value)}

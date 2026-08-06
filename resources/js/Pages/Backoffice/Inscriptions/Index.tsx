@@ -12,6 +12,7 @@ import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
 import ConfirmDialog from '@/Components/Modals/ConfirmDialog';
+import DateField from '@/Components/Forms/DateField';
 import FormField from '@/Components/Forms/FormField';
 import SelectField from '@/Components/Forms/SelectField';
 import TextareaField from '@/Components/Forms/TextareaField';
@@ -519,10 +520,9 @@ export default function InscriptionsIndex({
                                     </div>
                                 </div>
                                 <div className="col-md-4">
-                                    <FormField
+                                    <DateField
                                         id="ins-new-naiss"
                                         label="Date de naissance"
-                                        type="date"
                                         value={form.data.new_date_naissance}
                                         onChange={(event) => form.setData('new_date_naissance', event.target.value)}
                                         error={form.errors.new_date_naissance}
@@ -578,10 +578,9 @@ export default function InscriptionsIndex({
                                     </div>
                                 )}
                                 <div className="col-md-4">
-                                    <FormField
+                                    <DateField
                                         id="ins-new-date"
                                         label="Date d'inscription"
-                                        type="date"
                                         required
                                         value={form.data.date_inscription}
                                         onChange={(event) => form.setData('date_inscription', event.target.value)}
@@ -593,10 +592,9 @@ export default function InscriptionsIndex({
 
                         {editingInscription && (
                             <div className="col-md-4">
-                                <FormField
+                                <DateField
                                     id="ins-edit-date"
                                     label="Date d'inscription"
-                                    type="date"
                                     required
                                     value={form.data.date_inscription}
                                     onChange={(event) => form.setData('date_inscription', event.target.value)}
@@ -684,17 +682,16 @@ export default function InscriptionsIndex({
                                 {form.data.group_id !== '' && (
                                     <>
                                         <div className="col-md-4">
-                                            <FormField
+                                            <DateField
                                                 id="ins-debut"
                                                 label="Date de début"
-                                                type="date"
                                                 value={form.data.date_debut}
-                                                readOnly
+                                                disabled
                                             />
                                             <div className="form-text">Provient du groupe</div>
                                         </div>
                                         <div className="col-md-4">
-                                            <FormField id="ins-fin" label="Date de fin" type="date" value={form.data.date_fin} readOnly />
+                                            <DateField id="ins-fin" label="Date de fin" value={form.data.date_fin} disabled />
                                             <div className="form-text">Provient du groupe</div>
                                         </div>
                                     </>
@@ -783,9 +780,8 @@ export default function InscriptionsIndex({
                                                                     {final.toFixed(2)} DH
                                                                 </td>
                                                                 <td style={{ width: 150 }}>
-                                                                    <input
-                                                                        type="date"
-                                                                        className="form-control form-control-sm"
+                                                                    <DateField
+                                                                        id={`ins-fee-date-${index}`}
                                                                         value={line.dateEcheance}
                                                                         onChange={(event) => setLine(index, 'dateEcheance', event.target.value)}
                                                                     />

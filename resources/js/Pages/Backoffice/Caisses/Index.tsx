@@ -12,6 +12,7 @@ import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
 import SelectField from '@/Components/Forms/SelectField';
+import DateField from '@/Components/Forms/DateField';
 import FormField from '@/Components/Forms/FormField';
 import TextareaField from '@/Components/Forms/TextareaField';
 import FormActions from '@/Components/Forms/FormActions';
@@ -148,10 +149,8 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
                         <label className="form-label" htmlFor={`cj-from-${scope}`}>
                             Du
                         </label>
-                        <input
+                        <DateField
                             id={`cj-from-${scope}`}
-                            type="date"
-                            className="form-control"
                             value={dateFrom}
                             onChange={(e) => {
                                 setDateFrom(e.target.value);
@@ -163,10 +162,8 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
                         <label className="form-label" htmlFor={`cj-to-${scope}`}>
                             Au
                         </label>
-                        <input
+                        <DateField
                             id={`cj-to-${scope}`}
-                            type="date"
-                            className="form-control"
                             value={dateTo}
                             onChange={(e) => {
                                 setDateTo(e.target.value);

@@ -11,6 +11,7 @@ import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
+import DateField from '@/Components/Forms/DateField';
 import FormField from '@/Components/Forms/FormField';
 import SelectField from '@/Components/Forms/SelectField';
 import FormActions from '@/Components/Forms/FormActions';
@@ -317,20 +318,18 @@ export default function GroupsIndex({
                             />
                         </div>
                         <div className="col-md-6">
-                            <FormField
+                            <DateField
                                 id="grp-debut"
                                 label="Date de début"
-                                type="date"
                                 value={form.data.date_debut_formation}
                                 onChange={(event) => form.setData('date_debut_formation', event.target.value)}
                                 error={form.errors.date_debut_formation}
                             />
                         </div>
                         <div className="col-md-6">
-                            <FormField
+                            <DateField
                                 id="grp-fin"
                                 label="Date de fin"
-                                type="date"
                                 value={form.data.date_fin_formation}
                                 onChange={(event) => form.setData('date_fin_formation', event.target.value)}
                                 error={form.errors.date_fin_formation}
@@ -403,12 +402,10 @@ export default function GroupsIndex({
                                                         </select>
                                                     </td>
                                                     <td>
-                                                        <input
-                                                            type="date"
-                                                            className="form-control form-control-sm text-center"
+                                                        <DateField
+                                                            id={`grp-fee-d-${fee.value}`}
                                                             value={ligne.date_echeance}
                                                             onChange={(event) => setLigne(fee.value as number, 'date_echeance', event.target.value)}
-                                                            title="Échéance"
                                                         />
                                                     </td>
                                                     <td>

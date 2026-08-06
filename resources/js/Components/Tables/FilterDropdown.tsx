@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import DateField from '@/Components/Forms/DateField';
 import { t } from '@/Lib/i18n';
 
 export interface FilterFieldOption {
@@ -114,10 +115,8 @@ export default function FilterDropdown({ fields, onApply, onReset }: FilterDropd
                                                 {field.label}
                                             </label>
                                             {field.type === 'date' ? (
-                                                <input
+                                                <DateField
                                                     id={`filter-${field.name}`}
-                                                    type="date"
-                                                    className="form-control"
                                                     value={draft[field.name] ?? ''}
                                                     onChange={(e) => setDraft((d) => ({ ...d, [field.name]: e.target.value }))}
                                                 />

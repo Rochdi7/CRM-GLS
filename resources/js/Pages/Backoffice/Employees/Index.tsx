@@ -11,6 +11,7 @@ import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
 import ConfirmDialog from '@/Components/Modals/ConfirmDialog';
+import DateField from '@/Components/Forms/DateField';
 import FormField from '@/Components/Forms/FormField';
 import SelectField from '@/Components/Forms/SelectField';
 import TextareaField from '@/Components/Forms/TextareaField';
@@ -497,10 +498,9 @@ export default function EmployeesIndex({
                             </div>
 
                             <div className="col-md-4">
-                                <FormField
+                                <DateField
                                     id="emp-naissance"
                                     label="Date de naissance"
-                                    type="date"
                                     value={form.data.date_naissance}
                                     onChange={(event) => form.setData('date_naissance', event.target.value)}
                                     error={form.errors.date_naissance}
@@ -594,10 +594,9 @@ export default function EmployeesIndex({
                             )}
 
                             <div className="col-md-4">
-                                <FormField
+                                <DateField
                                     id="emp-embauche"
                                     label="Date d'embauche"
-                                    type="date"
                                     value={form.data.date_embauche}
                                     onChange={(event) => form.setData('date_embauche', event.target.value)}
                                     error={form.errors.date_embauche}
