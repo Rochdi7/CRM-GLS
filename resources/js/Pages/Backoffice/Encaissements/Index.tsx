@@ -262,9 +262,21 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                 options: methodeOptions,
                                 placeholder: 'Toutes les méthodes',
                             },
+                            {
+                                name: 'dateFrom',
+                                label: 'Du',
+                                type: 'date',
+                                value: filters.dateFrom,
+                            },
+                            {
+                                name: 'dateTo',
+                                label: 'Au',
+                                type: 'date',
+                                value: filters.dateTo,
+                            },
                         ]}
                         onApply={(values) => reload(values)}
-                        onReset={() => reload({ caisseFilter: '', methodeFilter: '' })}
+                        onReset={() => reload({ caisseFilter: '', methodeFilter: '', dateFrom: '', dateTo: '' })}
                     />
                 }
             >

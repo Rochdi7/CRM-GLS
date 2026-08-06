@@ -44,13 +44,17 @@ final class EmployeeController extends Controller
 
         $search = (string) $request->string('search');
         $categorieFilter = (string) $request->string('categorieFilter');
+        $statutFilter = (string) $request->string('statutFilter');
+        $etablissementFilter = (string) $request->string('etablissementFilter');
         $perPage = (int) $request->integer('perPage', GetEmployeesList::DEFAULT_PER_PAGE);
 
         return Inertia::render('Backoffice/Employees/Index', [
-            'employees' => $getEmployeesList($request->user(), $search, $categorieFilter, $perPage),
+            'employees' => $getEmployeesList($request->user(), $search, $categorieFilter, $statutFilter, $etablissementFilter, $perPage),
             'filters' => [
                 'search' => $search,
                 'categorieFilter' => $categorieFilter,
+                'statutFilter' => $statutFilter,
+                'etablissementFilter' => $etablissementFilter,
                 'perPage' => in_array($perPage, GetEmployeesList::PER_PAGE_OPTIONS, true)
                     ? $perPage
                     : GetEmployeesList::DEFAULT_PER_PAGE,

@@ -354,9 +354,16 @@ export default function InscriptionsIndex({
                                 options: statutFilterOptions,
                                 placeholder: 'Tous les statuts',
                             },
+                            {
+                                name: 'groupFilter',
+                                label: 'Groupe',
+                                value: filters.groupFilter,
+                                options: groupOptions,
+                                placeholder: 'Tous les groupes',
+                            },
                         ]}
                         onApply={(values) => reload(values)}
-                        onReset={() => reload({ statutFilter: '' })}
+                        onReset={() => reload({ statutFilter: '', groupFilter: '' })}
                     />
                 }
             >

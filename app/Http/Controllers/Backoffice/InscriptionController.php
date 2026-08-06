@@ -48,13 +48,15 @@ final class InscriptionController extends Controller
 
         $search = (string) $request->string('search');
         $statutFilter = (string) $request->string('statutFilter');
+        $groupFilter = (string) $request->string('groupFilter');
         $perPage = (int) $request->integer('perPage', GetInscriptionsList::DEFAULT_PER_PAGE);
 
         return Inertia::render('Backoffice/Inscriptions/Index', [
-            'inscriptions' => $getInscriptionsList($request->user(), $search, $statutFilter, $perPage),
+            'inscriptions' => $getInscriptionsList($request->user(), $search, $statutFilter, $groupFilter, $perPage),
             'filters' => [
                 'search' => $search,
                 'statutFilter' => $statutFilter,
+                'groupFilter' => $groupFilter,
                 'perPage' => in_array($perPage, GetInscriptionsList::PER_PAGE_OPTIONS, true)
                     ? $perPage
                     : GetInscriptionsList::DEFAULT_PER_PAGE,

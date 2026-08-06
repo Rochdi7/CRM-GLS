@@ -33,6 +33,8 @@ final class GetEmployeesList
         User $user,
         string $search = '',
         string $categorieFilter = '',
+        string $statutFilter = '',
+        string $etablissementFilter = '',
         int $perPage = self::DEFAULT_PER_PAGE,
     ): LengthAwarePaginator {
         if (! in_array($perPage, self::PER_PAGE_OPTIONS, true)) {
@@ -59,6 +61,8 @@ final class GetEmployeesList
                 });
             })
             ->when($categorieFilter !== '', fn ($q) => $q->where('categorie', $categorieFilter))
+            ->when($statutFilter !== '', fn ($q) => $q->where('statut', $statutFilter))
+            ->when($etablissementFilter !== '', fn ($q) => $q->where('etablissement_id', (int) $etablissementFilter))
             ->latest()
             ->paginate($perPage)
             ->withQueryString();

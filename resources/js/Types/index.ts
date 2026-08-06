@@ -341,6 +341,105 @@ export interface CaisseTransferDetails {
     soldeDestApres: MoneyDisplay | null;
 }
 
+// --- Attendance (Présences) -------------------------------------------------
+
+export interface SeanceRow {
+    id: number;
+    dateSeance: string;
+    heureDebut: string | null;
+    heureFin: string | null;
+    groupId: number;
+    groupNom: string | null;
+    groupNiveau: string | null;
+    enseignant: string | null;
+    enseignantId: number | null;
+    statut: string;
+    note: string | null;
+    presencesCount: number;
+    presentsCount: number;
+    absentsCount: number;
+    showUrl: string;
+}
+
+export interface SeanceForm {
+    group_id: string;
+    date_seance: string;
+    heure_debut: string;
+    heure_fin: string;
+    enseignant_id: string;
+    statut: string;
+    note: string;
+    [key: string]: string;
+}
+
+export interface SeanceStudentLine {
+    id: number;
+    reference: string;
+    nom: string;
+    prenom: string;
+    statut: string | null;
+    note: string;
+}
+
+export interface SeanceDetails {
+    id: number;
+    dateSeance: string;
+    heureDebut: string | null;
+    heureFin: string | null;
+    groupNom: string | null;
+    groupNiveau: string | null;
+    enseignant: string | null;
+    statut: string;
+    note: string | null;
+    students: SeanceStudentLine[];
+}
+
+// --- Stock ------------------------------------------------------------------
+
+export interface StockArticleRow {
+    id: number;
+    reference: string;
+    nom: string;
+    categorie: string;
+    quantite: number;
+    seuilAlerte: number | null;
+    enAlerte: boolean;
+    etablissement: string | null;
+    statut: string;
+    note: string | null;
+    mouvementsCount: number;
+}
+
+export interface StockArticleForm {
+    nom: string;
+    categorie: string;
+    seuil_alerte: string;
+    statut: string;
+    note: string;
+    [key: string]: string;
+}
+
+export interface StockMouvementRow {
+    id: number;
+    date: string | null;
+    articleNom: string | null;
+    articleReference: string | null;
+    type: string;
+    quantite: number;
+    quantiteAvant: number;
+    quantiteApres: number;
+    note: string | null;
+    par: string | null;
+}
+
+export interface StockMouvementForm {
+    stock_article_id: string;
+    type: string;
+    quantite: string;
+    note: string;
+    [key: string]: string;
+}
+
 // --- Shared form/CRUD primitives -------------------------------------------
 
 export interface SelectOption {
@@ -608,6 +707,8 @@ export interface EmployeeRow {
 export interface EmployeesFilters {
     search: string;
     categorieFilter: string;
+    statutFilter: string;
+    etablissementFilter: string;
     perPage: number;
 }
 
@@ -663,6 +764,8 @@ export interface StudentRow {
 export interface StudentsFilters {
     search: string;
     niveauFilter: string;
+    sexeFilter: string;
+    etablissementFilter: string;
     ageSort: string;
     perPage: number;
 }
@@ -784,6 +887,7 @@ export interface InscriptionFeeLine {
 export interface InscriptionsFilters {
     search: string;
     statutFilter: string;
+    groupFilter: string;
     perPage: number;
 }
 

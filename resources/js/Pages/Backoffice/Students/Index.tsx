@@ -113,6 +113,7 @@ export default function StudentsIndex({
     const parentRelationOptions: SelectOption[] = parentRelations.map((r) => ({ value: r, label: r }));
     const centerOptions: SelectOption[] = etablissements.map((etab) => ({ value: etab.id, label: etab.nom_centre }));
     const niveauFilterOptions: SelectOption[] = niveaux.map((n) => ({ value: n, label: n }));
+    const sexeFilterOptions: SelectOption[] = sexes.map((s) => ({ value: s, label: s }));
 
     const showsDomaine = niveauxAvecDomaine.includes(form.data.niveau);
     const showsExamen = form.data.niveau === niveauStudium;
@@ -284,9 +285,23 @@ export default function StudentsIndex({
                                 options: niveauFilterOptions,
                                 placeholder: 'Tous les niveaux',
                             },
+                            {
+                                name: 'sexeFilter',
+                                label: 'Sexe',
+                                value: filters.sexeFilter,
+                                options: sexeFilterOptions,
+                                placeholder: 'Tous',
+                            },
+                            {
+                                name: 'etablissementFilter',
+                                label: 'Centre',
+                                value: filters.etablissementFilter,
+                                options: centerOptions,
+                                placeholder: 'Tous les centres',
+                            },
                         ]}
                         onApply={(values) => reload(values)}
-                        onReset={() => reload({ niveauFilter: '' })}
+                        onReset={() => reload({ niveauFilter: '', sexeFilter: '', etablissementFilter: '' })}
                     />
                 }
             >

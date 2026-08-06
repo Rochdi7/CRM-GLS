@@ -33,6 +33,7 @@ final class GetInscriptionsList
         User $user,
         string $search = '',
         string $statutFilter = '',
+        string $groupFilter = '',
         int $perPage = self::DEFAULT_PER_PAGE,
     ): LengthAwarePaginator {
         if (! in_array($perPage, self::PER_PAGE_OPTIONS, true)) {
@@ -50,6 +51,7 @@ final class GetInscriptionsList
             })
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
             ->when($statutFilter !== '', fn ($q) => $q->where('statut', $statutFilter))
+            ->when($groupFilter !== '', fn ($q) => $q->where('group_id', (int) $groupFilter))
             ->when($search !== '', function ($q) use ($search): void {
                 $q->where(function ($sub) use ($search): void {
                     $sub->where('reference', 'ilike', "%{$search}%")

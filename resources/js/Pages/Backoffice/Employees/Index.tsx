@@ -278,9 +278,23 @@ export default function EmployeesIndex({
                                 options: categorieFilterOptions,
                                 placeholder: 'Toutes les catégories',
                             },
+                            {
+                                name: 'statutFilter',
+                                label: 'Statut',
+                                value: filters.statutFilter,
+                                options: statutOptions,
+                                placeholder: 'Tous les statuts',
+                            },
+                            {
+                                name: 'etablissementFilter',
+                                label: 'Centre',
+                                value: filters.etablissementFilter,
+                                options: centerOptions,
+                                placeholder: 'Tous les centres',
+                            },
                         ]}
                         onApply={(values) => reload(values)}
-                        onReset={() => reload({ categorieFilter: '' })}
+                        onReset={() => reload({ categorieFilter: '', statutFilter: '', etablissementFilter: '' })}
                     />
                 }
             >

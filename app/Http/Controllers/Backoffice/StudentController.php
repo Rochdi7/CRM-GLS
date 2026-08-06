@@ -36,14 +36,18 @@ final class StudentController extends Controller
 
         $search = (string) $request->string('search');
         $niveauFilter = (string) $request->string('niveauFilter');
+        $sexeFilter = (string) $request->string('sexeFilter');
+        $etablissementFilter = (string) $request->string('etablissementFilter');
         $ageSort = (string) $request->string('ageSort');
         $perPage = (int) $request->integer('perPage', GetStudentsList::DEFAULT_PER_PAGE);
 
         return Inertia::render('Backoffice/Students/Index', [
-            'students' => $getStudentsList($request->user(), $search, $niveauFilter, $ageSort, $perPage),
+            'students' => $getStudentsList($request->user(), $search, $niveauFilter, $sexeFilter, $etablissementFilter, $ageSort, $perPage),
             'filters' => [
                 'search' => $search,
                 'niveauFilter' => $niveauFilter,
+                'sexeFilter' => $sexeFilter,
+                'etablissementFilter' => $etablissementFilter,
                 'ageSort' => $ageSort,
                 'perPage' => in_array($perPage, GetStudentsList::PER_PAGE_OPTIONS, true)
                     ? $perPage

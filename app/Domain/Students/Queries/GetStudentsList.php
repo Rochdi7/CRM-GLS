@@ -33,6 +33,8 @@ final class GetStudentsList
         User $user,
         string $search = '',
         string $niveauFilter = '',
+        string $sexeFilter = '',
+        string $etablissementFilter = '',
         string $ageSort = '',
         int $perPage = self::DEFAULT_PER_PAGE,
     ): LengthAwarePaginator {
@@ -60,6 +62,8 @@ final class GetStudentsList
                 });
             })
             ->when($niveauFilter !== '', fn ($q) => $q->where('niveau', $niveauFilter))
+            ->when($sexeFilter !== '', fn ($q) => $q->where('sexe', $sexeFilter))
+            ->when($etablissementFilter !== '', fn ($q) => $q->where('etablissement_id', (int) $etablissementFilter))
             ->when(
                 $ageSort !== '',
                 // Age asc = youngest first = most recent birth date; unknown birth dates go last.
