@@ -365,46 +365,82 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                     {loadingFees && <p className="text-muted">Chargement des frais…</p>}
 
                     {createForm.data.payment_lines.length > 0 && (
-                        <div className="table-responsive mb-3">
-                            <table className="table table-sm">
-                                <thead>
-                                    <tr>
-                                        <th>Frais</th>
-                                        <th className="text-end">Restant</th>
-                                        <th>Montant</th>
-                                        <th>Méthode</th>
-                                        <th>Date</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {createForm.data.payment_lines.map((line, index) => {
-                                        // Server errors arrive keyed per submitted row
-                                        // (payment_lines.<i>.montant/…) — surface them on
-                                        // the row so a refused save is never silent.
-                                        const rowErrors = createForm.errors as Record<string, string | undefined>;
-                                        const montantError = rowErrors[`payment_lines.${index}.montant`];
-                                        const dateError = rowErrors[`payment_lines.${index}.date_paiement`];
+                        <>
+                            {/*
+                             * Summary strip + one labeled two-column block per
+                             * unpaid fee — the theme's Collect Fees modal
+                             * layout (students.html #add_fees_collect:
+                             * bg-light-300 recap, then row > col-lg-* with
+                             * form-label + full-size form-control), replacing
+                             * the cramped table-sm/form-control-sm grid.
+                             */}
+                            <div className="bg-light-300 p-3 pb-0 rounded mb-4">
+                                <div className="row align-items-center">
+                                    <div className="col-md-6">
+                                        <div className="mb-3">
+                                            <span className="fs-12 mb-1 d-block">Frais impayés</span>
+                                            <p className="text-dark mb-0">{createForm.data.payment_lines.length}</p>
+                                        </div>
+                                    </div>
+                                    <div className="col-md-6">
+                                        <div className="mb-3">
+                                            <span className="fs-12 mb-1 d-block">Total restant</span>
+                                            <p className="text-dark mb-0">
+                                                {createForm.data.payment_lines
+                                                    .reduce((sum, l) => sum + Number(l.reste), 0)
+                                                    .toFixed(2)}{' '}
+                                                MAD
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
 
-                                        return (
-                                            <tr key={line.feeId}>
-                                                <td>{line.nom}</td>
-                                                <td className="text-end">{Number(line.reste).toFixed(2)} MAD</td>
-                                                <td>
+                            {createForm.data.payment_lines.map((line, index) => {
+                                // Server errors arrive keyed per submitted row
+                                // (payment_lines.<i>.montant/…) — surface them on
+                                // the row so a refused save is never silent.
+                                const rowErrors = createForm.errors as Record<string, string | undefined>;
+                                const montantError = rowErrors[`payment_lines.${index}.montant`];
+                                const dateError = rowErrors[`payment_lines.${index}.date_paiement`];
+
+                                return (
+                                    <div className="border rounded p-3 mb-3" key={line.feeId}>
+                                        <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                                            <h6 className="mb-0">{line.nom}</h6>
+                                            <span className="badge badge-soft-danger d-inline-flex align-items-center">
+                                                <i className="ti ti-circle-filled fs-5 me-1" aria-hidden="true" />
+                                                Reste : {Number(line.reste).toFixed(2)} MAD
+                                            </span>
+                                        </div>
+                                        <div className="row">
+                                            <div className="col-lg-4 col-md-6">
+                                                <div className="mb-3 mb-lg-0">
+                                                    <label className="form-label" htmlFor={`pl-montant-${index}`}>
+                                                        Montant
+                                                    </label>
                                                     <input
+                                                        id={`pl-montant-${index}`}
                                                         type="number"
                                                         step="0.01"
                                                         min="0"
                                                         max={line.reste}
-                                                        className={`form-control form-control-sm${montantError ? ' is-invalid' : ''}`}
+                                                        className={`form-control${montantError ? ' is-invalid' : ''}`}
                                                         value={line.montant}
                                                         onChange={(e) => setLine(index, { montant: e.target.value })}
                                                         aria-invalid={montantError ? true : undefined}
                                                     />
                                                     {montantError && <div className="text-danger fs-12 mt-1">{montantError}</div>}
-                                                </td>
-                                                <td>
+                                                </div>
+                                            </div>
+                                            <div className="col-lg-4 col-md-6">
+                                                <div className="mb-3 mb-lg-0">
+                                                    <label className="form-label" htmlFor={`pl-methode-${index}`}>
+                                                        Méthode
+                                                    </label>
                                                     <select
-                                                        className="form-select form-select-sm"
+                                                        id={`pl-methode-${index}`}
+                                                        className="form-select"
                                                         value={line.methode}
                                                         onChange={(e) => setLine(index, { methode: e.target.value })}
                                                     >
@@ -414,26 +450,32 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                                             </option>
                                                         ))}
                                                     </select>
-                                                </td>
-                                                <td>
+                                                </div>
+                                            </div>
+                                            <div className="col-lg-4 col-md-6">
+                                                <div className="mb-0">
+                                                    <label className="form-label" htmlFor={`pl-date-${index}`}>
+                                                        Date
+                                                    </label>
                                                     <input
+                                                        id={`pl-date-${index}`}
                                                         type="date"
-                                                        className={`form-control form-control-sm${dateError ? ' is-invalid' : ''}`}
+                                                        className={`form-control${dateError ? ' is-invalid' : ''}`}
                                                         value={line.datePaiement}
                                                         onChange={(e) => setLine(index, { datePaiement: e.target.value })}
                                                         aria-invalid={dateError ? true : undefined}
                                                     />
                                                     {dateError && <div className="text-danger fs-12 mt-1">{dateError}</div>}
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                             {createForm.errors.payment_lines && (
-                                <div className="text-danger small mt-1">{createForm.errors.payment_lines}</div>
+                                <div className="text-danger small mb-3">{createForm.errors.payment_lines}</div>
                             )}
-                        </div>
+                        </>
                     )}
 
                     {anyLineIsCheque && (
