@@ -48,6 +48,10 @@ export default function SelectField({
     const searchRef = useRef<HTMLInputElement>(null);
 
     const selected = options.find((o) => String(o.value) === String(value));
+    // Mirrors Select2's minimumResultsForSearch (add-student.blade.php's
+    // Gender select shows no search box): short lists get the plain
+    // dropdown, long lists (students, countries…) keep the search input.
+    const showSearch = options.length > 8;
     const filtered = useMemo(
         () => (search === '' ? options : options.filter((o) => normalize(o.label).includes(normalize(search)))),
         [options, search],
@@ -155,20 +159,22 @@ export default function SelectField({
                         style={{ position: 'absolute', top: '100%', left: 0, width: '100%', zIndex: 1070 }}
                     >
                         <span className="select2-dropdown select2-dropdown--below" style={{ position: 'static', width: '100%' }}>
-                            <span className="select2-search select2-search--dropdown">
-                                <input
-                                    ref={searchRef}
-                                    className="select2-search__field"
-                                    type="search"
-                                    role="searchbox"
-                                    aria-label={`Rechercher — ${label}`}
-                                    value={search}
-                                    onChange={(e) => {
-                                        setSearch(e.target.value);
-                                        setHighlight(0);
-                                    }}
-                                />
-                            </span>
+                            {showSearch && (
+                                <span className="select2-search select2-search--dropdown">
+                                    <input
+                                        ref={searchRef}
+                                        className="select2-search__field"
+                                        type="search"
+                                        role="searchbox"
+                                        aria-label={`Rechercher — ${label}`}
+                                        value={search}
+                                        onChange={(e) => {
+                                            setSearch(e.target.value);
+                                            setHighlight(0);
+                                        }}
+                                    />
+                                </span>
+                            )}
                             <span className="select2-results">
                                 <ul className="select2-results__options" role="listbox" style={{ maxHeight: 220, overflowY: 'auto' }}>
                                     {placeholder && search === '' && (
