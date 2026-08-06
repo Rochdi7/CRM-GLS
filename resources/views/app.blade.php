@@ -25,6 +25,9 @@
 
     <link rel="stylesheet" href="{{ asset('assets/preskool/plugins/tabler-icons/tabler-icons.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/preskool/plugins/fontawesome/css/all.min.css') }}">
+    {{-- Select2 CSS only (no jQuery/Select2 JS anywhere): SelectField.tsx
+         renders Select2's own markup as a React-native searchable dropdown. --}}
+    <link rel="stylesheet" href="{{ asset('assets/preskool/css/select2.min.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/preskool/css/style.css') }}">
 
     {{--

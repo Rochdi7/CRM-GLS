@@ -24,3 +24,45 @@ html[data-theme='dark'] .nav-tabs .nav-link.active:focus {
     background-color: transparent;
     border-bottom-color: transparent;
 }
+
+/*
+ * React-native Select2-styled dropdown (SelectField.tsx — select2.min.css
+ * provides the base look; the plugin JS is never loaded).
+ */
+.select2-selection.select2-selection--single {
+    height: 38px;
+    display: block;
+    padding: 0;
+    border: 1px solid #e9edf4;
+    border-radius: 5px;
+    background-color: #fff;
+}
+.select2-selection--single .select2-selection__rendered {
+    line-height: 36px;
+    padding-left: 12px;
+    padding-right: 28px;
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.select2-selection--single .select2-selection__arrow {
+    height: 36px;
+    position: absolute;
+    top: 1px;
+    right: 6px;
+    width: 20px;
+}
+.select2-selection--single:disabled {
+    background-color: #f8f9fa;
+    cursor: not-allowed;
+}
+.gls-select2-invalid.select2-selection {
+    border-color: #dc3545 !important;
+}
+html[data-theme='dark'] .select2-selection.select2-selection--single,
+html[data-theme='dark'] .select2-dropdown {
+    background-color: transparent;
+    border-color: #3b3b4f;
+    color: inherit;
+}
