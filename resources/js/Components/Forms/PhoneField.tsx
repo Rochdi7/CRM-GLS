@@ -1,5 +1,6 @@
 import FormError from '@/Components/Forms/FormError';
 import { COUNTRIES, dialFor } from '@/Data/countries';
+import SelectField from '@/Components/Forms/SelectField';
 
 interface PhoneFieldProps {
     id: string;
@@ -40,19 +41,17 @@ export default function PhoneField({
             </label>
             <div className="row g-2">
                 <div className="col-5">
-                    <select
+                    {/* Same Select2-styled control as every other dropdown
+                        (bare mode: no label/margin of its own). */}
+                    <SelectField
                         id={`${id}-country`}
-                        className="form-select"
+                        options={COUNTRIES.map((country) => ({
+                            value: country.iso,
+                            label: `${country.nom} ${country.dial}`,
+                        }))}
                         value={countryIso}
                         onChange={(event) => onCountryChange(event.target.value)}
-                        aria-label="Indicatif pays"
-                    >
-                        {COUNTRIES.map((country) => (
-                            <option key={country.iso} value={country.iso}>
-                                {country.nom} {country.dial}
-                            </option>
-                        ))}
-                    </select>
+                    />
                 </div>
                 <div className="col-7">
                     <div className="input-group">

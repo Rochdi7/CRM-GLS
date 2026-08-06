@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ChangeEventHandler } from 'react';
 import FormError from '@/Components/Forms/FormError';
 import type { SelectOption } from '@/Types';
 
 interface SelectFieldProps {
     id: string;
-    label: string;
+    /** Omit for a bare control (e.g. PhoneField country picker) — no label row, no outer margin. */
+    label?: string;
     options: SelectOption[];
     placeholder?: string;
     error?: string;
@@ -15,20 +16,14 @@ interface SelectFieldProps {
     onChange?: ChangeEventHandler<HTMLSelectElement>;
 }
 
-function normalize(text: string): string {
-    return text
-        .normalize('NFD')
-        .replace(/[̀-ͯ]/g, '')
-        .toLowerCase();
-}
-
 /**
  * The app's standard dropdown, rendered in the theme's Select2 style
  * (form-select2.blade.php "Select With Placeholder" reference) — but 100%
  * React-native: only select2.min.css is loaded (app.blade.php), never the
  * jQuery plugin (CLAUDE.md §5/§6). Same API as the previous native-select
- * version (onChange receives an event-like object exposing target.value),
- * plus a built-in search box filtering options accent-insensitively.
+ * version (onChange receives an event-like object exposing target.value).
+ * No search box, matching the add-student.blade.php selects (product
+ * decision); keyboard navigation (arrows/Enter/Escape) still works.
  */
 export default function SelectField({
     id,
@@ -42,20 +37,10 @@ export default function SelectField({
     onChange,
 }: SelectFieldProps) {
     const [open, setOpen] = useState(false);
-    const [search, setSearch] = useState('');
     const [highlight, setHighlight] = useState(0);
     const wrapperRef = useRef<HTMLDivElement>(null);
-    const searchRef = useRef<HTMLInputElement>(null);
 
     const selected = options.find((o) => String(o.value) === String(value));
-    // Mirrors Select2's minimumResultsForSearch (add-student.blade.php's
-    // Gender select shows no search box): short lists get the plain
-    // dropdown, long lists (students, countries…) keep the search input.
-    const showSearch = options.length > 8;
-    const filtered = useMemo(
-        () => (search === '' ? options : options.filter((o) => normalize(o.label).includes(normalize(search)))),
-        [options, search],
-    );
 
     function emit(next: string) {
         onChange?.({ target: { value: next } } as unknown as React.ChangeEvent<HTMLSelectElement>);
@@ -64,7 +49,6 @@ export default function SelectField({
     function choose(option: SelectOption | null) {
         emit(option === null ? '' : String(option.value));
         setOpen(false);
-        setSearch('');
     }
 
     useEffect(() => {
@@ -72,13 +56,11 @@ export default function SelectField({
             return;
         }
 
-        searchRef.current?.focus();
         setHighlight(0);
 
         function handleOutside(event: MouseEvent) {
             if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
                 setOpen(false);
-                setSearch('');
             }
         }
 
@@ -95,27 +77,28 @@ export default function SelectField({
         if (event.key === 'Escape') {
             event.stopPropagation();
             setOpen(false);
-            setSearch('');
         } else if (event.key === 'ArrowDown') {
             event.preventDefault();
-            setHighlight((h) => Math.min(h + 1, filtered.length - 1));
+            setHighlight((h) => Math.min(h + 1, options.length - 1));
         } else if (event.key === 'ArrowUp') {
             event.preventDefault();
             setHighlight((h) => Math.max(h - 1, 0));
         } else if (event.key === 'Enter') {
             event.preventDefault();
-            if (filtered[highlight]) {
-                choose(filtered[highlight]);
+            if (options[highlight]) {
+                choose(options[highlight]);
             }
         }
     }
 
     return (
-        <div className="mb-3">
-            <label className="form-label" htmlFor={id}>
-                {label}
-                {required && <span className="text-danger ms-1">*</span>}
-            </label>
+        <div className={label ? 'mb-3' : ''}>
+            {label && (
+                <label className="form-label" htmlFor={id}>
+                    {label}
+                    {required && <span className="text-danger ms-1">*</span>}
+                </label>
+            )}
             <div className="position-relative" ref={wrapperRef} onKeyDown={handleKeyDown}>
                 <span
                     className={`select2 select2-container select2-container--default${open ? ' select2-container--open select2-container--focus' : ''}`}
@@ -159,25 +142,9 @@ export default function SelectField({
                         style={{ position: 'absolute', top: '100%', left: 0, width: '100%', zIndex: 1070 }}
                     >
                         <span className="select2-dropdown select2-dropdown--below" style={{ position: 'static', width: '100%' }}>
-                            {showSearch && (
-                                <span className="select2-search select2-search--dropdown">
-                                    <input
-                                        ref={searchRef}
-                                        className="select2-search__field"
-                                        type="search"
-                                        role="searchbox"
-                                        aria-label={`Rechercher — ${label}`}
-                                        value={search}
-                                        onChange={(e) => {
-                                            setSearch(e.target.value);
-                                            setHighlight(0);
-                                        }}
-                                    />
-                                </span>
-                            )}
                             <span className="select2-results">
                                 <ul className="select2-results__options" role="listbox" style={{ maxHeight: 220, overflowY: 'auto' }}>
-                                    {placeholder && search === '' && (
+                                    {placeholder && (
                                         <li
                                             className="select2-results__option"
                                             role="option"
@@ -190,10 +157,10 @@ export default function SelectField({
                                             {placeholder}
                                         </li>
                                     )}
-                                    {filtered.length === 0 && (
+                                    {options.length === 0 && (
                                         <li className="select2-results__option select2-results__message">Aucun résultat</li>
                                     )}
-                                    {filtered.map((option, index) => (
+                                    {options.map((option, index) => (
                                         <li
                                             key={option.value}
                                             className={`select2-results__option${index === highlight ? ' select2-results__option--highlighted' : ''}`}
