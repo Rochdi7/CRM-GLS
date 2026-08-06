@@ -25,7 +25,28 @@ interface RowActionItemProps {
  */
 export default function RowActions({ view, viewLabel = 'Voir', children }: RowActionsProps) {
     const [open, setOpen] = useState(false);
+    // The menu renders position:fixed, measured from the trigger — inside
+    // .table-responsive (overflow-x:auto) an absolutely-positioned menu gets
+    // clipped at the card edge (the theme demo escapes this via Popper,
+    // which this app deliberately doesn't load). Fixed positioning escapes
+    // every scroll container; flips upward near the viewport bottom.
+    const [pos, setPos] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
     const menuRef = useRef<HTMLDivElement>(null);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+
+    function toggle() {
+        if (!open && buttonRef.current) {
+            const rect = buttonRef.current.getBoundingClientRect();
+            const right = Math.max(8, window.innerWidth - rect.right);
+            const openUpward = rect.bottom + 220 > window.innerHeight;
+            setPos(
+                openUpward
+                    ? { bottom: window.innerHeight - rect.top + 4, right }
+                    : { top: rect.bottom + 4, right },
+            );
+        }
+        setOpen((value) => !value);
+    }
 
     useEffect(() => {
         if (!open) {
@@ -44,12 +65,22 @@ export default function RowActions({ view, viewLabel = 'Voir', children }: RowAc
             }
         }
 
+        // A fixed-position menu would drift from its trigger on any scroll
+        // (window or the table's own horizontal scroll) — close instead.
+        function handleScroll() {
+            setOpen(false);
+        }
+
         document.addEventListener('mousedown', handleClickOutside);
         document.addEventListener('keydown', handleEscape);
+        window.addEventListener('scroll', handleScroll, true);
+        window.addEventListener('resize', handleScroll);
 
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
             document.removeEventListener('keydown', handleEscape);
+            window.removeEventListener('scroll', handleScroll, true);
+            window.removeEventListener('resize', handleScroll);
         };
     }, [open]);
 
@@ -69,15 +100,19 @@ export default function RowActions({ view, viewLabel = 'Voir', children }: RowAc
             {hasItems && (
                 <div className="dropdown" ref={menuRef}>
                     <button
+                        ref={buttonRef}
                         type="button"
                         className="btn btn-white btn-icon btn-sm d-flex align-items-center justify-content-center rounded-circle p-0"
-                        onClick={() => setOpen((value) => !value)}
+                        onClick={toggle}
                         aria-expanded={open}
                         aria-label="Actions"
                     >
                         <i className="ti ti-dots-vertical fs-14" />
                     </button>
-                    <ul className={`dropdown-menu dropdown-menu-end p-3${open ? ' show' : ''}`}>
+                    <ul
+                        className={`dropdown-menu dropdown-menu-end p-3${open ? ' show' : ''}`}
+                        style={open && pos ? { position: 'fixed', left: 'auto', ...pos } : undefined}
+                    >
                         {children}
                     </ul>
                 </div>
