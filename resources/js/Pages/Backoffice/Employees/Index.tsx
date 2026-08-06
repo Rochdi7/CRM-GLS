@@ -455,9 +455,9 @@ export default function EmployeesIndex({
                                     <label className="form-label d-block">
                                         Genre<span className="text-danger ms-1">*</span>
                                     </label>
-                                    <div className="btn-group" role="group" aria-label="Genre">
+                                    <div className="d-flex gap-2" role="group" aria-label="Genre">
                                         {sexes.map((sexe) => (
-                                            <div key={sexe}>
+                                            <div key={sexe} className="flex-fill d-grid">
                                                 <input
                                                     type="radio"
                                                     className="btn-check"

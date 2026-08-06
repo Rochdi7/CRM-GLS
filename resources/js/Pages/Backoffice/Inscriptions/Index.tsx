@@ -486,9 +486,9 @@ export default function InscriptionsIndex({
                                 <div className="col-md-4">
                                     <div className="mb-3">
                                         <label className="form-label d-block">Genre</label>
-                                        <div className="btn-group" role="group" aria-label="Genre">
+                                        <div className="d-flex gap-2" role="group" aria-label="Genre">
                                             {sexes.map((sexe) => (
-                                                <div key={sexe}>
+                                                <div key={sexe} className="flex-fill d-grid">
                                                     <input
                                                         type="radio"
                                                         className="btn-check"
@@ -878,9 +878,9 @@ export default function InscriptionsIndex({
                             <div className="col-md-4">
                                 <div className="mb-3">
                                     <label className="form-label d-block">Genre</label>
-                                    <div className="btn-group" role="group" aria-label="Genre du parent">
+                                    <div className="d-flex gap-2" role="group" aria-label="Genre du parent">
                                         {sexes.map((sexe) => (
-                                            <div key={sexe}>
+                                            <div key={sexe} className="flex-fill d-grid">
                                                 <input
                                                     type="radio"
                                                     className="btn-check"
