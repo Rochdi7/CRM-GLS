@@ -46,12 +46,12 @@ export default function SettingsIndex({
             breadcrumbs={[{ label: 'Tableau de bord', href: '/backoffice/dashboard' }, { label: 'Paramètres' }]}
         >
             <Card className="p-0">
-                <ul className="nav nav-tabs nav-tabs-solid mb-4" role="tablist">
+                <ul className="nav nav-tabs p-0 border-bottom rounded-0 mb-4" role="tablist">
                     {availableTabs.map((tab) => (
                         <li className="nav-item" role="presentation" key={tab}>
                             <button
                                 type="button"
-                                className={`nav-link border-0 bg-transparent${tab === activeTab ? ' active' : ''}`}
+                                className={`nav-link d-inline-flex align-items-center${tab === activeTab ? ' active' : ''}`}
                                 onClick={() => switchTab(tab)}
                                 role="tab"
                                 aria-selected={tab === activeTab}
