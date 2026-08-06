@@ -89,7 +89,12 @@ export default function FilterDropdown({ fields, onApply, onReset }: FilterDropd
                 {activeCount > 0 && <span className="badge badge-soft-primary ms-2">{activeCount}</span>}
             </button>
             {open && (
-                <div className="dropdown-menu drop-width show p-0" style={{ minWidth: 320 }}>
+                // Markup copied from theme-reference/preskool/hrm/payroll.blade.php's
+                // filter dropdown (drop-width = the theme's 350px panel).
+                // dropdown-menu-end anchors the panel to the trigger's right
+                // edge in pure CSS — the theme demo gets the same result from
+                // Bootstrap's Popper, which this app deliberately doesn't load.
+                <div className="dropdown-menu dropdown-menu-end drop-width show" data-bs-popper="static">
                     <form
                         onSubmit={(event) => {
                             event.preventDefault();
@@ -100,7 +105,7 @@ export default function FilterDropdown({ fields, onApply, onReset }: FilterDropd
                         <div className="d-flex align-items-center border-bottom p-3">
                             <h4>{t('Filter')}</h4>
                         </div>
-                        <div className="p-3 pb-0 border-bottom">
+                        <div className="p-3 border-bottom">
                             <div className="row">
                                 {fields.map((field) => (
                                     <div className="col-md-6" key={field.name}>
