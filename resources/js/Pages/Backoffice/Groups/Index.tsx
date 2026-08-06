@@ -387,19 +387,14 @@ export default function GroupsIndex({
                                                         </label>
                                                     </td>
                                                     <td>
-                                                        <select
-                                                            className={`form-select form-select-sm text-center${classificationError ? ' is-invalid' : ''}`}
+                                                        <SelectField
+                                                            id={`grp-fee-c-${fee.value}`}
+                                                            options={niveauOptions}
+                                                            placeholder="—"
                                                             value={ligne.classification}
                                                             onChange={(event) => setLigne(fee.value as number, 'classification', event.target.value)}
-                                                            title="Classification"
-                                                        >
-                                                            <option value="">—</option>
-                                                            {niveaux.map((n) => (
-                                                                <option key={n} value={n}>
-                                                                    {n}
-                                                                </option>
-                                                            ))}
-                                                        </select>
+                                                            error={classificationError}
+                                                        />
                                                     </td>
                                                     <td>
                                                         <DateField

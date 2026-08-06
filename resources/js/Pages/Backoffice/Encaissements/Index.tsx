@@ -451,18 +451,12 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                                     <label className="form-label" htmlFor={`pl-methode-${index}`}>
                                                         Méthode
                                                     </label>
-                                                    <select
+                                                    <SelectField
                                                         id={`pl-methode-${index}`}
-                                                        className="form-select"
+                                                        options={methodeOptions}
                                                         value={line.methode}
                                                         onChange={(e) => setLine(index, { methode: e.target.value })}
-                                                    >
-                                                        {methodeOptions.map((m) => (
-                                                            <option key={m.value} value={m.value}>
-                                                                {m.label}
-                                                            </option>
-                                                        ))}
-                                                    </select>
+                                                    />
                                                 </div>
                                             </div>
                                             <div className="col-lg-4 col-md-6">

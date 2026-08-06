@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import DateField from '@/Components/Forms/DateField';
+import SelectField from '@/Components/Forms/SelectField';
 import { t } from '@/Lib/i18n';
 
 export interface FilterFieldOption {
@@ -121,19 +122,13 @@ export default function FilterDropdown({ fields, onApply, onReset }: FilterDropd
                                                     onChange={(e) => setDraft((d) => ({ ...d, [field.name]: e.target.value }))}
                                                 />
                                             ) : (
-                                                <select
+                                                <SelectField
                                                     id={`filter-${field.name}`}
-                                                    className="form-select"
+                                                    options={field.options ?? []}
+                                                    placeholder={field.placeholder ?? t('All')}
                                                     value={draft[field.name] ?? ''}
                                                     onChange={(e) => setDraft((d) => ({ ...d, [field.name]: e.target.value }))}
-                                                >
-                                                    <option value="">{field.placeholder ?? t('All')}</option>
-                                                    {field.options?.map((option) => (
-                                                        <option key={option.value} value={option.value}>
-                                                            {option.label}
-                                                        </option>
-                                                    ))}
-                                                </select>
+                                                />
                                             )}
                                         </div>
                                     </div>

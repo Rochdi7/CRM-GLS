@@ -4,6 +4,7 @@ import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import FormField from '@/Components/Forms/FormField';
 import PasswordField from '@/Components/Forms/PasswordField';
+import SelectField from '@/Components/Forms/SelectField';
 import SubmitButton from '@/Components/Forms/SubmitButton';
 import { COUNTRIES } from '@/Data/countries';
 
@@ -190,18 +191,16 @@ export default function ProfileIndex({ user, employee, phonePays, telephone, wha
                                                 <label className="form-label" htmlFor="p-pays">
                                                     Pays
                                                 </label>
-                                                <select
+                                                <SelectField
                                                     id="p-pays"
-                                                    className={`form-select${profileForm.errors.phone_pays ? ' is-invalid' : ''}`}
+                                                    options={Object.entries(countries).map(([iso, country]) => ({
+                                                        value: iso,
+                                                        label: `${country.nom} ${country.dial}`,
+                                                    }))}
                                                     value={profileForm.data.phone_pays}
                                                     onChange={(event) => profileForm.setData('phone_pays', event.target.value)}
-                                                >
-                                                    {Object.entries(countries).map(([iso, country]) => (
-                                                        <option value={iso} key={iso}>
-                                                            {country.nom} {country.dial}
-                                                        </option>
-                                                    ))}
-                                                </select>
+                                                    error={profileForm.errors.phone_pays}
+                                                />
                                             </div>
                                         </div>
                                         <div className="col-md-6">
