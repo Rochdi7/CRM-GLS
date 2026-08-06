@@ -390,7 +390,7 @@ export default function StudentsIndex({
                 title={editingStudent ? "Modifier l'étudiant" : 'Ajouter un étudiant'}
                 onClose={closeModal}
                 processing={form.processing}
-                size="lg"
+                size="xl"
             >
                 <form onSubmit={submit}>
                     <div className="d-flex align-items-center mb-4">
@@ -420,7 +420,7 @@ export default function StudentsIndex({
                     </div>
 
                     <div className="row">
-                        <div className="col-md-6">
+                        <div className="col-md-4">
                             <FormField
                                 id="stu-nom"
                                 label="Nom"
@@ -431,7 +431,7 @@ export default function StudentsIndex({
                                 placeholder="ex : Rafik"
                             />
                         </div>
-                        <div className="col-md-6">
+                        <div className="col-md-4">
                             <FormField
                                 id="stu-prenom"
                                 label="Prénom"
@@ -491,7 +491,7 @@ export default function StudentsIndex({
                                 placeholder="ex : AB123456"
                             />
                         </div>
-                        <div className="col-md-6">
+                        <div className="col-md-4">
                             <SelectField
                                 id="stu-niveau"
                                 label="Intéressé par"
@@ -503,7 +503,7 @@ export default function StudentsIndex({
                             />
                         </div>
                         {showsDomaine && (
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <SelectField
                                     id="stu-domaine"
                                     label="Domaine"
@@ -517,7 +517,7 @@ export default function StudentsIndex({
                             </div>
                         )}
                         {showsExamen && (
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <SelectField
                                     id="stu-examen"
                                     label="Examen d'entrée"
@@ -567,7 +567,7 @@ export default function StudentsIndex({
 
                     {activeTab === 'contact' && (
                         <div className="row">
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <PhoneField
                                     id="stu-tel"
                                     label="Téléphone"
@@ -578,7 +578,7 @@ export default function StudentsIndex({
                                     error={form.errors.telephone}
                                 />
                             </div>
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <PhoneField
                                     id="stu-wa"
                                     label="WhatsApp"
@@ -589,7 +589,7 @@ export default function StudentsIndex({
                                     error={form.errors.whatsapp}
                                 />
                             </div>
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <FormField
                                     id="stu-email"
                                     label="Email"
@@ -600,7 +600,7 @@ export default function StudentsIndex({
                                     placeholder="ex : nom@domaine.com"
                                 />
                             </div>
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <FormField
                                     id="stu-adresse"
                                     label="Adresse"
@@ -611,7 +611,7 @@ export default function StudentsIndex({
                                 />
                             </div>
                             {!centerLocked && (
-                                <div className="col-md-6">
+                                <div className="col-md-4">
                                     <SelectField
                                         id="stu-etab"
                                         label="Centre"

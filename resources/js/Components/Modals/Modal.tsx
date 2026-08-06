@@ -7,7 +7,7 @@ interface ModalProps extends PropsWithChildren {
     onClose: () => void;
     /** Disables Escape/backdrop close while a request is in flight (e.g. save/delete). */
     processing?: boolean;
-    size?: 'default' | 'lg';
+    size?: 'default' | 'lg' | 'xl';
     footer?: ReactNode;
     /**
      * Headerless variant — the PreSkool delete-confirmation modal
@@ -117,7 +117,7 @@ export default function Modal({ show, title, onClose, processing = false, size =
             >
                 <div
                     ref={dialogRef}
-                    className={`modal-dialog modal-dialog-centered${size === 'lg' ? ' modal-lg' : ''}`}
+                    className={`modal-dialog modal-dialog-centered${size === 'lg' ? ' modal-lg' : ''}${size === 'xl' ? ' modal-xl' : ''}`}
                 >
                     <div className="modal-content">
                         {!hideHeader && (

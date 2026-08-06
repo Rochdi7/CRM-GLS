@@ -424,7 +424,7 @@ export default function InscriptionsIndex({
                 title={editingInscription ? "Modifier l'inscription" : 'Ajouter une inscription'}
                 onClose={closeModal}
                 processing={form.processing}
-                size="lg"
+                size="xl"
             >
                 <form onSubmit={submit}>
                     <div className="row">
@@ -649,7 +649,7 @@ export default function InscriptionsIndex({
                     {activeTab === 'affectation' && (
                         <div>
                             <div className="row">
-                                <div className="col-md-6">
+                                <div className="col-md-4">
                                     <SelectField
                                         id="ins-group"
                                         label="Groupe"
@@ -662,7 +662,7 @@ export default function InscriptionsIndex({
                                     />
                                 </div>
                                 {editingInscription && (
-                                    <div className="col-md-6">
+                                    <div className="col-md-4">
                                         <SelectField
                                             id="ins-statut"
                                             label="Statut"
@@ -676,7 +676,7 @@ export default function InscriptionsIndex({
                                 )}
                                 {form.data.group_id !== '' && (
                                     <>
-                                        <div className="col-md-6">
+                                        <div className="col-md-4">
                                             <FormField
                                                 id="ins-debut"
                                                 label="Date de début"
@@ -686,7 +686,7 @@ export default function InscriptionsIndex({
                                             />
                                             <div className="form-text">Provient du groupe</div>
                                         </div>
-                                        <div className="col-md-6">
+                                        <div className="col-md-4">
                                             <FormField id="ins-fin" label="Date de fin" type="date" value={form.data.date_fin} readOnly />
                                             <div className="form-text">Provient du groupe</div>
                                         </div>
@@ -806,7 +806,7 @@ export default function InscriptionsIndex({
 
                     {activeTab === 'contact' && !editingInscription && form.data.inscription_mode === 'new' && (
                         <div className="row">
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <FormField
                                     id="ins-email"
                                     label="Email"
@@ -817,7 +817,7 @@ export default function InscriptionsIndex({
                                     placeholder="ex : nom@domaine.com"
                                 />
                             </div>
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <PhoneField
                                     id="ins-tel"
                                     label="Téléphone"
@@ -828,7 +828,7 @@ export default function InscriptionsIndex({
                                     error={form.errors.new_telephone}
                                 />
                             </div>
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <PhoneField
                                     id="ins-wa"
                                     label="WhatsApp"
@@ -839,7 +839,7 @@ export default function InscriptionsIndex({
                                     error={form.errors.new_whatsapp}
                                 />
                             </div>
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <FormField
                                     id="ins-adresse"
                                     label="Adresse"

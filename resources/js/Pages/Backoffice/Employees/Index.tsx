@@ -368,7 +368,7 @@ export default function EmployeesIndex({
                 )}
             </Card>
 
-            <Modal show={showModal} title={modalTitle} onClose={closeModal} processing={form.processing} size="lg">
+            <Modal show={showModal} title={modalTitle} onClose={closeModal} processing={form.processing} size="xl">
                 {credentials ? (
                     <div>
                         <div className="text-center mb-3">
@@ -427,7 +427,7 @@ export default function EmployeesIndex({
                         </div>
 
                         <div className="row">
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <FormField
                                     id="emp-nom"
                                     label="Nom"
@@ -438,7 +438,7 @@ export default function EmployeesIndex({
                                     placeholder="ex : Rafik"
                                 />
                             </div>
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <FormField
                                     id="emp-prenom"
                                     label="Prénom"
@@ -450,7 +450,7 @@ export default function EmployeesIndex({
                                 />
                             </div>
 
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <div className="mb-3">
                                     <label className="form-label d-block">
                                         Genre<span className="text-danger ms-1">*</span>
@@ -482,7 +482,7 @@ export default function EmployeesIndex({
                                 </div>
                             </div>
 
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <FormField
                                     id="emp-naissance"
                                     label="Date de naissance"
@@ -493,7 +493,7 @@ export default function EmployeesIndex({
                                 />
                             </div>
 
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <SelectField
                                     id="emp-cat"
                                     label="Catégorie de l'employé"
@@ -504,7 +504,7 @@ export default function EmployeesIndex({
                                     error={form.errors.categorie}
                                 />
                             </div>
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <SelectField
                                     id="emp-statut"
                                     label="Statut"
@@ -516,7 +516,7 @@ export default function EmployeesIndex({
                                 />
                             </div>
 
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <PhoneField
                                     id="emp-tel"
                                     label="Téléphone"
@@ -527,7 +527,7 @@ export default function EmployeesIndex({
                                     error={form.errors.telephone}
                                 />
                             </div>
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <PhoneField
                                     id="emp-wa"
                                     label="WhatsApp"
@@ -539,7 +539,7 @@ export default function EmployeesIndex({
                                 />
                             </div>
 
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <FormField
                                     id="emp-email"
                                     label="Email"
@@ -550,7 +550,7 @@ export default function EmployeesIndex({
                                     placeholder="ex : nom@domaine.com"
                                 />
                             </div>
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <FormField
                                     id="emp-adresse"
                                     label="Adresse"
@@ -564,7 +564,7 @@ export default function EmployeesIndex({
                             {/* A specific center active in the top bar assigns the record
                                 automatically — the field only shows on « Tous les centres ». */}
                             {!centerLocked && (
-                                <div className="col-md-6">
+                                <div className="col-md-4">
                                     <SelectField
                                         id="emp-etab"
                                         label="Centre"
@@ -579,7 +579,7 @@ export default function EmployeesIndex({
                                 </div>
                             )}
 
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <FormField
                                     id="emp-embauche"
                                     label="Date d'embauche"
@@ -589,7 +589,7 @@ export default function EmployeesIndex({
                                     error={form.errors.date_embauche}
                                 />
                             </div>
-                            <div className="col-md-6">
+                            <div className="col-md-4">
                                 <div className="mb-3">
                                     <label className="form-label" htmlFor="emp-salaire">
                                         Salaire
