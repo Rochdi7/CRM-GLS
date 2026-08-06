@@ -153,6 +153,54 @@ final class EncaissementsInertiaCrudTest extends TestCase
 
 
 
+    /**
+     * The Paiements page's view tabs (wimschool-style): "cheque" lists only
+     * cheque payments; "avance" lists only payments whose fee is still
+     * partially settled — both read-only filters over the same list.
+     */
+    public function test_view_tabs_filter_cheques_and_avances(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        $this->actingAs($user);
+
+        // Fully-paid fee via cheque + partially-paid fee via cash.
+        [$student1, $inscription1, $feeFull] = $this->enrolledStudentWithFee(1000);
+        $this->post(route('backoffice.encaissements.store'), [
+            'student_id' => $student1->id, 'inscription_id' => $inscription1->id,
+            'date_paiement' => '2025-09-20',
+            'numero_cheque' => 'CHQ-1', 'banque' => 'BMCE', 'date_echeance_cheque' => '2025-10-01',
+            'payment_lines' => [
+                ['fee_id' => $feeFull->id, 'montant' => '1000', 'methode' => 'Chèque', 'date_paiement' => '2025-09-20'],
+            ],
+        ])->assertRedirect();
+
+        [$student2, $inscription2, $feePartial] = $this->enrolledStudentWithFee(1000);
+        $this->post(route('backoffice.encaissements.store'), [
+            'student_id' => $student2->id, 'inscription_id' => $inscription2->id,
+            'date_paiement' => '2025-09-21',
+            'payment_lines' => [
+                ['fee_id' => $feePartial->id, 'montant' => '400', 'methode' => 'Espèces', 'date_paiement' => '2025-09-21'],
+            ],
+        ])->assertRedirect();
+
+        $this->assertSame(InscriptionFee::STATUT_PAYE, $feeFull->fresh()->statut);
+        $this->assertSame(InscriptionFee::STATUT_PAYE_PARTIELLEMENT, $feePartial->fresh()->statut);
+
+        $chequeRows = $this->get(route('backoffice.encaissements.index', ['view' => 'cheque']))
+            ->viewData('page')['props']['encaissements']['data'];
+        $this->assertCount(1, $chequeRows);
+        $this->assertSame('Chèque', $chequeRows[0]['methode']);
+
+        $avanceRows = $this->get(route('backoffice.encaissements.index', ['view' => 'avance']))
+            ->viewData('page')['props']['encaissements']['data'];
+        $this->assertCount(1, $avanceRows);
+        $this->assertSame('400.00', (string) $avanceRows[0]['montant']);
+
+        $allRows = $this->get(route('backoffice.encaissements.index'))
+            ->viewData('page')['props']['encaissements']['data'];
+        $this->assertCount(2, $allRows);
+    }
+
     public function test_amount_above_remaining_balance_is_rejected_with_zero_side_effects(): void
     {
         $user = $this->userWith('payments.view', 'payments.create');

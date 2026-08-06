@@ -1,8 +1,6 @@
-import { router, useForm } from '@inertiajs/react';
+import { Link, router, useForm, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
-import PageTabs from '@/Components/Navigation/PageTabs';
-import { FINANCE_TABS } from '@/Config/pageTabs';
 import Card from '@/Components/Shared/Card';
 import Modal from '@/Components/Modals/Modal';
 import ConfirmDialog from '@/Components/Modals/ConfirmDialog';
@@ -15,7 +13,7 @@ import Pagination from '@/Components/Tables/Pagination';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
-import type { CrudPermissions, PaginatedData, SelectOption, TypeDepenseForm, TypeDepenseRow } from '@/Types';
+import type { CrudPermissions, PaginatedData, SelectOption, SharedProps, TypeDepenseForm, TypeDepenseRow } from '@/Types';
 
 interface TypesDepensesIndexProps {
     types: PaginatedData<TypeDepenseRow>;
@@ -38,6 +36,10 @@ const EMPTY_FORM: TypeDepenseForm = { nom: '', statut: 'Actif' };
  * TypeDepenseController).
  */
 export default function TypesDepensesIndex({ types, filters, permissions }: TypesDepensesIndexProps) {
+    // Sibling-page tab links, UI-gated like the sidebar (server enforces).
+    const { auth } = usePage<SharedProps>().props;
+    const canViewDepenses = auth.isSuperAdmin || auth.permissions.includes('expenses.view');
+    const canViewRemboursements = auth.isSuperAdmin || auth.permissions.includes('refunds.view');
     const [showModal, setShowModal] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<TypeDepenseRow | null>(null);
@@ -123,7 +125,32 @@ export default function TypesDepensesIndex({ types, filters, permissions }: Type
                 )
             }
         >
-            <PageTabs tabs={FINANCE_TABS} />
+            {/* wimschool-style page tabs — mirrors the Gestion des dépenses
+                page's bar with this page as the active tab. */}
+            <ul className="nav nav-tabs mb-4" role="tablist">
+                {canViewDepenses && (
+                    <li className="nav-item" role="presentation">
+                        <Link href="/backoffice/depenses" className="nav-link d-inline-flex align-items-center">
+                            <i className="ti ti-receipt me-2" aria-hidden="true" />
+                            Dépenses
+                        </Link>
+                    </li>
+                )}
+                {canViewRemboursements && (
+                    <li className="nav-item" role="presentation">
+                        <Link href="/backoffice/depenses?tab=remboursements" className="nav-link d-inline-flex align-items-center">
+                            <i className="ti ti-arrow-back-up me-2" aria-hidden="true" />
+                            Remboursements
+                        </Link>
+                    </li>
+                )}
+                <li className="nav-item" role="presentation">
+                    <span className="nav-link active d-inline-flex align-items-center" aria-current="page">
+                        <i className="ti ti-receipt-tax me-2" aria-hidden="true" />
+                        Types de dépenses
+                    </span>
+                </li>
+            </ul>
 
             <Card title="Types de dépenses" bodyClassName="p-0 py-3">
                 <TableLengthRow search={<SearchInput value={filters.search} onSearch={handleSearch} placeholder="Rechercher" />} />

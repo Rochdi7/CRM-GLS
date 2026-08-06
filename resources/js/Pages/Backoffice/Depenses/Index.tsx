@@ -1,8 +1,6 @@
-import { router, useForm } from '@inertiajs/react';
+import { Link, router, useForm, usePage } from '@inertiajs/react';
 import { useRef, useState, type FormEvent } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
-import PageTabs from '@/Components/Navigation/PageTabs';
-import { FINANCE_TABS } from '@/Config/pageTabs';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
@@ -17,7 +15,7 @@ import FormField from '@/Components/Forms/FormField';
 import TextareaField from '@/Components/Forms/TextareaField';
 import FormActions from '@/Components/Forms/FormActions';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
-import type { DepenseRow, DepensesPageProps, RemboursementRow, SelectOption } from '@/Types';
+import type { DepenseRow, DepensesPageProps, RemboursementRow, SelectOption, SharedProps } from '@/Types';
 
 type Tab = 'depenses' | 'remboursements';
 
@@ -97,6 +95,10 @@ export default function DepensesIndex({
     filters,
 }: DepensesPageProps) {
     const isLoading = useInertiaLoading();
+    // The Types de dépenses tab links to its own page — UI-gate it like the
+    // sidebar does (server enforcement unchanged).
+    const { auth } = usePage<SharedProps>().props;
+    const canViewTypes = auth.isSuperAdmin || auth.permissions.includes('expense-types.view');
     const initialTab: Tab = new URLSearchParams(window.location.search).get('tab') === 'remboursements' && canViewRemboursements
         ? 'remboursements'
         : canViewDepenses
@@ -244,31 +246,41 @@ export default function DepensesIndex({
             title="Gestion des dépenses"
             breadcrumbs={[{ label: 'Tableau de bord', href: '/backoffice/dashboard' }, { label: 'Gestion des dépenses' }]}
         >
-            <PageTabs tabs={FINANCE_TABS} />
-
-            <ul className="nav nav-tabs nav-tabs-solid mb-4" role="tablist">
+            {/* wimschool-style page tabs: the module's own sub-views, plus
+                Types de dépenses as a sibling page (its own route). */}
+            <ul className="nav nav-tabs mb-4" role="tablist">
                 {canViewDepenses && (
-                    <li className="nav-item">
+                    <li className="nav-item" role="presentation">
                         <button
                             type="button"
-                            className={`nav-link${tab === 'depenses' ? ' active' : ''}`}
+                            className={`nav-link d-inline-flex align-items-center${tab === 'depenses' ? ' active' : ''}`}
+                            aria-current={tab === 'depenses' ? 'page' : undefined}
                             onClick={() => switchTab('depenses')}
                         >
-                            <i className="ti ti-receipt me-1" />
+                            <i className="ti ti-receipt me-2" aria-hidden="true" />
                             Dépenses
                         </button>
                     </li>
                 )}
                 {canViewRemboursements && (
-                    <li className="nav-item">
+                    <li className="nav-item" role="presentation">
                         <button
                             type="button"
-                            className={`nav-link${tab === 'remboursements' ? ' active' : ''}`}
+                            className={`nav-link d-inline-flex align-items-center${tab === 'remboursements' ? ' active' : ''}`}
+                            aria-current={tab === 'remboursements' ? 'page' : undefined}
                             onClick={() => switchTab('remboursements')}
                         >
-                            <i className="ti ti-arrow-back-up me-1" />
+                            <i className="ti ti-arrow-back-up me-2" aria-hidden="true" />
                             Remboursements
                         </button>
+                    </li>
+                )}
+                {canViewTypes && (
+                    <li className="nav-item" role="presentation">
+                        <Link href="/backoffice/types-depenses" className="nav-link d-inline-flex align-items-center">
+                            <i className="ti ti-receipt-tax me-2" aria-hidden="true" />
+                            Types de dépenses
+                        </Link>
                     </li>
                 )}
             </ul>

@@ -39,12 +39,21 @@ final class GetEncaissementsList
         string $dateFrom = '',
         string $dateTo = '',
         int $perPage = self::DEFAULT_PER_PAGE,
+        string $view = '',
     ): LengthAwarePaginator {
         $accessibleCaisseIds = $this->caisseOptions($user)->pluck('id')->all();
 
         $encaissements = Encaissement::query()
             ->with(['student', 'fee.inscription', 'caisse', 'agent'])
             ->whereIn('caisse_id', $accessibleCaisseIds)
+            // Page view tabs (wimschool-style, read-only filters):
+            // "cheque" = cheque payments; "avance" = payments whose fee is
+            // still only partially settled (InscriptionFee's own statut).
+            ->when($view === 'cheque', fn ($q) => $q->where('methode', Encaissement::METHODE_CHEQUE))
+            ->when($view === 'avance', fn ($q) => $q->whereHas(
+                'fee',
+                fn ($f) => $f->where('statut', \App\Models\InscriptionFee::STATUT_PAYE_PARTIELLEMENT),
+            ))
             ->when($caisseFilter !== '', fn ($q) => $q->where('caisse_id', (int) $caisseFilter))
             ->when($methodeFilter !== '', fn ($q) => $q->where('methode', $methodeFilter))
             ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_paiement', '>=', $dateFrom))

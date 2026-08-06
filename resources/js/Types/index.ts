@@ -916,6 +916,8 @@ export interface EncaissementsFilters {
     dateFrom: string;
     dateTo: string;
     perPage: number;
+    /** Page view tab: '' (all) | 'avance' (partially-settled fees) | 'cheque'. */
+    view: string;
 }
 
 export interface EncaissementsPageProps {

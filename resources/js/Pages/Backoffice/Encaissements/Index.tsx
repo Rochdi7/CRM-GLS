@@ -1,8 +1,6 @@
 import { router, useForm } from '@inertiajs/react';
 import { useState, type FormEvent } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
-import PageTabs from '@/Components/Navigation/PageTabs';
-import { FINANCE_TABS } from '@/Config/pageTabs';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
@@ -223,7 +221,26 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                 </button>
             }
         >
-            <PageTabs tabs={FINANCE_TABS} />
+            {/* wimschool-style view tabs — server-side read-only filters on the same list. */}
+            <ul className="nav nav-tabs mb-4" role="tablist">
+                {[
+                    { view: '', label: 'Paiements', icon: 'ti ti-cash-banknote' },
+                    { view: 'avance', label: 'Avances', icon: 'ti ti-clock-dollar' },
+                    { view: 'cheque', label: 'Chèques', icon: 'ti ti-file-invoice' },
+                ].map((tab) => (
+                    <li className="nav-item" key={tab.view} role="presentation">
+                        <button
+                            type="button"
+                            className={`nav-link d-inline-flex align-items-center${filters.view === tab.view ? ' active' : ''}`}
+                            aria-current={filters.view === tab.view ? 'page' : undefined}
+                            onClick={() => reload({ view: tab.view })}
+                        >
+                            <i className={`${tab.icon} me-2`} aria-hidden="true" />
+                            {tab.label}
+                        </button>
+                    </li>
+                ))}
+            </ul>
 
             <Card
                 title="Paiements"

@@ -48,9 +48,14 @@ final class EncaissementController extends Controller
         $dateFrom = (string) $request->string('dateFrom');
         $dateTo = (string) $request->string('dateTo');
         $perPage = (int) $request->integer('perPage', GetEncaissementsList::DEFAULT_PER_PAGE);
+        // Page view tabs: Paiements (all) / Avances / Chèques.
+        $view = (string) $request->string('view');
+        if (! in_array($view, ['', 'avance', 'cheque'], true)) {
+            $view = '';
+        }
 
         return Inertia::render('Backoffice/Encaissements/Index', [
-            'encaissements' => $getEncaissementsList($request->user(), $search, $caisseFilter, $methodeFilter, $dateFrom, $dateTo, $perPage),
+            'encaissements' => $getEncaissementsList($request->user(), $search, $caisseFilter, $methodeFilter, $dateFrom, $dateTo, $perPage, $view),
             'caisses' => $getEncaissementsList->caisseOptions($request->user()),
             'students' => $getEncaissementsList->studentOptions($request->user()),
             'methodes' => Encaissement::METHODES,
@@ -61,6 +66,7 @@ final class EncaissementController extends Controller
                 'dateFrom' => $dateFrom,
                 'dateTo' => $dateTo,
                 'perPage' => $perPage,
+                'view' => $view,
             ],
         ]);
     }
