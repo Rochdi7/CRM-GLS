@@ -360,44 +360,57 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {createForm.data.payment_lines.map((line, index) => (
-                                        <tr key={line.feeId}>
-                                            <td>{line.nom}</td>
-                                            <td className="text-end">{Number(line.reste).toFixed(2)} MAD</td>
-                                            <td>
-                                                <input
-                                                    type="number"
-                                                    step="0.01"
-                                                    min="0"
-                                                    max={line.reste}
-                                                    className="form-control form-control-sm"
-                                                    value={line.montant}
-                                                    onChange={(e) => setLine(index, { montant: e.target.value })}
-                                                />
-                                            </td>
-                                            <td>
-                                                <select
-                                                    className="form-select form-select-sm"
-                                                    value={line.methode}
-                                                    onChange={(e) => setLine(index, { methode: e.target.value })}
-                                                >
-                                                    {methodeOptions.map((m) => (
-                                                        <option key={m.value} value={m.value}>
-                                                            {m.label}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </td>
-                                            <td>
-                                                <input
-                                                    type="date"
-                                                    className="form-control form-control-sm"
-                                                    value={line.datePaiement}
-                                                    onChange={(e) => setLine(index, { datePaiement: e.target.value })}
-                                                />
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {createForm.data.payment_lines.map((line, index) => {
+                                        // Server errors arrive keyed per submitted row
+                                        // (payment_lines.<i>.montant/…) — surface them on
+                                        // the row so a refused save is never silent.
+                                        const rowErrors = createForm.errors as Record<string, string | undefined>;
+                                        const montantError = rowErrors[`payment_lines.${index}.montant`];
+                                        const dateError = rowErrors[`payment_lines.${index}.date_paiement`];
+
+                                        return (
+                                            <tr key={line.feeId}>
+                                                <td>{line.nom}</td>
+                                                <td className="text-end">{Number(line.reste).toFixed(2)} MAD</td>
+                                                <td>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        min="0"
+                                                        max={line.reste}
+                                                        className={`form-control form-control-sm${montantError ? ' is-invalid' : ''}`}
+                                                        value={line.montant}
+                                                        onChange={(e) => setLine(index, { montant: e.target.value })}
+                                                        aria-invalid={montantError ? true : undefined}
+                                                    />
+                                                    {montantError && <div className="text-danger fs-12 mt-1">{montantError}</div>}
+                                                </td>
+                                                <td>
+                                                    <select
+                                                        className="form-select form-select-sm"
+                                                        value={line.methode}
+                                                        onChange={(e) => setLine(index, { methode: e.target.value })}
+                                                    >
+                                                        {methodeOptions.map((m) => (
+                                                            <option key={m.value} value={m.value}>
+                                                                {m.label}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </td>
+                                                <td>
+                                                    <input
+                                                        type="date"
+                                                        className={`form-control form-control-sm${dateError ? ' is-invalid' : ''}`}
+                                                        value={line.datePaiement}
+                                                        onChange={(e) => setLine(index, { datePaiement: e.target.value })}
+                                                        aria-invalid={dateError ? true : undefined}
+                                                    />
+                                                    {dateError && <div className="text-danger fs-12 mt-1">{dateError}</div>}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                             {createForm.errors.payment_lines && (

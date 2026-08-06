@@ -78,17 +78,9 @@ export const backofficeNavigation: NavGroup[] = [
     {
         label: t('Finance'),
         items: [
-            // Hidden by product decision — routes stay active and
-            // permission-gated; re-enable when ready to expose Cash
-            // management in the sidebar.
-            // {
-            //     label: t('Cash management'),
-            //     href: '/backoffice/caisses',
-            //     icon: 'ti ti-cash',
-            //     permissions: ['cash-registers.view', 'cash-transfers.view'],
-            //     matchPaths: ['/backoffice/caisses', '/backoffice/caisse-transfers'],
-            //     inertia: true,
-            // },
+            // Finance modules as separate sidebar entries (wimschool-style
+            // sidebar: Encaissement / Caisse / Dépenses) — the PageTabs bar
+            // on each finance page cross-links them too.
             {
                 label: t('Payments'),
                 href: '/backoffice/encaissements',
@@ -97,26 +89,24 @@ export const backofficeNavigation: NavGroup[] = [
                 matchPaths: ['/backoffice/encaissements'],
                 inertia: true,
             },
-            // Hidden by product decision — re-enable when ready to expose
-            // Expense management in the sidebar.
-            // {
-            //     label: t('Expense management'),
-            //     href: '/backoffice/depenses',
-            //     icon: 'ti ti-receipt',
-            //     permissions: ['expenses.view', 'refunds.view'],
-            //     matchPaths: ['/backoffice/depenses', '/backoffice/remboursements'],
-            //     inertia: true,
-            // },
-            // Hidden by product decision — re-enable when ready to expose
-            // Expense types in the sidebar.
-            // {
-            //     label: t('Expense types'),
-            //     href: '/backoffice/types-depenses',
-            //     icon: 'ti ti-receipt-tax',
-            //     permissions: ['expense-types.view'],
-            //     matchPaths: ['/backoffice/types-depenses'],
-            //     inertia: true,
-            // },
+            {
+                label: t('Cash management'),
+                href: '/backoffice/caisses',
+                icon: 'ti ti-cash',
+                permissions: ['cash-registers.view', 'cash-transfers.view'],
+                matchPaths: ['/backoffice/caisses', '/backoffice/caisse-transfers'],
+                inertia: true,
+            },
+            {
+                label: t('Expense management'),
+                href: '/backoffice/depenses',
+                icon: 'ti ti-receipt',
+                permissions: ['expenses.view', 'refunds.view'],
+                matchPaths: ['/backoffice/depenses', '/backoffice/remboursements'],
+                inertia: true,
+            },
+            // Types de dépenses stays out of the sidebar — reachable via the
+            // finance PageTabs (product decision).
         ],
     },
     {
