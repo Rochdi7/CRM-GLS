@@ -159,7 +159,7 @@ Legend: `*` before a column name in the source diagram meant "required/NOT NULL"
 
 **`statut` lifecycle (mirrors WimSchool's own confirmed 3-tab Group workflow — "En inscription" / "En formation" / "Historique"):**
 
-1. **`"Pré-inscription"`** — group created, students can enroll, class hasn't started yet.
+1. **`"En inscription"`** — group created, students can enroll, class hasn't started yet.
 2. **`"En formation"`** — class is actively running.
 3. **`"Fin de formation"`** — class has finished. **The moment `statut` is set to this value, a snapshot row must be inserted into `groups_historique` in the same database transaction** (application-layer responsibility — not a database trigger). The `groups` row itself is **never deleted**.
 

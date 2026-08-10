@@ -4,7 +4,7 @@ import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
-import FilterDropdown from '@/Components/Tables/FilterDropdown';
+import TableToolbar from '@/Components/Tables/TableToolbar';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
@@ -19,20 +19,10 @@ import PhoneField from '@/Components/Forms/PhoneField';
 import FormActions from '@/Components/Forms/FormActions';
 import FormErrorsSummary from '@/Components/Forms/FormErrorsSummary';
 import StatusBadge from '@/Components/Details/StatusBadge';
+import SexeIcon from '@/Components/Details/SexeIcon';
 import { splitPhone } from '@/Data/countries';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import type { EmployeeRow, EmployeesPageProps, SelectOption } from '@/Types';
-
-/** Gender icon, matching components/backoffice/ui/sexe-icon.blade.php. */
-function SexeIcon({ sexe }: { sexe: string | null }) {
-    if (sexe === 'Homme') {
-        return <i className="ti ti-man fs-16 text-primary" title="Homme" />;
-    }
-    if (sexe === 'Femme') {
-        return <i className="ti ti-woman fs-16 text-pink" title="Femme" />;
-    }
-    return <>—</>;
-}
 
 interface EmployeeFormState {
     nom: string;
@@ -266,39 +256,48 @@ export default function EmployeesIndex({
                 </button>
             }
         >
-            <Card
-                title="Employés"
-                bodyClassName="p-0 py-3"
-                tools={
-                    <FilterDropdown
-                        fields={[
-                            {
-                                name: 'categorieFilter',
-                                label: 'Catégorie',
-                                value: filters.categorieFilter,
-                                options: categorieFilterOptions,
-                                placeholder: 'Toutes les catégories',
-                            },
-                            {
-                                name: 'statutFilter',
-                                label: 'Statut',
-                                value: filters.statutFilter,
-                                options: statutOptions,
-                                placeholder: 'Tous les statuts',
-                            },
-                            {
-                                name: 'etablissementFilter',
-                                label: 'Centre',
-                                value: filters.etablissementFilter,
-                                options: centerOptions,
-                                placeholder: 'Tous les centres',
-                            },
-                        ]}
-                        onApply={(values) => reload(values)}
-                        onReset={() => reload({ categorieFilter: '', statutFilter: '', etablissementFilter: '' })}
-                    />
-                }
-            >
+            <Card title="Employés" bodyClassName="p-0 py-3">
+                <div className="px-3 pt-2">
+                    <TableToolbar>
+                        <div style={{ width: 200 }}>
+                            <label className="form-label" htmlFor="emp-f-categorie">
+                                Catégorie
+                            </label>
+                            <SelectField
+                                id="emp-f-categorie"
+                                options={categorieFilterOptions}
+                                placeholder="Toutes les catégories"
+                                value={filters.categorieFilter}
+                                onChange={(event) => reload({ categorieFilter: event.target.value })}
+                            />
+                        </div>
+                        <div style={{ width: 180 }}>
+                            <label className="form-label" htmlFor="emp-f-statut">
+                                Statut
+                            </label>
+                            <SelectField
+                                id="emp-f-statut"
+                                options={statutOptions}
+                                placeholder="Tous les statuts"
+                                value={filters.statutFilter}
+                                onChange={(event) => reload({ statutFilter: event.target.value })}
+                            />
+                        </div>
+                        <div style={{ width: 220 }}>
+                            <label className="form-label" htmlFor="emp-f-centre">
+                                Centre
+                            </label>
+                            <SelectField
+                                id="emp-f-centre"
+                                options={centerOptions}
+                                placeholder="Tous les centres"
+                                value={filters.etablissementFilter}
+                                onChange={(event) => reload({ etablissementFilter: event.target.value })}
+                            />
+                        </div>
+                    </TableToolbar>
+                </div>
+
                 <TableLengthRow
                     perPage={filters.perPage}
                     perPageOptions={perPageOptions}
@@ -314,9 +313,9 @@ export default function EmployeesIndex({
                             loading={isLoading}
                             head={
                                 <tr>
+                                    <th />
                                     <th>Référence</th>
                                     <th>Nom</th>
-                                    <th>Genre</th>
                                     <th>Catégorie</th>
                                     <th>Centre</th>
                                     <th>Téléphone</th>
@@ -327,6 +326,9 @@ export default function EmployeesIndex({
                         >
                             {employees.data.map((employee) => (
                                 <tr key={employee.id}>
+                                    <td>
+                                        <SexeIcon sexe={employee.sexe} />
+                                    </td>
                                     <td>
                                         <code>{employee.reference}</code>
                                     </td>
@@ -349,9 +351,6 @@ export default function EmployeesIndex({
                                             </span>
                                             <span className="fw-medium">{employee.nomComplet}</span>
                                         </span>
-                                    </td>
-                                    <td>
-                                        <SexeIcon sexe={employee.sexe} />
                                     </td>
                                     <td>
                                         <span className="badge badge-soft-info">{employee.categorie}</span>

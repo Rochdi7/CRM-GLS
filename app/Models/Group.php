@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Class / cohort (gls-crm-schema.md §6).
  *
- * statut lifecycle: Pré-inscription → En formation → Fin de formation.
+ * statut lifecycle: En inscription → En formation → Fin de formation.
  * A group row is NEVER deleted, even after finishing (inscriptions.group_id
  * must stay a valid FK). groups_historique is an archive snapshot only.
  */
@@ -24,14 +24,14 @@ class Group extends Model
     use HasFactory;
 
     // statut lifecycle — enforced here, not at the database level (schema §6)
-    public const STATUT_PRE_INSCRIPTION = 'Pré-inscription';
+    public const STATUT_EN_INSCRIPTION = 'En inscription';
 
     public const STATUT_EN_FORMATION = 'En formation';
 
     public const STATUT_FIN_FORMATION = 'Fin de formation';
 
     public const STATUTS = [
-        self::STATUT_PRE_INSCRIPTION,
+        self::STATUT_EN_INSCRIPTION,
         self::STATUT_EN_FORMATION,
         self::STATUT_FIN_FORMATION,
     ];

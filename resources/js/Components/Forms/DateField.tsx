@@ -40,6 +40,57 @@ function parseIso(value: string): { year: number; month: number; day: number } |
     return { year, month, day };
 }
 
+/** Parses what the user types — 'dd-mm-yyyy' (also accepts 'dd/mm/yyyy') — into an ISO date, validating real calendar dates (no 31-02). */
+function parseDisplay(text: string): string | null {
+    const match = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/.exec(text.trim());
+    if (!match) {
+        return null;
+    }
+    const day = Number(match[1]);
+    const month = Number(match[2]);
+    const year = Number(match[3]);
+    const date = new Date(year, month - 1, day);
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+        return null;
+    }
+    return toIso(year, month - 1, day);
+}
+
+/**
+ * Masks free-typed input into 'dd-mm-yyyy' as the user types: strips
+ * non-digits, caps each group (2/2/4 digits — day/month can't exceed 31/12),
+ * and auto-inserts the dashes. Backspacing across a dash removes it along
+ * with the digit before it, so deleting feels natural.
+ */
+function maskDateInput(raw: string, previous: string): string {
+    const deleting = raw.length < previous.length;
+    let digits = raw.replace(/\D/g, '').slice(0, 8);
+
+    if (deleting && previous.endsWith('-') && raw === previous.slice(0, -1)) {
+        digits = digits.slice(0, -1);
+    }
+
+    let day = digits.slice(0, 2);
+    let month = digits.slice(2, 4);
+    const year = digits.slice(4, 8);
+
+    if (day.length === 2 && Number(day) > 31) {
+        day = day[0];
+    }
+    if (month.length === 2 && Number(month) > 12) {
+        month = month[0];
+    }
+
+    let out = day;
+    if (digits.length >= 3 || (day.length === 2 && !deleting)) {
+        out += '-' + month;
+    }
+    if (digits.length >= 5) {
+        out += '-' + year;
+    }
+    return out;
+}
+
 interface GridDay {
     year: number;
     month: number;
@@ -71,9 +122,14 @@ export default function DateField({
     const wrapperRef = useRef<HTMLDivElement>(null);
 
     const parsed = parseIso(value);
+    const formatted = parsed ? `${pad(parsed.day)}-${pad(parsed.month + 1)}-${parsed.year}` : '';
     const today = new Date();
     const [viewYear, setViewYear] = useState(() => parsed?.year ?? today.getFullYear());
     const [viewMonth, setViewMonth] = useState(() => parsed?.month ?? today.getMonth());
+
+    // While the user is actively typing, the input shows their own text
+    // (which may be incomplete/invalid) instead of the formatted value.
+    const [typedText, setTypedText] = useState<string | null>(null);
 
     function emit(next: string) {
         onChange?.({ target: { value: next } } as unknown as React.ChangeEvent<HTMLInputElement>);
@@ -89,11 +145,30 @@ export default function DateField({
 
     function choose(cell: GridDay) {
         emit(toIso(cell.year, cell.month, cell.day));
+        setTypedText(null);
         if (!cell.inMonth) {
             setViewYear(cell.year);
             setViewMonth(cell.month);
         }
         setOpen(false);
+    }
+
+    function handleTextChange(text: string) {
+        const masked = maskDateInput(text, typedText ?? formatted);
+        setTypedText(masked);
+        const iso = parseDisplay(masked);
+        if (iso) {
+            emit(iso);
+            const next = parseIso(iso)!;
+            setViewYear(next.year);
+            setViewMonth(next.month);
+        }
+    }
+
+    function handleTextBlur() {
+        // Whatever wasn't a valid date on blur is discarded — the input
+        // falls back to reflecting the last valid `value`.
+        setTypedText(null);
     }
 
     function moveMonth(delta: number) {
@@ -147,7 +222,7 @@ export default function DateField({
         year: 'numeric',
     });
 
-    const display = parsed ? `${pad(parsed.day)}-${pad(parsed.month + 1)}-${parsed.year}` : '';
+    const display = typedText ?? formatted;
     const todayIso = toIso(today.getFullYear(), today.getMonth(), today.getDate());
 
     return (
@@ -162,9 +237,10 @@ export default function DateField({
                 <input
                     id={id}
                     type="text"
-                    readOnly
+                    inputMode="numeric"
+                    autoComplete="off"
                     className={`form-control${error ? ' is-invalid' : ''}`}
-                    style={{ cursor: disabled ? undefined : 'pointer', paddingRight: '2.25rem' }}
+                    style={{ paddingRight: '2.25rem' }}
                     value={display}
                     placeholder={placeholder ?? 'jj-mm-aaaa'}
                     disabled={disabled}
@@ -173,13 +249,11 @@ export default function DateField({
                     aria-describedby={error ? `${id}-error` : undefined}
                     aria-haspopup="dialog"
                     aria-expanded={open}
-                    onClick={() => {
+                    onChange={(event) => handleTextChange(event.target.value)}
+                    onBlur={handleTextBlur}
+                    onFocus={() => {
                         if (!disabled) {
-                            if (open) {
-                                setOpen(false);
-                            } else {
-                                openPanel();
-                            }
+                            openPanel();
                         }
                     }}
                 />

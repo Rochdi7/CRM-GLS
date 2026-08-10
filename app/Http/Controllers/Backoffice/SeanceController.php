@@ -17,6 +17,7 @@ use App\Models\Presence;
 use App\Models\Seance;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -38,6 +39,7 @@ final class SeanceController extends Controller
             'search' => (string) $request->string('search'),
             'groupFilter' => (string) $request->string('groupFilter'),
             'statutFilter' => (string) $request->string('statutFilter'),
+            'enseignantFilter' => (string) $request->string('enseignantFilter'),
             'dateFrom' => (string) $request->string('dateFrom'),
             'dateTo' => (string) $request->string('dateTo'),
         ];
@@ -165,10 +167,16 @@ final class SeanceController extends Controller
         SavePresencesRequest $request,
         Seance $seance,
         EnregistrerPresences $enregistrerPresences,
-    ): RedirectResponse {
+    ): HttpResponse|RedirectResponse {
         $this->authorize('mark', $seance);
 
         $enregistrerPresences($seance, $request->validated('presences'));
+
+        // The roll-call toggles auto-save via a background XHR — no Inertia
+        // visit, so no redirect/flash: just acknowledge silently.
+        if ($request->expectsJson()) {
+            return response()->noContent();
+        }
 
         return redirect()->route('backoffice.seances.show', $seance)
             ->with('success', __('Attendance saved.'));

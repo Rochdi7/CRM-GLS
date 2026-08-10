@@ -19,7 +19,7 @@ final class GroupFactory extends Factory
         return [
             'nom' => 'Groupe '.fake()->unique()->numerify('###'),
             'niveau' => 'A1.1',
-            'statut' => Group::STATUT_PRE_INSCRIPTION,
+            'statut' => Group::STATUT_EN_INSCRIPTION,
         ];
     }
 }

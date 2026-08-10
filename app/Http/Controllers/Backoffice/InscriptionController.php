@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Domain\Registrations\Actions\MettreAJourFraisInscription;
 use App\Domain\Registrations\Queries\GetGroupInscriptionFees;
 use App\Domain\Registrations\Queries\GetInscriptionDetails;
 use App\Domain\Registrations\Queries\GetInscriptionFormOptions;
@@ -11,6 +12,7 @@ use App\Domain\Registrations\Queries\GetInscriptionsList;
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Inscriptions\StoreInscriptionRequest;
+use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionFeesRequest;
 use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionRequest;
 use App\Models\Group;
 use App\Models\Inscription;
@@ -31,11 +33,15 @@ use Inertia\Response;
  * Registrations (inscriptions) list + modal add/edit with manual fee lines
  * (Phase 9, docs/phase-9-inscriptions-audit.md +
  * docs/phase-9-inscriptions-mapping.md) — mirrors
- * App\Livewire\Backoffice\Inscriptions\InscriptionsIndex one-for-one,
- * including its create-vs-edit asymmetry (fee lines and group-derived
- * dates only apply on create; edit only ever touches 6 columns). The
- * Livewire component and its view are left completely untouched as
- * unreferenced fallback code.
+ * App\Livewire\Backoffice\Inscriptions\InscriptionsIndex one-for-one for the
+ * base fields (group-derived dates only apply on create; edit's own
+ * update() still only ever touches its original 6 columns). Fee lines are
+ * a later addition on top of that base behavior: create-time fee lines
+ * still work exactly as before, and editing an existing registration's fees
+ * is now a separate, explicit action (updateFees(), gated by
+ * registrations.manage-fees) rather than silently unsupported. The Livewire
+ * component and its view are left completely untouched as unreferenced
+ * fallback code.
  */
 final class InscriptionController extends Controller
 {
@@ -49,14 +55,18 @@ final class InscriptionController extends Controller
         $search = (string) $request->string('search');
         $statutFilter = (string) $request->string('statutFilter');
         $groupFilter = (string) $request->string('groupFilter');
+        $referenceFilter = (string) $request->string('referenceFilter');
+        $studentFilter = (string) $request->string('studentFilter');
         $perPage = (int) $request->integer('perPage', GetInscriptionsList::DEFAULT_PER_PAGE);
 
         return Inertia::render('Backoffice/Inscriptions/Index', [
-            'inscriptions' => $getInscriptionsList($request->user(), $search, $statutFilter, $groupFilter, $perPage),
+            'inscriptions' => $getInscriptionsList($request->user(), $search, $statutFilter, $groupFilter, $perPage, $referenceFilter, $studentFilter),
             'filters' => [
                 'search' => $search,
                 'statutFilter' => $statutFilter,
                 'groupFilter' => $groupFilter,
+                'referenceFilter' => $referenceFilter,
+                'studentFilter' => $studentFilter,
                 'perPage' => in_array($perPage, GetInscriptionsList::PER_PAGE_OPTIONS, true)
                     ? $perPage
                     : GetInscriptionsList::DEFAULT_PER_PAGE,
@@ -73,6 +83,7 @@ final class InscriptionController extends Controller
             'defaultCountry' => Countries::DEFAULT,
             'students' => $getInscriptionFormOptions->students($request->user()),
             'groups' => $getInscriptionFormOptions->groups($request->user()),
+            'canManageFees' => $request->user()->can('registrations.manage-fees'),
         ]);
     }
 
@@ -83,6 +94,59 @@ final class InscriptionController extends Controller
         return Inertia::render('Backoffice/Inscriptions/Show', [
             'inscription' => $getInscriptionDetails($inscription),
         ]);
+    }
+
+    /**
+     * Editable fee list for the edit modal — raw amounts/ids (not the
+     * French-display-formatted shape GetInscriptionDetails builds for the
+     * read-only Show page), so the client can prefill an editable form and
+     * PUT it straight back to updateFees() below. Same `view` gate as
+     * show() — seeing the list only needs the parent Inscription's view
+     * permission; actually saving changes needs registrations.manage-fees.
+     */
+    public function fees(Inscription $inscription): JsonResponse
+    {
+        $this->authorize('view', $inscription);
+
+        return response()->json([
+            'fees' => $inscription->fees->map(fn (InscriptionFee $fee): array => [
+                'id' => $fee->id,
+                'fraisId' => $fee->frais_id,
+                'nom' => $fee->nom,
+                'montantInitial' => (string) $fee->montant_initial,
+                'remisePct' => $fee->remise_pct !== null ? (string) $fee->remise_pct : '',
+                'remiseMontant' => $fee->remise_montant !== null ? (string) $fee->remise_montant : '',
+                'note' => $fee->note ?? '',
+                'dateEcheance' => $fee->date_echeance?->toDateString() ?? '',
+                'statut' => $fee->statut,
+            ])->values(),
+        ]);
+    }
+
+    /**
+     * Full replacement of an existing inscription's fee lines — the
+     * registrations.manage-fees permission's first live use (previously
+     * only checked by a dead controller, see docs/phase-9-inscriptions-
+     * audit.md §12 point 1). Deliberately unrestricted: a fee already paid
+     * or partially paid can still be edited or removed (product decision);
+     * removing a line with payments is refused by MettreAJourFraisInscription
+     * via the encaissements FK-restrict, surfaced as a field error.
+     */
+    public function updateFees(
+        UpdateInscriptionFeesRequest $request,
+        Inscription $inscription,
+        MettreAJourFraisInscription $action,
+    ): RedirectResponse {
+        // Center-scoping still applies (must be able to see this
+        // inscription at all) but the actual permission to mutate fees is
+        // registrations.manage-fees — already enforced by the route
+        // middleware, deliberately NOT also requiring registrations.update.
+        $this->authorize('view', $inscription);
+
+        $action->handle($inscription, $request->validated('fee_lines', []));
+
+        return redirect()->route('backoffice.inscriptions.index')
+            ->with('success', __('Registration fees updated.'));
     }
 
     /**

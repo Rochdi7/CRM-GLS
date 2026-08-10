@@ -5,9 +5,9 @@ import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
-import FilterDropdown from '@/Components/Tables/FilterDropdown';
+import TableToolbar from '@/Components/Tables/TableToolbar';
+import FilterTextInput from '@/Components/Tables/FilterTextInput';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
-import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
@@ -92,6 +92,14 @@ function emptyForm(defaultCountry: string): InscriptionFormState {
     };
 }
 
+/** Statut → badge color (Inscription::STATUTS: Active/Annulée/Changement/Expirée/Archivée). */
+function statutVariant(statut: string): 'success' | 'danger' | 'warning' | 'secondary' {
+    if (statut === 'Active') return 'success';
+    if (statut === 'Annulée') return 'danger';
+    if (statut === 'Changement') return 'warning';
+    return 'secondary';
+}
+
 /**
  * Mirrors InscriptionFee::computeMontant() exactly — display-only preview;
  * the server independently recomputes this from the same inputs and that
@@ -130,17 +138,22 @@ export default function InscriptionsIndex({
     defaultCountry,
     students,
     groups,
+    canManageFees,
 }: InscriptionsPageProps) {
     const isLoading = useInertiaLoading();
     const [showModal, setShowModal] = useState(false);
     const [editingInscription, setEditingInscription] = useState<InscriptionRow | null>(null);
     const [activeTab, setActiveTab] = useState<'affectation' | 'contact' | 'parent' | 'autre'>('affectation');
     const [loadingGroupFees, setLoadingGroupFees] = useState(false);
+    const [loadingEditingFees, setLoadingEditingFees] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<InscriptionRow | null>(null);
     const [deleteError, setDeleteError] = useState<string | undefined>(undefined);
     const [deleteProcessing, setDeleteProcessing] = useState(false);
 
     const form = useForm<InscriptionFormState>(emptyForm(defaultCountry));
+    // Separate form for the edit modal's fee table — its own endpoint
+    // (PUT .../fees), independent processing/errors from the base-fields form.
+    const feesForm = useForm<{ fee_lines: InscriptionFeeLine[] }>({ fee_lines: [] });
 
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.label }));
     const groupOptions: SelectOption[] = groups.map((g) => ({ value: g.id, label: g.label }));
@@ -172,11 +185,12 @@ export default function InscriptionsIndex({
     }
 
     function openEdit(inscription: InscriptionRow) {
-        // The edit form only ever changes 6 columns — no fee-line loading,
-        // matching the Livewire form's own `@unless ($editingId)` fee-table
-        // scoping exactly. The row exposes the raw student/group ids so the
-        // selects preselect by id (label-prefix matching used to pick the
-        // wrong record when two students shared a name — Phase 12 fix).
+        // The base-fields form only ever changes 6 columns, matching the
+        // Livewire form's own `@unless ($editingId)` scoping. Fee lines are
+        // loaded/saved separately below (feesForm, its own PUT endpoint).
+        // The row exposes the raw student/group ids so the selects
+        // preselect by id (label-prefix matching used to pick the wrong
+        // record when two students shared a name — Phase 12 fix).
         setEditingInscription(inscription);
         setActiveTab('affectation');
         form.clearErrors();
@@ -188,11 +202,23 @@ export default function InscriptionsIndex({
             statut: inscription.statut,
         });
         setShowModal(true);
+
+        // Fetched separately since InscriptionRow (the list payload) carries
+        // only feesCount, not the fee lines themselves.
+        feesForm.setData('fee_lines', []);
+        feesForm.clearErrors();
+        setLoadingEditingFees(true);
+        fetch(`/backoffice/inscriptions/${inscription.id}/fees`, { headers: { Accept: 'application/json' } })
+            .then((response) => response.json())
+            .then((data: { fees: InscriptionFeeLine[] }) => feesForm.setData('fee_lines', data.fees))
+            .finally(() => setLoadingEditingFees(false));
     }
 
     function closeModal() {
         setShowModal(false);
         setEditingInscription(null);
+        feesForm.setData('fee_lines', []);
+        feesForm.clearErrors();
         form.reset();
         form.clearErrors();
     }
@@ -265,29 +291,46 @@ export default function InscriptionsIndex({
             .finally(() => setLoadingGroupFees(false));
     }
 
-    function setLine(index: number, field: keyof InscriptionFeeLine, value: string) {
-        const lines = [...form.data.fee_lines];
-        const line = { ...lines[index], [field]: value };
+    /**
+     * Shared by the create form's "Frais disponibles" table and the edit
+     * modal's "Frais de cette inscription" table — takes the lines array +
+     * its own setter so each table stays on its own useForm instance.
+     */
+    function updateLine(
+        lines: InscriptionFeeLine[],
+        setLines: (next: InscriptionFeeLine[]) => void,
+        index: number,
+        field: keyof InscriptionFeeLine,
+        value: string,
+    ) {
+        const next = [...lines];
+        const line = { ...next[index], [field]: value };
 
-        const initial = parseFloat(line.montantInitial || '0');
-
-        if (field === 'remisePct' && initial > 0) {
-            const pct = Math.min(100, Math.max(0, parseFloat(value || '0')));
-            line.remiseMontant = value === '' ? '' : String(Math.round((initial * pct) / 100 * 100) / 100);
-        } else if (field === 'remiseMontant' && initial > 0) {
-            const dh = Math.min(initial, Math.max(0, parseFloat(value || '0')));
-            line.remisePct = value === '' ? '' : String(Math.round((dh / initial) * 100 * 100) / 100);
+        // Pct and DH are mutually exclusive, not two-way-synced: whichever
+        // one the user just typed into is the sole source of truth (matches
+        // the server's "pct wins when both are present" rule — the previous
+        // back-fill-the-other-field approach violated that rule the moment
+        // BOTH ended up non-empty, e.g. typing "100" DH on a 1300 fee
+        // derived a rounded 7.69% that then computed 1200.03 instead of the
+        // exact 1200 the user asked for). Editing the initial amount keeps
+        // whichever discount mode was already active, recomputing its paired
+        // display value for the still-open field only.
+        if (field === 'remisePct') {
+            line.remiseMontant = '';
+        } else if (field === 'remiseMontant') {
+            line.remisePct = '';
         } else if (field === 'montantInitial' && line.remisePct !== '') {
+            const initial = parseFloat(value || '0');
             const pct = Math.min(100, Math.max(0, parseFloat(line.remisePct || '0')));
-            line.remiseMontant = String(Math.round((parseFloat(value || '0') * pct) / 100 * 100) / 100);
+            line.remiseMontant = String(Math.round((initial * pct) / 100 * 100) / 100);
         }
 
-        lines[index] = line;
-        form.setData('fee_lines', lines);
+        next[index] = line;
+        setLines(next);
     }
 
-    function lineTotal(): number {
-        return form.data.fee_lines.reduce((sum, line) => {
+    function linesTotal(lines: InscriptionFeeLine[]): number {
+        return lines.reduce((sum, line) => {
             const initial = parseFloat(line.montantInitial || '0');
             const pct = line.remisePct !== '' ? parseFloat(line.remisePct) : null;
             const dh = line.remiseMontant !== '' ? parseFloat(line.remiseMontant) : null;
@@ -296,9 +339,87 @@ export default function InscriptionsIndex({
         }, 0);
     }
 
+    function setLine(index: number, field: keyof InscriptionFeeLine, value: string) {
+        updateLine(form.data.fee_lines, (next) => form.setData('fee_lines', next), index, field, value);
+    }
+
+    function lineTotal(): number {
+        return linesTotal(form.data.fee_lines);
+    }
+
+    function setEditingLine(index: number, field: keyof InscriptionFeeLine, value: string) {
+        updateLine(feesForm.data.fee_lines, (next) => feesForm.setData('fee_lines', next), index, field, value);
+    }
+
+    function addEditingLine() {
+        feesForm.setData('fee_lines', [
+            ...feesForm.data.fee_lines,
+            { fraisId: null, nom: '', montantInitial: '', remisePct: '', remiseMontant: '', note: '', dateEcheance: '' },
+        ]);
+    }
+
+    function removeEditingLine(index: number) {
+        feesForm.setData(
+            'fee_lines',
+            feesForm.data.fee_lines.filter((_, i) => i !== index),
+        );
+    }
+
+    function saveFees(event: FormEvent) {
+        event.preventDefault();
+        if (!editingInscription) {
+            return;
+        }
+
+        // Same camelCase → snake_case mapping as the create form's submit()
+        // — the server validates fee_lines.*.montant_initial/remise_pct/…
+        feesForm.transform((data) => ({
+            fee_lines: data.fee_lines.map((line) => ({
+                id: line.id,
+                frais_id: line.fraisId,
+                nom: line.nom,
+                montant_initial: line.montantInitial,
+                remise_pct: line.remisePct,
+                remise_montant: line.remiseMontant,
+                note: line.note,
+                date_echeance: line.dateEcheance,
+            })),
+        }));
+
+        feesForm.put(`/backoffice/inscriptions/${editingInscription.id}/fees`, {
+            preserveScroll: true,
+            onFinish: () => feesForm.transform((data) => data),
+        });
+    }
+
     function submit(event: FormEvent) {
         event.preventDefault();
-        const options = { preserveScroll: true, onSuccess: () => closeModal() };
+        const options = {
+            preserveScroll: true,
+            onSuccess: () => closeModal(),
+            // Reset the transform so a later submit on this shared form
+            // instance doesn't carry the fee_lines mapping over.
+            onFinish: () => form.transform((data) => data),
+        };
+
+        // fee_lines lives in camelCase client state (InscriptionFeeLine) but
+        // the server validates snake_case (fee_lines.*.montant_initial /
+        // .remise_pct / .remise_montant / .frais_id / .date_echeance) —
+        // without this mapping every submit silently validated as "no
+        // discount, zero amount" instead of failing loudly (all rules are
+        // nullable), so fee lines saved with no montant_initial/frais_id.
+        form.transform((data) => ({
+            ...data,
+            fee_lines: data.fee_lines.map((line) => ({
+                frais_id: line.fraisId,
+                nom: line.nom,
+                montant_initial: line.montantInitial,
+                remise_pct: line.remisePct,
+                remise_montant: line.remiseMontant,
+                note: line.note,
+                date_echeance: line.dateEcheance,
+            })),
+        }));
 
         if (editingInscription) {
             form.put(`/backoffice/inscriptions/${editingInscription.id}`, options);
@@ -342,37 +463,65 @@ export default function InscriptionsIndex({
                 </button>
             }
         >
-            <Card
-                title="Inscriptions"
-                bodyClassName="p-0 py-3"
-                tools={
-                    <FilterDropdown
-                        fields={[
-                            {
-                                name: 'statutFilter',
-                                label: 'Statut',
-                                value: filters.statutFilter,
-                                options: statutFilterOptions,
-                                placeholder: 'Tous les statuts',
-                            },
-                            {
-                                name: 'groupFilter',
-                                label: 'Groupe',
-                                value: filters.groupFilter,
-                                options: groupOptions,
-                                placeholder: 'Tous les groupes',
-                            },
-                        ]}
-                        onApply={(values) => reload(values)}
-                        onReset={() => reload({ statutFilter: '', groupFilter: '' })}
-                    />
-                }
-            >
+            <Card title="Inscriptions" bodyClassName="p-0 py-3">
+                {/* Per-column filter row (reference CRM's Inscriptions filters,
+                    without Offres) — replaces the dropdown + single search box. */}
+                <div className="px-3 pt-2">
+                    <TableToolbar>
+                        <div style={{ width: 170 }}>
+                            <label className="form-label" htmlFor="ins-f-reference">
+                                Référence
+                            </label>
+                            <FilterTextInput
+                                id="ins-f-reference"
+                                value={filters.referenceFilter}
+                                onChange={(value) => reload({ referenceFilter: value })}
+                                placeholder="ex : I19"
+                            />
+                        </div>
+                        <div style={{ width: 240 }}>
+                            <label className="form-label" htmlFor="ins-f-student">
+                                Étudiant
+                            </label>
+                            <SelectField
+                                id="ins-f-student"
+                                options={studentOptions}
+                                placeholder="Choisir un étudiant"
+                                value={filters.studentFilter}
+                                onChange={(event) => reload({ studentFilter: event.target.value })}
+                            />
+                        </div>
+                        <div style={{ width: 190 }}>
+                            <label className="form-label" htmlFor="ins-f-statut">
+                                Statut
+                            </label>
+                            <SelectField
+                                id="ins-f-statut"
+                                options={statutFilterOptions}
+                                placeholder="Tous les statuts"
+                                value={filters.statutFilter}
+                                onChange={(event) => reload({ statutFilter: event.target.value })}
+                            />
+                        </div>
+                        <div style={{ width: 240 }}>
+                            <label className="form-label" htmlFor="ins-f-groupe">
+                                Groupe
+                            </label>
+                            <SelectField
+                                id="ins-f-groupe"
+                                options={groupOptions}
+                                placeholder="Choisir une formation"
+                                value={filters.groupFilter}
+                                onChange={(event) => reload({ groupFilter: event.target.value })}
+                            />
+                        </div>
+                    </TableToolbar>
+                </div>
+
                 <TableLengthRow
                     perPage={filters.perPage}
                     perPageOptions={perPageOptions}
                     onPerPageChange={(perPage) => reload({ perPage })}
-                    search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} placeholder="Rechercher" />}
                 />
 
                 {inscriptions.data.length === 0 ? (
@@ -386,9 +535,10 @@ export default function InscriptionsIndex({
                                     <th>Référence</th>
                                     <th>Étudiant</th>
                                     <th>Groupe</th>
-                                    <th>Date</th>
+                                    <th>Date d'inscription</th>
+                                    <th>Date de début</th>
+                                    <th>Date de fin</th>
                                     <th>Total</th>
-                                    <th>Frais</th>
                                     <th>Statut</th>
                                     <th className="text-end">Action</th>
                                 </tr>
@@ -402,12 +552,11 @@ export default function InscriptionsIndex({
                                     <td className="fw-medium">{inscription.student ?? '—'}</td>
                                     <td>{inscription.groupe ?? '—'}</td>
                                     <td>{inscription.date ?? '—'}</td>
+                                    <td>{inscription.dateDebut ?? '—'}</td>
+                                    <td>{inscription.dateFin ?? '—'}</td>
                                     <td>{inscription.montantTotal !== null ? `${Number(inscription.montantTotal).toFixed(2)} MAD` : '—'}</td>
                                     <td>
-                                        <span className="badge badge-soft-secondary">{inscription.feesCount}</span>
-                                    </td>
-                                    <td>
-                                        <StatusBadge label={inscription.statut} variant="info" dot />
+                                        <StatusBadge label={inscription.statut} variant={statutVariant(inscription.statut)} dot />
                                     </td>
                                     <td className="text-end">
                                         <RowActions view={inscription.showUrl}>
@@ -800,6 +949,177 @@ export default function InscriptionsIndex({
                                                     </tr>
                                                 </tfoot>
                                             </table>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {editingInscription && (
+                                <div className="border-top pt-3">
+                                    <div className="d-flex align-items-center justify-content-between mb-1">
+                                        <h6 className="mb-0">Frais de cette inscription</h6>
+                                        {canManageFees && (
+                                            <button type="button" className="btn btn-outline-primary btn-sm" onClick={addEditingLine}>
+                                                <i className="ti ti-plus me-1" />
+                                                Ajouter un frais
+                                            </button>
+                                        )}
+                                    </div>
+                                    {!canManageFees && (
+                                        <p className="text-muted fs-13">
+                                            Lecture seule — vous n'avez pas la permission de modifier les frais.
+                                        </p>
+                                    )}
+                                    {loadingEditingFees ? (
+                                        <p className="text-muted fs-13">Chargement…</p>
+                                    ) : feesForm.data.fee_lines.length === 0 ? (
+                                        <p className="text-muted fs-13">Aucun frais enregistré pour cette inscription.</p>
+                                    ) : (
+                                        <div className="table-responsive">
+                                            <table className="table table-sm align-middle mb-1">
+                                                <thead className="thead-light">
+                                                    <tr>
+                                                        <th>Frais</th>
+                                                        <th>Initial (DH)</th>
+                                                        <th>Remise</th>
+                                                        <th>Note</th>
+                                                        <th className="text-end">Montant</th>
+                                                        <th>Échéance</th>
+                                                        <th>Statut</th>
+                                                        {canManageFees && <th />}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {feesForm.data.fee_lines.map((line, index) => {
+                                                        const initial = parseFloat(line.montantInitial || '0');
+                                                        const pct = line.remisePct !== '' ? parseFloat(line.remisePct) : null;
+                                                        const dh = line.remiseMontant !== '' ? parseFloat(line.remiseMontant) : null;
+                                                        const final = computeLineMontant(initial, pct, dh);
+                                                        const rowErrors = feesForm.errors as Record<string, string>;
+                                                        const montantError = rowErrors[`fee_lines.${index}.montant_initial`];
+
+                                                        return (
+                                                            <tr key={line.id ?? `new-${index}`}>
+                                                                <td style={{ width: 160 }}>
+                                                                    {canManageFees ? (
+                                                                        <input
+                                                                            type="text"
+                                                                            className="form-control form-control-sm"
+                                                                            value={line.nom}
+                                                                            onChange={(event) => setEditingLine(index, 'nom', event.target.value)}
+                                                                        />
+                                                                    ) : (
+                                                                        <span className="fw-medium">{line.nom}</span>
+                                                                    )}
+                                                                </td>
+                                                                <td style={{ width: 110 }}>
+                                                                    <input
+                                                                        type="number"
+                                                                        step="0.01"
+                                                                        min="0"
+                                                                        disabled={!canManageFees}
+                                                                        className={`form-control form-control-sm${montantError ? ' is-invalid' : ''}`}
+                                                                        value={line.montantInitial}
+                                                                        onChange={(event) => setEditingLine(index, 'montantInitial', event.target.value)}
+                                                                    />
+                                                                </td>
+                                                                <td style={{ width: 190 }}>
+                                                                    <div className="input-group input-group-sm">
+                                                                        <input
+                                                                            type="number"
+                                                                            step="0.01"
+                                                                            min="0"
+                                                                            max="100"
+                                                                            disabled={!canManageFees}
+                                                                            className="form-control"
+                                                                            placeholder="%"
+                                                                            value={line.remisePct}
+                                                                            onChange={(event) => setEditingLine(index, 'remisePct', event.target.value)}
+                                                                        />
+                                                                        <span className="input-group-text">%</span>
+                                                                        <input
+                                                                            type="number"
+                                                                            step="0.01"
+                                                                            min="0"
+                                                                            disabled={!canManageFees}
+                                                                            className="form-control"
+                                                                            placeholder="DH"
+                                                                            value={line.remiseMontant}
+                                                                            onChange={(event) => setEditingLine(index, 'remiseMontant', event.target.value)}
+                                                                        />
+                                                                        <span className="input-group-text">DH</span>
+                                                                    </div>
+                                                                </td>
+                                                                <td style={{ width: 150 }}>
+                                                                    <input
+                                                                        type="text"
+                                                                        disabled={!canManageFees}
+                                                                        className="form-control form-control-sm"
+                                                                        value={line.note}
+                                                                        onChange={(event) => setEditingLine(index, 'note', event.target.value)}
+                                                                    />
+                                                                </td>
+                                                                <td className="text-end fw-semibold" style={{ width: 110 }}>
+                                                                    {final.toFixed(2)} DH
+                                                                </td>
+                                                                <td style={{ width: 150 }}>
+                                                                    <DateField
+                                                                        id={`ins-edit-fee-date-${index}`}
+                                                                        value={line.dateEcheance}
+                                                                        disabled={!canManageFees}
+                                                                        onChange={(event) => setEditingLine(index, 'dateEcheance', event.target.value)}
+                                                                    />
+                                                                </td>
+                                                                <td style={{ width: 110 }}>
+                                                                    {line.statut && (
+                                                                        <span
+                                                                            className={`badge badge-soft-${line.statut === 'Payé' ? 'success' : line.statut === 'Payé partiellement' ? 'warning' : 'secondary'}`}
+                                                                        >
+                                                                            {line.statut}
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                {canManageFees && (
+                                                                    <td className="text-end" style={{ width: 40 }}>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="btn btn-icon btn-sm text-danger"
+                                                                            aria-label="Supprimer ce frais"
+                                                                            onClick={() => removeEditingLine(index)}
+                                                                        >
+                                                                            <i className="ti ti-trash" />
+                                                                        </button>
+                                                                    </td>
+                                                                )}
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                                <tfoot>
+                                                    <tr>
+                                                        <td colSpan={4} className="text-end fw-semibold">
+                                                            Total à payer
+                                                        </td>
+                                                        <td className="text-end fw-bold">{linesTotal(feesForm.data.fee_lines).toFixed(2)} DH</td>
+                                                        <td colSpan={canManageFees ? 3 : 2} />
+                                                    </tr>
+                                                </tfoot>
+                                            </table>
+                                        </div>
+                                    )}
+                                    {feesForm.errors.fee_lines && (
+                                        <div className="text-danger small mb-2">{feesForm.errors.fee_lines}</div>
+                                    )}
+                                    {canManageFees && (
+                                        <div className="d-flex justify-content-end">
+                                            <button
+                                                type="button"
+                                                className="btn btn-primary btn-sm"
+                                                disabled={feesForm.processing}
+                                                onClick={saveFees}
+                                            >
+                                                {feesForm.processing ? 'Enregistrement…' : 'Enregistrer les frais'}
+                                            </button>
                                         </div>
                                     )}
                                 </div>

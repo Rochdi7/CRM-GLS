@@ -179,6 +179,181 @@ final class InscriptionsInertiaCrudTest extends TestCase
         $this->assertSame($this->annee->id, $inscription->annee_scolaire_id);
     }
 
+    // --- read-only fee list (edit modal) ------------------------------------
+
+    public function test_fees_endpoint_returns_the_inscriptions_billed_fees(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.create'));
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $group = $this->groupWithFees();
+
+        $this->post(route('backoffice.inscriptions.store'), [
+            'inscription_mode' => 'existing',
+            'student_id' => $student->id,
+            'group_id' => $group->id,
+            'date_inscription' => '2025-09-15',
+            'fee_lines' => [
+                ['frais_id' => null, 'nom' => "Frais d'inscription", 'montant_initial' => '300'],
+                ['frais_id' => null, 'nom' => 'Frais de Juillet', 'montant_initial' => '1300', 'remise_montant' => '100'],
+            ],
+        ])->assertRedirect(route('backoffice.inscriptions.index'));
+
+        $inscription = Inscription::where('student_id', $student->id)->first();
+
+        $response = $this->get(route('backoffice.inscriptions.fees', $inscription))
+            ->assertOk()
+            ->json();
+
+        $this->assertCount(2, $response['fees']);
+        $discounted = collect($response['fees'])->firstWhere('nom', 'Frais de Juillet');
+        $this->assertSame('1300.00', $discounted['montantInitial']);
+        $this->assertSame('100.00', $discounted['remiseMontant']);
+        $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $discounted['statut']);
+        $this->assertNotNull($discounted['id']);
+    }
+
+    public function test_fees_endpoint_requires_registrations_view(): void
+    {
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $group = $this->makeGroup();
+        $inscription = Inscription::create([
+            'reference' => 'INS-FEES', 'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => 'Active', 'date_inscription' => '2025-09-15',
+        ]);
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('backoffice.inscriptions.fees', $inscription))
+            ->assertForbidden();
+    }
+
+    // --- editing fees on an existing inscription (registrations.manage-fees) ---
+
+    private function inscriptionWithFee(float $montantInitial = 1300.0): array
+    {
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $group = $this->makeGroup();
+        $inscription = Inscription::create([
+            'reference' => 'INS-EDIT-FEES', 'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => 'Active', 'date_inscription' => '2025-09-15', 'montant_total' => $montantInitial,
+        ]);
+        $fee = InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => 'Frais de Juillet',
+            'montant_initial' => $montantInitial, 'montant' => $montantInitial,
+            'date_echeance' => '2025-10-01', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+
+        return [$inscription, $fee];
+    }
+
+    public function test_updating_fees_requires_manage_fees_not_just_update(): void
+    {
+        [$inscription, $fee] = $this->inscriptionWithFee();
+
+        $this->actingAs($this->userWith('registrations.view', 'registrations.update'))
+            ->put(route('backoffice.inscriptions.fees.update', $inscription), [
+                'fee_lines' => [['id' => $fee->id, 'nom' => $fee->nom, 'montant_initial' => '1000']],
+            ])
+            ->assertForbidden();
+
+        $this->assertSame('1300.00', (string) $fee->fresh()->montant_initial);
+    }
+
+    public function test_an_unpaid_fee_amount_can_be_edited(): void
+    {
+        [$inscription, $fee] = $this->inscriptionWithFee();
+
+        $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
+            ->put(route('backoffice.inscriptions.fees.update', $inscription), [
+                'fee_lines' => [[
+                    'id' => $fee->id, 'nom' => $fee->nom,
+                    'montant_initial' => '1300', 'remise_montant' => '100',
+                ]],
+            ])
+            ->assertRedirect(route('backoffice.inscriptions.index'));
+
+        $fresh = $fee->fresh();
+        // 1300 − 100 DH = 1200.00 exactly (not a rounded-percentage artifact).
+        $this->assertSame('1200.00', (string) $fresh->montant);
+        $this->assertSame('1200.00', (string) $inscription->fresh()->montant_total);
+    }
+
+    public function test_a_new_fee_line_can_be_added_on_edit(): void
+    {
+        [$inscription, $fee] = $this->inscriptionWithFee();
+
+        $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
+            ->put(route('backoffice.inscriptions.fees.update', $inscription), [
+                'fee_lines' => [
+                    ['id' => $fee->id, 'nom' => $fee->nom, 'montant_initial' => '1300'],
+                    ['nom' => 'Frais supplémentaire', 'montant_initial' => '200'],
+                ],
+            ])
+            ->assertRedirect(route('backoffice.inscriptions.index'));
+
+        $this->assertSame(2, $inscription->fees()->count());
+        $this->assertSame('1500.00', (string) $inscription->fresh()->montant_total);
+    }
+
+    public function test_a_fee_line_omitted_from_the_payload_is_removed(): void
+    {
+        [$inscription, $fee] = $this->inscriptionWithFee();
+        $otherFee = InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => 'Autre frais',
+            'montant_initial' => 100, 'montant' => 100,
+            'date_echeance' => '2025-10-01', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+
+        $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
+            ->put(route('backoffice.inscriptions.fees.update', $inscription), [
+                'fee_lines' => [['id' => $fee->id, 'nom' => $fee->nom, 'montant_initial' => '1300']],
+            ])
+            ->assertRedirect(route('backoffice.inscriptions.index'));
+
+        $this->assertNull(InscriptionFee::find($otherFee->id));
+        $this->assertSame(1, $inscription->fees()->count());
+    }
+
+    public function test_removing_a_fee_line_that_has_payments_is_refused(): void
+    {
+        [$inscription, $fee] = $this->inscriptionWithFee();
+        $caisse = \App\Models\Caisse::factory()->create(['etablissement_id' => $this->centre->id]);
+        $agent = Employee::factory()->create(['etablissement_id' => $this->centre->id]);
+        \App\Models\Encaissement::create([
+            'reference' => 'ENC-EDIT-FEES', 'student_id' => $inscription->student_id,
+            'inscription_fee_id' => $fee->id, 'caisse_id' => $caisse->id, 'agent_id' => $agent->id,
+            'montant' => 500, 'methode' => 'Espèces', 'date_paiement' => '2025-10-01',
+        ]);
+
+        $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
+            ->put(route('backoffice.inscriptions.fees.update', $inscription), ['fee_lines' => []])
+            ->assertSessionHasErrors('fee_lines');
+
+        $this->assertNotNull(InscriptionFee::find($fee->id));
+    }
+
+    public function test_editing_a_partially_paid_fees_amount_recomputes_its_statut(): void
+    {
+        [$inscription, $fee] = $this->inscriptionWithFee(1000.0);
+        $caisse = \App\Models\Caisse::factory()->create(['etablissement_id' => $this->centre->id]);
+        $agent = Employee::factory()->create(['etablissement_id' => $this->centre->id]);
+        \App\Models\Encaissement::create([
+            'reference' => 'ENC-PARTIAL', 'student_id' => $inscription->student_id,
+            'inscription_fee_id' => $fee->id, 'caisse_id' => $caisse->id, 'agent_id' => $agent->id,
+            'montant' => 400, 'methode' => 'Espèces', 'date_paiement' => '2025-10-01',
+        ]);
+
+        // Lowering the fee to exactly what's already been paid should flip it to Payé.
+        $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
+            ->put(route('backoffice.inscriptions.fees.update', $inscription), [
+                'fee_lines' => [['id' => $fee->id, 'nom' => $fee->nom, 'montant_initial' => '400']],
+            ])
+            ->assertRedirect(route('backoffice.inscriptions.index'));
+
+        $this->assertSame(InscriptionFee::STATUT_PAYE, $fee->fresh()->statut);
+    }
+
     public function test_dh_discount_takes_effect_when_percentage_is_absent(): void
     {
         $this->actingAs($this->userWith('registrations.view', 'registrations.create'));

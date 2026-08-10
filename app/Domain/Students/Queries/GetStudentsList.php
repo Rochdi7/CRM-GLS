@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Students\Queries;
 
+use App\Models\Inscription;
 use App\Models\Student;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
@@ -37,6 +38,11 @@ final class GetStudentsList
         string $etablissementFilter = '',
         string $ageSort = '',
         int $perPage = self::DEFAULT_PER_PAGE,
+        string $referenceFilter = '',
+        string $nomFilter = '',
+        string $prenomFilter = '',
+        string $telephoneFilter = '',
+        string $inscriptionFilter = '',
     ): LengthAwarePaginator {
         if (! in_array($perPage, self::PER_PAGE_OPTIONS, true)) {
             $perPage = self::DEFAULT_PER_PAGE;
@@ -61,6 +67,23 @@ final class GetStudentsList
                         ->orWhere('telephone', 'ilike', "%{$search}%");
                 });
             })
+            ->when($referenceFilter !== '', fn ($q) => $q->where('reference', 'ilike', "%{$referenceFilter}%"))
+            ->when($nomFilter !== '', fn ($q) => $q->where('nom', 'ilike', "%{$nomFilter}%"))
+            ->when($prenomFilter !== '', fn ($q) => $q->where('prenom', 'ilike', "%{$prenomFilter}%"))
+            ->when($telephoneFilter !== '', fn ($q) => $q->where(fn ($sub) => $sub
+                ->where('telephone', 'ilike', "%{$telephoneFilter}%")
+                ->orWhere('whatsapp', 'ilike', "%{$telephoneFilter}%")))
+            // État d'inscription — 'active' = at least one Active registration,
+            // 'cancelled' = at least one Annulée/Archivée, 'none' = no registration.
+            ->when($inscriptionFilter === 'active', fn ($q) => $q->whereHas(
+                'inscriptions',
+                fn ($i) => $i->where('statut', Inscription::STATUT_ACTIVE),
+            ))
+            ->when($inscriptionFilter === 'cancelled', fn ($q) => $q->whereHas(
+                'inscriptions',
+                fn ($i) => $i->whereIn('statut', [Inscription::STATUT_ANNULEE, Inscription::STATUT_ARCHIVEE]),
+            ))
+            ->when($inscriptionFilter === 'none', fn ($q) => $q->whereDoesntHave('inscriptions'))
             ->when($niveauFilter !== '', fn ($q) => $q->where('niveau', $niveauFilter))
             ->when($sexeFilter !== '', fn ($q) => $q->where('sexe', $sexeFilter))
             ->when($etablissementFilter !== '', fn ($q) => $q->where('etablissement_id', (int) $etablissementFilter))
@@ -102,7 +125,7 @@ final class GetStudentsList
             'parentWhatsapp' => $student->parent_whatsapp,
             'note' => $student->note,
             'photoUrl' => $student->getFirstMediaUrl('photo') ?: null,
-            'photoThumbUrl' => $student->getFirstMediaUrl('photo', 'thumb') ?: null,
+            'photoThumbUrl' => $student->getFirstMediaUrl('photo', 'thumb') ?: $student->avatarUrl(),
         ]);
 
         return $students;

@@ -55,6 +55,14 @@ final class PermissionRegistry
                 'fees.update' => 'Modifier un frais',
                 'fees.delete' => 'Supprimer un frais',
             ],
+            // Deliberately absent from every role in matrix() below — only
+            // the Gate::before super-admin bypass can manage banks.
+            'Banques' => [
+                'banks.view' => 'Consulter le catalogue des banques',
+                'banks.create' => 'Créer une banque',
+                'banks.update' => 'Modifier une banque',
+                'banks.delete' => 'Supprimer une banque',
+            ],
             'Employés' => [
                 'employees.view' => 'Consulter les employés',
                 'employees.create' => 'Créer un employé',

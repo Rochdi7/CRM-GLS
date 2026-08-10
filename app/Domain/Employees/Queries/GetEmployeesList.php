@@ -87,7 +87,7 @@ final class GetEmployeesList
             'etablissementId' => $employee->etablissement_id,
             'etablissement' => $employee->etablissement?->nom_centre,
             'photoUrl' => $employee->getFirstMediaUrl('photo') ?: null,
-            'photoThumbUrl' => $employee->getFirstMediaUrl('photo', 'thumb') ?: null,
+            'photoThumbUrl' => $employee->getFirstMediaUrl('photo', 'thumb') ?: $employee->avatarUrl(),
         ]);
 
         return $employees;

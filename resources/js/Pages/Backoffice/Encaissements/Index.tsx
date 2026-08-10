@@ -4,7 +4,7 @@ import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
-import FilterDropdown from '@/Components/Tables/FilterDropdown';
+import FilterTextInput from '@/Components/Tables/FilterTextInput';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
@@ -38,6 +38,23 @@ interface EditFormState {
     note: string;
 }
 
+interface AvanceFormState {
+    student_id: number | '';
+    montant: string;
+    methode: string;
+    date_paiement: string;
+    numero_cheque: string;
+    banque: string;
+    date_echeance_cheque: string;
+    note: string;
+}
+
+interface ApplyAvanceFormState {
+    inscription_id: number | '';
+    fee_id: number | '';
+    montant: string;
+}
+
 /** Local list — the controller sends no perPageOptions prop (default perPage is 15, unclamped server-side). */
 const PER_PAGE_OPTIONS = [15, 25, 50, 100];
 
@@ -54,6 +71,19 @@ function emptyCreateForm(): CreateFormState {
     };
 }
 
+function emptyAvanceForm(): AvanceFormState {
+    return {
+        student_id: '',
+        montant: '',
+        methode: 'Espèces',
+        date_paiement: new Date().toISOString().slice(0, 10),
+        numero_cheque: '',
+        banque: '',
+        date_echeance_cheque: '',
+        note: '',
+    };
+}
+
 /**
  * Replaces App\Livewire\Backoffice\Encaissements\EncaissementsIndex — same
  * cascading student→inscription→fee-lines create form (one row per unpaid
@@ -64,13 +94,19 @@ function emptyCreateForm(): CreateFormState {
  * recomputes and re-validates (including the per-row max:reste cap and the
  * fee->inscription_id ownership check) on save.
  */
-export default function EncaissementsIndex({ encaissements, caisses, students, methodes, filters }: EncaissementsPageProps) {
+export default function EncaissementsIndex({ encaissements, caisses, students, methodes, banques, filters }: EncaissementsPageProps) {
     const isLoading = useInertiaLoading();
     const [showModal, setShowModal] = useState(false);
     const [editingRow, setEditingRow] = useState<EncaissementRow | null>(null);
     const [inscriptionOptions, setInscriptionOptions] = useState<SelectOption[]>([]);
     const [loadingInscriptions, setLoadingInscriptions] = useState(false);
     const [loadingFees, setLoadingFees] = useState(false);
+    const [showAvanceModal, setShowAvanceModal] = useState(false);
+    const [applyTarget, setApplyTarget] = useState<EncaissementRow | null>(null);
+    const [applyInscriptionOptions, setApplyInscriptionOptions] = useState<SelectOption[]>([]);
+    const [applyFeeOptions, setApplyFeeOptions] = useState<Array<SelectOption & { reste: string }>>([]);
+    const [loadingApplyInscriptions, setLoadingApplyInscriptions] = useState(false);
+    const [loadingApplyFees, setLoadingApplyFees] = useState(false);
 
     const caisseOptions: SelectOption[] = caisses.map((c) => ({ value: c.id, label: c.nom }));
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.nom }));
@@ -85,6 +121,8 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
         date_echeance_cheque: '',
         note: '',
     });
+    const avanceForm = useForm<AvanceFormState>(emptyAvanceForm());
+    const applyForm = useForm<ApplyAvanceFormState>({ inscription_id: '', fee_id: '', montant: '' });
 
     function reload(nextFilters: Partial<typeof filters>) {
         router.get('/backoffice/encaissements', { ...filters, ...nextFilters, page: undefined }, {
@@ -119,6 +157,86 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
     function closeModal() {
         setShowModal(false);
         setEditingRow(null);
+    }
+
+    function openCreateAvance() {
+        avanceForm.clearErrors();
+        avanceForm.setData(emptyAvanceForm());
+        setShowAvanceModal(true);
+    }
+
+    function closeAvanceModal() {
+        setShowAvanceModal(false);
+    }
+
+    function submitAvance(event: FormEvent) {
+        event.preventDefault();
+        avanceForm.post('/backoffice/avances', {
+            preserveScroll: true,
+            onSuccess: () => closeAvanceModal(),
+        });
+    }
+
+    async function openApplyAvance(row: EncaissementRow) {
+        setApplyTarget(row);
+        applyForm.clearErrors();
+        applyForm.setData({
+            inscription_id: '',
+            fee_id: '',
+            montant: '',
+        });
+        setApplyInscriptionOptions([]);
+        setApplyFeeOptions([]);
+
+        if (row.studentId === null) {
+            return;
+        }
+
+        setLoadingApplyInscriptions(true);
+        try {
+            const response = await fetch(`/backoffice/students/${row.studentId}/inscriptions-for-payment`);
+            const data: { inscriptions: Array<{ id: number; label: string }> } = await response.json();
+            setApplyInscriptionOptions(data.inscriptions.map((i) => ({ value: i.id, label: i.label })));
+        } finally {
+            setLoadingApplyInscriptions(false);
+        }
+    }
+
+    function closeApplyModal() {
+        setApplyTarget(null);
+        setApplyInscriptionOptions([]);
+        setApplyFeeOptions([]);
+    }
+
+    async function onApplyInscriptionChange(inscriptionId: number | '') {
+        applyForm.setData((previous) => ({ ...previous, inscription_id: inscriptionId, fee_id: '', montant: '' }));
+        setApplyFeeOptions([]);
+
+        if (inscriptionId === '') {
+            return;
+        }
+
+        setLoadingApplyFees(true);
+        try {
+            const response = await fetch(`/backoffice/inscriptions/${inscriptionId}/unpaid-fees`);
+            const data: { fees: UnpaidFee[] } = await response.json();
+            setApplyFeeOptions(data.fees.map((fee) => ({ value: fee.id, label: fee.nom, reste: fee.reste })));
+        } finally {
+            setLoadingApplyFees(false);
+        }
+    }
+
+    const selectedApplyFee = applyFeeOptions.find((f) => String(f.value) === String(applyForm.data.fee_id));
+    const avanceRestant = applyTarget ? Number(applyTarget.montantRestant ?? applyTarget.montant) : 0;
+    const applyMaxMontant = selectedApplyFee ? Math.min(Number(selectedApplyFee.reste), avanceRestant) : avanceRestant;
+
+    function submitApplyAvance(event: FormEvent) {
+        event.preventDefault();
+        if (!applyTarget) return;
+        applyForm.post(`/backoffice/avances/${applyTarget.id}/apply`, {
+            preserveScroll: true,
+            onSuccess: () => closeApplyModal(),
+        });
     }
 
     async function onStudentChange(studentId: number | '') {
@@ -213,19 +331,26 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
 
     return (
         <BackofficeLayout
-            title="Paiements"
-            breadcrumbs={[{ label: 'Tableau de bord', href: '/backoffice/dashboard' }, { label: 'Paiements' }]}
+            title="Encaissements"
+            breadcrumbs={[{ label: 'Tableau de bord', href: '/backoffice/dashboard' }, { label: 'Encaissements' }]}
             actions={
-                <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                    <i className="ti ti-square-rounded-plus me-2" />
-                    Enregistrer un paiement
-                </button>
+                filters.view === 'avance' ? (
+                    <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreateAvance}>
+                        <i className="ti ti-square-rounded-plus me-2" />
+                        Enregistrer une avance
+                    </button>
+                ) : (
+                    <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
+                        <i className="ti ti-square-rounded-plus me-2" />
+                        Enregistrer un paiement
+                    </button>
+                )
             }
         >
             {/* wimschool-style view tabs — server-side read-only filters on the same list. */}
             <ul className="nav nav-tabs p-0 border-bottom rounded-0 mb-4" role="tablist">
                 {[
-                    { view: '', label: 'Paiements', icon: 'ti ti-cash-banknote' },
+                    { view: '', label: 'Encaissements', icon: 'ti ti-cash-banknote' },
                     { view: 'avance', label: 'Avances', icon: 'ti ti-clock-dollar' },
                     { view: 'cheque', label: 'Chèques', icon: 'ti ti-file-invoice' },
                 ].map((tab) => (
@@ -243,44 +368,109 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                 ))}
             </ul>
 
-            <Card
-                title="Paiements"
-                bodyClassName="p-0 py-3"
-                tools={
-                    <FilterDropdown
-                        fields={[
-                            {
-                                name: 'caisseFilter',
-                                label: 'Caisse',
-                                value: filters.caisseFilter,
-                                options: caisseOptions,
-                                placeholder: 'Toutes les caisses',
-                            },
-                            {
-                                name: 'methodeFilter',
-                                label: 'Méthode',
-                                value: filters.methodeFilter,
-                                options: methodeOptions,
-                                placeholder: 'Toutes les méthodes',
-                            },
-                            {
-                                name: 'dateFrom',
-                                label: 'Du',
-                                type: 'date',
-                                value: filters.dateFrom,
-                            },
-                            {
-                                name: 'dateTo',
-                                label: 'Au',
-                                type: 'date',
-                                value: filters.dateTo,
-                            },
-                        ]}
-                        onApply={(values) => reload(values)}
-                        onReset={() => reload({ caisseFilter: '', methodeFilter: '', dateFrom: '', dateTo: '' })}
-                    />
-                }
-            >
+            <Card title="Encaissements" bodyClassName="p-0 py-3">
+                <div className="px-3 pt-2">
+                    <div className="row g-3 mb-3">
+                        {filters.view === 'cheque' ? (
+                            <div className="col-6 col-md-4 col-lg-2">
+                                <label className="form-label" htmlFor="enc-f-numero-cheque">
+                                    Num Chèque
+                                </label>
+                                <FilterTextInput
+                                    id="enc-f-numero-cheque"
+                                    value={filters.numeroChequeFilter}
+                                    onChange={(value) => reload({ numeroChequeFilter: value })}
+                                    placeholder="ex : P19"
+                                />
+                            </div>
+                        ) : (
+                            <div className="col-6 col-md-4 col-lg-2">
+                                <label className="form-label" htmlFor="enc-f-reference">
+                                    Référence
+                                </label>
+                                <FilterTextInput
+                                    id="enc-f-reference"
+                                    value={filters.referenceFilter}
+                                    onChange={(value) => reload({ referenceFilter: value })}
+                                    placeholder="ex : P19"
+                                />
+                            </div>
+                        )}
+                        <div className="col-6 col-md-4 col-lg-2">
+                            <label className="form-label" htmlFor="enc-f-student">
+                                Étudiant
+                            </label>
+                            <SelectField
+                                id="enc-f-student"
+                                options={studentOptions}
+                                placeholder="Choisir un étudiant"
+                                value={filters.studentFilter}
+                                onChange={(event) => reload({ studentFilter: event.target.value })}
+                            />
+                        </div>
+                        {filters.view === 'cheque' ? (
+                            <div className="col-6 col-md-4 col-lg-2">
+                                <label className="form-label" htmlFor="enc-f-banque">
+                                    Banque
+                                </label>
+                                <FilterTextInput
+                                    id="enc-f-banque"
+                                    value={filters.banqueFilter}
+                                    onChange={(value) => reload({ banqueFilter: value })}
+                                    placeholder="ex : Attijariwafa"
+                                />
+                            </div>
+                        ) : (
+                            <>
+                                <div className="col-6 col-md-4 col-lg-2">
+                                    <label className="form-label" htmlFor="enc-f-caisse">
+                                        Caisse
+                                    </label>
+                                    <SelectField
+                                        id="enc-f-caisse"
+                                        options={caisseOptions}
+                                        placeholder="Toutes les caisses"
+                                        value={filters.caisseFilter}
+                                        onChange={(event) => reload({ caisseFilter: event.target.value })}
+                                    />
+                                </div>
+                                <div className="col-6 col-md-4 col-lg-2">
+                                    <label className="form-label" htmlFor="enc-f-methode">
+                                        Méthode
+                                    </label>
+                                    <SelectField
+                                        id="enc-f-methode"
+                                        options={methodeOptions}
+                                        placeholder="Toutes les méthodes"
+                                        value={filters.methodeFilter}
+                                        onChange={(event) => reload({ methodeFilter: event.target.value })}
+                                    />
+                                </div>
+                            </>
+                        )}
+                        <div className="col-6 col-md-4 col-lg-2">
+                            <label className="form-label" htmlFor="enc-f-du">
+                                Date de début
+                            </label>
+                            <DateField
+                                id="enc-f-du"
+                                value={filters.dateFrom}
+                                onChange={(event) => reload({ dateFrom: event.target.value })}
+                            />
+                        </div>
+                        <div className="col-6 col-md-4 col-lg-2">
+                            <label className="form-label" htmlFor="enc-f-au">
+                                Date de fin
+                            </label>
+                            <DateField
+                                id="enc-f-au"
+                                value={filters.dateTo}
+                                onChange={(event) => reload({ dateTo: event.target.value })}
+                            />
+                        </div>
+                    </div>
+                </div>
+
                 <TableLengthRow
                     perPage={filters.perPage}
                     perPageOptions={PER_PAGE_OPTIONS}
@@ -295,47 +485,107 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                 />
 
                 {encaissements.data.length === 0 ? (
-                    <EmptyState title="Aucun paiement" icon="ti ti-cash-banknote" />
+                    <EmptyState
+                        title={filters.view === 'avance' ? 'Aucune avance' : 'Aucun paiement'}
+                        icon="ti ti-cash-banknote"
+                    />
                 ) : (
                     <>
-                        <DataTable
-                            loading={isLoading}
-                            head={
-                                <tr>
-                                    <th>Référence</th>
-                                    <th>Étudiant</th>
-                                    <th>Frais</th>
-                                    <th>Caisse</th>
-                                    <th className="text-end">Montant</th>
-                                    <th>Méthode</th>
-                                    <th>Date</th>
-                                    <th className="text-end">Action</th>
-                                </tr>
-                            }
-                        >
-                            {encaissements.data.map((row) => (
-                                <tr key={row.id}>
-                                    <td>
-                                        <code>{row.reference}</code>
-                                    </td>
-                                    <td>{row.student ?? '—'}</td>
-                                    <td>{row.feeNom ?? '—'}</td>
-                                    <td>{row.caisse ?? '—'}</td>
-                                    <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} MAD</td>
-                                    <td>
-                                        <span className="badge badge-soft-info">{row.methode}</span>
-                                    </td>
-                                    <td>{row.datePaiement ?? '—'}</td>
-                                    <td>
-                                        <RowActions view={row.showUrl}>
-                                            <RowActionItem icon="ti-edit" onClick={() => openEdit(row)}>
-                                                Modifier
-                                            </RowActionItem>
-                                        </RowActions>
-                                    </td>
-                                </tr>
-                            ))}
-                        </DataTable>
+                        {filters.view === 'avance' ? (
+                            <DataTable
+                                loading={isLoading}
+                                head={
+                                    <tr>
+                                        <th>Référence</th>
+                                        <th>Étudiant</th>
+                                        <th className="text-end">Montant</th>
+                                        <th>Caisse</th>
+                                        <th>Date</th>
+                                        <th className="text-end">Montant utilisé</th>
+                                        <th className="text-end">Montant restant</th>
+                                        <th className="text-end">Action</th>
+                                    </tr>
+                                }
+                            >
+                                {encaissements.data.map((row) => (
+                                    <tr key={row.id}>
+                                        <td>
+                                            <code>{row.reference}</code>
+                                        </td>
+                                        <td>{row.student ?? '—'}</td>
+                                        <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} MAD</td>
+                                        <td>{row.caisse ?? '—'}</td>
+                                        <td>{row.datePaiement ?? '—'}</td>
+                                        <td className="text-end">{Number(row.montantUtilise ?? 0).toFixed(2)} MAD</td>
+                                        <td className="text-end fw-medium">
+                                            {Number(row.montantRestant ?? row.montant).toFixed(2)} MAD
+                                        </td>
+                                        <td className="text-end">
+                                            <RowActions view={row.showUrl}>
+                                                {Number(row.montantRestant ?? row.montant) > 0 && (
+                                                    <RowActionItem icon="ti-arrow-forward" onClick={() => openApplyAvance(row)}>
+                                                        Appliquer à un frais
+                                                    </RowActionItem>
+                                                )}
+                                            </RowActions>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </DataTable>
+                        ) : (
+                            <DataTable
+                                loading={isLoading}
+                                head={
+                                    <tr>
+                                        <th>Référence</th>
+                                        <th>Étudiant</th>
+                                        {filters.view === 'cheque' && (
+                                            <>
+                                                <th>Num Chèque</th>
+                                                <th>Banque</th>
+                                                <th>Échéance</th>
+                                            </>
+                                        )}
+                                        <th>Frais</th>
+                                        <th>Caisse</th>
+                                        <th className="text-end">Montant</th>
+                                        <th>Méthode</th>
+                                        <th>Date</th>
+                                        <th className="text-end">Action</th>
+                                    </tr>
+                                }
+                            >
+                                {encaissements.data.map((row) => (
+                                    <tr key={row.id}>
+                                        <td>
+                                            <code>{row.reference}</code>
+                                        </td>
+                                        <td>{row.student ?? '—'}</td>
+                                        {filters.view === 'cheque' && (
+                                            <>
+                                                <td>{row.numeroCheque ?? '—'}</td>
+                                                <td>{row.banque ?? '—'}</td>
+                                                <td>{row.dateEcheanceCheque ?? '—'}</td>
+                                            </>
+                                        )}
+                                        <td>{row.feeNom ?? '—'}</td>
+                                        <td>{row.caisse ?? '—'}</td>
+                                        <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} MAD</td>
+                                        <td>
+                                            <span className="badge badge-soft-info">{row.methode}</span>
+                                        </td>
+                                        <td>{row.datePaiement ?? '—'}</td>
+                                        <td>
+                                            <RowActions view={row.showUrl}>
+                                                <RowActionItem icon="ti-edit" onClick={() => openEdit(row)}>
+                                                    Modifier
+                                                </RowActionItem>
+                                            </RowActions>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </DataTable>
+                        )}
                         <Pagination paginator={encaissements} showJumpToPage />
                     </>
                 )}
@@ -496,9 +746,11 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                 id="e-banque"
                                 label="Banque"
                                 required
+                                list="banques-suggestions"
                                 value={createForm.data.banque}
                                 onChange={(e) => createForm.setData('banque', e.target.value)}
                                 error={createForm.errors.banque}
+                                placeholder="ex : Attijariwafa Bank"
                             />
                             <DateField
                                 id="e-date-echeance-cheque"
@@ -573,9 +825,11 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                     id="e-edit-banque"
                                     label="Banque"
                                     required
+                                    list="banques-suggestions"
                                     value={editForm.data.banque}
                                     onChange={(e) => editForm.setData('banque', e.target.value)}
                                     error={editForm.errors.banque}
+                                    placeholder="ex : Attijariwafa Bank"
                                 />
                                 <DateField
                                     id="e-edit-date-echeance-cheque"
@@ -597,6 +851,165 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                     </form>
                 )}
             </Modal>
+
+            {/* Avance create modal — no fee/inscription cascade: just who paid,
+                how much, how, and when. Recorded with inscription_fee_id =
+                null (Encaissement::isAvance()), applied to a fee later. */}
+            <Modal
+                show={showAvanceModal}
+                title="Enregistrer une avance"
+                onClose={closeAvanceModal}
+                processing={avanceForm.processing}
+                footer={<FormActions form="avance-form" onCancel={closeAvanceModal} processing={avanceForm.processing} submitLabel="Enregistrer" />}
+            >
+                <form id="avance-form" onSubmit={submitAvance}>
+                    <SelectField
+                        id="av-student"
+                        label="Étudiant"
+                        options={studentOptions}
+                        placeholder="Sélectionner un étudiant"
+                        required
+                        value={avanceForm.data.student_id}
+                        onChange={(e) => avanceForm.setData('student_id', e.target.value === '' ? '' : Number(e.target.value))}
+                        error={avanceForm.errors.student_id}
+                    />
+                    <FormField
+                        id="av-montant"
+                        label="Montant"
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        required
+                        value={avanceForm.data.montant}
+                        onChange={(e) => avanceForm.setData('montant', e.target.value)}
+                        error={avanceForm.errors.montant}
+                    />
+                    <SelectField
+                        id="av-methode"
+                        label="Méthode"
+                        options={methodeOptions}
+                        required
+                        value={avanceForm.data.methode}
+                        onChange={(e) => avanceForm.setData('methode', e.target.value)}
+                        error={avanceForm.errors.methode}
+                    />
+                    <DateField
+                        id="av-date"
+                        label="Date"
+                        required
+                        value={avanceForm.data.date_paiement}
+                        onChange={(e) => avanceForm.setData('date_paiement', e.target.value)}
+                        error={avanceForm.errors.date_paiement}
+                    />
+                    {avanceForm.data.methode === 'Chèque' && (
+                        <>
+                            <FormField
+                                id="av-numero-cheque"
+                                label="Numéro de chèque"
+                                required
+                                value={avanceForm.data.numero_cheque}
+                                onChange={(e) => avanceForm.setData('numero_cheque', e.target.value)}
+                                error={avanceForm.errors.numero_cheque}
+                            />
+                            <FormField
+                                id="av-banque"
+                                label="Banque"
+                                required
+                                list="banques-suggestions"
+                                value={avanceForm.data.banque}
+                                onChange={(e) => avanceForm.setData('banque', e.target.value)}
+                                error={avanceForm.errors.banque}
+                                placeholder="ex : Attijariwafa Bank"
+                            />
+                            <DateField
+                                id="av-date-echeance-cheque"
+                                label="Échéance du chèque"
+                                required
+                                value={avanceForm.data.date_echeance_cheque}
+                                onChange={(e) => avanceForm.setData('date_echeance_cheque', e.target.value)}
+                                error={avanceForm.errors.date_echeance_cheque}
+                            />
+                        </>
+                    )}
+                    <TextareaField
+                        id="av-note"
+                        label="Note"
+                        value={avanceForm.data.note}
+                        onChange={(e) => avanceForm.setData('note', e.target.value)}
+                        error={avanceForm.errors.note}
+                    />
+                </form>
+            </Modal>
+
+            {/* Apply-avance modal — spends part/all of an avance's remaining
+                balance on a fee. The avance row itself is never edited; this
+                creates a second Encaissement (AppliquerAvance) linked back
+                via applied_from_encaissement_id. */}
+            <Modal
+                show={applyTarget !== null}
+                title={applyTarget ? `Appliquer l'avance ${applyTarget.reference}` : ''}
+                onClose={closeApplyModal}
+                processing={applyForm.processing}
+                footer={<FormActions form="apply-avance-form" onCancel={closeApplyModal} processing={applyForm.processing} submitLabel="Appliquer" />}
+            >
+                {applyTarget && (
+                    <form id="apply-avance-form" onSubmit={submitApplyAvance}>
+                        <div className="d-flex justify-content-between mb-3">
+                            <span className="text-muted">Montant restant de l'avance</span>
+                            <span className="fw-medium">{avanceRestant.toFixed(2)} MAD</span>
+                        </div>
+                        <SelectField
+                            id="ap-inscription"
+                            label="Inscription"
+                            options={applyInscriptionOptions}
+                            placeholder={loadingApplyInscriptions ? 'Chargement…' : 'Sélectionner une inscription'}
+                            required
+                            disabled={loadingApplyInscriptions}
+                            value={applyForm.data.inscription_id}
+                            onChange={(e) => onApplyInscriptionChange(e.target.value === '' ? '' : Number(e.target.value))}
+                            error={applyForm.errors.inscription_id}
+                        />
+                        <SelectField
+                            id="ap-fee"
+                            label="Frais"
+                            options={applyFeeOptions}
+                            placeholder={loadingApplyFees ? 'Chargement…' : 'Sélectionner un frais'}
+                            required
+                            disabled={applyForm.data.inscription_id === '' || loadingApplyFees}
+                            value={applyForm.data.fee_id}
+                            onChange={(e) =>
+                                applyForm.setData('fee_id', e.target.value === '' ? '' : Number(e.target.value))
+                            }
+                            error={applyForm.errors.fee_id}
+                        />
+                        {selectedApplyFee && (
+                            <p className="text-muted fs-13">Reste dû sur ce frais : {Number(selectedApplyFee.reste).toFixed(2)} MAD</p>
+                        )}
+                        <FormField
+                            id="ap-montant"
+                            label="Montant à appliquer"
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            max={applyMaxMontant}
+                            required
+                            disabled={applyForm.data.fee_id === ''}
+                            value={applyForm.data.montant}
+                            onChange={(e) => applyForm.setData('montant', e.target.value)}
+                            error={applyForm.errors.montant}
+                        />
+                    </form>
+                )}
+            </Modal>
+
+            {/* Autocomplete suggestions for the Banque text inputs above — sourced
+                from the catalog (Paramètres → Banques), but typing any other
+                name is still accepted (free text, not a strict dropdown). */}
+            <datalist id="banques-suggestions">
+                {banques.map((nom) => (
+                    <option key={nom} value={nom} />
+                ))}
+            </datalist>
         </BackofficeLayout>
     );
 }

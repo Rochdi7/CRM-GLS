@@ -7,9 +7,11 @@ use App\Http\Controllers\Backoffice\Auth\ForgotPasswordController;
 use App\Http\Controllers\Backoffice\Auth\LoginController;
 use App\Http\Controllers\Backoffice\Auth\LogoutController;
 use App\Http\Controllers\Backoffice\Auth\ResetPasswordController;
+use App\Http\Controllers\Backoffice\BanqueController;
 use App\Http\Controllers\Backoffice\CaisseController;
 use App\Http\Controllers\Backoffice\CaisseTransferController;
 use App\Http\Controllers\Backoffice\ContextController;
+use App\Http\Controllers\Backoffice\CreneauController;
 use App\Http\Controllers\Backoffice\DashboardController;
 use App\Http\Controllers\Backoffice\DepenseController;
 use App\Http\Controllers\Backoffice\Employees\EmployeeController;
@@ -116,6 +118,11 @@ Route::prefix('backoffice')
             // referential modules above — index/create/edit redirect to
             // Settings, store/update/destroy are the real endpoints.
             Route::resource('frais', FraisController::class)->except(['show']);
+            // Banques (bank catalog) — same pattern as Frais above, restricted
+            // to super-admin (banks.* permissions are absent from every role
+            // in PermissionRegistry::matrix()). Feeds the Chèque payment
+            // form's Banque dropdown (Encaissements).
+            Route::resource('banques', BanqueController::class)->except(['show']);
 
             // People — Employees: Inertia/React list + modal add/edit
             // (docs/inertia-react-migration-plan.md Phase 7). The Livewire
@@ -182,6 +189,19 @@ Route::prefix('backoffice')
             Route::put('seances/{seance}/presences', [SeanceController::class, 'savePresences'])
                 ->middleware('permission:attendance.mark')->name('seances.presences.update');
 
+            // Emploi du temps — weekly recurring schedule grid (créneaux),
+            // distinct from the dated séances above. Creating/editing/
+            // deleting a créneau generates/syncs its future séances
+            // (CreneauController + GenererSeancesDepuisCreneau).
+            Route::get('emploi-du-temps', [CreneauController::class, 'index'])
+                ->middleware('permission:attendance.view')->name('emploi-du-temps.index');
+            Route::post('creneaux', [CreneauController::class, 'store'])
+                ->middleware('permission:attendance.create')->name('creneaux.store');
+            Route::put('creneaux/{creneau}', [CreneauController::class, 'update'])
+                ->middleware('permission:attendance.update')->name('creneaux.update');
+            Route::delete('creneaux/{creneau}', [CreneauController::class, 'destroy'])
+                ->middleware('permission:attendance.delete')->name('creneaux.destroy');
+
             // Stock — ONE Inertia page (Articles + Mouvements tabs). Article
             // quantities only move through mouvement endpoints (caisse
             // pattern); movements have NO update/destroy routes — ever
@@ -200,9 +220,10 @@ Route::prefix('backoffice')
 
             // Enrollments — Inertia/React list + modal add/edit with manual
             // fee lines (Phase 9, docs/phase-9-inscriptions-audit.md +
-            // docs/phase-9-inscriptions-mapping.md). Fee lines only apply on
-            // create — editing an inscription never touches fees/totals,
-            // matching the live Livewire form's own asymmetry exactly.
+            // docs/phase-9-inscriptions-mapping.md). Base fields (student/
+            // group/statut/dates/note) keep the Livewire form's own
+            // create-vs-edit asymmetry; fee-line editing on an existing
+            // registration is a separate action below (registrations.manage-fees).
             Route::get('inscriptions', [InscriptionController::class, 'index'])
                 ->middleware('permission:registrations.view')->name('inscriptions.index');
             Route::post('inscriptions', [InscriptionController::class, 'store'])
@@ -213,6 +234,13 @@ Route::prefix('backoffice')
                 ->middleware('permission:registrations.delete')->name('inscriptions.destroy');
             Route::get('inscriptions/{inscription}', [InscriptionController::class, 'show'])
                 ->name('inscriptions.show');
+            // Fee list for the edit modal (view = registrations.view via
+            // policy inside the action); saving changes needs
+            // registrations.manage-fees, checked inside updateFees() itself.
+            Route::get('inscriptions/{inscription}/fees', [InscriptionController::class, 'fees'])
+                ->name('inscriptions.fees');
+            Route::put('inscriptions/{inscription}/fees', [InscriptionController::class, 'updateFees'])
+                ->middleware('permission:registrations.manage-fees')->name('inscriptions.fees.update');
             // "Frais disponibles" for a group — the create form's live
             // group-fee lookup (docs/phase-9-inscriptions-mapping.md's
             // confirmed decision: a dedicated endpoint, not embedding every
@@ -259,6 +287,15 @@ Route::prefix('backoffice')
                 ->name('students.inscriptions-for-payment');
             Route::get('inscriptions/{inscription}/unpaid-fees', [EncaissementController::class, 'inscriptionFees'])
                 ->name('inscriptions.unpaid-fees');
+
+            // Avances — unallocated advances (no fee attached, see
+            // Encaissement::isAvance()). Their own create route (no fee-line
+            // cascade) and an apply route that spends part/all of one onto a
+            // specific fee, without ever editing the avance row itself.
+            Route::post('avances', [EncaissementController::class, 'storeAvance'])
+                ->middleware('permission:payments.create')->name('avances.store');
+            Route::post('avances/{encaissement}/apply', [EncaissementController::class, 'applyAvance'])
+                ->middleware('permission:payments.create')->name('avances.apply');
 
             // Gestion des dépenses — ONE Inertia page hosting dépenses +
             // remboursements as client-side React tabs (Types de dépenses

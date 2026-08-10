@@ -149,4 +149,11 @@ class Employee extends Model implements HasMedia
     {
         return trim("{$this->prenom} {$this->nom}");
     }
+
+    /** Uploaded photo, or the sexe-based default avatar (man/girl) when none exists. */
+    public function avatarUrl(): string
+    {
+        return $this->getFirstMediaUrl('photo')
+            ?: asset($this->sexe === 'Femme' ? 'assets/images/avatar/defaultgirl.webp' : 'assets/images/avatar/defaultman.webp');
+    }
 }

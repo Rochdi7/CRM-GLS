@@ -32,7 +32,7 @@ class Seance extends Model
     ];
 
     protected $fillable = [
-        'group_id', 'date_seance', 'heure_debut', 'heure_fin',
+        'group_id', 'creneau_id', 'date_seance', 'heure_debut', 'heure_fin',
         'enseignant_id', 'etablissement_id', 'annee_scolaire_id',
         'statut', 'note', 'created_by',
     ];
@@ -47,6 +47,11 @@ class Seance extends Model
     public function group(): BelongsTo
     {
         return $this->belongsTo(Group::class);
+    }
+
+    public function creneau(): BelongsTo
+    {
+        return $this->belongsTo(Creneau::class);
     }
 
     public function enseignant(): BelongsTo

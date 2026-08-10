@@ -32,6 +32,7 @@ final class HandleInertiaRequests extends Middleware
                     'id' => $user->id,
                     'name' => $user->name,
                     'email' => $user->email,
+                    'photoUrl' => $user->employee?->avatarUrl() ?? asset('assets/images/avatar/defaultman.webp'),
                 ],
                 'permissions' => $user === null ? [] : $user->getAllPermissions()->pluck('name')->values(),
                 // super-admin bypasses every permission check via Gate::before

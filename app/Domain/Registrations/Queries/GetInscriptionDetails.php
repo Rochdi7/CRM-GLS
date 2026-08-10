@@ -43,6 +43,7 @@ final class GetInscriptionDetails
 
                 return [
                     'nom' => $fee->nom,
+                    'montantInitial' => number_format((float) $fee->montant_initial, 2, '.', ''),
                     'montant' => number_format((float) $fee->montant, 2, '.', ''),
                     'paye' => number_format($feePaid, 2, '.', ''),
                     'dateEcheance' => $fee->date_echeance?->format('d/m/Y'),

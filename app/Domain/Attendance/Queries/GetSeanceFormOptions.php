@@ -28,7 +28,7 @@ final class GetSeanceFormOptions
     public function groups(User $user): array
     {
         return Group::query()
-            ->whereIn('statut', [Group::STATUT_PRE_INSCRIPTION, Group::STATUT_EN_FORMATION])
+            ->whereIn('statut', [Group::STATUT_EN_INSCRIPTION, Group::STATUT_EN_FORMATION])
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))

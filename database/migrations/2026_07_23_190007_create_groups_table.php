@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 
 /*
  * gls-crm-schema.md §6 — Groups (class/cohort).
- * statut lifecycle: Pré-inscription → En formation → Fin de formation.
+ * statut lifecycle: En inscription → En formation → Fin de formation.
  * A group row is NEVER deleted (inscriptions.group_id must stay valid);
  * transition to "Fin de formation" must go through Group::archiverCommeTermine().
  */
@@ -25,7 +25,7 @@ return new class extends Migration
             $table->foreignId('etablissement_id')->nullable()->constrained('etablissements')->nullOnDelete();
             $table->foreignId('annee_scolaire_id')->nullable()->constrained('annees_scolaires')->nullOnDelete();
             $table->integer('capacite_max')->nullable();
-            $table->string('statut', 20)->default('Pré-inscription');
+            $table->string('statut', 20)->default('En inscription');
             $table->date('date_debut_formation')->nullable();
             $table->date('date_fin_formation')->nullable();
             $table->timestamps();

@@ -40,24 +40,31 @@ final class GetEncaissementsList
         string $dateTo = '',
         int $perPage = self::DEFAULT_PER_PAGE,
         string $view = '',
+        string $referenceFilter = '',
+        string $studentFilter = '',
+        string $numeroChequeFilter = '',
+        string $banqueFilter = '',
     ): LengthAwarePaginator {
         $accessibleCaisseIds = $this->caisseOptions($user)->pluck('id')->all();
 
         $encaissements = Encaissement::query()
             ->with(['student', 'fee.inscription', 'caisse', 'agent'])
+            ->when($view === 'avance', fn ($q) => $q->withSum('applications', 'montant'))
             ->whereIn('caisse_id', $accessibleCaisseIds)
-            // Page view tabs (wimschool-style, read-only filters):
-            // "cheque" = cheque payments; "avance" = payments whose fee is
-            // still only partially settled (InscriptionFee's own statut).
+            // Page view tabs (wimschool-style, read-only filters): "cheque" =
+            // cheque payments; "avance" = unallocated advances — payments
+            // with NO fee attached yet (Encaissement::isAvance()), not
+            // "apply" rows spending an avance and not fee-targeted payments.
             ->when($view === 'cheque', fn ($q) => $q->where('methode', Encaissement::METHODE_CHEQUE))
-            ->when($view === 'avance', fn ($q) => $q->whereHas(
-                'fee',
-                fn ($f) => $f->where('statut', \App\Models\InscriptionFee::STATUT_PAYE_PARTIELLEMENT),
-            ))
+            ->when($view === 'avance', fn ($q) => $q->whereNull('inscription_fee_id')->whereNull('applied_from_encaissement_id'))
             ->when($caisseFilter !== '', fn ($q) => $q->where('caisse_id', (int) $caisseFilter))
             ->when($methodeFilter !== '', fn ($q) => $q->where('methode', $methodeFilter))
             ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_paiement', '>=', $dateFrom))
             ->when($dateTo !== '', fn ($q) => $q->whereDate('date_paiement', '<=', $dateTo))
+            ->when($referenceFilter !== '', fn ($q) => $q->where('reference', 'ilike', "%{$referenceFilter}%"))
+            ->when($studentFilter !== '', fn ($q) => $q->where('student_id', (int) $studentFilter))
+            ->when($numeroChequeFilter !== '', fn ($q) => $q->where('numero_cheque', 'ilike', "%{$numeroChequeFilter}%"))
+            ->when($banqueFilter !== '', fn ($q) => $q->where('banque', 'ilike', "%{$banqueFilter}%"))
             ->when($search !== '', function ($q) use ($search): void {
                 $term = "%{$search}%";
                 $q->where(function ($sub) use ($term): void {
@@ -72,25 +79,31 @@ final class GetEncaissementsList
             ->paginate($perPage)
             ->withQueryString();
 
-        $encaissements->through(fn (Encaissement $e): array => [
-            'id' => $e->id,
-            'reference' => $e->reference,
-            'student' => $e->student?->nomComplet(),
-            'studentId' => $e->student_id,
-            'inscriptionId' => $e->fee?->inscription_id,
-            'feeNom' => $e->fee?->nom,
-            'caisse' => $e->caisse?->nom,
-            'caisseId' => $e->caisse_id,
-            'montant' => number_format((float) $e->montant, 2, '.', ''),
-            'methode' => $e->methode,
-            'datePaiement' => $e->date_paiement?->toDateString(),
-            'numeroCheque' => $e->numero_cheque,
-            'banque' => $e->banque,
-            'dateEcheanceCheque' => $e->date_echeance_cheque?->toDateString(),
-            'note' => $e->note,
-            'agent' => $e->agent?->nomComplet(),
-            'showUrl' => route('backoffice.encaissements.show', $e),
-        ]);
+        $encaissements->through(function (Encaissement $e) use ($view): array {
+            $utilise = $view === 'avance' ? (float) ($e->applications_sum_montant ?? 0) : null;
+
+            return [
+                'id' => $e->id,
+                'reference' => $e->reference,
+                'student' => $e->student?->nomComplet(),
+                'studentId' => $e->student_id,
+                'inscriptionId' => $e->fee?->inscription_id,
+                'feeNom' => $e->fee?->nom,
+                'caisse' => $e->caisse?->nom,
+                'caisseId' => $e->caisse_id,
+                'montant' => number_format((float) $e->montant, 2, '.', ''),
+                'methode' => $e->methode,
+                'datePaiement' => $e->date_paiement?->toDateString(),
+                'numeroCheque' => $e->numero_cheque,
+                'banque' => $e->banque,
+                'dateEcheanceCheque' => $e->date_echeance_cheque?->toDateString(),
+                'note' => $e->note,
+                'agent' => $e->agent?->nomComplet(),
+                'montantUtilise' => $utilise !== null ? number_format($utilise, 2, '.', '') : null,
+                'montantRestant' => $utilise !== null ? number_format(max(0.0, (float) $e->montant - $utilise), 2, '.', '') : null,
+                'showUrl' => route('backoffice.encaissements.show', $e),
+            ];
+        });
 
         return $encaissements;
     }

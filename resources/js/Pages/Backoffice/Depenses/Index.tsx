@@ -4,7 +4,7 @@ import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
-import FilterDropdown from '@/Components/Tables/FilterDropdown';
+import TableToolbar from '@/Components/Tables/TableToolbar';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
@@ -291,33 +291,53 @@ export default function DepensesIndex({
                     title="Dépenses"
                     bodyClassName="p-0 py-3"
                     tools={
-                        <>
-                            <FilterDropdown
-                                fields={[
-                                    {
-                                        name: 'typeFilter',
-                                        label: 'Type',
-                                        value: filters.typeFilter,
-                                        options: typeOptions,
-                                        placeholder: 'Tous les types',
-                                    },
-                                    { name: 'dateFrom', label: 'Du', type: 'date', value: filters.dateFrom },
-                                    { name: 'dateTo', label: 'Au', type: 'date', value: filters.dateTo },
-                                ]}
-                                onApply={(values) => reload(values)}
-                                onReset={() => reload({ typeFilter: '', dateFrom: '', dateTo: '' })}
-                            />
-                            <button
-                                type="button"
-                                className="btn btn-primary d-flex align-items-center mb-3"
-                                onClick={openCreateDepense}
-                            >
-                                <i className="ti ti-square-rounded-plus me-2" />
-                                Ajouter une dépense
-                            </button>
-                        </>
+                        <button
+                            type="button"
+                            className="btn btn-primary d-flex align-items-center mb-3"
+                            onClick={openCreateDepense}
+                        >
+                            <i className="ti ti-square-rounded-plus me-2" />
+                            Ajouter une dépense
+                        </button>
                     }
                 >
+                    <div className="px-3 pt-2">
+                        <TableToolbar>
+                            <div style={{ width: 220 }}>
+                                <label className="form-label" htmlFor="dep-f-type">
+                                    Type
+                                </label>
+                                <SelectField
+                                    id="dep-f-type"
+                                    options={typeOptions}
+                                    placeholder="Tous les types"
+                                    value={filters.typeFilter}
+                                    onChange={(event) => reload({ typeFilter: event.target.value })}
+                                />
+                            </div>
+                            <div style={{ width: 170 }}>
+                                <label className="form-label" htmlFor="dep-f-du">
+                                    Du
+                                </label>
+                                <DateField
+                                    id="dep-f-du"
+                                    value={filters.dateFrom}
+                                    onChange={(event) => reload({ dateFrom: event.target.value })}
+                                />
+                            </div>
+                            <div style={{ width: 170 }}>
+                                <label className="form-label" htmlFor="dep-f-au">
+                                    Au
+                                </label>
+                                <DateField
+                                    id="dep-f-au"
+                                    value={filters.dateTo}
+                                    onChange={(event) => reload({ dateTo: event.target.value })}
+                                />
+                            </div>
+                        </TableToolbar>
+                    </div>
+
                     <TableLengthRow
                         perPage={filters.perPage}
                         perPageOptions={PER_PAGE_OPTIONS}

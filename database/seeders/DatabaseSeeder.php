@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
             ReferentialDataSeeder::class,
             TypeDepenseSeeder::class,
             FraisSeeder::class,
+            BanqueSeeder::class,
             // Demo data (local dev only — every seeder below is idempotent):
             // one login per role, academic records, then finance movements so
             // every CRUD screen has something to click through.

@@ -87,7 +87,7 @@ final class GroupsInertiaCrudTest extends TestCase
         $this->post(route('backoffice.groups.store'), [
             'nom' => 'Herr Driss 13h - Intensifs',
             'niveau' => 'B1.1',
-            'statut' => Group::STATUT_PRE_INSCRIPTION,
+            'statut' => Group::STATUT_EN_INSCRIPTION,
             'fraisLignes' => [
                 $f1->id => ['montant' => '300'],
                 $f2->id => ['montant' => '1300'],
@@ -110,7 +110,7 @@ final class GroupsInertiaCrudTest extends TestCase
         $this->post(route('backoffice.groups.store'), [
             'nom' => 'Groupe Zéro',
             'niveau' => 'A1.1',
-            'statut' => Group::STATUT_PRE_INSCRIPTION,
+            'statut' => Group::STATUT_EN_INSCRIPTION,
             'fraisLignes' => [
                 $f1->id => ['montant' => '300'],
             ],
@@ -126,7 +126,7 @@ final class GroupsInertiaCrudTest extends TestCase
         $this->actingAs($this->userWith('groups.view', 'groups.create'));
 
         $this->post(route('backoffice.groups.store'), [
-            'nom' => 'X', 'niveau' => '', 'statut' => Group::STATUT_PRE_INSCRIPTION,
+            'nom' => 'X', 'niveau' => '', 'statut' => Group::STATUT_EN_INSCRIPTION,
         ])->assertSessionHasErrors('niveau');
     }
 
@@ -136,7 +136,7 @@ final class GroupsInertiaCrudTest extends TestCase
         $frais = Frais::create(['nom' => 'Frais annuel', 'statut' => 'Actif']);
 
         $this->post(route('backoffice.groups.store'), [
-            'nom' => 'Groupe X', 'niveau' => 'A1.1', 'statut' => Group::STATUT_PRE_INSCRIPTION,
+            'nom' => 'Groupe X', 'niveau' => 'A1.1', 'statut' => Group::STATUT_EN_INSCRIPTION,
             'fraisLignes' => [
                 $frais->id => ['montant' => '500', 'date_echeance' => '2025-10-18', 'classification' => 'B2.1'],
             ],
@@ -153,7 +153,7 @@ final class GroupsInertiaCrudTest extends TestCase
         $frais = Frais::create(['nom' => 'Frais A', 'statut' => 'Actif']);
 
         $this->post(route('backoffice.groups.store'), [
-            'nom' => 'Groupe X', 'niveau' => 'A1.1', 'statut' => Group::STATUT_PRE_INSCRIPTION,
+            'nom' => 'Groupe X', 'niveau' => 'A1.1', 'statut' => Group::STATUT_EN_INSCRIPTION,
             'fraisLignes' => [$frais->id => ['montant' => '100', 'classification' => 'Z9']],
         ])->assertSessionHasErrors("fraisLignes.{$frais->id}.classification");
     }
@@ -164,7 +164,7 @@ final class GroupsInertiaCrudTest extends TestCase
         $frais = Frais::create(['nom' => 'Frais A', 'statut' => 'Actif']);
 
         $this->post(route('backoffice.groups.store'), [
-            'nom' => 'Groupe X', 'niveau' => 'A1.1', 'statut' => Group::STATUT_PRE_INSCRIPTION,
+            'nom' => 'Groupe X', 'niveau' => 'A1.1', 'statut' => Group::STATUT_EN_INSCRIPTION,
             'fraisLignes' => [$frais->id => ['montant' => '']],
         ])->assertSessionHasErrors("fraisLignes.{$frais->id}.montant");
     }
@@ -219,7 +219,7 @@ final class GroupsInertiaCrudTest extends TestCase
         $this->actingAs($this->userWith('groups.view'));
 
         $this->post(route('backoffice.groups.store'), [
-            'nom' => 'X', 'niveau' => 'A1.1', 'statut' => Group::STATUT_PRE_INSCRIPTION,
+            'nom' => 'X', 'niveau' => 'A1.1', 'statut' => Group::STATUT_EN_INSCRIPTION,
         ])->assertForbidden();
     }
 

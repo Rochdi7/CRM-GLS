@@ -41,7 +41,7 @@ final class GetStudentDetails
             'email' => $student->email,
             'adresse' => $student->adresse,
             'centre' => $student->etablissement?->nom_centre,
-            'photoUrl' => $student->getFirstMediaUrl('photo') ?: null,
+            'photoUrl' => $student->avatarUrl(),
             'parent' => ($student->parent_nom || $student->parent_telephone || $student->parent_relation || $student->parent_cin)
                 ? [
                     'relation' => $student->parent_relation,

@@ -132,14 +132,14 @@ export default function Header({ user, context, canManageSettings, onMobileMenuT
                                 aria-expanded={userMenuOpen}
                             >
                                 <span className="avatar avatar-md rounded">
-                                    <img src="/assets/preskool/img/profiles/avatar-27.jpg" alt="" className="img-fluid" />
+                                    <img src={user?.photoUrl ?? '/assets/images/avatar/defaultman.webp'} alt="" className="img-fluid" />
                                 </span>
                             </button>
                             <div className={`dropdown-menu dropdown-menu-end${userMenuOpen ? ' show' : ''}`}>
                                 <div className="d-block">
                                     <div className="d-flex align-items-center p-2">
                                         <span className="avatar avatar-md me-2 online avatar-rounded">
-                                            <img src="/assets/preskool/img/profiles/avatar-27.jpg" alt="" />
+                                            <img src={user?.photoUrl ?? '/assets/images/avatar/defaultman.webp'} alt="" />
                                         </span>
                                         <div>
                                             <h6>{user?.name ?? 'GLS'}</h6>

@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Domain\Payments\Actions\AppliquerAvance;
 use App\Domain\Payments\Actions\EnregistrerEncaissement;
 use App\Domain\Payments\Queries\GetEncaissementDetails;
 use App\Domain\Payments\Queries\GetEncaissementsList;
 use App\Domain\Payments\Queries\GetInscriptionUnpaidFees;
+use App\Domain\Settings\Queries\GetBanquesList;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Backoffice\Encaissements\ApplyAvanceRequest;
+use App\Http\Requests\Backoffice\Encaissements\StoreAvanceRequest;
 use App\Http\Requests\Backoffice\Encaissements\StoreEncaissementRequest;
 use App\Http\Requests\Backoffice\Encaissements\UpdateEncaissementRequest;
 use App\Models\Encaissement;
@@ -41,12 +45,17 @@ final class EncaissementController extends Controller
     public function index(
         Request $request,
         GetEncaissementsList $getEncaissementsList,
+        GetBanquesList $getBanquesList,
     ): Response {
         $search = (string) $request->string('search');
         $caisseFilter = (string) $request->string('caisseFilter');
         $methodeFilter = (string) $request->string('methodeFilter');
         $dateFrom = (string) $request->string('dateFrom');
         $dateTo = (string) $request->string('dateTo');
+        $referenceFilter = (string) $request->string('referenceFilter');
+        $studentFilter = (string) $request->string('studentFilter');
+        $numeroChequeFilter = (string) $request->string('numeroChequeFilter');
+        $banqueFilter = (string) $request->string('banqueFilter');
         $perPage = (int) $request->integer('perPage', GetEncaissementsList::DEFAULT_PER_PAGE);
         // Page view tabs: Paiements (all) / Avances / Chèques.
         $view = (string) $request->string('view');
@@ -55,10 +64,24 @@ final class EncaissementController extends Controller
         }
 
         return Inertia::render('Backoffice/Encaissements/Index', [
-            'encaissements' => $getEncaissementsList($request->user(), $search, $caisseFilter, $methodeFilter, $dateFrom, $dateTo, $perPage, $view),
+            'encaissements' => $getEncaissementsList(
+                $request->user(),
+                $search,
+                $caisseFilter,
+                $methodeFilter,
+                $dateFrom,
+                $dateTo,
+                $perPage,
+                $view,
+                $referenceFilter,
+                $studentFilter,
+                $numeroChequeFilter,
+                $banqueFilter,
+            ),
             'caisses' => $getEncaissementsList->caisseOptions($request->user()),
             'students' => $getEncaissementsList->studentOptions($request->user()),
             'methodes' => Encaissement::METHODES,
+            'banques' => $getBanquesList->activeNames(),
             'filters' => [
                 'search' => $search,
                 'caisseFilter' => $caisseFilter,
@@ -67,6 +90,10 @@ final class EncaissementController extends Controller
                 'dateTo' => $dateTo,
                 'perPage' => $perPage,
                 'view' => $view,
+                'referenceFilter' => $referenceFilter,
+                'studentFilter' => $studentFilter,
+                'numeroChequeFilter' => $numeroChequeFilter,
+                'banqueFilter' => $banqueFilter,
             ],
         ]);
     }
@@ -143,6 +170,63 @@ final class EncaissementController extends Controller
 
         return redirect()->route('backoffice.encaissements.index')
             ->with('success', __('Payment recorded.'));
+    }
+
+    /**
+     * Records an avance — a payment with NO fee attached (Encaissement::
+     * isAvance()), held as credit against the student to allocate later via
+     * applyAvance(). Same server-derived-till rule as store().
+     */
+    public function storeAvance(StoreAvanceRequest $request, EnregistrerEncaissement $action): RedirectResponse
+    {
+        $this->authorize('create', Encaissement::class);
+
+        $agent = $request->user()->employee;
+
+        if ($agent === null) {
+            throw ValidationException::withMessages([
+                'montant' => __('Your account is not linked to any employee record.'),
+            ]);
+        }
+
+        $caisse = $agent->caisses()->first()
+            ?? app(\App\Services\CaisseProvisioner::class)->provisionFor($agent);
+
+        $data = $request->validated();
+
+        $action->handle([
+            'student_id' => $data['student_id'],
+            'inscription_fee_id' => null,
+            'montant' => $data['montant'],
+            'methode' => $data['methode'],
+            'date_paiement' => $data['date_paiement'],
+            'caisse_id' => $caisse->id,
+            'numero_cheque' => $data['methode'] === Encaissement::METHODE_CHEQUE ? ($data['numero_cheque'] ?? null) : null,
+            'banque' => $data['methode'] === Encaissement::METHODE_CHEQUE ? ($data['banque'] ?? null) : null,
+            'date_echeance_cheque' => $data['methode'] === Encaissement::METHODE_CHEQUE ? ($data['date_echeance_cheque'] ?? null) : null,
+            'note' => $data['note'] ?? null,
+        ], $agent);
+
+        return redirect()->route('backoffice.encaissements.index', ['view' => 'avance'])
+            ->with('success', __('Advance recorded.'));
+    }
+
+    /**
+     * Applies part (or all) of an avance's remaining balance to a specific
+     * fee — see AppliquerAvance's docblock for why this creates a new row
+     * rather than editing the avance.
+     */
+    public function applyAvance(ApplyAvanceRequest $request, Encaissement $encaissement, AppliquerAvance $action): RedirectResponse
+    {
+        $this->authorize('update', $encaissement);
+
+        $data = $request->validated();
+        $fee = InscriptionFee::findOrFail($data['fee_id']);
+
+        $action->handle($encaissement, $fee, (float) $data['montant']);
+
+        return redirect()->route('backoffice.encaissements.index', ['view' => 'avance'])
+            ->with('success', __('Advance applied.'));
     }
 
     public function show(Encaissement $encaissement, GetEncaissementDetails $getEncaissementDetails): Response

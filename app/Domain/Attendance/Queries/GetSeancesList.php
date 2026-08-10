@@ -29,7 +29,7 @@ final class GetSeancesList
     ) {}
 
     /**
-     * @param  array{search?: string, groupFilter?: string, statutFilter?: string, dateFrom?: string, dateTo?: string}  $filters
+     * @param  array{search?: string, groupFilter?: string, statutFilter?: string, enseignantFilter?: string, dateFrom?: string, dateTo?: string}  $filters
      */
     public function __invoke(User $user, array $filters = [], int $perPage = self::DEFAULT_PER_PAGE): LengthAwarePaginator
     {
@@ -40,6 +40,7 @@ final class GetSeancesList
         $search = $filters['search'] ?? '';
         $groupFilter = $filters['groupFilter'] ?? '';
         $statutFilter = $filters['statutFilter'] ?? '';
+        $enseignantFilter = $filters['enseignantFilter'] ?? '';
         $dateFrom = $filters['dateFrom'] ?? '';
         $dateTo = $filters['dateTo'] ?? '';
 
@@ -55,6 +56,7 @@ final class GetSeancesList
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
             ->when($statutFilter !== '', fn ($q) => $q->where('statut', $statutFilter))
             ->when($groupFilter !== '', fn ($q) => $q->where('group_id', (int) $groupFilter))
+            ->when($enseignantFilter !== '', fn ($q) => $q->where('enseignant_id', (int) $enseignantFilter))
             ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_seance', '>=', $dateFrom))
             ->when($dateTo !== '', fn ($q) => $q->whereDate('date_seance', '<=', $dateTo))
             ->when($search !== '', fn ($q) => $q->whereHas(

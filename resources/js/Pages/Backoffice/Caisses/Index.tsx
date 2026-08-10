@@ -5,7 +5,6 @@ import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
 import TableToolbar from '@/Components/Tables/TableToolbar';
-import FilterDropdown from '@/Components/Tables/FilterDropdown';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
@@ -138,12 +137,12 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
                         <SelectField
                             id={`cj-type-${scope}`}
                             options={[
-                                { value: 'paiement', label: 'Paiements' },
-                                { value: 'depense', label: 'Dépenses' },
-                                { value: 'remboursement', label: 'Remboursements' },
-                                { value: 'transfert', label: 'Transferts' },
+                                { value: 'paiement', label: 'Recette' },
+                                { value: 'remboursement', label: "Récupération d'une autre caisse" },
+                                { value: 'depense', label: 'Dépense' },
+                                { value: 'transfert', label: 'Transfert à une autre caisse' },
                             ]}
-                            placeholder="Tous les types"
+                            placeholder="Choisir un type"
                             value={typeFilter}
                             onChange={(e) => {
                                 setTypeFilter(e.target.value);
@@ -435,32 +434,36 @@ export default function CaissesIndex({
             {tab === 'journal' && canViewCaisses && journalAll && <JournalPanel scope="all" data={journalAll} />}
 
             {tab === 'comptes' && canViewCaisses && caisses && (
-                <Card
-                    title="Comptes de caisse"
-                    bodyClassName="p-0 py-3"
-                    tools={
-                        <FilterDropdown
-                            fields={[
-                                {
-                                    name: 'etablissementFilter',
-                                    label: 'Centre',
-                                    value: caissesFilters.etablissementFilter,
-                                    options: etablissementOptions,
-                                    placeholder: 'Tous les centres',
-                                },
-                                {
-                                    name: 'statutFilter',
-                                    label: 'Statut',
-                                    value: caissesFilters.statutFilter,
-                                    options: statutOptions,
-                                    placeholder: 'Tous les statuts',
-                                },
-                            ]}
-                            onApply={(values) => reloadCaisses(values)}
-                            onReset={() => reloadCaisses({ etablissementFilter: '', statutFilter: '' })}
-                        />
-                    }
-                >
+                <Card title="Comptes de caisse" bodyClassName="p-0 py-3">
+                    <div className="px-3 pt-2">
+                        <TableToolbar>
+                            <div style={{ width: 220 }}>
+                                <label className="form-label" htmlFor="cc-f-centre">
+                                    Centre
+                                </label>
+                                <SelectField
+                                    id="cc-f-centre"
+                                    options={etablissementOptions}
+                                    placeholder="Tous les centres"
+                                    value={caissesFilters.etablissementFilter}
+                                    onChange={(event) => reloadCaisses({ etablissementFilter: event.target.value })}
+                                />
+                            </div>
+                            <div style={{ width: 180 }}>
+                                <label className="form-label" htmlFor="cc-f-statut">
+                                    Statut
+                                </label>
+                                <SelectField
+                                    id="cc-f-statut"
+                                    options={statutOptions}
+                                    placeholder="Tous les statuts"
+                                    value={caissesFilters.statutFilter}
+                                    onChange={(event) => reloadCaisses({ statutFilter: event.target.value })}
+                                />
+                            </div>
+                        </TableToolbar>
+                    </div>
+
                     <TableLengthRow
                         search={<SearchInput value={caissesFilters.search} onSearch={(value) => reloadCaisses({ search: value })} />}
                     />
@@ -517,31 +520,33 @@ export default function CaissesIndex({
                     title="Transferts de caisse"
                     bodyClassName="p-0 py-3"
                     tools={
-                        <>
-                            <FilterDropdown
-                                fields={[
-                                    {
-                                        name: 'caisseFilter',
-                                        label: 'Caisse source',
-                                        value: transferFilters.caisseFilter,
-                                        options: transferCaisseOptions,
-                                        placeholder: 'Toutes les caisses',
-                                    },
-                                ]}
-                                onApply={(values) => reloadTransfers(values)}
-                                onReset={() => reloadTransfers({ caisseFilter: '' })}
-                            />
-                            <button
-                                type="button"
-                                className="btn btn-primary d-flex align-items-center mb-3"
-                                onClick={openCreateTransfer}
-                            >
-                                <i className="ti ti-square-rounded-plus me-2" />
-                                Demander un transfert
-                            </button>
-                        </>
+                        <button
+                            type="button"
+                            className="btn btn-primary d-flex align-items-center mb-3"
+                            onClick={openCreateTransfer}
+                        >
+                            <i className="ti ti-square-rounded-plus me-2" />
+                            Demander un transfert
+                        </button>
                     }
                 >
+                    <div className="px-3 pt-2">
+                        <TableToolbar>
+                            <div style={{ width: 220 }}>
+                                <label className="form-label" htmlFor="tr-f-caisse">
+                                    Caisse source
+                                </label>
+                                <SelectField
+                                    id="tr-f-caisse"
+                                    options={transferCaisseOptions}
+                                    placeholder="Toutes les caisses"
+                                    value={transferFilters.caisseFilter}
+                                    onChange={(event) => reloadTransfers({ caisseFilter: event.target.value })}
+                                />
+                            </div>
+                        </TableToolbar>
+                    </div>
+
                     <ul className="nav nav-pills px-3 mb-3">
                         {transferStatuts.map((statut) => (
                             <li className="nav-item" key={statut}>

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Tests\Feature\Backoffice\Settings;
 
 use App\Models\AnneeScolaire;
+use App\Models\Banque;
+use App\Models\Encaissement;
 use App\Models\Etablissement;
 use App\Models\Frais;
 use App\Models\Group;
@@ -376,5 +378,98 @@ final class SettingsTest extends TestCase
             'nom' => 'Salle Admin', 'etablissement_id' => $center->id, 'statut' => 'Active',
         ])->assertRedirect();
         $this->post(route('backoffice.frais.store'), ['nom' => 'Frais Admin', 'statut' => Frais::STATUT_ACTIF])->assertRedirect();
+        $this->post(route('backoffice.banques.store'), ['nom' => 'Banque Admin', 'statut' => Banque::STATUT_ACTIF])->assertRedirect();
+    }
+
+    // --- Banques tab -----------------------------------------------------------
+
+    public function test_a_bank_can_be_created_and_updated(): void
+    {
+        $this->userWith('banks.view', 'banks.create', 'banks.update');
+
+        $this->post(route('backoffice.banques.store'), ['nom' => 'Banque de Juillet', 'statut' => Banque::STATUT_ACTIF])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('banques', ['nom' => 'Banque de Juillet']);
+
+        $banque = Banque::first();
+        $this->put(route('backoffice.banques.update', $banque), ['nom' => 'Banque renommée', 'statut' => Banque::STATUT_ACTIF])
+            ->assertRedirect();
+
+        $this->assertSame('Banque renommée', $banque->fresh()->nom);
+    }
+
+    public function test_bank_name_must_be_unique(): void
+    {
+        $this->userWith('banks.view', 'banks.create');
+        Banque::create(['nom' => 'Attijariwafa Bank', 'statut' => Banque::STATUT_ACTIF]);
+
+        $this->post(route('backoffice.banques.store'), ['nom' => 'Attijariwafa Bank', 'statut' => Banque::STATUT_ACTIF])
+            ->assertSessionHasErrors('nom');
+    }
+
+    public function test_bank_used_by_a_payment_cannot_be_deleted(): void
+    {
+        $this->userWith('banks.view', 'banks.delete');
+        $banque = Banque::create(['nom' => 'Banque utilisée', 'statut' => Banque::STATUT_ACTIF]);
+
+        $center = Etablissement::factory()->create();
+        $annee = AnneeScolaire::create([
+            'nom' => '2025/2026', 'date_debut' => '2025-09-01', 'date_fin' => '2026-08-31',
+            'par_defaut' => false, 'inscription_ouverte' => true,
+        ]);
+        $student = Student::factory()->create(['etablissement_id' => $center->id]);
+        $group = Group::factory()->create(['etablissement_id' => $center->id, 'annee_scolaire_id' => $annee->id]);
+        $inscription = Inscription::create([
+            'reference' => 'INS-BQ', 'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $center->id, 'annee_scolaire_id' => $annee->id,
+            'statut' => 'Active', 'date_inscription' => '2025-09-15', 'montant_total' => 500,
+        ]);
+        $fee = \App\Models\InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => 'Frais', 'montant' => 500,
+            'date_echeance' => '2025-10-01', 'statut' => 'Non payé',
+        ]);
+        $caisse = \App\Models\Caisse::factory()->create(['etablissement_id' => $center->id]);
+        $agent = \App\Models\Employee::factory()->create(['etablissement_id' => $center->id]);
+
+        Encaissement::create([
+            'reference' => 'ENC-CHQ', 'student_id' => $student->id, 'inscription_fee_id' => $fee->id,
+            'caisse_id' => $caisse->id, 'agent_id' => $agent->id,
+            'montant' => 500, 'methode' => Encaissement::METHODE_CHEQUE, 'date_paiement' => '2025-10-01',
+            'numero_cheque' => 'CHQ-001', 'banque' => $banque->nom, 'date_echeance_cheque' => '2025-11-01',
+        ]);
+
+        $this->delete(route('backoffice.banques.destroy', $banque))->assertSessionHasErrors('delete');
+
+        $this->assertDatabaseHas('banques', ['id' => $banque->id]);
+    }
+
+    public function test_user_without_create_permission_cannot_add_a_bank(): void
+    {
+        $this->userWith('banks.view');
+
+        $this->post(route('backoffice.banques.store'), ['nom' => 'X', 'statut' => Banque::STATUT_ACTIF])
+            ->assertForbidden();
+    }
+
+    /**
+     * banks.* is deliberately absent from every role in
+     * PermissionRegistry::matrix() — even the director role (which holds
+     * every other tab's full CRUD set) must NOT reach the Banques tab.
+     */
+    public function test_director_role_cannot_manage_banks(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('director');
+        $this->actingAs($user);
+
+        $this->post(route('backoffice.banques.store'), ['nom' => 'X', 'statut' => Banque::STATUT_ACTIF])
+            ->assertForbidden();
+
+        $this->get(route('backoffice.settings', ['tab' => 'banques']))
+            ->assertInertia(fn (Assert $page) => $page->where(
+                'availableTabs',
+                fn ($tabs) => ! collect($tabs)->contains('banques'),
+            ));
     }
 }

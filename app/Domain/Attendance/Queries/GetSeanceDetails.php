@@ -26,7 +26,7 @@ final class GetSeanceDetails
             ->keyBy('student_id');
 
         $students = Inscription::query()
-            ->with(['student:id,reference,nom,prenom', 'student.media'])
+            ->with(['student:id,reference,nom,prenom,sexe', 'student.media'])
             ->where('group_id', $seance->group_id)
             ->where('statut', Inscription::STATUT_ACTIVE)
             ->get()
@@ -39,7 +39,7 @@ final class GetSeanceDetails
                 'reference' => $inscription->student->reference,
                 'nom' => $inscription->student->nom,
                 'prenom' => $inscription->student->prenom,
-                'photoUrl' => $inscription->student->getFirstMediaUrl('photo') ?: null,
+                'photoUrl' => $inscription->student->avatarUrl(),
                 'statut' => $existing->get($inscription->student->id)?->statut,
                 'note' => $existing->get($inscription->student->id)?->note ?? '',
             ]);

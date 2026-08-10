@@ -39,16 +39,39 @@ final class StudentController extends Controller
         $sexeFilter = (string) $request->string('sexeFilter');
         $etablissementFilter = (string) $request->string('etablissementFilter');
         $ageSort = (string) $request->string('ageSort');
+        $referenceFilter = (string) $request->string('referenceFilter');
+        $nomFilter = (string) $request->string('nomFilter');
+        $prenomFilter = (string) $request->string('prenomFilter');
+        $telephoneFilter = (string) $request->string('telephoneFilter');
+        $inscriptionFilter = (string) $request->string('inscriptionFilter');
         $perPage = (int) $request->integer('perPage', GetStudentsList::DEFAULT_PER_PAGE);
 
         return Inertia::render('Backoffice/Students/Index', [
-            'students' => $getStudentsList($request->user(), $search, $niveauFilter, $sexeFilter, $etablissementFilter, $ageSort, $perPage),
+            'students' => $getStudentsList(
+                $request->user(),
+                $search,
+                $niveauFilter,
+                $sexeFilter,
+                $etablissementFilter,
+                $ageSort,
+                $perPage,
+                $referenceFilter,
+                $nomFilter,
+                $prenomFilter,
+                $telephoneFilter,
+                $inscriptionFilter,
+            ),
             'filters' => [
                 'search' => $search,
                 'niveauFilter' => $niveauFilter,
                 'sexeFilter' => $sexeFilter,
                 'etablissementFilter' => $etablissementFilter,
                 'ageSort' => $ageSort,
+                'referenceFilter' => $referenceFilter,
+                'nomFilter' => $nomFilter,
+                'prenomFilter' => $prenomFilter,
+                'telephoneFilter' => $telephoneFilter,
+                'inscriptionFilter' => $inscriptionFilter,
                 'perPage' => in_array($perPage, GetStudentsList::PER_PAGE_OPTIONS, true)
                     ? $perPage
                     : GetStudentsList::DEFAULT_PER_PAGE,

@@ -35,6 +35,8 @@ final class GetInscriptionsList
         string $statutFilter = '',
         string $groupFilter = '',
         int $perPage = self::DEFAULT_PER_PAGE,
+        string $referenceFilter = '',
+        string $studentFilter = '',
     ): LengthAwarePaginator {
         if (! in_array($perPage, self::PER_PAGE_OPTIONS, true)) {
             $perPage = self::DEFAULT_PER_PAGE;
@@ -52,6 +54,8 @@ final class GetInscriptionsList
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
             ->when($statutFilter !== '', fn ($q) => $q->where('statut', $statutFilter))
             ->when($groupFilter !== '', fn ($q) => $q->where('group_id', (int) $groupFilter))
+            ->when($referenceFilter !== '', fn ($q) => $q->where('reference', 'ilike', "%{$referenceFilter}%"))
+            ->when($studentFilter !== '', fn ($q) => $q->where('student_id', (int) $studentFilter))
             ->when($search !== '', function ($q) use ($search): void {
                 $q->where(function ($sub) use ($search): void {
                     $sub->where('reference', 'ilike', "%{$search}%")
@@ -75,6 +79,8 @@ final class GetInscriptionsList
             'studentShowUrl' => $inscription->student ? route('backoffice.students.show', $inscription->student) : null,
             'groupe' => $inscription->group?->nom,
             'date' => $inscription->date_inscription?->format('d/m/Y'),
+            'dateDebut' => $inscription->date_debut?->format('d/m/Y'),
+            'dateFin' => $inscription->date_fin?->format('d/m/Y'),
             'montantTotal' => $inscription->montant_total !== null ? number_format((float) $inscription->montant_total, 2, '.', '') : null,
             'feesCount' => $inscription->fees_count,
             'statut' => $inscription->statut,

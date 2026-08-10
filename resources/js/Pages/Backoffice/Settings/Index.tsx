@@ -5,6 +5,7 @@ import EtablissementsPanel from '@/Pages/Backoffice/Settings/EtablissementsPanel
 import AnneesScolairesPanel from '@/Pages/Backoffice/Settings/AnneesScolairesPanel';
 import SallesPanel from '@/Pages/Backoffice/Settings/SallesPanel';
 import FraisPanel from '@/Pages/Backoffice/Settings/FraisPanel';
+import BanquesPanel from '@/Pages/Backoffice/Settings/BanquesPanel';
 import type { SettingsPageProps, SettingsTab } from '@/Types';
 
 const TAB_LABELS: Record<SettingsTab, { label: string; icon: string }> = {
@@ -12,6 +13,7 @@ const TAB_LABELS: Record<SettingsTab, { label: string; icon: string }> = {
     'annees-scolaires': { label: 'Années scolaires', icon: 'ti ti-calendar' },
     salles: { label: 'Salles', icon: 'ti ti-door' },
     frais: { label: 'Frais', icon: 'ti ti-receipt' },
+    banques: { label: 'Banques', icon: 'ti ti-building-bank' },
 };
 
 /**
@@ -31,6 +33,7 @@ export default function SettingsIndex({
     salles,
     centerOptions,
     frais,
+    banques,
 }: SettingsPageProps) {
     function switchTab(tab: SettingsTab) {
         if (tab === activeTab) {
@@ -74,6 +77,7 @@ export default function SettingsIndex({
                         <SallesPanel salles={salles} centerOptions={centerOptions ?? []} permissions={permissions.salles} />
                     )}
                     {activeTab === 'frais' && frais && <FraisPanel frais={frais} permissions={permissions.frais} />}
+                    {activeTab === 'banques' && banques && <BanquesPanel banques={banques} permissions={permissions.banques} />}
                 </div>
             </Card>
         </BackofficeLayout>

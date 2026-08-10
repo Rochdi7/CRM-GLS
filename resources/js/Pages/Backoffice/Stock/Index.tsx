@@ -13,7 +13,8 @@ import StatusBadge from '@/Components/Details/StatusBadge';
 import Pagination from '@/Components/Tables/Pagination';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
-import FilterDropdown from '@/Components/Tables/FilterDropdown';
+import TableToolbar from '@/Components/Tables/TableToolbar';
+import DateField from '@/Components/Forms/DateField';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import type {
     PaginatedData,
@@ -252,39 +253,48 @@ export default function StockIndex({
             </ul>
 
             {tab === 'articles' && (
-                <Card
-                    title="Articles"
-                    bodyClassName="p-0 py-3"
-                    tools={
-                        <FilterDropdown
-                            fields={[
-                                {
-                                    name: 'categorieFilter',
-                                    label: 'Catégorie',
-                                    value: filters.categorieFilter,
-                                    options: categories.map((categorie) => ({ value: categorie, label: categorie })),
-                                    placeholder: 'Toutes les catégories',
-                                },
-                                {
-                                    name: 'statutFilter',
-                                    label: 'Statut',
-                                    value: filters.statutFilter,
-                                    options: statuts.map((statut) => ({ value: statut, label: statut })),
-                                    placeholder: 'Tous les statuts',
-                                },
-                                {
-                                    name: 'alerteFilter',
-                                    label: 'Alerte stock',
-                                    value: filters.alerteFilter,
-                                    options: [{ value: '1', label: 'Sous le seuil uniquement' }],
-                                    placeholder: 'Tous les articles',
-                                },
-                            ]}
-                            onApply={(values) => reload(values)}
-                            onReset={() => reload({ categorieFilter: '', statutFilter: '', alerteFilter: '' })}
-                        />
-                    }
-                >
+                <Card title="Articles" bodyClassName="p-0 py-3">
+                    <div className="px-3 pt-2">
+                        <TableToolbar>
+                            <div style={{ width: 200 }}>
+                                <label className="form-label" htmlFor="stk-f-categorie">
+                                    Catégorie
+                                </label>
+                                <SelectField
+                                    id="stk-f-categorie"
+                                    options={categories.map((categorie) => ({ value: categorie, label: categorie }))}
+                                    placeholder="Toutes les catégories"
+                                    value={filters.categorieFilter}
+                                    onChange={(event) => reload({ categorieFilter: event.target.value })}
+                                />
+                            </div>
+                            <div style={{ width: 180 }}>
+                                <label className="form-label" htmlFor="stk-f-statut">
+                                    Statut
+                                </label>
+                                <SelectField
+                                    id="stk-f-statut"
+                                    options={statuts.map((statut) => ({ value: statut, label: statut }))}
+                                    placeholder="Tous les statuts"
+                                    value={filters.statutFilter}
+                                    onChange={(event) => reload({ statutFilter: event.target.value })}
+                                />
+                            </div>
+                            <div style={{ width: 220 }}>
+                                <label className="form-label" htmlFor="stk-f-alerte">
+                                    Alerte stock
+                                </label>
+                                <SelectField
+                                    id="stk-f-alerte"
+                                    options={[{ value: '1', label: 'Sous le seuil uniquement' }]}
+                                    placeholder="Tous les articles"
+                                    value={filters.alerteFilter}
+                                    onChange={(event) => reload({ alerteFilter: event.target.value })}
+                                />
+                            </div>
+                        </TableToolbar>
+                    </div>
+
                     <TableLengthRow
                         perPage={filters.perPage}
                         perPageOptions={perPageOptions}
@@ -373,34 +383,56 @@ export default function StockIndex({
             )}
 
             {tab === 'mouvements' && (
-                <Card
-                    title="Mouvements"
-                    bodyClassName="p-0 py-3"
-                    tools={
-                        <FilterDropdown
-                            fields={[
-                                {
-                                    name: 'articleFilter',
-                                    label: 'Article',
-                                    value: filters.articleFilter,
-                                    options: articleOptions,
-                                    placeholder: 'Tous les articles',
-                                },
-                                {
-                                    name: 'typeFilter',
-                                    label: 'Type',
-                                    value: filters.typeFilter,
-                                    options: mouvementTypes.map((type) => ({ value: type, label: type })),
-                                    placeholder: 'Tous les types',
-                                },
-                                { name: 'dateFrom', label: 'Du', type: 'date', value: filters.dateFrom },
-                                { name: 'dateTo', label: 'Au', type: 'date', value: filters.dateTo },
-                            ]}
-                            onApply={(values) => reload(values)}
-                            onReset={() => reload({ articleFilter: '', typeFilter: '', dateFrom: '', dateTo: '' })}
-                        />
-                    }
-                >
+                <Card title="Mouvements" bodyClassName="p-0 py-3">
+                    <div className="px-3 pt-2">
+                        <TableToolbar>
+                            <div style={{ width: 220 }}>
+                                <label className="form-label" htmlFor="mvt-f-article">
+                                    Article
+                                </label>
+                                <SelectField
+                                    id="mvt-f-article"
+                                    options={articleOptions}
+                                    placeholder="Tous les articles"
+                                    value={filters.articleFilter}
+                                    onChange={(event) => reload({ articleFilter: event.target.value })}
+                                />
+                            </div>
+                            <div style={{ width: 180 }}>
+                                <label className="form-label" htmlFor="mvt-f-type">
+                                    Type
+                                </label>
+                                <SelectField
+                                    id="mvt-f-type"
+                                    options={mouvementTypes.map((type) => ({ value: type, label: type }))}
+                                    placeholder="Tous les types"
+                                    value={filters.typeFilter}
+                                    onChange={(event) => reload({ typeFilter: event.target.value })}
+                                />
+                            </div>
+                            <div style={{ width: 170 }}>
+                                <label className="form-label" htmlFor="mvt-f-du">
+                                    Du
+                                </label>
+                                <DateField
+                                    id="mvt-f-du"
+                                    value={filters.dateFrom}
+                                    onChange={(event) => reload({ dateFrom: event.target.value })}
+                                />
+                            </div>
+                            <div style={{ width: 170 }}>
+                                <label className="form-label" htmlFor="mvt-f-au">
+                                    Au
+                                </label>
+                                <DateField
+                                    id="mvt-f-au"
+                                    value={filters.dateTo}
+                                    onChange={(event) => reload({ dateTo: event.target.value })}
+                                />
+                            </div>
+                        </TableToolbar>
+                    </div>
+
                     <RelatedRecordsTable
                         isEmpty={mouvements.data.length === 0}
                         emptyTitle="Aucun mouvement de stock pour le moment"

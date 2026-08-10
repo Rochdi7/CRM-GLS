@@ -7,10 +7,12 @@ namespace App\Http\Controllers\Backoffice;
 use App\Domain\Centers\Queries\GetEtablissementsList;
 use App\Domain\Settings\Queries\GetAccessibleCenterOptions;
 use App\Domain\Settings\Queries\GetAnneesScolairesList;
+use App\Domain\Settings\Queries\GetBanquesList;
 use App\Domain\Settings\Queries\GetFraisList;
 use App\Domain\Settings\Queries\GetSallesList;
 use App\Http\Controllers\Controller;
 use App\Models\AnneeScolaire;
+use App\Models\Banque;
 use App\Models\Etablissement;
 use App\Models\Frais;
 use App\Models\Salle;
@@ -40,6 +42,7 @@ final class SettingController extends Controller
         'annees-scolaires' => 'academic-years.view',
         'salles' => 'rooms.view',
         'frais' => 'fees.view',
+        'banques' => 'banks.view',
     ];
 
     public function __invoke(
@@ -48,6 +51,7 @@ final class SettingController extends Controller
         GetAnneesScolairesList $getAnneesScolairesList,
         GetSallesList $getSallesList,
         GetFraisList $getFraisList,
+        GetBanquesList $getBanquesList,
         GetAccessibleCenterOptions $getAccessibleCenterOptions,
     ): Response {
         $user = $request->user();
@@ -83,6 +87,7 @@ final class SettingController extends Controller
                 'centerOptions' => $getAccessibleCenterOptions($user)->values()->all(),
             ],
             'frais' => $props['frais'] = $getFraisList(),
+            'banques' => $props['banques'] = $getBanquesList(),
             default => null,
         };
 
@@ -99,6 +104,7 @@ final class SettingController extends Controller
             'annees-scolaires' => [AnneeScolaire::class, 'academic-years'],
             'salles' => [Salle::class, 'rooms'],
             'frais' => [Frais::class, 'fees'],
+            'banques' => [Banque::class, 'banks'],
         };
 
         return [

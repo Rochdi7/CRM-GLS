@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace App\Domain\Groups\Queries;
 
 use App\Models\Group;
+use App\Models\Inscription;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Read-model for the Groups list — extracted verbatim from
@@ -35,6 +37,9 @@ final class GetGroupsList
         string $search = '',
         string $statutFilter = Group::STATUT_EN_FORMATION,
         int $perPage = self::DEFAULT_PER_PAGE,
+        string $enseignantFilter = '',
+        string $dateFrom = '',
+        string $dateTo = '',
     ): LengthAwarePaginator {
         if (! in_array($perPage, self::PER_PAGE_OPTIONS, true)) {
             $perPage = self::DEFAULT_PER_PAGE;
@@ -42,11 +47,19 @@ final class GetGroupsList
 
         $groups = Group::query()
             ->with(['enseignant', 'frais'])
-            ->withCount(['inscriptions', 'frais'])
+            ->withCount([
+                'inscriptions',
+                'inscriptions as inscriptions_actives_count' => fn ($q) => $q->where('statut', Inscription::STATUT_ACTIVE),
+                'inscriptions as inscriptions_annulees_count' => fn ($q) => $q->where('statut', Inscription::STATUT_ANNULEE),
+                'inscriptions as etudiants_distincts_count' => fn ($q) => $q->select(DB::raw('COUNT(DISTINCT student_id)')),
+            ])
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
             ->when($statutFilter !== '', fn ($q) => $q->where('statut', $statutFilter))
+            ->when($enseignantFilter !== '', fn ($q) => $q->where('enseignant_id', (int) $enseignantFilter))
+            ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_debut_formation', '>=', $dateFrom))
+            ->when($dateTo !== '', fn ($q) => $q->whereDate('date_debut_formation', '<=', $dateTo))
             ->when($search !== '', fn ($q) => $q->where('nom', 'ilike', "%{$search}%"))
             ->latest()
             ->paginate($perPage)
@@ -62,6 +75,9 @@ final class GetGroupsList
             'dateFinFormation' => $group->date_fin_formation?->toDateString(),
             'statut' => $group->statut,
             'inscriptionsCount' => $group->inscriptions_count,
+            'inscriptionsActivesCount' => $group->inscriptions_actives_count,
+            'inscriptionsAnnuleesCount' => $group->inscriptions_annulees_count,
+            'etudiantsDistinctsCount' => $group->etudiants_distincts_count,
             'fraisCount' => $group->frais_count,
             'showUrl' => route('backoffice.groups.show', $group),
             // Keyed by frais_id so the edit modal can prefill the fee-lines

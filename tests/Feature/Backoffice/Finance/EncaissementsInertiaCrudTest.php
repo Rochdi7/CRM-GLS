@@ -154,16 +154,19 @@ final class EncaissementsInertiaCrudTest extends TestCase
 
 
     /**
-     * The Paiements page's view tabs (wimschool-style): "cheque" lists only
-     * cheque payments; "avance" lists only payments whose fee is still
-     * partially settled — both read-only filters over the same list.
+     * The Encaissements page's view tabs (wimschool-style): "cheque" lists
+     * only cheque payments; "avance" lists only unallocated advances
+     * (inscription_fee_id IS NULL, not yet applied to any fee) — both
+     * read-only filters over the same list. A partially-paid fee via cash is
+     * NOT an avance under the current definition — it's still a normal,
+     * fee-targeted payment.
      */
     public function test_view_tabs_filter_cheques_and_avances(): void
     {
         $user = $this->userWith('payments.view', 'payments.create');
         $this->actingAs($user);
 
-        // Fully-paid fee via cheque + partially-paid fee via cash.
+        // Fully-paid fee via cheque + a genuine unallocated avance (no fee).
         [$student1, $inscription1, $feeFull] = $this->enrolledStudentWithFee(1000);
         $this->post(route('backoffice.encaissements.store'), [
             'student_id' => $student1->id, 'inscription_id' => $inscription1->id,
@@ -174,17 +177,15 @@ final class EncaissementsInertiaCrudTest extends TestCase
             ],
         ])->assertRedirect();
 
-        [$student2, $inscription2, $feePartial] = $this->enrolledStudentWithFee(1000);
-        $this->post(route('backoffice.encaissements.store'), [
-            'student_id' => $student2->id, 'inscription_id' => $inscription2->id,
+        [$student2] = $this->enrolledStudentWithFee(1000);
+        $this->post(route('backoffice.avances.store'), [
+            'student_id' => $student2->id,
+            'montant' => '400',
+            'methode' => 'Espèces',
             'date_paiement' => '2025-09-21',
-            'payment_lines' => [
-                ['fee_id' => $feePartial->id, 'montant' => '400', 'methode' => 'Espèces', 'date_paiement' => '2025-09-21'],
-            ],
         ])->assertRedirect();
 
         $this->assertSame(InscriptionFee::STATUT_PAYE, $feeFull->fresh()->statut);
-        $this->assertSame(InscriptionFee::STATUT_PAYE_PARTIELLEMENT, $feePartial->fresh()->statut);
 
         $chequeRows = $this->get(route('backoffice.encaissements.index', ['view' => 'cheque']))
             ->viewData('page')['props']['encaissements']['data'];
@@ -195,10 +196,71 @@ final class EncaissementsInertiaCrudTest extends TestCase
             ->viewData('page')['props']['encaissements']['data'];
         $this->assertCount(1, $avanceRows);
         $this->assertSame('400.00', (string) $avanceRows[0]['montant']);
+        $this->assertSame('0.00', (string) $avanceRows[0]['montantUtilise']);
+        $this->assertSame('400.00', (string) $avanceRows[0]['montantRestant']);
 
         $allRows = $this->get(route('backoffice.encaissements.index'))
             ->viewData('page')['props']['encaissements']['data'];
         $this->assertCount(2, $allRows);
+    }
+
+    public function test_an_avance_can_be_applied_to_a_fee_without_touching_caisse_solde_again(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update');
+        $this->actingAs($user);
+        $caisse = $user->employee->caisses()->first();
+
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
+
+        $this->post(route('backoffice.avances.store'), [
+            'student_id' => $student->id,
+            'montant' => '600',
+            'methode' => 'Espèces',
+            'date_paiement' => '2025-09-21',
+        ])->assertRedirect();
+
+        $this->assertSame('600.00', (string) $caisse->fresh()->solde);
+        $avance = Encaissement::whereNull('inscription_fee_id')->firstOrFail();
+
+        $this->post(route('backoffice.avances.apply', $avance), [
+            'fee_id' => $fee->id,
+            'montant' => '600',
+        ])->assertRedirect();
+
+        // Applying does NOT re-increment the till — the money already
+        // arrived when the avance itself was recorded.
+        $this->assertSame('600.00', (string) $caisse->fresh()->solde);
+        $this->assertSame(InscriptionFee::STATUT_PAYE_PARTIELLEMENT, $fee->fresh()->statut);
+        $this->assertSame(2, Encaissement::count());
+
+        $avanceRows = $this->get(route('backoffice.encaissements.index', ['view' => 'avance']))
+            ->viewData('page')['props']['encaissements']['data'];
+        $this->assertCount(1, $avanceRows);
+        $this->assertSame('600.00', (string) $avanceRows[0]['montantUtilise']);
+        $this->assertSame('0.00', (string) $avanceRows[0]['montantRestant']);
+    }
+
+    public function test_applying_more_than_the_avances_remaining_balance_is_rejected(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update');
+        $this->actingAs($user);
+        [$student, , $fee] = $this->enrolledStudentWithFee(1000);
+
+        $this->post(route('backoffice.avances.store'), [
+            'student_id' => $student->id,
+            'montant' => '100',
+            'methode' => 'Espèces',
+            'date_paiement' => '2025-09-21',
+        ])->assertRedirect();
+        $avance = Encaissement::whereNull('inscription_fee_id')->firstOrFail();
+
+        $this->post(route('backoffice.avances.apply', $avance), [
+            'fee_id' => $fee->id,
+            'montant' => '500',
+        ])->assertSessionHasErrors('montant');
+
+        $this->assertSame(1, Encaissement::count());
+        $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $fee->fresh()->statut);
     }
 
     public function test_amount_above_remaining_balance_is_rejected_with_zero_side_effects(): void

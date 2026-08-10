@@ -70,6 +70,14 @@ export const backofficeNavigation: NavGroup[] = [
                 matchPaths: ['/backoffice/seances'],
                 inertia: true,
             },
+            {
+                label: t('Timetable'),
+                href: '/backoffice/emploi-du-temps',
+                icon: 'ti ti-calendar-time',
+                permissions: ['attendance.view'],
+                matchPaths: ['/backoffice/emploi-du-temps'],
+                inertia: true,
+            },
             // Hidden by product decision — the page stays reachable at
             // /backoffice/groups-historique (groups.view); re-enable when
             // it should appear in the sidebar.

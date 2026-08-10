@@ -2,6 +2,7 @@ export interface AuthUser {
     id: number;
     name: string;
     email: string | null;
+    photoUrl: string;
 }
 
 export interface ContextOption {
@@ -230,6 +231,7 @@ export interface GroupDetails {
 
 export interface InscriptionFeeRow {
     nom: string;
+    montantInitial: MoneyDisplay;
     montant: MoneyDisplay;
     paye: MoneyDisplay;
     dateEcheance: string | null;
@@ -372,6 +374,45 @@ export interface SeanceForm {
     [key: string]: string;
 }
 
+// --- Emploi du temps (weekly recurring schedule — créneaux) -----------------
+
+/** One créneau row — mirrors GetCreneauxGrille's ->map() output exactly. */
+export interface CreneauRow {
+    id: number;
+    groupId: number;
+    groupNom: string;
+    groupNiveau: string | null;
+    jourSemaine: number;
+    heureDebut: string;
+    heureFin: string;
+    enseignant: string | null;
+    enseignantId: number | null;
+    salle: string | null;
+    salleId: number | null;
+}
+
+/** Edit form — one créneau, one day. */
+export interface CreneauForm {
+    group_id: string;
+    jour_semaine: string;
+    heure_debut: string;
+    heure_fin: string;
+    enseignant_id: string;
+    salle_id: string;
+    [key: string]: string;
+}
+
+/** Create form — one submit can create a créneau per selected day (jours_semaine). */
+export interface CreneauCreateForm {
+    group_id: string;
+    jours_semaine: string[];
+    heure_debut: string;
+    heure_fin: string;
+    enseignant_id: string;
+    salle_id: string;
+    [key: string]: string | string[];
+}
+
 export interface SeanceStudentLine {
     id: number;
     reference: string;
@@ -461,7 +502,7 @@ export interface CrudPermissions {
 
 // --- Phase 6: simple CRUD modules ------------------------------------------
 
-export type SettingsTab = 'etablissements' | 'annees-scolaires' | 'salles' | 'frais';
+export type SettingsTab = 'etablissements' | 'annees-scolaires' | 'salles' | 'frais' | 'banques';
 
 export interface EtablissementRow {
     id: number;
@@ -525,6 +566,17 @@ export interface FraisForm {
     statut: string;
 }
 
+export interface BanqueRow {
+    id: number;
+    nom: string;
+    statut: string;
+}
+
+export interface BanqueForm {
+    nom: string;
+    statut: string;
+}
+
 export interface TypeDepenseRow {
     id: number;
     nom: string;
@@ -547,6 +599,7 @@ export interface SettingsPageProps {
     salles?: PaginatedData<SalleRow>;
     centerOptions?: SelectOption[];
     frais?: PaginatedData<FraisRow>;
+    banques?: PaginatedData<BanqueRow>;
     [key: string]: unknown;
 }
 
@@ -769,6 +822,12 @@ export interface StudentsFilters {
     sexeFilter: string;
     etablissementFilter: string;
     ageSort: string;
+    referenceFilter: string;
+    nomFilter: string;
+    prenomFilter: string;
+    telephoneFilter: string;
+    /** État d'inscription — '' (tous) | 'active' | 'cancelled' | 'none'. */
+    inscriptionFilter: string;
     perPage: number;
 }
 
@@ -803,6 +862,9 @@ export interface GroupRow {
     dateFinFormation: string | null;
     statut: string;
     inscriptionsCount: number;
+    inscriptionsActivesCount: number;
+    inscriptionsAnnuleesCount: number;
+    etudiantsDistinctsCount: number;
     fraisCount: number;
     showUrl: string;
     /** Keyed by frais_id — prefills the edit modal's fee-lines table without a second request. */
@@ -818,6 +880,9 @@ export interface GroupFraisLigne {
 export interface GroupsFilters {
     search: string;
     statutFilter: string;
+    enseignantFilter: string;
+    dateFrom: string;
+    dateTo: string;
     perPage: number;
 }
 
@@ -850,6 +915,8 @@ export interface InscriptionRow {
     studentShowUrl: string | null;
     groupe: string | null;
     date: string | null;
+    dateDebut: string | null;
+    dateFin: string | null;
     montantTotal: MoneyDisplay | null;
     feesCount: number;
     statut: string;
@@ -875,8 +942,15 @@ export interface InscriptionGroupFeesResponse {
     dateFin: string | null;
 }
 
-/** One editable fee line in the create-form's "Frais disponibles" table — mirrors Livewire's $feeLines shape. */
+/**
+ * One editable fee line — used both by the create form's "Frais
+ * disponibles" table (mirrors Livewire's $feeLines shape) and the edit
+ * modal's "Frais de cette inscription" table. `id` is set only for an
+ * existing InscriptionFee row being edited; omitted/undefined for a
+ * brand-new line (create form, or a line added while editing).
+ */
 export interface InscriptionFeeLine {
+    id?: number;
     fraisId: number | null;
     nom: string;
     montantInitial: string;
@@ -884,12 +958,16 @@ export interface InscriptionFeeLine {
     remiseMontant: string;
     note: string;
     dateEcheance: string;
+    /** Server-computed, informational only on the edit table (Non payé/Payé partiellement/Payé). Absent on create-form lines. */
+    statut?: string;
 }
 
 export interface InscriptionsFilters {
     search: string;
     statutFilter: string;
     groupFilter: string;
+    referenceFilter: string;
+    studentFilter: string;
     perPage: number;
 }
 
@@ -908,6 +986,8 @@ export interface InscriptionsPageProps {
     defaultCountry: string;
     students: InscriptionFormOption[];
     groups: InscriptionFormOption[];
+    /** UI convenience only — hides the edit-modal fee controls; real enforcement is registrations.manage-fees on the server (InscriptionController::updateFees). */
+    canManageFees: boolean;
     [key: string]: unknown;
 }
 
@@ -1012,6 +1092,10 @@ export interface EncaissementRow {
     dateEcheanceCheque: string | null;
     note: string | null;
     agent: string | null;
+    /** Only populated on the Avances tab — how much of this advance has already been applied to a fee. */
+    montantUtilise: MoneyDisplay | null;
+    /** Only populated on the Avances tab — montant minus montantUtilise. */
+    montantRestant: MoneyDisplay | null;
     showUrl: string;
 }
 
@@ -1024,6 +1108,10 @@ export interface EncaissementsFilters {
     perPage: number;
     /** Page view tab: '' (all) | 'avance' (partially-settled fees) | 'cheque'. */
     view: string;
+    referenceFilter: string;
+    studentFilter: string;
+    numeroChequeFilter: string;
+    banqueFilter: string;
 }
 
 export interface EncaissementsPageProps {
@@ -1031,6 +1119,8 @@ export interface EncaissementsPageProps {
     caisses: FinanceOption[];
     students: FinanceOption[];
     methodes: string[];
+    /** Active bank names from the catalog (Paramètres → Banques) — the Chèque form's dropdown source. */
+    banques: string[];
     filters: EncaissementsFilters;
     [key: string]: unknown;
 }

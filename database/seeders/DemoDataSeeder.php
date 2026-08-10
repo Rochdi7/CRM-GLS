@@ -149,7 +149,7 @@ final class DemoDataSeeder extends Seeder
         $defs = [
             ['Herr Driss 13h - Intensifs', 'B1.1', Group::STATUT_EN_FORMATION],
             ['Frau Sanaa 18h - Débutants', 'A1.1', Group::STATUT_EN_FORMATION],
-            ['Herr Karim 10h - Prépa ÖSD', 'B2.1', Group::STATUT_PRE_INSCRIPTION],
+            ['Herr Karim 10h - Prépa ÖSD', 'B2.1', Group::STATUT_EN_INSCRIPTION],
             ['Frau Nadia 16h - Intermédiaire', 'A2.2', Group::STATUT_EN_FORMATION],
         ];
 

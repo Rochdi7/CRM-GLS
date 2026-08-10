@@ -114,12 +114,12 @@ use Illuminate\Database\Eloquent\Model;
 class Group extends Model
 {
     // groups.statut lifecycle — enforced here, not at the database level (see gls-crm-schema.md §6)
-    public const STATUT_PRE_INSCRIPTION = 'Pré-inscription';
+    public const STATUT_EN_INSCRIPTION = 'En inscription';
     public const STATUT_EN_FORMATION = 'En formation';
     public const STATUT_FIN_FORMATION = 'Fin de formation';
 
     public const STATUTS = [
-        self::STATUT_PRE_INSCRIPTION,
+        self::STATUT_EN_INSCRIPTION,
         self::STATUT_EN_FORMATION,
         self::STATUT_FIN_FORMATION,
     ];
@@ -208,7 +208,7 @@ app/Livewire/
 │   ├── StudentForm.php
 │   └── StudentShow.php              → shows inscriptions, encaissements, remboursements for this student
 ├── Groups/
-│   ├── GroupIndex.php               → tabbed by statut (Pré-inscription / En formation / Historique)
+│   ├── GroupIndex.php               → tabbed by statut (En inscription / En formation / Historique)
 │   ├── GroupForm.php
 │   └── GroupHistoriqueIndex.php     → read-only archive list
 ├── Inscriptions/

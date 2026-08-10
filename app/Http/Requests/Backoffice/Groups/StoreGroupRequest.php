@@ -32,7 +32,7 @@ final class StoreGroupRequest extends FormRequest
             'niveau' => ['required', Rule::in(Group::NIVEAUX)],
             'enseignant_id' => ['nullable', 'exists:employees,id'],
             // A new group always starts at the beginning of its lifecycle.
-            'statut' => ['required', Rule::in([Group::STATUT_PRE_INSCRIPTION, Group::STATUT_EN_FORMATION])],
+            'statut' => ['required', Rule::in([Group::STATUT_EN_INSCRIPTION, Group::STATUT_EN_FORMATION])],
             'date_debut_formation' => ['nullable', 'date'],
             'date_fin_formation' => ['nullable', 'date', 'after_or_equal:date_debut_formation'],
             'fraisLignes' => ['nullable', 'array'],

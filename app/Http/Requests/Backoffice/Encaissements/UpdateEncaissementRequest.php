@@ -30,6 +30,9 @@ final class UpdateEncaissementRequest extends FormRequest
             'methode' => ['required', Rule::in(Encaissement::METHODES)],
             'date_paiement' => ['required', 'date'],
             'numero_cheque' => ['nullable', 'required_if:methode,'.Encaissement::METHODE_CHEQUE, 'string', 'max:50'],
+            // Free text — the Banques catalog (Paramètres → Banques) only
+            // feeds the form's autocomplete suggestions, never a hard
+            // constraint on what can be typed.
             'banque' => ['nullable', 'required_if:methode,'.Encaissement::METHODE_CHEQUE, 'string', 'max:100'],
             'date_echeance_cheque' => ['nullable', 'required_if:methode,'.Encaissement::METHODE_CHEQUE, 'date'],
             'note' => ['nullable', 'string'],

@@ -12,8 +12,9 @@ import RelatedRecordsTable from '@/Components/Details/RelatedRecordsTable';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import Pagination from '@/Components/Tables/Pagination';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
+import TableToolbar from '@/Components/Tables/TableToolbar';
 import SearchInput from '@/Components/Tables/SearchInput';
-import FilterDropdown from '@/Components/Tables/FilterDropdown';
+import DateField from '@/Components/Forms/DateField';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import type { PaginatedData, SeanceForm, SeanceRow, SelectOption } from '@/Types';
 
@@ -27,6 +28,7 @@ interface SeancesIndexProps {
         search: string;
         groupFilter: string;
         statutFilter: string;
+        enseignantFilter: string;
         dateFrom: string;
         dateTo: string;
         perPage: number;
@@ -173,34 +175,70 @@ export default function SeancesIndex({
                 )
             }
         >
-            <Card
-                title="Séances"
-                bodyClassName="p-0 py-3"
-                tools={
-                    <FilterDropdown
-                        fields={[
-                            {
-                                name: 'groupFilter',
-                                label: 'Groupe',
-                                value: filters.groupFilter,
-                                options: groupOptions,
-                                placeholder: 'Tous les groupes',
-                            },
-                            {
-                                name: 'statutFilter',
-                                label: 'Statut',
-                                value: filters.statutFilter,
-                                options: statuts.map((statut) => ({ value: statut, label: statut })),
-                                placeholder: 'Tous les statuts',
-                            },
-                            { name: 'dateFrom', label: 'Du', type: 'date', value: filters.dateFrom },
-                            { name: 'dateTo', label: 'Au', type: 'date', value: filters.dateTo },
-                        ]}
-                        onApply={(values) => reload(values)}
-                        onReset={() => reload({ groupFilter: '', statutFilter: '', dateFrom: '', dateTo: '' })}
-                    />
-                }
-            >
+            <Card title="Séances" bodyClassName="p-0 py-3">
+                {/* Filter row (reference CRM's Séances filters): Groupe/
+                    Statut/Enseignant/Date de début/Date de fin. */}
+                <div className="px-3 pt-2">
+                    <TableToolbar>
+                        <div style={{ width: 220 }}>
+                            <label className="form-label" htmlFor="seance-f-groupe">
+                                Groupe
+                            </label>
+                            <SelectField
+                                id="seance-f-groupe"
+                                options={groupOptions}
+                                placeholder="Choisir un niveau scolaire"
+                                value={filters.groupFilter}
+                                onChange={(event) => reload({ groupFilter: event.target.value })}
+                            />
+                        </div>
+                        <div style={{ width: 190 }}>
+                            <label className="form-label" htmlFor="seance-f-statut">
+                                Statut
+                            </label>
+                            <SelectField
+                                id="seance-f-statut"
+                                options={statuts.map((statut) => ({ value: statut, label: statut }))}
+                                placeholder="Choisir un statut"
+                                value={filters.statutFilter}
+                                onChange={(event) => reload({ statutFilter: event.target.value })}
+                            />
+                        </div>
+                        <div style={{ width: 220 }}>
+                            <label className="form-label" htmlFor="seance-f-enseignant">
+                                Enseignant
+                            </label>
+                            <SelectField
+                                id="seance-f-enseignant"
+                                options={enseignants}
+                                placeholder="Choisir un enseignant"
+                                value={filters.enseignantFilter}
+                                onChange={(event) => reload({ enseignantFilter: event.target.value })}
+                            />
+                        </div>
+                        <div style={{ width: 170 }}>
+                            <label className="form-label" htmlFor="seance-f-du">
+                                Date de début
+                            </label>
+                            <DateField
+                                id="seance-f-du"
+                                value={filters.dateFrom}
+                                onChange={(event) => reload({ dateFrom: event.target.value })}
+                            />
+                        </div>
+                        <div style={{ width: 170 }}>
+                            <label className="form-label" htmlFor="seance-f-au">
+                                Date de fin
+                            </label>
+                            <DateField
+                                id="seance-f-au"
+                                value={filters.dateTo}
+                                onChange={(event) => reload({ dateTo: event.target.value })}
+                            />
+                        </div>
+                    </TableToolbar>
+                </div>
+
                 <TableLengthRow
                     perPage={filters.perPage}
                     perPageOptions={perPageOptions}
@@ -263,30 +301,36 @@ export default function SeancesIndex({
                                 <StatusBadge label={row.statut} variant={statutVariant(row.statut)} dot />
                             </td>
                             <td className="text-end">
-                                <RowActions>
+                                <div className="d-flex align-items-center justify-content-end gap-2">
                                     {permissions.mark && (
-                                        <RowActionItem icon="ti-checklist" href={row.showUrl}>
-                                            Faire l'appel
-                                        </RowActionItem>
-                                    )}
-                                    {permissions.update && (
-                                        <RowActionItem icon="ti-edit" onClick={() => openEdit(row)}>
-                                            Modifier
-                                        </RowActionItem>
-                                    )}
-                                    {permissions.delete && (
-                                        <RowActionItem
-                                            icon="ti-trash"
-                                            danger
-                                            onClick={() => {
-                                                setDeleteTarget(row);
-                                                setDeleteError(undefined);
-                                            }}
+                                        <Link
+                                            href={row.showUrl}
+                                            className="btn btn-outline-primary btn-sm d-inline-flex align-items-center"
                                         >
-                                            Supprimer
-                                        </RowActionItem>
+                                            <i className="ti ti-checklist me-1" />
+                                            Faire l'appel
+                                        </Link>
                                     )}
-                                </RowActions>
+                                    <RowActions>
+                                        {permissions.update && (
+                                            <RowActionItem icon="ti-edit" onClick={() => openEdit(row)}>
+                                                Modifier
+                                            </RowActionItem>
+                                        )}
+                                        {permissions.delete && (
+                                            <RowActionItem
+                                                icon="ti-trash"
+                                                danger
+                                                onClick={() => {
+                                                    setDeleteTarget(row);
+                                                    setDeleteError(undefined);
+                                                }}
+                                            >
+                                                Supprimer
+                                            </RowActionItem>
+                                        )}
+                                    </RowActions>
+                                </div>
                             </td>
                         </tr>
                     ))}

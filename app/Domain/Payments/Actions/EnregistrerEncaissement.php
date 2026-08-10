@@ -33,7 +33,11 @@ final class EnregistrerEncaissement
 
             Caisse::query()->whereKey($data['caisse_id'])->increment('solde', (float) $data['montant']);
 
-            $this->recalculerStatutFee($encaissement->fee);
+            // An avance (no fee attached — see Encaissement::isAvance()) has
+            // nothing to recompute here.
+            if ($encaissement->fee !== null) {
+                $this->recalculerStatutFee($encaissement->fee);
+            }
 
             return $encaissement;
         });

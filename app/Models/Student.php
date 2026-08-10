@@ -191,4 +191,11 @@ class Student extends Model implements HasMedia
 
         return self::niveauDemandeExamen($this->niveau) ? $this->examen_type : null;
     }
+
+    /** Uploaded photo, or the sexe-based default avatar (man/girl) when none exists. */
+    public function avatarUrl(): string
+    {
+        return $this->getFirstMediaUrl('photo')
+            ?: asset($this->sexe === 'Femme' ? 'assets/images/avatar/defaultgirl.webp' : 'assets/images/avatar/defaultman.webp');
+    }
 }

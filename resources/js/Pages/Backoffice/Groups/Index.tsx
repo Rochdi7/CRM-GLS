@@ -1,13 +1,12 @@
 import { router, useForm } from '@inertiajs/react';
 import { useState, type FormEvent } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
-import PageTabs from '@/Components/Navigation/PageTabs';
-import { GROUPS_TABS } from '@/Config/pageTabs';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
+import TableToolbar from '@/Components/Tables/TableToolbar';
+import FilterTextInput from '@/Components/Tables/FilterTextInput';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
-import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
@@ -21,7 +20,7 @@ import type { GroupFraisLigne, GroupRow, GroupsPageProps, SelectOption } from '@
 
 const STATUT_TABS: Array<{ key: string; icon: string; label: string }> = [
     { key: 'En formation', icon: 'ti-school', label: 'En formation' },
-    { key: 'Pré-inscription', icon: 'ti-folder', label: 'Pré-inscription' },
+    { key: 'En inscription', icon: 'ti-folder', label: 'En inscription' },
     { key: 'Fin de formation', icon: 'ti-history', label: 'Historique' },
 ];
 
@@ -49,7 +48,7 @@ function emptyForm(fraisCatalog: SelectOption[]): GroupFormState {
         nom: '',
         niveau: '',
         enseignant_id: '',
-        statut: 'Pré-inscription',
+        statut: 'En inscription',
         date_debut_formation: '',
         date_fin_formation: '',
         fraisLignes: emptyFraisLignes(fraisCatalog),
@@ -81,15 +80,15 @@ export default function GroupsIndex({
     const fraisCatalogOptions: SelectOption[] = fraisCatalog.map((f) => ({ value: f.id, label: f.nom }));
     const niveauOptions: SelectOption[] = niveaux.map((n) => ({ value: n, label: n }));
     const enseignantOptions: SelectOption[] = enseignants.map((e) => ({ value: e.id, label: e.nom }));
-    // Create-mode status options omit "Fin de formation" — matches the
-    // Livewire form's select which only lists Pré-inscription/En formation
-    // when creating.
+    const statutFilterOptions: SelectOption[] = STATUT_TABS.map((tab) => ({ value: tab.key, label: tab.label }));
+    // Create-mode status options omit "Fin de formation" — a group can only
+    // reach it through the archive action (Group::archiverCommeTermine).
     const createStatutOptions: SelectOption[] = [
-        { value: 'Pré-inscription', label: 'Pré-inscription' },
+        { value: 'En inscription', label: 'En inscription' },
         { value: 'En formation', label: 'En formation' },
     ];
     const editStatutOptions: SelectOption[] = [
-        { value: 'Pré-inscription', label: 'Pré-inscription' },
+        { value: 'En inscription', label: 'En inscription' },
         { value: 'En formation', label: 'En formation' },
         { value: 'Fin de formation', label: 'Fin de formation' },
     ];
@@ -180,22 +179,81 @@ export default function GroupsIndex({
                 </button>
             }
         >
-            <PageTabs tabs={GROUPS_TABS} />
-
             <Card title="Groupes" bodyClassName="p-0 py-3">
+                {/* Filter row (reference CRM's Groupes filters, without a
+                    Formation column) — Groupe/Statut/Enseignant/dates. */}
+                <div className="px-3 pt-2">
+                    <TableToolbar>
+                        <div style={{ width: 220 }}>
+                            <label className="form-label" htmlFor="grp-f-nom">
+                                Groupe
+                            </label>
+                            <FilterTextInput
+                                id="grp-f-nom"
+                                value={filters.search}
+                                onChange={(value) => reload({ search: value })}
+                                placeholder="ex : Herr Driss 13h"
+                            />
+                        </div>
+                        <div style={{ width: 190 }}>
+                            <label className="form-label" htmlFor="grp-f-statut">
+                                Statut
+                            </label>
+                            <SelectField
+                                id="grp-f-statut"
+                                options={statutFilterOptions}
+                                placeholder="Choisir un statut"
+                                value={filters.statutFilter}
+                                onChange={(event) => setStatutTab(event.target.value)}
+                            />
+                        </div>
+                        <div style={{ width: 220 }}>
+                            <label className="form-label" htmlFor="grp-f-enseignant">
+                                Enseignant
+                            </label>
+                            <SelectField
+                                id="grp-f-enseignant"
+                                options={enseignantOptions}
+                                placeholder="Choisir un enseignant"
+                                value={filters.enseignantFilter}
+                                onChange={(event) => reload({ enseignantFilter: event.target.value })}
+                            />
+                        </div>
+                        <div style={{ width: 170 }}>
+                            <label className="form-label" htmlFor="grp-f-du">
+                                Date de début
+                            </label>
+                            <DateField
+                                id="grp-f-du"
+                                value={filters.dateFrom}
+                                onChange={(event) => reload({ dateFrom: event.target.value })}
+                            />
+                        </div>
+                        <div style={{ width: 170 }}>
+                            <label className="form-label" htmlFor="grp-f-au">
+                                Date de fin
+                            </label>
+                            <DateField
+                                id="grp-f-au"
+                                value={filters.dateTo}
+                                onChange={(event) => reload({ dateTo: event.target.value })}
+                            />
+                        </div>
+                    </TableToolbar>
+                </div>
+
                 <TableLengthRow
                     perPage={filters.perPage}
                     perPageOptions={perPageOptions}
                     onPerPageChange={(perPage) => reload({ perPage })}
-                    search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} placeholder="Rechercher" />}
                 />
 
-                <ul className="nav nav-tabs nav-tabs-solid mb-3 px-3" role="tablist">
+                <ul className="nav nav-tabs nav-tabs-solid nav-tabs-rounded-fill mb-3 px-3" role="tablist">
                     {STATUT_TABS.map((tab) => (
-                        <li className="nav-item" role="presentation" key={tab.key}>
+                        <li className="me-2 mb-2" role="presentation" key={tab.key}>
                             <button
                                 type="button"
-                                className={`nav-link border-0${filters.statutFilter === tab.key ? ' active' : ''}`}
+                                className={`nav-link rounded${filters.statutFilter === tab.key ? ' active' : ''}`}
                                 onClick={() => setStatutTab(tab.key)}
                             >
                                 <i className={`ti ${tab.icon} me-1`} />
@@ -217,10 +275,9 @@ export default function GroupsIndex({
                             head={
                                 <tr>
                                     <th>Nom</th>
-                                    <th>Niveau</th>
+                                    <th>Classification</th>
                                     <th>Enseignant</th>
-                                    <th>Étudiants</th>
-                                    <th>Frais</th>
+                                    <th>Statistique</th>
                                     <th>Statut</th>
                                     <th className="text-end">Action</th>
                                 </tr>
@@ -234,10 +291,20 @@ export default function GroupsIndex({
                                     </td>
                                     <td>{group.enseignant ?? '—'}</td>
                                     <td>
-                                        <span className="badge badge-soft-secondary">{group.inscriptionsCount}</span>
-                                    </td>
-                                    <td>
-                                        <span className="badge badge-soft-secondary">{group.fraisCount}</span>
+                                        <div className="d-flex flex-wrap gap-1">
+                                            <span className="badge badge-soft-secondary" title="Total inscriptions">
+                                                {group.inscriptionsCount}
+                                            </span>
+                                            <span className="badge badge-soft-success" title="Inscriptions actives">
+                                                {group.inscriptionsActivesCount}
+                                            </span>
+                                            <span className="badge badge-soft-danger" title="Inscriptions annulées">
+                                                {group.inscriptionsAnnuleesCount}
+                                            </span>
+                                            <span className="badge badge-soft-info" title="Étudiants">
+                                                {group.etudiantsDistinctsCount}
+                                            </span>
+                                        </div>
                                     </td>
                                     <td>
                                         <StatusBadge

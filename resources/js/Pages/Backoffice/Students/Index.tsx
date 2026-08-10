@@ -4,9 +4,9 @@ import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
-import FilterDropdown from '@/Components/Tables/FilterDropdown';
+import TableToolbar from '@/Components/Tables/TableToolbar';
+import FilterTextInput from '@/Components/Tables/FilterTextInput';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
-import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
@@ -17,6 +17,7 @@ import SelectField from '@/Components/Forms/SelectField';
 import TextareaField from '@/Components/Forms/TextareaField';
 import PhoneField from '@/Components/Forms/PhoneField';
 import FormActions from '@/Components/Forms/FormActions';
+import SexeIcon from '@/Components/Details/SexeIcon';
 import { splitPhone } from '@/Data/countries';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import type { SelectOption, StudentRow, StudentsPageProps } from '@/Types';
@@ -115,6 +116,12 @@ export default function StudentsIndex({
     const centerOptions: SelectOption[] = etablissements.map((etab) => ({ value: etab.id, label: etab.nom_centre }));
     const niveauFilterOptions: SelectOption[] = niveaux.map((n) => ({ value: n, label: n }));
     const sexeFilterOptions: SelectOption[] = sexes.map((s) => ({ value: s, label: s }));
+    // État d'inscription (reference CRM's filter) — machine values, French labels.
+    const inscriptionFilterOptions: SelectOption[] = [
+        { value: 'active', label: 'Avec une inscription active' },
+        { value: 'cancelled', label: 'Inscription annulée ou archivée' },
+        { value: 'none', label: 'Sans inscription' },
+    ];
 
     const showsDomaine = niveauxAvecDomaine.includes(form.data.niveau);
     const showsExamen = form.data.niveau === niveauStudium;
@@ -273,44 +280,111 @@ export default function StudentsIndex({
                 </button>
             }
         >
-            <Card
-                title="Étudiants"
-                bodyClassName="p-0 py-3"
-                tools={
-                    <FilterDropdown
-                        fields={[
-                            {
-                                name: 'niveauFilter',
-                                label: 'Niveau',
-                                value: filters.niveauFilter,
-                                options: niveauFilterOptions,
-                                placeholder: 'Tous les niveaux',
-                            },
-                            {
-                                name: 'sexeFilter',
-                                label: 'Sexe',
-                                value: filters.sexeFilter,
-                                options: sexeFilterOptions,
-                                placeholder: 'Tous',
-                            },
-                            {
-                                name: 'etablissementFilter',
-                                label: 'Centre',
-                                value: filters.etablissementFilter,
-                                options: centerOptions,
-                                placeholder: 'Tous les centres',
-                            },
-                        ]}
-                        onApply={(values) => reload(values)}
-                        onReset={() => reload({ niveauFilter: '', sexeFilter: '', etablissementFilter: '' })}
-                    />
-                }
-            >
+            <Card title="Étudiants" bodyClassName="p-0 py-3">
+                {/* Per-column filter row (reference CRM's Étudiants filters,
+                    without Catégorie d'âge) — replaces the single search box
+                    AND the "Filtrer" dropdown (Niveau/Centre moved in here). */}
+                <div className="px-3 pt-2">
+                    <TableToolbar>
+                        <div style={{ width: 150 }}>
+                            <label className="form-label" htmlFor="stu-f-reference">
+                                Référence
+                            </label>
+                            <FilterTextInput
+                                id="stu-f-reference"
+                                value={filters.referenceFilter}
+                                onChange={(value) => reload({ referenceFilter: value })}
+                                placeholder="ex : E95"
+                            />
+                        </div>
+                        <div style={{ width: 160 }}>
+                            <label className="form-label" htmlFor="stu-f-nom">
+                                Nom
+                            </label>
+                            <FilterTextInput
+                                id="stu-f-nom"
+                                value={filters.nomFilter}
+                                onChange={(value) => reload({ nomFilter: value })}
+                                placeholder="ex : Alaoui"
+                            />
+                        </div>
+                        <div style={{ width: 160 }}>
+                            <label className="form-label" htmlFor="stu-f-prenom">
+                                Prénom
+                            </label>
+                            <FilterTextInput
+                                id="stu-f-prenom"
+                                value={filters.prenomFilter}
+                                onChange={(value) => reload({ prenomFilter: value })}
+                                placeholder="ex : Ahmed"
+                            />
+                        </div>
+                        <div style={{ width: 160 }}>
+                            <label className="form-label" htmlFor="stu-f-telephone">
+                                Téléphone
+                            </label>
+                            <FilterTextInput
+                                id="stu-f-telephone"
+                                value={filters.telephoneFilter}
+                                onChange={(value) => reload({ telephoneFilter: value })}
+                                placeholder="ex : 2126619"
+                            />
+                        </div>
+                        <div style={{ width: 180 }}>
+                            <label className="form-label" htmlFor="stu-f-sexe">
+                                Sexe
+                            </label>
+                            <SelectField
+                                id="stu-f-sexe"
+                                options={sexeFilterOptions}
+                                placeholder="Sélectionner le sexe"
+                                value={filters.sexeFilter}
+                                onChange={(event) => reload({ sexeFilter: event.target.value })}
+                            />
+                        </div>
+                        <div style={{ width: 240 }}>
+                            <label className="form-label" htmlFor="stu-f-inscription">
+                                État d'inscription
+                            </label>
+                            <SelectField
+                                id="stu-f-inscription"
+                                options={inscriptionFilterOptions}
+                                placeholder="Tous"
+                                value={filters.inscriptionFilter}
+                                onChange={(event) => reload({ inscriptionFilter: event.target.value })}
+                            />
+                        </div>
+                        <div style={{ width: 180 }}>
+                            <label className="form-label" htmlFor="stu-f-niveau">
+                                Niveau
+                            </label>
+                            <SelectField
+                                id="stu-f-niveau"
+                                options={niveauFilterOptions}
+                                placeholder="Tous les niveaux"
+                                value={filters.niveauFilter}
+                                onChange={(event) => reload({ niveauFilter: event.target.value })}
+                            />
+                        </div>
+                        <div style={{ width: 220 }}>
+                            <label className="form-label" htmlFor="stu-f-centre">
+                                Centre
+                            </label>
+                            <SelectField
+                                id="stu-f-centre"
+                                options={centerOptions}
+                                placeholder="Tous les centres"
+                                value={filters.etablissementFilter}
+                                onChange={(event) => reload({ etablissementFilter: event.target.value })}
+                            />
+                        </div>
+                    </TableToolbar>
+                </div>
+
                 <TableLengthRow
                     perPage={filters.perPage}
                     perPageOptions={perPageOptions}
                     onPerPageChange={(perPage) => reload({ perPage })}
-                    search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} placeholder="Rechercher" />}
                 />
 
                 {students.data.length === 0 ? (
@@ -321,6 +395,7 @@ export default function StudentsIndex({
                             loading={isLoading}
                             head={
                                 <tr>
+                                    <th />
                                     <th>Référence</th>
                                     <th>Nom</th>
                                     <th>Intéressé par</th>
@@ -341,12 +416,16 @@ export default function StudentsIndex({
                                     </th>
                                     <th>Centre</th>
                                     <th>Téléphone</th>
+                                    <th>WhatsApp</th>
                                     <th className="text-end">Action</th>
                                 </tr>
                             }
                         >
                             {students.data.map((student) => (
                                 <tr key={student.id}>
+                                    <td>
+                                        <SexeIcon sexe={student.sexe} />
+                                    </td>
                                     <td>
                                         <code>{student.reference}</code>
                                     </td>
@@ -383,6 +462,7 @@ export default function StudentsIndex({
                                     <td>{student.age ?? '—'}</td>
                                     <td>{student.etablissement ?? '—'}</td>
                                     <td>{student.telephone ?? '—'}</td>
+                                    <td>{student.whatsapp ?? '—'}</td>
                                     <td className="text-end">
                                         <RowActions>
                                             <RowActionItem icon="ti-edit" onClick={() => openEdit(student)}>
