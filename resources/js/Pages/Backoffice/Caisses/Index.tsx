@@ -129,22 +129,28 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
 
             <Card title={scope === 'mine' ? 'Ma caisse' : 'Journal des transactions'}>
                 <TableToolbar>
-                    <SelectField
-                        id={`cj-type-${scope}`}
-                        label="Type de transaction"
-                        options={[
-                            { value: 'paiement', label: 'Paiements' },
-                            { value: 'depense', label: 'Dépenses' },
-                            { value: 'remboursement', label: 'Remboursements' },
-                            { value: 'transfert', label: 'Transferts' },
-                        ]}
-                        placeholder="Tous les types"
-                        value={typeFilter}
-                        onChange={(e) => {
-                            setTypeFilter(e.target.value);
-                            setPage(1);
-                        }}
-                    />
+                    {/* External label + bare SelectField, matching the Du/Au
+                        blocks exactly so the three fields align on one row. */}
+                    <div style={{ width: 200 }}>
+                        <label className="form-label" htmlFor={`cj-type-${scope}`}>
+                            Type de transaction
+                        </label>
+                        <SelectField
+                            id={`cj-type-${scope}`}
+                            options={[
+                                { value: 'paiement', label: 'Paiements' },
+                                { value: 'depense', label: 'Dépenses' },
+                                { value: 'remboursement', label: 'Remboursements' },
+                                { value: 'transfert', label: 'Transferts' },
+                            ]}
+                            placeholder="Tous les types"
+                            value={typeFilter}
+                            onChange={(e) => {
+                                setTypeFilter(e.target.value);
+                                setPage(1);
+                            }}
+                        />
+                    </div>
                     <div style={{ width: 160 }}>
                         <label className="form-label" htmlFor={`cj-from-${scope}`}>
                             Du
