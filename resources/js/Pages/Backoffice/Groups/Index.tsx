@@ -269,10 +269,10 @@ export default function GroupsIndex({
                 )}
             </Card>
 
-            <Modal show={showModal} title={editingGroup ? 'Modifier le groupe' : 'Ajouter un groupe'} onClose={closeModal} processing={form.processing} size="lg">
+            <Modal show={showModal} title={editingGroup ? 'Modifier le groupe' : 'Ajouter un groupe'} onClose={closeModal} processing={form.processing} size="xl">
                 <form onSubmit={submit}>
                     <div className="row">
-                        <div className="col-md-8">
+                        <div className="col-md-3">
                             <FormField
                                 id="grp-nom"
                                 label="Nom"
@@ -283,7 +283,7 @@ export default function GroupsIndex({
                                 placeholder="ex : Herr Driss 13h - Intensifs"
                             />
                         </div>
-                        <div className="col-md-4">
+                        <div className="col-md-3">
                             <SelectField
                                 id="grp-niveau"
                                 label="Niveau"
@@ -295,7 +295,7 @@ export default function GroupsIndex({
                                 error={form.errors.niveau}
                             />
                         </div>
-                        <div className="col-md-6">
+                        <div className="col-md-3">
                             <SelectField
                                 id="grp-ens"
                                 label="Enseignant"
@@ -306,7 +306,7 @@ export default function GroupsIndex({
                                 error={form.errors.enseignant_id}
                             />
                         </div>
-                        <div className="col-md-6">
+                        <div className="col-md-3">
                             <SelectField
                                 id="grp-statut"
                                 label="Statut"
@@ -317,7 +317,7 @@ export default function GroupsIndex({
                                 error={form.errors.statut}
                             />
                         </div>
-                        <div className="col-md-6">
+                        <div className="col-md-3">
                             <DateField
                                 id="grp-debut"
                                 label="Date de début"
@@ -326,7 +326,7 @@ export default function GroupsIndex({
                                 error={form.errors.date_debut_formation}
                             />
                         </div>
-                        <div className="col-md-6">
+                        <div className="col-md-3">
                             <DateField
                                 id="grp-fin"
                                 label="Date de fin"
