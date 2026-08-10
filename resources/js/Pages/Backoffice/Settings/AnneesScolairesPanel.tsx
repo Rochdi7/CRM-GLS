@@ -2,6 +2,7 @@ import { useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import Modal from '@/Components/Modals/Modal';
 import ConfirmDialog from '@/Components/Modals/ConfirmDialog';
+import DateField from '@/Components/Forms/DateField';
 import FormField from '@/Components/Forms/FormField';
 import CheckboxField from '@/Components/Forms/CheckboxField';
 import FormActions from '@/Components/Forms/FormActions';
@@ -198,10 +199,9 @@ export default function AnneesScolairesPanel({ anneesScolaires, permissions }: A
                             />
                         </div>
                         <div className="col-md-4">
-                            <FormField
+                            <DateField
                                 id="a-debut"
                                 label="Date de début"
-                                type="date"
                                 required
                                 value={form.data.date_debut}
                                 onChange={(event) => form.setData('date_debut', event.target.value)}
@@ -209,10 +209,9 @@ export default function AnneesScolairesPanel({ anneesScolaires, permissions }: A
                             />
                         </div>
                         <div className="col-md-4">
-                            <FormField
+                            <DateField
                                 id="a-fin"
                                 label="Date de fin"
-                                type="date"
                                 required
                                 value={form.data.date_fin}
                                 onChange={(event) => form.setData('date_fin', event.target.value)}

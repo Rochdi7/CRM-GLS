@@ -23,8 +23,10 @@ use App\Http\Controllers\Backoffice\PermissionController;
 use App\Http\Controllers\Backoffice\ProfileController;
 use App\Http\Controllers\Backoffice\RemboursementController;
 use App\Http\Controllers\Backoffice\Roles\RoleController;
+use App\Http\Controllers\Backoffice\SeanceController;
 use App\Http\Controllers\Backoffice\SettingController;
 use App\Http\Controllers\Backoffice\SalleController;
+use App\Http\Controllers\Backoffice\StockController;
 use App\Http\Controllers\Backoffice\StudentController;
 use App\Http\Controllers\Backoffice\TypeDepenseController;
 use App\Http\Controllers\Backoffice\Users\UserAuthorizationController;
@@ -162,6 +164,39 @@ Route::prefix('backoffice')
             Route::post('groups/{group}/archive', [GroupController::class, 'archive'])->name('groups.archive');
             Route::get('groups-historique', [GroupHistoriqueController::class, 'index'])
                 ->name('groups-historique.index');
+
+            // Attendance (Présences) — séances list + modal add/edit; the
+            // per-séance fiche de présence lives on the show page, saved as
+            // one roll call (attendance.mark). Center + academic year are
+            // inherited from the séance's group (SeanceController).
+            Route::get('seances', [SeanceController::class, 'index'])
+                ->middleware('permission:attendance.view')->name('seances.index');
+            Route::post('seances', [SeanceController::class, 'store'])
+                ->middleware('permission:attendance.create')->name('seances.store');
+            Route::put('seances/{seance}', [SeanceController::class, 'update'])
+                ->middleware('permission:attendance.update')->name('seances.update');
+            Route::delete('seances/{seance}', [SeanceController::class, 'destroy'])
+                ->middleware('permission:attendance.delete')->name('seances.destroy');
+            Route::get('seances/{seance}', [SeanceController::class, 'show'])
+                ->name('seances.show');
+            Route::put('seances/{seance}/presences', [SeanceController::class, 'savePresences'])
+                ->middleware('permission:attendance.mark')->name('seances.presences.update');
+
+            // Stock — ONE Inertia page (Articles + Mouvements tabs). Article
+            // quantities only move through mouvement endpoints (caisse
+            // pattern); movements have NO update/destroy routes — ever
+            // (compensating entries only). Articles with history can't be
+            // deleted (guard in StockController + restrictOnDelete FK).
+            Route::get('stock', [StockController::class, 'index'])
+                ->middleware('permission:stock.view')->name('stock.index');
+            Route::post('stock-articles', [StockController::class, 'storeArticle'])
+                ->middleware('permission:stock.create')->name('stock-articles.store');
+            Route::put('stock-articles/{article}', [StockController::class, 'updateArticle'])
+                ->middleware('permission:stock.update')->name('stock-articles.update');
+            Route::delete('stock-articles/{article}', [StockController::class, 'destroyArticle'])
+                ->middleware('permission:stock.delete')->name('stock-articles.destroy');
+            Route::post('stock-mouvements', [StockController::class, 'storeMouvement'])
+                ->middleware('permission:stock.move')->name('stock-mouvements.store');
 
             // Enrollments — Inertia/React list + modal add/edit with manual
             // fee lines (Phase 9, docs/phase-9-inscriptions-audit.md +

@@ -63,7 +63,10 @@ final class RolesAndPermissionsSeederTest extends TestCase
 
         $teacher = Role::findByName('teacher');
         $this->assertEqualsCanonicalizing(
-            ['dashboard.view', 'groups.view', 'students.view'],
+            [
+                'dashboard.view', 'groups.view', 'students.view',
+                'attendance.view', 'attendance.create', 'attendance.mark',
+            ],
             $teacher->permissions()->pluck('name')->all(),
         );
 

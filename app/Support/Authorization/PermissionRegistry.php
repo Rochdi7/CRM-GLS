@@ -94,6 +94,13 @@ final class PermissionRegistry
                 'groups.update' => 'Modifier un groupe',
                 'groups.archive' => 'Clôturer un groupe (Fin de formation)',
             ],
+            'Présences' => [
+                'attendance.view' => 'Consulter les séances et présences',
+                'attendance.create' => 'Créer une séance',
+                'attendance.update' => 'Modifier une séance',
+                'attendance.delete' => 'Supprimer une séance',
+                'attendance.mark' => 'Faire l\'appel (enregistrer les présences)',
+            ],
             'Caisses' => [
                 'cash-registers.view' => 'Consulter les caisses',
                 'cash-registers.create' => 'Créer une caisse',
@@ -126,6 +133,13 @@ final class PermissionRegistry
                 'cash-transfers.create' => 'Demander un transfert de caisse',
                 'cash-transfers.update' => 'Modifier ou annuler un transfert en attente',
                 'cash-transfers.validate' => 'Valider un transfert de caisse',
+            ],
+            'Stock' => [
+                'stock.view' => 'Consulter le stock',
+                'stock.create' => 'Créer un article de stock',
+                'stock.update' => 'Modifier un article de stock',
+                'stock.delete' => 'Supprimer un article de stock',
+                'stock.move' => 'Enregistrer un mouvement de stock',
             ],
             'Journal d\'audit' => [
                 'audit-logs.view' => 'Consulter le journal d\'audit',
@@ -203,12 +217,14 @@ final class PermissionRegistry
                 'registrations.view', 'registrations.create', 'registrations.update',
                 'registrations.delete', 'registrations.manage-fees',
                 'groups.view', 'groups.create', 'groups.update', 'groups.archive',
+                'attendance.view', 'attendance.create', 'attendance.update', 'attendance.delete', 'attendance.mark',
                 'cash-registers.view', 'cash-registers.create', 'cash-registers.update', 'cash-registers.delete',
                 'payments.view', 'payments.create', 'payments.update',
                 'expense-types.view', 'expense-types.create', 'expense-types.update', 'expense-types.delete',
                 'expenses.view', 'expenses.create', 'expenses.update',
                 'refunds.view', 'refunds.create', 'refunds.update',
                 'cash-transfers.view', 'cash-transfers.create', 'cash-transfers.update', 'cash-transfers.validate',
+                'stock.view', 'stock.create', 'stock.update', 'stock.delete', 'stock.move',
                 'audit-logs.view',
             ],
 
@@ -223,12 +239,14 @@ final class PermissionRegistry
                 'registrations.view', 'registrations.create', 'registrations.update',
                 'registrations.delete', 'registrations.manage-fees',
                 'groups.view', 'groups.create', 'groups.update', 'groups.archive',
+                'attendance.view', 'attendance.create', 'attendance.update', 'attendance.mark',
                 'cash-registers.view',
                 'payments.view',
                 'expense-types.view',
                 'expenses.view',
                 'refunds.view',
                 'cash-transfers.view',
+                'stock.view', 'stock.create', 'stock.update', 'stock.delete', 'stock.move',
             ],
 
             // Center-scoped day-to-day operator: records payments/expenses and
@@ -242,20 +260,22 @@ final class PermissionRegistry
                 'students.view', 'students.create', 'students.update',
                 'registrations.view', 'registrations.create', 'registrations.update', 'registrations.manage-fees',
                 'groups.view',
+                'attendance.view', 'attendance.create', 'attendance.mark',
                 'cash-registers.view',
                 'payments.view', 'payments.create',
                 'expense-types.view',
                 'expenses.view', 'expenses.create',
                 'refunds.view', 'refunds.create',
                 'cash-transfers.view', 'cash-transfers.create',
+                'stock.view', 'stock.move',
             ],
 
-            // Academic scope only — no financial data. Attendance permissions
-            // will be added with the attendance module.
+            // Academic scope only — no financial data.
             'teacher' => [
                 'dashboard.view',
                 'groups.view',
                 'students.view',
+                'attendance.view', 'attendance.create', 'attendance.mark',
             ],
 
             // Prospects/marketing-reports permissions will be added with those

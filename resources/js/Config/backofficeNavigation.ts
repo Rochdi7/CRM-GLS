@@ -62,6 +62,14 @@ export const backofficeNavigation: NavGroup[] = [
                 matchPaths: ['/backoffice/groups'],
                 inertia: true,
             },
+            {
+                label: t('Attendance'),
+                href: '/backoffice/seances',
+                icon: 'ti ti-calendar-check',
+                permissions: ['attendance.view'],
+                matchPaths: ['/backoffice/seances'],
+                inertia: true,
+            },
             // Hidden by product decision — the page stays reachable at
             // /backoffice/groups-historique (groups.view); re-enable when
             // it should appear in the sidebar.
@@ -107,6 +115,19 @@ export const backofficeNavigation: NavGroup[] = [
             },
             // Types de dépenses stays out of the sidebar — reachable via the
             // finance PageTabs (product decision).
+        ],
+    },
+    {
+        label: t('Stock'),
+        items: [
+            {
+                label: t('Stock management'),
+                href: '/backoffice/stock',
+                icon: 'ti ti-packages',
+                permissions: ['stock.view'],
+                matchPaths: ['/backoffice/stock'],
+                inertia: true,
+            },
         ],
     },
     {

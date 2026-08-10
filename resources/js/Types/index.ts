@@ -377,6 +377,7 @@ export interface SeanceStudentLine {
     reference: string;
     nom: string;
     prenom: string;
+    photoUrl: string | null;
     statut: string | null;
     note: string;
 }
@@ -389,6 +390,7 @@ export interface SeanceDetails {
     groupNom: string | null;
     groupNiveau: string | null;
     enseignant: string | null;
+    enseignantId: number | null;
     statut: string;
     note: string | null;
     students: SeanceStudentLine[];
