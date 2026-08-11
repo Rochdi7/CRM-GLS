@@ -14,6 +14,8 @@ interface DateFieldProps {
     required?: boolean;
     disabled?: boolean;
     placeholder?: string;
+    /** 'right' opens the panel flush with the input's right edge instead of its left — use for fields near the right edge of a modal/table (e.g. a last table column) where a left-aligned panel would overflow off-screen. */
+    panelAlign?: 'left' | 'right';
 }
 
 const WEEKDAYS = ['lu', 'ma', 'me', 'je', 've', 'sa', 'di'];
@@ -117,6 +119,7 @@ export default function DateField({
     required,
     disabled = false,
     placeholder,
+    panelAlign = 'left',
 }: DateFieldProps) {
     const [open, setOpen] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
@@ -273,7 +276,14 @@ export default function DateField({
                         className="bg-white border rounded-3 shadow p-3"
                         role="dialog"
                         aria-label={monthTitle}
-                        style={{ position: 'absolute', top: '100%', left: 0, zIndex: 1070, width: 300, marginTop: 4 }}
+                        style={{
+                            position: 'absolute',
+                            top: '100%',
+                            ...(panelAlign === 'right' ? { right: 0 } : { left: 0 }),
+                            zIndex: 1070,
+                            width: 300,
+                            marginTop: 4,
+                        }}
                     >
                         <div className="d-flex align-items-center justify-content-between mb-2">
                             <button

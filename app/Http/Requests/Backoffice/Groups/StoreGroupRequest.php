@@ -33,8 +33,8 @@ final class StoreGroupRequest extends FormRequest
             'enseignant_id' => ['nullable', 'exists:employees,id'],
             // A new group always starts at the beginning of its lifecycle.
             'statut' => ['required', Rule::in([Group::STATUT_EN_INSCRIPTION, Group::STATUT_EN_FORMATION])],
-            'date_debut_formation' => ['nullable', 'date'],
-            'date_fin_formation' => ['nullable', 'date', 'after_or_equal:date_debut_formation'],
+            'date_debut_formation' => ['required', 'date'],
+            'date_fin_formation' => ['required', 'date', 'after_or_equal:date_debut_formation'],
             'fraisLignes' => ['nullable', 'array'],
             'fraisLignes.*.montant' => ['required', 'numeric', 'min:0'],
             'fraisLignes.*.date_echeance' => ['nullable', 'date'],

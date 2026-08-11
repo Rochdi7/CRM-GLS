@@ -139,10 +139,12 @@ final class GroupController extends Controller
         DB::transaction(function () use ($data, $fraisLignes, $group): void {
             $statut = $data['statut'];
 
-            // A raw statut change to "Fin de formation" must go through the
-            // archive method — block it here (do it from the detail page),
-            // exactly as GroupsIndex::save() does.
-            if ($statut === Group::STATUT_FIN_FORMATION && $group->statut !== Group::STATUT_FIN_FORMATION) {
+            // A raw statut change to either terminal status (Fin de
+            // formation or Annulée) must go through archive()/annuler() —
+            // block it here, exactly as GroupsIndex::save() does for Fin de
+            // formation, so the groups_historique snapshot always stays in
+            // sync with the live statut.
+            if (in_array($statut, Group::STATUTS_HISTORIQUE, true) && ! in_array($group->statut, Group::STATUTS_HISTORIQUE, true)) {
                 $statut = $group->statut;
             }
 
@@ -180,6 +182,66 @@ final class GroupController extends Controller
 
         return redirect()->route('backoffice.groups.show', $group)
             ->with('status', __('Group archived (Fin de formation).'));
+    }
+
+    /**
+     * Quick row-menu action from the list — cancels a group (never actually
+     * ran), moving it into the Historique tab alongside "Fin de formation"
+     * groups. Only offered from the "En formation" tab in the UI (never a
+     * bare "En inscription" group, and never an already-terminal one), same
+     * groups.archive permission gate as the existing Terminer action.
+     */
+    public function annuler(Request $request, Group $group): RedirectResponse
+    {
+        $this->authorize('archive', $group);
+
+        if (in_array($group->statut, Group::STATUTS_HISTORIQUE, true)) {
+            return back();
+        }
+
+        $group->annuler($request->user()?->employee);
+
+        return redirect()->route('backoffice.groups.index')
+            ->with('success', __('Group cancelled.'));
+    }
+
+    /**
+     * Quick row-menu action from the list — reverses annuler(), bringing a
+     * cancelled group back to "En inscription". Only offered from the
+     * Historique tab in the UI, and only ever fires from Annulée (never
+     * from Fin de formation, which stays a one-way transition).
+     */
+    public function reactiver(Request $request, Group $group): RedirectResponse
+    {
+        $this->authorize('archive', $group);
+
+        if ($group->statut !== Group::STATUT_ANNULEE) {
+            return back();
+        }
+
+        $group->reactiver();
+
+        return redirect()->route('backoffice.groups.index')
+            ->with('success', __('Group reactivated.'));
+    }
+
+    /**
+     * Quick row-menu action from the list — starts the training, moving a
+     * group from "En inscription" to "En formation". Only offered from the
+     * En inscription tab in the UI, and only ever fires from that status.
+     */
+    public function activer(Request $request, Group $group): RedirectResponse
+    {
+        $this->authorize('archive', $group);
+
+        if ($group->statut !== Group::STATUT_EN_INSCRIPTION) {
+            return back();
+        }
+
+        $group->activer();
+
+        return redirect()->route('backoffice.groups.index')
+            ->with('success', __('Group started.'));
     }
 
     /**

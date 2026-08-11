@@ -8,8 +8,9 @@ import TableToolbar from '@/Components/Tables/TableToolbar';
 import FilterTextInput from '@/Components/Tables/FilterTextInput';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import Pagination from '@/Components/Tables/Pagination';
-import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
+import RowActions, { RowActionDivider, RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
+import ConfirmDialog from '@/Components/Modals/ConfirmDialog';
 import DateField from '@/Components/Forms/DateField';
 import FormField from '@/Components/Forms/FormField';
 import SelectField from '@/Components/Forms/SelectField';
@@ -18,7 +19,7 @@ import StatusBadge from '@/Components/Details/StatusBadge';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import type { GroupFraisLigne, GroupRow, GroupsPageProps, GroupStudentSegmentRow, SelectOption } from '@/Types';
 
-type StatsSegment = 'total' | 'active' | 'annulee' | 'etudiants';
+type StatsSegment = 'total' | 'active' | 'annulee' | 'changement' | 'etudiants';
 
 /** Rows per page of the "Frais du groupe" table — client-side only, no server round trip for this in-memory list. */
 const GROUP_FRAIS_PER_PAGE = 5;
@@ -27,6 +28,7 @@ const STATS_SEGMENT_LABELS: Record<StatsSegment, string> = {
     total: 'Total inscriptions',
     active: 'Inscriptions actives',
     annulee: 'Inscriptions annulées',
+    changement: 'Inscriptions en changement',
     etudiants: 'Étudiants',
 };
 
@@ -35,6 +37,47 @@ const STATUT_TABS: Array<{ key: string; icon: string; label: string }> = [
     { key: 'En inscription', icon: 'ti-folder', label: 'En inscription' },
     { key: 'Fin de formation', icon: 'ti-history', label: 'Historique' },
 ];
+
+type LifecycleAction = 'archive' | 'annuler' | 'reactiver' | 'activer';
+
+/** Per-action copy for the row-menu lifecycle ConfirmDialog — one place to keep title/message/icon/labels in sync per action, instead of parallel ternary chains that can drift apart. */
+const LIFECYCLE_CONFIRM_COPY: Record<
+    LifecycleAction,
+    { title: string; message: string; icon: string; variant: 'danger' | 'primary'; confirmLabel: string; processingLabel: string }
+> = {
+    archive: {
+        title: 'Terminer la formation',
+        message: 'Marquer ce groupe comme terminé (Fin de formation) ? Cette action est irréversible.',
+        icon: 'ti-archive',
+        variant: 'danger',
+        confirmLabel: 'Oui, terminer',
+        processingLabel: 'Finalisation…',
+    },
+    annuler: {
+        title: 'Annuler le groupe',
+        message: 'Voulez-vous vraiment annuler ce groupe ?',
+        icon: 'ti-x',
+        variant: 'danger',
+        confirmLabel: 'Oui, annuler',
+        processingLabel: 'Annulation…',
+    },
+    reactiver: {
+        title: 'Réactiver le groupe',
+        message: 'Voulez-vous vraiment réactiver ce groupe (retour à En inscription) ?',
+        icon: 'ti-refresh',
+        variant: 'primary',
+        confirmLabel: 'Oui, réactiver',
+        processingLabel: 'Réactivation…',
+    },
+    activer: {
+        title: 'Activer le groupe',
+        message: 'Démarrer la formation pour ce groupe (passage à En formation) ?',
+        icon: 'ti-player-play',
+        variant: 'primary',
+        confirmLabel: 'Oui, activer',
+        processingLabel: 'Activation…',
+    },
+};
 
 interface GroupFormState {
     nom: string;
@@ -92,6 +135,9 @@ export default function GroupsIndex({
     const [studentsRows, setStudentsRows] = useState<GroupStudentSegmentRow[]>([]);
     const [loadingStudents, setLoadingStudents] = useState(false);
     const [fraisPage, setFraisPage] = useState(1);
+    const [lifecycleTarget, setLifecycleTarget] = useState<{ group: GroupRow; action: LifecycleAction } | null>(null);
+    const [lifecycleError, setLifecycleError] = useState<string | undefined>(undefined);
+    const [lifecycleProcessing, setLifecycleProcessing] = useState(false);
 
     const fraisCatalogOptions: SelectOption[] = fraisCatalog.map((f) => ({ value: f.id, label: f.nom }));
     const niveauOptions: SelectOption[] = niveaux.map((n) => ({ value: n, label: n }));
@@ -166,6 +212,49 @@ export default function GroupsIndex({
         form.reset();
         form.clearErrors();
         setFraisPage(1);
+    }
+
+    function confirmArchive(group: GroupRow) {
+        setLifecycleTarget({ group, action: 'archive' });
+        setLifecycleError(undefined);
+    }
+
+    function confirmAnnuler(group: GroupRow) {
+        setLifecycleTarget({ group, action: 'annuler' });
+        setLifecycleError(undefined);
+    }
+
+    function confirmReactiver(group: GroupRow) {
+        setLifecycleTarget({ group, action: 'reactiver' });
+        setLifecycleError(undefined);
+    }
+
+    function confirmActiver(group: GroupRow) {
+        setLifecycleTarget({ group, action: 'activer' });
+        setLifecycleError(undefined);
+    }
+
+    function handleLifecycleConfirm() {
+        if (!lifecycleTarget) {
+            return;
+        }
+
+        setLifecycleProcessing(true);
+        router.post(
+            `/backoffice/groups/${lifecycleTarget.group.id}/${lifecycleTarget.action}`,
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setLifecycleTarget(null);
+                    setLifecycleError(undefined);
+                },
+                onError: (errors) => {
+                    setLifecycleError(errors.statut ?? 'Action impossible.');
+                },
+                onFinish: () => setLifecycleProcessing(false),
+            },
+        );
     }
 
     async function openStudentsSegment(group: GroupRow, segment: StatsSegment) {
@@ -301,6 +390,7 @@ export default function GroupsIndex({
                                     <th>Nom</th>
                                     <th>Classification</th>
                                     <th>Enseignant</th>
+                                    <th>Étudiants</th>
                                     <th>Statistique</th>
                                     <th>Statut</th>
                                     <th className="text-end">Action</th>
@@ -315,38 +405,44 @@ export default function GroupsIndex({
                                     </td>
                                     <td>{group.enseignant ?? '—'}</td>
                                     <td>
+                                        <button
+                                            type="button"
+                                            className="badge badge-soft-info border-0 d-inline-flex align-items-center gap-1"
+                                            title={STATS_SEGMENT_LABELS.etudiants}
+                                            onClick={() => openStudentsSegment(group, 'etudiants')}
+                                        >
+                                            {group.etudiantsDistinctsCount}
+                                            <i className="ti ti-user" aria-hidden="true" />
+                                        </button>
+                                    </td>
+                                    <td>
                                         <div className="d-flex flex-wrap gap-1">
                                             <button
                                                 type="button"
-                                                className="badge badge-soft-secondary border-0"
-                                                title={STATS_SEGMENT_LABELS.total}
-                                                onClick={() => openStudentsSegment(group, 'total')}
-                                            >
-                                                {group.inscriptionsCount}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="badge badge-soft-success border-0"
+                                                className="badge badge-soft-success border-0 d-inline-flex align-items-center gap-1"
                                                 title={STATS_SEGMENT_LABELS.active}
                                                 onClick={() => openStudentsSegment(group, 'active')}
                                             >
                                                 {group.inscriptionsActivesCount}
+                                                <i className="ti ti-user" aria-hidden="true" />
                                             </button>
                                             <button
                                                 type="button"
-                                                className="badge badge-soft-danger border-0"
+                                                className="badge badge-soft-secondary border-0 d-inline-flex align-items-center gap-1"
+                                                title={STATS_SEGMENT_LABELS.changement}
+                                                onClick={() => openStudentsSegment(group, 'changement')}
+                                            >
+                                                {group.inscriptionsChangementCount}
+                                                <i className="ti ti-user" aria-hidden="true" />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="badge badge-soft-danger border-0 d-inline-flex align-items-center gap-1"
                                                 title={STATS_SEGMENT_LABELS.annulee}
                                                 onClick={() => openStudentsSegment(group, 'annulee')}
                                             >
                                                 {group.inscriptionsAnnuleesCount}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="badge badge-soft-info border-0"
-                                                title={STATS_SEGMENT_LABELS.etudiants}
-                                                onClick={() => openStudentsSegment(group, 'etudiants')}
-                                            >
-                                                {group.etudiantsDistinctsCount}
+                                                <i className="ti ti-user" aria-hidden="true" />
                                             </button>
                                         </div>
                                     </td>
@@ -358,17 +454,46 @@ export default function GroupsIndex({
                                                     ? 'success'
                                                     : group.statut === 'Fin de formation'
                                                       ? 'secondary'
-                                                      : 'warning'
+                                                      : group.statut === 'Annulée'
+                                                        ? 'danger'
+                                                        : 'warning'
                                             }
                                             dot
                                         />
                                     </td>
                                     <td className="text-end">
                                         <RowActions view={group.showUrl}>
-                                            {group.statut !== 'Fin de formation' && (
+                                            {group.statut !== 'Fin de formation' && group.statut !== 'Annulée' && (
                                                 <RowActionItem icon="ti-edit" onClick={() => openEdit(group)}>
                                                     Modifier
                                                 </RowActionItem>
+                                            )}
+                                            {group.statut === 'En formation' && (
+                                                <>
+                                                    <RowActionDivider />
+                                                    <RowActionItem icon="ti-archive" onClick={() => confirmArchive(group)}>
+                                                        Terminer
+                                                    </RowActionItem>
+                                                    <RowActionItem icon="ti-x" danger onClick={() => confirmAnnuler(group)}>
+                                                        Annuler
+                                                    </RowActionItem>
+                                                </>
+                                            )}
+                                            {group.statut === 'Annulée' && (
+                                                <>
+                                                    <RowActionDivider />
+                                                    <RowActionItem icon="ti-refresh" onClick={() => confirmReactiver(group)}>
+                                                        Activer
+                                                    </RowActionItem>
+                                                </>
+                                            )}
+                                            {group.statut === 'En inscription' && (
+                                                <>
+                                                    <RowActionDivider />
+                                                    <RowActionItem icon="ti-player-play" onClick={() => confirmActiver(group)}>
+                                                        Activer
+                                                    </RowActionItem>
+                                                </>
                                             )}
                                         </RowActions>
                                     </td>
@@ -606,6 +731,24 @@ export default function GroupsIndex({
                     </div>
                 )}
             </Modal>
+
+            <ConfirmDialog
+                show={lifecycleTarget !== null}
+                title={LIFECYCLE_CONFIRM_COPY[lifecycleTarget?.action ?? 'archive'].title}
+                recordLabel={lifecycleTarget?.group.nom ?? ''}
+                message={LIFECYCLE_CONFIRM_COPY[lifecycleTarget?.action ?? 'archive'].message}
+                icon={LIFECYCLE_CONFIRM_COPY[lifecycleTarget?.action ?? 'archive'].icon}
+                variant={LIFECYCLE_CONFIRM_COPY[lifecycleTarget?.action ?? 'archive'].variant}
+                confirmLabel={LIFECYCLE_CONFIRM_COPY[lifecycleTarget?.action ?? 'archive'].confirmLabel}
+                processingLabel={LIFECYCLE_CONFIRM_COPY[lifecycleTarget?.action ?? 'archive'].processingLabel}
+                error={lifecycleError}
+                processing={lifecycleProcessing}
+                onConfirm={handleLifecycleConfirm}
+                onCancel={() => {
+                    setLifecycleTarget(null);
+                    setLifecycleError(undefined);
+                }}
+            />
         </BackofficeLayout>
     );
 }

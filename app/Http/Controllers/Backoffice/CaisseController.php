@@ -57,7 +57,17 @@ final class CaisseController extends Controller
         $statutFilter = (string) $request->string('statutFilter');
         $caisseFilter = (string) $request->string('caisseFilter');
 
+        // The transfer modal's fixed source: the acting employee's OWN till
+        // (even super-admins transfer from their own till — the source is
+        // never chosen client-side, matching CaisseTransferController::store).
+        $myCaisse = $user->employee?->caisses()->first();
+
         return Inertia::render('Backoffice/Caisses/Index', [
+            'myCaisse' => $myCaisse !== null ? [
+                'id' => $myCaisse->id,
+                'nom' => $myCaisse->nom,
+                'solde' => number_format((float) $myCaisse->solde, 2, '.', ''),
+            ] : null,
             'canViewCaisses' => $canViewCaisses,
             'canViewTransfers' => $canViewTransfers,
             'journalMine' => $canViewCaisses && $tab === 'ma-caisse'

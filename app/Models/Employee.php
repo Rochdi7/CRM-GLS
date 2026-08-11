@@ -24,6 +24,15 @@ class Employee extends Model implements HasMedia
     use HasFactory;
     use InteractsWithMedia;
 
+    /**
+     * Transient, not a DB column — an optional admin-chosen username read by
+     * EmployeeCredentialService::generateUniqueUsername() from the "created"
+     * observer. Declared as a real property so Eloquent's attribute magic
+     * (which would otherwise route any unknown property through
+     * setAttribute() and try to persist it) doesn't intercept it.
+     */
+    public ?string $requestedUsername = null;
+
     public const CATEGORIE_DIRECTEUR = 'Directeur';
 
     public const CATEGORIE_COMMERCIAL = 'Commercial';

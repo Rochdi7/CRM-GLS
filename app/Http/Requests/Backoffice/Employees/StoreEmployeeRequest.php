@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Requests\Backoffice\Employees;
 
 use App\Models\Employee;
+use App\Models\User;
 use App\Support\Phone\Countries;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -53,6 +54,9 @@ final class StoreEmployeeRequest extends FormRequest
             'date_embauche' => ['nullable', 'date'],
             'salaire' => ['nullable', 'numeric', 'min:0'],
             'etablissement_id' => ['nullable', 'exists:etablissements,id'],
+            // Optional — EmployeeCredentialService auto-generates one from
+            // nom/prenom when left blank. Validated here only if provided.
+            'username' => ['nullable', 'string', 'max:50', 'regex:/^[a-zA-Z0-9._-]+$/', Rule::unique(User::class, 'username')],
         ];
     }
 }

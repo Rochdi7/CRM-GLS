@@ -5,13 +5,16 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Payments\Actions\AppliquerAvance;
+use App\Domain\Payments\Actions\ConvertirEncaissementsEnAvance;
 use App\Domain\Payments\Actions\EnregistrerEncaissement;
 use App\Domain\Payments\Queries\GetEncaissementDetails;
 use App\Domain\Payments\Queries\GetEncaissementsList;
+use App\Domain\Payments\Queries\GetInscriptionPayments;
 use App\Domain\Payments\Queries\GetInscriptionUnpaidFees;
 use App\Domain\Settings\Queries\GetBanquesList;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Encaissements\ApplyAvanceRequest;
+use App\Http\Requests\Backoffice\Encaissements\ConvertAvanceRequest;
 use App\Http\Requests\Backoffice\Encaissements\StoreAvanceRequest;
 use App\Http\Requests\Backoffice\Encaissements\StoreEncaissementRequest;
 use App\Http\Requests\Backoffice\Encaissements\UpdateEncaissementRequest;
@@ -117,6 +120,17 @@ final class EncaissementController extends Controller
         return response()->json(['fees' => $getInscriptionUnpaidFees($inscription)]);
     }
 
+    /**
+     * Every fee-attached payment of one inscription — the "Convertir en
+     * avance" modal's checklist source.
+     */
+    public function inscriptionPayments(Inscription $inscription, GetInscriptionPayments $getInscriptionPayments): JsonResponse
+    {
+        $this->authorize('create', Encaissement::class);
+
+        return response()->json(['payments' => $getInscriptionPayments($inscription)]);
+    }
+
     public function store(StoreEncaissementRequest $request, EnregistrerEncaissement $action): RedirectResponse
     {
         $agent = $request->user()->employee;
@@ -212,6 +226,27 @@ final class EncaissementController extends Controller
     }
 
     /**
+     * Converts selected fee-attached payments of one inscription into
+     * unallocated avances — detaches them from their fees (which drop back
+     * to Non payé / Payé partiellement) without deleting anything and
+     * without touching any till. The freed amounts then show on the Avances
+     * tab with montant utilisé/restant, ready to be applied to another
+     * inscription's fees (typical after a changement de groupe).
+     */
+    public function convertAvance(ConvertAvanceRequest $request, ConvertirEncaissementsEnAvance $action): RedirectResponse
+    {
+        $this->authorize('create', Encaissement::class);
+
+        $data = $request->validated();
+        $inscription = Inscription::findOrFail((int) $data['inscription_id']);
+
+        $action->handle($inscription, array_map('intval', $data['encaissement_ids']));
+
+        return redirect()->route('backoffice.encaissements.index', ['view' => 'avance'])
+            ->with('success', __('Payments converted into advances.'));
+    }
+
+    /**
      * Applies part (or all) of an avance's remaining balance to a specific
      * fee — see AppliquerAvance's docblock for why this creates a new row
      * rather than editing the avance.
@@ -227,6 +262,44 @@ final class EncaissementController extends Controller
 
         return redirect()->route('backoffice.encaissements.index', ['view' => 'avance'])
             ->with('success', __('Advance applied.'));
+    }
+
+    /**
+     * Printable payment receipt (reçu) — a standalone Blade print page, NOT
+     * an Inertia page: it opens in a new tab sized for paper (A6 ticket, A5,
+     * or two A5-landscape copies) and auto-opens the browser print dialog,
+     * where "Enregistrer en PDF" doubles as the download. Rendered in the
+     * browser (not a PDF lib) so the Arabic labels keep correct glyph
+     * shaping. Header identity (nom/adresse/tél) comes from the payment's
+     * own center — inscription's center first, student's as fallback.
+     */
+    public function recu(Request $request, Encaissement $encaissement): \Illuminate\Contracts\View\View
+    {
+        $this->authorize('view', $encaissement);
+
+        $format = (string) $request->string('format', 'a5');
+        if (! in_array($format, ['a6', 'a5', 'a5x2'], true)) {
+            $format = 'a5';
+        }
+
+        $encaissement->load([
+            'student.etablissement',
+            'fee.inscription.anneeScolaire',
+            'fee.inscription.group',
+            'fee.inscription.etablissement',
+        ]);
+
+        $inscription = $encaissement->fee?->inscription;
+        $centre = $inscription?->etablissement ?? $encaissement->student?->etablissement;
+
+        return view('backoffice.encaissements.recu', [
+            'format' => $format,
+            'encaissement' => $encaissement,
+            'centre' => $centre,
+            'anneeScolaire' => $inscription?->anneeScolaire?->nom,
+            'niveau' => $inscription?->group?->nom ?? $encaissement->student?->niveau,
+            'fraisNom' => $encaissement->fee?->nom ?? 'Avance',
+        ]);
     }
 
     public function show(Encaissement $encaissement, GetEncaissementDetails $getEncaissementDetails): Response

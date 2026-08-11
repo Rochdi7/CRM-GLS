@@ -94,3 +94,35 @@ html[data-theme='dark'] .select2-dropdown {
     height: calc(100vh - 56px);
     overflow-y: auto;
 }
+
+/*
+ * Context switcher dropdowns (ContextSwitcher.tsx): the theme's own
+ * `.header .dropdown-menu { left: unset !important; right: 0 !important; }`
+ * (style.css, from _header.scss) targets Bootstrap's own JS-driven
+ * data-bs-popper dropdowns, which this app never uses (§3, all modals/
+ * dropdowns are React-owned). Its !important unconditionally overrode the
+ * inline `position:fixed` left/top ContextSwitcher.tsx sets after measuring
+ * the trigger button's own rect, snapping both menus to the viewport's true
+ * right edge instead of under their buttons — reproduced by disabling
+ * stylesheets one at a time until this exact rule flipped the computed
+ * `left`. `!important` is required to beat the theme rule's own
+ * `!important`, so the inline `left` React sets must win the same way —
+ * `var(--gls-menu-left)` is set inline alongside `left`/`top` for that
+ * reason; falls back to `0` (closed state, never visible) when unset.
+ */
+.gls-context-switcher .dropdown-menu {
+    left: var(--gls-menu-left, 0) !important;
+    right: auto !important;
+    /*
+     * .header (this menu's own stacking-context ancestor) has z-index: 999
+     * (style.css), while .sidebar — a sibling of .header, not a descendant —
+     * sits at z-index: 1041 (_sidebar.scss). A descendant's z-index only
+     * competes with the header's own siblings once it escapes the header's
+     * local stacking order, so no z-index on the menu itself (however high)
+     * beats the sidebar; .header's ancestor value has to win instead.
+     */
+    z-index: 1050;
+}
+.header {
+    z-index: 1042 !important;
+}

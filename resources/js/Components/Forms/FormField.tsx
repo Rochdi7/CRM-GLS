@@ -15,6 +15,7 @@ export default function FormField({ id, label, error, icon, required, className,
         <div className="mb-3">
             <label className="form-label" htmlFor={id}>
                 {label}
+                {required && <span className="text-danger ms-1">*</span>}
             </label>
             <div className={icon ? 'input-icon mb-3 position-relative' : undefined}>
                 {icon && (

@@ -150,14 +150,6 @@ export const backofficeNavigation: NavGroup[] = [
                 inertia: true,
             },
             {
-                label: t('Users'),
-                href: '/backoffice/users',
-                icon: 'ti ti-user-cog',
-                permissions: ['users.view'],
-                matchPaths: ['/backoffice/users'],
-                inertia: true,
-            },
-            {
                 label: t('Roles & Permissions'),
                 href: '/backoffice/roles',
                 icon: 'ti ti-shield-lock',

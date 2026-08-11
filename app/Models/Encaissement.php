@@ -21,6 +21,13 @@ use Spatie\Activitylog\Support\LogOptions;
  * SECOND Encaissement row (via AppliquerAvance) whose
  * applied_from_encaissement_id points back at the avance; the avance row
  * itself is never edited (money records are append-only, CLAUDE.md §11).
+ *
+ * A fee-attached row can later be DETACHED from its fee (inscription_fee_id
+ * set back to null by ConvertirEncaissementsEnAvance or
+ * ChangerGroupeInscription) — it then counts as an avance again, whether or
+ * not it was itself an "apply" row: a detached apply row keeps its
+ * applied_from link (so the parent avance's used amount stays correct) while
+ * its own montant becomes re-allocatable through its own applications().
  */
 class Encaissement extends Model
 {
@@ -86,7 +93,7 @@ class Encaissement extends Model
 
     public function isAvance(): bool
     {
-        return $this->inscription_fee_id === null && $this->applied_from_encaissement_id === null;
+        return $this->inscription_fee_id === null;
     }
 
     public function montantUtilise(): float

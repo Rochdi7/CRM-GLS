@@ -49,14 +49,18 @@ final class GetEncaissementsList
 
         $encaissements = Encaissement::query()
             ->with(['student', 'fee.inscription', 'caisse', 'agent'])
+            // Per-fee paid total, computed by the DB (no N+1): feeds the
+            // edit modal's read-only "Reste à payer" figure.
+            ->with(['fee' => fn ($q) => $q->withSum('encaissements', 'montant')])
             ->when($view === 'avance', fn ($q) => $q->withSum('applications', 'montant'))
             ->whereIn('caisse_id', $accessibleCaisseIds)
             // Page view tabs (wimschool-style, read-only filters): "cheque" =
             // cheque payments; "avance" = unallocated advances — payments
-            // with NO fee attached yet (Encaissement::isAvance()), not
-            // "apply" rows spending an avance and not fee-targeted payments.
+            // with NO fee attached (Encaissement::isAvance()): fresh avances
+            // AND rows later detached from their fee by
+            // ConvertirEncaissementsEnAvance / ChangerGroupeInscription.
             ->when($view === 'cheque', fn ($q) => $q->where('methode', Encaissement::METHODE_CHEQUE))
-            ->when($view === 'avance', fn ($q) => $q->whereNull('inscription_fee_id')->whereNull('applied_from_encaissement_id'))
+            ->when($view === 'avance', fn ($q) => $q->whereNull('inscription_fee_id'))
             ->when($caisseFilter !== '', fn ($q) => $q->where('caisse_id', (int) $caisseFilter))
             ->when($methodeFilter !== '', fn ($q) => $q->where('methode', $methodeFilter))
             ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_paiement', '>=', $dateFrom))
@@ -81,14 +85,19 @@ final class GetEncaissementsList
 
         $encaissements->through(function (Encaissement $e) use ($view): array {
             $utilise = $view === 'avance' ? (float) ($e->applications_sum_montant ?? 0) : null;
+            $feeTotal = $e->fee !== null ? (float) $e->fee->montant : null;
+            $feePaye = $e->fee !== null ? (float) ($e->fee->encaissements_sum_montant ?? 0) : null;
 
             return [
                 'id' => $e->id,
                 'reference' => $e->reference,
                 'student' => $e->student?->nomComplet(),
+                'studentRef' => $e->student?->reference,
                 'studentId' => $e->student_id,
                 'inscriptionId' => $e->fee?->inscription_id,
                 'feeNom' => $e->fee?->nom,
+                'feeMontantTotal' => $feeTotal !== null ? number_format($feeTotal, 2, '.', '') : null,
+                'feeReste' => $feeTotal !== null ? number_format(max(0.0, $feeTotal - $feePaye), 2, '.', '') : null,
                 'caisse' => $e->caisse?->nom,
                 'caisseId' => $e->caisse_id,
                 'montant' => number_format((float) $e->montant, 2, '.', ''),
@@ -102,6 +111,7 @@ final class GetEncaissementsList
                 'montantUtilise' => $utilise !== null ? number_format($utilise, 2, '.', '') : null,
                 'montantRestant' => $utilise !== null ? number_format(max(0.0, (float) $e->montant - $utilise), 2, '.', '') : null,
                 'showUrl' => route('backoffice.encaissements.show', $e),
+                'recuUrl' => route('backoffice.encaissements.recu', $e),
             ];
         });
 

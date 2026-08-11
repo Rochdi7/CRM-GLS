@@ -22,6 +22,7 @@ export default function PasswordField({ id, label, error, required, className, .
         <div className="mb-3">
             <label className="form-label" htmlFor={id}>
                 {label}
+                {required && <span className="text-danger ms-1">*</span>}
             </label>
             <div className="pass-group">
                 <input

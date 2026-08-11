@@ -82,11 +82,15 @@ final class EmployeeController extends Controller
         // Create → EmployeeObserver auto-creates the User and flashes the
         // one-time username + password to the session (surfaced to the
         // React page via the "flash.newEmployeeCredentials" shared prop —
-        // see HandleInertiaRequests).
-        $employee = Employee::create([
+        // see HandleInertiaRequests). Built unsaved first so the optional
+        // requested username (read by EmployeeCredentialService, not a real
+        // column) is present on the instance the "created" event receives.
+        $employee = new Employee([
             ...$payload,
             'reference' => ReferenceGenerator::make('EMP', 'employees'),
         ]);
+        $employee->requestedUsername = $data['username'] ?? null;
+        $employee->save();
 
         $this->storePhoto($employee, $request);
 

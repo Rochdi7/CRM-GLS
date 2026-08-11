@@ -20,6 +20,8 @@ interface EtablissementsPanelProps {
 interface FormShape {
     nom_centre: string;
     ville: string;
+    adresse: string;
+    ice: string;
     countryIso: string;
     national: string;
     email: string;
@@ -29,6 +31,8 @@ interface FormShape {
 const EMPTY_FORM: FormShape = {
     nom_centre: '',
     ville: '',
+    adresse: '',
+    ice: '',
     countryIso: DEFAULT_COUNTRY,
     national: '',
     email: '',
@@ -61,6 +65,8 @@ export default function EtablissementsPanel({ etablissements, permissions }: Eta
         form.setData({
             nom_centre: row.nomCentre,
             ville: row.ville,
+            adresse: row.adresse ?? '',
+            ice: row.ice ?? '',
             countryIso,
             national,
             email: row.email ?? '',
@@ -84,6 +90,8 @@ export default function EtablissementsPanel({ etablissements, permissions }: Eta
         const payload = {
             nom_centre: form.data.nom_centre,
             ville: form.data.ville,
+            adresse: form.data.adresse,
+            ice: form.data.ice,
             telephone: joinPhone(form.data.countryIso, form.data.national) ?? '',
             email: form.data.email,
             siege_social: form.data.siege_social,
@@ -218,6 +226,16 @@ export default function EtablissementsPanel({ etablissements, permissions }: Eta
                             />
                         </div>
                         <div className="col-12">
+                            <FormField
+                                id="e-adresse"
+                                label="Adresse"
+                                value={form.data.adresse}
+                                onChange={(event) => form.setData('adresse', event.target.value)}
+                                error={(form.errors as Record<string, string>).adresse}
+                                placeholder="ex : Laghrabliya rue Halima Saadia N 12, 2ème étage, 11060 Salé"
+                            />
+                        </div>
+                        <div className="col-12">
                             <PhoneField
                                 id="e-tel"
                                 label="Téléphone"
@@ -226,6 +244,16 @@ export default function EtablissementsPanel({ etablissements, permissions }: Eta
                                 onCountryChange={(iso) => form.setData('countryIso', iso)}
                                 onNationalChange={(value) => form.setData('national', value)}
                                 error={(form.errors as Record<string, string>).telephone}
+                            />
+                        </div>
+                        <div className="col-md-6">
+                            <FormField
+                                id="e-ice"
+                                label="ICE"
+                                value={form.data.ice}
+                                onChange={(event) => form.setData('ice', event.target.value)}
+                                error={(form.errors as Record<string, string>).ice}
+                                placeholder="ex : 001234567000089"
                             />
                         </div>
                         <div className="col-md-6">

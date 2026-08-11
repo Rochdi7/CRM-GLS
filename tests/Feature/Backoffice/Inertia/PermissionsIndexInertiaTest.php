@@ -77,7 +77,7 @@ final class PermissionsIndexInertiaTest extends TestCase
         $this->actingAs($user)
             ->get(route('backoffice.permissions.index'))
             ->assertInertia(fn (Assert $page) => $page
-                ->where('auth.user', fn (Collection $authUser) => $authUser->keys()->all() === ['id', 'name', 'email'])
+                ->where('auth.user', fn (Collection $authUser) => $authUser->keys()->all() === ['id', 'name', 'email', 'photoUrl'])
             );
     }
 

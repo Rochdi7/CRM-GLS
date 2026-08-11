@@ -78,7 +78,7 @@ final class AuthInertiaTest extends TestCase
             ->get(route('backoffice.profile'))
             ->assertInertia(fn (Assert $page) => $page
                 ->where('auth.user.id', $user->id)
-                ->where('auth.user', fn ($authUser) => collect($authUser)->keys()->all() === ['id', 'name', 'email'])
+                ->where('auth.user', fn ($authUser) => collect($authUser)->keys()->all() === ['id', 'name', 'email', 'photoUrl'])
             );
     }
 

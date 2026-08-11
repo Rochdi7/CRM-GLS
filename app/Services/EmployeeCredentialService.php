@@ -39,6 +39,16 @@ final class EmployeeCredentialService
 
     private function generateUniqueUsername(Employee $employee): string
     {
+        // `requestedUsername` is a transient property (not a real employees
+        // column) set by EmployeeController::store() from the optional form
+        // field — already validated as unique by StoreEmployeeRequest, but
+        // re-checked here defensively before falling back to auto-generation.
+        $requested = trim((string) ($employee->requestedUsername ?? ''));
+
+        if ($requested !== '' && ! User::query()->where('username', $requested)->exists()) {
+            return $requested;
+        }
+
         $base = Str::lower(Str::substr($employee->prenom, 0, 1).'.'.Str::slug($employee->nom));
         $username = $base;
         $i = 1;

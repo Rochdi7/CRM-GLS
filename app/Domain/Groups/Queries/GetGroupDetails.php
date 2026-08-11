@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Domain\Groups\Queries;
 
 use App\Models\Group;
+use App\Models\Inscription;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
+use Illuminate\Support\Carbon;
 
 /**
  * Extracted from resources/views/backoffice/groups/show.blade.php +
@@ -38,21 +40,41 @@ final class GetGroupDetails
             'dateDebutFormation' => $group->date_debut_formation?->format('d/m/Y'),
             'dateFinFormation' => $group->date_fin_formation?->format('d/m/Y'),
             'statut' => $group->statut,
+            'statutLabel' => $this->statutLabel($group->statut),
             'isFinished' => $isFinished,
+            'etudiantsDistinctsCount' => $group->inscriptions->pluck('student_id')->unique()->count(),
+            'inscriptionsActivesCount' => $group->inscriptions->where('statut', Inscription::STATUT_ACTIVE)->count(),
+            'inscriptionsChangementCount' => $group->inscriptions->where('statut', Inscription::STATUT_CHANGEMENT)->count(),
+            'inscriptionsAnnuleesCount' => $group->inscriptions->where('statut', Inscription::STATUT_ANNULEE)->count(),
             'canArchive' => ! $isFinished && $user->can('groups.archive') && $this->centerAccess->canAccessCenter($user, $group->etablissement_id),
             'archiveUrl' => route('backoffice.groups.archive', $group),
             'fees' => $group->frais->map(fn ($fee): array => [
                 'nom' => $fee->nom,
                 'classification' => $fee->pivot->classification,
                 'montant' => number_format((float) $fee->pivot->montant, 2, '.', ''),
+                'dateEcheance' => $fee->pivot->date_echeance ? Carbon::parse($fee->pivot->date_echeance)->format('d/m/Y') : null,
             ])->values()->all(),
             'inscriptions' => $group->inscriptions->map(fn ($inscription): array => [
                 'reference' => $inscription->reference,
                 'student' => $inscription->student?->nomComplet(),
                 'studentShowUrl' => $inscription->student ? route('backoffice.students.show', $inscription->student) : null,
                 'date' => $inscription->date_inscription?->format('d/m/Y'),
+                'dateDebut' => $inscription->date_debut?->format('d/m/Y'),
+                'dateFin' => $inscription->date_fin?->format('d/m/Y'),
                 'statut' => $inscription->statut,
             ])->values()->all(),
         ];
+    }
+
+    /** Header banner title, driven by the group's own statut. */
+    private function statutLabel(string $statut): string
+    {
+        return match ($statut) {
+            Group::STATUT_EN_INSCRIPTION => 'En inscription',
+            Group::STATUT_EN_FORMATION => 'Formation en cours',
+            Group::STATUT_FIN_FORMATION => 'Formation terminée',
+            Group::STATUT_ANNULEE => 'Formation annulée',
+            default => $statut,
+        };
     }
 }

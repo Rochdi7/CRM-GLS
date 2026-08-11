@@ -202,6 +202,7 @@ export interface GroupFeeRow {
     nom: string;
     classification: string | null;
     montant: MoneyDisplay;
+    dateEcheance: string | null;
 }
 
 export interface GroupInscriptionRow {
@@ -209,6 +210,8 @@ export interface GroupInscriptionRow {
     student: string | null;
     studentShowUrl: string | null;
     date: string | null;
+    dateDebut: string | null;
+    dateFin: string | null;
     statut: string;
 }
 
@@ -222,9 +225,15 @@ export interface GroupDetails {
     dateDebutFormation: string | null;
     dateFinFormation: string | null;
     statut: string;
+    /** Header banner title, driven by statut (e.g. "Formation en cours" for En formation). */
+    statutLabel: string;
     canArchive: boolean;
     isFinished: boolean;
     archiveUrl: string;
+    etudiantsDistinctsCount: number;
+    inscriptionsActivesCount: number;
+    inscriptionsChangementCount: number;
+    inscriptionsAnnuleesCount: number;
     fees: GroupFeeRow[];
     inscriptions: GroupInscriptionRow[];
 }
@@ -508,6 +517,9 @@ export interface EtablissementRow {
     id: number;
     nomCentre: string;
     ville: string;
+    adresse: string | null;
+    /** ICE (Identifiant Commun de l'Entreprise) — printed on payment receipts. */
+    ice: string | null;
     telephone: string | null;
     email: string | null;
     siegeSocial: boolean;
@@ -869,6 +881,7 @@ export interface GroupRow {
     inscriptionsCount: number;
     inscriptionsActivesCount: number;
     inscriptionsAnnuleesCount: number;
+    inscriptionsChangementCount: number;
     etudiantsDistinctsCount: number;
     fraisCount: number;
     showUrl: string;
@@ -1103,6 +1116,8 @@ export interface CaissesPageProps {
     transferCaisses: CaisseTransferFormOption[];
     transferStatuts: string[];
     currentEmployeeId: number | null;
+    /** The acting employee's OWN till — the transfer modal's fixed, read-only source (null when the account has no employee/till). */
+    myCaisse: CaisseTransferFormOption | null;
     transferFilters: { search: string; statutFilter: string; caisseFilter: string };
     [key: string]: unknown;
 }
@@ -1112,9 +1127,15 @@ export interface EncaissementRow {
     id: number;
     reference: string;
     student: string | null;
+    /** Student matricule (ETU-… reference) — shown as "REF | NOM" in the edit modal. */
+    studentRef: string | null;
     studentId: number | null;
     inscriptionId: number | null;
     feeNom: string | null;
+    /** Full amount of the paid fee — read-only context in the edit modal. */
+    feeMontantTotal: MoneyDisplay | null;
+    /** Fee amount minus everything already paid on it. */
+    feeReste: MoneyDisplay | null;
     caisse: string | null;
     caisseId: number | null;
     montant: MoneyDisplay;
@@ -1130,6 +1151,8 @@ export interface EncaissementRow {
     /** Only populated on the Avances tab — montant minus montantUtilise. */
     montantRestant: MoneyDisplay | null;
     showUrl: string;
+    /** Printable receipt page — append ?format=a6|a5|a5x2. */
+    recuUrl: string;
 }
 
 export interface EncaissementsFilters {
@@ -1167,6 +1190,18 @@ export interface UnpaidFee {
     reste: MoneyDisplay;
     statut: string;
     dateEcheance: string | null;
+}
+
+/** One payment row of the "Convertir en avance" checklist (GetInscriptionPayments). */
+export interface InscriptionPaymentRow {
+    id: number;
+    reference: string;
+    feeNom: string | null;
+    montant: MoneyDisplay;
+    methode: string;
+    datePaiement: string | null;
+    /** Already refunded — cannot be converted into an advance. */
+    rembourse: boolean;
 }
 
 /** One editable payment line in the create-form's cascade table — mirrors Livewire's $paymentLines shape. */

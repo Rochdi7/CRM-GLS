@@ -111,7 +111,11 @@ export default function RowActions({ view, viewLabel = 'Voir', children }: RowAc
                     </button>
                     <ul
                         className={`dropdown-menu dropdown-menu-end p-3${open ? ' show' : ''}`}
-                        style={open && pos ? { position: 'fixed', left: 'auto', ...pos } : undefined}
+                        // zIndex restores Bootstrap's 1000: the theme drops
+                        // .dropdown-menu to 10 and lifts every closed
+                        // .select2-container to 99 (style.css), so without it
+                        // the menu paints under the toolbar's SelectFields.
+                        style={open && pos ? { position: 'fixed', left: 'auto', zIndex: 1000, ...pos } : undefined}
                     >
                         {children}
                     </ul>

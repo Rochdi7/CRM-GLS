@@ -51,12 +51,21 @@ final class GetGroupsList
                 'inscriptions',
                 'inscriptions as inscriptions_actives_count' => fn ($q) => $q->where('statut', Inscription::STATUT_ACTIVE),
                 'inscriptions as inscriptions_annulees_count' => fn ($q) => $q->where('statut', Inscription::STATUT_ANNULEE),
+                'inscriptions as inscriptions_changement_count' => fn ($q) => $q->where('statut', Inscription::STATUT_CHANGEMENT),
                 'inscriptions as etudiants_distincts_count' => fn ($q) => $q->select(DB::raw('COUNT(DISTINCT student_id)')),
             ])
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
-            ->when($statutFilter !== '', fn ($q) => $q->where('statut', $statutFilter))
+            // The "Historique" tab groups both terminal statuses together
+            // (Fin de formation + Annulée) — its tab key stays the single
+            // value 'Fin de formation' (filters.statutFilter, tab active-
+            // state matching), but the actual query matches the whole set.
+            ->when(
+                $statutFilter === Group::STATUT_FIN_FORMATION,
+                fn ($q) => $q->whereIn('statut', Group::STATUTS_HISTORIQUE),
+                fn ($q) => $q->when($statutFilter !== '', fn ($q) => $q->where('statut', $statutFilter)),
+            )
             ->when($enseignantFilter !== '', fn ($q) => $q->where('enseignant_id', (int) $enseignantFilter))
             ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_debut_formation', '>=', $dateFrom))
             ->when($dateTo !== '', fn ($q) => $q->whereDate('date_debut_formation', '<=', $dateTo))
@@ -77,6 +86,7 @@ final class GetGroupsList
             'inscriptionsCount' => $group->inscriptions_count,
             'inscriptionsActivesCount' => $group->inscriptions_actives_count,
             'inscriptionsAnnuleesCount' => $group->inscriptions_annulees_count,
+            'inscriptionsChangementCount' => $group->inscriptions_changement_count,
             'etudiantsDistinctsCount' => $group->etudiants_distincts_count,
             'fraisCount' => $group->frais_count,
             'showUrl' => route('backoffice.groups.show', $group),
@@ -96,19 +106,26 @@ final class GetGroupsList
     }
 
     /**
-     * Per-status counts for the tab badges (same center/year scope, ignores search).
+     * Per-status counts for the tab badges (same center/year scope, ignores
+     * search). The "Historique" tab's badge (keyed by 'Fin de formation',
+     * matching the tab's own filter value) sums both terminal statuses —
+     * see the same combined-set rationale in __invoke() above.
      *
      * @return Collection<string, int>
      */
     public function statutCounts(User $user): Collection
     {
-        return Group::query()
+        $perStatut = Group::query()
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
             ->selectRaw('statut, COUNT(*) as total')
             ->groupBy('statut')
             ->pluck('total', 'statut');
+
+        $historiqueTotal = collect(Group::STATUTS_HISTORIQUE)->sum(fn (string $statut) => $perStatut->get($statut, 0));
+
+        return $perStatut->put(Group::STATUT_FIN_FORMATION, $historiqueTotal);
     }
 
     private function scopeToActiveCenter($query): void

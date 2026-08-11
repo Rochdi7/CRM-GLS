@@ -137,7 +137,7 @@ export default function Modal({ show, title, onClose, processing = false, size =
                             </div>
                         )}
                         <div className="modal-body">{children}</div>
-                        {footer && <div className="modal-footer">{footer}</div>}
+                        {footer && <div className="modal-footer gap-2">{footer}</div>}
                     </div>
                 </div>
             </div>

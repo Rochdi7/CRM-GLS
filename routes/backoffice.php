@@ -169,6 +169,13 @@ Route::prefix('backoffice')
                 ->middleware('permission:groups.update')->name('groups.update');
             Route::get('groups/{group}', [GroupController::class, 'show'])->name('groups.show');
             Route::post('groups/{group}/archive', [GroupController::class, 'archive'])->name('groups.archive');
+            // Quick lifecycle actions from the list's row menu — "Annuler"
+            // (-> Annulée, terminal, same groups.archive gate as Fin de
+            // formation), "Réactiver" (Annulée -> En inscription), and
+            // "Activer" (En inscription -> En formation, training starts).
+            Route::post('groups/{group}/annuler', [GroupController::class, 'annuler'])->name('groups.annuler');
+            Route::post('groups/{group}/reactiver', [GroupController::class, 'reactiver'])->name('groups.reactiver');
+            Route::post('groups/{group}/activer', [GroupController::class, 'activer'])->name('groups.activer');
             Route::get('groups/{group}/students-by-segment', [GroupController::class, 'studentsBySegment'])
                 ->name('groups.students-by-segment');
             Route::get('groups-historique', [GroupHistoriqueController::class, 'index'])
@@ -295,19 +302,28 @@ Route::prefix('backoffice')
                 ->middleware('permission:payments.create')->name('encaissements.store');
             Route::put('encaissements/{encaissement}', [EncaissementController::class, 'update'])
                 ->middleware('permission:payments.update')->name('encaissements.update');
+            Route::get('encaissements/{encaissement}/recu', [EncaissementController::class, 'recu'])
+                ->middleware('permission:payments.view')->name('encaissements.recu');
             Route::get('encaissements/{encaissement}', [EncaissementController::class, 'show'])
                 ->name('encaissements.show');
             Route::get('students/{student}/inscriptions-for-payment', [EncaissementController::class, 'studentInscriptions'])
                 ->name('students.inscriptions-for-payment');
             Route::get('inscriptions/{inscription}/unpaid-fees', [EncaissementController::class, 'inscriptionFees'])
                 ->name('inscriptions.unpaid-fees');
+            Route::get('inscriptions/{inscription}/payments', [EncaissementController::class, 'inscriptionPayments'])
+                ->name('inscriptions.payments');
 
             // Avances — unallocated advances (no fee attached, see
-            // Encaissement::isAvance()). Their own create route (no fee-line
-            // cascade) and an apply route that spends part/all of one onto a
-            // specific fee, without ever editing the avance row itself.
+            // Encaissement::isAvance()). A create route (fresh money, no
+            // fee-line cascade), a convert route that detaches existing
+            // payments of an inscription from their fees (the "changement de
+            // groupe" money-move flow), and an apply route that spends
+            // part/all of one onto a specific fee, without ever editing the
+            // avance row itself.
             Route::post('avances', [EncaissementController::class, 'storeAvance'])
                 ->middleware('permission:payments.create')->name('avances.store');
+            Route::post('avances/convert', [EncaissementController::class, 'convertAvance'])
+                ->middleware('permission:payments.create')->name('avances.convert');
             Route::post('avances/{encaissement}/apply', [EncaissementController::class, 'applyAvance'])
                 ->middleware('permission:payments.create')->name('avances.apply');
 

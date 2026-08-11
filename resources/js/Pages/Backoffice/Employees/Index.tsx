@@ -41,6 +41,7 @@ interface EmployeeFormState {
     date_embauche: string;
     salaire: string;
     etablissement_id: number | '';
+    username: string;
 }
 
 function emptyForm(defaultCountry: string, contextCenterId: number | null): EmployeeFormState {
@@ -61,6 +62,7 @@ function emptyForm(defaultCountry: string, contextCenterId: number | null): Empl
         date_embauche: '',
         salaire: '',
         etablissement_id: contextCenterId ?? '',
+        username: '',
     };
 }
 
@@ -631,6 +633,19 @@ export default function EmployeesIndex({
                                     placeholder="ex : 12 rue Al Massira, Marrakech"
                                 />
                             </div>
+
+                            {!editingEmployee && (
+                                <div className="col-md-4">
+                                    <FormField
+                                        id="emp-username"
+                                        label="Nom d'utilisateur"
+                                        value={form.data.username}
+                                        onChange={(event) => form.setData('username', event.target.value)}
+                                        error={form.errors.username}
+                                        placeholder="Généré automatiquement si vide"
+                                    />
+                                </div>
+                            )}
 
                             {/* A specific center active in the top bar assigns the record
                                 automatically — the field only shows on « Tous les centres ». */}

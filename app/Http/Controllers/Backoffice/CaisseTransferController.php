@@ -50,7 +50,22 @@ final class CaisseTransferController extends Controller
             ]);
         }
 
-        $action->handle($request->validated(), $requester);
+        // The source is ALWAYS the requester's own till — never chosen
+        // client-side, for any role including super-admin (the modal shows
+        // no source picker). Same server-derived-till rule + self-heal as
+        // EncaissementController::store().
+        $source = $requester->caisses()->first()
+            ?? app(\App\Services\CaisseProvisioner::class)->provisionFor($requester);
+
+        $data = $request->validated();
+
+        if ((int) $data['caisse_destination_id'] === $source->id) {
+            throw ValidationException::withMessages([
+                'caisse_destination_id' => __('The destination till must be different from your own till.'),
+            ]);
+        }
+
+        $action->handle([...$data, 'caisse_source_id' => $source->id], $requester);
 
         return redirect()->route('backoffice.caisses.index', ['tab' => 'transferts'])
             ->with('success', __('Transfer requested — awaiting validation.'));

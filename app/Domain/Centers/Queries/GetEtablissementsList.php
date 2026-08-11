@@ -25,6 +25,8 @@ final class GetEtablissementsList
             'id' => $e->id,
             'nomCentre' => $e->nom_centre,
             'ville' => $e->ville,
+            'adresse' => $e->adresse,
+            'ice' => $e->ice,
             'telephone' => $e->telephone,
             'email' => $e->email,
             'siegeSocial' => (bool) $e->siege_social,

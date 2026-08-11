@@ -96,7 +96,11 @@ export default function FilterDropdown({ fields, onApply, onReset }: FilterDropd
                 // dropdown-menu-end anchors the panel to the trigger's right
                 // edge in pure CSS — the theme demo gets the same result from
                 // Bootstrap's Popper, which this app deliberately doesn't load.
-                <div className="dropdown-menu dropdown-menu-end drop-width show" data-bs-popper="static">
+                // zIndex restores Bootstrap's 1000: the theme drops
+                // .dropdown-menu to 10 and lifts every closed
+                // .select2-container to 99 (style.css), so without it the
+                // panel paints under neighboring SelectField filters.
+                <div className="dropdown-menu dropdown-menu-end drop-width show" data-bs-popper="static" style={{ zIndex: 1000 }}>
                     <form
                         onSubmit={(event) => {
                             event.preventDefault();

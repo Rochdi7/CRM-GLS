@@ -263,6 +263,171 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $fee->fresh()->statut);
     }
 
+    public function test_inscription_payments_lookup_lists_fee_attached_payments(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        $this->actingAs($user);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
+
+        $this->post(route('backoffice.encaissements.store'), [
+            'student_id' => $student->id, 'inscription_id' => $inscription->id,
+            'date_paiement' => '2025-09-20',
+            'payment_lines' => [
+                ['fee_id' => $fee->id, 'montant' => '1000', 'methode' => 'Espèces', 'date_paiement' => '2025-09-20'],
+            ],
+        ])->assertRedirect();
+
+        $response = $this->get(route('backoffice.inscriptions.payments', $inscription))->json();
+
+        $this->assertCount(1, $response['payments']);
+        $this->assertSame('1000.00', $response['payments'][0]['montant']);
+        $this->assertSame($fee->nom, $response['payments'][0]['feeNom']);
+        $this->assertFalse($response['payments'][0]['rembourse']);
+    }
+
+    /**
+     * The "changement de groupe" money-move flow: converting detaches the
+     * payment from its fee (which drops back to Non payé) WITHOUT touching
+     * the till, the freed amount shows on the Avances tab with its full
+     * reste, and can then be applied to another inscription's fee.
+     */
+    public function test_payments_can_be_converted_into_avances_and_reapplied_to_another_inscription(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update');
+        $this->actingAs($user);
+        $caisse = $user->employee->caisses()->first();
+
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
+        $this->post(route('backoffice.encaissements.store'), [
+            'student_id' => $student->id, 'inscription_id' => $inscription->id,
+            'date_paiement' => '2025-09-20',
+            'payment_lines' => [
+                ['fee_id' => $fee->id, 'montant' => '1000', 'methode' => 'Espèces', 'date_paiement' => '2025-09-20'],
+            ],
+        ])->assertRedirect();
+
+        $encaissement = Encaissement::firstOrFail();
+        $this->assertSame(InscriptionFee::STATUT_PAYE, $fee->fresh()->statut);
+        $this->assertSame('1000.00', (string) $caisse->fresh()->solde);
+
+        $this->post(route('backoffice.avances.convert'), [
+            'inscription_id' => $inscription->id,
+            'encaissement_ids' => [$encaissement->id],
+        ])->assertRedirect(route('backoffice.encaissements.index', ['view' => 'avance']));
+
+        // Detached, fee owed again, money record intact, till untouched.
+        $this->assertNull($encaissement->fresh()->inscription_fee_id);
+        $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $fee->fresh()->statut);
+        $this->assertSame(1, Encaissement::count());
+        $this->assertSame('1000.00', (string) $caisse->fresh()->solde);
+
+        $avanceRows = $this->get(route('backoffice.encaissements.index', ['view' => 'avance']))
+            ->viewData('page')['props']['encaissements']['data'];
+        $this->assertCount(1, $avanceRows);
+        $this->assertSame('0.00', (string) $avanceRows[0]['montantUtilise']);
+        $this->assertSame('1000.00', (string) $avanceRows[0]['montantRestant']);
+
+        // Re-apply the freed amount onto a second inscription's fee.
+        $group2 = Group::factory()->create(['etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id]);
+        $inscription2 = Inscription::create([
+            'reference' => 'INS-NEW', 'student_id' => $student->id, 'group_id' => $group2->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => Inscription::STATUT_ACTIVE, 'date_inscription' => '2025-10-01',
+            'montant_total' => 1000,
+        ]);
+        $fee2 = InscriptionFee::create([
+            'inscription_id' => $inscription2->id, 'nom' => 'Frais nouveau groupe',
+            'montant_initial' => 1000, 'montant' => 1000,
+            'date_echeance' => '2025-10-31', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+
+        $this->post(route('backoffice.avances.apply', $encaissement), [
+            'fee_id' => $fee2->id,
+            'montant' => '1000',
+        ])->assertRedirect();
+
+        $this->assertSame(InscriptionFee::STATUT_PAYE, $fee2->fresh()->statut);
+        $this->assertSame('1000.00', (string) $caisse->fresh()->solde);
+
+        $avanceRows = $this->get(route('backoffice.encaissements.index', ['view' => 'avance']))
+            ->viewData('page')['props']['encaissements']['data'];
+        $this->assertCount(1, $avanceRows);
+        $this->assertSame('1000.00', (string) $avanceRows[0]['montantUtilise']);
+        $this->assertSame('0.00', (string) $avanceRows[0]['montantRestant']);
+    }
+
+    public function test_converting_a_payment_of_another_inscription_is_rejected_with_no_side_effects(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        $this->actingAs($user);
+
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
+        [, $otherInscription] = $this->enrolledStudentWithFee(500);
+
+        $this->post(route('backoffice.encaissements.store'), [
+            'student_id' => $student->id, 'inscription_id' => $inscription->id,
+            'date_paiement' => '2025-09-20',
+            'payment_lines' => [
+                ['fee_id' => $fee->id, 'montant' => '1000', 'methode' => 'Espèces', 'date_paiement' => '2025-09-20'],
+            ],
+        ])->assertRedirect();
+        $encaissement = Encaissement::firstOrFail();
+
+        // Tampered payload: the payment belongs to $inscription, not $otherInscription.
+        $this->post(route('backoffice.avances.convert'), [
+            'inscription_id' => $otherInscription->id,
+            'encaissement_ids' => [$encaissement->id],
+        ])->assertSessionHasErrors('encaissement_ids');
+
+        $this->assertSame($fee->id, $encaissement->fresh()->inscription_fee_id);
+        $this->assertSame(InscriptionFee::STATUT_PAYE, $fee->fresh()->statut);
+    }
+
+    /**
+     * A payment that was itself paid FROM an avance (an "apply" row) can be
+     * converted too: its fee is detached but its applied_from link is kept,
+     * so the parent avance's used amount stays correct while the detached
+     * row's own montant becomes re-allocatable (Encaissement::isAvance()).
+     */
+    public function test_converting_an_apply_row_reappears_as_its_own_avance(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update');
+        $this->actingAs($user);
+
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
+
+        $this->post(route('backoffice.avances.store'), [
+            'student_id' => $student->id, 'montant' => '600',
+            'methode' => 'Espèces', 'date_paiement' => '2025-09-21',
+        ])->assertRedirect();
+        $parentAvance = Encaissement::whereNull('inscription_fee_id')->firstOrFail();
+
+        $this->post(route('backoffice.avances.apply', $parentAvance), [
+            'fee_id' => $fee->id, 'montant' => '600',
+        ])->assertRedirect();
+        $applyRow = Encaissement::whereNotNull('applied_from_encaissement_id')->firstOrFail();
+
+        $this->post(route('backoffice.avances.convert'), [
+            'inscription_id' => $inscription->id,
+            'encaissement_ids' => [$applyRow->id],
+        ])->assertRedirect();
+
+        $fresh = $applyRow->fresh();
+        $this->assertNull($fresh->inscription_fee_id);
+        $this->assertSame($parentAvance->id, $fresh->applied_from_encaissement_id);
+        $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $fee->fresh()->statut);
+
+        $avanceRows = collect($this->get(route('backoffice.encaissements.index', ['view' => 'avance']))
+            ->viewData('page')['props']['encaissements']['data']);
+        $this->assertCount(2, $avanceRows);
+        // Parent stays fully used (its 600 went to the apply row)…
+        $parentRow = $avanceRows->firstWhere('id', $parentAvance->id);
+        $this->assertSame('0.00', (string) $parentRow['montantRestant']);
+        // …while the detached row carries the re-allocatable 600.
+        $detachedRow = $avanceRows->firstWhere('id', $applyRow->id);
+        $this->assertSame('600.00', (string) $detachedRow['montantRestant']);
+    }
+
     public function test_amount_above_remaining_balance_is_rejected_with_zero_side_effects(): void
     {
         $user = $this->userWith('payments.view', 'payments.create');

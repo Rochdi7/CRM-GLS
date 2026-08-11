@@ -9,7 +9,7 @@ import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
 import LocalPagination from '@/Components/Tables/LocalPagination';
-import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
+import RowActions, { RowActionDivider, RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
 import SelectField from '@/Components/Forms/SelectField';
 import DateField from '@/Components/Forms/DateField';
@@ -17,7 +17,7 @@ import FormField from '@/Components/Forms/FormField';
 import TextareaField from '@/Components/Forms/TextareaField';
 import FormActions from '@/Components/Forms/FormActions';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
-import type { EncaissementRow, EncaissementsPageProps, PaymentLine, SelectOption, UnpaidFee } from '@/Types';
+import type { EncaissementRow, EncaissementsPageProps, InscriptionPaymentRow, PaymentLine, SelectOption, UnpaidFee } from '@/Types';
 
 interface CreateFormState {
     student_id: number | '';
@@ -39,15 +39,15 @@ interface EditFormState {
     note: string;
 }
 
+/**
+ * "Convertir en avance" — no montant input: the amounts come from existing
+ * payments of the selected inscription; ticking rows detaches them from
+ * their frais server-side (avances.convert).
+ */
 interface AvanceFormState {
     student_id: number | '';
-    montant: string;
-    methode: string;
-    date_paiement: string;
-    numero_cheque: string;
-    banque: string;
-    date_echeance_cheque: string;
-    note: string;
+    inscription_id: number | '';
+    encaissement_ids: number[];
 }
 
 interface ApplyAvanceFormState {
@@ -75,13 +75,8 @@ function emptyCreateForm(): CreateFormState {
 function emptyAvanceForm(): AvanceFormState {
     return {
         student_id: '',
-        montant: '',
-        methode: 'Espèces',
-        date_paiement: new Date().toISOString().slice(0, 10),
-        numero_cheque: '',
-        banque: '',
-        date_echeance_cheque: '',
-        note: '',
+        inscription_id: '',
+        encaissement_ids: [],
     };
 }
 
@@ -105,6 +100,10 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
     const [feeLinesPage, setFeeLinesPage] = useState(1);
     const FEE_LINES_PER_PAGE = 4;
     const [showAvanceModal, setShowAvanceModal] = useState(false);
+    const [avanceInscriptionOptions, setAvanceInscriptionOptions] = useState<SelectOption[]>([]);
+    const [avancePayments, setAvancePayments] = useState<InscriptionPaymentRow[]>([]);
+    const [loadingAvanceInscriptions, setLoadingAvanceInscriptions] = useState(false);
+    const [loadingAvancePayments, setLoadingAvancePayments] = useState(false);
     const [applyTarget, setApplyTarget] = useState<EncaissementRow | null>(null);
     const [applyInscriptionOptions, setApplyInscriptionOptions] = useState<SelectOption[]>([]);
     const [applyFeeOptions, setApplyFeeOptions] = useState<Array<SelectOption & { reste: string }>>([]);
@@ -166,6 +165,8 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
     function openCreateAvance() {
         avanceForm.clearErrors();
         avanceForm.setData(emptyAvanceForm());
+        setAvanceInscriptionOptions([]);
+        setAvancePayments([]);
         setShowAvanceModal(true);
     }
 
@@ -173,9 +174,68 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
         setShowAvanceModal(false);
     }
 
+    async function onAvanceStudentChange(studentId: number | '') {
+        avanceForm.setData({ student_id: studentId, inscription_id: '', encaissement_ids: [] });
+        setAvanceInscriptionOptions([]);
+        setAvancePayments([]);
+
+        if (studentId === '') {
+            return;
+        }
+
+        setLoadingAvanceInscriptions(true);
+        try {
+            const response = await fetch(`/backoffice/students/${studentId}/inscriptions-for-payment`);
+            const data: { inscriptions: Array<{ id: number; label: string }> } = await response.json();
+            setAvanceInscriptionOptions(data.inscriptions.map((i) => ({ value: i.id, label: i.label })));
+        } finally {
+            setLoadingAvanceInscriptions(false);
+        }
+    }
+
+    async function onAvanceInscriptionChange(inscriptionId: number | '') {
+        avanceForm.setData((previous) => ({ ...previous, inscription_id: inscriptionId, encaissement_ids: [] }));
+        setAvancePayments([]);
+
+        if (inscriptionId === '') {
+            return;
+        }
+
+        setLoadingAvancePayments(true);
+        try {
+            const response = await fetch(`/backoffice/inscriptions/${inscriptionId}/payments`);
+            const data: { payments: InscriptionPaymentRow[] } = await response.json();
+            setAvancePayments(data.payments);
+        } finally {
+            setLoadingAvancePayments(false);
+        }
+    }
+
+    function toggleAvancePayment(id: number) {
+        avanceForm.setData((previous) => ({
+            ...previous,
+            encaissement_ids: previous.encaissement_ids.includes(id)
+                ? previous.encaissement_ids.filter((selected) => selected !== id)
+                : [...previous.encaissement_ids, id],
+        }));
+    }
+
+    const convertiblePayments = avancePayments.filter((p) => !p.rembourse);
+    const allAvanceSelected = convertiblePayments.length > 0 && convertiblePayments.every((p) => avanceForm.data.encaissement_ids.includes(p.id));
+    const avanceSelectedTotal = avancePayments
+        .filter((p) => avanceForm.data.encaissement_ids.includes(p.id))
+        .reduce((sum, p) => sum + Number(p.montant), 0);
+
+    function toggleAllAvancePayments() {
+        avanceForm.setData((previous) => ({
+            ...previous,
+            encaissement_ids: allAvanceSelected ? [] : convertiblePayments.map((p) => p.id),
+        }));
+    }
+
     function submitAvance(event: FormEvent) {
         event.preventDefault();
-        avanceForm.post('/backoffice/avances', {
+        avanceForm.post('/backoffice/avances/convert', {
             preserveScroll: true,
             onSuccess: () => closeAvanceModal(),
         });
@@ -354,8 +414,8 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
             actions={
                 filters.view === 'avance' ? (
                     <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreateAvance}>
-                        <i className="ti ti-square-rounded-plus me-2" />
-                        Enregistrer une avance
+                        <i className="ti ti-transfer me-2" />
+                        Convertir en avance
                     </button>
                 ) : (
                     <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
@@ -598,6 +658,25 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                                 <RowActionItem icon="ti-edit" onClick={() => openEdit(row)}>
                                                     Modifier
                                                 </RowActionItem>
+                                                <RowActionDivider />
+                                                <RowActionItem
+                                                    icon="ti-file-text"
+                                                    onClick={() => window.open(`${row.recuUrl}?format=a6`, '_blank')}
+                                                >
+                                                    Générer le reçu pour une imprimante ticket (format A6)
+                                                </RowActionItem>
+                                                <RowActionItem
+                                                    icon="ti-file-text"
+                                                    onClick={() => window.open(`${row.recuUrl}?format=a5`, '_blank')}
+                                                >
+                                                    Générer le reçu format A5
+                                                </RowActionItem>
+                                                <RowActionItem
+                                                    icon="ti-file-text"
+                                                    onClick={() => window.open(`${row.recuUrl}?format=a5x2`, '_blank')}
+                                                >
+                                                    Générer deux copies du reçu (Paysage A5)
+                                                </RowActionItem>
                                             </RowActions>
                                         </td>
                                     </tr>
@@ -724,6 +803,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                                                 value={line.datePaiement}
                                                                 onChange={(e) => setLine(index, { datePaiement: e.target.value })}
                                                                 error={dateError}
+                                                                panelAlign="right"
                                                             />
                                                         </td>
                                                     </tr>
@@ -798,27 +878,106 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                 </form>
             </Modal>
 
-            {/* Edit modal — only méthode/date/chèque/note are live; amount/caisse/student/fee are frozen. */}
+            {/* Edit modal — wimschool-style layout: read-only context fields
+                (étudiant / frais / montant total / reste à payer / montant de
+                paiement — money records are append-only, CLAUDE.md §11) with
+                only méthode/date/chèque/note as live inputs. */}
             <Modal
                 show={showModal && editingRow !== null}
-                title={editingRow ? `Modifier le paiement ${editingRow.reference}` : ''}
+                title={editingRow ? `Modifier paiement : ${editingRow.reference}` : ''}
                 onClose={closeModal}
                 processing={editForm.processing}
                 size="lg"
-                footer={<FormActions form="encaissement-edit-form" onCancel={closeModal} processing={editForm.processing} submitLabel="Enregistrer" />}
+                footer={
+                    <FormActions
+                        form="encaissement-edit-form"
+                        onCancel={closeModal}
+                        processing={editForm.processing}
+                        submitLabel="Modifier"
+                        cancelLabel="Fermer"
+                    />
+                }
             >
                 {editingRow && (
                     <form id="encaissement-edit-form" onSubmit={submitEdit}>
-                        <div className="alert alert-info">Le montant et la caisse ne peuvent pas être modifiés.</div>
-                        <div className="d-flex justify-content-between mb-2">
-                            <span className="text-muted">Montant</span>
-                            <span className="fw-medium">{Number(editingRow.montant).toFixed(2)} MAD</span>
-                        </div>
                         <div className="row">
+                            <div className="col-md-6 mb-3">
+                                <label className="form-label" htmlFor="e-edit-student">
+                                    Étudiant
+                                </label>
+                                <input
+                                    id="e-edit-student"
+                                    type="text"
+                                    className="form-control"
+                                    value={[editingRow.studentRef, editingRow.student].filter(Boolean).join(' | ') || '—'}
+                                    disabled
+                                />
+                            </div>
+                            <div className="col-md-6 mb-3">
+                                <label className="form-label" htmlFor="e-edit-frais">
+                                    Frais
+                                </label>
+                                <input
+                                    id="e-edit-frais"
+                                    type="text"
+                                    className="form-control"
+                                    value={editingRow.feeNom ?? 'Avance'}
+                                    disabled
+                                />
+                            </div>
+                            <div className="col-md-6 mb-3">
+                                <label className="form-label" htmlFor="e-edit-montant-total">
+                                    Montant total
+                                </label>
+                                <div className="input-group">
+                                    <input
+                                        id="e-edit-montant-total"
+                                        type="text"
+                                        className="form-control"
+                                        value={editingRow.feeMontantTotal !== null ? Number(editingRow.feeMontantTotal).toFixed(2) : '—'}
+                                        disabled
+                                    />
+                                    <span className="input-group-text">DH</span>
+                                </div>
+                            </div>
+                            <div className="col-md-6 mb-3">
+                                <label className="form-label" htmlFor="e-edit-reste">
+                                    Reste à payer
+                                </label>
+                                <div className="input-group">
+                                    <input
+                                        id="e-edit-reste"
+                                        type="text"
+                                        className="form-control"
+                                        value={editingRow.feeReste !== null ? Number(editingRow.feeReste).toFixed(2) : '—'}
+                                        disabled
+                                    />
+                                    <span className="input-group-text">DH</span>
+                                </div>
+                            </div>
+                            {/* Montant read-only by design: money records are
+                                append-only (corrections = remboursement + new
+                                paiement), and caisse.solde would silently
+                                desync otherwise. */}
+                            <div className="col-md-6 mb-3">
+                                <label className="form-label" htmlFor="e-edit-montant">
+                                    Montant de paiement
+                                </label>
+                                <div className="input-group">
+                                    <input
+                                        id="e-edit-montant"
+                                        type="text"
+                                        className="form-control"
+                                        value={Number(editingRow.montant).toFixed(2)}
+                                        disabled
+                                    />
+                                    <span className="input-group-text">DH</span>
+                                </div>
+                            </div>
                             <div className="col-md-6">
                                 <SelectField
                                     id="e-edit-methode"
-                                    label="Méthode"
+                                    label="Méthode de paiement"
                                     options={methodeOptions}
                                     required
                                     value={editForm.data.methode}
@@ -829,7 +988,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                             <div className="col-md-6">
                                 <DateField
                                     id="e-edit-date"
-                                    label="Date de paiement"
+                                    label="Date"
                                     required
                                     value={editForm.data.date_paiement}
                                     onChange={(e) => editForm.setData('date_paiement', e.target.value)}
@@ -884,16 +1043,27 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                 )}
             </Modal>
 
-            {/* Avance create modal — no fee/inscription cascade: just who paid,
-                how much, how, and when. Recorded with inscription_fee_id =
-                null (Encaissement::isAvance()), applied to a fee later. */}
+            {/* Convert-to-avance modal — no montant input: select a student,
+                one of their inscriptions, then tick the payments to detach
+                from their frais (avances.convert). The frais drop back to
+                Non payé / Payé partiellement; the amounts reappear on the
+                Avances tab (montant utilisé/restant) ready to be applied to
+                another inscription's frais — the "changement de groupe"
+                money-move flow. */}
             <Modal
                 show={showAvanceModal}
-                title="Enregistrer une avance"
+                title="Convertir des paiements en avance"
                 onClose={closeAvanceModal}
                 processing={avanceForm.processing}
                 size="lg"
-                footer={<FormActions form="avance-form" onCancel={closeAvanceModal} processing={avanceForm.processing} submitLabel="Enregistrer" />}
+                footer={
+                    <FormActions
+                        form="avance-form"
+                        onCancel={closeAvanceModal}
+                        processing={avanceForm.processing}
+                        submitLabel="Convertir en avance"
+                    />
+                }
             >
                 <form id="avance-form" onSubmit={submitAvance}>
                     <div className="row">
@@ -905,88 +1075,102 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                 placeholder="Sélectionner un étudiant"
                                 required
                                 value={avanceForm.data.student_id}
-                                onChange={(e) => avanceForm.setData('student_id', e.target.value === '' ? '' : Number(e.target.value))}
+                                onChange={(e) => onAvanceStudentChange(e.target.value === '' ? '' : Number(e.target.value))}
                                 error={avanceForm.errors.student_id}
                             />
                         </div>
                         <div className="col-md-6">
-                            <FormField
-                                id="av-montant"
-                                label="Montant"
-                                type="number"
-                                step="0.01"
-                                min="0.01"
-                                required
-                                value={avanceForm.data.montant}
-                                onChange={(e) => avanceForm.setData('montant', e.target.value)}
-                                error={avanceForm.errors.montant}
-                            />
-                        </div>
-                        <div className="col-md-6">
                             <SelectField
-                                id="av-methode"
-                                label="Méthode"
-                                options={methodeOptions}
+                                id="av-inscription"
+                                label="Inscription"
+                                options={avanceInscriptionOptions}
+                                placeholder={loadingAvanceInscriptions ? 'Chargement…' : 'Sélectionner une inscription'}
                                 required
-                                value={avanceForm.data.methode}
-                                onChange={(e) => avanceForm.setData('methode', e.target.value)}
-                                error={avanceForm.errors.methode}
-                            />
-                        </div>
-                        <div className="col-md-6">
-                            <DateField
-                                id="av-date"
-                                label="Date"
-                                required
-                                value={avanceForm.data.date_paiement}
-                                onChange={(e) => avanceForm.setData('date_paiement', e.target.value)}
-                                error={avanceForm.errors.date_paiement}
+                                disabled={avanceForm.data.student_id === '' || loadingAvanceInscriptions}
+                                value={avanceForm.data.inscription_id}
+                                onChange={(e) => onAvanceInscriptionChange(e.target.value === '' ? '' : Number(e.target.value))}
+                                error={avanceForm.errors.inscription_id}
                             />
                         </div>
                     </div>
-                    {avanceForm.data.methode === 'Chèque' && (
-                        <div className="row">
-                            <div className="col-md-4">
-                                <FormField
-                                    id="av-numero-cheque"
-                                    label="Numéro de chèque"
-                                    required
-                                    value={avanceForm.data.numero_cheque}
-                                    onChange={(e) => avanceForm.setData('numero_cheque', e.target.value)}
-                                    error={avanceForm.errors.numero_cheque}
-                                />
-                            </div>
-                            <div className="col-md-4">
-                                <FormField
-                                    id="av-banque"
-                                    label="Banque"
-                                    required
-                                    list="banques-suggestions"
-                                    value={avanceForm.data.banque}
-                                    onChange={(e) => avanceForm.setData('banque', e.target.value)}
-                                    error={avanceForm.errors.banque}
-                                    placeholder="ex : Attijariwafa Bank"
-                                />
-                            </div>
-                            <div className="col-md-4">
-                                <DateField
-                                    id="av-date-echeance-cheque"
-                                    label="Échéance du chèque"
-                                    required
-                                    value={avanceForm.data.date_echeance_cheque}
-                                    onChange={(e) => avanceForm.setData('date_echeance_cheque', e.target.value)}
-                                    error={avanceForm.errors.date_echeance_cheque}
-                                />
-                            </div>
-                        </div>
+
+                    {avanceForm.data.inscription_id !== '' && (
+                        loadingAvancePayments ? (
+                            <p className="text-muted mb-0">Chargement des paiements…</p>
+                        ) : avancePayments.length === 0 ? (
+                            <p className="text-muted mb-0">Aucun paiement enregistré sur cette inscription.</p>
+                        ) : (
+                            <>
+                                <p className="text-muted fs-13">
+                                    Les paiements cochés seront détachés de leurs frais (qui redeviennent à payer)
+                                    et leur montant sera disponible en avance, à appliquer ensuite sur les frais
+                                    d'une autre inscription. Aucun paiement n'est supprimé et la caisse n'est pas
+                                    modifiée.
+                                </p>
+                                <div className="table-responsive">
+                                    <table className="table table-sm align-middle mb-2">
+                                        <thead>
+                                            <tr>
+                                                <th style={{ width: '2.5rem' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        className="form-check-input"
+                                                        aria-label="Tout sélectionner"
+                                                        checked={allAvanceSelected}
+                                                        onChange={toggleAllAvancePayments}
+                                                    />
+                                                </th>
+                                                <th>Référence</th>
+                                                <th>Frais</th>
+                                                <th className="text-end">Montant</th>
+                                                <th>Méthode</th>
+                                                <th>Date</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {avancePayments.map((payment) => (
+                                                <tr key={payment.id}>
+                                                    <td>
+                                                        <input
+                                                            type="checkbox"
+                                                            className="form-check-input"
+                                                            aria-label={`Sélectionner ${payment.reference}`}
+                                                            disabled={payment.rembourse}
+                                                            checked={avanceForm.data.encaissement_ids.includes(payment.id)}
+                                                            onChange={() => toggleAvancePayment(payment.id)}
+                                                        />
+                                                    </td>
+                                                    <td>
+                                                        <code>{payment.reference}</code>
+                                                    </td>
+                                                    <td>
+                                                        {payment.feeNom ?? '—'}
+                                                        {payment.rembourse && (
+                                                            <span className="badge badge-soft-danger ms-2">Remboursé</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="text-end fw-medium">{Number(payment.montant).toFixed(2)} MAD</td>
+                                                    <td>
+                                                        <span className="badge badge-soft-info">{payment.methode}</span>
+                                                    </td>
+                                                    <td>{payment.datePaiement ?? '—'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="d-flex justify-content-between border-top pt-2">
+                                    <span className="text-muted">
+                                        {avanceForm.data.encaissement_ids.length} paiement(s) sélectionné(s)
+                                    </span>
+                                    <span className="fw-medium">Total à convertir : {avanceSelectedTotal.toFixed(2)} MAD</span>
+                                </div>
+                            </>
+                        )
                     )}
-                    <TextareaField
-                        id="av-note"
-                        label="Note"
-                        value={avanceForm.data.note}
-                        onChange={(e) => avanceForm.setData('note', e.target.value)}
-                        error={avanceForm.errors.note}
-                    />
+                    {avanceForm.errors.encaissement_ids && (
+                        <div className="text-danger fs-13 mt-2">{avanceForm.errors.encaissement_ids}</div>
+                    )}
                 </form>
             </Modal>
 

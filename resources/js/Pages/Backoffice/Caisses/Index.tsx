@@ -20,8 +20,12 @@ import type { CaissesPageProps, CaisseJournalData, CaisseTransferRow, SelectOpti
 
 type Tab = 'ma-caisse' | 'transferts';
 
+/**
+ * No caisse_source_id: the source is ALWAYS the acting employee's own till,
+ * derived server-side (CaisseTransferController::store) — the modal only
+ * shows it read-only via the `myCaisse` page prop.
+ */
 interface TransferFormState {
-    caisse_source_id: number | '';
     caisse_destination_id: number | '';
     montant: string;
     date_transfert: string;
@@ -33,7 +37,7 @@ function todayIso(): string {
 }
 
 function emptyTransferForm(): TransferFormState {
-    return { caisse_source_id: '', caisse_destination_id: '', montant: '', date_transfert: todayIso(), note: '' };
+    return { caisse_destination_id: '', montant: '', date_transfert: todayIso(), note: '' };
 }
 
 const TRANSFER_STATUT_BADGE: Record<string, 'success' | 'secondary' | 'warning'> = {
@@ -247,6 +251,7 @@ export default function CaissesIndex({
     transferCaisses,
     transferStatuts,
     currentEmployeeId,
+    myCaisse,
     transferFilters: initialTransferFilters,
 }: CaissesPageProps) {
     const isLoading = useInertiaLoading();

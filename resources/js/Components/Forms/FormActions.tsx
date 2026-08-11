@@ -2,6 +2,7 @@ interface FormActionsProps {
     onCancel: () => void;
     processing: boolean;
     submitLabel?: string;
+    cancelLabel?: string;
     processingLabel?: string;
     /**
      * REQUIRED whenever FormActions renders in a Modal `footer` slot: the
@@ -18,13 +19,14 @@ export default function FormActions({
     onCancel,
     processing,
     submitLabel = 'Enregistrer',
+    cancelLabel = 'Annuler',
     processingLabel = 'Enregistrement…',
     form,
 }: FormActionsProps) {
     return (
         <>
             <button type="button" className="btn btn-light" onClick={onCancel} disabled={processing}>
-                Annuler
+                {cancelLabel}
             </button>
             <button type="submit" form={form} className="btn btn-primary" disabled={processing}>
                 {processing ? (

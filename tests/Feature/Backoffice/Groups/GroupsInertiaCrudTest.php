@@ -318,4 +318,171 @@ final class GroupsInertiaCrudTest extends TestCase
             ->get(route('backoffice.groups.students-by-segment', $group))
             ->assertForbidden();
     }
+
+    // --- annuler / réactiver (row-menu quick lifecycle actions) ---------
+
+    public function test_annuler_sets_statut_to_annulee_and_writes_historique(): void
+    {
+        $group = Group::factory()->create([
+            'statut' => Group::STATUT_EN_FORMATION,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $this->actingAs($this->userWith('groups.view', 'groups.archive'))
+            ->post(route('backoffice.groups.annuler', $group))
+            ->assertRedirect(route('backoffice.groups.index'));
+
+        $fresh = $group->fresh();
+        $this->assertSame(Group::STATUT_ANNULEE, $fresh->statut);
+        $this->assertNotNull($fresh->historique);
+    }
+
+    public function test_annuler_is_refused_from_an_already_terminal_status(): void
+    {
+        $group = Group::factory()->create([
+            'statut' => Group::STATUT_EN_FORMATION,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+        $group->archiverCommeTermine();
+
+        $this->actingAs($this->userWith('groups.view', 'groups.archive'))
+            ->post(route('backoffice.groups.annuler', $group))
+            ->assertRedirect();
+
+        $this->assertSame(Group::STATUT_FIN_FORMATION, $group->fresh()->statut);
+    }
+
+    public function test_annuler_requires_groups_archive_permission(): void
+    {
+        $group = Group::factory()->create([
+            'statut' => Group::STATUT_EN_FORMATION,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $this->actingAs($this->userWith('groups.view'))
+            ->post(route('backoffice.groups.annuler', $group))
+            ->assertForbidden();
+
+        $this->assertSame(Group::STATUT_EN_FORMATION, $group->fresh()->statut);
+    }
+
+    public function test_reactiver_sets_statut_back_to_en_inscription(): void
+    {
+        $group = Group::factory()->create([
+            'statut' => Group::STATUT_ANNULEE,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $this->actingAs($this->userWith('groups.view', 'groups.archive'))
+            ->post(route('backoffice.groups.reactiver', $group))
+            ->assertRedirect(route('backoffice.groups.index'));
+
+        $this->assertSame(Group::STATUT_EN_INSCRIPTION, $group->fresh()->statut);
+    }
+
+    public function test_reactiver_is_refused_from_fin_de_formation(): void
+    {
+        $group = Group::factory()->create([
+            'statut' => Group::STATUT_EN_FORMATION,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+        $group->archiverCommeTermine();
+
+        $this->actingAs($this->userWith('groups.view', 'groups.archive'))
+            ->post(route('backoffice.groups.reactiver', $group))
+            ->assertRedirect();
+
+        $this->assertSame(Group::STATUT_FIN_FORMATION, $group->fresh()->statut);
+    }
+
+    public function test_activer_sets_statut_to_en_formation(): void
+    {
+        $group = Group::factory()->create([
+            'statut' => Group::STATUT_EN_INSCRIPTION,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $this->actingAs($this->userWith('groups.view', 'groups.archive'))
+            ->post(route('backoffice.groups.activer', $group))
+            ->assertRedirect(route('backoffice.groups.index'));
+
+        $this->assertSame(Group::STATUT_EN_FORMATION, $group->fresh()->statut);
+    }
+
+    public function test_activer_is_refused_when_not_en_inscription(): void
+    {
+        $group = Group::factory()->create([
+            'statut' => Group::STATUT_EN_FORMATION,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $this->actingAs($this->userWith('groups.view', 'groups.archive'))
+            ->post(route('backoffice.groups.activer', $group))
+            ->assertRedirect();
+
+        $this->assertSame(Group::STATUT_EN_FORMATION, $group->fresh()->statut);
+    }
+
+    public function test_activer_requires_groups_archive_permission(): void
+    {
+        $group = Group::factory()->create([
+            'statut' => Group::STATUT_EN_INSCRIPTION,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $this->actingAs($this->userWith('groups.view'))
+            ->post(route('backoffice.groups.activer', $group))
+            ->assertForbidden();
+
+        $this->assertSame(Group::STATUT_EN_INSCRIPTION, $group->fresh()->statut);
+    }
+
+    public function test_a_group_can_be_cancelled_reactivated_and_cancelled_again_without_error(): void
+    {
+        $group = Group::factory()->create([
+            'statut' => Group::STATUT_EN_FORMATION,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $group->annuler();
+        $this->assertSame(Group::STATUT_ANNULEE, $group->fresh()->statut);
+
+        $group->reactiver();
+        $this->assertSame(Group::STATUT_EN_INSCRIPTION, $group->fresh()->statut);
+
+        $group->annuler();
+        $this->assertSame(Group::STATUT_ANNULEE, $group->fresh()->statut);
+
+        // historique() is a HasOne — the second annuler() must refresh the
+        // same snapshot row, not error or create a duplicate.
+        $this->assertSame(1, $group->historique()->count());
+    }
+
+    public function test_historique_tab_combines_fin_de_formation_and_annulee_groups(): void
+    {
+        $finished = Group::factory()->create([
+            'nom' => 'Groupe Terminé', 'statut' => Group::STATUT_EN_FORMATION,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+        $finished->archiverCommeTermine();
+
+        $cancelled = Group::factory()->create([
+            'nom' => 'Groupe Annulé', 'statut' => Group::STATUT_EN_FORMATION,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+        $cancelled->annuler();
+
+        Group::factory()->create([
+            'nom' => 'Groupe Actif', 'statut' => Group::STATUT_EN_FORMATION,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $this->actingAs($this->userWith('groups.view'))
+            ->get(route('backoffice.groups.index', ['statutFilter' => Group::STATUT_FIN_FORMATION]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('groups.total', 2)
+                ->where('statutCounts.Fin de formation', 2)
+            );
+    }
 }

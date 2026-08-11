@@ -9,8 +9,8 @@ use App\Models\Inscription;
 use Illuminate\Support\Collection;
 
 /**
- * Drills into one of the Groups list's "Statistique" badges (total /
- * active / annulée / distinct students) — same 4 counts GetGroupsList
+ * Drills into one of the Groups list's Étudiants/Statistique badges (distinct
+ * students / active / changement / annulée) — same counts GetGroupsList
  * computes via withCount, now returning the actual student rows behind
  * whichever badge was clicked.
  */
@@ -22,12 +22,15 @@ final class GetGroupStudentsBySegment
 
     public const SEGMENT_ANNULEE = 'annulee';
 
+    public const SEGMENT_CHANGEMENT = 'changement';
+
     public const SEGMENT_ETUDIANTS = 'etudiants';
 
     public const SEGMENTS = [
         self::SEGMENT_TOTAL,
         self::SEGMENT_ACTIVE,
         self::SEGMENT_ANNULEE,
+        self::SEGMENT_CHANGEMENT,
         self::SEGMENT_ETUDIANTS,
     ];
 
@@ -47,6 +50,7 @@ final class GetGroupStudentsBySegment
         match ($segment) {
             self::SEGMENT_ACTIVE => $query->where('statut', Inscription::STATUT_ACTIVE),
             self::SEGMENT_ANNULEE => $query->where('statut', Inscription::STATUT_ANNULEE),
+            self::SEGMENT_CHANGEMENT => $query->where('statut', Inscription::STATUT_CHANGEMENT),
             // "total" and "étudiants" both start from every inscription in
             // the group; étudiants additionally dedupes by student below.
             default => null,

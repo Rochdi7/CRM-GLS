@@ -15,9 +15,14 @@ use Illuminate\Support\Facades\DB;
 /**
  * Class / cohort (gls-crm-schema.md §6).
  *
- * statut lifecycle: En inscription → En formation → Fin de formation.
- * A group row is NEVER deleted, even after finishing (inscriptions.group_id
- * must stay a valid FK). groups_historique is an archive snapshot only.
+ * statut lifecycle: En inscription → En formation → {Fin de formation |
+ * Annulée} (both terminal, both shown in the list's "Historique" tab —
+ * Annulée for a group that never actually ran, Fin de formation for one
+ * that completed normally). En inscription -> Annulée is not offered by the
+ * UI's quick actions (only from En formation) but is not blocked here.
+ * A group row is NEVER deleted, even after finishing/cancelling
+ * (inscriptions.group_id must stay a valid FK). groups_historique is an
+ * archive snapshot only.
  */
 class Group extends Model
 {
@@ -30,10 +35,19 @@ class Group extends Model
 
     public const STATUT_FIN_FORMATION = 'Fin de formation';
 
+    public const STATUT_ANNULEE = 'Annulée';
+
     public const STATUTS = [
         self::STATUT_EN_INSCRIPTION,
         self::STATUT_EN_FORMATION,
         self::STATUT_FIN_FORMATION,
+        self::STATUT_ANNULEE,
+    ];
+
+    /** Terminal statuses grouped under the list's "Historique" tab. */
+    public const STATUTS_HISTORIQUE = [
+        self::STATUT_FIN_FORMATION,
+        self::STATUT_ANNULEE,
     ];
 
     /**
@@ -114,7 +128,64 @@ class Group extends Model
                 'date_fin_formation' => $this->date_fin_formation ?? now(),
             ]);
 
-            $this->historique()->create([
+            $this->writeHistoriqueSnapshot($archivedBy);
+        });
+    }
+
+    /**
+     * Marks the group cancelled (never actually ran, as opposed to
+     * "Fin de formation"'s normal completion) and archives the same kind of
+     * snapshot — the group's own `statut` column is what distinguishes the
+     * two in the Historique tab, since groups_historique itself carries no
+     * separate "reason" column. Only valid from En inscription/En formation
+     * (never from an already-terminal status — enforced by the caller via
+     * the same authorize()/guard pattern archive() uses).
+     */
+    public function annuler(?Employee $archivedBy = null): void
+    {
+        DB::transaction(function () use ($archivedBy): void {
+            $this->update(['statut' => self::STATUT_ANNULEE]);
+
+            $this->writeHistoriqueSnapshot($archivedBy);
+        });
+    }
+
+    /**
+     * Reverses annuler() — brings a cancelled group back to "En inscription"
+     * so enrollment can resume. Deliberately does NOT touch groups_historique
+     * (the snapshot row is refreshed again by whichever terminal action
+     * happens next, if any); "Fin de formation" is never reactivated through
+     * this method — that transition stays one-way, matching
+     * archiverCommeTermine()'s existing irreversibility.
+     */
+    public function reactiver(): void
+    {
+        $this->update(['statut' => self::STATUT_EN_INSCRIPTION]);
+    }
+
+    /**
+     * Starts the training — moves a group from "En inscription" to
+     * "En formation" (enrollment closes, the class is now actually running).
+     * Only valid from En inscription; refused otherwise by the caller's own
+     * guard, same pattern as annuler()/reactiver().
+     */
+    public function activer(): void
+    {
+        $this->update(['statut' => self::STATUT_EN_FORMATION]);
+    }
+
+    /**
+     * updateOrCreate rather than create(): a group can cycle
+     * annuler() -> reactiver() -> annuler()/archiverCommeTermine() more than
+     * once, and historique() is a HasOne — always keep the single snapshot
+     * row current instead of erroring or duplicating on a second terminal
+     * transition.
+     */
+    private function writeHistoriqueSnapshot(?Employee $archivedBy): void
+    {
+        $this->historique()->updateOrCreate(
+            ['group_id' => $this->id],
+            [
                 'nom' => $this->nom,
                 'niveau' => $this->niveau,
                 'enseignant_id' => $this->enseignant_id,
@@ -125,7 +196,7 @@ class Group extends Model
                 'date_fin_formation' => $this->date_fin_formation,
                 'archived_at' => now(),
                 'archived_by' => $archivedBy?->id,
-            ]);
-        });
+            ],
+        );
     }
 }

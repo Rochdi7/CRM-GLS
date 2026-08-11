@@ -1,5 +1,6 @@
 import { router } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import type { Context } from '@/Types';
 
 interface ContextSwitcherProps {
@@ -7,7 +8,7 @@ interface ContextSwitcherProps {
 }
 
 /** Fixed-position coordinates for a dropdown menu, measured from its trigger. */
-type MenuPos = { top: number; right: number } | null;
+type MenuPos = { top: number; left: number } | null;
 
 /**
  * Measures a trigger button's position for a `position: fixed` dropdown menu
@@ -17,11 +18,39 @@ type MenuPos = { top: number; right: number } | null;
  * eating its clicks. Fixed positioning anchored to the trigger's own
  * bounding rect sidesteps that entirely — same fix already applied to
  * RowActions.tsx for the same class of bug.
+ *
+ * Anchored via `left` (not `right`) and reported through the
+ * `--gls-menu-left` custom property (see app.css): the theme's own
+ * `.header .dropdown-menu { left: unset !important; right: 0 !important; }`
+ * (style.css, from _header.scss — written for Bootstrap's own JS-driven
+ * data-bs-popper dropdowns, which this app never uses) unconditionally wins
+ * over a plain inline `left`/`right`, snapping the menu to the viewport's
+ * true right edge regardless of the trigger's position. Only `!important`
+ * beats `!important`, so app.css re-asserts `left` with its own
+ * `!important`, reading the actual offset from this custom property (custom
+ * properties aren't subject to the same shorthand override). The menu's
+ * right edge is then aligned to the trigger's right edge with
+ * `translateX(-100%)`.
  */
 function measureMenuPos(trigger: HTMLElement): MenuPos {
     const rect = trigger.getBoundingClientRect();
 
-    return { top: rect.bottom + 4, right: Math.max(8, window.innerWidth - rect.right) };
+    return { top: rect.bottom + 4, left: rect.right };
+}
+
+/** Builds the fixed-position style, including the `--gls-menu-left` custom property app.css reads. */
+function menuStyle(pos: MenuPos): CSSProperties | undefined {
+    if (!pos) {
+        return undefined;
+    }
+
+    return {
+        position: 'fixed',
+        top: pos.top,
+        right: 'auto',
+        transform: 'translateX(-100%)',
+        ['--gls-menu-left' as string]: `${pos.left}px`,
+    } as CSSProperties;
 }
 
 /**
@@ -141,7 +170,7 @@ export default function ContextSwitcher({ context }: ContextSwitcherProps) {
                 </button>
                 <div
                     className={`dropdown-menu dropdown-menu-end${yearMenuOpen ? ' show' : ''}`}
-                    style={yearMenuOpen && yearMenuPos ? { position: 'fixed', left: 'auto', ...yearMenuPos } : undefined}
+                    style={yearMenuOpen ? menuStyle(yearMenuPos) : undefined}
                 >
                     {context.availableAcademicYears.map((annee) => (
                         <button
@@ -173,7 +202,7 @@ export default function ContextSwitcher({ context }: ContextSwitcherProps) {
                 {context.canSwitchCenter && (
                     <div
                         className={`dropdown-menu dropdown-menu-end${centerMenuOpen ? ' show' : ''}`}
-                        style={centerMenuOpen && centerMenuPos ? { position: 'fixed', left: 'auto', ...centerMenuPos } : undefined}
+                        style={centerMenuOpen ? menuStyle(centerMenuPos) : undefined}
                     >
                         <button
                             type="button"
