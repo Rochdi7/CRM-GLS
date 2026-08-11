@@ -343,6 +343,7 @@ export default function SeancesIndex({
                 title={editingId ? 'Modifier la séance' : 'Ajouter une séance'}
                 onClose={closeModal}
                 processing={form.processing}
+                size="lg"
             >
                 <form onSubmit={handleSubmit}>
                     <div className="row">

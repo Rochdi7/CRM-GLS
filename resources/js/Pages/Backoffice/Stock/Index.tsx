@@ -477,6 +477,7 @@ export default function StockIndex({
                 title={editingId ? "Modifier l'article" : 'Ajouter un article'}
                 onClose={closeArticleModal}
                 processing={articleForm.processing}
+                size="lg"
             >
                 <form onSubmit={submitArticle}>
                     <div className="row">
@@ -553,6 +554,7 @@ export default function StockIndex({
                 title="Nouveau mouvement de stock"
                 onClose={closeMouvementModal}
                 processing={mouvementForm.processing}
+                size="lg"
             >
                 <form onSubmit={submitMouvement}>
                     <div className="row">
@@ -573,7 +575,13 @@ export default function StockIndex({
                                 id="mvt-type"
                                 label="Type"
                                 required
-                                options={mouvementTypes.map((type) => ({ value: type, label: type }))}
+                                // "Ajustement" (inventory recount) stays a valid
+                                // backend type — the model/action still support
+                                // it — but isn't offered here anymore; staff
+                                // corrections go through Entrée/Sortie instead.
+                                options={mouvementTypes
+                                    .filter((type) => type !== 'Ajustement')
+                                    .map((type) => ({ value: type, label: type }))}
                                 value={mouvementForm.data.type}
                                 onChange={(event) => mouvementForm.setData('type', event.target.value)}
                                 error={mouvementForm.errors.type}

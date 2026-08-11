@@ -338,6 +338,7 @@ export default function EmploiDuTempsIndex({
                 title={editingId ? 'Modifier le créneau' : 'Ajouter un créneau'}
                 onClose={closeModal}
                 processing={form.processing}
+                size="lg"
             >
                 <form onSubmit={submit}>
                     <div className="row">

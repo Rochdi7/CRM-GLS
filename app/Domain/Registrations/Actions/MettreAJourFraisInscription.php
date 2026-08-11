@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Full replacement of an existing inscription's fee lines, in ONE
+ * Full replacement of an existing inscription's VISIBLE fee lines, in ONE
  * transaction — the edit-modal counterpart to the create form's fee-line
  * table (InscriptionController::store()), now made live for the first time
  * (registrations.manage-fees was previously only checked by a dead
@@ -19,12 +19,17 @@ use Illuminate\Validation\ValidationException;
  *
  * Lines carrying an `id` update that InscriptionFee row (amount/discount/
  * date/note only — statut is always recomputed from actual payments, never
- * trusted from the client); lines with no `id` are created; any existing
- * row absent from the submitted set is deleted. Deliberately unrestricted —
- * a fee already fully or partially paid can still have its montant changed
- * or be removed (per product decision); removing a line that has payments
- * hits the same encaissements FK-restrict the standalone destroy() already
- * relies on, surfaced here as a field error instead of a 500.
+ * trusted from the client); lines with no `id` are created; any VISIBLE
+ * existing row absent from the submitted set is deleted (hidden rows —
+ * masque_le set — are simply never sent back by the client, since fees()
+ * only returns visible ones, and must NOT be swept up by this "omitted =
+ * delete" comparison — hiding/restoring a fee is MasquerFraisInscription/
+ * RestaurerFraisInscription's job, never a hard delete). Deliberately
+ * unrestricted on visible rows — a fee already fully or partially paid can
+ * still have its montant changed or be removed (per product decision);
+ * removing a line that has payments hits the same encaissements FK-restrict
+ * the standalone destroy() already relies on, surfaced here as a field
+ * error instead of a 500.
  */
 final class MettreAJourFraisInscription
 {
@@ -77,12 +82,13 @@ final class MettreAJourFraisInscription
                 }
 
                 $inscription->fees()
+                    ->whereNull('masque_le')
                     ->whereNotIn('id', $keptIds)
                     ->get()
                     ->each(fn (InscriptionFee $fee) => $fee->delete());
 
                 $inscription->update([
-                    'montant_total' => $inscription->fees()->sum('montant') ?: null,
+                    'montant_total' => $inscription->fees()->whereNull('masque_le')->sum('montant') ?: null,
                 ]);
 
                 return $inscription->fresh('fees');

@@ -78,6 +78,7 @@ final class StudentController extends Controller
             ],
             'perPageOptions' => GetStudentsList::PER_PAGE_OPTIONS,
             'niveaux' => Student::NIVEAUX,
+            'niveauxInteret' => Student::NIVEAUX_TRACKS,
             'domaines' => Student::DOMAINES,
             'examenTypes' => Student::EXAMEN_TYPES,
             'sexes' => Student::SEXES,

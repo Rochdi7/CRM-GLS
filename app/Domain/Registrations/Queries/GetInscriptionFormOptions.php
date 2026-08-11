@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Registrations\Queries;
 
+use App\Models\Frais;
 use App\Models\Group;
 use App\Models\Student;
 use App\Services\Authorization\CenterAccessService;
@@ -55,5 +56,21 @@ final class GetInscriptionFormOptions
             ->orderBy('nom')
             ->get()
             ->map(fn (Group $g): array => ['id' => $g->id, 'label' => "{$g->nom} — {$g->niveau}"]);
+    }
+
+    /**
+     * Active catalog fees — feeds the edit modal's "Ajouter un frais"
+     * picker, so a fee not originally assigned to the group can still be
+     * added to a single inscription after the fact.
+     *
+     * @return Collection<int, array{id: int, label: string}>
+     */
+    public function frais(): Collection
+    {
+        return Frais::query()
+            ->where('statut', Frais::STATUT_ACTIF)
+            ->orderBy('nom')
+            ->get()
+            ->map(fn (Frais $f): array => ['id' => $f->id, 'label' => $f->nom]);
     }
 }

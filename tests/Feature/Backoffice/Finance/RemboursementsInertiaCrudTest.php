@@ -4,9 +4,14 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Backoffice\Finance;
 
+use App\Models\AnneeScolaire;
 use App\Models\Caisse;
 use App\Models\Employee;
+use App\Models\Encaissement;
 use App\Models\Etablissement;
+use App\Models\Group;
+use App\Models\Inscription;
+use App\Models\InscriptionFee;
 use App\Models\Remboursement;
 use App\Models\Student;
 use App\Models\User;
@@ -35,6 +40,40 @@ final class RemboursementsInertiaCrudTest extends TestCase
         parent::setUp();
         $this->seed(RolesAndPermissionsSeeder::class);
         $this->centre = Etablissement::factory()->create();
+    }
+
+    /**
+     * @return array{0: Student, 1: Encaissement} a student with one
+     *     fee-targeted payment (not an avance)
+     */
+    private function studentWithPayment(float $montant = 500): array
+    {
+        $annee = AnneeScolaire::firstOrCreate(
+            ['nom' => '2025/2026'],
+            ['date_debut' => '2025-09-01', 'date_fin' => '2026-08-31', 'par_defaut' => true, 'inscription_ouverte' => true],
+        );
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $group = Group::factory()->create(['etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $annee->id]);
+        $inscription = Inscription::create([
+            'reference' => 'INS-'.fake()->unique()->numerify('#####'),
+            'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $annee->id,
+            'statut' => Inscription::STATUT_ACTIVE, 'date_inscription' => '2025-09-15',
+        ]);
+        $fee = InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => 'Frais de Juillet',
+            'montant_initial' => $montant, 'montant' => $montant,
+            'date_echeance' => '2025-07-31', 'statut' => InscriptionFee::STATUT_PAYE,
+        ]);
+        $caisse = Caisse::factory()->create(['etablissement_id' => $this->centre->id]);
+        $encaissement = Encaissement::create([
+            'reference' => 'ENC-'.fake()->unique()->numerify('#####'),
+            'student_id' => $student->id, 'inscription_fee_id' => $fee->id,
+            'caisse_id' => $caisse->id, 'agent_id' => Employee::factory()->create(['etablissement_id' => $this->centre->id])->id,
+            'montant' => $montant, 'methode' => 'Espèces', 'date_paiement' => '2025-09-20',
+        ]);
+
+        return [$student, $encaissement];
     }
 
     private function userWith(string ...$permissions): User
@@ -80,6 +119,34 @@ final class RemboursementsInertiaCrudTest extends TestCase
         $remboursement = Remboursement::where('beneficiaire_id', $student->id)->first();
         $this->assertNotNull($remboursement);
         $this->assertStringStartsWith('RMB-', $remboursement->reference);
+        $this->assertSame('850.00', (string) $caisse->fresh()->solde);
+    }
+
+    /**
+     * Regression: the create form never has a caisse field (the till is
+     * always the acting employee's own), so the real-world payload has NO
+     * caisse_id at all. Before this fix, caisse_id was still `required`
+     * server-side, which silently failed every submission from the actual
+     * UI — this is the "click Enregistrer, nothing happens" bug.
+     */
+    public function test_a_remboursement_can_be_created_with_no_caisse_id_in_the_payload(): void
+    {
+        $user = $this->userWith('refunds.view', 'refunds.create');
+        $this->actingAs($user);
+        $caisse = $user->employee->caisses()->first();
+        $caisse->update(['solde' => 1000]);
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+
+        $this->post(route('backoffice.remboursements.store'), [
+            'beneficiaire_id' => $student->id,
+            'montant' => '150',
+            'date_remboursement' => '2025-09-20',
+        ])->assertSessionDoesntHaveErrors()
+            ->assertRedirect(route('backoffice.depenses.index', ['tab' => 'remboursements']));
+
+        $remboursement = Remboursement::where('beneficiaire_id', $student->id)->first();
+        $this->assertNotNull($remboursement);
+        $this->assertSame($caisse->id, $remboursement->caisse_id);
         $this->assertSame('850.00', (string) $caisse->fresh()->solde);
     }
 
@@ -152,5 +219,79 @@ final class RemboursementsInertiaCrudTest extends TestCase
             'montant' => '150',
             'date_remboursement' => '2025-09-20',
         ])->assertForbidden();
+    }
+
+    /**
+     * Covers the create form's "which payment are we refunding?" cascade
+     * (GetStudentPaymentsForRefund) — selecting a student lists their
+     * fee-targeted payments, excluding unallocated avances.
+     */
+    public function test_student_payments_lists_only_fee_targeted_payments_not_avances(): void
+    {
+        $this->actingAs($this->userWith('refunds.view', 'refunds.create'));
+        [$student, $encaissement] = $this->studentWithPayment(500);
+
+        // A genuine avance for the same student — must NOT appear.
+        Encaissement::create([
+            'reference' => 'ENC-AVANCE', 'student_id' => $student->id, 'inscription_fee_id' => null,
+            'caisse_id' => $encaissement->caisse_id, 'agent_id' => $encaissement->agent_id,
+            'montant' => 200, 'methode' => 'Espèces', 'date_paiement' => '2025-09-21',
+        ]);
+
+        $response = $this->get(route('backoffice.students.payments-for-refund', $student))->json();
+
+        $this->assertCount(1, $response['payments']);
+        $this->assertSame($encaissement->id, $response['payments'][0]['id']);
+        $this->assertSame('500.00', $response['payments'][0]['montant']);
+        $this->assertSame('0.00', $response['payments'][0]['dejaRembourse']);
+    }
+
+    /**
+     * Picking a payment links the refund back to it (encaissement_id) —
+     * traceability, not a hard cap: the amount stays whatever was submitted.
+     */
+    public function test_a_remboursement_can_be_linked_to_the_payment_it_refunds(): void
+    {
+        $user = $this->userWith('refunds.view', 'refunds.create');
+        $this->actingAs($user);
+        $caisse = $user->employee->caisses()->first();
+        $caisse->update(['solde' => 1000]);
+        [$student, $encaissement] = $this->studentWithPayment(500);
+
+        $this->post(route('backoffice.remboursements.store'), [
+            'beneficiaire_id' => $student->id,
+            'encaissement_id' => $encaissement->id,
+            'caisse_id' => $caisse->id,
+            'montant' => '500',
+            'date_remboursement' => '2025-09-22',
+        ])->assertRedirect(route('backoffice.depenses.index', ['tab' => 'remboursements']));
+
+        $remboursement = Remboursement::where('beneficiaire_id', $student->id)->firstOrFail();
+        $this->assertSame($encaissement->id, $remboursement->encaissement_id);
+
+        // "déjà remboursé" now reflects this linked refund for future lookups.
+        $response = $this->get(route('backoffice.students.payments-for-refund', $student))->json();
+        $this->assertSame('500.00', $response['payments'][0]['dejaRembourse']);
+    }
+
+    public function test_a_remboursement_without_a_linked_payment_is_still_allowed(): void
+    {
+        // Goodwill/legacy refunds unrelated to any tracked payment stay valid
+        // (encaissement_id is nullable — no hard requirement was added).
+        $user = $this->userWith('refunds.view', 'refunds.create');
+        $this->actingAs($user);
+        $caisse = $user->employee->caisses()->first();
+        $caisse->update(['solde' => 1000]);
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+
+        $this->post(route('backoffice.remboursements.store'), [
+            'beneficiaire_id' => $student->id,
+            'caisse_id' => $caisse->id,
+            'montant' => '150',
+            'date_remboursement' => '2025-09-20',
+        ])->assertSessionDoesntHaveErrors();
+
+        $remboursement = Remboursement::where('beneficiaire_id', $student->id)->firstOrFail();
+        $this->assertNull($remboursement->encaissement_id);
     }
 }

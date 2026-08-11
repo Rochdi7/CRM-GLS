@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Domain\Registrations\Actions\BasculerVisibiliteFraisInscription;
+use App\Domain\Registrations\Actions\ChangerGroupeInscription;
 use App\Domain\Registrations\Actions\MettreAJourFraisInscription;
 use App\Domain\Registrations\Queries\GetGroupInscriptionFees;
 use App\Domain\Registrations\Queries\GetInscriptionDetails;
@@ -11,6 +13,7 @@ use App\Domain\Registrations\Queries\GetInscriptionFormOptions;
 use App\Domain\Registrations\Queries\GetInscriptionsList;
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Backoffice\Inscriptions\ChangeGroupInscriptionRequest;
 use App\Http\Requests\Backoffice\Inscriptions\StoreInscriptionRequest;
 use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionFeesRequest;
 use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionRequest;
@@ -74,6 +77,7 @@ final class InscriptionController extends Controller
             'perPageOptions' => GetInscriptionsList::PER_PAGE_OPTIONS,
             'statuts' => Inscription::STATUTS,
             'niveaux' => Student::NIVEAUX,
+            'niveauxInteret' => Student::NIVEAUX_TRACKS,
             'domaines' => Student::DOMAINES,
             'examenTypes' => Student::EXAMEN_TYPES,
             'sexes' => Student::SEXES,
@@ -83,7 +87,9 @@ final class InscriptionController extends Controller
             'defaultCountry' => Countries::DEFAULT,
             'students' => $getInscriptionFormOptions->students($request->user()),
             'groups' => $getInscriptionFormOptions->groups($request->user()),
+            'frais' => $getInscriptionFormOptions->frais(),
             'canManageFees' => $request->user()->can('registrations.manage-fees'),
+            'canChangeGroup' => $request->user()->can('registrations.change-group'),
         ]);
     }
 
@@ -109,7 +115,7 @@ final class InscriptionController extends Controller
         $this->authorize('view', $inscription);
 
         return response()->json([
-            'fees' => $inscription->fees->map(fn (InscriptionFee $fee): array => [
+            'fees' => $inscription->fees()->whereNull('masque_le')->get()->map(fn (InscriptionFee $fee): array => [
                 'id' => $fee->id,
                 'fraisId' => $fee->frais_id,
                 'nom' => $fee->nom,
@@ -119,8 +125,51 @@ final class InscriptionController extends Controller
                 'note' => $fee->note ?? '',
                 'dateEcheance' => $fee->date_echeance?->toDateString() ?? '',
                 'statut' => $fee->statut,
+                // Informational only (never submitted back) — drives the
+                // "Reste à payer" column in the edit table.
+                'paye' => number_format($fee->montantPaye(), 2, '.', ''),
+            ])->values(),
+            // Hidden fees — feeds the edit modal's "Frais masqués" list, the
+            // only place a hidden fee can be restored from.
+            'hiddenFees' => $inscription->fees()->whereNotNull('masque_le')->get()->map(fn (InscriptionFee $fee): array => [
+                'id' => $fee->id,
+                'nom' => $fee->nom,
+                'montant' => (string) $fee->montant,
+                'dateEcheance' => $fee->date_echeance?->toDateString() ?? '',
             ])->values(),
         ]);
+    }
+
+    /**
+     * Hides a fee line instead of deleting it — replaces the old hard-delete
+     * that used to happen implicitly through updateFees()'s "omitted from
+     * the payload = delete" sweep. The row and its payment history stay
+     * intact; only masque_le is set (BasculerVisibiliteFraisInscription).
+     */
+    public function hideFee(
+        Inscription $inscription,
+        InscriptionFee $fee,
+        BasculerVisibiliteFraisInscription $action,
+    ): RedirectResponse {
+        $this->authorize('view', $inscription);
+
+        $action->hide($inscription, $fee);
+
+        return redirect()->route('backoffice.inscriptions.index')
+            ->with('success', __('Fee hidden.'));
+    }
+
+    public function restoreFee(
+        Inscription $inscription,
+        InscriptionFee $fee,
+        BasculerVisibiliteFraisInscription $action,
+    ): RedirectResponse {
+        $this->authorize('view', $inscription);
+
+        $action->restore($inscription, $fee);
+
+        return redirect()->route('backoffice.inscriptions.index')
+            ->with('success', __('Fee restored.'));
     }
 
     /**
@@ -267,20 +316,57 @@ final class InscriptionController extends Controller
             ->with('success', __('Registration created.'));
     }
 
+    /**
+     * "Changement de groupe" — archives this inscription into
+     * inscriptions_historique and creates a new Active one in the target
+     * group (ChangerGroupeInscription), instead of editing group_id in
+     * place like update() does. Kept as its own gated action
+     * (registrations.change-group) rather than folded into update() since
+     * it mutates money allocation (unpaid fees dropped from the old
+     * inscription become unallocated avances) and always creates a second
+     * row.
+     */
+    public function changeGroup(
+        ChangeGroupInscriptionRequest $request,
+        Inscription $inscription,
+        ChangerGroupeInscription $action,
+    ): RedirectResponse {
+        $this->authorize('changeGroup', $inscription);
+
+        $data = $request->validated();
+        $newGroup = Group::findOrFail($data['new_group_id']);
+
+        $action->handle(
+            $inscription,
+            $newGroup,
+            $data['date_fin'],
+            $data['date_debut'],
+            $data['unpaid_fees_scope'] ?? null,
+            $data['note'] ?? null,
+            $request->user()->employee,
+        );
+
+        return redirect()->route('backoffice.inscriptions.index')
+            ->with('success', __('Registration moved to the new group.'));
+    }
+
     public function update(UpdateInscriptionRequest $request, Inscription $inscription): RedirectResponse
     {
         $this->authorize('update', $inscription);
 
         $data = $request->validated();
 
-        // Only 6 columns are ever updated — fees/totals/center/year are
+        // Only 5 columns are ever updated — fees/totals/center/year/group are
         // never touched on edit, matching InscriptionsIndex::save()'s
         // $editing branch exactly. date_debut/date_fin come straight from
         // the request (NOT re-derived from the group, unlike create — a
         // confirmed asymmetry, see docs/phase-9-inscriptions-audit.md §12).
+        // group_id is deliberately never accepted here — moving a student to
+        // another group only ever happens through changeGroup()
+        // (ChangerGroupeInscription: fee migration + archival snapshot +
+        // registrations.change-group gate), never a silent field swap.
         $inscription->update([
             'student_id' => $data['student_id'],
-            'group_id' => $data['group_id'],
             'statut' => $data['statut'],
             'date_inscription' => $data['date_inscription'],
             'date_debut' => $data['date_debut'] ?? null,
@@ -290,6 +376,43 @@ final class InscriptionController extends Controller
 
         return redirect()->route('backoffice.inscriptions.index')
             ->with('success', __('Registration updated.'));
+    }
+
+    /**
+     * Quick status action from the list's row menu — "Annuler" (Active ->
+     * Annulée) and "Réactiver" (Changement/Annulée -> Active, the reverse
+     * move, so a mistaken cancel doesn't require opening the full edit
+     * modal to undo). Reaching "Changement" is deliberately NOT offered
+     * here — that status is only ever set by the dedicated changeGroup()
+     * flow, which also migrates fees and creates a replacement Active
+     * inscription; a bare Active -> Changement with no successor would
+     * leave the student's enrollment history looking like a change that
+     * never actually happened. Every other transition (e.g. an already-
+     * Annulée row being annulled again) is refused.
+     */
+    public function updateStatut(Request $request, Inscription $inscription): RedirectResponse
+    {
+        $this->authorize('update', $inscription);
+
+        $statut = $request->string('statut')->toString();
+
+        if (! in_array($statut, [Inscription::STATUT_ACTIVE, Inscription::STATUT_ANNULEE], true)) {
+            abort(422, 'Invalid status.');
+        }
+
+        $isReactivation = $statut === Inscription::STATUT_ACTIVE;
+        $currentIsActive = $inscription->statut === Inscription::STATUT_ACTIVE;
+
+        if ($isReactivation === $currentIsActive) {
+            throw ValidationException::withMessages([
+                'statut' => __('This status change is not allowed from the current status.'),
+            ]);
+        }
+
+        $inscription->update(['statut' => $statut]);
+
+        return redirect()->route('backoffice.inscriptions.index')
+            ->with('success', __('Registration status updated.'));
     }
 
     /**

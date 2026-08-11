@@ -14,9 +14,10 @@ import SelectField from '@/Components/Forms/SelectField';
 import DateField from '@/Components/Forms/DateField';
 import FormField from '@/Components/Forms/FormField';
 import TextareaField from '@/Components/Forms/TextareaField';
+import TagsInput from '@/Components/Forms/TagsInput';
 import FormActions from '@/Components/Forms/FormActions';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
-import type { DepenseRow, DepensesPageProps, RemboursementRow, SelectOption, SharedProps } from '@/Types';
+import type { DepenseRow, DepensesPageProps, EncaissementFormOption, RemboursementRow, SelectOption, SharedProps } from '@/Types';
 
 type Tab = 'depenses' | 'remboursements';
 
@@ -36,7 +37,7 @@ interface DepenseFormState {
 
 interface RemboursementFormState {
     beneficiaire_id: number | '';
-    caisse_id: number | '';
+    encaissement_id: number | '';
     montant: string;
     date_remboursement: string;
     motif: string;
@@ -65,7 +66,7 @@ function emptyDepenseForm(): DepenseFormState {
 function emptyRemboursementForm(): RemboursementFormState {
     return {
         beneficiaire_id: '',
-        caisse_id: '',
+        encaissement_id: '',
         montant: '',
         date_remboursement: new Date().toISOString().slice(0, 10),
         motif: '',
@@ -84,6 +85,7 @@ function emptyRemboursementForm(): RemboursementFormState {
 export default function DepensesIndex({
     canViewDepenses,
     canViewRemboursements,
+    soldeActuel,
     depenses,
     montantTotal,
     typesDepenses,
@@ -111,6 +113,8 @@ export default function DepensesIndex({
     const [editingDepense, setEditingDepense] = useState<DepenseRow | null>(null);
     const [showRemboursementModal, setShowRemboursementModal] = useState(false);
     const [editingRemboursement, setEditingRemboursement] = useState<RemboursementRow | null>(null);
+    const [studentPayments, setStudentPayments] = useState<EncaissementFormOption[]>([]);
+    const [loadingStudentPayments, setLoadingStudentPayments] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const typeOptions: SelectOption[] = typesDepenses.map((t) => ({ value: t.id, label: t.nom }));
@@ -202,6 +206,7 @@ export default function DepensesIndex({
         setEditingRemboursement(null);
         remboursementForm.clearErrors();
         remboursementForm.setData(emptyRemboursementForm());
+        setStudentPayments([]);
         setShowRemboursementModal(true);
     }
 
@@ -210,18 +215,54 @@ export default function DepensesIndex({
         remboursementForm.clearErrors();
         remboursementForm.setData({
             beneficiaire_id: row.beneficiaireId ?? '',
-            caisse_id: row.caisseId ?? '',
+            encaissement_id: '',
             montant: row.montant,
             date_remboursement: row.dateRemboursement ?? '',
             motif: row.motif ?? '',
             note: row.note ?? '',
         });
+        setStudentPayments([]);
         setShowRemboursementModal(true);
     }
 
     function closeRemboursementModal() {
         setShowRemboursementModal(false);
         setEditingRemboursement(null);
+        setStudentPayments([]);
+    }
+
+    async function onBeneficiaireChange(studentId: number | '') {
+        remboursementForm.setData((previous) => ({
+            ...previous,
+            beneficiaire_id: studentId,
+            encaissement_id: '',
+            montant: '',
+        }));
+        setStudentPayments([]);
+
+        if (studentId === '') {
+            return;
+        }
+
+        setLoadingStudentPayments(true);
+        try {
+            const response = await fetch(`/backoffice/students/${studentId}/payments-for-refund`);
+            const data: { payments: EncaissementFormOption[] } = await response.json();
+            setStudentPayments(data.payments);
+        } finally {
+            setLoadingStudentPayments(false);
+        }
+    }
+
+    function selectPaymentToRefund(payment: EncaissementFormOption) {
+        const dejaRembourse = Number(payment.dejaRembourse);
+        const resteRemboursable = Math.max(0, Number(payment.montant) - dejaRembourse);
+
+        remboursementForm.setData((previous) => ({
+            ...previous,
+            encaissement_id: payment.id,
+            montant: resteRemboursable.toFixed(2),
+        }));
     }
 
     function submitRemboursement(event: FormEvent) {
@@ -471,7 +512,7 @@ export default function DepensesIndex({
                 title={editingDepense ? 'Modifier la dépense' : 'Ajouter une dépense'}
                 onClose={closeDepenseModal}
                 processing={depenseForm.processing}
-                size="lg"
+                size="xl"
                 footer={<FormActions form="depense-form" onCancel={closeDepenseModal} processing={depenseForm.processing} />}
             >
                 <form id="depense-form" onSubmit={submitDepense}>
@@ -480,82 +521,110 @@ export default function DepensesIndex({
                             Le montant et la caisse ne peuvent pas être modifiés après création.
                         </div>
                     )}
-                    <SelectField
-                        id="d-type"
-                        label="Type de dépense"
-                        options={typeOptions}
-                        placeholder="Sélectionner un type"
-                        required
-                        value={depenseForm.data.type_depense_id}
-                        onChange={(e) => depenseForm.setData('type_depense_id', e.target.value === '' ? '' : Number(e.target.value))}
-                        error={depenseForm.errors.type_depense_id}
-                    />
-                    <SelectField
-                        id="d-group"
-                        label="Groupe (optionnel)"
-                        options={groupOptions}
-                        placeholder="Aucun groupe"
-                        value={depenseForm.data.group_id}
-                        onChange={(e) => depenseForm.setData('group_id', e.target.value === '' ? '' : Number(e.target.value))}
-                        error={depenseForm.errors.group_id}
-                    />
-                    {editingDepense ? (
-                        <div className="d-flex justify-content-between mb-3">
-                            <span className="text-muted">Montant</span>
-                            <span className="fw-medium">{Number(depenseForm.data.montant).toFixed(2)} MAD</span>
+                    {!editingDepense && soldeActuel !== null && (
+                        <div className="alert alert-info d-flex justify-content-between align-items-center">
+                            <span>Solde actuel de votre caisse</span>
+                            <span className="fw-semibold">{Number(soldeActuel).toFixed(2)} MAD</span>
                         </div>
-                    ) : (
-                        <FormField
-                            id="d-montant"
-                            label="Montant"
-                            type="number"
-                            step="0.01"
-                            min="0.01"
-                            required
-                            value={depenseForm.data.montant}
-                            onChange={(e) => depenseForm.setData('montant', e.target.value)}
-                            error={depenseForm.errors.montant}
-                        />
                     )}
-                    <SelectField
-                        id="d-methode"
-                        label="Méthode de paiement"
-                        options={methodeOptions}
-                        placeholder="Sélectionner une méthode"
-                        required={!editingDepense}
-                        value={depenseForm.data.methode_paiement}
-                        onChange={(e) => depenseForm.setData('methode_paiement', e.target.value)}
-                        error={depenseForm.errors.methode_paiement}
-                    />
-                    <DateField
-                        id="d-date"
-                        label="Date"
-                        required
-                        value={depenseForm.data.date_depense}
-                        onChange={(e) => depenseForm.setData('date_depense', e.target.value)}
-                        error={depenseForm.errors.date_depense}
-                    />
-                    <FormField
-                        id="d-reference-facture"
-                        label="Référence facture fournisseur"
-                        value={depenseForm.data.reference_facture}
-                        onChange={(e) => depenseForm.setData('reference_facture', e.target.value)}
-                        error={depenseForm.errors.reference_facture}
-                    />
-                    <TextareaField
-                        id="d-description"
-                        label="Description"
-                        value={depenseForm.data.description}
-                        onChange={(e) => depenseForm.setData('description', e.target.value)}
-                        error={depenseForm.errors.description}
-                    />
-                    <FormField
-                        id="d-mots-cles"
-                        label="Mots-clés (séparés par des virgules)"
-                        value={depenseForm.data.mots_cles}
-                        onChange={(e) => depenseForm.setData('mots_cles', e.target.value)}
-                        error={depenseForm.errors.mots_cles}
-                    />
+                    <div className="row">
+                        <div className="col-md-4">
+                            <SelectField
+                                id="d-type"
+                                label="Type de dépense"
+                                options={typeOptions}
+                                placeholder="Sélectionner un type"
+                                required
+                                value={depenseForm.data.type_depense_id}
+                                onChange={(e) => depenseForm.setData('type_depense_id', e.target.value === '' ? '' : Number(e.target.value))}
+                                error={depenseForm.errors.type_depense_id}
+                            />
+                        </div>
+                        <div className="col-md-4">
+                            <SelectField
+                                id="d-group"
+                                label="Groupe (optionnel)"
+                                options={groupOptions}
+                                placeholder="Aucun groupe"
+                                value={depenseForm.data.group_id}
+                                onChange={(e) => depenseForm.setData('group_id', e.target.value === '' ? '' : Number(e.target.value))}
+                                error={depenseForm.errors.group_id}
+                            />
+                        </div>
+                        <div className="col-md-4">
+                            {editingDepense ? (
+                                <div className="d-flex justify-content-between mb-3">
+                                    <span className="text-muted">Montant</span>
+                                    <span className="fw-medium">{Number(depenseForm.data.montant).toFixed(2)} MAD</span>
+                                </div>
+                            ) : (
+                                <FormField
+                                    id="d-montant"
+                                    label="Montant"
+                                    type="number"
+                                    step="0.01"
+                                    min="0.01"
+                                    required
+                                    value={depenseForm.data.montant}
+                                    onChange={(e) => depenseForm.setData('montant', e.target.value)}
+                                    error={depenseForm.errors.montant}
+                                />
+                            )}
+                        </div>
+                        <div className="col-md-4">
+                            <SelectField
+                                id="d-methode"
+                                label="Méthode de paiement"
+                                options={methodeOptions}
+                                placeholder="Sélectionner une méthode"
+                                required={!editingDepense}
+                                value={depenseForm.data.methode_paiement}
+                                onChange={(e) => depenseForm.setData('methode_paiement', e.target.value)}
+                                error={depenseForm.errors.methode_paiement}
+                            />
+                        </div>
+                        <div className="col-md-4">
+                            <DateField
+                                id="d-date"
+                                label="Date"
+                                required
+                                value={depenseForm.data.date_depense}
+                                onChange={(e) => depenseForm.setData('date_depense', e.target.value)}
+                                error={depenseForm.errors.date_depense}
+                            />
+                        </div>
+                        <div className="col-md-4">
+                            <FormField
+                                id="d-reference-facture"
+                                label="Référence facture fournisseur"
+                                value={depenseForm.data.reference_facture}
+                                onChange={(e) => depenseForm.setData('reference_facture', e.target.value)}
+                                error={depenseForm.errors.reference_facture}
+                            />
+                        </div>
+                    </div>
+                    <div className="row">
+                        <div className="col-md-6">
+                            <TextareaField
+                                id="d-description"
+                                label="Description"
+                                rows={2}
+                                value={depenseForm.data.description}
+                                onChange={(e) => depenseForm.setData('description', e.target.value)}
+                                error={depenseForm.errors.description}
+                            />
+                        </div>
+                        <div className="col-md-6">
+                            <TagsInput
+                                id="d-mots-cles"
+                                label="Mots-clés"
+                                value={depenseForm.data.mots_cles}
+                                onChange={(value) => depenseForm.setData('mots_cles', value)}
+                                error={depenseForm.errors.mots_cles}
+                                placeholder="Taper un mot-clé puis Entrée…"
+                            />
+                        </div>
+                    </div>
                     <TextareaField
                         id="d-note"
                         label="Note"
@@ -588,6 +657,7 @@ export default function DepensesIndex({
                 title={editingRemboursement ? 'Modifier le remboursement' : 'Ajouter un remboursement'}
                 onClose={closeRemboursementModal}
                 processing={remboursementForm.processing}
+                size="xl"
                 footer={<FormActions form="remboursement-form" onCancel={closeRemboursementModal} processing={remboursementForm.processing} />}
             >
                 <form id="remboursement-form" onSubmit={submitRemboursement}>
@@ -596,52 +666,110 @@ export default function DepensesIndex({
                             Le montant et la caisse ne peuvent pas être modifiés après création.
                         </div>
                     )}
-                    <SelectField
-                        id="r-beneficiaire"
-                        label="Bénéficiaire"
-                        options={studentOptions}
-                        placeholder="Sélectionner un étudiant"
-                        required
-                        disabled={!!editingRemboursement}
-                        value={remboursementForm.data.beneficiaire_id}
-                        onChange={(e) => remboursementForm.setData('beneficiaire_id', e.target.value === '' ? '' : Number(e.target.value))}
-                        error={remboursementForm.errors.beneficiaire_id}
-                    />
-                    {editingRemboursement ? (
-                        <div className="d-flex justify-content-between mb-3">
-                            <span className="text-muted">Montant</span>
-                            <span className="fw-medium text-danger">
-                                -{Number(remboursementForm.data.montant).toFixed(2)} MAD
-                            </span>
+                    <div className="row">
+                        <div className={editingRemboursement ? 'col-12' : 'col-md-4'}>
+                            <SelectField
+                                id="r-beneficiaire"
+                                label="Bénéficiaire"
+                                options={studentOptions}
+                                placeholder="Sélectionner un étudiant"
+                                required
+                                disabled={!!editingRemboursement}
+                                value={remboursementForm.data.beneficiaire_id}
+                                onChange={(e) => onBeneficiaireChange(e.target.value === '' ? '' : Number(e.target.value))}
+                                error={remboursementForm.errors.beneficiaire_id}
+                            />
                         </div>
-                    ) : (
-                        <FormField
-                            id="r-montant"
-                            label="Montant"
-                            type="number"
-                            step="0.01"
-                            min="0.01"
-                            required
-                            value={remboursementForm.data.montant}
-                            onChange={(e) => remboursementForm.setData('montant', e.target.value)}
-                            error={remboursementForm.errors.montant}
-                        />
+                        <div className="col-md-4">
+                            {editingRemboursement ? (
+                                <div className="d-flex justify-content-between mb-3">
+                                    <span className="text-muted">Montant</span>
+                                    <span className="fw-medium text-danger">
+                                        -{Number(remboursementForm.data.montant).toFixed(2)} MAD
+                                    </span>
+                                </div>
+                            ) : (
+                                <FormField
+                                    id="r-montant"
+                                    label="Montant"
+                                    type="number"
+                                    step="0.01"
+                                    min="0.01"
+                                    required
+                                    value={remboursementForm.data.montant}
+                                    onChange={(e) => remboursementForm.setData('montant', e.target.value)}
+                                    error={remboursementForm.errors.montant}
+                                />
+                            )}
+                        </div>
+                        <div className="col-md-4">
+                            <DateField
+                                id="r-date"
+                                label="Date"
+                                required
+                                value={remboursementForm.data.date_remboursement}
+                                onChange={(e) => remboursementForm.setData('date_remboursement', e.target.value)}
+                                error={remboursementForm.errors.date_remboursement}
+                            />
+                        </div>
+                    </div>
+
+                    {!editingRemboursement && loadingStudentPayments && (
+                        <p className="text-muted mb-3">Chargement des paiements…</p>
                     )}
-                    <DateField
-                        id="r-date"
-                        label="Date"
-                        required
-                        value={remboursementForm.data.date_remboursement}
-                        onChange={(e) => remboursementForm.setData('date_remboursement', e.target.value)}
-                        error={remboursementForm.errors.date_remboursement}
-                    />
-                    <FormField
-                        id="r-motif"
-                        label="Motif"
-                        value={remboursementForm.data.motif}
-                        onChange={(e) => remboursementForm.setData('motif', e.target.value)}
-                        error={remboursementForm.errors.motif}
-                    />
+                    {!editingRemboursement &&
+                        !loadingStudentPayments &&
+                        remboursementForm.data.beneficiaire_id !== '' &&
+                        studentPayments.length === 0 && (
+                            <p className="text-muted mb-3">Aucun paiement trouvé pour cet étudiant.</p>
+                        )}
+
+                    {!editingRemboursement && studentPayments.length > 0 && (
+                        <div className="mb-3">
+                            <label className="form-label">Paiement à rembourser</label>
+                            <div className="table-responsive border rounded" style={{ maxHeight: 260, overflowY: 'auto' }}>
+                                <table className="table table-sm align-middle mb-0">
+                                    <thead className="table-light" style={{ position: 'sticky', top: 0, zIndex: 1 }}>
+                                        <tr>
+                                            <th></th>
+                                            <th>Référence</th>
+                                            <th>Frais</th>
+                                            <th>Méthode</th>
+                                            <th>Date</th>
+                                            <th className="text-end">Montant</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {studentPayments.map((payment) => (
+                                            <tr
+                                                key={payment.id}
+                                                className={remboursementForm.data.encaissement_id === payment.id ? 'table-primary' : undefined}
+                                                style={{ cursor: 'pointer' }}
+                                                onClick={() => selectPaymentToRefund(payment)}
+                                            >
+                                                <td>
+                                                    <input
+                                                        type="radio"
+                                                        className="form-check-input"
+                                                        checked={remboursementForm.data.encaissement_id === payment.id}
+                                                        onChange={() => selectPaymentToRefund(payment)}
+                                                    />
+                                                </td>
+                                                <td>
+                                                    <code>{payment.reference}</code>
+                                                </td>
+                                                <td>{payment.feeNom ?? '—'}</td>
+                                                <td>{payment.methode}</td>
+                                                <td>{payment.date ?? '—'}</td>
+                                                <td className="text-end fw-medium">{Number(payment.montant).toFixed(2)} MAD</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
                     <TextareaField
                         id="r-note"
                         label="Note"

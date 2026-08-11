@@ -121,6 +121,15 @@ export default function RowActions({ view, viewLabel = 'Voir', children }: RowAc
     );
 }
 
+/** Visual separator between groups of related row actions (Bootstrap's own `.dropdown-divider`). */
+export function RowActionDivider() {
+    return (
+        <li>
+            <hr className="dropdown-divider" />
+        </li>
+    );
+}
+
 export function RowActionItem({ icon, href, danger = false, onClick, children }: RowActionItemProps) {
     const className = `dropdown-item rounded-1${danger ? ' text-danger' : ''}`;
 

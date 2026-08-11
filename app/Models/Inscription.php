@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
@@ -90,5 +91,11 @@ class Inscription extends Model
     public function fees(): HasMany
     {
         return $this->hasMany(InscriptionFee::class);
+    }
+
+    /** Set only when this inscription was archived via a group change. */
+    public function historique(): HasOne
+    {
+        return $this->hasOne(InscriptionHistorique::class);
     }
 }

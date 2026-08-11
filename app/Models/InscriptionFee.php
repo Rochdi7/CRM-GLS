@@ -32,7 +32,7 @@ class InscriptionFee extends Model
     protected $fillable = [
         'inscription_id', 'frais_id', 'nom',
         'montant_initial', 'remise_pct', 'remise_montant', 'montant',
-        'date_echeance', 'note', 'statut',
+        'date_echeance', 'note', 'statut', 'masque_le',
     ];
 
     protected function casts(): array
@@ -43,7 +43,13 @@ class InscriptionFee extends Model
             'remise_pct' => 'decimal:2',
             'remise_montant' => 'decimal:2',
             'date_echeance' => 'date',
+            'masque_le' => 'datetime',
         ];
+    }
+
+    public function estMasque(): bool
+    {
+        return $this->masque_le !== null;
     }
 
     /**

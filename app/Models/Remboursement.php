@@ -20,7 +20,7 @@ class Remboursement extends Model
     use LogsActivity;
 
     protected $fillable = [
-        'reference', 'beneficiaire_id', 'caisse_id', 'montant',
+        'reference', 'beneficiaire_id', 'encaissement_id', 'caisse_id', 'montant',
         'date_remboursement', 'motif', 'note', 'agent_id',
     ];
 
@@ -43,6 +43,12 @@ class Remboursement extends Model
     public function beneficiaire(): BelongsTo
     {
         return $this->belongsTo(Student::class, 'beneficiaire_id');
+    }
+
+    /** The payment this refund reverses — nullable (a refund isn't always tied to a tracked payment). */
+    public function encaissement(): BelongsTo
+    {
+        return $this->belongsTo(Encaissement::class);
     }
 
     public function caisse(): BelongsTo

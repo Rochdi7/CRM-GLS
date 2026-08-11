@@ -1,5 +1,5 @@
 import { router, useForm } from '@inertiajs/react';
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
@@ -9,7 +9,7 @@ import TableToolbar from '@/Components/Tables/TableToolbar';
 import FilterTextInput from '@/Components/Tables/FilterTextInput';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import Pagination from '@/Components/Tables/Pagination';
-import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
+import RowActions, { RowActionDivider, RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
 import ConfirmDialog from '@/Components/Modals/ConfirmDialog';
 import DateField from '@/Components/Forms/DateField';
@@ -20,6 +20,7 @@ import PhoneField from '@/Components/Forms/PhoneField';
 import FormActions from '@/Components/Forms/FormActions';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import type {
+    HiddenInscriptionFee,
     InscriptionFeeLine,
     InscriptionGroupFeesResponse,
     InscriptionRow,
@@ -114,6 +115,9 @@ function computeLineMontant(initial: number, remisePct: number | null, remiseMon
     return Math.round(Math.max(0, initial - (remiseMontant ?? 0)) * 100) / 100;
 }
 
+/** Rows per page of the "Frais disponibles" table — client-side only, no server round trip for this in-memory list. */
+const AVAILABLE_FEES_PER_PAGE = 5;
+
 /**
  * Replaces App\Livewire\Backoffice\Inscriptions\InscriptionsIndex — the most
  * business-critical module migrated so far. Preserves every calculation and
@@ -128,7 +132,7 @@ export default function InscriptionsIndex({
     filters,
     perPageOptions,
     statuts,
-    niveaux,
+    niveauxInteret,
     domaines,
     examenTypes,
     sexes,
@@ -138,7 +142,9 @@ export default function InscriptionsIndex({
     defaultCountry,
     students,
     groups,
+    frais,
     canManageFees,
+    canChangeGroup,
 }: InscriptionsPageProps) {
     const isLoading = useInertiaLoading();
     const [showModal, setShowModal] = useState(false);
@@ -146,18 +152,52 @@ export default function InscriptionsIndex({
     const [activeTab, setActiveTab] = useState<'affectation' | 'contact' | 'parent' | 'autre'>('affectation');
     const [loadingGroupFees, setLoadingGroupFees] = useState(false);
     const [loadingEditingFees, setLoadingEditingFees] = useState(false);
+    const [hiddenFees, setHiddenFees] = useState<HiddenInscriptionFee[]>([]);
+    const [hideProcessingId, setHideProcessingId] = useState<number | null>(null);
+    const [restoreProcessingId, setRestoreProcessingId] = useState<number | null>(null);
+    const [availableFeesPage, setAvailableFeesPage] = useState(1);
+    const [newFeeToAdd, setNewFeeToAdd] = useState<number | ''>('');
     const [deleteTarget, setDeleteTarget] = useState<InscriptionRow | null>(null);
     const [deleteError, setDeleteError] = useState<string | undefined>(undefined);
     const [deleteProcessing, setDeleteProcessing] = useState(false);
+    const [changeGroupTarget, setChangeGroupTarget] = useState<InscriptionRow | null>(null);
+    const [showFeesDetails, setShowFeesDetails] = useState(false);
+    const [statutTarget, setStatutTarget] = useState<{ inscription: InscriptionRow; statut: 'Annulée' | 'Active' } | null>(null);
+    const [statutError, setStatutError] = useState<string | undefined>(undefined);
+    const [statutProcessing, setStatutProcessing] = useState(false);
 
     const form = useForm<InscriptionFormState>(emptyForm(defaultCountry));
+    const changeGroupForm = useForm<{
+        new_group_id: number | '';
+        date_fin: string;
+        date_debut: string;
+        unpaid_fees_scope: '' | 'overdue_only' | 'all';
+        note: string;
+    }>({
+        new_group_id: '',
+        date_fin: new Date().toISOString().slice(0, 10),
+        date_debut: new Date().toISOString().slice(0, 10),
+        unpaid_fees_scope: '',
+        note: '',
+    });
     // Separate form for the edit modal's fee table — its own endpoint
     // (PUT .../fees), independent processing/errors from the base-fields form.
     const feesForm = useForm<{ fee_lines: InscriptionFeeLine[] }>({ fee_lines: [] });
+    const feesSaveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.label }));
     const groupOptions: SelectOption[] = groups.map((g) => ({ value: g.id, label: g.label }));
-    const niveauOptions: SelectOption[] = niveaux.map((n) => ({ value: n, label: n }));
+    // Catalog fees already fully "Payé" on this inscription are excluded —
+    // nothing to gain from re-adding a settled fee; unpaid/partial/not-yet-
+    // added ones (incl. re-adding the same name as a second charge) stay
+    // selectable.
+    const paidFeeNames = new Set(
+        feesForm.data.fee_lines.filter((line) => line.statut === 'Payé').map((line) => line.nom),
+    );
+    const fraisOptions: SelectOption[] = frais
+        .filter((f) => !paidFeeNames.has(f.label))
+        .map((f) => ({ value: f.id, label: f.label }));
+    const niveauOptions: SelectOption[] = niveauxInteret.map((n) => ({ value: n, label: n }));
     const domaineOptions: SelectOption[] = domaines.map((d) => ({ value: d, label: d }));
     const examenOptions: SelectOption[] = examenTypes.map((e) => ({ value: e, label: e }));
     const parentRelationOptions: SelectOption[] = parentRelations.map((r) => ({ value: r, label: r }));
@@ -181,6 +221,7 @@ export default function InscriptionsIndex({
         form.reset();
         form.clearErrors();
         form.setData(emptyForm(defaultCountry));
+        setAvailableFeesPage(1);
         setShowModal(true);
     }
 
@@ -207,10 +248,15 @@ export default function InscriptionsIndex({
         // only feesCount, not the fee lines themselves.
         feesForm.setData('fee_lines', []);
         feesForm.clearErrors();
+        setHiddenFees([]);
+        setNewFeeToAdd('');
         setLoadingEditingFees(true);
         fetch(`/backoffice/inscriptions/${inscription.id}/fees`, { headers: { Accept: 'application/json' } })
             .then((response) => response.json())
-            .then((data: { fees: InscriptionFeeLine[] }) => feesForm.setData('fee_lines', data.fees))
+            .then((data: { fees: InscriptionFeeLine[]; hiddenFees: HiddenInscriptionFee[] }) => {
+                feesForm.setData('fee_lines', data.fees);
+                setHiddenFees(data.hiddenFees);
+            })
             .finally(() => setLoadingEditingFees(false));
     }
 
@@ -219,6 +265,8 @@ export default function InscriptionsIndex({
         setEditingInscription(null);
         feesForm.setData('fee_lines', []);
         feesForm.clearErrors();
+        setHiddenFees([]);
+        setNewFeeToAdd('');
         form.reset();
         form.clearErrors();
     }
@@ -262,6 +310,7 @@ export default function InscriptionsIndex({
 
     function handleGroupChange(groupId: number | '') {
         form.setData((data) => ({ ...data, group_id: groupId, fee_lines: [], date_debut: '', date_fin: '' }));
+        setAvailableFeesPage(1);
 
         if (groupId === '' || editingInscription) {
             return;
@@ -347,34 +396,15 @@ export default function InscriptionsIndex({
         return linesTotal(form.data.fee_lines);
     }
 
-    function setEditingLine(index: number, field: keyof InscriptionFeeLine, value: string) {
-        updateLine(feesForm.data.fee_lines, (next) => feesForm.setData('fee_lines', next), index, field, value);
-    }
-
-    function addEditingLine() {
-        feesForm.setData('fee_lines', [
-            ...feesForm.data.fee_lines,
-            { fraisId: null, nom: '', montantInitial: '', remisePct: '', remiseMontant: '', note: '', dateEcheance: '' },
-        ]);
-    }
-
-    function removeEditingLine(index: number) {
-        feesForm.setData(
-            'fee_lines',
-            feesForm.data.fee_lines.filter((_, i) => i !== index),
-        );
-    }
-
-    function saveFees(event: FormEvent) {
-        event.preventDefault();
+    function persistFees(lines: InscriptionFeeLine[]) {
         if (!editingInscription) {
             return;
         }
 
         // Same camelCase → snake_case mapping as the create form's submit()
         // — the server validates fee_lines.*.montant_initial/remise_pct/…
-        feesForm.transform((data) => ({
-            fee_lines: data.fee_lines.map((line) => ({
+        feesForm.transform(() => ({
+            fee_lines: lines.map((line) => ({
                 id: line.id,
                 frais_id: line.fraisId,
                 nom: line.nom,
@@ -389,6 +419,108 @@ export default function InscriptionsIndex({
         feesForm.put(`/backoffice/inscriptions/${editingInscription.id}/fees`, {
             preserveScroll: true,
             onFinish: () => feesForm.transform((data) => data),
+        });
+    }
+
+    function scheduleFeesSave(lines: InscriptionFeeLine[]) {
+        if (feesSaveTimeout.current) {
+            clearTimeout(feesSaveTimeout.current);
+        }
+        feesSaveTimeout.current = setTimeout(() => persistFees(lines), 600);
+    }
+
+    function setEditingLine(index: number, field: keyof InscriptionFeeLine, value: string) {
+        updateLine(feesForm.data.fee_lines, (next) => {
+            feesForm.setData('fee_lines', next);
+            scheduleFeesSave(next);
+        }, index, field, value);
+    }
+
+    /**
+     * Adds a new fee line to an existing inscription, from the active
+     * catalog (`frais` prop) — the line has no `id` yet, so
+     * MettreAJourFraisInscription creates it on the next scheduleFeesSave
+     * (same "no id = create" rule the create form already relies on).
+     */
+    function addEditingLine() {
+        if (newFeeToAdd === '') {
+            return;
+        }
+
+        const catalogFee = frais.find((f) => f.id === newFeeToAdd);
+
+        if (!catalogFee) {
+            return;
+        }
+
+        const next = [
+            ...feesForm.data.fee_lines,
+            {
+                fraisId: catalogFee.id,
+                nom: catalogFee.label,
+                montantInitial: '',
+                remisePct: '',
+                remiseMontant: '',
+                note: '',
+                dateEcheance: '',
+            },
+        ];
+
+        feesForm.setData('fee_lines', next);
+        setNewFeeToAdd('');
+        scheduleFeesSave(next);
+    }
+
+    /**
+     * Hides the fee instead of deleting it (BasculerVisibiliteFraisInscription)
+     * — the row and its payment history stay intact and it moves to "Frais
+     * masqués", restorable from there. A brand-new line with no `id` yet
+     * (added client-side, never saved) is simply dropped from the form
+     * instead, since there is nothing to hide server-side.
+     */
+    function removeEditingLine(index: number) {
+        const line = feesForm.data.fee_lines[index];
+
+        if (!line.id || !editingInscription) {
+            feesForm.setData('fee_lines', feesForm.data.fee_lines.filter((_, i) => i !== index));
+            return;
+        }
+
+        if (feesSaveTimeout.current) {
+            clearTimeout(feesSaveTimeout.current);
+        }
+
+        setHideProcessingId(line.id);
+        router.post(`/backoffice/inscriptions/${editingInscription.id}/fees/${line.id}/hide`, {}, {
+            preserveScroll: true,
+            onSuccess: () => {
+                feesForm.setData('fee_lines', feesForm.data.fee_lines.filter((_, i) => i !== index));
+                setHiddenFees((previous) => [
+                    ...previous,
+                    { id: line.id as number, nom: line.nom, montant: line.montantInitial, dateEcheance: line.dateEcheance },
+                ]);
+            },
+            onFinish: () => setHideProcessingId(null),
+        });
+    }
+
+    function restoreHiddenFee(fee: HiddenInscriptionFee) {
+        if (!editingInscription) {
+            return;
+        }
+
+        setRestoreProcessingId(fee.id);
+        router.post(`/backoffice/inscriptions/${editingInscription.id}/fees/${fee.id}/restore`, {}, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setHiddenFees((previous) => previous.filter((f) => f.id !== fee.id));
+                setLoadingEditingFees(true);
+                fetch(`/backoffice/inscriptions/${editingInscription.id}/fees`, { headers: { Accept: 'application/json' } })
+                    .then((response) => response.json())
+                    .then((data: { fees: InscriptionFeeLine[] }) => feesForm.setData('fee_lines', data.fees))
+                    .finally(() => setLoadingEditingFees(false));
+            },
+            onFinish: () => setRestoreProcessingId(null),
         });
     }
 
@@ -449,6 +581,64 @@ export default function InscriptionsIndex({
                 setDeleteError(errors.delete ?? 'Suppression impossible.');
             },
             onFinish: () => setDeleteProcessing(false),
+        });
+    }
+
+    function confirmStatutChange(inscription: InscriptionRow, statut: 'Annulée' | 'Active') {
+        setStatutTarget({ inscription, statut });
+        setStatutError(undefined);
+    }
+
+    function handleStatutChange() {
+        if (!statutTarget) {
+            return;
+        }
+
+        setStatutProcessing(true);
+        router.patch(
+            `/backoffice/inscriptions/${statutTarget.inscription.id}/statut`,
+            { statut: statutTarget.statut },
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setStatutTarget(null);
+                    setStatutError(undefined);
+                },
+                onError: (errors) => {
+                    setStatutError(errors.statut ?? 'Action impossible.');
+                },
+                onFinish: () => setStatutProcessing(false),
+            },
+        );
+    }
+
+    function openChangeGroup(inscription: InscriptionRow) {
+        setChangeGroupTarget(inscription);
+        setShowFeesDetails(false);
+        changeGroupForm.clearErrors();
+        changeGroupForm.setData({
+            new_group_id: '',
+            date_fin: new Date().toISOString().slice(0, 10),
+            date_debut: new Date().toISOString().slice(0, 10),
+            unpaid_fees_scope: '',
+            note: '',
+        });
+    }
+
+    function closeChangeGroup() {
+        setChangeGroupTarget(null);
+        changeGroupForm.clearErrors();
+    }
+
+    function submitChangeGroup(event: FormEvent) {
+        event.preventDefault();
+        if (!changeGroupTarget) {
+            return;
+        }
+
+        changeGroupForm.post(`/backoffice/inscriptions/${changeGroupTarget.id}/change-group`, {
+            preserveScroll: true,
+            onSuccess: () => closeChangeGroup(),
         });
     }
 
@@ -563,6 +753,30 @@ export default function InscriptionsIndex({
                                             <RowActionItem icon="ti-edit" onClick={() => openEdit(inscription)}>
                                                 Modifier
                                             </RowActionItem>
+
+                                            <RowActionDivider />
+
+                                            {inscription.statut === 'Active' ? (
+                                                <RowActionItem icon="ti-x" danger onClick={() => confirmStatutChange(inscription, 'Annulée')}>
+                                                    Annuler
+                                                </RowActionItem>
+                                            ) : (
+                                                <RowActionItem icon="ti-refresh" onClick={() => confirmStatutChange(inscription, 'Active')}>
+                                                    Réactiver
+                                                </RowActionItem>
+                                            )}
+
+                                            {canChangeGroup && inscription.statut === 'Active' && (
+                                                <>
+                                                    <RowActionDivider />
+                                                    <RowActionItem icon="ti-replace" onClick={() => openChangeGroup(inscription)}>
+                                                        Changement de groupe
+                                                    </RowActionItem>
+                                                </>
+                                            )}
+
+                                            <RowActionDivider />
+
                                             <RowActionItem icon="ti-trash" danger onClick={() => confirmDelete(inscription)}>
                                                 Supprimer
                                             </RowActionItem>
@@ -804,16 +1018,31 @@ export default function InscriptionsIndex({
                         <div>
                             <div className="row">
                                 <div className="col-md-4">
-                                    <SelectField
-                                        id="ins-group"
-                                        label="Groupe"
-                                        required
-                                        options={groupOptions}
-                                        placeholder="Choisir une formation"
-                                        value={form.data.group_id}
-                                        onChange={(event) => handleGroupChange(event.target.value ? Number(event.target.value) : '')}
-                                        error={form.errors.group_id}
-                                    />
+                                    {editingInscription ? (
+                                        // Group is read-only here — changing group has its own
+                                        // dedicated "Changement de groupe" flow (fee migration +
+                                        // archival snapshot, registrations.change-group gate);
+                                        // this plain edit form must never silently move the
+                                        // student to another group.
+                                        <FormField
+                                            id="ins-group"
+                                            label="Groupe"
+                                            value={editingInscription.groupe ?? '—'}
+                                            readOnly
+                                            disabled
+                                        />
+                                    ) : (
+                                        <SelectField
+                                            id="ins-group"
+                                            label="Groupe"
+                                            required
+                                            options={groupOptions}
+                                            placeholder="Choisir une formation"
+                                            value={form.data.group_id}
+                                            onChange={(event) => handleGroupChange(event.target.value ? Number(event.target.value) : '')}
+                                            error={form.errors.group_id}
+                                        />
+                                    )}
                                 </div>
                                 {editingInscription && (
                                     <div className="col-md-4">
@@ -872,7 +1101,13 @@ export default function InscriptionsIndex({
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {form.data.fee_lines.map((line, index) => {
+                                                    {form.data.fee_lines
+                                                        .slice(
+                                                            (availableFeesPage - 1) * AVAILABLE_FEES_PER_PAGE,
+                                                            availableFeesPage * AVAILABLE_FEES_PER_PAGE,
+                                                        )
+                                                        .map((line, pageIndex) => {
+                                                        const index = (availableFeesPage - 1) * AVAILABLE_FEES_PER_PAGE + pageIndex;
                                                         const initial = parseFloat(line.montantInitial || '0');
                                                         const pct = line.remisePct !== '' ? parseFloat(line.remisePct) : null;
                                                         const dh = line.remiseMontant !== '' ? parseFloat(line.remiseMontant) : null;
@@ -949,6 +1184,12 @@ export default function InscriptionsIndex({
                                                     </tr>
                                                 </tfoot>
                                             </table>
+                                            <ClientFeesPagination
+                                                total={form.data.fee_lines.length}
+                                                perPage={AVAILABLE_FEES_PER_PAGE}
+                                                page={availableFeesPage}
+                                                onPageChange={setAvailableFeesPage}
+                                            />
                                         </div>
                                     )}
                                 </div>
@@ -958,17 +1199,34 @@ export default function InscriptionsIndex({
                                 <div className="border-top pt-3">
                                     <div className="d-flex align-items-center justify-content-between mb-1">
                                         <h6 className="mb-0">Frais de cette inscription</h6>
-                                        {canManageFees && (
-                                            <button type="button" className="btn btn-outline-primary btn-sm" onClick={addEditingLine}>
-                                                <i className="ti ti-plus me-1" />
-                                                Ajouter un frais
-                                            </button>
-                                        )}
                                     </div>
                                     {!canManageFees && (
                                         <p className="text-muted fs-13">
                                             Lecture seule — vous n'avez pas la permission de modifier les frais.
                                         </p>
+                                    )}
+                                    {canManageFees && !loadingEditingFees && (
+                                        <div className="d-flex align-items-center gap-2 mb-3" style={{ maxWidth: 420 }}>
+                                            <div className="flex-grow-1">
+                                                <SelectField
+                                                    id="ins-add-frais"
+                                                    options={fraisOptions}
+                                                    placeholder="Ajouter un frais du catalogue…"
+                                                    value={newFeeToAdd}
+                                                    onChange={(event) =>
+                                                        setNewFeeToAdd(event.target.value ? Number(event.target.value) : '')
+                                                    }
+                                                />
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="btn btn-primary btn-sm flex-shrink-0"
+                                                disabled={newFeeToAdd === ''}
+                                                onClick={addEditingLine}
+                                            >
+                                                <i className="ti ti-plus" />
+                                            </button>
+                                        </div>
                                     )}
                                     {loadingEditingFees ? (
                                         <p className="text-muted fs-13">Chargement…</p>
@@ -1084,10 +1342,12 @@ export default function InscriptionsIndex({
                                                                         <button
                                                                             type="button"
                                                                             className="btn btn-icon btn-sm text-danger"
-                                                                            aria-label="Supprimer ce frais"
+                                                                            aria-label="Masquer ce frais"
+                                                                            title="Masquer ce frais"
+                                                                            disabled={hideProcessingId === line.id}
                                                                             onClick={() => removeEditingLine(index)}
                                                                         >
-                                                                            <i className="ti ti-trash" />
+                                                                            <i className={hideProcessingId === line.id ? 'ti ti-loader-2' : 'ti ti-trash'} />
                                                                         </button>
                                                                     </td>
                                                                 )}
@@ -1110,16 +1370,46 @@ export default function InscriptionsIndex({
                                     {feesForm.errors.fee_lines && (
                                         <div className="text-danger small mb-2">{feesForm.errors.fee_lines}</div>
                                     )}
-                                    {canManageFees && (
-                                        <div className="d-flex justify-content-end">
-                                            <button
-                                                type="button"
-                                                className="btn btn-primary btn-sm"
-                                                disabled={feesForm.processing}
-                                                onClick={saveFees}
-                                            >
-                                                {feesForm.processing ? 'Enregistrement…' : 'Enregistrer les frais'}
-                                            </button>
+                                    {canManageFees && feesForm.processing && (
+                                        <div className="text-muted small mb-2">Enregistrement…</div>
+                                    )}
+
+                                    {hiddenFees.length > 0 && (
+                                        <div className="mt-3">
+                                            <h6 className="mb-1">Frais masqués</h6>
+                                            <div className="table-responsive">
+                                                <table className="table table-sm align-middle mb-0">
+                                                    <thead className="thead-light">
+                                                        <tr>
+                                                            <th>Frais</th>
+                                                            <th className="text-end">Montant</th>
+                                                            <th>Échéance</th>
+                                                            {canManageFees && <th />}
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {hiddenFees.map((fee) => (
+                                                            <tr key={fee.id}>
+                                                                <td className="text-muted">{fee.nom}</td>
+                                                                <td className="text-end text-muted">{Number(fee.montant).toFixed(2)} DH</td>
+                                                                <td className="text-muted">{fee.dateEcheance || '—'}</td>
+                                                                {canManageFees && (
+                                                                    <td className="text-end" style={{ width: 120 }}>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="btn btn-outline-primary btn-sm"
+                                                                            disabled={restoreProcessingId === fee.id}
+                                                                            onClick={() => restoreHiddenFee(fee)}
+                                                                        >
+                                                                            {restoreProcessingId === fee.id ? 'Restauration…' : 'Restaurer'}
+                                                                        </button>
+                                                                    </td>
+                                                                )}
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -1293,6 +1583,233 @@ export default function InscriptionsIndex({
                     setDeleteError(undefined);
                 }}
             />
+
+            <ConfirmDialog
+                show={statutTarget !== null}
+                title={statutTarget?.statut === 'Annulée' ? "Annuler l'inscription" : "Réactiver l'inscription"}
+                recordLabel={statutTarget?.inscription.reference ?? ''}
+                message={
+                    statutTarget?.statut === 'Annulée'
+                        ? 'Voulez-vous vraiment annuler cette inscription ?'
+                        : 'Voulez-vous vraiment réactiver cette inscription ?'
+                }
+                icon={statutTarget?.statut === 'Annulée' ? 'ti-x' : 'ti-refresh'}
+                variant={statutTarget?.statut === 'Annulée' ? 'danger' : 'primary'}
+                confirmLabel={statutTarget?.statut === 'Annulée' ? 'Oui, annuler' : 'Oui, réactiver'}
+                processingLabel={statutTarget?.statut === 'Annulée' ? 'Annulation…' : 'Réactivation…'}
+                error={statutError}
+                processing={statutProcessing}
+                onConfirm={handleStatutChange}
+                onCancel={() => {
+                    setStatutTarget(null);
+                    setStatutError(undefined);
+                }}
+            />
+
+            <Modal
+                show={changeGroupTarget !== null}
+                title={`Changement de groupe : ${changeGroupTarget?.student ?? ''}`}
+                onClose={closeChangeGroup}
+                processing={changeGroupForm.processing}
+                size="lg"
+            >
+                {changeGroupTarget && (
+                    <form onSubmit={submitChangeGroup}>
+                        <div className="alert alert-warning">
+                            Cette action archivera l'inscription actuelle et créera une nouvelle inscription dans le
+                            nouveau groupe sélectionné.
+                        </div>
+
+                        <h6 className="mb-2">Groupe actuel</h6>
+                        <div className="row mb-3">
+                            <div className="col-md-6">
+                                <FormField id="cg-groupe-actuel" label="Groupe" value={changeGroupTarget.groupe ?? '—'} readOnly disabled />
+                            </div>
+                            <div className="col-md-6">
+                                <FormField
+                                    id="cg-montant-total"
+                                    label="Montant total"
+                                    value={
+                                        changeGroupTarget.montantTotal !== null
+                                            ? `${Number(changeGroupTarget.montantTotal).toFixed(2)} MAD`
+                                            : '—'
+                                    }
+                                    readOnly
+                                    disabled
+                                />
+                            </div>
+                            <div className="col-md-6">
+                                <DateField
+                                    id="cg-date-fin"
+                                    label="Date de fin"
+                                    required
+                                    value={changeGroupForm.data.date_fin}
+                                    onChange={(event) => changeGroupForm.setData('date_fin', event.target.value)}
+                                    error={changeGroupForm.errors.date_fin}
+                                />
+                            </div>
+                            <div className="col-12">
+                                <TextareaField
+                                    id="cg-note"
+                                    label="Note"
+                                    value={changeGroupForm.data.note}
+                                    onChange={(event) => changeGroupForm.setData('note', event.target.value)}
+                                    error={changeGroupForm.errors.note}
+                                />
+                            </div>
+                            <div className="col-12">
+                                <button
+                                    type="button"
+                                    className="btn btn-link p-0"
+                                    onClick={() => setShowFeesDetails((value) => !value)}
+                                >
+                                    {showFeesDetails ? 'Moins de détails' : 'Plus de détails'}
+                                </button>
+                                {showFeesDetails && (
+                                    <div className="mt-2">
+                                        <div className="form-check">
+                                            <input
+                                                type="radio"
+                                                className="form-check-input"
+                                                id="cg-scope-overdue"
+                                                name="cg-scope"
+                                                checked={changeGroupForm.data.unpaid_fees_scope === 'overdue_only'}
+                                                onChange={() => changeGroupForm.setData('unpaid_fees_scope', 'overdue_only')}
+                                            />
+                                            <label className="form-check-label" htmlFor="cg-scope-overdue">
+                                                Supprimer tous les frais Non payés ayant une date supérieure à la date de fin
+                                            </label>
+                                        </div>
+                                        <div className="form-check">
+                                            <input
+                                                type="radio"
+                                                className="form-check-input"
+                                                id="cg-scope-all"
+                                                name="cg-scope"
+                                                checked={changeGroupForm.data.unpaid_fees_scope === 'all'}
+                                                onChange={() => changeGroupForm.setData('unpaid_fees_scope', 'all')}
+                                            />
+                                            <label className="form-check-label" htmlFor="cg-scope-all">
+                                                Supprimer tous les frais Non payés
+                                            </label>
+                                        </div>
+                                        <div className="form-check">
+                                            <input
+                                                type="radio"
+                                                className="form-check-input"
+                                                id="cg-scope-none"
+                                                name="cg-scope"
+                                                checked={changeGroupForm.data.unpaid_fees_scope === ''}
+                                                onChange={() => changeGroupForm.setData('unpaid_fees_scope', '')}
+                                            />
+                                            <label className="form-check-label" htmlFor="cg-scope-none">
+                                                Ne rien supprimer
+                                            </label>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <h6 className="mb-2">Le nouveau groupe</h6>
+                        <div className="row mb-3">
+                            <div className="col-md-6">
+                                <DateField
+                                    id="cg-date-debut"
+                                    label="Date de début"
+                                    required
+                                    value={changeGroupForm.data.date_debut}
+                                    onChange={(event) => changeGroupForm.setData('date_debut', event.target.value)}
+                                    error={changeGroupForm.errors.date_debut}
+                                />
+                            </div>
+                            <div className="col-md-6">
+                                <SelectField
+                                    id="cg-groupe"
+                                    label="Groupe"
+                                    required
+                                    options={groupOptions.filter((g) => g.value !== changeGroupTarget.groupId)}
+                                    placeholder="Choisir une formation"
+                                    value={changeGroupForm.data.new_group_id}
+                                    onChange={(event) =>
+                                        changeGroupForm.setData('new_group_id', event.target.value ? Number(event.target.value) : '')
+                                    }
+                                    error={changeGroupForm.errors.new_group_id}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="d-flex justify-content-end gap-2 mt-4">
+                            <FormActions onCancel={closeChangeGroup} processing={changeGroupForm.processing} submitLabel="Confirmer" />
+                        </div>
+                    </form>
+                )}
+            </Modal>
         </BackofficeLayout>
+    );
+}
+
+interface ClientFeesPaginationProps {
+    total: number;
+    perPage: number;
+    page: number;
+    onPageChange: (page: number) => void;
+}
+
+/**
+ * Lightweight client-side pager for the "Frais disponibles" table — the
+ * lines live entirely in form's in-memory state (no server round trip until
+ * submit), so this can't reuse the server-driven <Pagination> component
+ * (which navigates via router.get against a Laravel paginator). Same
+ * Bootstrap `.pagination` markup/prev-next-jump styling.
+ */
+function ClientFeesPagination({ total, perPage, page, onPageChange }: ClientFeesPaginationProps) {
+    const lastPage = Math.max(1, Math.ceil(total / perPage));
+
+    if (lastPage <= 1) {
+        return null;
+    }
+
+    const from = (page - 1) * perPage + 1;
+    const to = Math.min(total, page * perPage);
+
+    return (
+        <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+            <p className="text-muted mb-0">{total} total</p>
+            <nav aria-label="Pagination des frais">
+                <ul className="pagination pagination-sm mb-0">
+                    <li className={`page-item${page === 1 ? ' disabled' : ''}`} aria-disabled={page === 1 ? true : undefined}>
+                        <button type="button" className="page-link border-0" aria-label="Première page" onClick={() => onPageChange(1)}>
+                            «
+                        </button>
+                    </li>
+                    <li className={`page-item${page === 1 ? ' disabled' : ''}`} aria-disabled={page === 1 ? true : undefined}>
+                        <button type="button" className="page-link border-0" aria-label="Page précédente" onClick={() => onPageChange(page - 1)}>
+                            ‹
+                        </button>
+                    </li>
+                    {Array.from({ length: lastPage }, (_, i) => i + 1).map((n) => (
+                        <li className={`page-item${n === page ? ' active' : ''}`} aria-current={n === page ? 'page' : undefined} key={n}>
+                            <button type="button" className="page-link border-0" onClick={() => onPageChange(n)}>
+                                {n}
+                            </button>
+                        </li>
+                    ))}
+                    <li className={`page-item${page === lastPage ? ' disabled' : ''}`} aria-disabled={page === lastPage ? true : undefined}>
+                        <button type="button" className="page-link border-0" aria-label="Page suivante" onClick={() => onPageChange(page + 1)}>
+                            ›
+                        </button>
+                    </li>
+                    <li className={`page-item${page === lastPage ? ' disabled' : ''}`} aria-disabled={page === lastPage ? true : undefined}>
+                        <button type="button" className="page-link border-0" aria-label="Dernière page" onClick={() => onPageChange(lastPage)}>
+                            »
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+            <p className="text-muted mb-0">
+                {from}–{to} sur {total}
+            </p>
+        </div>
     );
 }

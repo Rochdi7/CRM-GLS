@@ -83,8 +83,11 @@ export default function EmployeesIndex({
     etablissements,
     centerLocked,
     contextCenterId,
+    canManageUsers,
 }: EmployeesPageProps) {
-    const { props } = usePage<{ flash: { newEmployeeCredentials?: { username: string; password: string } | null } }>();
+    const { props } = usePage<{
+        flash: { newEmployeeCredentials?: { username: string; password: string } | null; regeneratedPassword?: string | null };
+    }>();
     const isLoading = useInertiaLoading();
 
     const [showModal, setShowModal] = useState(false);
@@ -96,6 +99,11 @@ export default function EmployeesIndex({
     const [deleteError, setDeleteError] = useState<string | undefined>(undefined);
     const [deleteProcessing, setDeleteProcessing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const [accountTarget, setAccountTarget] = useState<EmployeeRow | null>(null);
+    const [confirmingRegenerate, setConfirmingRegenerate] = useState(false);
+    const [regeneratedPasswordShown, setRegeneratedPasswordShown] = useState<string | null>(null);
+    const [regenerating, setRegenerating] = useState(false);
 
     const form = useForm<EmployeeFormState>(emptyForm(defaultCountry, contextCenterId));
 
@@ -243,6 +251,49 @@ export default function EmployeesIndex({
         });
     }
 
+    function openAccount(employee: EmployeeRow) {
+        setAccountTarget(employee);
+        setRegeneratedPasswordShown(null);
+        setConfirmingRegenerate(false);
+    }
+
+    function closeAccount() {
+        setAccountTarget(null);
+        setRegeneratedPasswordShown(null);
+        setConfirmingRegenerate(false);
+    }
+
+    function requestRegenerate() {
+        setConfirmingRegenerate(true);
+    }
+
+    function confirmRegenerate() {
+        if (!accountTarget?.userId) {
+            return;
+        }
+
+        setRegenerating(true);
+        router.post(
+            `/backoffice/users/${accountTarget.userId}/regenerate-password`,
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: () => setConfirmingRegenerate(false),
+                onFinish: () => setRegenerating(false),
+            },
+        );
+    }
+
+    // The one-time password is delivered via the shared
+    // `flash.regeneratedPassword` prop (see HandleInertiaRequests) after
+    // confirmRegenerate()'s POST lands — same mechanism as the Users page.
+    useEffect(() => {
+        if (props.flash?.regeneratedPassword && accountTarget) {
+            setRegeneratedPasswordShown(props.flash.regeneratedPassword);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [props.flash?.regeneratedPassword]);
+
     const modalTitle = credentials ? 'Employé créé' : editingEmployee ? "Modifier l'employé" : 'Ajouter un employé';
 
     return (
@@ -283,18 +334,20 @@ export default function EmployeesIndex({
                                 onChange={(event) => reload({ statutFilter: event.target.value })}
                             />
                         </div>
-                        <div style={{ width: 220 }}>
-                            <label className="form-label" htmlFor="emp-f-centre">
-                                Centre
-                            </label>
-                            <SelectField
-                                id="emp-f-centre"
-                                options={centerOptions}
-                                placeholder="Tous les centres"
-                                value={filters.etablissementFilter}
-                                onChange={(event) => reload({ etablissementFilter: event.target.value })}
-                            />
-                        </div>
+                        {!centerLocked && (
+                            <div style={{ width: 220 }}>
+                                <label className="form-label" htmlFor="emp-f-centre">
+                                    Centre
+                                </label>
+                                <SelectField
+                                    id="emp-f-centre"
+                                    options={centerOptions}
+                                    placeholder="Tous les centres"
+                                    value={filters.etablissementFilter}
+                                    onChange={(event) => reload({ etablissementFilter: event.target.value })}
+                                />
+                            </div>
+                        )}
                     </TableToolbar>
                 </div>
 
@@ -369,6 +422,11 @@ export default function EmployeesIndex({
                                             <RowActionItem icon="ti-edit" onClick={() => openEdit(employee)}>
                                                 Modifier
                                             </RowActionItem>
+                                            {canManageUsers && employee.userId && (
+                                                <RowActionItem icon="ti-key" onClick={() => openAccount(employee)}>
+                                                    Voir le compte
+                                                </RowActionItem>
+                                            )}
                                             <RowActionItem icon="ti-trash" danger onClick={() => confirmDelete(employee)}>
                                                 Supprimer
                                             </RowActionItem>
@@ -662,6 +720,95 @@ export default function EmployeesIndex({
                     setDeleteError(undefined);
                 }}
             />
+
+            <Modal
+                show={accountTarget !== null && !confirmingRegenerate}
+                title="Compte de connexion"
+                onClose={closeAccount}
+                processing={regenerating}
+                footer={
+                    <button type="button" className="btn btn-primary" onClick={closeAccount}>
+                        Fermer
+                    </button>
+                }
+            >
+                <div className="text-center mb-3">
+                    <span className="avatar avatar-xl bg-primary-transparent rounded-circle d-inline-flex align-items-center justify-content-center mb-2">
+                        <i className="ti ti-user-shield fs-24 text-primary" />
+                    </span>
+                    <h5>{accountTarget?.nomComplet}</h5>
+                </div>
+                <div className="alert alert-info d-flex justify-content-between align-items-center mb-3">
+                    <span className="fw-medium">Nom d'utilisateur</span>
+                    <code className="fs-14">{accountTarget?.username ?? '—'}</code>
+                </div>
+
+                {regeneratedPasswordShown ? (
+                    <>
+                        <div className="alert alert-info d-flex justify-content-between align-items-center mb-0">
+                            <span>
+                                Nouveau mot de passe : <code className="fs-14">{regeneratedPasswordShown}</code>
+                            </span>
+                            <span className="badge badge-soft-warning">Unique</span>
+                        </div>
+                        <p className="text-muted fs-12 mt-2 mb-0">
+                            Communiquez-le maintenant — il ne sera plus jamais affiché. L'employé devra le changer à sa prochaine
+                            connexion.
+                        </p>
+                    </>
+                ) : (
+                    <>
+                        <p className="text-muted fs-13">
+                            Pour des raisons de sécurité, le mot de passe existant n'est jamais affiché. Générez-en un nouveau à
+                            usage unique si l'employé l'a perdu.
+                        </p>
+                        <button
+                            type="button"
+                            className="btn btn-outline-warning btn-sm"
+                            onClick={requestRegenerate}
+                            disabled={regenerating}
+                        >
+                            {regenerating ? (
+                                <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" />
+                            ) : (
+                                <i className="ti ti-key me-1" />
+                            )}
+                            Régénérer le mot de passe
+                        </button>
+                    </>
+                )}
+            </Modal>
+
+            <Modal
+                show={confirmingRegenerate}
+                title="Confirmer la régénération"
+                onClose={() => setConfirmingRegenerate(false)}
+                processing={regenerating}
+                footer={
+                    <>
+                        <button
+                            type="button"
+                            className="btn btn-light"
+                            onClick={() => setConfirmingRegenerate(false)}
+                            disabled={regenerating}
+                        >
+                            Annuler
+                        </button>
+                        <button type="button" className="btn btn-warning" onClick={confirmRegenerate} disabled={regenerating}>
+                            {regenerating ? (
+                                <>
+                                    <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
+                                    Génération…
+                                </>
+                            ) : (
+                                'Générer un nouveau mot de passe'
+                            )}
+                        </button>
+                    </>
+                }
+            >
+                <p className="mb-0">Générer un nouveau mot de passe à usage unique pour cet employé ?</p>
+            </Modal>
         </BackofficeLayout>
     );
 }

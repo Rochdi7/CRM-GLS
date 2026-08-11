@@ -141,6 +141,22 @@ Shared components (reuse these — do not re-invent per page):
   the old `<x-backoffice.ui.filter-bar>`. `Pagination` renders the same
   Bootstrap `.pagination` markup but navigates via `router.get(...)` instead
   of `<a href>`, so query-string filters persist across pages.
+- **Centre filter dropdown rule (every list page, current and future):** if a
+  CRUD index page filters by `etablissement_id` (a "Centre" `SelectField` in
+  the `TableToolbar`), that dropdown must be wrapped in `{!centerLocked && (
+  … )}` and the controller's `index()` must pass `'centerLocked' =>
+  ! $context->isAllCenters()` (see `StudentController@index`,
+  `EmployeeController@index` for the pattern). Reasoning: `CurrentContext`
+  already scopes every query server-side to the active center when one is
+  selected (§11 "Active working context"), so showing a redundant Centre
+  filter once the user has switched to Marrakech/Rabat/etc. is misleading —
+  it should only appear when the top-bar switcher is on "Tous les centres"
+  (which itself is only selectable by `centers.access-all`/super-admin
+  users). Never gate this on a role check in the component — reuse the
+  existing `centerLocked` prop so the rule stays in sync with the context
+  switcher automatically. Apply this to any new module's list page that adds
+  a Centre column/filter (Groups, Inscriptions, Encaissements, Depenses,
+  Remboursements, Stock, etc.) as soon as it gets one.
 - `resources/js/Components/Forms/SelectField.tsx` — a plain native `<select>`
   styled with Bootstrap's `.form-select`. **Never Select2 or any jQuery
   plugin** — Inertia pages load no jQuery/Select2 assets at all; native

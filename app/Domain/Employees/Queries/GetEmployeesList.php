@@ -42,8 +42,9 @@ final class GetEmployeesList
         }
 
         $employees = Employee::query()
-            // `media` eager-loaded for the avatar column (avoids N+1).
-            ->with(['etablissement', 'media'])
+            // `media` eager-loaded for the avatar column, `user` for the
+            // "Voir le compte" action (avoids N+1 on both).
+            ->with(['etablissement', 'media', 'user'])
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             // Narrow to the center selected in the top-bar switcher.
             ->tap(function ($q): void {
@@ -86,6 +87,8 @@ final class GetEmployeesList
             'salaire' => $employee->salaire !== null ? (string) $employee->salaire : null,
             'etablissementId' => $employee->etablissement_id,
             'etablissement' => $employee->etablissement?->nom_centre,
+            'userId' => $employee->user?->id,
+            'username' => $employee->user?->username,
             'photoUrl' => $employee->getFirstMediaUrl('photo') ?: null,
             'photoThumbUrl' => $employee->getFirstMediaUrl('photo', 'thumb') ?: $employee->avatarUrl(),
         ]);

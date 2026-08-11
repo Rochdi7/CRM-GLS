@@ -108,4 +108,10 @@ class Encaissement extends Model
     {
         return $this->belongsTo(Employee::class, 'agent_id');
     }
+
+    /** Refunds recorded against this payment (Remboursement.encaissement_id). */
+    public function remboursements(): HasMany
+    {
+        return $this->hasMany(Remboursement::class);
+    }
 }

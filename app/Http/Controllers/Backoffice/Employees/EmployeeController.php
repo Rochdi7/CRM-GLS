@@ -68,6 +68,7 @@ final class EmployeeController extends Controller
             'centerLocked' => ! $context->isAllCenters(),
             'contextCenterId' => $context->etablissementId(),
             'contextCenterName' => $context->etablissement()?->nom_centre,
+            'canManageUsers' => $request->user()->can('users.assign-roles'),
         ]);
     }
 

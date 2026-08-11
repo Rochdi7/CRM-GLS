@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Finance\Actions\EnregistrerRemboursement;
+use App\Domain\Finance\Queries\GetStudentPaymentsForRefund;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Remboursements\StoreRemboursementRequest;
 use App\Http\Requests\Backoffice\Remboursements\UpdateRemboursementRequest;
 use App\Models\Remboursement;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Validation\ValidationException;
 
@@ -26,6 +28,18 @@ use Illuminate\Validation\ValidationException;
  */
 final class RemboursementController extends Controller
 {
+    /**
+     * A student's fee-targeted payments — the create form's "which payment
+     * are we refunding?" cascade (GetStudentPaymentsForRefund). Gated the
+     * same as creating a refund.
+     */
+    public function studentPayments(int $student, GetStudentPaymentsForRefund $getStudentPaymentsForRefund): JsonResponse
+    {
+        $this->authorize('create', Remboursement::class);
+
+        return response()->json(['payments' => $getStudentPaymentsForRefund($student)]);
+    }
+
     public function store(StoreRemboursementRequest $request, EnregistrerRemboursement $action): RedirectResponse
     {
         $this->authorize('create', Remboursement::class);
@@ -34,13 +48,22 @@ final class RemboursementController extends Controller
 
         if ($agent === null) {
             throw ValidationException::withMessages([
-                'caisse_id' => __('Your account is not linked to any employee record.'),
+                'beneficiaire_id' => __('Your account is not linked to any employee record.'),
             ]);
         }
 
+        // The till is ALWAYS the acting employee's own caisse — never chosen
+        // client-side (the modal shows no caisse field). Same self-heal as
+        // EncaissementController::store() for pre-provisioner accounts.
+        $caisse = $agent->caisses()->first()
+            ?? app(\App\Services\CaisseProvisioner::class)->provisionFor($agent);
+
         // Domain action: creates the refund AND decrements caisses.solde in
         // ONE transaction.
-        $action->handle($request->validated(), $agent);
+        $action->handle([
+            ...$request->validated(),
+            'caisse_id' => $caisse->id,
+        ], $agent);
 
         return redirect()->route('backoffice.depenses.index', ['tab' => 'remboursements'])
             ->with('success', __('Refund recorded.'));

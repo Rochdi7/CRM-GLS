@@ -12,44 +12,39 @@ import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
 import SelectField from '@/Components/Forms/SelectField';
 import DateField from '@/Components/Forms/DateField';
-import FormField from '@/Components/Forms/FormField';
 import TextareaField from '@/Components/Forms/TextareaField';
 import FormActions from '@/Components/Forms/FormActions';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import type { CaissesPageProps, CaisseJournalData, CaisseTransferRow, SelectOption } from '@/Types';
 
-type Tab = 'ma-caisse' | 'journal' | 'transferts' | 'comptes';
+type Tab = 'ma-caisse' | 'transferts';
 
 interface TransferFormState {
     caisse_source_id: number | '';
     caisse_destination_id: number | '';
     montant: string;
+    date_transfert: string;
     note: string;
 }
 
-function emptyTransferForm(): TransferFormState {
-    return { caisse_source_id: '', caisse_destination_id: '', montant: '', note: '' };
+function todayIso(): string {
+    return new Date().toISOString().slice(0, 10);
 }
 
-const JOURNAL_TYPE_BADGE: Record<string, 'success' | 'danger' | 'warning' | 'info'> = {
-    paiement: 'success',
-    depense: 'danger',
-    remboursement: 'warning',
-    transfert: 'info',
-};
-
-const JOURNAL_TYPE_LABEL: Record<string, string> = {
-    paiement: 'Paiement',
-    depense: 'Dépense',
-    remboursement: 'Remboursement',
-    transfert: 'Transfert',
-};
+function emptyTransferForm(): TransferFormState {
+    return { caisse_source_id: '', caisse_destination_id: '', montant: '', date_transfert: todayIso(), note: '' };
+}
 
 const TRANSFER_STATUT_BADGE: Record<string, 'success' | 'secondary' | 'warning'> = {
     'Validé': 'success',
     'Annulé': 'secondary',
     'En attente': 'warning',
+};
+
+const TRANSACTION_TYPE_BADGE: Record<string, 'success' | 'danger'> = {
+    'Réception': 'success',
+    'Transfert': 'danger',
 };
 
 function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJournalData }) {
@@ -73,11 +68,7 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
     if (journal.caissesInScope.length === 0) {
         return (
             <Card>
-                <EmptyState
-                    title="Aucune caisse"
-                    message={scope === 'mine' ? "Votre compte n'est lié à aucune caisse." : 'Aucune caisse visible dans le contexte actuel.'}
-                    icon="ti ti-cash"
-                />
+                <EmptyState title="Aucune caisse" message="Votre compte n'est lié à aucune caisse." icon="ti ti-cash" />
             </Card>
         );
     }
@@ -92,7 +83,7 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
                                 <i className="ti ti-cash-banknote text-success fs-20" />
                             </span>
                             <div>
-                                <p className="mb-0 text-muted">Paiements reçus</p>
+                                <p className="mb-0 text-muted">Encaissments</p>
                                 <h5 className="mb-0 text-success">{Number(journal.totalEncaissements).toFixed(2)} DH</h5>
                             </div>
                         </div>
@@ -115,7 +106,7 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
                     <div className="card">
                         <div className="card-body d-flex align-items-center">
                             <span className="avatar avatar-md bg-primary-transparent rounded-circle me-3 d-inline-flex align-items-center justify-content-center">
-                                <i className="ti ti-wallet text-primary fs-20" />
+                                <i className="ti ti-currency-dollar text-primary fs-20" />
                             </span>
                             <div>
                                 <p className="mb-0 text-muted">Solde</p>
@@ -126,80 +117,68 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
                 </div>
             </div>
 
-            <Card title={scope === 'mine' ? 'Ma caisse' : 'Journal des transactions'}>
-                <TableToolbar>
-                    {/* External label + bare SelectField, matching the Du/Au
-                        blocks exactly so the three fields align on one row. */}
-                    <div style={{ width: 200 }}>
-                        <label className="form-label" htmlFor={`cj-type-${scope}`}>
-                            Type de transaction
-                        </label>
-                        <SelectField
-                            id={`cj-type-${scope}`}
-                            options={[
-                                { value: 'paiement', label: 'Recette' },
-                                { value: 'remboursement', label: "Récupération d'une autre caisse" },
-                                { value: 'depense', label: 'Dépense' },
-                                { value: 'transfert', label: 'Transfert à une autre caisse' },
-                            ]}
-                            placeholder="Choisir un type"
-                            value={typeFilter}
-                            onChange={(e) => {
-                                setTypeFilter(e.target.value);
-                                setPage(1);
-                            }}
-                        />
-                    </div>
-                    <div style={{ width: 160 }}>
-                        <label className="form-label" htmlFor={`cj-from-${scope}`}>
-                            Du
-                        </label>
-                        <DateField
-                            id={`cj-from-${scope}`}
-                            value={dateFrom}
-                            onChange={(e) => {
-                                setDateFrom(e.target.value);
-                                setPage(1);
-                            }}
-                        />
-                    </div>
-                    <div style={{ width: 160 }}>
-                        <label className="form-label" htmlFor={`cj-to-${scope}`}>
-                            Au
-                        </label>
-                        <DateField
-                            id={`cj-to-${scope}`}
-                            value={dateTo}
-                            onChange={(e) => {
-                                setDateTo(e.target.value);
-                                setPage(1);
-                            }}
-                        />
-                    </div>
-                </TableToolbar>
-
-                {scope === 'mine' && (
-                    <div className="text-muted mb-1">{journal.caissesInScope.map((c) => c.nom).join(', ')}</div>
-                )}
-
-                <div className="mb-3 fw-medium">
-                    Paiements : {Number(journal.totauxParType.paiement ?? 0).toFixed(2)} DH
-                    {' / '}Remboursements : {Number(journal.totauxParType.remboursement ?? 0).toFixed(2)} DH
-                    {' / '}Dépenses : {Number(journal.totauxParType.depense ?? 0).toFixed(2)} DH
-                    {' / '}Transferts : {Number(journal.totauxParType.transfert ?? 0).toFixed(2)} DH
+            <Card bodyClassName="p-0 py-3">
+                <div className="px-3 pt-2">
+                    <TableToolbar>
+                        <div style={{ width: 200 }}>
+                            <label className="form-label" htmlFor={`cj-type-${scope}`}>
+                                Type
+                            </label>
+                            <SelectField
+                                id={`cj-type-${scope}`}
+                                options={[
+                                    { value: 'paiement', label: 'Recette' },
+                                    { value: 'remboursement', label: "Récupération d'une autre caisse" },
+                                    { value: 'depense', label: 'Dépense' },
+                                    { value: 'transfert', label: 'Transfert à une autre caisse' },
+                                ]}
+                                placeholder="Choisir un type"
+                                value={typeFilter}
+                                onChange={(e) => {
+                                    setTypeFilter(e.target.value);
+                                    setPage(1);
+                                }}
+                            />
+                        </div>
+                        <div style={{ width: 170 }}>
+                            <label className="form-label" htmlFor={`cj-from-${scope}`}>
+                                Date de début
+                            </label>
+                            <DateField
+                                id={`cj-from-${scope}`}
+                                value={dateFrom}
+                                onChange={(e) => {
+                                    setDateFrom(e.target.value);
+                                    setPage(1);
+                                }}
+                            />
+                        </div>
+                        <div style={{ width: 170 }}>
+                            <label className="form-label" htmlFor={`cj-to-${scope}`}>
+                                Date de fin
+                            </label>
+                            <DateField
+                                id={`cj-to-${scope}`}
+                                value={dateTo}
+                                onChange={(e) => {
+                                    setDateTo(e.target.value);
+                                    setPage(1);
+                                }}
+                            />
+                        </div>
+                    </TableToolbar>
                 </div>
 
                 {loading ? (
-                    <p className="text-muted">Chargement…</p>
+                    <p className="text-muted px-3">Chargement…</p>
                 ) : journal.rows.length === 0 ? (
-                    <EmptyState title="Aucune transaction pour cette période" icon="ti ti-report-money" />
+                    <EmptyState title="Aucune caisse n'a été trouvée." icon="ti ti-report-money" />
                 ) : (
                     <>
                         <DataTable
                             head={
                                 <tr>
                                     <th>Référence</th>
-                                    <th>Type</th>
                                     <th>Transaction</th>
                                     <th>Étudiant / Tiers</th>
                                     <th className="text-end">Montant</th>
@@ -211,9 +190,6 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
                             {journal.rows.map((row, i) => (
                                 <tr key={`${row.type}-${row.reference}-${i}`}>
                                     <td>{row.url ? <a href={row.url}><code>{row.reference}</code></a> : <code>{row.reference}</code>}</td>
-                                    <td>
-                                        <StatusBadge label={JOURNAL_TYPE_LABEL[row.type] ?? row.type} variant={JOURNAL_TYPE_BADGE[row.type] ?? 'secondary'} />
-                                    </td>
                                     <td>{row.libelle ?? '—'}</td>
                                     <td>{row.tiers ?? '—'}</td>
                                     <td className={`text-end fw-medium ${row.sens < 0 ? 'text-danger' : 'text-success'}`}>
@@ -226,7 +202,7 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
                             ))}
                         </DataTable>
 
-                        <div className="d-flex align-items-center justify-content-between mt-3">
+                        <div className="d-flex align-items-center justify-content-between mt-3 px-3">
                             <span className="text-muted">{journal.total} transaction(s)</span>
                             <div className="btn-group">
                                 <button
@@ -258,64 +234,54 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
 }
 
 /**
- * "Gestion de la caisse" — replaces the Livewire tabbed page (Ma caisse +
- * Journal des transactions + Transferts + Comptes de caisse). The journal
- * tabs fetch their own data client-side (CaisseController@journal) so
- * filter/date/page changes don't reload the whole tabbed page — mirrors
- * CaisseJournal's own live re-render exactly, including the confirmed,
- * still-unaddressed performance characteristics (4 merged queries per
- * scope) which this phase deliberately preserves rather than rewrites
- * (docs/phase-10-finance-mapping.md Q4).
+ * "Gestion de la caisse" — Ma caisse + Validation de transfert (the
+ * former Journal des transactions and Comptes de caisse tabs were dropped
+ * per product decision; their data/routes still exist server-side for
+ * anyone linking in directly, just no longer surfaced as tabs here).
  */
 export default function CaissesIndex({
     canViewCaisses,
     canViewTransfers,
     journalMine,
-    journalAll,
-    caisses,
-    etablissements,
-    statuts,
     transfers,
-    transferStatutCounts,
     transferCaisses,
     transferStatuts,
     currentEmployeeId,
+    transferFilters: initialTransferFilters,
 }: CaissesPageProps) {
     const isLoading = useInertiaLoading();
     const availableTabs: Tab[] = [
-        ...(canViewCaisses ? (['ma-caisse', 'journal'] as Tab[]) : []),
+        ...(canViewCaisses ? (['ma-caisse'] as Tab[]) : []),
         ...(canViewTransfers ? (['transferts'] as Tab[]) : []),
-        ...(canViewCaisses ? (['comptes'] as Tab[]) : []),
     ];
     const requested = new URLSearchParams(window.location.search).get('tab') as Tab | null;
     const [tab, setTab] = useState<Tab>(requested && availableTabs.includes(requested) ? requested : availableTabs[0]);
 
-    const [caissesFilters, setCaissesFilters] = useState({ search: '', etablissementFilter: '', statutFilter: '' });
-    const [transferFilters, setTransferFilters] = useState({ search: '', statutFilter: transferStatuts[0] ?? 'En attente', caisseFilter: '' });
+    const [transferFilters, setTransferFilters] = useState(
+        initialTransferFilters ?? { search: '', statutFilter: '', caisseFilter: '' },
+    );
 
     const [showTransferModal, setShowTransferModal] = useState(false);
     const [editingTransfer, setEditingTransfer] = useState<CaisseTransferRow | null>(null);
     const [validateError, setValidateError] = useState<string | undefined>(undefined);
 
-    const etablissementOptions: SelectOption[] = etablissements.map((e) => ({ value: e.id, label: e.nom }));
-    const statutOptions: SelectOption[] = statuts.map((s) => ({ value: s, label: s }));
     const transferCaisseOptions: SelectOption[] = transferCaisses.map((c) => ({ value: c.id, label: `${c.nom} (${Number(c.solde).toFixed(2)} DH)` }));
+    const transferStatutOptions: SelectOption[] = transferStatuts.map((s) => ({ value: s, label: s }));
 
     const transferForm = useForm<TransferFormState>(emptyTransferForm());
+
+    // Live Solde / Reste preview for the modal — sourced from the selected
+    // source caisse's own balance (transferCaisses already carries `solde`
+    // per option), never trusted as authoritative: the server independently
+    // re-validates the transfer amount against the caisse's real balance.
+    const selectedSourceCaisse = transferCaisses.find((c) => c.id === transferForm.data.caisse_source_id);
+    const soldeSource = selectedSourceCaisse ? Number(selectedSourceCaisse.solde) : null;
+    const montantATransferer = parseFloat(transferForm.data.montant || '0');
+    const reste = soldeSource !== null ? soldeSource - (Number.isFinite(montantATransferer) ? montantATransferer : 0) : null;
 
     function switchTab(next: Tab) {
         setTab(next);
         router.get('/backoffice/caisses', { tab: next }, { preserveState: true, preserveScroll: true, replace: true });
-    }
-
-    function reloadCaisses(next: Partial<typeof caissesFilters>) {
-        const merged = { ...caissesFilters, ...next };
-        setCaissesFilters(merged);
-        router.get('/backoffice/caisses', { tab: 'comptes', ...merged, page: undefined }, {
-            preserveState: true,
-            preserveScroll: true,
-            replace: true,
-        });
     }
 
     function reloadTransfers(next: Partial<typeof transferFilters>) {
@@ -340,8 +306,9 @@ export default function CaissesIndex({
         transferForm.clearErrors();
         transferForm.setData({
             caisse_source_id: row.caisseSourceId ?? '',
-            caisse_destination_id: '',
+            caisse_destination_id: row.caisseDestinationId ?? '',
             montant: row.montant,
+            date_transfert: row.dateTransfert ? row.dateTransfert.slice(0, 10) : todayIso(),
             note: row.note ?? '',
         });
         setShowTransferModal(true);
@@ -394,176 +361,72 @@ export default function CaissesIndex({
         <BackofficeLayout
             title="Gestion de la caisse"
             breadcrumbs={[{ label: 'Tableau de bord', href: '/backoffice/dashboard' }, { label: 'Gestion de la caisse' }]}
+            actions={
+                canViewTransfers ? (
+                    <button type="button" className="btn btn-info d-flex align-items-center" onClick={openCreateTransfer}>
+                        <i className="ti ti-arrows-exchange me-2" />
+                        transférer
+                    </button>
+                ) : undefined
+            }
         >
             <ul className="nav nav-tabs nav-tabs-solid mb-4" role="tablist">
                 {canViewCaisses && (
                     <li className="nav-item">
                         <button type="button" className={`nav-link${tab === 'ma-caisse' ? ' active' : ''}`} onClick={() => switchTab('ma-caisse')}>
-                            <i className="ti ti-wallet me-1" />
+                            <i className="ti ti-cube me-1" />
                             Ma caisse
-                        </button>
-                    </li>
-                )}
-                {canViewCaisses && (
-                    <li className="nav-item">
-                        <button type="button" className={`nav-link${tab === 'journal' ? ' active' : ''}`} onClick={() => switchTab('journal')}>
-                            <i className="ti ti-report-money me-1" />
-                            Journal des transactions
                         </button>
                     </li>
                 )}
                 {canViewTransfers && (
                     <li className="nav-item">
                         <button type="button" className={`nav-link${tab === 'transferts' ? ' active' : ''}`} onClick={() => switchTab('transferts')}>
-                            <i className="ti ti-arrows-exchange me-1" />
-                            Transferts de caisse
-                        </button>
-                    </li>
-                )}
-                {canViewCaisses && (
-                    <li className="nav-item">
-                        <button type="button" className={`nav-link${tab === 'comptes' ? ' active' : ''}`} onClick={() => switchTab('comptes')}>
-                            <i className="ti ti-cash me-1" />
-                            Comptes de caisse
+                            <i className="ti ti-circle-check me-1" />
+                            Validation de transfert
                         </button>
                     </li>
                 )}
             </ul>
 
             {tab === 'ma-caisse' && canViewCaisses && journalMine && <JournalPanel scope="mine" data={journalMine} />}
-            {tab === 'journal' && canViewCaisses && journalAll && <JournalPanel scope="all" data={journalAll} />}
-
-            {tab === 'comptes' && canViewCaisses && caisses && (
-                <Card title="Comptes de caisse" bodyClassName="p-0 py-3">
-                    <div className="px-3 pt-2">
-                        <TableToolbar>
-                            <div style={{ width: 220 }}>
-                                <label className="form-label" htmlFor="cc-f-centre">
-                                    Centre
-                                </label>
-                                <SelectField
-                                    id="cc-f-centre"
-                                    options={etablissementOptions}
-                                    placeholder="Tous les centres"
-                                    value={caissesFilters.etablissementFilter}
-                                    onChange={(event) => reloadCaisses({ etablissementFilter: event.target.value })}
-                                />
-                            </div>
-                            <div style={{ width: 180 }}>
-                                <label className="form-label" htmlFor="cc-f-statut">
-                                    Statut
-                                </label>
-                                <SelectField
-                                    id="cc-f-statut"
-                                    options={statutOptions}
-                                    placeholder="Tous les statuts"
-                                    value={caissesFilters.statutFilter}
-                                    onChange={(event) => reloadCaisses({ statutFilter: event.target.value })}
-                                />
-                            </div>
-                        </TableToolbar>
-                    </div>
-
-                    <TableLengthRow
-                        search={<SearchInput value={caissesFilters.search} onSearch={(value) => reloadCaisses({ search: value })} />}
-                    />
-
-                    <div className="alert alert-info mx-3">
-                        Chaque employé possède une caisse, créée automatiquement avec lui. Les soldes ne bougent qu'à
-                        travers les paiements, dépenses, remboursements et transferts validés.
-                    </div>
-
-                    {caisses.data.length === 0 ? (
-                        <EmptyState title="Aucune caisse" message="Une caisse apparaît dès qu'un employé est créé." icon="ti ti-cash" />
-                    ) : (
-                        <>
-                            <DataTable
-                                loading={isLoading}
-                                head={
-                                    <tr>
-                                        <th>Nom</th>
-                                        <th>Centre</th>
-                                        <th>Responsable</th>
-                                        <th className="text-end">Solde</th>
-                                        <th>Statut</th>
-                                        <th className="text-end">Action</th>
-                                    </tr>
-                                }
-                            >
-                                {caisses.data.map((row) => (
-                                    <tr key={row.id}>
-                                        <td className="fw-medium">
-                                            <a href={row.showUrl} className="text-dark">
-                                                {row.nom}
-                                            </a>
-                                        </td>
-                                        <td>{row.centre ?? '—'}</td>
-                                        <td>{row.responsable ?? '—'}</td>
-                                        <td className="text-end fw-medium">{Number(row.solde).toFixed(2)} DH</td>
-                                        <td>
-                                            <StatusBadge label={row.statut} variant={row.statut === 'Active' ? 'success' : 'secondary'} dot />
-                                        </td>
-                                        <td>
-                                            <RowActions view={row.showUrl} />
-                                        </td>
-                                    </tr>
-                                ))}
-                            </DataTable>
-                            <Pagination paginator={caisses} showJumpToPage />
-                        </>
-                    )}
-                </Card>
-            )}
 
             {tab === 'transferts' && canViewTransfers && transfers && (
-                <Card
-                    title="Transferts de caisse"
-                    bodyClassName="p-0 py-3"
-                    tools={
-                        <button
-                            type="button"
-                            className="btn btn-primary d-flex align-items-center mb-3"
-                            onClick={openCreateTransfer}
-                        >
-                            <i className="ti ti-square-rounded-plus me-2" />
-                            Demander un transfert
-                        </button>
-                    }
-                >
+                <Card bodyClassName="p-0 py-3">
                     <div className="px-3 pt-2">
                         <TableToolbar>
-                            <div style={{ width: 220 }}>
+                            <div style={{ width: 200 }}>
                                 <label className="form-label" htmlFor="tr-f-caisse">
-                                    Caisse source
+                                    Type
                                 </label>
                                 <SelectField
                                     id="tr-f-caisse"
                                     options={transferCaisseOptions}
-                                    placeholder="Toutes les caisses"
+                                    placeholder="Choisir un type"
                                     value={transferFilters.caisseFilter}
                                     onChange={(event) => reloadTransfers({ caisseFilter: event.target.value })}
+                                />
+                            </div>
+                            <div style={{ width: 180 }}>
+                                <label className="form-label" htmlFor="tr-f-statut">
+                                    Statut
+                                </label>
+                                <SelectField
+                                    id="tr-f-statut"
+                                    options={transferStatutOptions}
+                                    placeholder="Choisir un statut"
+                                    value={transferFilters.statutFilter}
+                                    onChange={(event) => reloadTransfers({ statutFilter: event.target.value })}
                                 />
                             </div>
                         </TableToolbar>
                     </div>
 
-                    <ul className="nav nav-pills px-3 mb-3">
-                        {transferStatuts.map((statut) => (
-                            <li className="nav-item" key={statut}>
-                                <button
-                                    type="button"
-                                    className={`nav-link${transferFilters.statutFilter === statut ? ' active' : ''}`}
-                                    onClick={() => reloadTransfers({ statutFilter: statut })}
-                                >
-                                    {statut} <span className="badge bg-light text-dark ms-1">{transferStatutCounts[statut] ?? 0}</span>
-                                </button>
-                            </li>
-                        ))}
-                    </ul>
-
                     <TableLengthRow
                         search={<SearchInput value={transferFilters.search} onSearch={(value) => reloadTransfers({ search: value })} />}
                     />
+
+                    <p className="px-3 fw-semibold">Total : {transfers.data.reduce((sum, r) => sum + Number(r.montant), 0).toFixed(2)}</p>
 
                     {validateError && <div className="alert alert-danger mx-3">{validateError}</div>}
 
@@ -575,26 +438,30 @@ export default function CaissesIndex({
                                 loading={isLoading}
                                 head={
                                     <tr>
-                                        <th>Référence</th>
-                                        <th>De</th>
-                                        <th>Vers</th>
+                                        <th>Expéditeur</th>
+                                        <th>Destinataire</th>
+                                        <th>Type de transaction</th>
                                         <th className="text-end">Montant</th>
-                                        <th>Date</th>
                                         <th>Statut</th>
+                                        <th>Date</th>
+                                        <th>Note</th>
                                         <th className="text-end">Action</th>
                                     </tr>
                                 }
                             >
                                 {transfers.data.map((row) => (
                                     <tr key={row.id}>
-                                        <td><a href={row.showUrl}><code>{row.reference}</code></a></td>
-                                        <td>{row.caisseSource ?? '—'}</td>
-                                        <td>{row.caisseDestination ?? '—'}</td>
+                                        <td>{row.expediteur ?? '—'}</td>
+                                        <td>{row.destinataire ?? '—'}</td>
+                                        <td>
+                                            <StatusBadge label={row.typeTransaction} variant={TRANSACTION_TYPE_BADGE[row.typeTransaction] ?? 'secondary'} />
+                                        </td>
                                         <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} DH</td>
-                                        <td>{row.dateTransfert ?? '—'}</td>
                                         <td>
                                             <StatusBadge label={row.statut} variant={TRANSFER_STATUT_BADGE[row.statut] ?? 'warning'} dot />
                                         </td>
+                                        <td>{row.dateTransfert ? row.dateTransfert.slice(0, 10) : '—'}</td>
+                                        <td>{row.note ?? '—'}</td>
                                         <td>
                                             <RowActions view={row.showUrl}>
                                                 {row.isPending && (
@@ -632,10 +499,11 @@ export default function CaissesIndex({
 
             <Modal
                 show={showTransferModal}
-                title={editingTransfer ? 'Modifier le transfert' : 'Demander un transfert'}
+                title={editingTransfer ? 'Modifier le transfert' : 'Transfert à une autre caisse'}
                 onClose={closeTransferModal}
                 processing={transferForm.processing}
-                footer={<FormActions form="transfer-form" onCancel={closeTransferModal} processing={transferForm.processing} />}
+                size="lg"
+                footer={<FormActions form="transfer-form" onCancel={closeTransferModal} processing={transferForm.processing} submitLabel="Valider" />}
             >
                 <form id="transfer-form" onSubmit={submitTransfer}>
                     <div className="alert alert-info">
@@ -643,46 +511,93 @@ export default function CaissesIndex({
                             ? 'Seule la note peut être modifiée — les caisses et le montant sont figés.'
                             : 'Les soldes ne bougent pas maintenant : un autre employé doit valider ce transfert.'}
                     </div>
-                    <SelectField
-                        id="ct-source"
-                        label="Caisse source"
-                        options={transferCaisseOptions}
-                        placeholder="Sélectionner une caisse"
-                        required
-                        disabled={!!editingTransfer}
-                        value={transferForm.data.caisse_source_id}
-                        onChange={(e) => transferForm.setData('caisse_source_id', e.target.value === '' ? '' : Number(e.target.value))}
-                        error={transferForm.errors.caisse_source_id}
-                    />
-                    <SelectField
-                        id="ct-destination"
-                        label="Caisse destination"
-                        options={transferCaisseOptions}
-                        placeholder="Sélectionner une caisse"
-                        required
-                        disabled={!!editingTransfer}
-                        value={transferForm.data.caisse_destination_id}
-                        onChange={(e) => transferForm.setData('caisse_destination_id', e.target.value === '' ? '' : Number(e.target.value))}
-                        error={transferForm.errors.caisse_destination_id}
-                    />
-                    {editingTransfer ? (
-                        <div className="d-flex justify-content-between mb-3">
-                            <span className="text-muted">Montant</span>
-                            <span className="fw-medium">{Number(transferForm.data.montant).toFixed(2)} DH</span>
+                    <div className="row">
+                        <div className="col-md-6">
+                            <SelectField
+                                id="ct-source"
+                                label="Caisse source"
+                                options={transferCaisseOptions}
+                                placeholder="Sélectionner une caisse"
+                                required
+                                disabled={!!editingTransfer}
+                                value={transferForm.data.caisse_source_id}
+                                onChange={(e) => transferForm.setData('caisse_source_id', e.target.value === '' ? '' : Number(e.target.value))}
+                                error={transferForm.errors.caisse_source_id}
+                            />
                         </div>
-                    ) : (
-                        <FormField
-                            id="ct-montant"
-                            label="Montant"
-                            type="number"
-                            step="0.01"
-                            min="0.01"
-                            required
-                            value={transferForm.data.montant}
-                            onChange={(e) => transferForm.setData('montant', e.target.value)}
-                            error={transferForm.errors.montant}
-                        />
-                    )}
+                        <div className="col-md-6">
+                            <SelectField
+                                id="ct-destination"
+                                label="Comptes de caisse"
+                                options={transferCaisseOptions}
+                                placeholder="Choisir un compte de caisse"
+                                required
+                                disabled={!!editingTransfer}
+                                value={transferForm.data.caisse_destination_id}
+                                onChange={(e) => transferForm.setData('caisse_destination_id', e.target.value === '' ? '' : Number(e.target.value))}
+                                error={transferForm.errors.caisse_destination_id}
+                            />
+                        </div>
+                        <div className="col-md-6">
+                            {/* Read-only live preview of the selected source caisse's balance — informational only, the server independently re-validates. */}
+                            <div className="mb-3">
+                                <label className="form-label">Solde</label>
+                                <div className="input-group">
+                                    <input type="text" className="form-control bg-light" readOnly value={soldeSource !== null ? soldeSource.toFixed(2) : ''} />
+                                    <span className="input-group-text">DH</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="col-md-6">
+                            {/* Read-only live preview: Solde − Montant à transférer. */}
+                            <div className="mb-3">
+                                <label className="form-label">Reste</label>
+                                <div className="input-group">
+                                    <input type="text" className="form-control bg-light" readOnly value={reste !== null ? reste.toFixed(2) : ''} />
+                                    <span className="input-group-text">DH</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="col-md-6">
+                            {editingTransfer ? (
+                                <div className="d-flex justify-content-between mb-3">
+                                    <span className="text-muted">Montant</span>
+                                    <span className="fw-medium">{Number(transferForm.data.montant).toFixed(2)} DH</span>
+                                </div>
+                            ) : (
+                                <div className="mb-3">
+                                    <label className="form-label" htmlFor="ct-montant">
+                                        Montant à transférer<span className="text-danger ms-1">*</span>
+                                    </label>
+                                    <div className="input-group">
+                                        <input
+                                            id="ct-montant"
+                                            type="number"
+                                            step="0.01"
+                                            min="0.01"
+                                            required
+                                            placeholder="ex : 500"
+                                            className={`form-control${transferForm.errors.montant ? ' is-invalid' : ''}`}
+                                            value={transferForm.data.montant}
+                                            onChange={(e) => transferForm.setData('montant', e.target.value)}
+                                        />
+                                        <span className="input-group-text">DH</span>
+                                    </div>
+                                    {transferForm.errors.montant && <div className="text-danger fs-12 mt-1">{transferForm.errors.montant}</div>}
+                                </div>
+                            )}
+                        </div>
+                        <div className="col-md-6">
+                            <DateField
+                                id="ct-date"
+                                label="Date"
+                                required
+                                disabled
+                                value={transferForm.data.date_transfert}
+                                onChange={(e) => transferForm.setData('date_transfert', e.target.value)}
+                            />
+                        </div>
+                    </div>
                     <TextareaField
                         id="ct-note"
                         label="Note"

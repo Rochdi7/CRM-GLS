@@ -66,3 +66,31 @@ html[data-theme='dark'] .select2-dropdown {
     border-color: #3b3b4f;
     color: inherit;
 }
+
+/*
+ * Header logo: the theme's own 130px sizing (style.css .header-left .logo
+ * img) is oversized for the GLS logo's own proportions/whitespace on
+ * desktop. Scale it down while keeping the header-left layout untouched.
+ */
+@media (min-width: 992px) {
+    .header .header-left .logo img {
+        width: 90px;
+    }
+}
+@media (max-width: 991.98px) {
+    .header .header-left .logo img {
+        width: 70px;
+    }
+}
+
+/*
+ * Sidebar scrolling: the theme relies on the jQuery slimScroll plugin
+ * (.sidebar-inner.slimscroll) to make the nav list scrollable when it
+ * overflows the viewport. That plugin is intentionally never loaded here
+ * (§6, no jQuery plugins) so items below the fold were unreachable. Give
+ * the sidebar native scroll instead — same visual result, no jQuery.
+ */
+.sidebar .sidebar-inner {
+    height: calc(100vh - 56px);
+    overflow-y: auto;
+}

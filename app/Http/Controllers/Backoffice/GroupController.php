@@ -7,12 +7,14 @@ namespace App\Http\Controllers\Backoffice;
 use App\Domain\Groups\Queries\GetGroupDetails;
 use App\Domain\Groups\Queries\GetGroupFormOptions;
 use App\Domain\Groups\Queries\GetGroupsList;
+use App\Domain\Groups\Queries\GetGroupStudentsBySegment;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Groups\StoreGroupRequest;
 use App\Http\Requests\Backoffice\Groups\UpdateGroupRequest;
 use App\Models\Frais;
 use App\Models\Group;
 use App\Services\Context\CurrentContext;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -76,6 +78,24 @@ final class GroupController extends Controller
         return Inertia::render('Backoffice/Groups/Show', [
             'group' => $getGroupDetails($group, $request->user()),
         ]);
+    }
+
+    /**
+     * Drills into one of the list's "Statistique" badges — the student rows
+     * behind the total/active/annulée/distinct-students count that was
+     * clicked (GetGroupStudentsBySegment).
+     */
+    public function studentsBySegment(Request $request, Group $group, GetGroupStudentsBySegment $getGroupStudentsBySegment): JsonResponse
+    {
+        $this->authorize('view', $group);
+
+        $segment = (string) $request->string('segment');
+
+        if (! in_array($segment, GetGroupStudentsBySegment::SEGMENTS, true)) {
+            $segment = GetGroupStudentsBySegment::SEGMENT_TOTAL;
+        }
+
+        return response()->json(['students' => $getGroupStudentsBySegment($group, $segment)]);
     }
 
     public function store(StoreGroupRequest $request): RedirectResponse

@@ -86,6 +86,16 @@ export default function Header({ user, context, canManageSettings, onMobileMenuT
                     type="button"
                     id="toggle_btn"
                     className="border-0 bg-transparent p-0"
+                    // The theme CSS shrinks #toggle_btn to opacity:0/0x0 while
+                    // collapsed (.mini-sidebar .header #toggle_btn) unless
+                    // body.expand-menu is also set — which Sidebar.tsx only
+                    // adds while the cursor is hovering the sidebar rail
+                    // itself. Moving the cursor from the rail to this button
+                    // (a different element) drops that hover state first,
+                    // making the only way to re-expand the sidebar disappear
+                    // mid-click. Force it visible/clickable at all times
+                    // instead of depending on that hover coupling.
+                    style={miniSidebar ? { opacity: 1, height: 'auto', width: 'auto' } : undefined}
                     onClick={() => setMiniSidebar((v) => !v)}
                     aria-label={t('Collapse sidebar')}
                     aria-pressed={miniSidebar}

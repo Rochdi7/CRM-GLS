@@ -259,4 +259,63 @@ final class GroupsInertiaCrudTest extends TestCase
                 ->where("groups.data.0.fraisLignes.{$frais->id}.classification", 'B1.1')
             );
     }
+
+    /**
+     * Covers the "Statistique" badges' drill-down (GetGroupStudentsBySegment):
+     * total/active/annulée each filter by inscription statut, "étudiants"
+     * dedupes a student who re-enrolled twice into one row.
+     */
+    public function test_students_by_segment_filters_correctly(): void
+    {
+        $this->actingAs($this->userWith('groups.view'));
+        $group = Group::factory()->create([
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => Group::STATUT_EN_FORMATION,
+        ]);
+
+        $studentActive = \App\Models\Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $studentAnnulee = \App\Models\Student::factory()->create(['etablissement_id' => $this->centre->id]);
+
+        \App\Models\Inscription::create([
+            'reference' => 'INS-ACTIVE', 'student_id' => $studentActive->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => \App\Models\Inscription::STATUT_ACTIVE, 'date_inscription' => '2025-09-15',
+        ]);
+        \App\Models\Inscription::create([
+            'reference' => 'INS-ANNULEE', 'student_id' => $studentAnnulee->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => \App\Models\Inscription::STATUT_ANNULEE, 'date_inscription' => '2025-09-16',
+        ]);
+        // Same student re-enrolled — "étudiants" must dedupe this to 1, not 2.
+        \App\Models\Inscription::create([
+            'reference' => 'INS-ACTIVE-2', 'student_id' => $studentActive->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => \App\Models\Inscription::STATUT_CHANGEMENT, 'date_inscription' => '2025-09-20',
+        ]);
+
+        $total = $this->get(route('backoffice.groups.students-by-segment', $group).'?segment=total')->json('students');
+        $this->assertCount(3, $total);
+
+        $active = $this->get(route('backoffice.groups.students-by-segment', $group).'?segment=active')->json('students');
+        $this->assertCount(1, $active);
+        $this->assertSame($studentActive->reference, $active[0]['reference']);
+
+        $annulee = $this->get(route('backoffice.groups.students-by-segment', $group).'?segment=annulee')->json('students');
+        $this->assertCount(1, $annulee);
+        $this->assertSame($studentAnnulee->reference, $annulee[0]['reference']);
+
+        $etudiants = $this->get(route('backoffice.groups.students-by-segment', $group).'?segment=etudiants')->json('students');
+        $this->assertCount(2, $etudiants);
+    }
+
+    public function test_students_by_segment_requires_view_permission(): void
+    {
+        $group = Group::factory()->create([
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $this->actingAs($this->userWith('dashboard.view'))
+            ->get(route('backoffice.groups.students-by-segment', $group))
+            ->assertForbidden();
+    }
 }

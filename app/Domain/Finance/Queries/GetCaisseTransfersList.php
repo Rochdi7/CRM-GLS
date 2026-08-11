@@ -14,11 +14,14 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 
 /**
- * Read-model for the Caisse Transfers list — extracted verbatim from
- * CaisseTransfersIndex::render() (same center-scoping through the SOURCE
- * till, same status/source-till/search filters, same statutCounts tab
- * badges, same `currentEmployeeId` prop used to hide the Validate action on
- * your own request).
+ * Read-model for the "Validation de transfert" list — a personal inbox/
+ * outbox: every transfer where one of the VIEWER's own tills is either end
+ * (source or destination), not just transfers they sent. Each row's "Type
+ * de transaction" is relative to the viewer (Réception when money is coming
+ * into one of their tills, Transfert when it's leaving one), and
+ * Expéditeur/Destinataire show the owning EMPLOYEE's name
+ * (Caisse::responsable(), e.g. "Rochdi Karouali") rather than the raw
+ * caisse label ("Caisse — Rochdi Karouali").
  */
 final class GetCaisseTransfersList
 {
@@ -36,16 +39,26 @@ final class GetCaisseTransfersList
         string $caisseFilter = '',
         int $perPage = self::DEFAULT_PER_PAGE,
     ): LengthAwarePaginator {
-        $currentEmployeeId = $user->employee?->id;
+        $myCaisseIds = $user->employee?->caisses()->pluck('id')->all() ?? [];
 
         $transfers = CaisseTransfer::query()
-            ->with(['caisseSource', 'caisseDestination', 'requestedBy', 'validatedBy'])
-            ->whereHas('caisseSource', function (Builder $q) use ($user): void {
-                $this->centerAccess->scopeAccessibleCenters($q, $user);
-                $this->scopeToActiveCenter($q);
+            ->with(['caisseSource.responsable', 'caisseDestination.responsable', 'requestedBy', 'validatedBy'])
+            ->where(function (Builder $q) use ($user): void {
+                $q->whereHas('caisseSource', function (Builder $sq) use ($user): void {
+                    $this->centerAccess->scopeAccessibleCenters($sq, $user);
+                    $this->scopeToActiveCenter($sq);
+                })->orWhereHas('caisseDestination', function (Builder $dq) use ($user): void {
+                    $this->centerAccess->scopeAccessibleCenters($dq, $user);
+                    $this->scopeToActiveCenter($dq);
+                });
             })
             ->when($statutFilter !== '', fn ($q) => $q->where('statut', $statutFilter))
-            ->when($caisseFilter !== '', fn ($q) => $q->where('caisse_source_id', (int) $caisseFilter))
+            ->when(
+                $caisseFilter !== '',
+                fn ($q) => $q->where(fn ($sub) => $sub
+                    ->where('caisse_source_id', (int) $caisseFilter)
+                    ->orWhere('caisse_destination_id', (int) $caisseFilter)),
+            )
             ->when($search !== '', function ($q) use ($search): void {
                 $term = "%{$search}%";
                 $q->where(function ($sub) use ($term): void {
@@ -56,22 +69,29 @@ final class GetCaisseTransfersList
             ->paginate($perPage)
             ->withQueryString();
 
-        $transfers->through(fn (CaisseTransfer $t): array => [
-            'id' => $t->id,
-            'reference' => $t->reference,
-            'caisseSource' => $t->caisseSource?->nom,
-            'caisseSourceId' => $t->caisse_source_id,
-            'caisseDestination' => $t->caisseDestination?->nom,
-            'montant' => number_format((float) $t->montant, 2, '.', ''),
-            'dateTransfert' => $t->date_transfert?->toDateTimeString(),
-            'statut' => $t->statut,
-            'requestedBy' => $t->requestedBy?->nomComplet(),
-            'requestedById' => $t->requested_by,
-            'validatedBy' => $t->validatedBy?->nomComplet(),
-            'note' => $t->note,
-            'isPending' => $t->statut === CaisseTransfer::STATUT_EN_ATTENTE,
-            'showUrl' => route('backoffice.caisse-transfers.show', $t),
-        ]);
+        $transfers->through(function (CaisseTransfer $t) use ($myCaisseIds): array {
+            $isReception = in_array($t->caisse_destination_id, $myCaisseIds, true)
+                && ! in_array($t->caisse_source_id, $myCaisseIds, true);
+
+            return [
+                'id' => $t->id,
+                'reference' => $t->reference,
+                'expediteur' => $t->caisseSource?->responsable?->nomComplet() ?? $t->caisseSource?->nom,
+                'destinataire' => $t->caisseDestination?->responsable?->nomComplet() ?? $t->caisseDestination?->nom,
+                'caisseSourceId' => $t->caisse_source_id,
+                'caisseDestinationId' => $t->caisse_destination_id,
+                'typeTransaction' => $isReception ? 'Réception' : 'Transfert',
+                'montant' => number_format((float) $t->montant, 2, '.', ''),
+                'dateTransfert' => $t->date_transfert?->toDateTimeString(),
+                'statut' => $t->statut,
+                'requestedBy' => $t->requestedBy?->nomComplet(),
+                'requestedById' => $t->requested_by,
+                'validatedBy' => $t->validatedBy?->nomComplet(),
+                'note' => $t->note,
+                'isPending' => $t->statut === CaisseTransfer::STATUT_EN_ATTENTE,
+                'showUrl' => route('backoffice.caisse-transfers.show', $t),
+            ];
+        });
 
         return $transfers;
     }
@@ -82,9 +102,14 @@ final class GetCaisseTransfersList
     public function statutCounts(User $user): Collection
     {
         return CaisseTransfer::query()
-            ->whereHas('caisseSource', function (Builder $q) use ($user): void {
-                $this->centerAccess->scopeAccessibleCenters($q, $user);
-                $this->scopeToActiveCenter($q);
+            ->where(function (Builder $q) use ($user): void {
+                $q->whereHas('caisseSource', function (Builder $sq) use ($user): void {
+                    $this->centerAccess->scopeAccessibleCenters($sq, $user);
+                    $this->scopeToActiveCenter($sq);
+                })->orWhereHas('caisseDestination', function (Builder $dq) use ($user): void {
+                    $this->centerAccess->scopeAccessibleCenters($dq, $user);
+                    $this->scopeToActiveCenter($dq);
+                });
             })
             ->selectRaw('statut, COUNT(*) as total')
             ->groupBy('statut')

@@ -169,6 +169,8 @@ Route::prefix('backoffice')
                 ->middleware('permission:groups.update')->name('groups.update');
             Route::get('groups/{group}', [GroupController::class, 'show'])->name('groups.show');
             Route::post('groups/{group}/archive', [GroupController::class, 'archive'])->name('groups.archive');
+            Route::get('groups/{group}/students-by-segment', [GroupController::class, 'studentsBySegment'])
+                ->name('groups.students-by-segment');
             Route::get('groups-historique', [GroupHistoriqueController::class, 'index'])
                 ->name('groups-historique.index');
 
@@ -230,6 +232,12 @@ Route::prefix('backoffice')
                 ->middleware('permission:registrations.create')->name('inscriptions.store');
             Route::put('inscriptions/{inscription}', [InscriptionController::class, 'update'])
                 ->middleware('permission:registrations.update')->name('inscriptions.update');
+            // Quick status actions from the list's row menu ("Archiver" /
+            // "Annuler" / "Réactiver") — a two-way Active <-> {Changement,
+            // Annulée} toggle, refused for any other transition
+            // (InscriptionController::updateStatut).
+            Route::patch('inscriptions/{inscription}/statut', [InscriptionController::class, 'updateStatut'])
+                ->middleware('permission:registrations.update')->name('inscriptions.update-statut');
             Route::delete('inscriptions/{inscription}', [InscriptionController::class, 'destroy'])
                 ->middleware('permission:registrations.delete')->name('inscriptions.destroy');
             Route::get('inscriptions/{inscription}', [InscriptionController::class, 'show'])
@@ -241,6 +249,12 @@ Route::prefix('backoffice')
                 ->name('inscriptions.fees');
             Route::put('inscriptions/{inscription}/fees', [InscriptionController::class, 'updateFees'])
                 ->middleware('permission:registrations.manage-fees')->name('inscriptions.fees.update');
+            Route::post('inscriptions/{inscription}/fees/{fee}/hide', [InscriptionController::class, 'hideFee'])
+                ->middleware('permission:registrations.manage-fees')->name('inscriptions.fees.hide');
+            Route::post('inscriptions/{inscription}/fees/{fee}/restore', [InscriptionController::class, 'restoreFee'])
+                ->middleware('permission:registrations.manage-fees')->name('inscriptions.fees.restore');
+            Route::post('inscriptions/{inscription}/change-group', [InscriptionController::class, 'changeGroup'])
+                ->middleware('permission:registrations.change-group')->name('inscriptions.change-group');
             // "Frais disponibles" for a group — the create form's live
             // group-fee lookup (docs/phase-9-inscriptions-mapping.md's
             // confirmed decision: a dedicated endpoint, not embedding every
@@ -326,6 +340,8 @@ Route::prefix('backoffice')
                 ->middleware('permission:refunds.create')->name('remboursements.store');
             Route::put('remboursements/{remboursement}', [RemboursementController::class, 'update'])
                 ->middleware('permission:refunds.update')->name('remboursements.update');
+            Route::get('students/{student}/payments-for-refund', [RemboursementController::class, 'studentPayments'])
+                ->name('students.payments-for-refund');
             // No remboursements.show — zero detail page anywhere in the live
             // app, preserved (docs/phase-10-finance-mapping.md Q2).
 

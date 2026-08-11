@@ -9,8 +9,9 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 /**
- * `reference` is system-generated and `agent_id` comes from the
- * authenticated employee — neither is accepted from the request.
+ * `reference` is system-generated and `agent_id`/`caisse_id` come from the
+ * authenticated employee's own till (DepenseController::store()) — none of
+ * the three is accepted from the request.
  *
  * `justificatifs.*` mirrors Depense::registerMediaCollections()'s mime
  * allowlist and DepensesIndex's own file-rule contract exactly (Phase 10 —
@@ -31,7 +32,6 @@ final class StoreDepenseRequest extends FormRequest
     {
         return [
             'type_depense_id' => ['required', 'exists:types_depenses,id'],
-            'caisse_id' => ['required', 'exists:caisses,id', new \App\Rules\AccessibleCaisse],
             'group_id' => ['nullable', 'exists:groups,id'],
             'montant' => ['required', 'numeric', 'min:0.01'],
             'methode_paiement' => ['required', Rule::in(Depense::METHODES)],

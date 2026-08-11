@@ -55,9 +55,18 @@ final class DepenseController extends Controller
             ? $getDepensesList($user, $search, $typeFilter, $caisseFilter, $dateFrom, $dateTo, $perPage)
             : null;
 
+        // The acting employee's own till balance — shown read-only in the
+        // Dépense create modal so staff can see what they're spending
+        // against (same till StoreDepenseRequest silently derives on save).
+        $employee = $user->employee;
+        $soldeActuel = $employee !== null
+            ? (string) ($employee->caisses()->first()?->solde ?? '0.00')
+            : null;
+
         return Inertia::render('Backoffice/Depenses/Index', [
             'canViewDepenses' => $user->can('expenses.view'),
             'canViewRemboursements' => $user->can('refunds.view'),
+            'soldeActuel' => $soldeActuel,
             'depenses' => $depensesList['data'] ?? null,
             'montantTotal' => $depensesList['montantTotal'] ?? null,
             'typesDepenses' => $user->can('expenses.view') ? $getDepensesList->typeDepenseOptions() : [],
@@ -86,11 +95,20 @@ final class DepenseController extends Controller
 
         if ($employee === null) {
             throw ValidationException::withMessages([
-                'caisse_id' => __('Your account is not linked to any employee record.'),
+                'type_depense_id' => __('Your account is not linked to any employee record.'),
             ]);
         }
 
-        $payload = collect($request->validated())->except(['justificatifs'])->all();
+        // The till is ALWAYS the acting employee's own caisse — never chosen
+        // client-side (the modal shows no caisse field). Same self-heal as
+        // EncaissementController::store() for pre-provisioner accounts.
+        $caisse = $employee->caisses()->first()
+            ?? app(\App\Services\CaisseProvisioner::class)->provisionFor($employee);
+
+        $payload = collect($request->validated())
+            ->except(['justificatifs'])
+            ->merge(['caisse_id' => $caisse->id])
+            ->all();
 
         // Domain action: creates the expense, generates the DEP- reference,
         // and decrements caisses.solde in ONE transaction.

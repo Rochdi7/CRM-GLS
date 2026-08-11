@@ -6,6 +6,24 @@ interface ContextSwitcherProps {
     context: Context;
 }
 
+/** Fixed-position coordinates for a dropdown menu, measured from its trigger. */
+type MenuPos = { top: number; right: number } | null;
+
+/**
+ * Measures a trigger button's position for a `position: fixed` dropdown menu
+ * — plain `.dropdown-menu` (position: absolute, relative to `.dropdown`)
+ * gets pushed out of place by this header's own layout shifts (e.g. the
+ * mini-sidebar's narrower `.header-left`), landing on top of the sidebar and
+ * eating its clicks. Fixed positioning anchored to the trigger's own
+ * bounding rect sidesteps that entirely — same fix already applied to
+ * RowActions.tsx for the same class of bug.
+ */
+function measureMenuPos(trigger: HTMLElement): MenuPos {
+    const rect = trigger.getBoundingClientRect();
+
+    return { top: rect.bottom + 4, right: Math.max(8, window.innerWidth - rect.right) };
+}
+
 /**
  * Markup mirrors resources/views/livewire/backoffice/context/context-switcher.blade.php
  * exactly (two `.dropdown` buttons, same classes/icons/badges) — dropdown
@@ -20,9 +38,51 @@ interface ContextSwitcherProps {
 export default function ContextSwitcher({ context }: ContextSwitcherProps) {
     const [yearMenuOpen, setYearMenuOpen] = useState(false);
     const [centerMenuOpen, setCenterMenuOpen] = useState(false);
+    const [yearMenuPos, setYearMenuPos] = useState<MenuPos>(null);
+    const [centerMenuPos, setCenterMenuPos] = useState<MenuPos>(null);
     const [processing, setProcessing] = useState(false);
     const yearRef = useRef<HTMLDivElement>(null);
     const centerRef = useRef<HTMLDivElement>(null);
+    const yearButtonRef = useRef<HTMLButtonElement>(null);
+    const centerButtonRef = useRef<HTMLButtonElement>(null);
+
+    function toggleYearMenu() {
+        if (!yearMenuOpen && yearButtonRef.current) {
+            setYearMenuPos(measureMenuPos(yearButtonRef.current));
+        }
+        setYearMenuOpen((open) => !open);
+    }
+
+    function toggleCenterMenu() {
+        if (!context.canSwitchCenter) {
+            return;
+        }
+        if (!centerMenuOpen && centerButtonRef.current) {
+            setCenterMenuPos(measureMenuPos(centerButtonRef.current));
+        }
+        setCenterMenuOpen((open) => !open);
+    }
+
+    useEffect(() => {
+        if (!yearMenuOpen && !centerMenuOpen) {
+            return;
+        }
+
+        function handleReposition() {
+            setYearMenuOpen(false);
+            setCenterMenuOpen(false);
+        }
+
+        // A fixed-position menu drifts from its trigger on scroll/resize —
+        // close instead of tracking (same behavior as RowActions.tsx).
+        window.addEventListener('scroll', handleReposition, true);
+        window.addEventListener('resize', handleReposition);
+
+        return () => {
+            window.removeEventListener('scroll', handleReposition, true);
+            window.removeEventListener('resize', handleReposition);
+        };
+    }, [yearMenuOpen, centerMenuOpen]);
 
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
@@ -69,16 +129,20 @@ export default function ContextSwitcher({ context }: ContextSwitcherProps) {
         <div className="gls-context-switcher d-flex align-items-center flex-wrap gap-2">
             <div className="dropdown" ref={yearRef}>
                 <button
+                    ref={yearButtonRef}
                     type="button"
                     className="btn btn-outline-light bg-white d-flex align-items-center dropdown-toggle"
-                    onClick={() => setYearMenuOpen((open) => !open)}
+                    onClick={toggleYearMenu}
                     aria-expanded={yearMenuOpen}
                     disabled={processing}
                 >
                     <i className="ti ti-calendar me-2" />
                     <span className="fw-semibold">{context.currentAcademicYear?.name ?? 'Année scolaire'}</span>
                 </button>
-                <div className={`dropdown-menu dropdown-menu-end${yearMenuOpen ? ' show' : ''}`}>
+                <div
+                    className={`dropdown-menu dropdown-menu-end${yearMenuOpen ? ' show' : ''}`}
+                    style={yearMenuOpen && yearMenuPos ? { position: 'fixed', left: 'auto', ...yearMenuPos } : undefined}
+                >
                     {context.availableAcademicYears.map((annee) => (
                         <button
                             key={annee.id}
@@ -94,9 +158,10 @@ export default function ContextSwitcher({ context }: ContextSwitcherProps) {
 
             <div className="dropdown" ref={centerRef}>
                 <button
+                    ref={centerButtonRef}
                     type="button"
                     className={`btn btn-outline-light bg-white d-flex align-items-center${context.canSwitchCenter ? ' dropdown-toggle' : ''}`}
-                    onClick={() => context.canSwitchCenter && setCenterMenuOpen((open) => !open)}
+                    onClick={toggleCenterMenu}
                     aria-expanded={centerMenuOpen}
                     disabled={processing || !context.canSwitchCenter}
                 >
@@ -106,7 +171,10 @@ export default function ContextSwitcher({ context }: ContextSwitcherProps) {
                     </span>
                 </button>
                 {context.canSwitchCenter && (
-                    <div className={`dropdown-menu dropdown-menu-end${centerMenuOpen ? ' show' : ''}`}>
+                    <div
+                        className={`dropdown-menu dropdown-menu-end${centerMenuOpen ? ' show' : ''}`}
+                        style={centerMenuOpen && centerMenuPos ? { position: 'fixed', left: 'auto', ...centerMenuPos } : undefined}
+                    >
                         <button
                             type="button"
                             className={`dropdown-item border-0 bg-transparent w-100 text-start${context.isAllCenters ? ' active' : ''}`}

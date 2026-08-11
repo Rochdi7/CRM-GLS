@@ -757,6 +757,8 @@ export interface EmployeeRow {
     etablissement: string | null;
     photoUrl: string | null;
     photoThumbUrl: string | null;
+    userId: number | null;
+    username: string | null;
 }
 
 export interface EmployeesFilters {
@@ -779,6 +781,8 @@ export interface EmployeesPageProps {
     centerLocked: boolean;
     contextCenterId: number | null;
     contextCenterName: string | null;
+    /** UI convenience only — hides the "Voir le compte" row action; real enforcement is users.assign-roles on the server (UserController::regeneratePassword). */
+    canManageUsers: boolean;
     [key: string]: unknown;
 }
 
@@ -836,6 +840,7 @@ export interface StudentsPageProps {
     filters: StudentsFilters;
     perPageOptions: number[];
     niveaux: string[];
+    niveauxInteret: string[];
     domaines: string[];
     examenTypes: string[];
     sexes: string[];
@@ -869,6 +874,18 @@ export interface GroupRow {
     showUrl: string;
     /** Keyed by frais_id — prefills the edit modal's fee-lines table without a second request. */
     fraisLignes: Record<number, { montant: string; dateEcheance: string; classification: string }>;
+}
+
+/** One row of the "Statistique" drill-down modal (GetGroupStudentsBySegment). */
+export interface GroupStudentSegmentRow {
+    reference: string;
+    prenom: string;
+    nom: string;
+    cin: string | null;
+    telephone: string | null;
+    dateNaissance: string | null;
+    niveauScolaire: string | null;
+    dateInscription: string | null;
 }
 
 export interface GroupFraisLigne {
@@ -960,6 +977,16 @@ export interface InscriptionFeeLine {
     dateEcheance: string;
     /** Server-computed, informational only on the edit table (Non payé/Payé partiellement/Payé). Absent on create-form lines. */
     statut?: string;
+    /** Server-computed, informational only on the edit table (amount already paid — drives "Reste à payer"). Absent on create-form lines. */
+    paye?: string;
+}
+
+/** One hidden ("masqué") fee line on an existing inscription — read-only, restorable via inscriptions.fees.restore. */
+export interface HiddenInscriptionFee {
+    id: number;
+    nom: string;
+    montant: string;
+    dateEcheance: string;
 }
 
 export interface InscriptionsFilters {
@@ -977,6 +1004,7 @@ export interface InscriptionsPageProps {
     perPageOptions: number[];
     statuts: string[];
     niveaux: string[];
+    niveauxInteret: string[];
     domaines: string[];
     examenTypes: string[];
     sexes: string[];
@@ -986,8 +1014,12 @@ export interface InscriptionsPageProps {
     defaultCountry: string;
     students: InscriptionFormOption[];
     groups: InscriptionFormOption[];
+    /** Active fee catalog — feeds the edit modal's "Ajouter un frais" picker. */
+    frais: InscriptionFormOption[];
     /** UI convenience only — hides the edit-modal fee controls; real enforcement is registrations.manage-fees on the server (InscriptionController::updateFees). */
     canManageFees: boolean;
+    /** UI convenience only — hides the "Changement de groupe" row action; real enforcement is registrations.change-group on the server (InscriptionController::changeGroup). */
+    canChangeGroup: boolean;
     [key: string]: unknown;
 }
 
@@ -1040,9 +1072,13 @@ export interface CaisseJournalData {
 export interface CaisseTransferRow {
     id: number;
     reference: string;
-    caisseSource: string | null;
+    /** Owning employee's name (Caisse::responsable()), not the raw "Caisse — Name" label. */
+    expediteur: string | null;
+    destinataire: string | null;
     caisseSourceId: number | null;
-    caisseDestination: string | null;
+    caisseDestinationId: number | null;
+    /** Relative to the viewer: 'Réception' when one of their own tills is the destination, 'Transfert' otherwise. */
+    typeTransaction: 'Réception' | 'Transfert';
     montant: MoneyDisplay;
     dateTransfert: string | null;
     statut: string;
@@ -1062,15 +1098,12 @@ export interface CaissesPageProps {
     canViewCaisses: boolean;
     canViewTransfers: boolean;
     journalMine: CaisseJournalData | null;
-    journalAll: CaisseJournalData | null;
-    caisses: PaginatedData<CaisseRow> | null;
-    etablissements: FinanceOption[];
-    statuts: string[];
     transfers: PaginatedData<CaisseTransferRow> | null;
     transferStatutCounts: Record<string, number>;
     transferCaisses: CaisseTransferFormOption[];
     transferStatuts: string[];
     currentEmployeeId: number | null;
+    transferFilters: { search: string; statutFilter: string; caisseFilter: string };
     [key: string]: unknown;
 }
 
@@ -1140,7 +1173,9 @@ export interface UnpaidFee {
 export interface PaymentLine {
     feeId: number;
     nom: string;
+    montantInitial: string;
     reste: string;
+    dateEcheance: string | null;
     montant: string;
     methode: string;
     datePaiement: string;
@@ -1191,9 +1226,22 @@ export interface RemboursementRow {
     agent: string | null;
 }
 
+/** One of a student's fee-targeted payments — the Remboursement form's "which payment?" picker (GetStudentPaymentsForRefund). */
+export interface EncaissementFormOption {
+    id: number;
+    reference: string;
+    montant: MoneyDisplay;
+    methode: string;
+    date: string | null;
+    feeNom: string | null;
+    dejaRembourse: MoneyDisplay;
+}
+
 export interface DepensesPageProps {
     canViewDepenses: boolean;
     canViewRemboursements: boolean;
+    /** The acting employee's own till balance — null if they have no employee record. */
+    soldeActuel: MoneyDisplay | null;
     depenses: PaginatedData<DepenseRow> | null;
     montantTotal: MoneyDisplay | null;
     typesDepenses: FinanceOption[];

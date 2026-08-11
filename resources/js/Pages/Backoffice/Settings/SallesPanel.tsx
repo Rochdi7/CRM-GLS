@@ -171,7 +171,7 @@ export default function SallesPanel({ salles, centerOptions, permissions }: Sall
             </RelatedRecordsTable>
             <Pagination paginator={salles} showJumpToPage />
 
-            <Modal show={showModal} title={editingId ? 'Modifier la salle' : 'Ajouter une salle'} onClose={closeModal} processing={form.processing}>
+            <Modal show={showModal} title={editingId ? 'Modifier la salle' : 'Ajouter une salle'} onClose={closeModal} processing={form.processing} size="lg">
                 {noCenters ? (
                     <>
                         <div className="alert alert-warning mb-0">Créez d'abord un centre avant d'ajouter des salles.</div>

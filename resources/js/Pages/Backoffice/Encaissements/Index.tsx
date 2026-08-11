@@ -8,6 +8,7 @@ import FilterTextInput from '@/Components/Tables/FilterTextInput';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
+import LocalPagination from '@/Components/Tables/LocalPagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
 import SelectField from '@/Components/Forms/SelectField';
@@ -101,6 +102,8 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
     const [inscriptionOptions, setInscriptionOptions] = useState<SelectOption[]>([]);
     const [loadingInscriptions, setLoadingInscriptions] = useState(false);
     const [loadingFees, setLoadingFees] = useState(false);
+    const [feeLinesPage, setFeeLinesPage] = useState(1);
+    const FEE_LINES_PER_PAGE = 4;
     const [showAvanceModal, setShowAvanceModal] = useState(false);
     const [applyTarget, setApplyTarget] = useState<EncaissementRow | null>(null);
     const [applyInscriptionOptions, setApplyInscriptionOptions] = useState<SelectOption[]>([]);
@@ -135,6 +138,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
     function openCreate() {
         setEditingRow(null);
         setInscriptionOptions([]);
+        setFeeLinesPage(1);
         createForm.clearErrors();
         createForm.setData(emptyCreateForm());
         setShowModal(true);
@@ -247,6 +251,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
             payment_lines: [],
         }));
         setInscriptionOptions([]);
+        setFeeLinesPage(1);
 
         if (studentId === '') {
             return;
@@ -264,6 +269,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
 
     async function onInscriptionChange(inscriptionId: number | '') {
         createForm.setData((previous) => ({ ...previous, inscription_id: inscriptionId, payment_lines: [] }));
+        setFeeLinesPage(1);
 
         if (inscriptionId === '') {
             return;
@@ -278,7 +284,9 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                 payment_lines: data.fees.map((fee) => ({
                     feeId: fee.id,
                     nom: fee.nom,
+                    montantInitial: fee.montantInitial,
                     reste: fee.reste,
+                    dateEcheance: fee.dateEcheance,
                     montant: '',
                     methode: 'Espèces',
                     datePaiement: previous.date_paiement,
@@ -317,6 +325,16 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
         createForm.post('/backoffice/encaissements', {
             preserveScroll: true,
             onSuccess: () => closeModal(),
+            // A rejected row could be paginated out of view — jump to
+            // whichever page holds the first "payment_lines.<i>.*" error so
+            // the user isn't left staring at an unrelated page.
+            onError: (errors) => {
+                const firstErrorKey = Object.keys(errors).find((key) => key.startsWith('payment_lines.'));
+                if (!firstErrorKey) return;
+                const lineIndex = Number(firstErrorKey.split('.')[1]);
+                if (Number.isNaN(lineIndex)) return;
+                setFeeLinesPage(Math.floor(lineIndex / FEE_LINES_PER_PAGE) + 1);
+            },
         });
     }
 
@@ -597,135 +615,130 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                 title="Enregistrer un paiement"
                 onClose={closeModal}
                 processing={createForm.processing}
-                size="lg"
+                size="xl"
                 footer={
                     <FormActions form="encaissement-create-form" onCancel={closeModal} processing={createForm.processing} submitLabel="Enregistrer" />
                 }
             >
                 <form id="encaissement-create-form" onSubmit={submitCreate}>
-                    <SelectField
-                        id="e-student"
-                        label="Étudiant"
-                        options={studentOptions}
-                        placeholder="Sélectionner un étudiant"
-                        required
-                        value={createForm.data.student_id}
-                        onChange={(e) => onStudentChange(e.target.value === '' ? '' : Number(e.target.value))}
-                        error={createForm.errors.student_id}
-                    />
-                    <SelectField
-                        id="e-inscription"
-                        label="Inscription"
-                        options={inscriptionOptions}
-                        placeholder={loadingInscriptions ? 'Chargement…' : 'Sélectionner une inscription'}
-                        required
-                        disabled={createForm.data.student_id === '' || loadingInscriptions}
-                        value={createForm.data.inscription_id}
-                        onChange={(e) => onInscriptionChange(e.target.value === '' ? '' : Number(e.target.value))}
-                        error={createForm.errors.inscription_id}
-                    />
+                    <div className="row">
+                        <div className="col-md-6">
+                            <SelectField
+                                id="e-student"
+                                label="Étudiant"
+                                options={studentOptions}
+                                placeholder="Sélectionner un étudiant"
+                                required
+                                value={createForm.data.student_id}
+                                onChange={(e) => onStudentChange(e.target.value === '' ? '' : Number(e.target.value))}
+                                error={createForm.errors.student_id}
+                            />
+                        </div>
+                        <div className="col-md-6">
+                            <SelectField
+                                id="e-inscription"
+                                label="Inscription"
+                                options={inscriptionOptions}
+                                placeholder={loadingInscriptions ? 'Chargement…' : 'Sélectionner une inscription'}
+                                required
+                                disabled={createForm.data.student_id === '' || loadingInscriptions}
+                                value={createForm.data.inscription_id}
+                                onChange={(e) => onInscriptionChange(e.target.value === '' ? '' : Number(e.target.value))}
+                                error={createForm.errors.inscription_id}
+                            />
+                        </div>
+                    </div>
 
                     {loadingFees && <p className="text-muted">Chargement des frais…</p>}
 
                     {createForm.data.payment_lines.length > 0 && (
                         <>
-                            {/*
-                             * Summary strip + one labeled two-column block per
-                             * unpaid fee — the theme's Collect Fees modal
-                             * layout (students.html #add_fees_collect:
-                             * bg-light-300 recap, then row > col-lg-* with
-                             * form-label + full-size form-control), replacing
-                             * the cramped table-sm/form-control-sm grid.
-                             */}
-                            <div className="bg-light-300 p-3 pb-0 rounded mb-4">
-                                <div className="row align-items-center">
-                                    <div className="col-md-6">
-                                        <div className="mb-3">
-                                            <span className="fs-12 mb-1 d-block">Frais impayés</span>
-                                            <p className="text-dark mb-0">{createForm.data.payment_lines.length}</p>
-                                        </div>
-                                    </div>
-                                    <div className="col-md-6">
-                                        <div className="mb-3">
-                                            <span className="fs-12 mb-1 d-block">Total restant</span>
-                                            <p className="text-dark mb-0">
-                                                {createForm.data.payment_lines
-                                                    .reduce((sum, l) => sum + Number(l.reste), 0)
-                                                    .toFixed(2)}{' '}
-                                                MAD
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
+                            {/* wimschool-style compact fee table: Frais / Date
+                                d'échéance / Montant / Reste à payer / Montant
+                                de paiement / Méthode / Date — one row per
+                                unpaid fee, replacing the old stacked cards. */}
+                            <div className="table-responsive mb-3">
+                                <table className="table table-bordered align-middle mb-0">
+                                    <thead className="table-light">
+                                        <tr>
+                                            <th>Frais</th>
+                                            <th>Date d'échéance</th>
+                                            <th className="text-end">Montant</th>
+                                            <th className="text-end">Reste à payer</th>
+                                            <th style={{ minWidth: 140 }}>Montant de paiement</th>
+                                            <th style={{ minWidth: 150 }}>Méthode</th>
+                                            <th style={{ minWidth: 160 }}>Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {createForm.data.payment_lines
+                                            // Pair each line with its real array index BEFORE
+                                            // slicing — pagination only changes what's on
+                                            // screen, never which row a montant/date belongs
+                                            // to (still keyed by the original index).
+                                            .map((line, index) => ({ line, index }))
+                                            .slice((feeLinesPage - 1) * FEE_LINES_PER_PAGE, feeLinesPage * FEE_LINES_PER_PAGE)
+                                            .map(({ line, index }) => {
+                                                // Server errors arrive keyed per submitted row
+                                                // (payment_lines.<i>.montant/…) — surface them on
+                                                // the row so a refused save is never silent.
+                                                const rowErrors = createForm.errors as Record<string, string | undefined>;
+                                                const montantError = rowErrors[`payment_lines.${index}.montant`];
+                                                const dateError = rowErrors[`payment_lines.${index}.date_paiement`];
+
+                                                return (
+                                                    <tr key={line.feeId}>
+                                                        <td className="fw-medium">{line.nom}</td>
+                                                        <td>{line.dateEcheance ?? '—'}</td>
+                                                        <td className="text-end">{Number(line.montantInitial).toFixed(2)} DH</td>
+                                                        <td className="text-end">{Number(line.reste).toFixed(2)} DH</td>
+                                                        <td>
+                                                            <div className="input-group input-group-sm">
+                                                                <input
+                                                                    id={`pl-montant-${index}`}
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    max={line.reste}
+                                                                    placeholder="0"
+                                                                    className={`form-control${montantError ? ' is-invalid' : ''}`}
+                                                                    value={line.montant}
+                                                                    onChange={(e) => setLine(index, { montant: e.target.value })}
+                                                                    aria-invalid={montantError ? true : undefined}
+                                                                />
+                                                                <span className="input-group-text">DH</span>
+                                                            </div>
+                                                            {montantError && <div className="text-danger fs-12 mt-1">{montantError}</div>}
+                                                        </td>
+                                                        <td>
+                                                            <SelectField
+                                                                id={`pl-methode-${index}`}
+                                                                options={methodeOptions}
+                                                                value={line.methode}
+                                                                onChange={(e) => setLine(index, { methode: e.target.value })}
+                                                            />
+                                                        </td>
+                                                        <td>
+                                                            <DateField
+                                                                id={`pl-date-${index}`}
+                                                                value={line.datePaiement}
+                                                                onChange={(e) => setLine(index, { datePaiement: e.target.value })}
+                                                                error={dateError}
+                                                            />
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                    </tbody>
+                                </table>
                             </div>
-
-                            {createForm.data.payment_lines.map((line, index) => {
-                                // Server errors arrive keyed per submitted row
-                                // (payment_lines.<i>.montant/…) — surface them on
-                                // the row so a refused save is never silent.
-                                const rowErrors = createForm.errors as Record<string, string | undefined>;
-                                const montantError = rowErrors[`payment_lines.${index}.montant`];
-                                const dateError = rowErrors[`payment_lines.${index}.date_paiement`];
-
-                                return (
-                                    <div className="border rounded p-3 mb-3" key={line.feeId}>
-                                        <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-                                            <h6 className="mb-0">{line.nom}</h6>
-                                            <span className="badge badge-soft-danger d-inline-flex align-items-center">
-                                                <i className="ti ti-circle-filled fs-5 me-1" aria-hidden="true" />
-                                                Reste : {Number(line.reste).toFixed(2)} MAD
-                                            </span>
-                                        </div>
-                                        <div className="row">
-                                            <div className="col-lg-4 col-md-6">
-                                                <div className="mb-3 mb-lg-0">
-                                                    <label className="form-label" htmlFor={`pl-montant-${index}`}>
-                                                        Montant
-                                                    </label>
-                                                    <input
-                                                        id={`pl-montant-${index}`}
-                                                        type="number"
-                                                        step="0.01"
-                                                        min="0"
-                                                        max={line.reste}
-                                                        className={`form-control${montantError ? ' is-invalid' : ''}`}
-                                                        value={line.montant}
-                                                        onChange={(e) => setLine(index, { montant: e.target.value })}
-                                                        aria-invalid={montantError ? true : undefined}
-                                                    />
-                                                    {montantError && <div className="text-danger fs-12 mt-1">{montantError}</div>}
-                                                </div>
-                                            </div>
-                                            <div className="col-lg-4 col-md-6">
-                                                <div className="mb-3 mb-lg-0">
-                                                    <label className="form-label" htmlFor={`pl-methode-${index}`}>
-                                                        Méthode
-                                                    </label>
-                                                    <SelectField
-                                                        id={`pl-methode-${index}`}
-                                                        options={methodeOptions}
-                                                        value={line.methode}
-                                                        onChange={(e) => setLine(index, { methode: e.target.value })}
-                                                    />
-                                                </div>
-                                            </div>
-                                            <div className="col-lg-4 col-md-6">
-                                                <div className="mb-0">
-                                                    <label className="form-label" htmlFor={`pl-date-${index}`}>
-                                                        Date
-                                                    </label>
-                                                    <DateField
-                                                        id={`pl-date-${index}`}
-                                                        value={line.datePaiement}
-                                                        onChange={(e) => setLine(index, { datePaiement: e.target.value })}
-                                                        error={dateError}
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                            <LocalPagination
+                                page={feeLinesPage}
+                                pageCount={Math.ceil(createForm.data.payment_lines.length / FEE_LINES_PER_PAGE)}
+                                onPageChange={setFeeLinesPage}
+                                total={createForm.data.payment_lines.length}
+                                perPage={FEE_LINES_PER_PAGE}
+                            />
                             {createForm.errors.payment_lines && (
                                 <div className="text-danger small mb-3">{createForm.errors.payment_lines}</div>
                             )}
@@ -733,33 +746,39 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                     )}
 
                     {anyLineIsCheque && (
-                        <div className="border-top pt-3 mt-2">
-                            <FormField
-                                id="e-numero-cheque"
-                                label="Numéro de chèque"
-                                required
-                                value={createForm.data.numero_cheque}
-                                onChange={(e) => createForm.setData('numero_cheque', e.target.value)}
-                                error={createForm.errors.numero_cheque}
-                            />
-                            <FormField
-                                id="e-banque"
-                                label="Banque"
-                                required
-                                list="banques-suggestions"
-                                value={createForm.data.banque}
-                                onChange={(e) => createForm.setData('banque', e.target.value)}
-                                error={createForm.errors.banque}
-                                placeholder="ex : Attijariwafa Bank"
-                            />
-                            <DateField
-                                id="e-date-echeance-cheque"
-                                label="Échéance du chèque"
-                                required
-                                value={createForm.data.date_echeance_cheque}
-                                onChange={(e) => createForm.setData('date_echeance_cheque', e.target.value)}
-                                error={createForm.errors.date_echeance_cheque}
-                            />
+                        <div className="border-top pt-3 mt-2 row">
+                            <div className="col-md-4">
+                                <FormField
+                                    id="e-numero-cheque"
+                                    label="Numéro de chèque"
+                                    required
+                                    value={createForm.data.numero_cheque}
+                                    onChange={(e) => createForm.setData('numero_cheque', e.target.value)}
+                                    error={createForm.errors.numero_cheque}
+                                />
+                            </div>
+                            <div className="col-md-4">
+                                <FormField
+                                    id="e-banque"
+                                    label="Banque"
+                                    required
+                                    list="banques-suggestions"
+                                    value={createForm.data.banque}
+                                    onChange={(e) => createForm.setData('banque', e.target.value)}
+                                    error={createForm.errors.banque}
+                                    placeholder="ex : Attijariwafa Bank"
+                                />
+                            </div>
+                            <div className="col-md-4">
+                                <DateField
+                                    id="e-date-echeance-cheque"
+                                    label="Échéance du chèque"
+                                    required
+                                    value={createForm.data.date_echeance_cheque}
+                                    onChange={(e) => createForm.setData('date_echeance_cheque', e.target.value)}
+                                    error={createForm.errors.date_echeance_cheque}
+                                />
+                            </div>
                         </div>
                     )}
 
@@ -785,6 +804,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                 title={editingRow ? `Modifier le paiement ${editingRow.reference}` : ''}
                 onClose={closeModal}
                 processing={editForm.processing}
+                size="lg"
                 footer={<FormActions form="encaissement-edit-form" onCancel={closeModal} processing={editForm.processing} submitLabel="Enregistrer" />}
             >
                 {editingRow && (
@@ -794,52 +814,64 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                             <span className="text-muted">Montant</span>
                             <span className="fw-medium">{Number(editingRow.montant).toFixed(2)} MAD</span>
                         </div>
-                        <SelectField
-                            id="e-edit-methode"
-                            label="Méthode"
-                            options={methodeOptions}
-                            required
-                            value={editForm.data.methode}
-                            onChange={(e) => editForm.setData('methode', e.target.value)}
-                            error={editForm.errors.methode}
-                        />
-                        <DateField
-                            id="e-edit-date"
-                            label="Date de paiement"
-                            required
-                            value={editForm.data.date_paiement}
-                            onChange={(e) => editForm.setData('date_paiement', e.target.value)}
-                            error={editForm.errors.date_paiement}
-                        />
-                        {editForm.data.methode === 'Chèque' && (
-                            <>
-                                <FormField
-                                    id="e-edit-numero-cheque"
-                                    label="Numéro de chèque"
+                        <div className="row">
+                            <div className="col-md-6">
+                                <SelectField
+                                    id="e-edit-methode"
+                                    label="Méthode"
+                                    options={methodeOptions}
                                     required
-                                    value={editForm.data.numero_cheque}
-                                    onChange={(e) => editForm.setData('numero_cheque', e.target.value)}
-                                    error={editForm.errors.numero_cheque}
+                                    value={editForm.data.methode}
+                                    onChange={(e) => editForm.setData('methode', e.target.value)}
+                                    error={editForm.errors.methode}
                                 />
-                                <FormField
-                                    id="e-edit-banque"
-                                    label="Banque"
-                                    required
-                                    list="banques-suggestions"
-                                    value={editForm.data.banque}
-                                    onChange={(e) => editForm.setData('banque', e.target.value)}
-                                    error={editForm.errors.banque}
-                                    placeholder="ex : Attijariwafa Bank"
-                                />
+                            </div>
+                            <div className="col-md-6">
                                 <DateField
-                                    id="e-edit-date-echeance-cheque"
-                                    label="Échéance du chèque"
+                                    id="e-edit-date"
+                                    label="Date de paiement"
                                     required
-                                    value={editForm.data.date_echeance_cheque}
-                                    onChange={(e) => editForm.setData('date_echeance_cheque', e.target.value)}
-                                    error={editForm.errors.date_echeance_cheque}
+                                    value={editForm.data.date_paiement}
+                                    onChange={(e) => editForm.setData('date_paiement', e.target.value)}
+                                    error={editForm.errors.date_paiement}
                                 />
-                            </>
+                            </div>
+                        </div>
+                        {editForm.data.methode === 'Chèque' && (
+                            <div className="row">
+                                <div className="col-md-4">
+                                    <FormField
+                                        id="e-edit-numero-cheque"
+                                        label="Numéro de chèque"
+                                        required
+                                        value={editForm.data.numero_cheque}
+                                        onChange={(e) => editForm.setData('numero_cheque', e.target.value)}
+                                        error={editForm.errors.numero_cheque}
+                                    />
+                                </div>
+                                <div className="col-md-4">
+                                    <FormField
+                                        id="e-edit-banque"
+                                        label="Banque"
+                                        required
+                                        list="banques-suggestions"
+                                        value={editForm.data.banque}
+                                        onChange={(e) => editForm.setData('banque', e.target.value)}
+                                        error={editForm.errors.banque}
+                                        placeholder="ex : Attijariwafa Bank"
+                                    />
+                                </div>
+                                <div className="col-md-4">
+                                    <DateField
+                                        id="e-edit-date-echeance-cheque"
+                                        label="Échéance du chèque"
+                                        required
+                                        value={editForm.data.date_echeance_cheque}
+                                        onChange={(e) => editForm.setData('date_echeance_cheque', e.target.value)}
+                                        error={editForm.errors.date_echeance_cheque}
+                                    />
+                                </div>
+                            </div>
                         )}
                         <TextareaField
                             id="e-edit-note"
@@ -860,76 +892,93 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                 title="Enregistrer une avance"
                 onClose={closeAvanceModal}
                 processing={avanceForm.processing}
+                size="lg"
                 footer={<FormActions form="avance-form" onCancel={closeAvanceModal} processing={avanceForm.processing} submitLabel="Enregistrer" />}
             >
                 <form id="avance-form" onSubmit={submitAvance}>
-                    <SelectField
-                        id="av-student"
-                        label="Étudiant"
-                        options={studentOptions}
-                        placeholder="Sélectionner un étudiant"
-                        required
-                        value={avanceForm.data.student_id}
-                        onChange={(e) => avanceForm.setData('student_id', e.target.value === '' ? '' : Number(e.target.value))}
-                        error={avanceForm.errors.student_id}
-                    />
-                    <FormField
-                        id="av-montant"
-                        label="Montant"
-                        type="number"
-                        step="0.01"
-                        min="0.01"
-                        required
-                        value={avanceForm.data.montant}
-                        onChange={(e) => avanceForm.setData('montant', e.target.value)}
-                        error={avanceForm.errors.montant}
-                    />
-                    <SelectField
-                        id="av-methode"
-                        label="Méthode"
-                        options={methodeOptions}
-                        required
-                        value={avanceForm.data.methode}
-                        onChange={(e) => avanceForm.setData('methode', e.target.value)}
-                        error={avanceForm.errors.methode}
-                    />
-                    <DateField
-                        id="av-date"
-                        label="Date"
-                        required
-                        value={avanceForm.data.date_paiement}
-                        onChange={(e) => avanceForm.setData('date_paiement', e.target.value)}
-                        error={avanceForm.errors.date_paiement}
-                    />
-                    {avanceForm.data.methode === 'Chèque' && (
-                        <>
-                            <FormField
-                                id="av-numero-cheque"
-                                label="Numéro de chèque"
+                    <div className="row">
+                        <div className="col-md-6">
+                            <SelectField
+                                id="av-student"
+                                label="Étudiant"
+                                options={studentOptions}
+                                placeholder="Sélectionner un étudiant"
                                 required
-                                value={avanceForm.data.numero_cheque}
-                                onChange={(e) => avanceForm.setData('numero_cheque', e.target.value)}
-                                error={avanceForm.errors.numero_cheque}
+                                value={avanceForm.data.student_id}
+                                onChange={(e) => avanceForm.setData('student_id', e.target.value === '' ? '' : Number(e.target.value))}
+                                error={avanceForm.errors.student_id}
                             />
+                        </div>
+                        <div className="col-md-6">
                             <FormField
-                                id="av-banque"
-                                label="Banque"
+                                id="av-montant"
+                                label="Montant"
+                                type="number"
+                                step="0.01"
+                                min="0.01"
                                 required
-                                list="banques-suggestions"
-                                value={avanceForm.data.banque}
-                                onChange={(e) => avanceForm.setData('banque', e.target.value)}
-                                error={avanceForm.errors.banque}
-                                placeholder="ex : Attijariwafa Bank"
+                                value={avanceForm.data.montant}
+                                onChange={(e) => avanceForm.setData('montant', e.target.value)}
+                                error={avanceForm.errors.montant}
                             />
+                        </div>
+                        <div className="col-md-6">
+                            <SelectField
+                                id="av-methode"
+                                label="Méthode"
+                                options={methodeOptions}
+                                required
+                                value={avanceForm.data.methode}
+                                onChange={(e) => avanceForm.setData('methode', e.target.value)}
+                                error={avanceForm.errors.methode}
+                            />
+                        </div>
+                        <div className="col-md-6">
                             <DateField
-                                id="av-date-echeance-cheque"
-                                label="Échéance du chèque"
+                                id="av-date"
+                                label="Date"
                                 required
-                                value={avanceForm.data.date_echeance_cheque}
-                                onChange={(e) => avanceForm.setData('date_echeance_cheque', e.target.value)}
-                                error={avanceForm.errors.date_echeance_cheque}
+                                value={avanceForm.data.date_paiement}
+                                onChange={(e) => avanceForm.setData('date_paiement', e.target.value)}
+                                error={avanceForm.errors.date_paiement}
                             />
-                        </>
+                        </div>
+                    </div>
+                    {avanceForm.data.methode === 'Chèque' && (
+                        <div className="row">
+                            <div className="col-md-4">
+                                <FormField
+                                    id="av-numero-cheque"
+                                    label="Numéro de chèque"
+                                    required
+                                    value={avanceForm.data.numero_cheque}
+                                    onChange={(e) => avanceForm.setData('numero_cheque', e.target.value)}
+                                    error={avanceForm.errors.numero_cheque}
+                                />
+                            </div>
+                            <div className="col-md-4">
+                                <FormField
+                                    id="av-banque"
+                                    label="Banque"
+                                    required
+                                    list="banques-suggestions"
+                                    value={avanceForm.data.banque}
+                                    onChange={(e) => avanceForm.setData('banque', e.target.value)}
+                                    error={avanceForm.errors.banque}
+                                    placeholder="ex : Attijariwafa Bank"
+                                />
+                            </div>
+                            <div className="col-md-4">
+                                <DateField
+                                    id="av-date-echeance-cheque"
+                                    label="Échéance du chèque"
+                                    required
+                                    value={avanceForm.data.date_echeance_cheque}
+                                    onChange={(e) => avanceForm.setData('date_echeance_cheque', e.target.value)}
+                                    error={avanceForm.errors.date_echeance_cheque}
+                                />
+                            </div>
+                        </div>
                     )}
                     <TextareaField
                         id="av-note"
@@ -950,6 +999,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                 title={applyTarget ? `Appliquer l'avance ${applyTarget.reference}` : ''}
                 onClose={closeApplyModal}
                 processing={applyForm.processing}
+                size="lg"
                 footer={<FormActions form="apply-avance-form" onCancel={closeApplyModal} processing={applyForm.processing} submitLabel="Appliquer" />}
             >
                 {applyTarget && (
@@ -958,30 +1008,36 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                             <span className="text-muted">Montant restant de l'avance</span>
                             <span className="fw-medium">{avanceRestant.toFixed(2)} MAD</span>
                         </div>
-                        <SelectField
-                            id="ap-inscription"
-                            label="Inscription"
-                            options={applyInscriptionOptions}
-                            placeholder={loadingApplyInscriptions ? 'Chargement…' : 'Sélectionner une inscription'}
-                            required
-                            disabled={loadingApplyInscriptions}
-                            value={applyForm.data.inscription_id}
-                            onChange={(e) => onApplyInscriptionChange(e.target.value === '' ? '' : Number(e.target.value))}
-                            error={applyForm.errors.inscription_id}
-                        />
-                        <SelectField
-                            id="ap-fee"
-                            label="Frais"
-                            options={applyFeeOptions}
-                            placeholder={loadingApplyFees ? 'Chargement…' : 'Sélectionner un frais'}
-                            required
-                            disabled={applyForm.data.inscription_id === '' || loadingApplyFees}
-                            value={applyForm.data.fee_id}
-                            onChange={(e) =>
-                                applyForm.setData('fee_id', e.target.value === '' ? '' : Number(e.target.value))
-                            }
-                            error={applyForm.errors.fee_id}
-                        />
+                        <div className="row">
+                            <div className="col-md-6">
+                                <SelectField
+                                    id="ap-inscription"
+                                    label="Inscription"
+                                    options={applyInscriptionOptions}
+                                    placeholder={loadingApplyInscriptions ? 'Chargement…' : 'Sélectionner une inscription'}
+                                    required
+                                    disabled={loadingApplyInscriptions}
+                                    value={applyForm.data.inscription_id}
+                                    onChange={(e) => onApplyInscriptionChange(e.target.value === '' ? '' : Number(e.target.value))}
+                                    error={applyForm.errors.inscription_id}
+                                />
+                            </div>
+                            <div className="col-md-6">
+                                <SelectField
+                                    id="ap-fee"
+                                    label="Frais"
+                                    options={applyFeeOptions}
+                                    placeholder={loadingApplyFees ? 'Chargement…' : 'Sélectionner un frais'}
+                                    required
+                                    disabled={applyForm.data.inscription_id === '' || loadingApplyFees}
+                                    value={applyForm.data.fee_id}
+                                    onChange={(e) =>
+                                        applyForm.setData('fee_id', e.target.value === '' ? '' : Number(e.target.value))
+                                    }
+                                    error={applyForm.errors.fee_id}
+                                />
+                            </div>
+                        </div>
                         {selectedApplyFee && (
                             <p className="text-muted fs-13">Reste dû sur ce frais : {Number(selectedApplyFee.reste).toFixed(2)} MAD</p>
                         )}

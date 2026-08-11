@@ -16,7 +16,19 @@ import SelectField from '@/Components/Forms/SelectField';
 import FormActions from '@/Components/Forms/FormActions';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
-import type { GroupFraisLigne, GroupRow, GroupsPageProps, SelectOption } from '@/Types';
+import type { GroupFraisLigne, GroupRow, GroupsPageProps, GroupStudentSegmentRow, SelectOption } from '@/Types';
+
+type StatsSegment = 'total' | 'active' | 'annulee' | 'etudiants';
+
+/** Rows per page of the "Frais du groupe" table — client-side only, no server round trip for this in-memory list. */
+const GROUP_FRAIS_PER_PAGE = 5;
+
+const STATS_SEGMENT_LABELS: Record<StatsSegment, string> = {
+    total: 'Total inscriptions',
+    active: 'Inscriptions actives',
+    annulee: 'Inscriptions annulées',
+    etudiants: 'Étudiants',
+};
 
 const STATUT_TABS: Array<{ key: string; icon: string; label: string }> = [
     { key: 'En formation', icon: 'ti-school', label: 'En formation' },
@@ -76,11 +88,14 @@ export default function GroupsIndex({
     const isLoading = useInertiaLoading();
     const [showModal, setShowModal] = useState(false);
     const [editingGroup, setEditingGroup] = useState<GroupRow | null>(null);
+    const [studentsModal, setStudentsModal] = useState<{ group: GroupRow; segment: StatsSegment } | null>(null);
+    const [studentsRows, setStudentsRows] = useState<GroupStudentSegmentRow[]>([]);
+    const [loadingStudents, setLoadingStudents] = useState(false);
+    const [fraisPage, setFraisPage] = useState(1);
 
     const fraisCatalogOptions: SelectOption[] = fraisCatalog.map((f) => ({ value: f.id, label: f.nom }));
     const niveauOptions: SelectOption[] = niveaux.map((n) => ({ value: n, label: n }));
     const enseignantOptions: SelectOption[] = enseignants.map((e) => ({ value: e.id, label: e.nom }));
-    const statutFilterOptions: SelectOption[] = STATUT_TABS.map((tab) => ({ value: tab.key, label: tab.label }));
     // Create-mode status options omit "Fin de formation" — a group can only
     // reach it through the archive action (Group::archiverCommeTermine).
     const createStatutOptions: SelectOption[] = [
@@ -112,6 +127,7 @@ export default function GroupsIndex({
         form.reset();
         form.clearErrors();
         form.setData(emptyForm(fraisCatalogOptions));
+        setFraisPage(1);
         setShowModal(true);
     }
 
@@ -140,6 +156,7 @@ export default function GroupsIndex({
             fraisLignes: lignes,
         });
 
+        setFraisPage(1);
         setShowModal(true);
     }
 
@@ -148,6 +165,25 @@ export default function GroupsIndex({
         setEditingGroup(null);
         form.reset();
         form.clearErrors();
+        setFraisPage(1);
+    }
+
+    async function openStudentsSegment(group: GroupRow, segment: StatsSegment) {
+        setStudentsModal({ group, segment });
+        setStudentsRows([]);
+        setLoadingStudents(true);
+        try {
+            const response = await fetch(`/backoffice/groups/${group.id}/students-by-segment?segment=${segment}`);
+            const data: { students: GroupStudentSegmentRow[] } = await response.json();
+            setStudentsRows(data.students);
+        } finally {
+            setLoadingStudents(false);
+        }
+    }
+
+    function closeStudentsModal() {
+        setStudentsModal(null);
+        setStudentsRows([]);
     }
 
     function setLigne(fraisId: number, field: keyof GroupFraisLigne, value: string) {
@@ -180,8 +216,26 @@ export default function GroupsIndex({
             }
         >
             <Card title="Groupes" bodyClassName="p-0 py-3">
+                <ul className="nav nav-tabs nav-tabs-solid nav-tabs-rounded-fill mb-3 px-3" role="tablist">
+                    {STATUT_TABS.map((tab) => (
+                        <li className="me-2 mb-2" role="presentation" key={tab.key}>
+                            <button
+                                type="button"
+                                className={`nav-link rounded${filters.statutFilter === tab.key ? ' active' : ''}`}
+                                onClick={() => setStatutTab(tab.key)}
+                            >
+                                <i className={`ti ${tab.icon} me-1`} />
+                                {tab.label}
+                                <span className={`badge ${filters.statutFilter === tab.key ? 'bg-white text-dark' : 'badge-soft-secondary'} ms-1`}>
+                                    {statutCounts[tab.key] ?? 0}
+                                </span>
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+
                 {/* Filter row (reference CRM's Groupes filters, without a
-                    Formation column) — Groupe/Statut/Enseignant/dates. */}
+                    Formation column) — Groupe/Enseignant/dates. */}
                 <div className="px-3 pt-2">
                     <TableToolbar>
                         <div style={{ width: 220 }}>
@@ -193,18 +247,6 @@ export default function GroupsIndex({
                                 value={filters.search}
                                 onChange={(value) => reload({ search: value })}
                                 placeholder="ex : Herr Driss 13h"
-                            />
-                        </div>
-                        <div style={{ width: 190 }}>
-                            <label className="form-label" htmlFor="grp-f-statut">
-                                Statut
-                            </label>
-                            <SelectField
-                                id="grp-f-statut"
-                                options={statutFilterOptions}
-                                placeholder="Choisir un statut"
-                                value={filters.statutFilter}
-                                onChange={(event) => setStatutTab(event.target.value)}
                             />
                         </div>
                         <div style={{ width: 220 }}>
@@ -248,24 +290,6 @@ export default function GroupsIndex({
                     onPerPageChange={(perPage) => reload({ perPage })}
                 />
 
-                <ul className="nav nav-tabs nav-tabs-solid nav-tabs-rounded-fill mb-3 px-3" role="tablist">
-                    {STATUT_TABS.map((tab) => (
-                        <li className="me-2 mb-2" role="presentation" key={tab.key}>
-                            <button
-                                type="button"
-                                className={`nav-link rounded${filters.statutFilter === tab.key ? ' active' : ''}`}
-                                onClick={() => setStatutTab(tab.key)}
-                            >
-                                <i className={`ti ${tab.icon} me-1`} />
-                                {tab.label}
-                                <span className={`badge ${filters.statutFilter === tab.key ? 'bg-white text-dark' : 'badge-soft-secondary'} ms-1`}>
-                                    {statutCounts[tab.key] ?? 0}
-                                </span>
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-
                 {groups.data.length === 0 ? (
                     <EmptyState title="Aucun groupe avec ce statut" icon="ti ti-users-group" />
                 ) : (
@@ -292,18 +316,38 @@ export default function GroupsIndex({
                                     <td>{group.enseignant ?? '—'}</td>
                                     <td>
                                         <div className="d-flex flex-wrap gap-1">
-                                            <span className="badge badge-soft-secondary" title="Total inscriptions">
+                                            <button
+                                                type="button"
+                                                className="badge badge-soft-secondary border-0"
+                                                title={STATS_SEGMENT_LABELS.total}
+                                                onClick={() => openStudentsSegment(group, 'total')}
+                                            >
                                                 {group.inscriptionsCount}
-                                            </span>
-                                            <span className="badge badge-soft-success" title="Inscriptions actives">
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="badge badge-soft-success border-0"
+                                                title={STATS_SEGMENT_LABELS.active}
+                                                onClick={() => openStudentsSegment(group, 'active')}
+                                            >
                                                 {group.inscriptionsActivesCount}
-                                            </span>
-                                            <span className="badge badge-soft-danger" title="Inscriptions annulées">
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="badge badge-soft-danger border-0"
+                                                title={STATS_SEGMENT_LABELS.annulee}
+                                                onClick={() => openStudentsSegment(group, 'annulee')}
+                                            >
                                                 {group.inscriptionsAnnuleesCount}
-                                            </span>
-                                            <span className="badge badge-soft-info" title="Étudiants">
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="badge badge-soft-info border-0"
+                                                title={STATS_SEGMENT_LABELS.etudiants}
+                                                onClick={() => openStudentsSegment(group, 'etudiants')}
+                                            >
                                                 {group.etudiantsDistinctsCount}
-                                            </span>
+                                            </button>
                                         </div>
                                     </td>
                                     <td>
@@ -435,7 +479,9 @@ export default function GroupsIndex({
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {fraisCatalogOptions.map((fee) => {
+                                        {fraisCatalogOptions
+                                            .slice((fraisPage - 1) * GROUP_FRAIS_PER_PAGE, fraisPage * GROUP_FRAIS_PER_PAGE)
+                                            .map((fee) => {
                                             const ligne = form.data.fraisLignes[fee.value as number] ?? {
                                                 montant: '0',
                                                 date_echeance: '',
@@ -490,6 +536,12 @@ export default function GroupsIndex({
                                         })}
                                     </tbody>
                                 </table>
+                                <GroupFraisPagination
+                                    total={fraisCatalogOptions.length}
+                                    perPage={GROUP_FRAIS_PER_PAGE}
+                                    page={fraisPage}
+                                    onPageChange={setFraisPage}
+                                />
                             </div>
                         )}
                     </div>
@@ -499,6 +551,126 @@ export default function GroupsIndex({
                     </div>
                 </form>
             </Modal>
+
+            <Modal
+                show={studentsModal !== null}
+                title="La liste d'étudiants"
+                onClose={closeStudentsModal}
+                size="xl"
+            >
+                {loadingStudents ? (
+                    <p className="text-muted mb-0">Chargement…</p>
+                ) : studentsRows.length === 0 ? (
+                    <EmptyState title="Aucun étudiant" icon="ti ti-users-group" />
+                ) : (
+                    <div className="table-responsive">
+                        <table className="table table-bordered align-middle mb-0">
+                            <thead className="table-light">
+                                <tr>
+                                    <th>Référence</th>
+                                    <th>Prénom</th>
+                                    <th>Nom</th>
+                                    <th>CIN</th>
+                                    <th>Téléphone</th>
+                                    <th>Date de naissance</th>
+                                    <th>Niveau scolaire</th>
+                                    <th>Date d'inscription</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {studentsRows.map((student) => (
+                                    <tr key={student.reference}>
+                                        <td>
+                                            <code>{student.reference}</code>
+                                        </td>
+                                        <td>{student.prenom}</td>
+                                        <td>{student.nom}</td>
+                                        <td>{student.cin ?? '—'}</td>
+                                        <td>
+                                            {student.telephone ? (
+                                                <a href={`tel:${student.telephone}`} className="d-inline-flex align-items-center">
+                                                    <i className="ti ti-phone me-1" />
+                                                    {student.telephone}
+                                                </a>
+                                            ) : (
+                                                '—'
+                                            )}
+                                        </td>
+                                        <td>{student.dateNaissance ?? '—'}</td>
+                                        <td>{student.niveauScolaire ?? '—'}</td>
+                                        <td>{student.dateInscription ?? '—'}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </Modal>
         </BackofficeLayout>
+    );
+}
+
+interface GroupFraisPaginationProps {
+    total: number;
+    perPage: number;
+    page: number;
+    onPageChange: (page: number) => void;
+}
+
+/**
+ * Lightweight client-side pager for the "Frais du groupe" table — the fee
+ * lines live entirely in form's in-memory state (no server round trip until
+ * submit), so this can't reuse the server-driven <Pagination> component
+ * (which navigates via router.get against a Laravel paginator). Same
+ * Bootstrap `.pagination` markup/prev-next-jump styling.
+ */
+function GroupFraisPagination({ total, perPage, page, onPageChange }: GroupFraisPaginationProps) {
+    const lastPage = Math.max(1, Math.ceil(total / perPage));
+
+    if (lastPage <= 1) {
+        return null;
+    }
+
+    const from = (page - 1) * perPage + 1;
+    const to = Math.min(total, page * perPage);
+
+    return (
+        <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2">
+            <p className="text-muted mb-0">{total} total</p>
+            <nav aria-label="Pagination des frais">
+                <ul className="pagination pagination-sm mb-0">
+                    <li className={`page-item${page === 1 ? ' disabled' : ''}`} aria-disabled={page === 1 ? true : undefined}>
+                        <button type="button" className="page-link border-0" aria-label="Première page" onClick={() => onPageChange(1)}>
+                            «
+                        </button>
+                    </li>
+                    <li className={`page-item${page === 1 ? ' disabled' : ''}`} aria-disabled={page === 1 ? true : undefined}>
+                        <button type="button" className="page-link border-0" aria-label="Page précédente" onClick={() => onPageChange(page - 1)}>
+                            ‹
+                        </button>
+                    </li>
+                    {Array.from({ length: lastPage }, (_, i) => i + 1).map((n) => (
+                        <li className={`page-item${n === page ? ' active' : ''}`} aria-current={n === page ? 'page' : undefined} key={n}>
+                            <button type="button" className="page-link border-0" onClick={() => onPageChange(n)}>
+                                {n}
+                            </button>
+                        </li>
+                    ))}
+                    <li className={`page-item${page === lastPage ? ' disabled' : ''}`} aria-disabled={page === lastPage ? true : undefined}>
+                        <button type="button" className="page-link border-0" aria-label="Page suivante" onClick={() => onPageChange(page + 1)}>
+                            ›
+                        </button>
+                    </li>
+                    <li className={`page-item${page === lastPage ? ' disabled' : ''}`} aria-disabled={page === lastPage ? true : undefined}>
+                        <button type="button" className="page-link border-0" aria-label="Dernière page" onClick={() => onPageChange(lastPage)}>
+                            »
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+            <p className="text-muted mb-0">
+                {from}–{to} sur {total}
+            </p>
+        </div>
     );
 }

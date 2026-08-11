@@ -612,7 +612,7 @@ final class InscriptionsInertiaCrudTest extends TestCase
 
     // --- update --------------------------------------------------------
 
-    public function test_update_only_touches_the_six_editable_fields(): void
+    public function test_update_only_touches_the_five_editable_fields(): void
     {
         $this->actingAs($this->userWith('registrations.view', 'registrations.update'));
         $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
@@ -626,7 +626,6 @@ final class InscriptionsInertiaCrudTest extends TestCase
 
         $this->put(route('backoffice.inscriptions.update', $inscription), [
             'student_id' => $student->id,
-            'group_id' => $group->id,
             'statut' => 'Annulée',
             'date_inscription' => '2025-09-15',
             // Deliberately different from the group's training period — on
@@ -641,6 +640,154 @@ final class InscriptionsInertiaCrudTest extends TestCase
         $this->assertSame('2026-07-01', $fresh->date_fin->toDateString());
         // Untouched by update.
         $this->assertSame('1000.00', (string) $fresh->montant_total);
+    }
+
+    /**
+     * group_id is no longer accepted by this endpoint at all — a tampered
+     * client sending a different group must have it silently ignored;
+     * moving a student to another group only ever happens through
+     * changeGroup() (fee migration + archival snapshot).
+     */
+    public function test_update_ignores_a_tampered_group_id(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.update'));
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $originalGroup = $this->makeGroup();
+        $otherGroup = $this->makeGroup();
+        $inscription = Inscription::create([
+            'reference' => 'INS-EDIT-GROUP', 'student_id' => $student->id, 'group_id' => $originalGroup->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => 'Active', 'date_inscription' => '2025-09-15',
+        ]);
+
+        $this->put(route('backoffice.inscriptions.update', $inscription), [
+            'student_id' => $student->id,
+            'group_id' => $otherGroup->id,
+            'statut' => 'Active',
+            'date_inscription' => '2025-09-15',
+        ])->assertRedirect(route('backoffice.inscriptions.index'));
+
+        $this->assertSame($originalGroup->id, $inscription->fresh()->group_id);
+    }
+
+    // --- update-statut (row-menu "Annuler"/"Réactiver") ------------------
+
+    /**
+     * "Changement" is deliberately NOT reachable through this endpoint —
+     * only the dedicated changeGroup() flow (which also migrates fees and
+     * creates a replacement Active inscription) may set that status.
+     */
+    public function test_update_statut_rejects_changement_as_a_target(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.update'));
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $group = $this->makeGroup();
+        $inscription = Inscription::create([
+            'reference' => 'INS-NOARCHIVE', 'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => 'Active', 'date_inscription' => '2025-09-15',
+        ]);
+
+        $this->patch(route('backoffice.inscriptions.update-statut', $inscription), [
+            'statut' => 'Changement',
+        ])->assertStatus(422);
+
+        $this->assertSame('Active', $inscription->fresh()->statut);
+    }
+
+    public function test_annuler_sets_statut_to_annulee(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.update'));
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $group = $this->makeGroup();
+        $inscription = Inscription::create([
+            'reference' => 'INS-CANCEL', 'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => 'Active', 'date_inscription' => '2025-09-15',
+        ]);
+
+        $this->patch(route('backoffice.inscriptions.update-statut', $inscription), [
+            'statut' => 'Annulée',
+        ])->assertRedirect(route('backoffice.inscriptions.index'));
+
+        $this->assertSame('Annulée', $inscription->fresh()->statut);
+    }
+
+    /**
+     * "Réactiver" — the reverse move (Changement/Annulée -> Active), a
+     * two-way toggle symmetric with Archiver/Annuler so a mistaken
+     * archive/cancel doesn't require the full edit modal to undo.
+     */
+    public function test_reactiver_sets_statut_back_to_active(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.update'));
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $group = $this->makeGroup();
+        $inscription = Inscription::create([
+            'reference' => 'INS-REACTIVATE', 'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => 'Changement', 'date_inscription' => '2025-09-15',
+        ]);
+
+        $this->patch(route('backoffice.inscriptions.update-statut', $inscription), [
+            'statut' => 'Active',
+        ])->assertRedirect(route('backoffice.inscriptions.index'));
+
+        $this->assertSame('Active', $inscription->fresh()->statut);
+    }
+
+    public function test_update_statut_refuses_reactivating_an_already_active_inscription(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.update'));
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $group = $this->makeGroup();
+        $inscription = Inscription::create([
+            'reference' => 'INS-ALREADY-ACT', 'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => 'Active', 'date_inscription' => '2025-09-15',
+        ]);
+
+        $this->patch(route('backoffice.inscriptions.update-statut', $inscription), [
+            'statut' => 'Active',
+        ])->assertSessionHasErrors('statut');
+
+        $this->assertSame('Active', $inscription->fresh()->statut);
+    }
+
+    public function test_update_statut_rejects_an_invalid_statut_value(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.update'));
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $group = $this->makeGroup();
+        $inscription = Inscription::create([
+            'reference' => 'INS-BAD-STATUT', 'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => 'Active', 'date_inscription' => '2025-09-15',
+        ]);
+
+        $this->patch(route('backoffice.inscriptions.update-statut', $inscription), [
+            'statut' => 'Bogus',
+        ])->assertStatus(422);
+
+        $this->assertSame('Active', $inscription->fresh()->statut);
+    }
+
+    public function test_user_without_update_permission_cannot_update_statut(): void
+    {
+        $this->actingAs($this->userWith('registrations.view'));
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $group = $this->makeGroup();
+        $inscription = Inscription::create([
+            'reference' => 'INS-STATUT-NOPERM', 'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => 'Active', 'date_inscription' => '2025-09-15',
+        ]);
+
+        $this->patch(route('backoffice.inscriptions.update-statut', $inscription), [
+            'statut' => 'Annulée',
+        ])->assertForbidden();
+
+        $this->assertSame('Active', $inscription->fresh()->statut);
     }
 
     public function test_user_without_update_permission_cannot_update(): void

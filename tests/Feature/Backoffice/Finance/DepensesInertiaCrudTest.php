@@ -90,6 +90,35 @@ final class DepensesInertiaCrudTest extends TestCase
         $this->assertSame('4880.00', (string) $caisse->fresh()->solde);
     }
 
+    /**
+     * Regression: the create form never has a caisse field (the till is
+     * always the acting employee's own — see StoreDepenseRequest's
+     * docblock), so the payload legitimately arrives with NO caisse_id at
+     * all. Before this fix, caisse_id was still `required` server-side,
+     * which silently failed every real submission.
+     */
+    public function test_a_depense_can_be_created_with_no_caisse_id_in_the_payload(): void
+    {
+        $user = $this->userWith('expenses.view', 'expenses.create');
+        $this->actingAs($user);
+        $caisse = $user->employee->caisses()->first();
+        $caisse->update(['solde' => 5000]);
+
+        $this->post(route('backoffice.depenses.store'), [
+            'type_depense_id' => $this->type->id,
+            'montant' => '120',
+            'methode_paiement' => 'Espèces',
+            'date_depense' => '2025-09-15',
+            'description' => 'Fournitures de bureau',
+        ])->assertSessionDoesntHaveErrors()
+            ->assertRedirect(route('backoffice.depenses.index'));
+
+        $depense = Depense::where('description', 'Fournitures de bureau')->first();
+        $this->assertNotNull($depense);
+        $this->assertSame($caisse->id, $depense->caisse_id);
+        $this->assertSame('4880.00', (string) $caisse->fresh()->solde);
+    }
+
     public function test_methode_paiement_is_required_on_create(): void
     {
         $user = $this->userWith('expenses.view', 'expenses.create');

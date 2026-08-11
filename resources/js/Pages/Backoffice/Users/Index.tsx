@@ -213,6 +213,7 @@ export default function UsersIndex({ users, filters, perPageOptions }: UsersInde
                 title="Modifier l'utilisateur"
                 onClose={closeModal}
                 processing={form.processing || regenerating}
+                size="lg"
                 footer={
                     <>
                         <button type="button" className="btn btn-light" onClick={closeModal} disabled={form.processing}>
@@ -238,30 +239,38 @@ export default function UsersIndex({ users, filters, perPageOptions }: UsersInde
                 }
             >
                 <form onSubmit={submit} id="user-edit-form">
-                    <FormField
-                        id="u-name"
-                        label="Nom"
-                        required
-                        value={form.data.name}
-                        onChange={(event) => form.setData('name', event.target.value)}
-                        error={form.errors.name}
-                    />
-                    <FormField
-                        id="u-email"
-                        label="Email"
-                        type="email"
-                        required
-                        value={form.data.email}
-                        onChange={(event) => form.setData('email', event.target.value)}
-                        error={form.errors.email}
-                    />
-                    <FormField
-                        id="u-username"
-                        label="Nom d'utilisateur"
-                        value={form.data.username}
-                        onChange={(event) => form.setData('username', event.target.value)}
-                        error={form.errors.username}
-                    />
+                    <div className="row">
+                        <div className="col-md-6">
+                            <FormField
+                                id="u-name"
+                                label="Nom"
+                                required
+                                value={form.data.name}
+                                onChange={(event) => form.setData('name', event.target.value)}
+                                error={form.errors.name}
+                            />
+                        </div>
+                        <div className="col-md-6">
+                            <FormField
+                                id="u-email"
+                                label="Email"
+                                type="email"
+                                required
+                                value={form.data.email}
+                                onChange={(event) => form.setData('email', event.target.value)}
+                                error={form.errors.email}
+                            />
+                        </div>
+                        <div className="col-md-6">
+                            <FormField
+                                id="u-username"
+                                label="Nom d'utilisateur"
+                                value={form.data.username}
+                                onChange={(event) => form.setData('username', event.target.value)}
+                                error={form.errors.username}
+                            />
+                        </div>
+                    </div>
                     <div className="form-check form-switch mb-3">
                         <input
                             className="form-check-input"

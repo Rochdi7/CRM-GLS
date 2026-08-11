@@ -62,6 +62,48 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
             );
     }
 
+    /**
+     * "Validation de transfert" is a personal inbox/outbox: the list must
+     * include transfers where the viewer's own till is EITHER end (not just
+     * transfers they sent), labeled relative to them (Réception when money
+     * is arriving into one of their tills, Transfert when it's leaving
+     * one), with Expéditeur/Destinataire showing the owning EMPLOYEE's name
+     * (not the raw "Caisse — Name" label).
+     */
+    public function test_transfer_list_labels_direction_relative_to_the_viewer(): void
+    {
+        $sender = $this->userWith('cash-transfers.view', 'cash-transfers.create');
+        $senderCaisse = $sender->employee->caisses()->first();
+        $receiver = $this->userWith('cash-transfers.view');
+        $receiverCaisse = $receiver->employee->caisses()->first();
+        $receiverCaisse->update(['solde' => 500]);
+
+        $this->actingAs($sender);
+        $this->post(route('backoffice.caisse-transfers.store'), [
+            'caisse_source_id' => $senderCaisse->id,
+            'caisse_destination_id' => $receiverCaisse->id,
+            'montant' => '300',
+        ]);
+
+        // The sender sees it as an outgoing "Transfert".
+        $senderResponse = $this->get(route('backoffice.caisses.index', ['tab' => 'transferts']))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->has('transfers.data.0'));
+        $senderRow = $senderResponse->viewData('page')['props']['transfers']['data'][0];
+        $this->assertSame('Transfert', $senderRow['typeTransaction']);
+        $this->assertSame($sender->employee->nomComplet(), $senderRow['expediteur']);
+        $this->assertSame($receiver->employee->nomComplet(), $senderRow['destinataire']);
+
+        // The receiver — who never requested it — still sees it, labeled
+        // "Réception" from their side.
+        $this->actingAs($receiver);
+        $receiverResponse = $this->get(route('backoffice.caisses.index', ['tab' => 'transferts']))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->has('transfers.data.0'));
+        $receiverRow = $receiverResponse->viewData('page')['props']['transfers']['data'][0];
+        $this->assertSame('Réception', $receiverRow['typeTransaction']);
+    }
+
     public function test_requesting_a_transfer_does_not_move_any_balance(): void
     {
         $user = $this->userWith('cash-transfers.view', 'cash-transfers.create');

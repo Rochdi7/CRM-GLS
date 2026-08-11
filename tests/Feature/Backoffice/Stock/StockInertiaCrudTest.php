@@ -84,7 +84,7 @@ final class StockInertiaCrudTest extends TestCase
         ])->assertRedirect(route('backoffice.stock.index'));
 
         $article = StockArticle::firstOrFail();
-        $this->assertMatchesRegularExpression('/^ART-\d{6}$/', $article->reference);
+        $this->assertMatchesRegularExpression('/^ART-\d{3,}$/', $article->reference);
         $this->assertSame(0, $article->quantite);
         $this->assertSame(10, $article->seuil_alerte);
     }

@@ -222,6 +222,7 @@ export default function TypesDepensesIndex({ types, filters, permissions }: Type
                 title={editingId ? 'Modifier le type de dépense' : 'Ajouter un type de dépense'}
                 onClose={closeModal}
                 processing={form.processing}
+                size="lg"
             >
                 <form onSubmit={handleSubmit}>
                     <div className="row">

@@ -11,13 +11,25 @@ interface ConfirmDialogProps {
     processing: boolean;
     onConfirm: () => void;
     onCancel: () => void;
+    /** Icon class (without the `ti` prefix) shown above the title. Defaults to the delete mark. */
+    icon?: string;
+    /** Confirm button style. Defaults to danger (delete/destructive actions). */
+    variant?: 'danger' | 'primary';
+    /** Confirm button label when idle. Defaults to the delete wording. */
+    confirmLabel?: string;
+    /** Confirm button label while processing. Defaults to the delete wording. */
+    processingLabel?: string;
 }
 
 /**
- * Delete-confirmation dialog in the PreSkool style (students.html
- * #delete-modal — Phase 13 UI parity): headerless centered body with the
- * `delete-icon` + `ti-trash-x` mark, title, message, and centered
- * Cancel/`btn-danger` pair. Still renders the record's own label (never a
+ * Generic confirm dialog in the PreSkool style (students.html #delete-modal
+ * — Phase 13 UI parity): headerless centered body with an icon mark, title,
+ * message, and centered Cancel/confirm pair. Defaults to the original
+ * delete-confirmation wording/icon/color (still every existing destroy
+ * caller's exact previous behavior); pass icon/variant/confirmLabel/
+ * processingLabel to reuse it for a non-destructive confirmation (e.g. a
+ * status change) without ever showing delete-flavored copy for a
+ * non-deleting action. Still renders the record's own label (never a
  * generic "delete this?") and surfaces the server's refusal message
  * verbatim — never a raw SQL/constraint error (CLAUDE.md safe-message rule).
  */
@@ -30,12 +42,16 @@ export default function ConfirmDialog({
     processing,
     onConfirm,
     onCancel,
+    icon = 'ti-trash-x',
+    variant = 'danger',
+    confirmLabel,
+    processingLabel,
 }: ConfirmDialogProps) {
     return (
         <Modal show={show} title={title} onClose={onCancel} processing={processing} hideHeader>
             <div className="text-center">
                 <span className="delete-icon">
-                    <i className="ti ti-trash-x" aria-hidden="true" />
+                    <i className={`ti ${icon}`} aria-hidden="true" />
                 </span>
                 <h4>{title}</h4>
                 <p className="mb-1">{message}</p>
@@ -49,14 +65,14 @@ export default function ConfirmDialog({
                     <button type="button" className="btn btn-light me-3" onClick={onCancel} disabled={processing}>
                         {t('Cancel')}
                     </button>
-                    <button type="button" className="btn btn-danger" onClick={onConfirm} disabled={processing}>
+                    <button type="button" className={`btn btn-${variant}`} onClick={onConfirm} disabled={processing}>
                         {processing ? (
                             <>
                                 <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
-                                {t('Deleting…')}
+                                {processingLabel ?? t('Deleting…')}
                             </>
                         ) : (
-                            t('Yes, delete')
+                            confirmLabel ?? t('Yes, delete')
                         )}
                     </button>
                 </div>
