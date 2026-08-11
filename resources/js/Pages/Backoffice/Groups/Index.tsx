@@ -557,6 +557,7 @@ export default function GroupsIndex({
                             <DateField
                                 id="grp-debut"
                                 label="Date de début"
+                                required
                                 value={form.data.date_debut_formation}
                                 onChange={(event) => form.setData('date_debut_formation', event.target.value)}
                                 error={form.errors.date_debut_formation}
@@ -566,6 +567,7 @@ export default function GroupsIndex({
                             <DateField
                                 id="grp-fin"
                                 label="Date de fin"
+                                required
                                 value={form.data.date_fin_formation}
                                 onChange={(event) => form.setData('date_fin_formation', event.target.value)}
                                 error={form.errors.date_fin_formation}

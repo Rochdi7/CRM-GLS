@@ -168,12 +168,17 @@ final class EncaissementsInertiaCrudTest extends TestCase
 
         // Fully-paid fee via cheque + a genuine unallocated avance (no fee).
         [$student1, $inscription1, $feeFull] = $this->enrolledStudentWithFee(1000);
+        $cheque = \App\Models\Cheque::create([
+            'reference' => 'CHQ-TAB-1', 'source' => \App\Models\Cheque::SOURCE_ETUDIANT, 'student_id' => $student1->id,
+            'numero_cheque' => 'CHQ-1', 'banque' => 'BMCE', 'date_reception' => '2025-09-01', 'date_echeance' => '2025-10-01',
+            'type' => \App\Models\Cheque::TYPE_A_DEPOSER, 'statut' => \App\Models\Cheque::STATUT_EN_POSSESSION,
+            'montant' => 1000, 'etablissement_id' => $this->centre->id, 'agent_id' => $user->employee->id,
+        ]);
         $this->post(route('backoffice.encaissements.store'), [
             'student_id' => $student1->id, 'inscription_id' => $inscription1->id,
             'date_paiement' => '2025-09-20',
-            'numero_cheque' => 'CHQ-1', 'banque' => 'BMCE', 'date_echeance_cheque' => '2025-10-01',
             'payment_lines' => [
-                ['fee_id' => $feeFull->id, 'montant' => '1000', 'methode' => 'Chèque', 'date_paiement' => '2025-09-20'],
+                ['fee_id' => $feeFull->id, 'montant' => '1000', 'methode' => 'Chèque', 'date_paiement' => '2025-09-20', 'cheque_id' => $cheque->id],
             ],
         ])->assertRedirect();
 
@@ -557,5 +562,89 @@ final class EncaissementsInertiaCrudTest extends TestCase
     public function test_no_delete_route_exists_for_payments(): void
     {
         $this->assertFalse(\Illuminate\Support\Facades\Route::has('backoffice.encaissements.destroy'));
+    }
+
+    // --- paying with a tracked chèque (Chèques module) --------------------
+
+    public function test_paying_with_a_tracked_cheque_links_it_and_fills_its_details(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'cheques.view', 'cheques.create');
+        $this->actingAs($user);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(500);
+
+        $cheque = \App\Models\Cheque::create([
+            'reference' => 'CHQ-PAY', 'source' => \App\Models\Cheque::SOURCE_ETUDIANT, 'student_id' => $student->id,
+            'numero_cheque' => 'CHQ-PAY-1', 'montant' => 500, 'banque' => 'BMCE',
+            'date_reception' => '2025-09-01', 'date_echeance' => '2025-10-01',
+            'type' => \App\Models\Cheque::TYPE_A_DEPOSER, 'statut' => \App\Models\Cheque::STATUT_EN_POSSESSION,
+            'etablissement_id' => $this->centre->id, 'agent_id' => $user->employee->id,
+        ]);
+
+        $this->post(route('backoffice.encaissements.store'), [
+            'student_id' => $student->id,
+            'inscription_id' => $inscription->id,
+            'date_paiement' => '2025-09-20',
+            'payment_lines' => [
+                ['fee_id' => $fee->id, 'montant' => '500', 'methode' => 'Chèque', 'date_paiement' => '2025-09-20', 'cheque_id' => $cheque->id],
+            ],
+        ])->assertSessionDoesntHaveErrors();
+
+        $encaissement = Encaissement::firstOrFail();
+        $this->assertSame($cheque->id, $encaissement->cheque_id);
+        $this->assertSame('CHQ-PAY-1', $encaissement->numero_cheque);
+        $this->assertSame('BMCE', $encaissement->banque);
+        $this->assertSame('2025-10-01', $encaissement->date_echeance_cheque->toDateString());
+        $this->assertSame(0.0, $cheque->fresh()->montantRestant());
+    }
+
+    public function test_paying_with_a_tracked_cheque_cannot_exceed_its_remaining_balance(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'cheques.view', 'cheques.create');
+        $this->actingAs($user);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
+
+        $cheque = \App\Models\Cheque::create([
+            'reference' => 'CHQ-SMALL', 'source' => \App\Models\Cheque::SOURCE_ETUDIANT, 'student_id' => $student->id,
+            'numero_cheque' => 'CHQ-SMALL-1', 'montant' => 300, 'date_reception' => '2025-09-01',
+            'type' => \App\Models\Cheque::TYPE_A_DEPOSER, 'statut' => \App\Models\Cheque::STATUT_EN_POSSESSION,
+            'etablissement_id' => $this->centre->id, 'agent_id' => $user->employee->id,
+        ]);
+
+        $this->post(route('backoffice.encaissements.store'), [
+            'student_id' => $student->id,
+            'inscription_id' => $inscription->id,
+            'date_paiement' => '2025-09-20',
+            'payment_lines' => [
+                ['fee_id' => $fee->id, 'montant' => '1000', 'methode' => 'Chèque', 'date_paiement' => '2025-09-20', 'cheque_id' => $cheque->id],
+            ],
+        ])->assertSessionHasErrors('payment_lines');
+
+        $this->assertSame(0, Encaissement::count());
+    }
+
+    public function test_a_cheque_belonging_to_another_student_cannot_be_used(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'cheques.view', 'cheques.create');
+        $this->actingAs($user);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(500);
+        $otherStudent = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+
+        $cheque = \App\Models\Cheque::create([
+            'reference' => 'CHQ-OTHER', 'source' => \App\Models\Cheque::SOURCE_ETUDIANT, 'student_id' => $otherStudent->id,
+            'numero_cheque' => 'CHQ-OTHER-1', 'montant' => 500, 'date_reception' => '2025-09-01',
+            'type' => \App\Models\Cheque::TYPE_A_DEPOSER, 'statut' => \App\Models\Cheque::STATUT_EN_POSSESSION,
+            'etablissement_id' => $this->centre->id, 'agent_id' => $user->employee->id,
+        ]);
+
+        $this->post(route('backoffice.encaissements.store'), [
+            'student_id' => $student->id,
+            'inscription_id' => $inscription->id,
+            'date_paiement' => '2025-09-20',
+            'payment_lines' => [
+                ['fee_id' => $fee->id, 'montant' => '500', 'methode' => 'Chèque', 'date_paiement' => '2025-09-20', 'cheque_id' => $cheque->id],
+            ],
+        ])->assertSessionHasErrors('payment_lines');
+
+        $this->assertSame(0, Encaissement::count());
     }
 }

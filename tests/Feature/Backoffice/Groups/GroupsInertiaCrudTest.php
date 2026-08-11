@@ -88,6 +88,8 @@ final class GroupsInertiaCrudTest extends TestCase
             'nom' => 'Herr Driss 13h - Intensifs',
             'niveau' => 'B1.1',
             'statut' => Group::STATUT_EN_INSCRIPTION,
+            'date_debut_formation' => '2025-09-01',
+            'date_fin_formation' => '2026-06-30',
             'fraisLignes' => [
                 $f1->id => ['montant' => '300'],
                 $f2->id => ['montant' => '1300'],
@@ -111,6 +113,8 @@ final class GroupsInertiaCrudTest extends TestCase
             'nom' => 'Groupe Zéro',
             'niveau' => 'A1.1',
             'statut' => Group::STATUT_EN_INSCRIPTION,
+            'date_debut_formation' => '2025-09-01',
+            'date_fin_formation' => '2026-06-30',
             'fraisLignes' => [
                 $f1->id => ['montant' => '300'],
             ],
@@ -137,6 +141,7 @@ final class GroupsInertiaCrudTest extends TestCase
 
         $this->post(route('backoffice.groups.store'), [
             'nom' => 'Groupe X', 'niveau' => 'A1.1', 'statut' => Group::STATUT_EN_INSCRIPTION,
+            'date_debut_formation' => '2025-09-01', 'date_fin_formation' => '2026-06-30',
             'fraisLignes' => [
                 $frais->id => ['montant' => '500', 'date_echeance' => '2025-10-18', 'classification' => 'B2.1'],
             ],
@@ -179,6 +184,7 @@ final class GroupsInertiaCrudTest extends TestCase
 
         $this->put(route('backoffice.groups.update', $group), [
             'nom' => $group->nom, 'niveau' => $group->niveau, 'statut' => $group->statut,
+            'date_debut_formation' => '2025-09-01', 'date_fin_formation' => '2026-06-30',
             'fraisLignes' => [
                 $a->id => ['montant' => '100'],
                 $b->id => ['montant' => '250'],
@@ -201,6 +207,7 @@ final class GroupsInertiaCrudTest extends TestCase
         $this->put(route('backoffice.groups.update', $group), [
             'nom' => $group->nom, 'niveau' => $group->niveau,
             'statut' => Group::STATUT_FIN_FORMATION,
+            'date_debut_formation' => '2025-09-01', 'date_fin_formation' => '2026-06-30',
         ])->assertSessionDoesntHaveErrors();
 
         // The raw update must NOT actually finish the group — only
@@ -240,6 +247,7 @@ final class GroupsInertiaCrudTest extends TestCase
 
         $this->put(route('backoffice.groups.update', $groupInB), [
             'nom' => $groupInB->nom, 'niveau' => $groupInB->niveau, 'statut' => $groupInB->statut,
+            'date_debut_formation' => '2025-09-01', 'date_fin_formation' => '2026-06-30',
         ])->assertForbidden();
     }
 

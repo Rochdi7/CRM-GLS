@@ -1,4 +1,4 @@
-import { router, useForm } from '@inertiajs/react';
+import { router, useForm, usePage } from '@inertiajs/react';
 import { useEffect, useState, type FormEvent } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
@@ -10,13 +10,14 @@ import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
+import ConfirmDialog from '@/Components/Modals/ConfirmDialog';
 import SelectField from '@/Components/Forms/SelectField';
 import DateField from '@/Components/Forms/DateField';
 import TextareaField from '@/Components/Forms/TextareaField';
 import FormActions from '@/Components/Forms/FormActions';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
-import type { CaissesPageProps, CaisseJournalData, CaisseTransferRow, SelectOption } from '@/Types';
+import type { CaissesPageProps, CaisseJournalData, CaisseTransferRow, SelectOption, SharedProps } from '@/Types';
 
 type Tab = 'ma-caisse' | 'transferts';
 
@@ -266,21 +267,43 @@ export default function CaissesIndex({
         initialTransferFilters ?? { search: '', statutFilter: '', caisseFilter: '' },
     );
 
+    // Client-side permission checks — UI convenience only (hide affordances
+    // the server would refuse anyway); real enforcement stays in the
+    // policies/controllers (CLAUDE.md §5/§16).
+    const { auth } = usePage<SharedProps>().props;
+    const canUpdateTransfers = auth.isSuperAdmin || auth.permissions.includes('cash-transfers.update');
+    const canValidateTransfers = auth.isSuperAdmin || auth.permissions.includes('cash-transfers.validate');
+
     const [showTransferModal, setShowTransferModal] = useState(false);
     const [editingTransfer, setEditingTransfer] = useState<CaisseTransferRow | null>(null);
-    const [validateError, setValidateError] = useState<string | undefined>(undefined);
+    // Validate/cancel go through a ConfirmDialog popup; a server refusal
+    // (self-validation, already-validated, permission…) is shown INSIDE the
+    // dialog instead of an inline page alert.
+    const [confirmAction, setConfirmAction] = useState<{ type: 'validate' | 'cancel'; row: CaisseTransferRow } | null>(null);
+    const [actionError, setActionError] = useState<string | undefined>(undefined);
+    const [actionProcessing, setActionProcessing] = useState(false);
 
-    const transferCaisseOptions: SelectOption[] = transferCaisses.map((c) => ({ value: c.id, label: `${c.nom} (${Number(c.solde).toFixed(2)} DH)` }));
+    // Destination choices — every accessible till EXCEPT the acting
+    // employee's own (the fixed source): transferring to yourself is
+    // meaningless and refused server-side anyway. The unfiltered list stays
+    // available for the edit modal's frozen display of older rows.
+    const allTransferCaisseOptions: SelectOption[] = transferCaisses.map((c) => ({ value: c.id, label: `${c.nom} (${Number(c.solde).toFixed(2)} DH)` }));
+    const transferCaisseOptions: SelectOption[] = transferCaisses
+        .filter((c) => c.id !== myCaisse?.id)
+        .map((c) => ({ value: c.id, label: `${c.nom} (${Number(c.solde).toFixed(2)} DH)` }));
     const transferStatutOptions: SelectOption[] = transferStatuts.map((s) => ({ value: s, label: s }));
 
     const transferForm = useForm<TransferFormState>(emptyTransferForm());
 
-    // Live Solde / Reste preview for the modal — sourced from the selected
-    // source caisse's own balance (transferCaisses already carries `solde`
-    // per option), never trusted as authoritative: the server independently
-    // re-validates the transfer amount against the caisse's real balance.
-    const selectedSourceCaisse = transferCaisses.find((c) => c.id === transferForm.data.caisse_source_id);
-    const soldeSource = selectedSourceCaisse ? Number(selectedSourceCaisse.solde) : null;
+    // Live Solde / Reste preview for the modal. Create mode: the fixed
+    // source is always MY own till (myCaisse). Edit mode: the frozen source
+    // of the row being edited. Display-only either way — the server
+    // independently re-validates against the caisse's real balance.
+    const editingSourceCaisse = editingTransfer ? transferCaisses.find((c) => c.id === editingTransfer.caisseSourceId) : null;
+    const sourceCaisseNom = editingTransfer ? (editingSourceCaisse?.nom ?? '—') : (myCaisse?.nom ?? '—');
+    const soldeSource = editingTransfer
+        ? (editingSourceCaisse ? Number(editingSourceCaisse.solde) : null)
+        : (myCaisse ? Number(myCaisse.solde) : null);
     const montantATransferer = parseFloat(transferForm.data.montant || '0');
     const reste = soldeSource !== null ? soldeSource - (Number.isFinite(montantATransferer) ? montantATransferer : 0) : null;
 
@@ -310,7 +333,6 @@ export default function CaissesIndex({
         setEditingTransfer(row);
         transferForm.clearErrors();
         transferForm.setData({
-            caisse_source_id: row.caisseSourceId ?? '',
             caisse_destination_id: row.caisseDestinationId ?? '',
             montant: row.montant,
             date_transfert: row.dateTransfert ? row.dateTransfert.slice(0, 10) : todayIso(),
@@ -327,10 +349,19 @@ export default function CaissesIndex({
     function submitTransfer(event: FormEvent) {
         event.preventDefault();
 
+        // The server redirects to ?tab=transferts, but Inertia form posts
+        // preserve component state — without syncing the local `tab` here the
+        // page would keep showing the previous tab (e.g. "Ma caisse") whose
+        // dataset was NOT recomputed for this visit, rendering an empty page.
+        const onSuccess = () => {
+            closeTransferModal();
+            setTab('transferts');
+        };
+
         if (editingTransfer) {
             transferForm.put(`/backoffice/caisse-transfers/${editingTransfer.id}`, {
                 preserveScroll: true,
-                onSuccess: () => closeTransferModal(),
+                onSuccess,
             });
 
             return;
@@ -338,28 +369,39 @@ export default function CaissesIndex({
 
         transferForm.post('/backoffice/caisse-transfers', {
             preserveScroll: true,
-            onSuccess: () => closeTransferModal(),
+            onSuccess,
         });
     }
 
-    function cancelTransfer(row: CaisseTransferRow) {
-        router.put(
-            `/backoffice/caisse-transfers/${row.id}`,
-            { note: row.note ?? '', statut: 'Annulé' },
-            { preserveScroll: true },
-        );
+    function openConfirmAction(type: 'validate' | 'cancel', row: CaisseTransferRow) {
+        setActionError(undefined);
+        setConfirmAction({ type, row });
     }
 
-    function validateTransfer(row: CaisseTransferRow) {
-        setValidateError(undefined);
-        router.put(
-            `/backoffice/caisse-transfers/${row.id}/validate`,
-            {},
-            {
-                preserveScroll: true,
-                onError: (errors) => setValidateError(errors.validate),
-            },
-        );
+    function closeConfirmAction() {
+        setConfirmAction(null);
+        setActionError(undefined);
+    }
+
+    function runConfirmAction() {
+        if (!confirmAction) return;
+        const { type, row } = confirmAction;
+        setActionError(undefined);
+        setActionProcessing(true);
+
+        const url = type === 'validate'
+            ? `/backoffice/caisse-transfers/${row.id}/validate`
+            : `/backoffice/caisse-transfers/${row.id}`;
+        const payload = type === 'validate' ? {} : { note: row.note ?? '', statut: 'Annulé' };
+
+        router.put(url, payload, {
+            preserveScroll: true,
+            onSuccess: () => closeConfirmAction(),
+            // Surface the server's refusal verbatim inside the dialog —
+            // whichever field it was keyed on.
+            onError: (errors) => setActionError(Object.values(errors)[0]),
+            onFinish: () => setActionProcessing(false),
+        });
     }
 
     return (
@@ -433,8 +475,6 @@ export default function CaissesIndex({
 
                     <p className="px-3 fw-semibold">Total : {transfers.data.reduce((sum, r) => sum + Number(r.montant), 0).toFixed(2)}</p>
 
-                    {validateError && <div className="alert alert-danger mx-3">{validateError}</div>}
-
                     {transfers.data.length === 0 ? (
                         <EmptyState title="Aucun transfert" icon="ti ti-arrows-exchange" />
                     ) : (
@@ -468,26 +508,24 @@ export default function CaissesIndex({
                                         <td>{row.dateTransfert ? row.dateTransfert.slice(0, 10) : '—'}</td>
                                         <td>{row.note ?? '—'}</td>
                                         <td>
+                                            {/* Mutating actions are permission-gated client-side
+                                                (hidden, not just refused): Modifier/Annuler need
+                                                cash-transfers.update, Valider needs
+                                                cash-transfers.validate — and never on one's own
+                                                request (self-validation is refused server-side). */}
                                             <RowActions view={row.showUrl}>
-                                                {row.isPending && (
+                                                {row.isPending && canUpdateTransfers && (
                                                     <RowActionItem icon="ti-edit" onClick={() => openEditTransfer(row)}>
                                                         Modifier
                                                     </RowActionItem>
                                                 )}
-                                                {row.isPending && (
-                                                    <RowActionItem icon="ti-x" onClick={() => cancelTransfer(row)}>
+                                                {row.isPending && canUpdateTransfers && (
+                                                    <RowActionItem icon="ti-x" onClick={() => openConfirmAction('cancel', row)}>
                                                         Annuler
                                                     </RowActionItem>
                                                 )}
-                                                {row.isPending && row.requestedById !== currentEmployeeId && (
-                                                    <RowActionItem
-                                                        icon="ti-check"
-                                                        onClick={() => {
-                                                            if (window.confirm('Valider ce transfert ? Les soldes vont bouger.')) {
-                                                                validateTransfer(row);
-                                                            }
-                                                        }}
-                                                    >
+                                                {row.isPending && canValidateTransfers && row.requestedById !== currentEmployeeId && (
+                                                    <RowActionItem icon="ti-check" onClick={() => openConfirmAction('validate', row)}>
                                                         Valider
                                                     </RowActionItem>
                                                 )}
@@ -501,6 +539,33 @@ export default function CaissesIndex({
                     )}
                 </Card>
             )}
+
+            {/* Validate/cancel confirmation popup — server refusals
+                (self-validation, permission, already validated…) are shown
+                inside it via `error`, replacing the old window.confirm +
+                inline page alert. */}
+            <ConfirmDialog
+                show={confirmAction !== null}
+                title={confirmAction?.type === 'validate' ? 'Valider le transfert' : 'Annuler le transfert'}
+                message={
+                    confirmAction?.type === 'validate'
+                        ? 'Les soldes des deux caisses vont bouger immédiatement.'
+                        : 'Le transfert sera marqué comme annulé — aucun solde ne bouge.'
+                }
+                recordLabel={
+                    confirmAction
+                        ? `${Number(confirmAction.row.montant).toFixed(2)} DH — ${confirmAction.row.expediteur ?? '—'} → ${confirmAction.row.destinataire ?? '—'}`
+                        : ''
+                }
+                error={actionError}
+                processing={actionProcessing}
+                onConfirm={runConfirmAction}
+                onCancel={closeConfirmAction}
+                icon={confirmAction?.type === 'validate' ? 'ti-circle-check' : 'ti-circle-x'}
+                variant={confirmAction?.type === 'validate' ? 'primary' : 'danger'}
+                confirmLabel={confirmAction?.type === 'validate' ? 'Valider' : "Oui, annuler"}
+                processingLabel={confirmAction?.type === 'validate' ? 'Validation…' : 'Annulation…'}
+            />
 
             <Modal
                 show={showTransferModal}
@@ -516,28 +581,35 @@ export default function CaissesIndex({
                             ? 'Seule la note peut être modifiée — les caisses et le montant sont figés.'
                             : 'Les soldes ne bougent pas maintenant : un autre employé doit valider ce transfert.'}
                     </div>
+                    {!editingTransfer && !myCaisse && (
+                        <div className="alert alert-warning">
+                            Votre compte n'est lié à aucune caisse — impossible de demander un transfert.
+                        </div>
+                    )}
                     <div className="row">
                         <div className="col-md-6">
-                            <SelectField
-                                id="ct-source"
-                                label="Caisse source"
-                                options={transferCaisseOptions}
-                                placeholder="Sélectionner une caisse"
-                                required
-                                disabled={!!editingTransfer}
-                                value={transferForm.data.caisse_source_id}
-                                onChange={(e) => transferForm.setData('caisse_source_id', e.target.value === '' ? '' : Number(e.target.value))}
-                                error={transferForm.errors.caisse_source_id}
-                            />
+                            {/* The source is ALWAYS the acting employee's own till —
+                                fixed server-side (even for super-admins), never a
+                                dropdown. */}
+                            <div className="mb-3">
+                                <label className="form-label" htmlFor="ct-source">Caisse source</label>
+                                <input
+                                    id="ct-source"
+                                    type="text"
+                                    className="form-control bg-light"
+                                    readOnly
+                                    value={sourceCaisseNom}
+                                />
+                            </div>
                         </div>
                         <div className="col-md-6">
                             <SelectField
                                 id="ct-destination"
-                                label="Comptes de caisse"
-                                options={transferCaisseOptions}
-                                placeholder="Choisir un compte de caisse"
+                                label="Caisse destination"
+                                options={editingTransfer ? allTransferCaisseOptions : transferCaisseOptions}
+                                placeholder="Choisir une caisse destination"
                                 required
-                                disabled={!!editingTransfer}
+                                disabled={!!editingTransfer || !myCaisse}
                                 value={transferForm.data.caisse_destination_id}
                                 onChange={(e) => transferForm.setData('caisse_destination_id', e.target.value === '' ? '' : Number(e.target.value))}
                                 error={transferForm.errors.caisse_destination_id}

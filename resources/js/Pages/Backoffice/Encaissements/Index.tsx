@@ -1,5 +1,5 @@
 import { router, useForm } from '@inertiajs/react';
-import { useState, type FormEvent } from 'react';
+import { Fragment, useState, type FormEvent } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
@@ -17,7 +17,7 @@ import FormField from '@/Components/Forms/FormField';
 import TextareaField from '@/Components/Forms/TextareaField';
 import FormActions from '@/Components/Forms/FormActions';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
-import type { EncaissementRow, EncaissementsPageProps, InscriptionPaymentRow, PaymentLine, SelectOption, UnpaidFee } from '@/Types';
+import type { EncaissementRow, EncaissementsPageProps, InscriptionPaymentRow, PaymentLine, SelectOption, StudentChequeOption, UnpaidFee } from '@/Types';
 
 interface CreateFormState {
     student_id: number | '';
@@ -25,9 +25,6 @@ interface CreateFormState {
     date_paiement: string;
     note: string;
     payment_lines: PaymentLine[];
-    numero_cheque: string;
-    banque: string;
-    date_echeance_cheque: string;
 }
 
 interface EditFormState {
@@ -66,9 +63,6 @@ function emptyCreateForm(): CreateFormState {
         date_paiement: new Date().toISOString().slice(0, 10),
         note: '',
         payment_lines: [],
-        numero_cheque: '',
-        banque: '',
-        date_echeance_cheque: '',
     };
 }
 
@@ -85,10 +79,16 @@ function emptyAvanceForm(): AvanceFormState {
  * cascading student→inscription→fee-lines create form (one row per unpaid
  * fee, no till picker at all since the acting employee's own till is always
  * used server-side), same edit-mode freeze on montant/caisse/student/fee
- * (only méthode/date/chèque/note are live inputs). Every discount/remaining-
- * balance figure shown here is display-only — the server independently
- * recomputes and re-validates (including the per-row max:reste cap and the
- * fee->inscription_id ownership check) on save.
+ * (only méthode/date/chèque/note are live inputs on edit). Every discount/
+ * remaining-balance figure shown here is display-only — the server
+ * independently recomputes and re-validates (including the per-row
+ * max:reste cap and the fee->inscription_id ownership check) on save.
+ *
+ * A Chèque-method row on CREATE has no manual numéro/banque/échéance entry
+ * — it must reference one of the student's tracked chèques (Chèques
+ * module, /backoffice/cheques), picked from a dropdown that expands
+ * directly under that row; numéro/banque/échéance are always read off that
+ * Cheque record server-side (EncaissementController@store).
  */
 export default function EncaissementsIndex({ encaissements, caisses, students, methodes, banques, filters }: EncaissementsPageProps) {
     const isLoading = useInertiaLoading();
@@ -109,6 +109,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
     const [applyFeeOptions, setApplyFeeOptions] = useState<Array<SelectOption & { reste: string }>>([]);
     const [loadingApplyInscriptions, setLoadingApplyInscriptions] = useState(false);
     const [loadingApplyFees, setLoadingApplyFees] = useState(false);
+    const [studentCheques, setStudentCheques] = useState<StudentChequeOption[]>([]);
 
     const caisseOptions: SelectOption[] = caisses.map((c) => ({ value: c.id, label: c.nom }));
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.nom }));
@@ -137,6 +138,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
     function openCreate() {
         setEditingRow(null);
         setInscriptionOptions([]);
+        setStudentCheques([]);
         setFeeLinesPage(1);
         createForm.clearErrors();
         createForm.setData(emptyCreateForm());
@@ -309,8 +311,10 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
             student_id: studentId,
             inscription_id: '',
             payment_lines: [],
+            cheque_id: '',
         }));
         setInscriptionOptions([]);
+        setStudentCheques([]);
         setFeeLinesPage(1);
 
         if (studentId === '') {
@@ -324,6 +328,21 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
             setInscriptionOptions(data.inscriptions.map((i) => ({ value: i.id, label: i.label })));
         } finally {
             setLoadingInscriptions(false);
+        }
+
+        // Tracked chèques of this student still holding value (Chèques
+        // module) — the ONLY source for a Chèque-method row's numéro/
+        // banque/échéance; there is no manual entry fallback (Ajouter un
+        // chèque lives on its own page, /backoffice/cheques).
+        try {
+            const chequesResponse = await fetch(`/backoffice/students/${studentId}/cheques`, { headers: { Accept: 'application/json' } });
+            if (chequesResponse.ok) {
+                const chequesData: { cheques: StudentChequeOption[] } = await chequesResponse.json();
+                setStudentCheques(chequesData.cheques);
+            }
+        } catch {
+            // Network hiccup — the row's cheque dropdown just stays empty;
+            // the user can retry by reselecting the student.
         }
     }
 
@@ -350,6 +369,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                     montant: '',
                     methode: 'Espèces',
                     datePaiement: previous.date_paiement,
+                    chequeId: '',
                 })),
             }));
         } finally {
@@ -363,8 +383,6 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
             payment_lines: previous.payment_lines.map((line, i) => (i === index ? { ...line, ...patch } : line)),
         }));
     }
-
-    const anyLineIsCheque = createForm.data.payment_lines.some((l) => l.montant !== '' && l.methode === 'Chèque');
 
     function submitCreate(event: FormEvent) {
         event.preventDefault();
@@ -380,6 +398,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                 montant: line.montant,
                 methode: line.methode,
                 date_paiement: line.datePaiement,
+                cheque_id: line.methode === 'Chèque' ? line.chequeId : null,
             })),
         }));
         createForm.post('/backoffice/encaissements', {
@@ -425,12 +444,15 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                 )
             }
         >
-            {/* wimschool-style view tabs — server-side read-only filters on the same list. */}
+            {/* wimschool-style view tabs — server-side read-only filters on the same list, PLUS one real page link
+                (Chèques → the standalone Chèques module) sharing the same tab bar, same cross-link convention as
+                GROUPS_TABS (Groupes ↔ Historique). The old "Paiements par chèque" tab button was removed
+                (redundant now that the real Chèques module exists) — the view=cheque filter/columns it drove
+                are still reachable by URL (?view=cheque), just no longer exposed as a tab. */}
             <ul className="nav nav-tabs p-0 border-bottom rounded-0 mb-4" role="tablist">
                 {[
                     { view: '', label: 'Encaissements', icon: 'ti ti-cash-banknote' },
                     { view: 'avance', label: 'Avances', icon: 'ti ti-clock-dollar' },
-                    { view: 'cheque', label: 'Chèques', icon: 'ti ti-file-invoice' },
                 ].map((tab) => (
                     <li className="nav-item" key={tab.view} role="presentation">
                         <button
@@ -444,6 +466,12 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                         </button>
                     </li>
                 ))}
+                <li className="nav-item" role="presentation">
+                    <a href="/backoffice/cheques" className="nav-link d-inline-flex align-items-center">
+                        <i className="ti ti-building-bank me-2" aria-hidden="true" />
+                        Chèques
+                    </a>
+                </li>
             </ul>
 
             <Card title="Encaissements" bodyClassName="p-0 py-3">
@@ -764,49 +792,86 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                                 const rowErrors = createForm.errors as Record<string, string | undefined>;
                                                 const montantError = rowErrors[`payment_lines.${index}.montant`];
                                                 const dateError = rowErrors[`payment_lines.${index}.date_paiement`];
+                                                const chequeError = rowErrors[`payment_lines.${index}.cheque_id`];
+                                                const isCheque = line.methode === 'Chèque';
 
                                                 return (
-                                                    <tr key={line.feeId}>
-                                                        <td className="fw-medium">{line.nom}</td>
-                                                        <td>{line.dateEcheance ?? '—'}</td>
-                                                        <td className="text-end">{Number(line.montantInitial).toFixed(2)} DH</td>
-                                                        <td className="text-end">{Number(line.reste).toFixed(2)} DH</td>
-                                                        <td>
-                                                            <div className="input-group input-group-sm">
-                                                                <input
-                                                                    id={`pl-montant-${index}`}
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    min="0"
-                                                                    max={line.reste}
-                                                                    placeholder="0"
-                                                                    className={`form-control${montantError ? ' is-invalid' : ''}`}
-                                                                    value={line.montant}
-                                                                    onChange={(e) => setLine(index, { montant: e.target.value })}
-                                                                    aria-invalid={montantError ? true : undefined}
+                                                    <Fragment key={line.feeId}>
+                                                        <tr>
+                                                            <td className="fw-medium">{line.nom}</td>
+                                                            <td>{line.dateEcheance ?? '—'}</td>
+                                                            <td className="text-end">{Number(line.montantInitial).toFixed(2)} DH</td>
+                                                            <td className="text-end">{Number(line.reste).toFixed(2)} DH</td>
+                                                            <td>
+                                                                <div className="input-group input-group-sm">
+                                                                    <input
+                                                                        id={`pl-montant-${index}`}
+                                                                        type="number"
+                                                                        step="0.01"
+                                                                        min="0"
+                                                                        max={line.reste}
+                                                                        placeholder="0"
+                                                                        className={`form-control${montantError ? ' is-invalid' : ''}`}
+                                                                        value={line.montant}
+                                                                        onChange={(e) => setLine(index, { montant: e.target.value })}
+                                                                        aria-invalid={montantError ? true : undefined}
+                                                                    />
+                                                                    <span className="input-group-text">DH</span>
+                                                                </div>
+                                                                {montantError && <div className="text-danger fs-12 mt-1">{montantError}</div>}
+                                                            </td>
+                                                            <td>
+                                                                <SelectField
+                                                                    id={`pl-methode-${index}`}
+                                                                    options={methodeOptions}
+                                                                    value={line.methode}
+                                                                    onChange={(e) =>
+                                                                        setLine(index, {
+                                                                            methode: e.target.value,
+                                                                            chequeId: e.target.value === 'Chèque' ? line.chequeId : '',
+                                                                        })
+                                                                    }
                                                                 />
-                                                                <span className="input-group-text">DH</span>
-                                                            </div>
-                                                            {montantError && <div className="text-danger fs-12 mt-1">{montantError}</div>}
-                                                        </td>
-                                                        <td>
-                                                            <SelectField
-                                                                id={`pl-methode-${index}`}
-                                                                options={methodeOptions}
-                                                                value={line.methode}
-                                                                onChange={(e) => setLine(index, { methode: e.target.value })}
-                                                            />
-                                                        </td>
-                                                        <td>
-                                                            <DateField
-                                                                id={`pl-date-${index}`}
-                                                                value={line.datePaiement}
-                                                                onChange={(e) => setLine(index, { datePaiement: e.target.value })}
-                                                                error={dateError}
-                                                                panelAlign="right"
-                                                            />
-                                                        </td>
-                                                    </tr>
+                                                            </td>
+                                                            <td>
+                                                                <DateField
+                                                                    id={`pl-date-${index}`}
+                                                                    value={line.datePaiement}
+                                                                    onChange={(e) => setLine(index, { datePaiement: e.target.value })}
+                                                                    error={dateError}
+                                                                    panelAlign="right"
+                                                                />
+                                                            </td>
+                                                        </tr>
+                                                        {isCheque && (
+                                                            <tr>
+                                                                <td colSpan={7} className="bg-light-subtle">
+                                                                    <SelectField
+                                                                        id={`pl-cheque-${index}`}
+                                                                        label="Chèque enregistré"
+                                                                        required
+                                                                        options={studentCheques.map((c) => ({
+                                                                            value: c.id,
+                                                                            label: `${c.numeroCheque}${c.banque ? ` — ${c.banque}` : ''} (reste ${Number(c.reste).toFixed(2)} DH)`,
+                                                                        }))}
+                                                                        placeholder={
+                                                                            studentCheques.length === 0
+                                                                                ? "Aucun chèque enregistré pour cet étudiant — ajoutez-en un dans Chèques"
+                                                                                : 'Choisir un chèque'
+                                                                        }
+                                                                        disabled={studentCheques.length === 0}
+                                                                        value={line.chequeId}
+                                                                        onChange={(e) =>
+                                                                            setLine(index, {
+                                                                                chequeId: e.target.value ? Number(e.target.value) : '',
+                                                                            })
+                                                                        }
+                                                                        error={chequeError}
+                                                                    />
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                    </Fragment>
                                                 );
                                             })}
                                     </tbody>
@@ -823,43 +888,6 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                 <div className="text-danger small mb-3">{createForm.errors.payment_lines}</div>
                             )}
                         </>
-                    )}
-
-                    {anyLineIsCheque && (
-                        <div className="border-top pt-3 mt-2 row">
-                            <div className="col-md-4">
-                                <FormField
-                                    id="e-numero-cheque"
-                                    label="Numéro de chèque"
-                                    required
-                                    value={createForm.data.numero_cheque}
-                                    onChange={(e) => createForm.setData('numero_cheque', e.target.value)}
-                                    error={createForm.errors.numero_cheque}
-                                />
-                            </div>
-                            <div className="col-md-4">
-                                <FormField
-                                    id="e-banque"
-                                    label="Banque"
-                                    required
-                                    list="banques-suggestions"
-                                    value={createForm.data.banque}
-                                    onChange={(e) => createForm.setData('banque', e.target.value)}
-                                    error={createForm.errors.banque}
-                                    placeholder="ex : Attijariwafa Bank"
-                                />
-                            </div>
-                            <div className="col-md-4">
-                                <DateField
-                                    id="e-date-echeance-cheque"
-                                    label="Échéance du chèque"
-                                    required
-                                    value={createForm.data.date_echeance_cheque}
-                                    onChange={(e) => createForm.setData('date_echeance_cheque', e.target.value)}
-                                    error={createForm.errors.date_echeance_cheque}
-                                />
-                            </div>
-                        </div>
                     )}
 
                     {/*

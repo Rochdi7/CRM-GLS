@@ -10,6 +10,7 @@ use App\Http\Controllers\Backoffice\Auth\ResetPasswordController;
 use App\Http\Controllers\Backoffice\BanqueController;
 use App\Http\Controllers\Backoffice\CaisseController;
 use App\Http\Controllers\Backoffice\CaisseTransferController;
+use App\Http\Controllers\Backoffice\ChequeController;
 use App\Http\Controllers\Backoffice\ContextController;
 use App\Http\Controllers\Backoffice\CreneauController;
 use App\Http\Controllers\Backoffice\DashboardController;
@@ -326,6 +327,23 @@ Route::prefix('backoffice')
                 ->middleware('permission:payments.create')->name('avances.convert');
             Route::post('avances/{encaissement}/apply', [EncaissementController::class, 'applyAvance'])
                 ->middleware('permission:payments.create')->name('avances.apply');
+
+            // Chèques — off-ledger inventory of physical checks in hand
+            // (garantie / à déposer), tracked reception -> dépôt ->
+            // encaissé/rejeté. A Cheque row never moves money by itself;
+            // paying with one goes through the normal Encaissement flow
+            // (cheque_id link). ⚠ NEVER add a destroy route.
+            Route::get('cheques', [ChequeController::class, 'index'])
+                ->middleware('permission:cheques.view')->name('cheques.index');
+            Route::post('cheques', [ChequeController::class, 'store'])
+                ->middleware('permission:cheques.create')->name('cheques.store');
+            Route::put('cheques/{cheque}', [ChequeController::class, 'update'])
+                ->middleware('permission:cheques.update')->name('cheques.update');
+            Route::patch('cheques/{cheque}/statut', [ChequeController::class, 'updateStatut'])
+                ->middleware('permission:cheques.update')->name('cheques.update-statut');
+            // Feeds the "Payer avec un chèque" dropdown in the payment form.
+            Route::get('students/{student}/cheques', [ChequeController::class, 'studentCheques'])
+                ->name('students.cheques');
 
             // Gestion des dépenses — ONE Inertia page hosting dépenses +
             // remboursements as client-side React tabs (Types de dépenses

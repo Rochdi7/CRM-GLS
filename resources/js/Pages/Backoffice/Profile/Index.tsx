@@ -22,7 +22,6 @@ interface EmployeeSummary {
     email: string | null;
     date_naissance: string | null;
     date_embauche: string | null;
-    salaire: string | null;
     centre: string | null;
 }
 
@@ -143,10 +142,6 @@ export default function ProfileIndex({ user, employee, phonePays, telephone, wha
                                 <div className="d-flex justify-content-between mb-2">
                                     <span className="text-muted">Date d'embauche</span>
                                     <span className="fw-medium">{employee.date_embauche ?? '—'}</span>
-                                </div>
-                                <div className="d-flex justify-content-between mb-2">
-                                    <span className="text-muted">Salaire</span>
-                                    <span className="fw-medium">{employee.salaire ? `${employee.salaire} MAD` : '—'}</span>
                                 </div>
                                 <div className="d-flex justify-content-between">
                                     <span className="text-muted">Centre</span>

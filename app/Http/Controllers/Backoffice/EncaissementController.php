@@ -18,6 +18,7 @@ use App\Http\Requests\Backoffice\Encaissements\ConvertAvanceRequest;
 use App\Http\Requests\Backoffice\Encaissements\StoreAvanceRequest;
 use App\Http\Requests\Backoffice\Encaissements\StoreEncaissementRequest;
 use App\Http\Requests\Backoffice\Encaissements\UpdateEncaissementRequest;
+use App\Models\Cheque;
 use App\Models\Encaissement;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
@@ -153,7 +154,45 @@ final class EncaissementController extends Controller
 
         $touchedLines = collect($data['payment_lines'])->filter(fn ($l) => ($l['montant'] ?? '') !== '');
 
-        DB::transaction(function () use ($touchedLines, $data, $inscriptionId, $agent, $caisse, $action): void {
+        // Every Chèque-method row must reference a tracked chèque (Chèques
+        // module, no manual numéro/banque/échéance entry anymore) — numero/
+        // banque/échéance are always read off that Cheque row. Two rows can
+        // reference two different chèques, so cheques are loaded and their
+        // per-cheque totals validated up front, before anything is written.
+        $chequeIds = $touchedLines
+            ->filter(fn ($l) => $l['methode'] === Encaissement::METHODE_CHEQUE)
+            ->pluck('cheque_id')
+            ->unique();
+
+        $cheques = Cheque::query()->findOrFail($chequeIds->all())->keyBy('id');
+
+        foreach ($chequeIds as $chequeId) {
+            $cheque = $cheques[$chequeId];
+
+            if ($cheque->student_id !== (int) $data['student_id']) {
+                throw ValidationException::withMessages([
+                    'payment_lines' => __('This cheque does not belong to the selected student.'),
+                ]);
+            }
+
+            if ($cheque->statut === Cheque::STATUT_REJETE) {
+                throw ValidationException::withMessages([
+                    'payment_lines' => __('A rejected cheque cannot be used to pay.'),
+                ]);
+            }
+
+            $chequeTotal = (float) $touchedLines
+                ->filter(fn ($l) => $l['methode'] === Encaissement::METHODE_CHEQUE && (int) $l['cheque_id'] === $chequeId)
+                ->sum(fn ($l) => (float) $l['montant']);
+
+            if ($chequeTotal > $cheque->montantRestant()) {
+                throw ValidationException::withMessages([
+                    'payment_lines' => __("The amount cannot exceed the cheque's remaining balance."),
+                ]);
+            }
+        }
+
+        DB::transaction(function () use ($touchedLines, $data, $inscriptionId, $agent, $caisse, $action, $cheques): void {
             foreach ($touchedLines as $line) {
                 $fee = InscriptionFee::findOrFail($line['fee_id']);
 
@@ -167,16 +206,20 @@ final class EncaissementController extends Controller
                     ]);
                 }
 
+                $isCheque = $line['methode'] === Encaissement::METHODE_CHEQUE;
+                $cheque = $isCheque ? $cheques[(int) $line['cheque_id']] : null;
+
                 $action->handle([
                     'student_id' => $data['student_id'],
                     'inscription_fee_id' => $fee->id,
+                    'cheque_id' => $cheque?->id,
                     'montant' => $line['montant'],
                     'methode' => $line['methode'],
                     'date_paiement' => $line['date_paiement'],
                     'caisse_id' => $caisse->id,
-                    'numero_cheque' => $line['methode'] === Encaissement::METHODE_CHEQUE ? ($data['numero_cheque'] ?? null) : null,
-                    'banque' => $line['methode'] === Encaissement::METHODE_CHEQUE ? ($data['banque'] ?? null) : null,
-                    'date_echeance_cheque' => $line['methode'] === Encaissement::METHODE_CHEQUE ? ($data['date_echeance_cheque'] ?? null) : null,
+                    'numero_cheque' => $cheque?->numero_cheque,
+                    'banque' => $cheque?->banque,
+                    'date_echeance_cheque' => $cheque?->date_echeance?->toDateString(),
                     'note' => $data['note'] ?? null,
                 ], $agent);
             }

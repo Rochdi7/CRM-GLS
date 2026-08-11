@@ -1181,6 +1181,62 @@ export interface EncaissementsPageProps {
     [key: string]: unknown;
 }
 
+/** One row of the Chèques list — mirrors GetChequesList's ->through() mapping exactly. */
+export interface ChequeRow {
+    id: number;
+    reference: string;
+    source: string;
+    studentId: number | null;
+    proprietaire: string | null;
+    proprietaireNom: string | null;
+    telephone: string | null;
+    whatsapp: string | null;
+    numeroCheque: string;
+    montant: MoneyDisplay;
+    reste: MoneyDisplay;
+    banque: string | null;
+    dateReception: string | null;
+    type: string;
+    dateEcheance: string | null;
+    statut: string;
+    note: string;
+}
+
+export interface ChequesFilters {
+    numeroFilter: string;
+    proprietaireFilter: string;
+    banqueFilter: string;
+    typeFilter: string;
+    statutFilter: string;
+    dateEcheanceFrom: string;
+    dateEcheanceTo: string;
+    perPage: number;
+}
+
+export interface ChequesPageProps {
+    cheques: PaginatedData<ChequeRow>;
+    filters: ChequesFilters;
+    perPageOptions: number[];
+    sources: string[];
+    types: string[];
+    statuts: string[];
+    banques: string[];
+    students: FinanceOption[];
+    canCreate: boolean;
+    canUpdate: boolean;
+    [key: string]: unknown;
+}
+
+/** One chèque option in the payment form's "Payer avec un chèque" dropdown (ChequeController::studentCheques). */
+export interface StudentChequeOption {
+    id: number;
+    numeroCheque: string;
+    banque: string | null;
+    montant: MoneyDisplay;
+    reste: MoneyDisplay;
+    statut: string;
+}
+
 /** One "Frais disponible" line loaded from the selected inscription (GetInscriptionUnpaidFees). */
 export interface UnpaidFee {
     id: number;
@@ -1214,6 +1270,8 @@ export interface PaymentLine {
     montant: string;
     methode: string;
     datePaiement: string;
+    /** Tracked chèque (Chèques module) this row pays with, when methode = Chèque — required, no manual entry fallback. */
+    chequeId: number | '';
 }
 
 /** One row of the Depenses list — mirrors GetDepensesList's ->through() mapping exactly. */

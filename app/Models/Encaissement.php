@@ -47,7 +47,7 @@ class Encaissement extends Model
     ];
 
     protected $fillable = [
-        'reference', 'student_id', 'inscription_fee_id', 'applied_from_encaissement_id', 'montant', 'methode',
+        'reference', 'student_id', 'inscription_fee_id', 'applied_from_encaissement_id', 'cheque_id', 'montant', 'methode',
         'date_paiement', 'caisse_id', 'agent_id',
         'numero_cheque', 'banque', 'date_echeance_cheque', 'note',
     ];
@@ -83,6 +83,12 @@ class Encaissement extends Model
     public function appliedFrom(): BelongsTo
     {
         return $this->belongsTo(self::class, 'applied_from_encaissement_id');
+    }
+
+    /** The tracked chèque this payment was made with (Cheques module), when any. */
+    public function cheque(): BelongsTo
+    {
+        return $this->belongsTo(Cheque::class);
     }
 
     /** Rows that have applied THIS avance to a fee — sum('montant') is the avance's used amount. */

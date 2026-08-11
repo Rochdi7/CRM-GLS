@@ -59,6 +59,8 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
                 ->where('canViewTransfers', true)
                 ->has('transfers')
                 ->has('transferCaisses')
+                // The transfer modal's fixed source — the viewer's own till.
+                ->has('myCaisse')
             );
     }
 
@@ -79,11 +81,13 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
         $receiverCaisse->update(['solde' => 500]);
 
         $this->actingAs($sender);
+        // No caisse_source_id in the payload — the source is always the
+        // sender's own till, derived server-side.
         $this->post(route('backoffice.caisse-transfers.store'), [
-            'caisse_source_id' => $senderCaisse->id,
             'caisse_destination_id' => $receiverCaisse->id,
             'montant' => '300',
         ]);
+        $this->assertSame($senderCaisse->id, CaisseTransfer::first()->caisse_source_id);
 
         // The sender sees it as an outgoing "Transfert".
         $senderResponse = $this->get(route('backoffice.caisses.index', ['tab' => 'transferts']))
@@ -108,11 +112,11 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
     {
         $user = $this->userWith('cash-transfers.view', 'cash-transfers.create');
         $this->actingAs($user);
-        $source = $this->caisse(1000);
+        $source = $user->employee->caisses()->first();
+        $source->update(['solde' => 1000]);
         $destination = $this->caisse(500);
 
         $this->post(route('backoffice.caisse-transfers.store'), [
-            'caisse_source_id' => $source->id,
             'caisse_destination_id' => $destination->id,
             'montant' => '300',
             'note' => 'Réapprovisionnement',
@@ -128,28 +132,51 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
         $this->assertNull($transfer->solde_source_apres);
     }
 
-    public function test_same_caisse_source_and_destination_is_rejected(): void
+    public function test_transferring_to_your_own_till_is_rejected(): void
     {
         $user = $this->userWith('cash-transfers.view', 'cash-transfers.create');
         $this->actingAs($user);
-        $caisse = $this->caisse();
+        $ownCaisse = $user->employee->caisses()->first();
 
         $this->post(route('backoffice.caisse-transfers.store'), [
-            'caisse_source_id' => $caisse->id,
-            'caisse_destination_id' => $caisse->id,
+            'caisse_destination_id' => $ownCaisse->id,
             'montant' => '100',
         ])->assertSessionHasErrors('caisse_destination_id');
+
+        $this->assertSame(0, CaisseTransfer::count());
+    }
+
+    /**
+     * The source till can never be chosen client-side — a tampered
+     * caisse_source_id in the payload is simply ignored and the requester's
+     * OWN till is used, for every role including super-admin.
+     */
+    public function test_a_tampered_caisse_source_id_is_ignored(): void
+    {
+        $user = $this->userWith('cash-transfers.view', 'cash-transfers.create');
+        $this->actingAs($user);
+        $ownCaisse = $user->employee->caisses()->first();
+        $foreignCaisse = $this->caisse(9999);
+        $destination = $this->caisse(500);
+
+        $this->post(route('backoffice.caisse-transfers.store'), [
+            'caisse_source_id' => $foreignCaisse->id,
+            'caisse_destination_id' => $destination->id,
+            'montant' => '100',
+        ])->assertRedirect();
+
+        $this->assertSame($ownCaisse->id, CaisseTransfer::first()->caisse_source_id);
     }
 
     public function test_validation_by_a_different_employee_moves_both_balances(): void
     {
         $requester = $this->userWith('cash-transfers.view', 'cash-transfers.create');
         $this->actingAs($requester);
-        $source = $this->caisse(1000);
+        $source = $requester->employee->caisses()->first();
+        $source->update(['solde' => 1000]);
         $destination = $this->caisse(500);
 
         $this->post(route('backoffice.caisse-transfers.store'), [
-            'caisse_source_id' => $source->id,
             'caisse_destination_id' => $destination->id,
             'montant' => '300',
         ]);
@@ -174,11 +201,11 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
     {
         $user = $this->userWith('cash-transfers.view', 'cash-transfers.create', 'cash-transfers.validate');
         $this->actingAs($user);
-        $source = $this->caisse(1000);
+        $source = $user->employee->caisses()->first();
+        $source->update(['solde' => 1000]);
         $destination = $this->caisse(500);
 
         $this->post(route('backoffice.caisse-transfers.store'), [
-            'caisse_source_id' => $source->id,
             'caisse_destination_id' => $destination->id,
             'montant' => '300',
         ]);
@@ -198,10 +225,9 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
     {
         $requester = $this->userWith('cash-transfers.view', 'cash-transfers.create');
         $this->actingAs($requester);
-        $source = $this->caisse(1000);
         $destination = $this->caisse(500);
         $this->post(route('backoffice.caisse-transfers.store'), [
-            'caisse_source_id' => $source->id, 'caisse_destination_id' => $destination->id, 'montant' => '100',
+            'caisse_destination_id' => $destination->id, 'montant' => '100',
         ]);
         $transfer = CaisseTransfer::first();
 
@@ -214,10 +240,11 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
     {
         $requester = $this->userWith('cash-transfers.view', 'cash-transfers.create');
         $this->actingAs($requester);
-        $source = $this->caisse(1000);
+        $source = $requester->employee->caisses()->first();
+        $source->update(['solde' => 1000]);
         $destination = $this->caisse(500);
         $this->post(route('backoffice.caisse-transfers.store'), [
-            'caisse_source_id' => $source->id, 'caisse_destination_id' => $destination->id, 'montant' => '300',
+            'caisse_destination_id' => $destination->id, 'montant' => '300',
         ]);
         $transfer = CaisseTransfer::first();
 
@@ -237,10 +264,11 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
     {
         $user = $this->userWith('cash-transfers.view', 'cash-transfers.create', 'cash-transfers.update');
         $this->actingAs($user);
-        $source = $this->caisse(1000);
+        $source = $user->employee->caisses()->first();
+        $source->update(['solde' => 1000]);
         $destination = $this->caisse(500);
         $this->post(route('backoffice.caisse-transfers.store'), [
-            'caisse_source_id' => $source->id, 'caisse_destination_id' => $destination->id, 'montant' => '300', 'note' => 'Initial',
+            'caisse_destination_id' => $destination->id, 'montant' => '300', 'note' => 'Initial',
         ]);
         $transfer = CaisseTransfer::first();
         $otherCaisse = $this->caisse(200);
@@ -262,10 +290,9 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
     {
         $requester = $this->userWith('cash-transfers.view', 'cash-transfers.create', 'cash-transfers.update');
         $this->actingAs($requester);
-        $source = $this->caisse(1000);
         $destination = $this->caisse(500);
         $this->post(route('backoffice.caisse-transfers.store'), [
-            'caisse_source_id' => $source->id, 'caisse_destination_id' => $destination->id, 'montant' => '300',
+            'caisse_destination_id' => $destination->id, 'montant' => '300',
         ]);
         $transfer = CaisseTransfer::first();
 
@@ -284,10 +311,11 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
     {
         $user = $this->userWith('cash-transfers.view', 'cash-transfers.create', 'cash-transfers.update');
         $this->actingAs($user);
-        $source = $this->caisse(1000);
+        $source = $user->employee->caisses()->first();
+        $source->update(['solde' => 1000]);
         $destination = $this->caisse(500);
         $this->post(route('backoffice.caisse-transfers.store'), [
-            'caisse_source_id' => $source->id, 'caisse_destination_id' => $destination->id, 'montant' => '300',
+            'caisse_destination_id' => $destination->id, 'montant' => '300',
         ]);
         $transfer = CaisseTransfer::first();
 
@@ -307,11 +335,10 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
         $user = User::factory()->create();
         $user->givePermissionTo('cash-transfers.view', 'cash-transfers.create', 'centers.access-all');
         $this->actingAs($user->fresh());
-        $source = $this->caisse(1000);
         $destination = $this->caisse(500);
 
         $this->post(route('backoffice.caisse-transfers.store'), [
-            'caisse_source_id' => $source->id, 'caisse_destination_id' => $destination->id, 'montant' => '300',
+            'caisse_destination_id' => $destination->id, 'montant' => '300',
         ])->assertSessionHasErrors('caisse_source_id');
 
         $this->assertSame(0, CaisseTransfer::count());
@@ -327,10 +354,9 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
         $otherCentre = Etablissement::factory()->create();
         $requester = $this->userWith('cash-transfers.view', 'cash-transfers.create');
         $this->actingAs($requester);
-        $source = $this->caisse(1000);
         $destination = $this->caisse(500);
         $this->post(route('backoffice.caisse-transfers.store'), [
-            'caisse_source_id' => $source->id, 'caisse_destination_id' => $destination->id, 'montant' => '300',
+            'caisse_destination_id' => $destination->id, 'montant' => '300',
         ]);
         $transfer = CaisseTransfer::first();
 

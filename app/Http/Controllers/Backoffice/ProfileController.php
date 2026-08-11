@@ -49,7 +49,6 @@ final class ProfileController
                 'email' => $user->employee->email,
                 'date_naissance' => $user->employee->date_naissance?->format('d/m/Y'),
                 'date_embauche' => $user->employee->date_embauche?->format('d/m/Y'),
-                'salaire' => $user->employee->salaire !== null ? number_format((float) $user->employee->salaire, 2) : null,
                 'centre' => $user->employee->etablissement?->nom_centre,
             ],
             'phonePays' => $phonePays,

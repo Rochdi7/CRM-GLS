@@ -23,6 +23,11 @@ use Illuminate\Validation\Rule;
  * rule since it depends on which fee each row targets — enforced via the
  * closure rule below, exactly mirroring the Livewire component's own
  * dynamic `max:reste` rule per touched row.
+ *
+ * A row paying by Chèque MUST reference an existing tracked Cheque
+ * (Chèques module) via `payment_lines.*.cheque_id` — there is no manual
+ * numéro/banque/échéance entry anymore; that data always comes from the
+ * Cheque row (EncaissementController@store).
  */
 final class StoreEncaissementRequest extends FormRequest
 {
@@ -37,7 +42,6 @@ final class StoreEncaissementRequest extends FormRequest
     public function rules(): array
     {
         $lines = $this->input('payment_lines', []);
-        $anyCheque = collect($lines)->contains(fn ($l) => ($l['methode'] ?? null) === Encaissement::METHODE_CHEQUE);
 
         $rules = [
             'student_id' => ['required', 'exists:students,id'],
@@ -55,12 +59,6 @@ final class StoreEncaissementRequest extends FormRequest
                 }
             }],
             'payment_lines.*.fee_id' => ['required', 'exists:inscription_fees,id'],
-            'numero_cheque' => ['nullable', $anyCheque ? 'required' : 'nullable', 'string', 'max:50'],
-            // Free text — the Banques catalog (Paramètres → Banques) only
-            // feeds the form's autocomplete suggestions, never a hard
-            // constraint on what can be typed.
-            'banque' => ['nullable', $anyCheque ? 'required' : 'nullable', 'string', 'max:100'],
-            'date_echeance_cheque' => ['nullable', $anyCheque ? 'required' : 'nullable', 'date'],
         ];
 
         foreach ($lines as $i => $line) {
@@ -70,10 +68,12 @@ final class StoreEncaissementRequest extends FormRequest
 
             $fee = InscriptionFee::find($line['fee_id'] ?? null);
             $reste = $fee ? round(max(0, (float) $fee->montant - $fee->montantPaye()), 2) : 0;
+            $isCheque = ($line['methode'] ?? null) === Encaissement::METHODE_CHEQUE;
 
             $rules["payment_lines.{$i}.montant"] = ['required', 'numeric', 'min:0.01', "max:{$reste}"];
             $rules["payment_lines.{$i}.methode"] = ['required', Rule::in(Encaissement::METHODES)];
             $rules["payment_lines.{$i}.date_paiement"] = ['required', 'date'];
+            $rules["payment_lines.{$i}.cheque_id"] = [$isCheque ? 'required' : 'nullable', 'exists:cheques,id'];
         }
 
         return $rules;
@@ -83,6 +83,7 @@ final class StoreEncaissementRequest extends FormRequest
     {
         return [
             'payment_lines.*.montant.max' => __('The amount cannot exceed the remaining balance of this fee.'),
+            'payment_lines.*.cheque_id.required' => __('Select a recorded cheque to pay with.'),
         ];
     }
 }

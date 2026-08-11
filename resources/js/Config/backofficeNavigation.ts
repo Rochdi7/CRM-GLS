@@ -101,8 +101,15 @@ export const backofficeNavigation: NavGroup[] = [
                 label: t('Payments'),
                 href: '/backoffice/encaissements',
                 icon: 'ti ti-cash-banknote',
+                // Chèques (physical-check inventory) has no sidebar entry of
+                // its own — reachable via this page's PageTabs cross-link,
+                // same "stays out of the sidebar" convention as Types de
+                // dépenses below. matchPaths (not permissions) is what
+                // decides the active-state highlight when actually on the
+                // Chèques page — visibility itself still requires
+                // payments.view, since that's the page this link opens.
                 permissions: ['payments.view'],
-                matchPaths: ['/backoffice/encaissements'],
+                matchPaths: ['/backoffice/encaissements', '/backoffice/cheques'],
                 inertia: true,
             },
             {
@@ -121,8 +128,8 @@ export const backofficeNavigation: NavGroup[] = [
                 matchPaths: ['/backoffice/depenses', '/backoffice/remboursements'],
                 inertia: true,
             },
-            // Types de dépenses stays out of the sidebar — reachable via the
-            // finance PageTabs (product decision).
+            // Chèques and Types de dépenses stay out of the sidebar —
+            // reachable via each other's finance PageTabs (product decision).
         ],
     },
     {
