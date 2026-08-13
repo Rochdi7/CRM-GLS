@@ -20,9 +20,16 @@ return new class extends Migration
             $table->foreignId('group_id')->constrained('groups')->cascadeOnDelete();
             $table->foreignId('frais_id')->constrained('frais')->cascadeOnDelete();
             $table->decimal('montant', 10, 2); // amount for this group
+            // Per-group due date: different groups can bill the same catalog
+            // fee with different échéances.
+            $table->date('date_echeance')->nullable();
+            // Per-group classification (e.g. CEFR niveau) — plain VARCHAR
+            // validated against Group::NIVEAUX (schema §5, no lookup table).
+            $table->string('classification', 10)->nullable();
             $table->timestamps();
 
             $table->unique(['group_id', 'frais_id']);
+            $table->index('frais_id', 'group_frais_frais_id_idx');
         });
     }
 

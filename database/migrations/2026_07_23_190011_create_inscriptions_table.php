@@ -26,6 +26,12 @@ return new class extends Migration
             $table->text('note')->nullable();
             $table->foreignId('created_by')->nullable()->constrained('employees')->nullOnDelete();
             $table->timestamps();
+
+            $table->index(['annee_scolaire_id', 'statut'], 'inscriptions_annee_statut_idx');
+            $table->index('student_id', 'inscriptions_student_id_idx');
+            $table->index('group_id', 'inscriptions_group_id_idx');
+            $table->index('etablissement_id', 'inscriptions_etablissement_id_idx');
+            $table->index('created_by', 'inscriptions_created_by_idx');
         });
     }
 

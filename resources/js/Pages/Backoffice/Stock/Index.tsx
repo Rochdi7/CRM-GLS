@@ -1,4 +1,4 @@
-import { router, useForm } from '@inertiajs/react';
+import { Link, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
@@ -25,13 +25,18 @@ import type {
     StockMouvementRow,
 } from '@/Types';
 
+interface StockTypeOption {
+    id: number;
+    nom: string;
+}
+
 interface StockIndexProps {
     tab: 'articles' | 'mouvements';
     articles: PaginatedData<StockArticleRow>;
     mouvements: PaginatedData<StockMouvementRow>;
     filters: {
         search: string;
-        categorieFilter: string;
+        stockTypeFilter: string;
         statutFilter: string;
         alerteFilter: string;
         articleFilter: string;
@@ -42,7 +47,7 @@ interface StockIndexProps {
     };
     perPageOptions: number[];
     articleOptions: SelectOption[];
-    categories: string[];
+    stockTypes: StockTypeOption[];
     statuts: string[];
     mouvementTypes: string[];
     permissions: { create: boolean; update: boolean; delete: boolean; move: boolean };
@@ -50,7 +55,7 @@ interface StockIndexProps {
 
 const EMPTY_ARTICLE_FORM: StockArticleForm = {
     nom: '',
-    categorie: '',
+    stock_type_id: '',
     seuil_alerte: '',
     statut: 'Actif',
     note: '',
@@ -81,7 +86,7 @@ export default function StockIndex({
     filters,
     perPageOptions,
     articleOptions,
-    categories,
+    stockTypes,
     statuts,
     mouvementTypes,
     permissions,
@@ -122,7 +127,7 @@ export default function StockIndex({
     function openEditArticle(row: StockArticleRow) {
         articleForm.setData({
             nom: row.nom,
-            categorie: row.categorie,
+            stock_type_id: row.stockTypeId,
             seuil_alerte: row.seuilAlerte !== null ? String(row.seuilAlerte) : '',
             statut: row.statut,
             note: row.note ?? '',
@@ -207,6 +212,12 @@ export default function StockIndex({
             ]}
             actions={
                 <div className="d-flex gap-2">
+                    {permissions.create && (
+                        <Link href="/backoffice/stock-types" className="btn btn-outline-secondary d-flex align-items-center">
+                            <i className="ti ti-category me-2" />
+                            Types de stock
+                        </Link>
+                    )}
                     {permissions.move && (
                         <button
                             type="button"
@@ -257,15 +268,15 @@ export default function StockIndex({
                     <div className="px-3 pt-2">
                         <TableToolbar>
                             <div style={{ width: 200 }}>
-                                <label className="form-label" htmlFor="stk-f-categorie">
-                                    Catégorie
+                                <label className="form-label" htmlFor="stk-f-type">
+                                    Type
                                 </label>
                                 <SelectField
-                                    id="stk-f-categorie"
-                                    options={categories.map((categorie) => ({ value: categorie, label: categorie }))}
-                                    placeholder="Toutes les catégories"
-                                    value={filters.categorieFilter}
-                                    onChange={(event) => reload({ categorieFilter: event.target.value })}
+                                    id="stk-f-type"
+                                    options={stockTypes.map((type) => ({ value: type.id, label: type.nom }))}
+                                    placeholder="Tous les types"
+                                    value={filters.stockTypeFilter}
+                                    onChange={(event) => reload({ stockTypeFilter: event.target.value })}
                                 />
                             </div>
                             <div style={{ width: 180 }}>
@@ -328,7 +339,7 @@ export default function StockIndex({
                             <tr key={row.id}>
                                 <td className="text-muted">{row.reference}</td>
                                 <td className="fw-medium">{row.nom}</td>
-                                <td>{row.categorie}</td>
+                                <td>{row.stockType ?? '—'}</td>
                                 <td>
                                     <span className={`badge badge-soft-${row.enAlerte ? 'danger' : 'success'}`}>
                                         {row.quantite}
@@ -494,14 +505,14 @@ export default function StockIndex({
                         </div>
                         <div className="col-md-6">
                             <SelectField
-                                id="stock-categorie"
-                                label="Catégorie"
+                                id="stock-type"
+                                label="Type"
                                 required
-                                options={categories.map((categorie) => ({ value: categorie, label: categorie }))}
-                                placeholder="Sélectionner une catégorie"
-                                value={articleForm.data.categorie}
-                                onChange={(event) => articleForm.setData('categorie', event.target.value)}
-                                error={articleForm.errors.categorie}
+                                options={stockTypes.map((type) => ({ value: type.id, label: type.nom }))}
+                                placeholder="Sélectionner un type"
+                                value={articleForm.data.stock_type_id}
+                                onChange={(event) => articleForm.setData('stock_type_id', Number(event.target.value))}
+                                error={articleForm.errors.stock_type_id}
                             />
                         </div>
                         <div className="col-md-6">

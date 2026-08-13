@@ -46,22 +46,10 @@ return new class extends Migration
             $table->index('student_id');
             $table->index(['statut', 'date_echeance']);
         });
-
-        // Payments made using a tracked chèque link back to it — the sum of
-        // these rows' montant is the chèque's used amount ("Reste" = montant
-        // minus this sum), mirroring the avance applications() pattern.
-        Schema::table('encaissements', function (Blueprint $table): void {
-            $table->foreignId('cheque_id')->nullable()->after('applied_from_encaissement_id')
-                ->constrained('cheques')->restrictOnDelete();
-            $table->index('cheque_id');
-        });
     }
 
     public function down(): void
     {
-        Schema::table('encaissements', function (Blueprint $table): void {
-            $table->dropConstrainedForeignId('cheque_id');
-        });
         Schema::dropIfExists('cheques');
     }
 };

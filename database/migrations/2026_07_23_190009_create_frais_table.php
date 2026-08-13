@@ -19,7 +19,6 @@ return new class extends Migration
         Schema::create('frais', function (Blueprint $table): void {
             $table->id();
             $table->string('nom', 150);
-            $table->decimal('montant_defaut', 10, 2)->nullable(); // suggested amount
             $table->string('statut', 20)->default('Actif');
             $table->timestamps();
         });

@@ -15,6 +15,8 @@ return new class extends Migration
             $table->id();
             $table->string('nom_centre', 150);
             $table->string('ville', 100);
+            $table->string('adresse', 255)->nullable();
+            $table->string('ice', 30)->nullable(); // Identifiant Commun de l'Entreprise
             $table->string('telephone', 20)->nullable();
             $table->string('email', 255)->nullable();
             $table->boolean('siege_social')->default(false);

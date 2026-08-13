@@ -93,6 +93,12 @@ class Inscription extends Model
         return $this->hasMany(InscriptionFee::class);
     }
 
+    /** Books (StockArticle rows) assigned to this registration — see AssignerLivresInscription. */
+    public function livres(): HasMany
+    {
+        return $this->hasMany(InscriptionLivre::class);
+    }
+
     /** Set only when this inscription was archived via a group change. */
     public function historique(): HasOne
     {

@@ -452,7 +452,8 @@ export interface StockArticleRow {
     id: number;
     reference: string;
     nom: string;
-    categorie: string;
+    stockTypeId: number;
+    stockType: string | null;
     quantite: number;
     seuilAlerte: number | null;
     enAlerte: boolean;
@@ -464,11 +465,11 @@ export interface StockArticleRow {
 
 export interface StockArticleForm {
     nom: string;
-    categorie: string;
+    stock_type_id: number | '';
     seuil_alerte: string;
     statut: string;
     note: string;
-    [key: string]: string;
+    [key: string]: string | number;
 }
 
 export interface StockMouvementRow {
@@ -598,6 +599,19 @@ export interface TypeDepenseRow {
 }
 
 export interface TypeDepenseForm {
+    nom: string;
+    statut: string;
+}
+
+export interface StockTypeRow {
+    id: number;
+    nom: string;
+    statut: string;
+    isSystem: boolean;
+    articlesCount: number;
+}
+
+export interface StockTypeForm {
     nom: string;
     statut: string;
 }
@@ -1118,7 +1132,7 @@ export interface CaissesPageProps {
     currentEmployeeId: number | null;
     /** The acting employee's OWN till — the transfer modal's fixed, read-only source (null when the account has no employee/till). */
     myCaisse: CaisseTransferFormOption | null;
-    transferFilters: { search: string; statutFilter: string; caisseFilter: string };
+    transferFilters: { search: string; statutFilter: string; typeFilter: string };
     [key: string]: unknown;
 }
 

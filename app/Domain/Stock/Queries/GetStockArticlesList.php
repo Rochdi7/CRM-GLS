@@ -28,7 +28,7 @@ final class GetStockArticlesList
     ) {}
 
     /**
-     * @param  array{search?: string, categorieFilter?: string, statutFilter?: string, alerteFilter?: string}  $filters
+     * @param  array{search?: string, stockTypeFilter?: string, statutFilter?: string, alerteFilter?: string}  $filters
      */
     public function __invoke(User $user, array $filters = [], int $perPage = self::DEFAULT_PER_PAGE): LengthAwarePaginator
     {
@@ -37,16 +37,16 @@ final class GetStockArticlesList
         }
 
         $search = $filters['search'] ?? '';
-        $categorieFilter = $filters['categorieFilter'] ?? '';
+        $stockTypeFilter = $filters['stockTypeFilter'] ?? '';
         $statutFilter = $filters['statutFilter'] ?? '';
         $alerteFilter = $filters['alerteFilter'] ?? '';
 
         $articles = StockArticle::query()
-            ->with('etablissement:id,nom_centre')
+            ->with(['etablissement:id,nom_centre', 'stockType:id,nom'])
             ->withCount('mouvements')
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
-            ->when($categorieFilter !== '', fn ($q) => $q->where('categorie', $categorieFilter))
+            ->when($stockTypeFilter !== '', fn ($q) => $q->where('stock_type_id', (int) $stockTypeFilter))
             ->when($statutFilter !== '', fn ($q) => $q->where('statut', $statutFilter))
             ->when($alerteFilter === '1', fn ($q) => $q
                 ->whereNotNull('seuil_alerte')
@@ -62,7 +62,8 @@ final class GetStockArticlesList
             'id' => $article->id,
             'reference' => $article->reference,
             'nom' => $article->nom,
-            'categorie' => $article->categorie,
+            'stockTypeId' => $article->stock_type_id,
+            'stockType' => $article->stockType?->nom,
             'quantite' => $article->quantite,
             'seuilAlerte' => $article->seuil_alerte,
             'enAlerte' => $article->enAlerte(),

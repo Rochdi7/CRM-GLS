@@ -155,6 +155,12 @@ final class PermissionRegistry
                 'stock.delete' => 'Supprimer un article de stock',
                 'stock.move' => 'Enregistrer un mouvement de stock',
             ],
+            'Types de stock' => [
+                'stock-types.view' => 'Consulter les types de stock',
+                'stock-types.create' => 'Créer un type de stock',
+                'stock-types.update' => 'Modifier un type de stock',
+                'stock-types.delete' => 'Supprimer un type de stock',
+            ],
             'Journal d\'audit' => [
                 'audit-logs.view' => 'Consulter le journal d\'audit',
             ],
@@ -240,6 +246,7 @@ final class PermissionRegistry
                 'cheques.view', 'cheques.create', 'cheques.update',
                 'cash-transfers.view', 'cash-transfers.create', 'cash-transfers.update', 'cash-transfers.validate',
                 'stock.view', 'stock.create', 'stock.update', 'stock.delete', 'stock.move',
+                'stock-types.view', 'stock-types.create', 'stock-types.update', 'stock-types.delete',
                 'audit-logs.view',
             ],
 
@@ -263,6 +270,7 @@ final class PermissionRegistry
                 'cheques.view',
                 'cash-transfers.view',
                 'stock.view', 'stock.create', 'stock.update', 'stock.delete', 'stock.move',
+                'stock-types.view', 'stock-types.create', 'stock-types.update', 'stock-types.delete',
             ],
 
             // Center-scoped day-to-day operator: records payments/expenses and
@@ -273,19 +281,20 @@ final class PermissionRegistry
                 'centers.view',
                 'academic-years.view',
                 'rooms.view',
-                'students.view', 'students.create', 'students.update',
-                'registrations.view', 'registrations.create', 'registrations.update', 'registrations.manage-fees',
-                'registrations.change-group',
+                'students.view', 'students.create', 'students.update', 'students.delete',
+                'registrations.view', 'registrations.create', 'registrations.update', 'registrations.delete',
+                'registrations.manage-fees', 'registrations.change-group',
                 'groups.view', 'groups.create', 'groups.update',
                 'attendance.view', 'attendance.create', 'attendance.mark',
                 'cash-registers.view',
-                'payments.view', 'payments.create',
+                'payments.view', 'payments.create', 'payments.update',
                 'expense-types.view',
                 'expenses.view', 'expenses.create',
                 'refunds.view', 'refunds.create',
                 'cheques.view', 'cheques.create',
                 'cash-transfers.view', 'cash-transfers.create',
                 'stock.view', 'stock.move',
+                'stock-types.view',
             ],
 
             // Academic scope only — no financial data.

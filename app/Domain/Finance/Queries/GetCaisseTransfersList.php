@@ -32,11 +32,15 @@ final class GetCaisseTransfersList
         private readonly CurrentContext $context,
     ) {}
 
+    public const TYPE_ENVOYE = 'envoye';
+
+    public const TYPE_RECU = 'recu';
+
     public function __invoke(
         User $user,
         string $search = '',
         string $statutFilter = CaisseTransfer::STATUT_EN_ATTENTE,
-        string $caisseFilter = '',
+        string $typeFilter = '',
         int $perPage = self::DEFAULT_PER_PAGE,
     ): LengthAwarePaginator {
         $myCaisseIds = $user->employee?->caisses()->pluck('id')->all() ?? [];
@@ -54,10 +58,12 @@ final class GetCaisseTransfersList
             })
             ->when($statutFilter !== '', fn ($q) => $q->where('statut', $statutFilter))
             ->when(
-                $caisseFilter !== '',
-                fn ($q) => $q->where(fn ($sub) => $sub
-                    ->where('caisse_source_id', (int) $caisseFilter)
-                    ->orWhere('caisse_destination_id', (int) $caisseFilter)),
+                $typeFilter === self::TYPE_ENVOYE,
+                fn ($q) => $q->whereIn('caisse_source_id', $myCaisseIds),
+            )
+            ->when(
+                $typeFilter === self::TYPE_RECU,
+                fn ($q) => $q->whereIn('caisse_destination_id', $myCaisseIds),
             )
             ->when($search !== '', function ($q) use ($search): void {
                 $term = "%{$search}%";

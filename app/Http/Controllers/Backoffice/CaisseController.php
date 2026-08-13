@@ -55,7 +55,7 @@ final class CaisseController extends Controller
 
         $search = (string) $request->string('search');
         $statutFilter = (string) $request->string('statutFilter');
-        $caisseFilter = (string) $request->string('caisseFilter');
+        $typeFilter = (string) $request->string('typeFilter');
 
         // The transfer modal's fixed source: the acting employee's OWN till
         // (even super-admins transfer from their own till — the source is
@@ -74,7 +74,7 @@ final class CaisseController extends Controller
                 ? $getCaisseJournal($user, 'mine', '', '', '', 1)
                 : null,
             'transfers' => $canViewTransfers && $tab === 'transferts'
-                ? $getCaisseTransfersList($user, $search, $statutFilter, $caisseFilter)
+                ? $getCaisseTransfersList($user, $search, $statutFilter, $typeFilter)
                 : null,
             'transferStatutCounts' => $canViewTransfers && $tab === 'transferts'
                 ? $getCaisseTransfersList->statutCounts($user)
@@ -87,7 +87,7 @@ final class CaisseController extends Controller
             'transferFilters' => [
                 'search' => $search,
                 'statutFilter' => $statutFilter,
-                'caisseFilter' => $caisseFilter,
+                'typeFilter' => $typeFilter,
             ],
         ]);
     }

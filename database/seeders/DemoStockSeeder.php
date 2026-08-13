@@ -9,6 +9,7 @@ use App\Models\Employee;
 use App\Models\Etablissement;
 use App\Models\StockArticle;
 use App\Models\StockMouvement;
+use App\Models\StockType;
 use Illuminate\Database\Seeder;
 
 /**
@@ -29,15 +30,16 @@ final class DemoStockSeeder extends Seeder
 
         $centres = Etablissement::query()->orderBy('id')->pluck('id')->all();
         $agentId = Employee::query()->orderBy('id')->value('id');
+        $typeIds = StockType::query()->pluck('id', 'nom');
 
-        // [nom, catégorie, quantité finale, seuil, mouvements [type, qté]]
+        // [nom, nom du type de stock, quantité finale, seuil, mouvements [type, qté]]
         $articles = [
             ['Ramettes papier A4', 'Fournitures de bureau', 42, 20, [['Entrée', 50], ['Sortie', 8]]],
             ['Stylos bleus (boîte de 50)', 'Fournitures de bureau', 6, 10, [['Entrée', 12], ['Sortie', 6]]],
             ['Marqueurs tableau blanc', 'Fournitures de bureau', 18, 15, [['Entrée', 24], ['Sortie', 6]]],
-            ['Manuel Menschen A1.1', 'Livres et manuels', 35, 15, [['Entrée', 40], ['Sortie', 5]]],
-            ['Manuel Menschen A2.1', 'Livres et manuels', 8, 12, [['Entrée', 30], ['Sortie', 22]]],
-            ['Manuel Sicher! B1.1', 'Livres et manuels', 22, 10, [['Entrée', 25], ['Sortie', 3]]],
+            ['Manuel Menschen A1.1', StockType::SYSTEM_LIVRE, 35, 15, [['Entrée', 40], ['Sortie', 5]]],
+            ['Manuel Menschen A2.1', StockType::SYSTEM_LIVRE, 8, 12, [['Entrée', 30], ['Sortie', 22]]],
+            ['Manuel Sicher! B1.1', StockType::SYSTEM_LIVRE, 22, 10, [['Entrée', 25], ['Sortie', 3]]],
             ['Cahiers d\'exercices B2', 'Matériel pédagogique', 14, 8, [['Entrée', 20], ['Sortie', 6]]],
             ['Cartes de vocabulaire (jeu)', 'Matériel pédagogique', 9, 5, [['Entrée', 10], ['Sortie', 1]]],
             ['Cartouches d\'encre HP 305', 'Consommables', 4, 6, [['Entrée', 10], ['Sortie', 6]]],
@@ -47,11 +49,11 @@ final class DemoStockSeeder extends Seeder
             ['Rallonges électriques', 'Autre', 7, 3, [['Entrée', 8], ['Sortie', 1]]],
         ];
 
-        foreach ($articles as $i => [$nom, $categorie, $quantiteFinale, $seuil, $mouvements]) {
+        foreach ($articles as $i => [$nom, $typeNom, $quantiteFinale, $seuil, $mouvements]) {
             $article = StockArticle::create([
                 'reference' => ReferenceGenerator::make('ART', 'stock_articles'),
                 'nom' => $nom,
-                'categorie' => $categorie,
+                'stock_type_id' => $typeIds[$typeNom],
                 'quantite' => 0, // rebuilt below through the movement chain
                 'seuil_alerte' => $seuil,
                 'etablissement_id' => $centres === [] ? null : $centres[$i % count($centres)],

@@ -21,6 +21,8 @@ class DatabaseSeeder extends Seeder
             // 25/26) and adds the 7 GLS branches with their rooms.
             ReferentialDataSeeder::class,
             TypeDepenseSeeder::class,
+            StockTypeSeeder::class,
+            BookStockSeeder::class,
             FraisSeeder::class,
             BanqueSeeder::class,
             // Demo data (local dev only — every seeder below is idempotent):

@@ -13,6 +13,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * Inventory item (Stock module). `quantite` is application-maintained: it
  * only ever changes through EnregistrerMouvementStock (one transaction with
  * the stock_mouvements audit line) — never a raw update.
+ *
+ * A product with per-center stock (e.g. a book title) is modeled as ONE
+ * StockArticle row PER center — same `nom`, different `etablissement_id`/
+ * `quantite`/`reference` — not a single row shared across centers.
  */
 class StockArticle extends Model
 {
@@ -27,20 +31,15 @@ class StockArticle extends Model
         self::STATUT_INACTIF,
     ];
 
-    /** Plain VARCHAR validated against constants — deliberate (schema doc). */
-    public const CATEGORIES = [
-        'Fournitures de bureau',
-        'Matériel pédagogique',
-        'Livres et manuels',
-        'Consommables',
-        'Équipement',
-        'Autre',
-    ];
-
     protected $fillable = [
-        'reference', 'nom', 'categorie', 'quantite', 'seuil_alerte',
+        'reference', 'nom', 'stock_type_id', 'quantite', 'seuil_alerte',
         'etablissement_id', 'statut', 'note',
     ];
+
+    public function stockType(): BelongsTo
+    {
+        return $this->belongsTo(StockType::class);
+    }
 
     public function etablissement(): BelongsTo
     {
@@ -50,6 +49,11 @@ class StockArticle extends Model
     public function mouvements(): HasMany
     {
         return $this->hasMany(StockMouvement::class);
+    }
+
+    public function inscriptions(): HasMany
+    {
+        return $this->hasMany(InscriptionLivre::class);
     }
 
     public function enAlerte(): bool

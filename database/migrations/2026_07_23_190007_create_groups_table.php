@@ -29,6 +29,11 @@ return new class extends Migration
             $table->date('date_debut_formation')->nullable();
             $table->date('date_fin_formation')->nullable();
             $table->timestamps();
+
+            $table->index('enseignant_id', 'groups_enseignant_id_idx');
+            $table->index('salle_id', 'groups_salle_id_idx');
+            $table->index('etablissement_id', 'groups_etablissement_id_idx');
+            $table->index('annee_scolaire_id', 'groups_annee_scolaire_id_idx');
         });
     }
 

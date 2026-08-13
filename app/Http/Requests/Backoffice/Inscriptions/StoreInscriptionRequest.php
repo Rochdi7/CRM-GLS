@@ -47,6 +47,8 @@ final class StoreInscriptionRequest extends FormRequest
             'fee_lines.*.remise_pct' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'fee_lines.*.remise_montant' => ['nullable', 'numeric', 'min:0'],
             'fee_lines.*.date_echeance' => ['nullable', 'date'],
+            'livre_ids' => ['nullable', 'array'],
+            'livre_ids.*' => ['integer', 'exists:stock_articles,id'],
         ];
 
         if ($this->input('inscription_mode') === 'existing') {

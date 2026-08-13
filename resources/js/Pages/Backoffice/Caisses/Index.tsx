@@ -264,7 +264,7 @@ export default function CaissesIndex({
     const [tab, setTab] = useState<Tab>(requested && availableTabs.includes(requested) ? requested : availableTabs[0]);
 
     const [transferFilters, setTransferFilters] = useState(
-        initialTransferFilters ?? { search: '', statutFilter: '', caisseFilter: '' },
+        initialTransferFilters ?? { search: '', statutFilter: '', typeFilter: '' },
     );
 
     // Client-side permission checks — UI convenience only (hide affordances
@@ -292,6 +292,10 @@ export default function CaissesIndex({
         .filter((c) => c.id !== myCaisse?.id)
         .map((c) => ({ value: c.id, label: `${c.nom} (${Number(c.solde).toFixed(2)} DH)` }));
     const transferStatutOptions: SelectOption[] = transferStatuts.map((s) => ({ value: s, label: s }));
+    const transferTypeOptions: SelectOption[] = [
+        { value: 'envoye', label: "Envoyé à une autre caisse" },
+        { value: 'recu', label: "Reçu d'une autre caisse" },
+    ];
 
     const transferForm = useForm<TransferFormState>(emptyTransferForm());
 
@@ -443,15 +447,15 @@ export default function CaissesIndex({
                     <div className="px-3 pt-2">
                         <TableToolbar>
                             <div style={{ width: 200 }}>
-                                <label className="form-label" htmlFor="tr-f-caisse">
+                                <label className="form-label" htmlFor="tr-f-type">
                                     Type
                                 </label>
                                 <SelectField
-                                    id="tr-f-caisse"
-                                    options={transferCaisseOptions}
-                                    placeholder="Choisir un type"
-                                    value={transferFilters.caisseFilter}
-                                    onChange={(event) => reloadTransfers({ caisseFilter: event.target.value })}
+                                    id="tr-f-type"
+                                    options={transferTypeOptions}
+                                    placeholder="Tous les types"
+                                    value={transferFilters.typeFilter}
+                                    onChange={(event) => reloadTransfers({ typeFilter: event.target.value })}
                                 />
                             </div>
                             <div style={{ width: 180 }}>

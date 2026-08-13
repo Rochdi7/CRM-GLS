@@ -26,7 +26,7 @@ final class UpdateStockArticleRequest extends FormRequest
     {
         return [
             'nom' => ['required', 'string', 'max:150'],
-            'categorie' => ['required', Rule::in(StockArticle::CATEGORIES)],
+            'stock_type_id' => ['required', 'exists:stock_types,id'],
             'seuil_alerte' => ['nullable', 'integer', 'min:0'],
             'statut' => ['required', Rule::in(StockArticle::STATUTS)],
             'note' => ['nullable', 'string', 'max:1000'],

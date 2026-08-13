@@ -33,6 +33,11 @@ return new class extends Migration
             $table->foreignId('requested_by')->constrained('employees')->restrictOnDelete();
             $table->foreignId('validated_by')->nullable()->constrained('employees')->nullOnDelete();
             $table->timestamps();
+
+            $table->index('caisse_source_id', 'caisse_transfers_caisse_source_id_idx');
+            $table->index('caisse_destination_id', 'caisse_transfers_caisse_destination_id_idx');
+            $table->index('requested_by', 'caisse_transfers_requested_by_idx');
+            $table->index('validated_by', 'caisse_transfers_validated_by_idx');
         });
     }
 

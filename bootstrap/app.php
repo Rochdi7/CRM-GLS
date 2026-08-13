@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\HandleInertiaRequests;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -12,6 +13,11 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    ->withSchedule(function (Schedule $schedule): void {
+        // Auto-generates the day's (and upcoming) séances from every active
+        // group's emploi du temps — see app/Console/Commands/GenerateSeances.php.
+        $schedule->command('seances:generate')->dailyAt('08:00');
+    })
     ->withMiddleware(function (Middleware $middleware): void {
         // Backoffice is the only authenticated area for now: guests hitting
         // protected pages go to the Backoffice login; authenticated users

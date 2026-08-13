@@ -14,6 +14,7 @@ use App\Http\Requests\Backoffice\Stock\StoreStockMouvementRequest;
 use App\Http\Requests\Backoffice\Stock\UpdateStockArticleRequest;
 use App\Models\StockArticle;
 use App\Models\StockMouvement;
+use App\Models\StockType;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
 use Illuminate\Http\RedirectResponse;
@@ -44,7 +45,7 @@ final class StockController extends Controller
 
         $articleFilters = [
             'search' => (string) $request->string('search'),
-            'categorieFilter' => (string) $request->string('categorieFilter'),
+            'stockTypeFilter' => (string) $request->string('stockTypeFilter'),
             'statutFilter' => (string) $request->string('statutFilter'),
             'alerteFilter' => (string) $request->string('alerteFilter'),
         ];
@@ -84,7 +85,10 @@ final class StockController extends Controller
             ],
             'perPageOptions' => GetStockArticlesList::PER_PAGE_OPTIONS,
             'articleOptions' => $articleOptions,
-            'categories' => StockArticle::CATEGORIES,
+            'stockTypes' => StockType::query()
+                ->where('statut', StockType::STATUT_ACTIF)
+                ->orderBy('nom')
+                ->get(['id', 'nom']),
             'statuts' => StockArticle::STATUTS,
             'mouvementTypes' => StockMouvement::TYPES,
             'permissions' => [
@@ -105,7 +109,7 @@ final class StockController extends Controller
         StockArticle::create([
             'reference' => ReferenceGenerator::make('ART', 'stock_articles'),
             'nom' => $data['nom'],
-            'categorie' => $data['categorie'],
+            'stock_type_id' => $data['stock_type_id'],
             'quantite' => 0,
             'seuil_alerte' => $data['seuil_alerte'] ?? null,
             'etablissement_id' => $context->etablissementId(),
@@ -126,7 +130,7 @@ final class StockController extends Controller
         // quantite is untouched here on purpose — movements only.
         $article->update([
             'nom' => $data['nom'],
-            'categorie' => $data['categorie'],
+            'stock_type_id' => $data['stock_type_id'],
             'seuil_alerte' => $data['seuil_alerte'] ?? null,
             'statut' => $data['statut'],
             'note' => $data['note'] ?? null,

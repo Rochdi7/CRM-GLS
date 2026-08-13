@@ -7,6 +7,7 @@ namespace Tests\Feature\Backoffice\Stock;
 use App\Models\Etablissement;
 use App\Models\StockArticle;
 use App\Models\StockMouvement;
+use App\Models\StockType;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -23,11 +24,17 @@ final class StockInertiaCrudTest extends TestCase
 
     private Etablissement $centre;
 
+    private StockType $livreType;
+
+    private StockType $fournituresType;
+
     protected function setUp(): void
     {
         parent::setUp();
         $this->seed(RolesAndPermissionsSeeder::class);
         $this->centre = Etablissement::factory()->create();
+        $this->livreType = StockType::create(['nom' => StockType::SYSTEM_LIVRE, 'is_system' => true, 'statut' => StockType::STATUT_ACTIF]);
+        $this->fournituresType = StockType::create(['nom' => 'Fournitures de bureau', 'is_system' => true, 'statut' => StockType::STATUT_ACTIF]);
     }
 
     private function userWith(string ...$permissions): User
@@ -45,7 +52,7 @@ final class StockInertiaCrudTest extends TestCase
         return StockArticle::create(array_merge([
             'reference' => 'ART-'.str_pad((string) (StockArticle::count() + 1), 6, '0', STR_PAD_LEFT),
             'nom' => 'Manuel A1',
-            'categorie' => 'Livres et manuels',
+            'stock_type_id' => $this->livreType->id,
             'quantite' => 0,
             'statut' => StockArticle::STATUT_ACTIF,
         ], $attributes));
@@ -66,7 +73,7 @@ final class StockInertiaCrudTest extends TestCase
                 ->component('Backoffice/Stock/Index', false)
                 ->has('articles.data', 1)
                 ->has('mouvements.data', 0)
-                ->has('categories')
+                ->has('stockTypes')
                 ->has('mouvementTypes')
                 ->where('permissions.create', false)
             );
@@ -78,7 +85,7 @@ final class StockInertiaCrudTest extends TestCase
 
         $this->post(route('backoffice.stock-articles.store'), [
             'nom' => 'Marqueurs effaçables',
-            'categorie' => 'Fournitures de bureau',
+            'stock_type_id' => $this->fournituresType->id,
             'seuil_alerte' => 10,
             'statut' => StockArticle::STATUT_ACTIF,
         ])->assertRedirect(route('backoffice.stock.index'));
@@ -94,7 +101,7 @@ final class StockInertiaCrudTest extends TestCase
         $this->actingAs($this->userWith('stock.view'))
             ->post(route('backoffice.stock-articles.store'), [
                 'nom' => 'X',
-                'categorie' => 'Autre',
+                'stock_type_id' => $this->fournituresType->id,
                 'statut' => StockArticle::STATUT_ACTIF,
             ])->assertForbidden();
     }
@@ -107,7 +114,7 @@ final class StockInertiaCrudTest extends TestCase
 
         $this->put(route('backoffice.stock-articles.update', $article), [
             'nom' => 'Manuel A1 (2e édition)',
-            'categorie' => 'Livres et manuels',
+            'stock_type_id' => $this->livreType->id,
             'quantite' => 999, // must be ignored — quantities move via movements only
             'statut' => StockArticle::STATUT_INACTIF,
         ])->assertRedirect();

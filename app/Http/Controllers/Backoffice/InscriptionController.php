@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Domain\Registrations\Actions\AssignerLivresInscription;
 use App\Domain\Registrations\Actions\BasculerVisibiliteFraisInscription;
 use App\Domain\Registrations\Actions\ChangerGroupeInscription;
 use App\Domain\Registrations\Actions\MettreAJourFraisInscription;
@@ -16,11 +17,14 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Inscriptions\ChangeGroupInscriptionRequest;
 use App\Http\Requests\Backoffice\Inscriptions\StoreInscriptionRequest;
 use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionFeesRequest;
+use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionLivresRequest;
 use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionRequest;
 use App\Models\Group;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
 use App\Models\Student;
+use App\Models\StockArticle;
+use App\Models\StockType;
 use App\Services\Context\CurrentContext;
 use App\Support\Phone\Countries;
 use Illuminate\Database\QueryException;
@@ -222,15 +226,89 @@ final class InscriptionController extends Controller
         ]);
     }
 
-    public function store(StoreInscriptionRequest $request): RedirectResponse
+    /**
+     * "Livre" stock articles at a group's own center — feeds the create
+     * form's book multi-select. Same permission gate as groupFees() (both
+     * are pure lookups for the create flow, not a mutation).
+     */
+    public function groupLivres(Group $group): JsonResponse
+    {
+        $this->authorize('create', Inscription::class);
+
+        return response()->json([
+            'livres' => $this->availableLivresQuery($group->etablissement_id)->get()
+                ->map(fn (StockArticle $a): array => ['id' => $a->id, 'nom' => $a->nom, 'quantite' => $a->quantite])
+                ->values(),
+        ]);
+    }
+
+    /**
+     * Books already assigned to an existing registration, plus the same
+     * center's available "Livre" stock — feeds the edit modal's multi-select
+     * (pre-selected + pickable). Same `view` gate as fees()/show().
+     */
+    public function livres(Inscription $inscription): JsonResponse
+    {
+        $this->authorize('view', $inscription);
+
+        return response()->json([
+            'assignedIds' => $inscription->livres()->pluck('stock_article_id')->values(),
+            'livres' => $this->availableLivresQuery($inscription->etablissement_id)->get()
+                ->map(fn (StockArticle $a): array => ['id' => $a->id, 'nom' => $a->nom, 'quantite' => $a->quantite])
+                ->values(),
+        ]);
+    }
+
+    /**
+     * Syncs an existing registration's assigned books to the submitted set
+     * (AssignerLivresInscription — additive/subtractive, never destroy-and-
+     * recreate, so a book already given is never re-decremented). Gated by
+     * registrations.manage-fees, same permission as the fee-line editor —
+     * both are "adjust what this registration owes/receives after the fact"
+     * actions.
+     */
+    public function updateLivres(
+        UpdateInscriptionLivresRequest $request,
+        Inscription $inscription,
+        AssignerLivresInscription $action,
+    ): RedirectResponse {
+        $this->authorize('view', $inscription);
+
+        $data = $request->validated();
+        $livreIds = array_map('intval', $data['livre_ids'] ?? []);
+
+        $action->validateAvailability($livreIds, $inscription->livres()->pluck('stock_article_id')->all());
+        $action->handle($inscription, $livreIds, $request->user()?->employee);
+
+        return redirect()->route('backoffice.inscriptions.index')
+            ->with('success', __('Registration books updated.'));
+    }
+
+    /**
+     * Active "Livre"-type stock articles for a given center — shared by
+     * groupLivres()/livres() so both stay center-scoped the same way.
+     */
+    private function availableLivresQuery(?int $etablissementId)
+    {
+        return StockArticle::query()
+            ->whereHas('stockType', fn ($q) => $q->where('nom', StockType::SYSTEM_LIVRE))
+            ->where('statut', StockArticle::STATUT_ACTIF)
+            ->where('etablissement_id', $etablissementId)
+            ->orderBy('nom');
+    }
+
+    public function store(StoreInscriptionRequest $request, AssignerLivresInscription $assignerLivres): RedirectResponse
     {
         $this->authorize('create', Inscription::class);
 
         $data = $request->validated();
         $group = Group::findOrFail($data['group_id']);
         $creatingStudent = $data['inscription_mode'] === 'new';
+        $livreIds = array_map('intval', $data['livre_ids'] ?? []);
 
-        DB::transaction(function () use ($data, $group, $creatingStudent, $request): void {
+        $assignerLivres->validateAvailability($livreIds, []);
+
+        DB::transaction(function () use ($data, $group, $creatingStudent, $request, $livreIds, $assignerLivres): void {
             if ($creatingStudent) {
                 $phonePays = $data['phone_pays'] ?? Countries::DEFAULT;
                 $niveau = $data['new_niveau'] ?? null;
@@ -309,6 +387,10 @@ final class InscriptionController extends Controller
 
             foreach ($lines as $line) {
                 $inscription->fees()->create($line);
+            }
+
+            if ($livreIds !== []) {
+                $assignerLivres->handle($inscription, $livreIds, $request->user()->employee);
             }
         });
 

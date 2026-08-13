@@ -21,7 +21,15 @@ return new class extends Migration
             $table->id();
             $table->string('reference', 20)->unique();
             $table->foreignId('student_id')->constrained('students')->restrictOnDelete();
-            $table->foreignId('inscription_fee_id')->constrained('inscription_fees')->restrictOnDelete();
+            // Nullable: an "avance" is money received but not yet allocated to
+            // any fee (gls-crm-schema.md §11's documented trade-off), applied
+            // to a fee later via a second row carrying applied_from_encaissement_id.
+            $table->foreignId('inscription_fee_id')->nullable()->constrained('inscription_fees')->restrictOnDelete();
+            $table->foreignId('applied_from_encaissement_id')->nullable()->constrained('encaissements')->nullOnDelete();
+            // Payments made using a tracked chèque link back to it — the sum
+            // of these rows' montant is the chèque's used amount ("Reste" =
+            // montant minus this sum), mirroring the avance applications() pattern.
+            $table->foreignId('cheque_id')->nullable()->constrained('cheques')->restrictOnDelete();
             $table->decimal('montant', 12, 2);
             $table->string('methode', 30); // Espèces / TPE / Chèque / Virement
             $table->date('date_paiement');
@@ -32,6 +40,13 @@ return new class extends Migration
             $table->date('date_echeance_cheque')->nullable();
             $table->text('note')->nullable();
             $table->timestamps();
+
+            $table->index(['caisse_id', 'date_paiement'], 'encaissements_caisse_date_idx');
+            $table->index('student_id', 'encaissements_student_id_idx');
+            $table->index('inscription_fee_id', 'encaissements_inscription_fee_id_idx');
+            $table->index('agent_id', 'encaissements_agent_id_idx');
+            $table->index('applied_from_encaissement_id', 'encaissements_applied_from_idx');
+            $table->index('cheque_id', 'encaissements_cheque_id_idx');
         });
     }
 

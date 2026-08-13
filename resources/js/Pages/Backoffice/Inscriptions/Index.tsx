@@ -15,6 +15,7 @@ import ConfirmDialog from '@/Components/Modals/ConfirmDialog';
 import DateField from '@/Components/Forms/DateField';
 import FormField from '@/Components/Forms/FormField';
 import SelectField from '@/Components/Forms/SelectField';
+import MultiSelectField from '@/Components/Forms/MultiSelectField';
 import TextareaField from '@/Components/Forms/TextareaField';
 import PhoneField from '@/Components/Forms/PhoneField';
 import FormActions from '@/Components/Forms/FormActions';
@@ -38,6 +39,7 @@ interface InscriptionFormState {
     date_fin: string;
     note: string;
     fee_lines: InscriptionFeeLine[];
+    livre_ids: number[];
     // New-student inline fields.
     new_nom: string;
     new_prenom: string;
@@ -71,6 +73,7 @@ function emptyForm(defaultCountry: string): InscriptionFormState {
         date_fin: '',
         note: '',
         fee_lines: [],
+        livre_ids: [],
         new_nom: '',
         new_prenom: '',
         new_sexe: '',
@@ -152,6 +155,14 @@ export default function InscriptionsIndex({
     const [activeTab, setActiveTab] = useState<'affectation' | 'contact' | 'parent' | 'autre'>('affectation');
     const [loadingGroupFees, setLoadingGroupFees] = useState(false);
     const [loadingEditingFees, setLoadingEditingFees] = useState(false);
+    // Books ("Livre" stock) available at the selected group's center — create form.
+    const [availableLivres, setAvailableLivres] = useState<Array<{ id: number; nom: string; quantite: number }>>([]);
+    // Edit modal's own book state: what's already assigned + what's pickable at this inscription's center.
+    const [editingLivreIds, setEditingLivreIds] = useState<number[]>([]);
+    const [editingAvailableLivres, setEditingAvailableLivres] = useState<Array<{ id: number; nom: string; quantite: number }>>([]);
+    const [loadingEditingLivres, setLoadingEditingLivres] = useState(false);
+    const [livresError, setLivresError] = useState<string | undefined>(undefined);
+    const [livresProcessing, setLivresProcessing] = useState(false);
     const [hiddenFees, setHiddenFees] = useState<HiddenInscriptionFee[]>([]);
     const [hideProcessingId, setHideProcessingId] = useState<number | null>(null);
     const [restoreProcessingId, setRestoreProcessingId] = useState<number | null>(null);
@@ -258,6 +269,18 @@ export default function InscriptionsIndex({
                 setHiddenFees(data.hiddenFees);
             })
             .finally(() => setLoadingEditingFees(false));
+
+        setEditingLivreIds([]);
+        setEditingAvailableLivres([]);
+        setLivresError(undefined);
+        setLoadingEditingLivres(true);
+        fetch(`/backoffice/inscriptions/${inscription.id}/livres`, { headers: { Accept: 'application/json' } })
+            .then((response) => response.json())
+            .then((data: { assignedIds: number[]; livres: Array<{ id: number; nom: string; quantite: number }> }) => {
+                setEditingLivreIds(data.assignedIds);
+                setEditingAvailableLivres(data.livres);
+            })
+            .finally(() => setLoadingEditingLivres(false));
     }
 
     function closeModal() {
@@ -267,6 +290,10 @@ export default function InscriptionsIndex({
         feesForm.clearErrors();
         setHiddenFees([]);
         setNewFeeToAdd('');
+        setAvailableLivres([]);
+        setEditingLivreIds([]);
+        setEditingAvailableLivres([]);
+        setLivresError(undefined);
         form.reset();
         form.clearErrors();
     }
@@ -309,8 +336,9 @@ export default function InscriptionsIndex({
     }
 
     function handleGroupChange(groupId: number | '') {
-        form.setData((data) => ({ ...data, group_id: groupId, fee_lines: [], date_debut: '', date_fin: '' }));
+        form.setData((data) => ({ ...data, group_id: groupId, fee_lines: [], livre_ids: [], date_debut: '', date_fin: '' }));
         setAvailableFeesPage(1);
+        setAvailableLivres([]);
 
         if (groupId === '' || editingInscription) {
             return;
@@ -338,6 +366,12 @@ export default function InscriptionsIndex({
                 }));
             })
             .finally(() => setLoadingGroupFees(false));
+
+        fetch(`/backoffice/groups/${groupId}/inscription-livres`, { headers: { Accept: 'application/json' } })
+            .then((response) => response.json())
+            .then((data: { livres: Array<{ id: number; nom: string; quantite: number }> }) => {
+                setAvailableLivres(data.livres);
+            });
     }
 
     /**
@@ -522,6 +556,32 @@ export default function InscriptionsIndex({
             },
             onFinish: () => setRestoreProcessingId(null),
         });
+    }
+
+    /**
+     * Saves the edit modal's book selection — its own PUT endpoint
+     * (AssignerLivresInscription), independent of the base-fields form. A
+     * book already assigned stays untouched even if resubmitted; only newly
+     * checked/unchecked books move stock (add = -1, remove = +1), which is
+     * how a later level change can add a further book without re-charging
+     * stock for ones already given.
+     */
+    function submitEditingLivres() {
+        if (!editingInscription) {
+            return;
+        }
+
+        setLivresProcessing(true);
+        setLivresError(undefined);
+        router.put(
+            `/backoffice/inscriptions/${editingInscription.id}/livres`,
+            { livre_ids: editingLivreIds },
+            {
+                preserveScroll: true,
+                onError: (errors) => setLivresError(errors.livre_ids ?? 'Action impossible.'),
+                onFinish: () => setLivresProcessing(false),
+            },
+        );
     }
 
     function submit(event: FormEvent) {
@@ -1195,6 +1255,29 @@ export default function InscriptionsIndex({
                                 </div>
                             )}
 
+                            {!editingInscription && (
+                                <div className="border-top pt-3">
+                                    <h6 className="mb-1">Livres</h6>
+                                    {form.data.group_id === '' ? (
+                                        <p className="text-muted fs-13">Sélectionnez un groupe pour voir les livres disponibles.</p>
+                                    ) : availableLivres.length === 0 ? (
+                                        <p className="text-muted fs-13">Aucun livre en stock pour ce centre.</p>
+                                    ) : (
+                                        <MultiSelectField
+                                            id="ins-livres"
+                                            options={availableLivres.map((l) => ({
+                                                value: l.id,
+                                                label: `${l.nom} (${l.quantite} en stock)`,
+                                            }))}
+                                            placeholder="Sélectionner un ou plusieurs livres…"
+                                            values={form.data.livre_ids.map(String)}
+                                            onChange={(values) => form.setData('livre_ids', values.map(Number))}
+                                            error={(form.errors as Record<string, string>).livre_ids}
+                                        />
+                                    )}
+                                </div>
+                            )}
+
                             {editingInscription && (
                                 <div className="border-top pt-3">
                                     <div className="d-flex align-items-center justify-content-between mb-1">
@@ -1411,6 +1494,44 @@ export default function InscriptionsIndex({
                                                 </table>
                                             </div>
                                         </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {editingInscription && (
+                                <div className="border-top pt-3">
+                                    <h6 className="mb-1">Livres</h6>
+                                    {loadingEditingLivres ? (
+                                        <p className="text-muted fs-13">Chargement…</p>
+                                    ) : editingAvailableLivres.length === 0 && editingLivreIds.length === 0 ? (
+                                        <p className="text-muted fs-13">Aucun livre en stock pour ce centre.</p>
+                                    ) : (
+                                        <>
+                                            <MultiSelectField
+                                                id="ins-edit-livres"
+                                                options={editingAvailableLivres.map((l) => ({
+                                                    value: l.id,
+                                                    label: `${l.nom} (${l.quantite} en stock)`,
+                                                }))}
+                                                placeholder="Sélectionner un ou plusieurs livres…"
+                                                disabled={!canManageFees}
+                                                values={editingLivreIds.map(String)}
+                                                onChange={(values) => setEditingLivreIds(values.map(Number))}
+                                                error={livresError}
+                                            />
+                                            {canManageFees && (
+                                                <div className="d-flex justify-content-end mt-1">
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-outline-primary btn-sm"
+                                                        disabled={livresProcessing}
+                                                        onClick={submitEditingLivres}
+                                                    >
+                                                        {livresProcessing ? 'Enregistrement…' : 'Enregistrer les livres'}
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             )}

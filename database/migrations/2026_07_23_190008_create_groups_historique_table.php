@@ -29,6 +29,13 @@ return new class extends Migration
             $table->date('date_fin_formation')->nullable();
             $table->dateTime('archived_at');
             $table->foreignId('archived_by')->nullable()->constrained('employees')->nullOnDelete();
+
+            $table->index('archived_at', 'groups_historique_archived_at_idx');
+            $table->index('enseignant_id', 'groups_historique_enseignant_id_idx');
+            $table->index('etablissement_id', 'groups_historique_etablissement_id_idx');
+            $table->index('annee_scolaire_id', 'groups_historique_annee_scolaire_id_idx');
+            $table->index('archived_by', 'groups_historique_archived_by_idx');
+            $table->index('group_id', 'groups_historique_group_id_idx');
         });
     }
 

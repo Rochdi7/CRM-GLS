@@ -30,6 +30,7 @@ use App\Http\Controllers\Backoffice\SeanceController;
 use App\Http\Controllers\Backoffice\SettingController;
 use App\Http\Controllers\Backoffice\SalleController;
 use App\Http\Controllers\Backoffice\StockController;
+use App\Http\Controllers\Backoffice\StockTypeController;
 use App\Http\Controllers\Backoffice\StudentController;
 use App\Http\Controllers\Backoffice\TypeDepenseController;
 use App\Http\Controllers\Backoffice\Users\UserAuthorizationController;
@@ -227,6 +228,13 @@ Route::prefix('backoffice')
                 ->middleware('permission:stock.delete')->name('stock-articles.destroy');
             Route::post('stock-mouvements', [StockController::class, 'storeMouvement'])
                 ->middleware('permission:stock.move')->name('stock-mouvements.store');
+            // Types de stock — replaces the old hardcoded CATEGORIES array
+            // (product decision: new product types beyond "Livre" are added
+            // here without a code change). is_system rows stay locked
+            // (StockTypePolicy + explicit unconditional controller guard,
+            // same pattern as Types de dépenses).
+            Route::resource('stock-types', StockTypeController::class)
+                ->except(['show', 'create', 'edit']);
 
             // Enrollments — Inertia/React list + modal add/edit with manual
             // fee lines (Phase 9, docs/phase-9-inscriptions-audit.md +
@@ -263,12 +271,26 @@ Route::prefix('backoffice')
                 ->middleware('permission:registrations.manage-fees')->name('inscriptions.fees.restore');
             Route::post('inscriptions/{inscription}/change-group', [InscriptionController::class, 'changeGroup'])
                 ->middleware('permission:registrations.change-group')->name('inscriptions.change-group');
+            // Books (Chèques-module-style "Livre" stock) assigned to a
+            // registration — see AssignerLivresInscription; the same
+            // registrations.manage-fees gate as fee-line editing, since both
+            // are "adjust what this registration owes/received after the
+            // fact" actions.
+            Route::get('inscriptions/{inscription}/livres', [InscriptionController::class, 'livres'])
+                ->name('inscriptions.livres');
+            Route::put('inscriptions/{inscription}/livres', [InscriptionController::class, 'updateLivres'])
+                ->middleware('permission:registrations.manage-fees')->name('inscriptions.livres.update');
             // "Frais disponibles" for a group — the create form's live
             // group-fee lookup (docs/phase-9-inscriptions-mapping.md's
             // confirmed decision: a dedicated endpoint, not embedding every
             // group's fees in the initial options payload).
             Route::get('groups/{group}/inscription-fees', [InscriptionController::class, 'groupFees'])
                 ->name('groups.inscription-fees');
+            // "Livre" stock available at a group's own center — feeds the
+            // create form's book multi-select, same gate/shape as
+            // inscription-fees above.
+            Route::get('groups/{group}/inscription-livres', [InscriptionController::class, 'groupLivres'])
+                ->name('groups.inscription-livres');
             // inscription-fees.* (store/update/destroy) intentionally NOT
             // routed here — genuinely dead code pre-Phase-9 (zero callers in
             // any view/React page, confirmed by the audit) and still not

@@ -17,6 +17,9 @@ return new class extends Migration
         Schema::create('seances', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('group_id')->constrained('groups')->restrictOnDelete();
+            // Links back to the weekly recurring slot this séance was
+            // generated from — nullable, manually-created séances have none.
+            $table->foreignId('creneau_id')->nullable()->constrained('creneaux')->nullOnDelete();
             $table->date('date_seance');
             $table->time('heure_debut')->nullable();
             $table->time('heure_fin')->nullable();
@@ -33,6 +36,7 @@ return new class extends Migration
             // and ordered by date), the rest get standalone indexes.
             $table->index(['group_id', 'date_seance']);
             $table->index('date_seance');
+            $table->index('creneau_id');
             $table->index('enseignant_id');
             $table->index('etablissement_id');
             $table->index('annee_scolaire_id');

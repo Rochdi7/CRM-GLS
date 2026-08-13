@@ -15,6 +15,9 @@ return new class extends Migration
             $table->id();
             $table->string('reference', 20)->unique();
             $table->foreignId('beneficiaire_id')->constrained('students')->restrictOnDelete();
+            // Links the refund back to the specific payment it's refunding;
+            // nullable — a refund unrelated to any tracked payment is allowed.
+            $table->foreignId('encaissement_id')->nullable()->constrained('encaissements')->nullOnDelete();
             $table->foreignId('caisse_id')->constrained('caisses')->restrictOnDelete();
             $table->decimal('montant', 12, 2);
             $table->date('date_remboursement');
@@ -22,6 +25,11 @@ return new class extends Migration
             $table->text('note')->nullable();
             $table->foreignId('agent_id')->constrained('employees')->restrictOnDelete();
             $table->timestamps();
+
+            $table->index(['caisse_id', 'date_remboursement'], 'remboursements_caisse_date_idx');
+            $table->index('beneficiaire_id', 'remboursements_beneficiaire_id_idx');
+            $table->index('agent_id', 'remboursements_agent_id_idx');
+            $table->index('encaissement_id', 'remboursements_encaissement_id_idx');
         });
     }
 

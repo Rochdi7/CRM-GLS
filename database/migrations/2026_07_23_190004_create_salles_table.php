@@ -18,6 +18,8 @@ return new class extends Migration
             $table->integer('capacite')->nullable();
             $table->string('statut', 20)->default('Active');
             $table->timestamps();
+
+            $table->index('etablissement_id', 'salles_etablissement_id_idx');
         });
     }
 

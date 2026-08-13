@@ -24,6 +24,9 @@ return new class extends Migration
             $table->decimal('solde', 12, 2)->nullable()->default(0);
             $table->string('statut', 20)->default('Active');
             $table->timestamps();
+
+            $table->index('etablissement_id', 'caisses_etablissement_id_idx');
+            $table->index('responsable_employee_id', 'caisses_responsable_employee_id_idx');
         });
     }
 
