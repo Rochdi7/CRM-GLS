@@ -5,6 +5,7 @@ import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
+import { blockImplicitSubmit } from '@/Lib/forms';
 import TableToolbar from '@/Components/Tables/TableToolbar';
 import FilterTextInput from '@/Components/Tables/FilterTextInput';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
@@ -117,6 +118,7 @@ function computeLineMontant(initial: number, remisePct: number | null, remiseMon
 
     return Math.round(Math.max(0, initial - (remiseMontant ?? 0)) * 100) / 100;
 }
+
 
 /** Rows per page of the "Frais disponibles" table — client-side only, no server round trip for this in-memory list. */
 const AVAILABLE_FEES_PER_PAGE = 5;
@@ -419,6 +421,22 @@ export default function InscriptionsIndex({
             const dh = line.remiseMontant !== '' ? parseFloat(line.remiseMontant) : null;
 
             return sum + computeLineMontant(initial, pct, dh);
+        }, 0);
+    }
+
+    /**
+     * Sum of what is still owed across the edit table's lines. Mirrors the
+     * per-row calculation (live montant minus the server-computed `paye`,
+     * clamped at 0 so an overpaid line can't offset an underpaid one).
+     */
+    function linesResteTotal(lines: InscriptionFeeLine[]): number {
+        return lines.reduce((sum, line) => {
+            const initial = parseFloat(line.montantInitial || '0');
+            const pct = line.remisePct !== '' ? parseFloat(line.remisePct) : null;
+            const dh = line.remiseMontant !== '' ? parseFloat(line.remiseMontant) : null;
+            const paye = parseFloat(line.paye ?? '0') || 0;
+
+            return sum + Math.max(0, computeLineMontant(initial, pct, dh) - paye);
         }, 0);
     }
 
@@ -857,7 +875,7 @@ export default function InscriptionsIndex({
                 processing={form.processing}
                 size="xl"
             >
-                <form onSubmit={submit}>
+                <form onSubmit={submit} onKeyDown={blockImplicitSubmit}>
                     <div className="row">
                         {!editingInscription && (
                             <div className="col-md-4">
@@ -1157,6 +1175,7 @@ export default function InscriptionsIndex({
                                                         <th>Remise</th>
                                                         <th>Note</th>
                                                         <th className="text-end">Montant</th>
+                                                        <th className="text-end">Reste</th>
                                                         <th>Échéance</th>
                                                     </tr>
                                                 </thead>
@@ -1223,6 +1242,15 @@ export default function InscriptionsIndex({
                                                                 <td className="text-end fw-semibold" style={{ width: 110 }}>
                                                                     {final.toFixed(2)} DH
                                                                 </td>
+                                                                {/*
+                                                                 * On a new inscription nothing is paid yet, so reste always
+                                                                 * equals montant. Shown anyway so this table's columns line up
+                                                                 * with the edit modal's — the same fee reads the same way
+                                                                 * before and after saving.
+                                                                 */}
+                                                                <td className="text-end fw-semibold text-danger" style={{ width: 110 }}>
+                                                                    {final.toFixed(2)} DH
+                                                                </td>
                                                                 <td style={{ width: 150 }}>
                                                                     <DateField
                                                                         id={`ins-fee-date-${index}`}
@@ -1240,6 +1268,7 @@ export default function InscriptionsIndex({
                                                         <td colSpan={4} className="text-end fw-semibold">
                                                             Total à payer
                                                         </td>
+                                                        <td className="text-end fw-bold">{lineTotal().toFixed(2)} DH</td>
                                                         <td className="text-end fw-bold">{lineTotal().toFixed(2)} DH</td>
                                                         <td />
                                                     </tr>
@@ -1326,6 +1355,7 @@ export default function InscriptionsIndex({
                                                         <th>Remise</th>
                                                         <th>Note</th>
                                                         <th className="text-end">Montant</th>
+                                                        <th className="text-end">Reste</th>
                                                         <th>Échéance</th>
                                                         <th>Statut</th>
                                                         {canManageFees && <th />}
@@ -1337,6 +1367,14 @@ export default function InscriptionsIndex({
                                                         const pct = line.remisePct !== '' ? parseFloat(line.remisePct) : null;
                                                         const dh = line.remiseMontant !== '' ? parseFloat(line.remiseMontant) : null;
                                                         const final = computeLineMontant(initial, pct, dh);
+                                                        // `paye` is server-computed (sum of the line's encaissements) and
+                                                        // never submitted back. `final` is the LIVE edited montant, so while
+                                                        // the user changes initial/remise the reste previews against the
+                                                        // already-paid total — same unsaved-preview behaviour the Montant
+                                                        // column already has. Clamped at 0: an overpaid line reads 0, not
+                                                        // a negative.
+                                                        const paye = parseFloat(line.paye ?? '0') || 0;
+                                                        const reste = Math.max(0, final - paye);
                                                         const rowErrors = feesForm.errors as Record<string, string>;
                                                         const montantError = rowErrors[`fee_lines.${index}.montant_initial`];
 
@@ -1404,6 +1442,13 @@ export default function InscriptionsIndex({
                                                                 <td className="text-end fw-semibold" style={{ width: 110 }}>
                                                                     {final.toFixed(2)} DH
                                                                 </td>
+                                                                <td
+                                                                    className={`text-end fw-semibold${reste > 0 ? ' text-danger' : ' text-success'}`}
+                                                                    style={{ width: 110 }}
+                                                                    title={`Payé : ${paye.toFixed(2)} DH`}
+                                                                >
+                                                                    {reste.toFixed(2)} DH
+                                                                </td>
                                                                 <td style={{ width: 150 }}>
                                                                     <DateField
                                                                         id={`ins-edit-fee-date-${index}`}
@@ -1446,6 +1491,9 @@ export default function InscriptionsIndex({
                                                             Total à payer
                                                         </td>
                                                         <td className="text-end fw-bold">{linesTotal(feesForm.data.fee_lines).toFixed(2)} DH</td>
+                                                        <td className="text-end fw-bold">
+                                                            {linesResteTotal(feesForm.data.fee_lines).toFixed(2)} DH
+                                                        </td>
                                                         <td colSpan={canManageFees ? 3 : 2} />
                                                     </tr>
                                                 </tfoot>
@@ -1737,7 +1785,7 @@ export default function InscriptionsIndex({
                 size="lg"
             >
                 {changeGroupTarget && (
-                    <form onSubmit={submitChangeGroup}>
+                    <form onSubmit={submitChangeGroup} onKeyDown={blockImplicitSubmit}>
                         <div className="alert alert-warning">
                             Cette action archivera l'inscription actuelle et créera une nouvelle inscription dans le
                             nouveau groupe sélectionné.

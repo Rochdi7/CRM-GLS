@@ -81,7 +81,7 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
     return (
         <>
             <div className="row">
-                <div className="col-md-4">
+                <div className="col-md-6 col-xl-3">
                     <div className="card">
                         <div className="card-body d-flex align-items-center">
                             <span className="avatar avatar-md bg-success-transparent rounded-circle me-3 d-inline-flex align-items-center justify-content-center">
@@ -94,7 +94,7 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
                         </div>
                     </div>
                 </div>
-                <div className="col-md-4">
+                <div className="col-md-6 col-xl-3">
                     <div className="card">
                         <div className="card-body d-flex align-items-center">
                             <span className="avatar avatar-md bg-danger-transparent rounded-circle me-3 d-inline-flex align-items-center justify-content-center">
@@ -107,7 +107,20 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
                         </div>
                     </div>
                 </div>
-                <div className="col-md-4">
+                <div className="col-md-6 col-xl-3">
+                    <div className="card">
+                        <div className="card-body d-flex align-items-center">
+                            <span className="avatar avatar-md bg-warning-transparent rounded-circle me-3 d-inline-flex align-items-center justify-content-center">
+                                <i className="ti ti-arrow-back-up text-warning fs-20" />
+                            </span>
+                            <div>
+                                <p className="mb-0 text-muted">Remboursements</p>
+                                <h5 className="mb-0 text-warning">{Number(journal.totalRemboursements).toFixed(2)} DH</h5>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div className="col-md-6 col-xl-3">
                     <div className="card">
                         <div className="card-body d-flex align-items-center">
                             <span className="avatar avatar-md bg-primary-transparent rounded-circle me-3 d-inline-flex align-items-center justify-content-center">

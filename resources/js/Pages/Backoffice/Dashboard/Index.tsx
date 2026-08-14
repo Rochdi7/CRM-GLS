@@ -2,6 +2,7 @@ import { router } from '@inertiajs/react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import StatsGrid from '@/Components/Dashboard/StatsGrid';
 import AnnualFraisChart from '@/Components/Dashboard/AnnualFraisChart';
+import SeancesCalendar from '@/Components/Dashboard/SeancesCalendar';
 import type { DashboardPageProps } from '@/Types';
 
 /**
@@ -11,9 +12,23 @@ import type { DashboardPageProps } from '@/Types';
  * Students is still a Livewire route — mixed-navigation rule), plus the
  * "Résumé des frais annuels" chart (GetAnnualFraisSummary).
  */
-export default function DashboardIndex({ stats, annualFrais, annualFraisYear, annualFraisYears }: DashboardPageProps) {
+export default function DashboardIndex({ stats, annualFrais, annualFraisYear, annualFraisYears, seancesCalendar }: DashboardPageProps) {
     function changeYear(year: number) {
-        router.get('/backoffice/dashboard', { year }, { preserveState: true, preserveScroll: true, replace: true });
+        router.get(
+            '/backoffice/dashboard',
+            { year, calMonth: seancesCalendar.month },
+            { preserveState: true, preserveScroll: true, replace: true },
+        );
+    }
+
+    function changeCalendarMonth(month: string) {
+        // Partial reload — only the calendar prop is recomputed server-side;
+        // the chart keeps its year via the shared query string.
+        router.get(
+            '/backoffice/dashboard',
+            { year: annualFraisYear, calMonth: month },
+            { preserveState: true, preserveScroll: true, replace: true, only: ['seancesCalendar'] },
+        );
     }
 
     return (
@@ -53,6 +68,12 @@ export default function DashboardIndex({ stats, annualFrais, annualFraisYear, an
             </div>
 
             <StatsGrid stats={stats} />
+
+            <div className="row">
+                <div className="col-md-12 d-flex">
+                    <SeancesCalendar data={seancesCalendar} onMonthChange={changeCalendarMonth} />
+                </div>
+            </div>
 
             <div className="row">
                 <div className="col-md-12">

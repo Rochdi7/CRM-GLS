@@ -243,6 +243,7 @@ export default function DepensesIndex({
         const prefillEncaissement = params.get('prefill_encaissement_id');
         const prefillMontant = params.get('prefill_montant');
         const prefillMotif = params.get('prefill_motif');
+        const prefillNote = params.get('prefill_note');
 
         if (!canViewRemboursements || prefillBeneficiaire === null) {
             return;
@@ -254,7 +255,7 @@ export default function DepensesIndex({
             montant: prefillMontant ?? '',
             date_remboursement: new Date().toISOString().slice(0, 10),
             motif: prefillMotif ?? '',
-            note: '',
+            note: prefillNote ?? '',
         });
         setShowRemboursementModal(true);
         // eslint-disable-next-line react-hooks/exhaustive-deps

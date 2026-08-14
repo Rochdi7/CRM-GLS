@@ -115,16 +115,26 @@ export default function InscriptionShow({ inscription }: InscriptionShowProps) {
                                     <th>Nom du frais</th>
                                     <th>Montant</th>
                                     <th>Payé</th>
+                                    <th>Reste</th>
                                     <th>Échéance</th>
                                     <th>Statut</th>
                                 </tr>
                             }
                         >
-                            {inscription.fees.map((fee) => (
+                            {inscription.fees.map((fee) => {
+                                // Derived here rather than server-side: montant and paye are
+                                // both already on the prop, so a `reste` key would be redundant
+                                // state that could drift from them.
+                                const reste = Math.max(0, Number(fee.montant) - Number(fee.paye));
+
+                                return (
                                 <tr key={fee.nom}>
                                     <td className="fw-medium">{fee.nom}</td>
                                     <td>{Number(fee.montant).toFixed(2)} MAD</td>
                                     <td>{Number(fee.paye).toFixed(2)} MAD</td>
+                                    <td className={`fw-semibold ${reste > 0 ? 'text-danger' : 'text-success'}`}>
+                                        {reste.toFixed(2)} MAD
+                                    </td>
                                     <td>{fee.dateEcheance ?? '—'}</td>
                                     <td>
                                         <span className={`badge badge-soft-${feeStatusVariant(fee.statut)}`}>
@@ -132,7 +142,8 @@ export default function InscriptionShow({ inscription }: InscriptionShowProps) {
                                         </span>
                                     </td>
                                 </tr>
-                            ))}
+                                );
+                            })}
                         </RelatedRecordsTable>
                     </Card>
                 </div>

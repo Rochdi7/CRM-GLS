@@ -48,6 +48,30 @@ function emptyForm(): ChequeFormState {
     };
 }
 
+/**
+ * Builds the note pre-filled on a remboursement created from a rejected
+ * chèque. Money records are never deleted (CLAUDE.md §11) — corrections are
+ * compensating entries — so the refund row itself has to carry enough
+ * context to be auditable on its own. Optional fields are skipped rather
+ * than rendered as "null".
+ */
+function rejectedChequeNote(cheque: ChequeRow): string {
+    const parts = [`Remboursement suite au rejet du chèque n° ${cheque.numeroCheque}`];
+
+    if (cheque.banque) {
+        parts.push(`banque : ${cheque.banque}`);
+    }
+
+    if (cheque.dateEcheance) {
+        parts.push(`échéance : ${cheque.dateEcheance}`);
+    }
+
+    parts.push(`montant du chèque : ${cheque.montant} DH`);
+    parts.push(`réf. chèque : ${cheque.reference}`);
+
+    return `${parts.join(' — ')}.`;
+}
+
 function statutVariant(statut: string): 'primary' | 'warning' | 'success' | 'danger' {
     if (statut === 'Déposé') return 'warning';
     if (statut === 'Encaissé') return 'success';
@@ -207,6 +231,10 @@ export default function ChequesIndex({
             params.set('prefill_encaissement_id', String(single.id));
             params.set('prefill_montant', single.montant);
             params.set('prefill_motif', `Chèque ${cheque.numeroCheque} rejeté`);
+            // The motif is the short reason; the note carries the traceable
+            // detail so the refund still explains itself months later, without
+            // the reader having to go find the chèque.
+            params.set('prefill_note', rejectedChequeNote(cheque));
         }
 
         setRejectedCheque(null);

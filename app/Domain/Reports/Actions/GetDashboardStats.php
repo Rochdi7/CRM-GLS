@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Reports\Actions;
 
 use App\Domain\Reports\DTOs\DashboardStatsData;
+use App\Models\Depense;
 use App\Models\Employee;
 use App\Models\Encaissement;
 use App\Models\Group;
@@ -52,6 +53,12 @@ final class GetDashboardStats
             ->when($centreId, fn ($q) => $q->whereHas('caisse', fn ($c) => $c->where('etablissement_id', $centreId)))
             ->sum('montant');
 
+        // Dépenses this month — same range + till-based center scoping as
+        // the encaissements figure so the two cards are directly comparable.
+        $depensesMonthQuery = Depense::query()
+            ->whereBetween('date_depense', [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()])
+            ->when($centreId, fn ($q) => $q->whereHas('caisse', fn ($c) => $c->where('etablissement_id', $centreId)));
+
         return new DashboardStatsData(
             studentsTotal: (clone $studentsQuery)->count(),
             employeesTotal: (clone $employeesQuery)->count(),
@@ -65,7 +72,11 @@ final class GetDashboardStats
             groupsEnFormation: (clone $groupsQuery)->where('statut', Group::STATUT_EN_FORMATION)->count(),
             inscriptionsTotal: (clone $inscriptionsQuery)->count(),
             inscriptionsActives: (clone $inscriptionsQuery)->where('statut', Inscription::STATUT_ACTIVE)->count(),
+            inscriptionsAnnulees: (clone $inscriptionsQuery)->where('statut', Inscription::STATUT_ANNULEE)->count(),
+            inscriptionsChangement: (clone $inscriptionsQuery)->where('statut', Inscription::STATUT_CHANGEMENT)->count(),
             paymentsMonth: (float) $paymentsMonth,
+            depensesMonth: (float) (clone $depensesMonthQuery)->sum('montant'),
+            depensesMonthCount: (clone $depensesMonthQuery)->count(),
             anneeLabel: $context->anneeScolaire()?->nom,
             centreLabel: $context->isAllCenters() ? __('All centers') : $context->etablissement()?->nom_centre,
         );

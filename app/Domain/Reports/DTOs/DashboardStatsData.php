@@ -20,7 +20,11 @@ final class DashboardStatsData
         public readonly int $groupsEnFormation,
         public readonly int $inscriptionsTotal,
         public readonly int $inscriptionsActives,
+        public readonly int $inscriptionsAnnulees,
+        public readonly int $inscriptionsChangement,
         public readonly float $paymentsMonth,
+        public readonly float $depensesMonth,
+        public readonly int $depensesMonthCount,
         public readonly ?string $anneeLabel,
         public readonly ?string $centreLabel,
     ) {}
@@ -28,7 +32,8 @@ final class DashboardStatsData
     /**
      * @return array{studentsTotal: int, employeesTotal: int, employeesActive: int,
      *     enseignantsTotal: int, parentsTotal: int, groupsTotal: int, groupsEnFormation: int, inscriptionsTotal: int,
-     *     inscriptionsActives: int, paymentsMonth: string, anneeLabel: ?string, centreLabel: ?string}
+     *     inscriptionsActives: int, inscriptionsAnnulees: int, inscriptionsChangement: int, paymentsMonth: string,
+     *     depensesMonth: string, depensesMonthCount: int, anneeLabel: ?string, centreLabel: ?string}
      */
     public function toArray(): array
     {
@@ -42,9 +47,13 @@ final class DashboardStatsData
             'groupsEnFormation' => $this->groupsEnFormation,
             'inscriptionsTotal' => $this->inscriptionsTotal,
             'inscriptionsActives' => $this->inscriptionsActives,
+            'inscriptionsAnnulees' => $this->inscriptionsAnnulees,
+            'inscriptionsChangement' => $this->inscriptionsChangement,
             // String, fixed 2-decimal — money is never floated to the client
             // (CLAUDE.md §17 Money rules; the source column is decimal(12,2)).
             'paymentsMonth' => number_format($this->paymentsMonth, 2, '.', ''),
+            'depensesMonth' => number_format($this->depensesMonth, 2, '.', ''),
+            'depensesMonthCount' => $this->depensesMonthCount,
             'anneeLabel' => $this->anneeLabel,
             'centreLabel' => $this->centreLabel,
         ];

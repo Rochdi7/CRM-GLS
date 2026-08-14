@@ -619,3 +619,198 @@ html[data-theme='dark'] .gls-toast-progress {
         transform: scaleX(0);
     }
 }
+
+/*
+ * "Résumé des séances" dashboard calendar (Components/Dashboard/
+ * SeancesCalendar.tsx) — custom widget, not a theme component. Dots are
+ * status-colored (vert Effectuée / rouge Annulée / ambre Prévue) and carry
+ * a pure-CSS tooltip via data-tooltip (no Bootstrap tooltip JS — §3).
+ */
+.gls-seancecal {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    border: 1px solid #e9edf4;
+    border-radius: 5px;
+    overflow: visible;
+}
+.gls-seancecal-weekday {
+    padding: 10px 6px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 13px;
+    color: #202c4b;
+    background: #f9fafb;
+    border-bottom: 1px solid #e9edf4;
+}
+.gls-seancecal-day {
+    min-height: 84px;
+    padding: 8px;
+    border-bottom: 1px solid #e9edf4;
+    border-right: 1px solid #e9edf4;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: background-color 0.15s ease;
+}
+.gls-seancecal-day:nth-child(7n) {
+    border-right: 0;
+}
+.gls-seancecal-day.has-seances {
+    cursor: pointer;
+}
+.gls-seancecal-day.has-seances:hover {
+    background: #eefaf5;
+}
+.gls-seancecal-day.is-today {
+    background: #eaf8ec;
+}
+.gls-seancecal-day.is-today .gls-seancecal-num {
+    font-size: 24px;
+    font-weight: 600;
+}
+.gls-seancecal-day-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 4px;
+}
+.gls-seancecal-num {
+    margin-left: auto;
+    font-size: 15px;
+    color: #515b73;
+}
+.gls-seancecal-day.is-weekend .gls-seancecal-num {
+    color: #e05c6d;
+}
+.gls-seancecal-day.is-outside .gls-seancecal-num {
+    color: #b9c0cf;
+}
+.gls-seancecal-count {
+    flex-shrink: 0;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 5px;
+    border-radius: 50%;
+    background: #a5484f;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.gls-seancecal-dots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+.gls-seancecal-dot {
+    position: relative;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    cursor: pointer;
+}
+.gls-seancecal-dot-success {
+    background: #2e9d7e;
+}
+.gls-seancecal-dot-danger {
+    background: #ef6879;
+}
+.gls-seancecal-dot-warning {
+    background: #eab300;
+}
+.gls-seancecal-dot:hover {
+    transform: scale(1.25);
+}
+/* Pure-CSS tooltip (dark bubble + arrow) fed by data-tooltip. */
+.gls-seancecal-dot::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: 240px;
+    padding: 6px 10px;
+    border-radius: 5px;
+    background: #202c4b;
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.4;
+    text-align: center;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s ease;
+    z-index: 20;
+    pointer-events: none;
+}
+.gls-seancecal-dot::before {
+    content: '';
+    position: absolute;
+    bottom: calc(100% + 3px);
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #202c4b;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s ease;
+    z-index: 20;
+    pointer-events: none;
+}
+.gls-seancecal-dot:hover::after,
+.gls-seancecal-dot:hover::before {
+    opacity: 1;
+    visibility: visible;
+}
+/* First grid row's tooltips would clip above the card — flip them below. */
+.gls-seancecal-day:nth-child(-n + 14) .gls-seancecal-dot::after {
+    bottom: auto;
+    top: calc(100% + 8px);
+}
+.gls-seancecal-day:nth-child(-n + 14) .gls-seancecal-dot::before {
+    bottom: auto;
+    top: calc(100% + 3px);
+    border-top-color: transparent;
+    border-bottom-color: #202c4b;
+}
+@media (max-width: 767.98px) {
+    .gls-seancecal-day {
+        min-height: 64px;
+        padding: 5px;
+    }
+    .gls-seancecal-weekday {
+        font-size: 11px;
+        padding: 8px 2px;
+    }
+    .gls-seancecal-day.is-today .gls-seancecal-num {
+        font-size: 18px;
+    }
+    .gls-seancecal-dot {
+        width: 9px;
+        height: 9px;
+    }
+}
+html[data-theme='dark'] .gls-seancecal,
+html[data-theme='dark'] .gls-seancecal-weekday,
+html[data-theme='dark'] .gls-seancecal-day {
+    border-color: #393f4d;
+}
+html[data-theme='dark'] .gls-seancecal-weekday {
+    background: #1b1f27;
+    color: #d5d8de;
+}
+html[data-theme='dark'] .gls-seancecal-num {
+    color: #b1b6c1;
+}
+html[data-theme='dark'] .gls-seancecal-day.is-outside .gls-seancecal-num {
+    color: #565e6d;
+}
+html[data-theme='dark'] .gls-seancecal-day.has-seances:hover {
+    background: rgba(46, 157, 126, 0.12);
+}
+html[data-theme='dark'] .gls-seancecal-day.is-today {
+    background: rgba(46, 157, 126, 0.18);
+}

@@ -8,6 +8,8 @@ interface StatCardProps {
     label: string;
     secondaryLabel?: string;
     secondaryValue?: ReactNode;
+    /** Free-form footer row (e.g. several status badges) — replaces the secondary label/value pair. */
+    footer?: ReactNode;
 }
 
 /**
@@ -16,7 +18,7 @@ interface StatCardProps {
  * an illustrated SVG — matches how every other icon in the backoffice is
  * rendered (RowActions, StatusBadge, nav items), no separate image assets.
  */
-export default function StatCard({ icon, iconBg, value, label, secondaryLabel, secondaryValue }: StatCardProps) {
+export default function StatCard({ icon, iconBg, value, label, secondaryLabel, secondaryValue, footer }: StatCardProps) {
     return (
         <div className="col-xxl-3 col-sm-6 d-flex">
             <div className="card flex-fill border-0">
@@ -30,7 +32,11 @@ export default function StatCard({ icon, iconBg, value, label, secondaryLabel, s
                             <p className="text-gray">{label}</p>
                         </div>
                     </div>
-                    {secondaryLabel && (
+                    {footer ? (
+                        <div className="d-flex align-items-center flex-wrap gap-1 border-top mt-3 pt-3">
+                            {footer}
+                        </div>
+                    ) : secondaryLabel && (
                         <div className="d-flex align-items-center justify-content-between border-top mt-3 pt-3">
                             <p className="mb-0">
                                 {secondaryLabel} : <span className="text-dark fw-semibold">{secondaryValue}</span>

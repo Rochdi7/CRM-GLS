@@ -17,6 +17,7 @@ import SelectField from '@/Components/Forms/SelectField';
 import FormActions from '@/Components/Forms/FormActions';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
+import { blockImplicitSubmit } from '@/Lib/forms';
 import type { GroupFraisLigne, GroupRow, GroupsPageProps, GroupStudentSegmentRow, SelectOption, SharedProps } from '@/Types';
 
 type StatsSegment = 'total' | 'active' | 'annulee' | 'changement' | 'etudiants';
@@ -526,7 +527,7 @@ export default function GroupsIndex({
             </Card>
 
             <Modal show={showModal} title={editingGroup ? 'Modifier le groupe' : 'Ajouter un groupe'} onClose={closeModal} processing={form.processing} size="xl">
-                <form onSubmit={submit}>
+                <form onSubmit={submit} onKeyDown={blockImplicitSubmit}>
                     <div className="row">
                         <div className="col-md-3">
                             <FormField

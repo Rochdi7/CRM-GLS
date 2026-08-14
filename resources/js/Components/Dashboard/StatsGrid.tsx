@@ -75,8 +75,19 @@ export default function StatsGrid({ stats }: StatsGridProps) {
                 iconBg="bg-info-transparent"
                 value={stats.inscriptionsTotal}
                 label="Inscriptions"
-                secondaryLabel="Actives"
-                secondaryValue={stats.inscriptionsActives}
+                footer={
+                    <>
+                        <span className="badge badge-soft-success">
+                            Actives : {stats.inscriptionsActives}
+                        </span>
+                        <span className="badge badge-soft-danger">
+                            Annulées : {stats.inscriptionsAnnulees}
+                        </span>
+                        <span className="badge badge-soft-info">
+                            Changement : {stats.inscriptionsChangement}
+                        </span>
+                    </>
+                }
             />
 
             <StatCard
@@ -84,6 +95,15 @@ export default function StatsGrid({ stats }: StatsGridProps) {
                 iconBg="bg-success-transparent"
                 value={`${Number(stats.paymentsMonth).toFixed(2)} MAD`}
                 label="Encaissements ce mois-ci"
+            />
+
+            <StatCard
+                icon="ti-cash-banknote-off"
+                iconBg="bg-danger-transparent"
+                value={`${Number(stats.depensesMonth).toFixed(2)} MAD`}
+                label="Dépenses ce mois-ci"
+                secondaryLabel="Nombre de dépenses"
+                secondaryValue={stats.depensesMonthCount}
             />
         </div>
     );

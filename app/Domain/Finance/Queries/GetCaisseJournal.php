@@ -74,6 +74,12 @@ final class GetCaisseJournal
 
         $totalEncaissements = (float) Encaissement::query()->whereIn('caisse_id', $ids)->sum('montant');
         $totalDepenses = (float) Depense::query()->whereIn('caisse_id', $ids)->sum('montant');
+        // Refunds decrement the till exactly like a dépense
+        // (EnregistrerRemboursement), but they are their own outflow and must
+        // not be folded into the "Dépenses" KPI — without this total the page
+        // contradicts itself: the solde drops while every displayed total
+        // stays put, which reads as "the caisse didn't record the refund".
+        $totalRemboursements = (float) Remboursement::query()->whereIn('caisse_id', $ids)->sum('montant');
         $solde = (float) Caisse::query()->whereIn('id', $ids)->sum('solde');
 
         $rows = $this->rows($ids, $typeFilter, $dateFrom, $dateTo);
@@ -88,6 +94,7 @@ final class GetCaisseJournal
                 ->map(fn (Caisse $c): array => ['id' => $c->id, 'nom' => $c->nom]),
             'totalEncaissements' => number_format($totalEncaissements, 2, '.', ''),
             'totalDepenses' => number_format($totalDepenses, 2, '.', ''),
+            'totalRemboursements' => number_format($totalRemboursements, 2, '.', ''),
             'solde' => number_format($solde, 2, '.', ''),
             'totauxParType' => $totauxParType->all(),
             'total' => $rows->count(),

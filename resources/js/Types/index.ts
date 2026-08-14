@@ -95,9 +95,30 @@ export interface DashboardStats {
     groupsEnFormation: number;
     inscriptionsTotal: number;
     inscriptionsActives: number;
+    inscriptionsAnnulees: number;
+    inscriptionsChangement: number;
     paymentsMonth: string;
+    depensesMonth: string;
+    depensesMonthCount: number;
     anneeLabel: string | null;
     centreLabel: string | null;
+}
+
+/** One séance inside the "Résumé des séances" dashboard calendar (GetSeancesCalendar). */
+export interface SeanceCalendarEntry {
+    id: number;
+    groupNom: string | null;
+    enseignant: string | null;
+    statut: string;
+    heureDebut: string | null;
+    heureFin: string | null;
+    showUrl: string;
+}
+
+/** Mirrors GetSeancesCalendar's return shape — one month of séances keyed by 'YYYY-MM-DD'. */
+export interface SeancesCalendarData {
+    month: string;
+    days: Record<string, SeanceCalendarEntry[]>;
 }
 
 /** Mirrors App\Domain\Reports\Actions\GetAnnualFraisSummary's return shape — 12 monthly points, 5 series, each a pre-formatted decimal string (money never floated over the wire). */
@@ -115,6 +136,7 @@ export interface DashboardPageProps {
     annualFrais: AnnualFraisSummary;
     annualFraisYear: number;
     annualFraisYears: number[];
+    seancesCalendar: SeancesCalendarData;
     [key: string]: unknown;
 }
 
@@ -1124,6 +1146,8 @@ export interface CaisseJournalData {
     caissesInScope: Array<{ id: number; nom: string }>;
     totalEncaissements: MoneyDisplay;
     totalDepenses: MoneyDisplay;
+    /** Refunds paid out of the till — a separate outflow from `totalDepenses`, never folded into it. */
+    totalRemboursements: MoneyDisplay;
     solde: MoneyDisplay;
     totauxParType: Record<string, MoneyDisplay>;
     total: number;

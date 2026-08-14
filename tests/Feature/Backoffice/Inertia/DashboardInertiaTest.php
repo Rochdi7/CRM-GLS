@@ -9,6 +9,7 @@ use App\Models\Employee;
 use App\Models\Etablissement;
 use App\Models\Group;
 use App\Models\Role;
+use App\Models\Seance;
 use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -55,9 +56,15 @@ final class DashboardInertiaTest extends TestCase
                 ->has('stats.groupsEnFormation')
                 ->has('stats.inscriptionsTotal')
                 ->has('stats.inscriptionsActives')
+                ->has('stats.inscriptionsAnnulees')
+                ->has('stats.inscriptionsChangement')
                 ->has('stats.paymentsMonth')
+                ->has('stats.depensesMonth')
+                ->has('stats.depensesMonthCount')
                 ->has('stats.anneeLabel')
                 ->has('stats.centreLabel')
+                ->has('seancesCalendar.month')
+                ->has('seancesCalendar.days')
             );
     }
 
@@ -68,8 +75,8 @@ final class DashboardInertiaTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->where('stats', fn ($stats) => collect($stats)->keys()->all() === [
                     'studentsTotal', 'employeesTotal', 'employeesActive', 'enseignantsTotal', 'parentsTotal', 'groupsTotal',
-                    'groupsEnFormation', 'inscriptionsTotal', 'inscriptionsActives',
-                    'paymentsMonth', 'anneeLabel', 'centreLabel',
+                    'groupsEnFormation', 'inscriptionsTotal', 'inscriptionsActives', 'inscriptionsAnnulees', 'inscriptionsChangement',
+                    'paymentsMonth', 'depensesMonth', 'depensesMonthCount', 'anneeLabel', 'centreLabel',
                 ])
             );
     }
@@ -81,7 +88,65 @@ final class DashboardInertiaTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->where('stats.studentsTotal', 0)
                 ->where('stats.paymentsMonth', '0.00')
+                ->where('stats.depensesMonth', '0.00')
+                ->where('stats.depensesMonthCount', 0)
             );
+    }
+
+    public function test_seances_calendar_groups_month_sessions_by_day(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole(Role::SUPER_ADMIN);
+
+        $annee = AnneeScolaire::query()->where('nom', '2025/2026')->firstOrFail();
+        $centre = Etablissement::factory()->create();
+        $group = Group::factory()->create(['etablissement_id' => $centre->id, 'annee_scolaire_id' => $annee->id]);
+
+        $inMonth = now()->startOfMonth()->addDays(2);
+        Seance::create([
+            'group_id' => $group->id,
+            'date_seance' => $inMonth->toDateString(),
+            'heure_debut' => '19:00',
+            'heure_fin' => '21:30',
+            'etablissement_id' => $centre->id,
+            'annee_scolaire_id' => $annee->id,
+            'statut' => Seance::STATUT_EFFECTUEE,
+        ]);
+        // Previous month — must not appear for the default (current) month.
+        Seance::create([
+            'group_id' => $group->id,
+            'date_seance' => now()->subMonthNoOverflow()->toDateString(),
+            'etablissement_id' => $centre->id,
+            'annee_scolaire_id' => $annee->id,
+            'statut' => Seance::STATUT_PREVUE,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('backoffice.dashboard'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('seancesCalendar.month', now()->format('Y-m'))
+                ->has('seancesCalendar.days', 1)
+                ->has("seancesCalendar.days.{$inMonth->toDateString()}", 1)
+                ->where("seancesCalendar.days.{$inMonth->toDateString()}.0.statut", Seance::STATUT_EFFECTUEE)
+                ->where("seancesCalendar.days.{$inMonth->toDateString()}.0.heureDebut", '19:00')
+            );
+    }
+
+    public function test_seances_calendar_follows_the_requested_month(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole(Role::SUPER_ADMIN);
+
+        $target = now()->subMonthNoOverflow();
+
+        $this->actingAs($admin)
+            ->get(route('backoffice.dashboard', ['calMonth' => $target->format('Y-m')]))
+            ->assertInertia(fn (Assert $page) => $page->where('seancesCalendar.month', $target->format('Y-m')));
+
+        // Malformed month falls back to the current one instead of erroring.
+        $this->actingAs($admin)
+            ->get(route('backoffice.dashboard', ['calMonth' => 'not-a-month']))
+            ->assertInertia(fn (Assert $page) => $page->where('seancesCalendar.month', now()->format('Y-m')));
     }
 
     public function test_stats_follow_the_selected_center(): void
