@@ -28,6 +28,9 @@
     {{-- Select2 CSS only (no jQuery/Select2 JS anywhere): SelectField.tsx
          renders Select2's own markup as a React-native searchable dropdown. --}}
     <link rel="stylesheet" href="{{ asset('assets/preskool/css/select2.min.css') }}">
+    {{-- Flag sprite classes (.flag.flag-xx, ISO-3166 lowercase codes) used by
+         PhoneField's country dropdown — see icons/icon-flag.blade.php reference. --}}
+    <link rel="stylesheet" href="{{ asset('assets/preskool/plugins/icons/flags/flags.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/preskool/css/style.css') }}">
 
     {{--

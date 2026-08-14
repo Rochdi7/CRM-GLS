@@ -261,7 +261,7 @@ export default function DateField({
                     }}
                 />
                 <i
-                    className="ti ti-calendar text-muted"
+                    className="fa fa-calendar text-muted"
                     aria-hidden="true"
                     style={{
                         position: 'absolute',
@@ -292,7 +292,7 @@ export default function DateField({
                                 aria-label="Mois précédent"
                                 onClick={() => moveMonth(-1)}
                             >
-                                <i className="ti ti-chevron-left" aria-hidden="true" />
+                                <i className="fa fa-chevron-left" aria-hidden="true" />
                             </button>
                             <span className="fw-bold text-capitalize">{monthTitle}</span>
                             <button
@@ -301,7 +301,7 @@ export default function DateField({
                                 aria-label="Mois suivant"
                                 onClick={() => moveMonth(1)}
                             >
-                                <i className="ti ti-chevron-right" aria-hidden="true" />
+                                <i className="fa fa-chevron-right" aria-hidden="true" />
                             </button>
                         </div>
                         <div

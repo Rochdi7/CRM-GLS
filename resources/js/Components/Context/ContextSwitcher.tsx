@@ -165,7 +165,7 @@ export default function ContextSwitcher({ context }: ContextSwitcherProps) {
                     aria-expanded={yearMenuOpen}
                     disabled={processing}
                 >
-                    <i className="ti ti-calendar me-2" />
+                    <i className="fa fa-calendar me-2" />
                     <span className="fw-semibold">{context.currentAcademicYear?.name ?? 'Année scolaire'}</span>
                 </button>
                 <div
@@ -194,7 +194,7 @@ export default function ContextSwitcher({ context }: ContextSwitcherProps) {
                     aria-expanded={centerMenuOpen}
                     disabled={processing || !context.canSwitchCenter}
                 >
-                    <i className="ti ti-building me-2" />
+                    <i className="fa fa-building me-2" />
                     <span className="fw-semibold">
                         {context.isAllCenters ? 'Tous les centres' : (context.currentCenter?.name ?? 'Centre')}
                     </span>
@@ -209,7 +209,7 @@ export default function ContextSwitcher({ context }: ContextSwitcherProps) {
                             className={`dropdown-item border-0 bg-transparent w-100 text-start${context.isAllCenters ? ' active' : ''}`}
                             onClick={() => submitContext({ etablissement_id: null })}
                         >
-                            <i className="ti ti-world me-2" />
+                            <i className="fa fa-globe me-2" />
                             Tous les centres
                         </button>
                         <div className="dropdown-divider" />

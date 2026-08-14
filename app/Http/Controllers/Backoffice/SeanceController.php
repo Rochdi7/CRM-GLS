@@ -9,12 +9,15 @@ use App\Domain\Attendance\Queries\GetSeanceDetails;
 use App\Domain\Attendance\Queries\GetSeanceFormOptions;
 use App\Domain\Attendance\Queries\GetSeancesList;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Backoffice\Attendance\AnnulerSeanceRequest;
 use App\Http\Requests\Backoffice\Attendance\SavePresencesRequest;
 use App\Http\Requests\Backoffice\Attendance\StoreSeanceRequest;
 use App\Http\Requests\Backoffice\Attendance\UpdateSeanceRequest;
 use App\Models\Group;
 use App\Models\Presence;
 use App\Models\Seance;
+use App\Services\Authorization\CenterAccessService;
+use App\Services\Context\CurrentContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -76,33 +79,154 @@ final class SeanceController extends Controller
         Seance $seance,
         GetSeanceDetails $getSeanceDetails,
         GetSeanceFormOptions $formOptions,
+        GetSeancesList $getSeancesList,
     ): Response {
         $this->authorize('view', $seance);
 
+        return $this->renderFicheDePresence(
+            $request,
+            $seance,
+            $getSeanceDetails,
+            $formOptions,
+            $getSeancesList,
+            pageUrl: route('backoffice.seances.show', $seance),
+        );
+    }
+
+    /**
+     * "Saisir l'absence" tab entry point from the Index list — no séance is
+     * pre-selected there. Renders the same fiche de présence as show(),
+     * defaulting to today's earliest séance when one exists; otherwise an
+     * empty roll call with the Date/Employé/Séances pickers so the user can
+     * pick another day right there — never redirects or blocks.
+     */
+    public function presences(
+        Request $request,
+        GetSeanceDetails $getSeanceDetails,
+        GetSeanceFormOptions $formOptions,
+        GetSeancesList $getSeancesList,
+        CenterAccessService $centerAccess,
+        CurrentContext $context,
+    ): Response {
+        $this->authorize('viewAny', Seance::class);
+
+        $user = $request->user();
+        $requestedDate = (string) $request->string('date');
+        $hasExplicitDate = preg_match('/^\d{4}-\d{2}-\d{2}$/', $requestedDate) === 1;
+
+        $seance = $request->integer('seance') !== 0
+            ? Seance::find($request->integer('seance'))
+            : Seance::query()
+                ->tap(fn ($q) => $centerAccess->scopeAccessibleCenters($q, $user))
+                ->tap(function ($q) use ($context): void {
+                    $etablissementId = $context->etablissementId();
+
+                    if ($etablissementId !== null) {
+                        $q->where(fn ($sub) => $sub->whereNull('etablissement_id')->orWhere('etablissement_id', $etablissementId));
+                    }
+                })
+                ->when($context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
+                ->whereDate('date_seance', $hasExplicitDate ? $requestedDate : now()->toDateString())
+                ->when($request->filled('enseignant'), fn ($q) => $q->where('enseignant_id', $request->integer('enseignant')))
+                ->orderBy('heure_debut')
+                ->orderBy('id')
+                ->first();
+
+        if ($seance !== null && ! $user->can('view', $seance)) {
+            $seance = null;
+        }
+
+        if ($seance === null) {
+            // Non-blocking — the page still renders below with the pickers
+            // and an empty roll call so the user can pick another date.
+            $request->session()->flash('info', __('No session is scheduled for this date.'));
+        }
+
+        return $this->renderFicheDePresence(
+            $request,
+            $seance,
+            $getSeanceDetails,
+            $formOptions,
+            $getSeancesList,
+            fallbackDate: $hasExplicitDate ? $requestedDate : now()->toDateString(),
+            pageUrl: route('backoffice.seances.presences'),
+        );
+    }
+
+    /**
+     * Shared render for the fiche de présence page (both tabs): the roll
+     * call for $seance (or an empty one when null — "Saisir l'absence"
+     * opened with nothing scheduled) plus the "Séances" tab's own list.
+     */
+    private function renderFicheDePresence(
+        Request $request,
+        ?Seance $seance,
+        GetSeanceDetails $getSeanceDetails,
+        GetSeanceFormOptions $formOptions,
+        GetSeancesList $getSeancesList,
+        ?string $fallbackDate = null,
+        string $pageUrl = '',
+    ): Response {
         $user = $request->user();
 
         // The Date / Employé selectors above the roll call drive the séance
-        // picker; they default to the open séance's own date and teacher.
+        // picker; they default to the open séance's own date and teacher,
+        // or today when no séance is loaded at all.
         $filterDate = (string) $request->string('date');
 
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $filterDate) !== 1) {
-            $filterDate = $seance->date_seance->toDateString();
+            $filterDate = $seance?->date_seance->toDateString() ?? $fallbackDate ?? now()->toDateString();
         }
 
         $filterEnseignant = $request->has('enseignant')
             ? ($request->integer('enseignant') ?: null)
-            : $seance->enseignant_id;
+            : $seance?->enseignant_id;
+
+        // "Séances" tab — same list/filters as Index, scoped to this page so
+        // switching tabs never navigates away from the fiche de présence.
+        $listFilters = [
+            'search' => (string) $request->string('search'),
+            'groupFilter' => (string) $request->string('groupFilter'),
+            'statutFilter' => (string) $request->string('statutFilter'),
+            'enseignantFilter' => (string) $request->string('enseignantFilter'),
+            'dateFrom' => (string) $request->string('dateFrom'),
+            'dateTo' => (string) $request->string('dateTo'),
+        ];
+
+        if (! in_array($listFilters['statutFilter'], Seance::STATUTS, true)) {
+            $listFilters['statutFilter'] = '';
+        }
+
+        $perPage = (int) $request->integer('perPage', GetSeancesList::DEFAULT_PER_PAGE);
 
         return Inertia::render('Backoffice/Seances/Show', [
-            'seance' => $getSeanceDetails($seance),
+            'seance' => $seance !== null ? $getSeanceDetails($seance) : null,
+            'pageUrl' => $pageUrl,
             'presenceStatuts' => Presence::STATUTS,
-            'canMark' => $user->can('mark', $seance),
+            'canMark' => $seance !== null && $user->can('mark', $seance),
+            'canValidate' => $seance !== null && $user->can('validate', $seance),
+            'canCancel' => $seance !== null && $user->can('cancel', $seance),
             'filters' => [
                 'date' => $filterDate,
                 'enseignant' => $filterEnseignant,
             ],
             'enseignantOptions' => $formOptions->enseignants(),
             'seanceOptions' => $formOptions->seancesFor($user, $filterDate, $filterEnseignant),
+            'seances' => $getSeancesList($user, $listFilters, $perPage),
+            'listFilters' => $listFilters + [
+                'perPage' => in_array($perPage, GetSeancesList::PER_PAGE_OPTIONS, true)
+                    ? $perPage
+                    : GetSeancesList::DEFAULT_PER_PAGE,
+            ],
+            'perPageOptions' => GetSeancesList::PER_PAGE_OPTIONS,
+            'groupOptions' => $formOptions->groups($user),
+            'statuts' => Seance::STATUTS,
+            'listPermissions' => [
+                'create' => $user->can('create', Seance::class),
+                'update' => $user->can('attendance.update'),
+                'delete' => $user->can('attendance.delete'),
+                'mark' => $user->can('attendance.mark'),
+            ],
         ]);
     }
 
@@ -180,5 +304,25 @@ final class SeanceController extends Controller
 
         return redirect()->route('backoffice.seances.show', $seance)
             ->with('success', __('Attendance saved.'));
+    }
+
+    public function valider(Request $request, Seance $seance): RedirectResponse
+    {
+        $this->authorize('validate', $seance);
+
+        $seance->valider();
+
+        return redirect()->back()
+            ->with('success', __('Session confirmed.'));
+    }
+
+    public function annuler(AnnulerSeanceRequest $request, Seance $seance): RedirectResponse
+    {
+        $this->authorize('cancel', $seance);
+
+        $seance->annuler((string) $request->validated('motif'));
+
+        return redirect()->back()
+            ->with('success', __('Session cancelled.'));
     }
 }

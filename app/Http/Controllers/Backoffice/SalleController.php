@@ -37,7 +37,7 @@ final class SalleController extends Controller
         Salle::create($request->validated());
 
         return redirect()->route('backoffice.settings', ['tab' => 'salles'])
-            ->with('status', __('Salle créée.'));
+            ->with('success', __('Salle créée.'));
     }
 
     public function edit(Salle $salle): RedirectResponse
@@ -50,7 +50,7 @@ final class SalleController extends Controller
         $salle->update($request->validated());
 
         return redirect()->route('backoffice.settings', ['tab' => 'salles'])
-            ->with('status', __('Salle mise à jour.'));
+            ->with('success', __('Salle mise à jour.'));
     }
 
     /**
@@ -69,6 +69,6 @@ final class SalleController extends Controller
         $salle->delete();
 
         return redirect()->route('backoffice.settings', ['tab' => 'salles'])
-            ->with('status', __('Salle supprimée.'));
+            ->with('success', __('Salle supprimée.'));
     }
 }

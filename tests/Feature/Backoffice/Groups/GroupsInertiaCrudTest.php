@@ -445,6 +445,48 @@ final class GroupsInertiaCrudTest extends TestCase
         $this->assertSame(Group::STATUT_EN_INSCRIPTION, $group->fresh()->statut);
     }
 
+    public function test_retourner_en_inscription_sets_statut_back_to_en_inscription(): void
+    {
+        $group = Group::factory()->create([
+            'statut' => Group::STATUT_EN_FORMATION,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $this->actingAs($this->userWith('groups.view', 'groups.archive'))
+            ->post(route('backoffice.groups.retourner-en-inscription', $group))
+            ->assertRedirect(route('backoffice.groups.index'));
+
+        $this->assertSame(Group::STATUT_EN_INSCRIPTION, $group->fresh()->statut);
+    }
+
+    public function test_retourner_en_inscription_is_refused_when_not_en_formation(): void
+    {
+        $group = Group::factory()->create([
+            'statut' => Group::STATUT_EN_INSCRIPTION,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $this->actingAs($this->userWith('groups.view', 'groups.archive'))
+            ->post(route('backoffice.groups.retourner-en-inscription', $group))
+            ->assertRedirect();
+
+        $this->assertSame(Group::STATUT_EN_INSCRIPTION, $group->fresh()->statut);
+    }
+
+    public function test_retourner_en_inscription_requires_groups_archive_permission(): void
+    {
+        $group = Group::factory()->create([
+            'statut' => Group::STATUT_EN_FORMATION,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $this->actingAs($this->userWith('groups.view'))
+            ->post(route('backoffice.groups.retourner-en-inscription', $group))
+            ->assertForbidden();
+
+        $this->assertSame(Group::STATUT_EN_FORMATION, $group->fresh()->statut);
+    }
+
     public function test_a_group_can_be_cancelled_reactivated_and_cancelled_again_without_error(): void
     {
         $group = Group::factory()->create([

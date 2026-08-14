@@ -34,7 +34,7 @@ class Seance extends Model
     protected $fillable = [
         'group_id', 'creneau_id', 'date_seance', 'heure_debut', 'heure_fin',
         'enseignant_id', 'etablissement_id', 'annee_scolaire_id',
-        'statut', 'note', 'created_by',
+        'statut', 'note', 'motif_annulation', 'created_by',
     ];
 
     protected function casts(): array
@@ -77,5 +77,25 @@ class Seance extends Model
     public function presences(): HasMany
     {
         return $this->hasMany(Presence::class);
+    }
+
+    /**
+     * Manually confirms the séance actually took place. The roll call no
+     * longer flips the statut on its own (EnregistrerPresences) — marking
+     * "Effectuée" is a deliberate action from the row menu.
+     */
+    public function valider(): void
+    {
+        $this->update(['statut' => self::STATUT_EFFECTUEE]);
+    }
+
+    /**
+     * Cancels the séance with a required reason, kept separate from the
+     * general `note` field so it never overwrites unrelated notes already on
+     * the séance.
+     */
+    public function annuler(string $motif): void
+    {
+        $this->update(['statut' => self::STATUT_ANNULEE, 'motif_annulation' => $motif]);
     }
 }

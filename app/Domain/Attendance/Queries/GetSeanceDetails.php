@@ -55,6 +55,7 @@ final class GetSeanceDetails
             'enseignantId' => $seance->enseignant_id,
             'statut' => $seance->statut,
             'note' => $seance->note,
+            'motifAnnulation' => $seance->motif_annulation,
             'students' => $students,
         ];
     }

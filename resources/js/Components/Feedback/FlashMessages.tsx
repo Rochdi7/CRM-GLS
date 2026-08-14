@@ -55,7 +55,7 @@ export default function FlashMessages({ flash }: FlashMessagesProps) {
                         onClick={() => setDismissed((prev) => ({ ...prev, [key]: true }))}
                     >
                         <span>
-                            <i className="ti ti-x" />
+                            <i className="fa fa-xmark" />
                         </span>
                     </button>
                 </div>

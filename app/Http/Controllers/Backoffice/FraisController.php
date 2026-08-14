@@ -42,7 +42,7 @@ final class FraisController extends Controller
         Frais::create($request->validated());
 
         return redirect()->route('backoffice.settings', ['tab' => 'frais'])
-            ->with('status', __('Frais créé.'));
+            ->with('success', __('Frais créé.'));
     }
 
     public function edit(Frais $frai): RedirectResponse
@@ -55,7 +55,7 @@ final class FraisController extends Controller
         $frai->update($request->validated());
 
         return redirect()->route('backoffice.settings', ['tab' => 'frais'])
-            ->with('status', __('Frais mis à jour.'));
+            ->with('success', __('Frais mis à jour.'));
     }
 
     /**
@@ -74,6 +74,6 @@ final class FraisController extends Controller
         $frai->delete();
 
         return redirect()->route('backoffice.settings', ['tab' => 'frais'])
-            ->with('status', __('Frais supprimé.'));
+            ->with('success', __('Frais supprimé.'));
     }
 }

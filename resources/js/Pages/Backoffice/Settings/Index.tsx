@@ -9,11 +9,11 @@ import BanquesPanel from '@/Pages/Backoffice/Settings/BanquesPanel';
 import type { SettingsPageProps, SettingsTab } from '@/Types';
 
 const TAB_LABELS: Record<SettingsTab, { label: string; icon: string }> = {
-    etablissements: { label: 'Centres', icon: 'ti ti-building' },
-    'annees-scolaires': { label: 'Années scolaires', icon: 'ti ti-calendar' },
-    salles: { label: 'Salles', icon: 'ti ti-door' },
-    frais: { label: 'Frais', icon: 'ti ti-receipt' },
-    banques: { label: 'Banques', icon: 'ti ti-building-bank' },
+    etablissements: { label: 'Centres', icon: 'fa fa-building' },
+    'annees-scolaires': { label: 'Années scolaires', icon: 'fa fa-calendar' },
+    salles: { label: 'Salles', icon: 'fa fa-door-open' },
+    frais: { label: 'Frais', icon: 'fa fa-receipt' },
+    banques: { label: 'Banques', icon: 'fa fa-building-columns' },
 };
 
 /**

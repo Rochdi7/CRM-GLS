@@ -19,4 +19,18 @@ final class SeancePolicy extends ResourcePolicy
     {
         return $user->can('attendance.mark') && $this->withinCenter($user, $seance);
     }
+
+    /**
+     * Manually confirming ("Valider") or cancelling ("Annuler") a séance —
+     * same audience as taking the roll call itself.
+     */
+    public function validate(User $user, Seance $seance): bool
+    {
+        return $this->mark($user, $seance);
+    }
+
+    public function cancel(User $user, Seance $seance): bool
+    {
+        return $this->mark($user, $seance);
+    }
 }

@@ -24,6 +24,7 @@ use App\Http\Controllers\Backoffice\GroupHistoriqueController;
 use App\Http\Controllers\Backoffice\InscriptionController;
 use App\Http\Controllers\Backoffice\PermissionController;
 use App\Http\Controllers\Backoffice\ProfileController;
+use App\Http\Controllers\Backoffice\RecouvrementController;
 use App\Http\Controllers\Backoffice\RemboursementController;
 use App\Http\Controllers\Backoffice\Roles\RoleController;
 use App\Http\Controllers\Backoffice\SeanceController;
@@ -173,11 +174,15 @@ Route::prefix('backoffice')
             Route::post('groups/{group}/archive', [GroupController::class, 'archive'])->name('groups.archive');
             // Quick lifecycle actions from the list's row menu — "Annuler"
             // (-> Annulée, terminal, same groups.archive gate as Fin de
-            // formation), "Réactiver" (Annulée -> En inscription), and
-            // "Activer" (En inscription -> En formation, training starts).
+            // formation), "Réactiver" (Annulée -> En inscription), "Activer"
+            // (En inscription -> En formation, training starts), and
+            // "Retourner en inscription" (En formation -> En inscription,
+            // reverses Activer).
             Route::post('groups/{group}/annuler', [GroupController::class, 'annuler'])->name('groups.annuler');
             Route::post('groups/{group}/reactiver', [GroupController::class, 'reactiver'])->name('groups.reactiver');
             Route::post('groups/{group}/activer', [GroupController::class, 'activer'])->name('groups.activer');
+            Route::post('groups/{group}/retourner-en-inscription', [GroupController::class, 'retournerEnInscription'])
+                ->name('groups.retourner-en-inscription');
             Route::get('groups/{group}/students-by-segment', [GroupController::class, 'studentsBySegment'])
                 ->name('groups.students-by-segment');
             Route::get('groups-historique', [GroupHistoriqueController::class, 'index'])
@@ -195,10 +200,23 @@ Route::prefix('backoffice')
                 ->middleware('permission:attendance.update')->name('seances.update');
             Route::delete('seances/{seance}', [SeanceController::class, 'destroy'])
                 ->middleware('permission:attendance.delete')->name('seances.destroy');
+            // Static segment — must stay before seances/{seance} so it isn't
+            // swallowed by the wildcard. "Saisir l'absence" tab entry point
+            // from the Index list: no séance is pre-selected, so this always
+            // renders the fiche de présence page (never redirects/blocks) —
+            // today's first séance if one exists, else an empty roll call
+            // with the Date/Employé/Séances pickers so the user can pick
+            // another day right there.
+            Route::get('seances/saisir-absence', [SeanceController::class, 'presences'])
+                ->middleware('permission:attendance.view')->name('seances.presences');
             Route::get('seances/{seance}', [SeanceController::class, 'show'])
                 ->name('seances.show');
             Route::put('seances/{seance}/presences', [SeanceController::class, 'savePresences'])
                 ->middleware('permission:attendance.mark')->name('seances.presences.update');
+            Route::post('seances/{seance}/valider', [SeanceController::class, 'valider'])
+                ->middleware('permission:attendance.mark')->name('seances.valider');
+            Route::post('seances/{seance}/annuler', [SeanceController::class, 'annuler'])
+                ->middleware('permission:attendance.mark')->name('seances.annuler');
 
             // Emploi du temps — weekly recurring schedule grid (créneaux),
             // distinct from the dated séances above. Creating/editing/
@@ -232,9 +250,12 @@ Route::prefix('backoffice')
             // (product decision: new product types beyond "Livre" are added
             // here without a code change). is_system rows stay locked
             // (StockTypePolicy + explicit unconditional controller guard,
-            // same pattern as Types de dépenses).
+            // same pattern as Types de dépenses). Merged into the "Gestion
+            // du stock" page as a third tab (tab=types) — no standalone
+            // index page/route anymore, only the store/update/destroy
+            // mutation endpoints the tab's forms submit to.
             Route::resource('stock-types', StockTypeController::class)
-                ->except(['show', 'create', 'edit']);
+                ->except(['show', 'create', 'edit', 'index']);
 
             // Enrollments — Inertia/React list + modal add/edit with manual
             // fee lines (Phase 9, docs/phase-9-inscriptions-audit.md +
@@ -335,6 +356,12 @@ Route::prefix('backoffice')
                 ->name('inscriptions.unpaid-fees');
             Route::get('inscriptions/{inscription}/payments', [EncaissementController::class, 'inscriptionPayments'])
                 ->name('inscriptions.payments');
+
+            // Gestion des recouvrements — read-only overdue-fees report
+            // (GetRetardsList). Two client-side tabs ("Retards selon la
+            // durée" / "Retards selon les critères") share the same query.
+            Route::get('recouvrement', [RecouvrementController::class, 'index'])
+                ->middleware('permission:collections.view')->name('recouvrement.index');
 
             // Avances — unallocated advances (no fee attached, see
             // Encaissement::isAvance()). A create route (fresh money, no

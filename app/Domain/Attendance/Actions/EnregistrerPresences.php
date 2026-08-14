@@ -15,7 +15,9 @@ use Illuminate\Support\Facades\DB;
  * Only students actually enrolled in the séance's group (active inscription)
  * are accepted — submitted lines for anyone else are silently dropped, so a
  * stale or forged student_id can never attach a presence to the wrong group.
- * Saving a roll call marks the séance "Effectuée" unless it was cancelled.
+ * Deliberately does NOT touch the séance's own `statut` — "Effectuée" is only
+ * ever set by the explicit "Valider la séance" row-menu action
+ * (Seance::valider()), never as a side effect of saving roll-call toggles.
  */
 final class EnregistrerPresences
 {
@@ -50,10 +52,6 @@ final class EnregistrerPresences
                         'note' => ($ligne['note'] ?? '') !== '' ? $ligne['note'] : null,
                     ],
                 );
-            }
-
-            if ($seance->statut !== Seance::STATUT_ANNULEE) {
-                $seance->update(['statut' => Seance::STATUT_EFFECTUEE]);
             }
         });
     }

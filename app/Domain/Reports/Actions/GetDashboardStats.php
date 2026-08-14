@@ -56,6 +56,11 @@ final class GetDashboardStats
             studentsTotal: (clone $studentsQuery)->count(),
             employeesTotal: (clone $employeesQuery)->count(),
             employeesActive: (clone $employeesQuery)->where('statut', Employee::STATUT_ACTIF)->count(),
+            enseignantsTotal: (clone $employeesQuery)->where('categorie', Employee::CATEGORIE_ENSEIGNANT)->count(),
+            // No separate "parents" table by design (Student::parent_nom
+            // lives inline, gls-crm-schema.md §5) — a "parent" is any
+            // student with a guardian actually recorded.
+            parentsTotal: (clone $studentsQuery)->whereNotNull('parent_nom')->count(),
             groupsTotal: (clone $groupsQuery)->count(),
             groupsEnFormation: (clone $groupsQuery)->where('statut', Group::STATUT_EN_FORMATION)->count(),
             inscriptionsTotal: (clone $inscriptionsQuery)->count(),

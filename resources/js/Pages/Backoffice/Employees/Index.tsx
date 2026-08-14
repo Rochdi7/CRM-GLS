@@ -304,7 +304,7 @@ export default function EmployeesIndex({
             breadcrumbs={[{ label: 'Tableau de bord', href: '/backoffice/dashboard' }, { label: 'Employés' }]}
             actions={
                 <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                    <i className="ti ti-square-rounded-plus me-2" />
+                    <i className="fa fa-square-plus me-2" />
                     Ajouter un employé
                 </button>
             }
@@ -361,7 +361,7 @@ export default function EmployeesIndex({
                 />
 
                 {employees.data.length === 0 ? (
-                    <EmptyState title="Aucun employé" icon="ti ti-users" />
+                    <EmptyState title="Aucun employé" icon="fa fa-users" />
                 ) : (
                     <>
                         <DataTable
@@ -421,15 +421,15 @@ export default function EmployeesIndex({
                                     </td>
                                     <td className="text-end">
                                         <RowActions>
-                                            <RowActionItem icon="ti-edit" onClick={() => openEdit(employee)}>
+                                            <RowActionItem icon="fa-pen" onClick={() => openEdit(employee)}>
                                                 Modifier
                                             </RowActionItem>
                                             {canManageUsers && employee.userId && (
-                                                <RowActionItem icon="ti-key" onClick={() => openAccount(employee)}>
+                                                <RowActionItem icon="fa-key" onClick={() => openAccount(employee)}>
                                                     Voir le compte
                                                 </RowActionItem>
                                             )}
-                                            <RowActionItem icon="ti-trash" danger onClick={() => confirmDelete(employee)}>
+                                            <RowActionItem icon="fa-trash" danger onClick={() => confirmDelete(employee)}>
                                                 Supprimer
                                             </RowActionItem>
                                         </RowActions>
@@ -447,7 +447,7 @@ export default function EmployeesIndex({
                     <div>
                         <div className="text-center mb-3">
                             <span className="avatar avatar-xl bg-success-transparent rounded-circle d-inline-flex align-items-center justify-content-center mb-2">
-                                <i className="ti ti-circle-check fs-24 text-success" />
+                                <i className="fa fa-circle-check fs-24 text-success" />
                             </span>
                             <h5>Employé créé</h5>
                             <p className="text-muted">
@@ -481,7 +481,7 @@ export default function EmployeesIndex({
                                 ) : existingPhotoUrl ? (
                                     <img src={existingPhotoUrl} alt="" className="w-100 h-100" style={{ objectFit: 'cover' }} />
                                 ) : (
-                                    <i className="ti ti-camera fs-24 text-muted" />
+                                    <i className="fa fa-camera fs-24 text-muted" />
                                 )}
                             </span>
                             <div>
@@ -546,7 +546,7 @@ export default function EmployeesIndex({
                                                     className="btn btn-outline-primary d-inline-flex align-items-center justify-content-center px-4"
                                                     htmlFor={`emp-sexe-${sexe}`}
                                                 >
-                                                    <i className={`ti ${sexe === 'Homme' ? 'ti-man' : 'ti-woman'} me-1`} />
+                                                    <i className={`fa ${sexe === 'Homme' ? 'fa-mars' : 'fa-venus'} me-1`} />
                                                     {sexe === 'Homme' ? 'Masculin' : 'Féminin'}
                                                 </label>
                                             </div>
@@ -710,7 +710,7 @@ export default function EmployeesIndex({
 
                         {!editingEmployee && (
                             <p className="text-muted fs-13 mb-0">
-                                <i className="ti ti-info-circle me-1" />
+                                <i className="fa fa-circle-info me-1" />
                                 Un compte de connexion sera créé automatiquement pour cet employé.
                             </p>
                         )}
@@ -749,7 +749,7 @@ export default function EmployeesIndex({
             >
                 <div className="text-center mb-3">
                     <span className="avatar avatar-xl bg-primary-transparent rounded-circle d-inline-flex align-items-center justify-content-center mb-2">
-                        <i className="ti ti-user-shield fs-24 text-primary" />
+                        <i className="fa fa-user-shield fs-24 text-primary" />
                     </span>
                     <h5>{accountTarget?.nomComplet}</h5>
                 </div>
@@ -786,7 +786,7 @@ export default function EmployeesIndex({
                             {regenerating ? (
                                 <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" />
                             ) : (
-                                <i className="ti ti-key me-1" />
+                                <i className="fa fa-key me-1" />
                             )}
                             Régénérer le mot de passe
                         </button>

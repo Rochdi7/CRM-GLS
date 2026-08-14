@@ -14,6 +14,8 @@ final class DashboardStatsData
         public readonly int $studentsTotal,
         public readonly int $employeesTotal,
         public readonly int $employeesActive,
+        public readonly int $enseignantsTotal,
+        public readonly int $parentsTotal,
         public readonly int $groupsTotal,
         public readonly int $groupsEnFormation,
         public readonly int $inscriptionsTotal,
@@ -25,7 +27,7 @@ final class DashboardStatsData
 
     /**
      * @return array{studentsTotal: int, employeesTotal: int, employeesActive: int,
-     *     groupsTotal: int, groupsEnFormation: int, inscriptionsTotal: int,
+     *     enseignantsTotal: int, parentsTotal: int, groupsTotal: int, groupsEnFormation: int, inscriptionsTotal: int,
      *     inscriptionsActives: int, paymentsMonth: string, anneeLabel: ?string, centreLabel: ?string}
      */
     public function toArray(): array
@@ -34,6 +36,8 @@ final class DashboardStatsData
             'studentsTotal' => $this->studentsTotal,
             'employeesTotal' => $this->employeesTotal,
             'employeesActive' => $this->employeesActive,
+            'enseignantsTotal' => $this->enseignantsTotal,
+            'parentsTotal' => $this->parentsTotal,
             'groupsTotal' => $this->groupsTotal,
             'groupsEnFormation' => $this->groupsEnFormation,
             'inscriptionsTotal' => $this->inscriptionsTotal,

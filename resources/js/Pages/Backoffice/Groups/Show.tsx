@@ -11,9 +11,9 @@ interface GroupShowProps {
 type ShowTab = 'frais' | 'etudiants' | 'groupe';
 
 const TABS: Array<{ key: ShowTab; icon: string; label: string }> = [
-    { key: 'frais', icon: 'ti-briefcase', label: 'Frais Scolaires' },
-    { key: 'etudiants', icon: 'ti-user', label: 'Étudiants' },
-    { key: 'groupe', icon: 'ti-home', label: 'Groupe' },
+    { key: 'frais', icon: 'fa-briefcase', label: 'Frais Scolaires' },
+    { key: 'etudiants', icon: 'fa-user', label: 'Étudiants' },
+    { key: 'groupe', icon: 'fa-house', label: 'Groupe' },
 ];
 
 function statutVariant(statut: string): 'success' | 'secondary' | 'danger' | 'warning' {
@@ -65,7 +65,7 @@ export default function GroupShow({ group }: GroupShowProps) {
                         <ul className="nav nav-tabs nav-tabs-solid nav-tabs-rounded-fill mb-0" role="tablist">
                             <li className="me-2" role="presentation">
                                 <button type="button" className="nav-link rounded active" disabled>
-                                    <i className="ti ti-file-text me-1" />
+                                    <i className="fa fa-file-lines me-1" />
                                     Fiche
                                 </button>
                             </li>
@@ -75,17 +75,17 @@ export default function GroupShow({ group }: GroupShowProps) {
                                 <form method="POST" action={group.archiveUrl} onSubmit={handleArchiveSubmit}>
                                     <input type="hidden" name="_token" value={getCsrfToken()} />
                                     <button type="submit" className="btn btn-outline-secondary d-flex align-items-center">
-                                        <i className="ti ti-archive me-2" />
+                                        <i className="fa fa-box-archive me-2" />
                                         Terminer la formation
                                     </button>
                                 </form>
                             )}
                             <a href="/backoffice/groups" className="btn btn-primary d-flex align-items-center">
-                                <i className="ti ti-edit me-2" />
+                                <i className="fa fa-pen me-2" />
                                 Modifier
                             </a>
                             <a href="/backoffice/groups" className="btn btn-outline-secondary d-flex align-items-center">
-                                <i className="ti ti-arrow-left me-2" />
+                                <i className="fa fa-arrow-left me-2" />
                                 Retour
                             </a>
                         </div>
@@ -131,7 +131,7 @@ export default function GroupShow({ group }: GroupShowProps) {
                                     className={`nav-link rounded${activeTab === tab.key ? ' active' : ''}`}
                                     onClick={() => setActiveTab(tab.key)}
                                 >
-                                    <i className={`ti ${tab.icon} me-1`} />
+                                    <i className={`fa ${tab.icon} me-1`} />
                                     {tab.label}
                                     {tab.key === 'frais' && (
                                         <span className={`badge ${activeTab === tab.key ? 'bg-white text-dark' : 'badge-soft-secondary'} ms-1`}>
@@ -152,7 +152,7 @@ export default function GroupShow({ group }: GroupShowProps) {
                         <RelatedRecordsTable
                             isEmpty={group.fees.length === 0}
                             emptyTitle="Aucun frais assigné"
-                            emptyIcon="ti ti-briefcase"
+                            emptyIcon="fa fa-briefcase"
                             head={
                                 <tr>
                                     <th>Frais</th>
@@ -180,7 +180,7 @@ export default function GroupShow({ group }: GroupShowProps) {
                         <RelatedRecordsTable
                             isEmpty={group.inscriptions.length === 0}
                             emptyTitle="Aucun étudiant inscrit"
-                            emptyIcon="ti ti-users"
+                            emptyIcon="fa fa-users"
                             head={
                                 <tr>
                                     <th>Référence</th>
@@ -220,7 +220,7 @@ export default function GroupShow({ group }: GroupShowProps) {
                                                 className="btn btn-outline-light bg-white btn-icon d-inline-flex align-items-center justify-content-center rounded-circle p-0"
                                                 title="Voir l'étudiant"
                                             >
-                                                <i className="ti ti-eye" />
+                                                <i className="fa fa-eye" />
                                             </a>
                                         )}
                                     </td>
@@ -255,7 +255,7 @@ export default function GroupShow({ group }: GroupShowProps) {
                                 <td>
                                     <span className="badge badge-soft-info d-inline-flex align-items-center gap-1">
                                         {group.etudiantsDistinctsCount}
-                                        <i className="ti ti-user" aria-hidden="true" />
+                                        <i className="fa fa-user" aria-hidden="true" />
                                     </span>
                                 </td>
                                 <td>
@@ -265,21 +265,21 @@ export default function GroupShow({ group }: GroupShowProps) {
                                             title="Inscriptions actives"
                                         >
                                             {group.inscriptionsActivesCount}
-                                            <i className="ti ti-user" aria-hidden="true" />
+                                            <i className="fa fa-user" aria-hidden="true" />
                                         </span>
                                         <span
                                             className="badge badge-soft-secondary d-inline-flex align-items-center gap-1"
                                             title="Inscriptions en changement"
                                         >
                                             {group.inscriptionsChangementCount}
-                                            <i className="ti ti-user" aria-hidden="true" />
+                                            <i className="fa fa-user" aria-hidden="true" />
                                         </span>
                                         <span
                                             className="badge badge-soft-danger d-inline-flex align-items-center gap-1"
                                             title="Inscriptions annulées"
                                         >
                                             {group.inscriptionsAnnuleesCount}
-                                            <i className="ti ti-user" aria-hidden="true" />
+                                            <i className="fa fa-user" aria-hidden="true" />
                                         </span>
                                     </div>
                                 </td>

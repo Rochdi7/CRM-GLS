@@ -16,40 +16,22 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Dashboard'),
                 href: '/backoffice/dashboard',
-                icon: 'ti ti-layout-dashboard',
+                icon: 'fa fa-gauge',
                 matchPaths: ['/backoffice/dashboard'],
                 inertia: true,
             },
         ],
     },
     {
-        label: t('People'),
-        items: [
-            {
-                label: t('Students'),
-                href: '/backoffice/students',
-                icon: 'ti ti-school',
-                permissions: ['students.view'],
-                matchPaths: ['/backoffice/students'],
-                inertia: true,
-            },
-            {
-                label: t('Employees'),
-                href: '/backoffice/employees',
-                icon: 'ti ti-users',
-                permissions: ['employees.view'],
-                matchPaths: ['/backoffice/employees'],
-                inertia: true,
-            },
-        ],
-    },
-    {
-        label: t('Academic'),
+        // Old-CRM grouping (see pic 2): Prospects / Essais & Tests would
+        // belong here too, but those modules don't exist in this app yet —
+        // omitted rather than linked to nothing (product decision).
+        label: t('Registrations management'),
         items: [
             {
                 label: t('Registrations'),
                 href: '/backoffice/inscriptions',
-                icon: 'ti ti-clipboard-list',
+                icon: 'fa fa-clipboard-list',
                 permissions: ['registrations.view'],
                 matchPaths: ['/backoffice/inscriptions'],
                 inertia: true,
@@ -57,25 +39,9 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Groups'),
                 href: '/backoffice/groups',
-                icon: 'ti ti-users-group',
+                icon: 'fa fa-people-group',
                 permissions: ['groups.view'],
                 matchPaths: ['/backoffice/groups'],
-                inertia: true,
-            },
-            {
-                label: t('Attendance'),
-                href: '/backoffice/seances',
-                icon: 'ti ti-calendar-check',
-                permissions: ['attendance.view'],
-                matchPaths: ['/backoffice/seances'],
-                inertia: true,
-            },
-            {
-                label: t('Timetable'),
-                href: '/backoffice/emploi-du-temps',
-                icon: 'ti ti-calendar-time',
-                permissions: ['attendance.view'],
-                matchPaths: ['/backoffice/emploi-du-temps'],
                 inertia: true,
             },
             // Hidden by product decision — the page stays reachable at
@@ -84,7 +50,7 @@ export const backofficeNavigation: NavGroup[] = [
             // {
             //     label: t('Groups History'),
             //     href: '/backoffice/groups-historique',
-            //     icon: 'ti ti-archive',
+            //     icon: 'fa fa-box-archive',
             //     permissions: ['groups.view'],
             //     matchPaths: ['/backoffice/groups-historique'],
             //     inertia: true,
@@ -92,7 +58,42 @@ export const backofficeNavigation: NavGroup[] = [
         ],
     },
     {
-        label: t('Finance'),
+        // Old-CRM grouping (see pic 2): Gestion des devoirs / Doc.
+        // pédagogique would belong here too, but those modules don't exist
+        // in this app yet — omitted rather than linked to nothing.
+        label: t('Educational tracking'),
+        items: [
+            {
+                label: t('Students'),
+                href: '/backoffice/students',
+                icon: 'fa fa-school',
+                permissions: ['students.view'],
+                matchPaths: ['/backoffice/students'],
+                inertia: true,
+            },
+            {
+                label: t('Attendance'),
+                href: '/backoffice/seances',
+                icon: 'fa fa-calendar-check',
+                permissions: ['attendance.view'],
+                matchPaths: ['/backoffice/seances'],
+                inertia: true,
+            },
+            {
+                label: t('Timetable'),
+                href: '/backoffice/emploi-du-temps',
+                icon: 'fa fa-clock',
+                permissions: ['attendance.view'],
+                matchPaths: ['/backoffice/emploi-du-temps'],
+                inertia: true,
+            },
+        ],
+    },
+    {
+        // Old-CRM grouping (see pic 2/3): Recouvrement / Situation
+        // financière would belong here too, but those modules don't exist
+        // in this app yet — omitted rather than linked to nothing.
+        label: t('Financial management'),
         items: [
             // Finance modules as separate sidebar entries (wimschool-style
             // sidebar: Encaissement / Caisse / Dépenses) — the PageTabs bar
@@ -100,7 +101,7 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Payments'),
                 href: '/backoffice/encaissements',
-                icon: 'ti ti-cash-banknote',
+                icon: 'fa fa-cash-register-banknote',
                 // Chèques (physical-check inventory) has no sidebar entry of
                 // its own — reachable via this page's PageTabs cross-link,
                 // same "stays out of the sidebar" convention as Types de
@@ -115,7 +116,7 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Cash management'),
                 href: '/backoffice/caisses',
-                icon: 'ti ti-cash',
+                icon: 'fa fa-cash-register',
                 permissions: ['cash-registers.view', 'cash-transfers.view'],
                 matchPaths: ['/backoffice/caisses', '/backoffice/caisse-transfers'],
                 inertia: true,
@@ -123,9 +124,17 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Expense management'),
                 href: '/backoffice/depenses',
-                icon: 'ti ti-receipt',
+                icon: 'fa fa-receipt',
                 permissions: ['expenses.view', 'refunds.view'],
                 matchPaths: ['/backoffice/depenses', '/backoffice/remboursements'],
+                inertia: true,
+            },
+            {
+                label: t('Collections management'),
+                href: '/backoffice/recouvrement',
+                icon: 'fa fa-money-bill-transfer',
+                permissions: ['collections.view'],
+                matchPaths: ['/backoffice/recouvrement'],
                 inertia: true,
             },
             // Chèques and Types de dépenses stay out of the sidebar —
@@ -133,12 +142,32 @@ export const backofficeNavigation: NavGroup[] = [
         ],
     },
     {
-        label: t('Stock'),
+        // Old-CRM grouping (see pic 3): Gestion de la paie would belong
+        // here too, but payroll doesn't exist in this app yet — omitted
+        // rather than linked to nothing.
+        label: t('Human resources'),
+        items: [
+            {
+                label: t('Employees'),
+                href: '/backoffice/employees',
+                icon: 'fa fa-users',
+                permissions: ['employees.view'],
+                matchPaths: ['/backoffice/employees'],
+                inertia: true,
+            },
+        ],
+    },
+    {
+        // Old-CRM grouping (see pic 3): Gestion des services / Activité
+        // parascolaire / Communications / Outils would belong here too, but
+        // those modules don't exist in this app yet — omitted rather than
+        // linked to nothing.
+        label: t('Establishment tracking'),
         items: [
             {
                 label: t('Stock management'),
                 href: '/backoffice/stock',
-                icon: 'ti ti-packages',
+                icon: 'fa fa-boxes-stacked',
                 permissions: ['stock.view'],
                 matchPaths: ['/backoffice/stock'],
                 inertia: true,
@@ -146,12 +175,12 @@ export const backofficeNavigation: NavGroup[] = [
         ],
     },
     {
-        label: t('Administration'),
+        label: t('Configuration'),
         items: [
             {
                 label: t('Settings'),
                 href: '/backoffice/settings',
-                icon: 'ti ti-settings',
+                icon: 'fa fa-gear',
                 permissions: ['centers.view', 'academic-years.view', 'rooms.view', 'fees.view'],
                 matchPaths: ['/backoffice/settings'],
                 inertia: true,
@@ -159,7 +188,7 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Roles & Permissions'),
                 href: '/backoffice/roles',
-                icon: 'ti ti-shield-lock',
+                icon: 'fa fa-shield-halved',
                 permissions: ['roles.view'],
                 matchPaths: ['/backoffice/roles'],
                 inertia: true,
@@ -167,7 +196,7 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Permissions'),
                 href: '/backoffice/permissions',
-                icon: 'ti ti-key',
+                icon: 'fa fa-key',
                 permissions: ['permissions.view'],
                 matchPaths: ['/backoffice/permissions'],
                 inertia: true,

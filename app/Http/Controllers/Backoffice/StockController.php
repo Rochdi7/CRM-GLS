@@ -8,6 +8,7 @@ use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Domain\Stock\Actions\EnregistrerMouvementStock;
 use App\Domain\Stock\Queries\GetStockArticlesList;
 use App\Domain\Stock\Queries\GetStockMouvementsList;
+use App\Domain\Stock\Queries\GetStockTypesList;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Stock\StoreStockArticleRequest;
 use App\Http\Requests\Backoffice\Stock\StoreStockMouvementRequest;
@@ -35,6 +36,7 @@ final class StockController extends Controller
         Request $request,
         GetStockArticlesList $getArticles,
         GetStockMouvementsList $getMouvements,
+        GetStockTypesList $getStockTypes,
         CenterAccessService $centerAccess,
         CurrentContext $context,
     ): Response {
@@ -57,7 +59,10 @@ final class StockController extends Controller
             'dateTo' => (string) $request->string('dateTo'),
         ];
 
+        $typeSearch = (string) $request->string('typeSearch');
+
         $perPage = (int) $request->integer('perPage', GetStockArticlesList::DEFAULT_PER_PAGE);
+        $typePerPage = (int) $request->integer('typePerPage', GetStockArticlesList::DEFAULT_PER_PAGE);
 
         // Options for the movement modal's article select + the Mouvements
         // filter — every accessible article, active first.
@@ -75,13 +80,21 @@ final class StockController extends Controller
             ->all();
 
         return Inertia::render('Backoffice/Stock/Index', [
-            'tab' => in_array($tab, ['articles', 'mouvements'], true) ? $tab : 'articles',
+            'tab' => in_array($tab, ['articles', 'mouvements', 'types'], true) ? $tab : 'articles',
             'articles' => $getArticles($user, $articleFilters, $perPage),
             'mouvements' => $getMouvements($user, $mouvementFilters, $perPage),
+            'stockTypesList' => $getStockTypes(
+                $typeSearch,
+                in_array($typePerPage, [10, 25, 50, 100], true) ? $typePerPage : 10,
+            ),
             'filters' => $articleFilters + $mouvementFilters + [
                 'perPage' => in_array($perPage, GetStockArticlesList::PER_PAGE_OPTIONS, true)
                     ? $perPage
                     : GetStockArticlesList::DEFAULT_PER_PAGE,
+            ],
+            'typeFilters' => [
+                'typeSearch' => $typeSearch,
+                'typePerPage' => in_array($typePerPage, [10, 25, 50, 100], true) ? $typePerPage : 10,
             ],
             'perPageOptions' => GetStockArticlesList::PER_PAGE_OPTIONS,
             'articleOptions' => $articleOptions,
@@ -96,6 +109,11 @@ final class StockController extends Controller
                 'update' => $user->can('stock.update'),
                 'delete' => $user->can('stock.delete'),
                 'move' => $user->can('stock.move'),
+            ],
+            'typePermissions' => [
+                'create' => $user->can('create', StockType::class),
+                'update' => $user->can('stock-types.update'),
+                'delete' => $user->can('stock-types.delete'),
             ],
         ]);
     }

@@ -13,14 +13,14 @@ function SexeLabel({ sexe }: { sexe: string | null }) {
     if (sexe === 'Homme') {
         return (
             <span className="d-inline-flex align-items-center">
-                <i className="ti ti-man fs-16 text-primary" />
+                <i className="fa fa-mars fs-16 text-primary" />
             </span>
         );
     }
     if (sexe === 'Femme') {
         return (
             <span className="d-inline-flex align-items-center">
-                <i className="ti ti-woman fs-16 text-pink" />
+                <i className="fa fa-venus fs-16 text-pink" />
             </span>
         );
     }
@@ -114,7 +114,7 @@ export default function StudentShow({ student }: StudentShowProps) {
                         <RelatedRecordsTable
                             isEmpty={student.inscriptions.length === 0}
                             emptyTitle="Aucune inscription"
-                            emptyIcon="ti ti-clipboard-list"
+                            emptyIcon="fa fa-clipboard-list"
                             head={
                                 <tr>
                                     <th>Référence</th>
@@ -152,7 +152,7 @@ export default function StudentShow({ student }: StudentShowProps) {
                         <RelatedRecordsTable
                             isEmpty={student.paiements.length === 0}
                             emptyTitle="Aucun paiement"
-                            emptyIcon="ti ti-report-money"
+                            emptyIcon="fa fa-money-bill-wave"
                             head={
                                 <tr>
                                     <th>Référence</th>

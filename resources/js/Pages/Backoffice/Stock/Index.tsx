@@ -1,4 +1,4 @@
-import { Link, router, useForm } from '@inertiajs/react';
+import { router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
@@ -17,12 +17,15 @@ import TableToolbar from '@/Components/Tables/TableToolbar';
 import DateField from '@/Components/Forms/DateField';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import type {
+    CrudPermissions,
     PaginatedData,
     SelectOption,
     StockArticleForm,
     StockArticleRow,
     StockMouvementForm,
     StockMouvementRow,
+    StockTypeForm,
+    StockTypeRow,
 } from '@/Types';
 
 interface StockTypeOption {
@@ -31,9 +34,10 @@ interface StockTypeOption {
 }
 
 interface StockIndexProps {
-    tab: 'articles' | 'mouvements';
+    tab: 'articles' | 'mouvements' | 'types';
     articles: PaginatedData<StockArticleRow>;
     mouvements: PaginatedData<StockMouvementRow>;
+    stockTypesList: PaginatedData<StockTypeRow>;
     filters: {
         search: string;
         stockTypeFilter: string;
@@ -45,13 +49,20 @@ interface StockIndexProps {
         dateTo: string;
         perPage: number;
     };
+    typeFilters: { typeSearch: string; typePerPage: number };
     perPageOptions: number[];
     articleOptions: SelectOption[];
     stockTypes: StockTypeOption[];
     statuts: string[];
     mouvementTypes: string[];
     permissions: { create: boolean; update: boolean; delete: boolean; move: boolean };
+    typePermissions: CrudPermissions;
 }
+
+const STOCK_TYPE_STATUT_OPTIONS: SelectOption[] = [
+    { value: 'Actif', label: 'Actif' },
+    { value: 'Inactif', label: 'Inactif' },
+];
 
 const EMPTY_ARTICLE_FORM: StockArticleForm = {
     nom: '',
@@ -68,6 +79,8 @@ const EMPTY_MOUVEMENT_FORM: StockMouvementForm = {
     note: '',
 };
 
+const EMPTY_STOCK_TYPE_FORM: StockTypeForm = { nom: '', statut: 'Actif' };
+
 function typeVariant(type: string): 'success' | 'danger' | 'info' {
     if (type === 'Entrée') return 'success';
     if (type === 'Sortie') return 'danger';
@@ -75,21 +88,27 @@ function typeVariant(type: string): 'success' | 'danger' | 'info' {
 }
 
 /**
- * Gestion du stock — Articles + Mouvements as client-side tabs (Gestion des
- * dépenses pattern). Quantities only change through movements; movements are
- * append-only (no edit/delete — compensating entries, like finance records).
+ * Gestion du stock — Articles + Mouvements + Types de stock as client-side
+ * tabs (Gestion des dépenses pattern). Quantities only change through
+ * movements; movements are append-only (no edit/delete — compensating
+ * entries, like finance records). Types de stock used to be a separate page
+ * reached via a header button — folded in here as a third tab so managing
+ * categories doesn't require leaving Gestion du stock.
  */
 export default function StockIndex({
     tab,
     articles,
     mouvements,
+    stockTypesList,
     filters,
+    typeFilters,
     perPageOptions,
     articleOptions,
     stockTypes,
     statuts,
     mouvementTypes,
     permissions,
+    typePermissions,
 }: StockIndexProps) {
     const [showArticleModal, setShowArticleModal] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
@@ -98,7 +117,14 @@ export default function StockIndex({
     const [deleteError, setDeleteError] = useState<string>();
     const [deleting, setDeleting] = useState(false);
 
+    const [showTypeModal, setShowTypeModal] = useState(false);
+    const [editingTypeId, setEditingTypeId] = useState<number | null>(null);
+    const [deleteTypeTarget, setDeleteTypeTarget] = useState<StockTypeRow | null>(null);
+    const [deleteTypeError, setDeleteTypeError] = useState<string>();
+    const [deletingType, setDeletingType] = useState(false);
+
     const articleForm = useForm<StockArticleForm>(EMPTY_ARTICLE_FORM);
+    const stockTypeForm = useForm<StockTypeForm>(EMPTY_STOCK_TYPE_FORM);
     const mouvementForm = useForm<StockMouvementForm>(EMPTY_MOUVEMENT_FORM);
 
     function reload(changes: Partial<Record<string, string | number>>) {
@@ -109,10 +135,18 @@ export default function StockIndex({
         );
     }
 
-    function switchTab(next: 'articles' | 'mouvements') {
+    function reloadTypes(changes: Partial<Record<string, string | number>>) {
         router.get(
             '/backoffice/stock',
-            { ...filters, tab: next, page: undefined },
+            { ...typeFilters, tab: 'types', ...changes, page: undefined },
+            { preserveState: true, preserveScroll: true, replace: true },
+        );
+    }
+
+    function switchTab(next: 'articles' | 'mouvements' | 'types') {
+        router.get(
+            '/backoffice/stock',
+            { ...filters, ...typeFilters, tab: next, page: undefined },
             { preserveState: true, preserveScroll: true, replace: true },
         );
     }
@@ -201,6 +235,61 @@ export default function StockIndex({
         });
     }
 
+    function openCreateType() {
+        stockTypeForm.reset();
+        stockTypeForm.clearErrors();
+        setEditingTypeId(null);
+        setShowTypeModal(true);
+    }
+
+    function openEditType(row: StockTypeRow) {
+        stockTypeForm.setData({ nom: row.nom, statut: row.statut });
+        stockTypeForm.clearErrors();
+        setEditingTypeId(row.id);
+        setShowTypeModal(true);
+    }
+
+    function closeTypeModal() {
+        setShowTypeModal(false);
+        setEditingTypeId(null);
+        stockTypeForm.reset();
+        stockTypeForm.clearErrors();
+    }
+
+    function submitType(event: React.FormEvent) {
+        event.preventDefault();
+        const options = { preserveScroll: true, onSuccess: () => closeTypeModal() };
+
+        if (editingTypeId) {
+            stockTypeForm.put(`/backoffice/stock-types/${editingTypeId}`, options);
+        } else {
+            stockTypeForm.post('/backoffice/stock-types', options);
+        }
+    }
+
+    function confirmDeleteType() {
+        if (!deleteTypeTarget) {
+            return;
+        }
+
+        setDeletingType(true);
+        setDeleteTypeError(undefined);
+
+        stockTypeForm.transform(() => ({}));
+        stockTypeForm.delete(`/backoffice/stock-types/${deleteTypeTarget.id}`, {
+            preserveScroll: true,
+            onFinish: () => stockTypeForm.transform((data) => data),
+            onSuccess: () => {
+                setDeleteTypeTarget(null);
+                setDeletingType(false);
+            },
+            onError: (errors: Record<string, string>) => {
+                setDeleteTypeError(errors.delete ?? 'Suppression impossible.');
+                setDeletingType(false);
+            },
+        });
+    }
+
     const isArticleAjustement = mouvementForm.data.type === 'Ajustement';
 
     return (
@@ -212,25 +301,25 @@ export default function StockIndex({
             ]}
             actions={
                 <div className="d-flex gap-2">
-                    {permissions.create && (
-                        <Link href="/backoffice/stock-types" className="btn btn-outline-secondary d-flex align-items-center">
-                            <i className="ti ti-category me-2" />
-                            Types de stock
-                        </Link>
+                    {tab === 'types' && typePermissions.create && (
+                        <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreateType}>
+                            <i className="fa fa-square-plus me-2" />
+                            Ajouter un type de stock
+                        </button>
                     )}
-                    {permissions.move && (
+                    {tab !== 'types' && permissions.move && (
                         <button
                             type="button"
                             className="btn btn-outline-primary d-flex align-items-center"
                             onClick={() => openMouvement()}
                         >
-                            <i className="ti ti-arrows-exchange me-2" />
+                            <i className="fa fa-arrows-rotate me-2" />
                             Nouveau mouvement
                         </button>
                     )}
-                    {permissions.create && (
+                    {tab !== 'types' && permissions.create && (
                         <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreateArticle}>
-                            <i className="ti ti-square-rounded-plus me-2" />
+                            <i className="fa fa-square-plus me-2" />
                             Ajouter un article
                         </button>
                     )}
@@ -246,7 +335,7 @@ export default function StockIndex({
                         aria-current={tab === 'articles' ? 'page' : undefined}
                         onClick={() => switchTab('articles')}
                     >
-                        <i className="ti ti-packages me-2" aria-hidden="true" />
+                        <i className="fa fa-boxes-stacked me-2" aria-hidden="true" />
                         Articles
                     </button>
                 </li>
@@ -257,10 +346,23 @@ export default function StockIndex({
                         aria-current={tab === 'mouvements' ? 'page' : undefined}
                         onClick={() => switchTab('mouvements')}
                     >
-                        <i className="ti ti-arrows-exchange me-2" aria-hidden="true" />
+                        <i className="fa fa-arrows-rotate me-2" aria-hidden="true" />
                         Mouvements
                     </button>
                 </li>
+                {typePermissions.create || typePermissions.update || typePermissions.delete ? (
+                    <li className="nav-item" role="presentation">
+                        <button
+                            type="button"
+                            className={`nav-link d-inline-flex align-items-center${tab === 'types' ? ' active' : ''}`}
+                            aria-current={tab === 'types' ? 'page' : undefined}
+                            onClick={() => switchTab('types')}
+                        >
+                            <i className="fa fa-table-cells me-2" aria-hidden="true" />
+                            Types de stock
+                        </button>
+                    </li>
+                ) : null}
             </ul>
 
             {tab === 'articles' && (
@@ -322,7 +424,7 @@ export default function StockIndex({
                     <RelatedRecordsTable
                         isEmpty={articles.data.length === 0}
                         emptyTitle="Aucun article de stock pour le moment"
-                        emptyIcon="ti ti-packages"
+                        emptyIcon="fa fa-boxes-stacked"
                         head={
                             <tr>
                                 <th>Référence</th>
@@ -346,7 +448,7 @@ export default function StockIndex({
                                     </span>
                                     {row.enAlerte && (
                                         <i
-                                            className="ti ti-alert-triangle text-danger ms-2"
+                                            className="fa fa-triangle-exclamation text-danger ms-2"
                                             title="Stock sous le seuil d'alerte"
                                             aria-label="Stock sous le seuil d'alerte"
                                         />
@@ -363,18 +465,18 @@ export default function StockIndex({
                                 <td className="text-end">
                                     <RowActions>
                                         {permissions.move && (
-                                            <RowActionItem icon="ti-arrows-exchange" onClick={() => openMouvement(row.id)}>
+                                            <RowActionItem icon="fa-arrows-rotate" onClick={() => openMouvement(row.id)}>
                                                 Mouvement
                                             </RowActionItem>
                                         )}
                                         {permissions.update && (
-                                            <RowActionItem icon="ti-edit" onClick={() => openEditArticle(row)}>
+                                            <RowActionItem icon="fa-pen" onClick={() => openEditArticle(row)}>
                                                 Modifier
                                             </RowActionItem>
                                         )}
                                         {permissions.delete && row.mouvementsCount === 0 && (
                                             <RowActionItem
-                                                icon="ti-trash"
+                                                icon="fa-trash"
                                                 danger
                                                 onClick={() => {
                                                     setDeleteTarget(row);
@@ -447,7 +549,7 @@ export default function StockIndex({
                     <RelatedRecordsTable
                         isEmpty={mouvements.data.length === 0}
                         emptyTitle="Aucun mouvement de stock pour le moment"
-                        emptyIcon="ti ti-arrows-exchange"
+                        emptyIcon="fa fa-arrows-rotate"
                         head={
                             <tr>
                                 <th>Date</th>
@@ -480,6 +582,84 @@ export default function StockIndex({
                         ))}
                     </RelatedRecordsTable>
                     <Pagination paginator={mouvements} showJumpToPage />
+                </Card>
+            )}
+
+            {tab === 'types' && (
+                <Card title="Types de stock" bodyClassName="p-0 py-3">
+                    <TableLengthRow
+                        perPage={typeFilters.typePerPage}
+                        perPageOptions={perPageOptions}
+                        onPerPageChange={(typePerPage) => reloadTypes({ typePerPage })}
+                        search={
+                            <SearchInput
+                                value={typeFilters.typeSearch}
+                                onSearch={(typeSearch) => reloadTypes({ typeSearch })}
+                                placeholder="Rechercher"
+                            />
+                        }
+                    />
+
+                    <RelatedRecordsTable
+                        isEmpty={stockTypesList.data.length === 0}
+                        emptyTitle="Aucun type de stock pour le moment"
+                        emptyIcon="fa fa-table-cells"
+                        head={
+                            <tr>
+                                <th>Nom</th>
+                                <th>Articles</th>
+                                <th>Statut</th>
+                                <th className="text-end">Action</th>
+                            </tr>
+                        }
+                    >
+                        {stockTypesList.data.map((row) => (
+                            <tr key={row.id}>
+                                <td className="fw-medium">
+                                    {row.nom}
+                                    {row.isSystem && (
+                                        <span className="ms-2">
+                                            <StatusBadge label="Système" variant="secondary" dot />
+                                        </span>
+                                    )}
+                                </td>
+                                <td>
+                                    <span className="badge badge-soft-secondary">{row.articlesCount}</span>
+                                </td>
+                                <td>
+                                    <StatusBadge
+                                        label={row.statut === 'Actif' ? 'Actif' : 'Inactif'}
+                                        variant={row.statut === 'Actif' ? 'success' : 'secondary'}
+                                        dot
+                                    />
+                                </td>
+                                <td className="text-end">
+                                    {!row.isSystem && (
+                                        <RowActions>
+                                            {typePermissions.update && (
+                                                <RowActionItem icon="fa-pen" onClick={() => openEditType(row)}>
+                                                    Modifier
+                                                </RowActionItem>
+                                            )}
+                                            {typePermissions.delete && (
+                                                <RowActionItem
+                                                    icon="fa-trash"
+                                                    danger
+                                                    onClick={() => {
+                                                        setDeleteTypeTarget(row);
+                                                        setDeleteTypeError(undefined);
+                                                    }}
+                                                >
+                                                    Supprimer
+                                                </RowActionItem>
+                                            )}
+                                        </RowActions>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </RelatedRecordsTable>
+                    <Pagination paginator={stockTypesList} showJumpToPage />
                 </Card>
             )}
 
@@ -637,6 +817,55 @@ export default function StockIndex({
                 processing={deleting}
                 onConfirm={confirmDelete}
                 onCancel={() => setDeleteTarget(null)}
+            />
+
+            <Modal
+                show={showTypeModal}
+                title={editingTypeId ? 'Modifier le type de stock' : 'Ajouter un type de stock'}
+                onClose={closeTypeModal}
+                processing={stockTypeForm.processing}
+                size="lg"
+            >
+                <form onSubmit={submitType}>
+                    <div className="row">
+                        <div className="col-md-6">
+                            <FormField
+                                id="st-nom"
+                                label="Nom"
+                                required
+                                value={stockTypeForm.data.nom}
+                                onChange={(event) => stockTypeForm.setData('nom', event.target.value)}
+                                error={stockTypeForm.errors.nom}
+                                placeholder="ex : Livre"
+                            />
+                        </div>
+                        <div className="col-md-6">
+                            <SelectField
+                                id="st-statut"
+                                label="Statut"
+                                required
+                                options={STOCK_TYPE_STATUT_OPTIONS}
+                                value={stockTypeForm.data.statut}
+                                onChange={(event) => stockTypeForm.setData('statut', event.target.value)}
+                                error={stockTypeForm.errors.statut}
+                            />
+                        </div>
+                    </div>
+                    <div className="d-flex justify-content-end gap-2 mt-3">
+                        <FormActions onCancel={closeTypeModal} processing={stockTypeForm.processing} />
+                    </div>
+                </form>
+            </Modal>
+
+            <ConfirmDialog
+                show={deleteTypeTarget !== null}
+                title="Supprimer ce type de stock ?"
+                recordLabel={deleteTypeTarget?.nom ?? ''}
+                message="Cette action est définitive. Le type sera supprimé s'il n'est plus utilisé par des articles."
+                error={deleteTypeError}
+                processing={deletingType}
+                onConfirm={confirmDeleteType}
+                onCancel={() => setDeleteTypeTarget(null)}
             />
         </BackofficeLayout>
     );

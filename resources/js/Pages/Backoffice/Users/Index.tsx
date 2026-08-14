@@ -11,7 +11,6 @@ import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import Modal from '@/Components/Modals/Modal';
 import FormField from '@/Components/Forms/FormField';
-import AuthStatus from '@/Components/Feedback/AuthStatus';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import type { SharedProps, UserEditForm, UserRow, UsersIndexPageProps } from '@/Types';
 
@@ -138,8 +137,6 @@ export default function UsersIndex({ users, filters, perPageOptions }: UsersInde
             title="Utilisateurs"
             breadcrumbs={[{ label: 'Tableau de bord', href: '/backoffice/dashboard' }, { label: 'Utilisateurs' }]}
         >
-            <AuthStatus status={flash.status} />
-
             <Card title="Utilisateurs" bodyClassName="p-0 py-3">
                 <TableLengthRow
                     perPage={filters.perPage}
@@ -149,7 +146,7 @@ export default function UsersIndex({ users, filters, perPageOptions }: UsersInde
                 />
 
                 {users.data.length === 0 ? (
-                    <EmptyState title="Aucun utilisateur trouvé" icon="ti ti-user-off" />
+                    <EmptyState title="Aucun utilisateur trouvé" icon="fa fa-user-slash" />
                 ) : (
                     <>
                         <DataTable
@@ -192,10 +189,10 @@ export default function UsersIndex({ users, filters, perPageOptions }: UsersInde
                                     </td>
                                     <td className="text-end">
                                         <RowActions>
-                                            <RowActionItem icon="ti-edit" onClick={() => openEdit(user)}>
+                                            <RowActionItem icon="fa-pen" onClick={() => openEdit(user)}>
                                                 Modifier
                                             </RowActionItem>
-                                            <RowActionItem icon="ti-shield-cog" href={`/backoffice/users/${user.id}/authorization`}>
+                                            <RowActionItem icon="fa-user-gear" href={`/backoffice/users/${user.id}/authorization`}>
                                                 Gérer les autorisations
                                             </RowActionItem>
                                         </RowActions>
@@ -309,7 +306,7 @@ export default function UsersIndex({ users, filters, perPageOptions }: UsersInde
                                 {regenerating ? (
                                     <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" />
                                 ) : (
-                                    <i className="ti ti-key me-1" />
+                                    <i className="fa fa-key me-1" />
                                 )}
                                 Régénérer le mot de passe
                             </button>

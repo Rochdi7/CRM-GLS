@@ -84,7 +84,6 @@ export default function StudentsIndex({
     students,
     filters,
     perPageOptions,
-    niveaux,
     niveauxInteret,
     domaines,
     examenTypes,
@@ -115,7 +114,7 @@ export default function StudentsIndex({
     const examenOptions: SelectOption[] = examenTypes.map((e) => ({ value: e, label: e }));
     const parentRelationOptions: SelectOption[] = parentRelations.map((r) => ({ value: r, label: r }));
     const centerOptions: SelectOption[] = etablissements.map((etab) => ({ value: etab.id, label: etab.nom_centre }));
-    const niveauFilterOptions: SelectOption[] = niveaux.map((n) => ({ value: n, label: n }));
+    const niveauFilterOptions: SelectOption[] = niveauxInteret.map((n) => ({ value: n, label: n }));
     const sexeFilterOptions: SelectOption[] = sexes.map((s) => ({ value: s, label: s }));
     // État d'inscription (reference CRM's filter) — machine values, French labels.
     const inscriptionFilterOptions: SelectOption[] = [
@@ -276,7 +275,7 @@ export default function StudentsIndex({
             breadcrumbs={[{ label: 'Tableau de bord', href: '/backoffice/dashboard' }, { label: 'Étudiants' }]}
             actions={
                 <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                    <i className="ti ti-square-rounded-plus me-2" />
+                    <i className="fa fa-square-plus me-2" />
                     Ajouter un étudiant
                 </button>
             }
@@ -357,12 +356,12 @@ export default function StudentsIndex({
                         </div>
                         <div style={{ width: 180 }}>
                             <label className="form-label" htmlFor="stu-f-niveau">
-                                Niveau
+                                Intéressé par
                             </label>
                             <SelectField
                                 id="stu-f-niveau"
                                 options={niveauFilterOptions}
-                                placeholder="Tous les niveaux"
+                                placeholder="Tous"
                                 value={filters.niveauFilter}
                                 onChange={(event) => reload({ niveauFilter: event.target.value })}
                             />
@@ -391,7 +390,7 @@ export default function StudentsIndex({
                 />
 
                 {students.data.length === 0 ? (
-                    <EmptyState title="Aucun étudiant" message="Ajoutez votre premier étudiant pour commencer." icon="ti ti-school" />
+                    <EmptyState title="Aucun étudiant" message="Ajoutez votre premier étudiant pour commencer." icon="fa fa-school" />
                 ) : (
                     <>
                         <DataTable
@@ -413,7 +412,7 @@ export default function StudentsIndex({
                                         >
                                             Âge
                                             <i
-                                                className={`ti ${filters.ageSort === 'asc' ? 'ti-sort-ascending' : filters.ageSort === 'desc' ? 'ti-sort-descending' : 'ti-arrows-sort'} ms-1 text-muted`}
+                                                className={`fa ${filters.ageSort === 'asc' ? 'fa-sort-up' : filters.ageSort === 'desc' ? 'fa-sort-down' : 'fa-sort'} ms-1 text-muted`}
                                             />
                                         </a>
                                     </th>
@@ -468,10 +467,10 @@ export default function StudentsIndex({
                                     <td>{student.whatsapp ?? '—'}</td>
                                     <td className="text-end">
                                         <RowActions>
-                                            <RowActionItem icon="ti-edit" onClick={() => openEdit(student)}>
+                                            <RowActionItem icon="fa-pen" onClick={() => openEdit(student)}>
                                                 Modifier
                                             </RowActionItem>
-                                            <RowActionItem icon="ti-trash" danger onClick={() => confirmDelete(student)}>
+                                            <RowActionItem icon="fa-trash" danger onClick={() => confirmDelete(student)}>
                                                 Supprimer
                                             </RowActionItem>
                                         </RowActions>
@@ -499,7 +498,7 @@ export default function StudentsIndex({
                             ) : existingPhotoUrl ? (
                                 <img src={existingPhotoUrl} alt="" className="w-100 h-100" style={{ objectFit: 'cover' }} />
                             ) : (
-                                <i className="ti ti-camera fs-24 text-muted" />
+                                <i className="fa fa-camera fs-24 text-muted" />
                             )}
                         </span>
                         <div>
@@ -561,7 +560,7 @@ export default function StudentsIndex({
                                                 className="btn btn-outline-primary d-inline-flex align-items-center justify-content-center px-4"
                                                 htmlFor={`stu-sexe-${sexe}`}
                                             >
-                                                <i className={`ti ${sexe === 'Homme' ? 'ti-man' : 'ti-woman'} me-1`} />
+                                                <i className={`fa ${sexe === 'Homme' ? 'fa-mars' : 'fa-venus'} me-1`} />
                                                 {sexe === 'Homme' ? 'Masculin' : 'Féminin'}
                                             </label>
                                         </div>
@@ -637,7 +636,7 @@ export default function StudentsIndex({
                                 className={`nav-link d-inline-flex align-items-center${activeTab === 'contact' ? ' active' : ''}`}
                                 onClick={() => setActiveTab('contact')}
                             >
-                                <i className="ti ti-mail me-1" />
+                                <i className="fa fa-envelope me-1" />
                                 Contact
                             </button>
                         </li>
@@ -647,7 +646,7 @@ export default function StudentsIndex({
                                 className={`nav-link d-inline-flex align-items-center${activeTab === 'parent' ? ' active' : ''}`}
                                 onClick={() => setActiveTab('parent')}
                             >
-                                <i className="ti ti-user me-1" />
+                                <i className="fa fa-user me-1" />
                                 Parent
                             </button>
                         </li>
@@ -657,7 +656,7 @@ export default function StudentsIndex({
                                 className={`nav-link d-inline-flex align-items-center${activeTab === 'autre' ? ' active' : ''}`}
                                 onClick={() => setActiveTab('autre')}
                             >
-                                <i className="ti ti-info-circle me-1" />
+                                <i className="fa fa-circle-info me-1" />
                                 Autres informations
                             </button>
                         </li>
@@ -769,7 +768,7 @@ export default function StudentsIndex({
                                                     className="btn btn-outline-primary d-inline-flex align-items-center justify-content-center px-4"
                                                     htmlFor={`stu-psexe-${sexe}`}
                                                 >
-                                                    <i className={`ti ${sexe === 'Homme' ? 'ti-man' : 'ti-woman'} me-1`} />
+                                                    <i className={`fa ${sexe === 'Homme' ? 'fa-mars' : 'fa-venus'} me-1`} />
                                                     {sexe === 'Homme' ? 'Masculin' : 'Féminin'}
                                                 </label>
                                             </div>

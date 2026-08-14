@@ -39,7 +39,7 @@ final class EtablissementController extends Controller
         Etablissement::create($request->validated());
 
         return redirect()->route('backoffice.settings', ['tab' => 'etablissements'])
-            ->with('status', __('Établissement créé.'));
+            ->with('success', __('Établissement créé.'));
     }
 
     public function show(Etablissement $etablissement): RedirectResponse
@@ -57,7 +57,7 @@ final class EtablissementController extends Controller
         $etablissement->update($request->validated());
 
         return redirect()->route('backoffice.settings', ['tab' => 'etablissements'])
-            ->with('status', __('Établissement mis à jour.'));
+            ->with('success', __('Établissement mis à jour.'));
     }
 
     /**
@@ -80,6 +80,6 @@ final class EtablissementController extends Controller
         $etablissement->delete();
 
         return redirect()->route('backoffice.settings', ['tab' => 'etablissements'])
-            ->with('status', __('Établissement supprimé.'));
+            ->with('success', __('Établissement supprimé.'));
     }
 }

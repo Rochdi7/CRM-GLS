@@ -178,7 +178,7 @@ final class SeancesInertiaCrudTest extends TestCase
             );
     }
 
-    public function test_the_roll_call_saves_and_marks_the_seance_done(): void
+    public function test_the_roll_call_saves_without_changing_the_seance_statut(): void
     {
         $student = $this->enrollStudent();
         $other = Student::factory()->create(); // NOT enrolled in the group
@@ -200,7 +200,68 @@ final class SeancesInertiaCrudTest extends TestCase
             'statut' => Presence::STATUT_PRESENT,
         ]);
         $this->assertDatabaseMissing('presences', ['student_id' => $other->id]);
+        // Saving the roll call no longer auto-marks the séance "Effectuée" —
+        // that's now the explicit "Valider la séance" row-menu action.
+        $this->assertSame(Seance::STATUT_PREVUE, $seance->fresh()->statut);
+    }
+
+    public function test_valider_marks_the_seance_effectuee(): void
+    {
+        $seance = $this->makeSeance();
+
+        $this->actingAs($this->userWith('attendance.view', 'attendance.mark'))
+            ->post(route('backoffice.seances.valider', $seance))
+            ->assertRedirect();
+
         $this->assertSame(Seance::STATUT_EFFECTUEE, $seance->fresh()->statut);
+    }
+
+    public function test_valider_requires_attendance_mark(): void
+    {
+        $seance = $this->makeSeance();
+
+        $this->actingAs($this->userWith('attendance.view'))
+            ->post(route('backoffice.seances.valider', $seance))
+            ->assertForbidden();
+
+        $this->assertSame(Seance::STATUT_PREVUE, $seance->fresh()->statut);
+    }
+
+    public function test_annuler_cancels_the_seance_with_a_reason(): void
+    {
+        $seance = $this->makeSeance();
+
+        $this->actingAs($this->userWith('attendance.view', 'attendance.mark'))
+            ->post(route('backoffice.seances.annuler', $seance), ['motif' => 'Jour férié'])
+            ->assertRedirect();
+
+        $seance->refresh();
+        $this->assertSame(Seance::STATUT_ANNULEE, $seance->statut);
+        $this->assertSame('Jour férié', $seance->motif_annulation);
+    }
+
+    public function test_annuler_does_not_require_a_reason(): void
+    {
+        $seance = $this->makeSeance();
+
+        $this->actingAs($this->userWith('attendance.view', 'attendance.mark'))
+            ->post(route('backoffice.seances.annuler', $seance), ['motif' => ''])
+            ->assertRedirect();
+
+        $seance->refresh();
+        $this->assertSame(Seance::STATUT_ANNULEE, $seance->statut);
+        $this->assertSame('', $seance->motif_annulation);
+    }
+
+    public function test_annuler_requires_attendance_mark(): void
+    {
+        $seance = $this->makeSeance();
+
+        $this->actingAs($this->userWith('attendance.view'))
+            ->post(route('backoffice.seances.annuler', $seance), ['motif' => 'Jour férié'])
+            ->assertForbidden();
+
+        $this->assertSame(Seance::STATUT_PREVUE, $seance->fresh()->statut);
     }
 
     public function test_resaving_the_roll_call_updates_instead_of_duplicating(): void

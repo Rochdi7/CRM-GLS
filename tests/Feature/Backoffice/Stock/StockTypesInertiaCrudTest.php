@@ -17,7 +17,9 @@ use Tests\TestCase;
 /**
  * Types de stock CRUD — replaces StockArticle's old hardcoded CATEGORIES
  * array. Mirrors TypesDepensesCrudTest one-for-one (its direct model
- * template, TypeDepense).
+ * template, TypeDepense). The list itself is the "types" tab of the merged
+ * Gestion du stock page (StockController@index) — no standalone index route
+ * anymore, only the store/update/destroy mutation endpoints below.
  */
 final class StockTypesInertiaCrudTest extends TestCase
 {
@@ -49,28 +51,22 @@ final class StockTypesInertiaCrudTest extends TestCase
 
     // --- Access -------------------------------------------------------------
 
-    public function test_the_page_renders_for_a_user_with_the_view_permission(): void
+    public function test_the_types_tab_renders_for_a_user_with_the_view_permission(): void
     {
-        $this->withPermissions('stock-types.view');
+        $this->withPermissions('stock.view', 'stock-types.view');
         StockType::create(['nom' => 'Papeterie', 'is_system' => false, 'statut' => StockType::STATUT_ACTIF]);
 
-        $this->get(route('backoffice.stock-types.index'))
+        $this->get(route('backoffice.stock.index', ['tab' => 'types']))
             ->assertInertia(fn (Assert $page) => $page
-                ->component('Backoffice/StockTypes/Index')
-                ->where('types.data.0.nom', 'Papeterie')
+                ->component('Backoffice/Stock/Index')
+                ->where('tab', 'types')
+                ->where('stockTypesList.data.0.nom', 'Papeterie')
             );
-    }
-
-    public function test_the_page_is_forbidden_without_the_view_permission(): void
-    {
-        $this->withPermissions('dashboard.view');
-
-        $this->get(route('backoffice.stock-types.index'))->assertForbidden();
     }
 
     public function test_creating_is_forbidden_without_the_create_permission(): void
     {
-        $this->withPermissions('stock-types.view');
+        $this->withPermissions('stock.view', 'stock-types.view');
 
         $this->post(route('backoffice.stock-types.store'), ['nom' => 'X', 'statut' => StockType::STATUT_ACTIF])
             ->assertForbidden();
@@ -80,11 +76,11 @@ final class StockTypesInertiaCrudTest extends TestCase
 
     public function test_a_custom_stock_type_can_be_created(): void
     {
-        $this->withPermissions('stock-types.view', 'stock-types.create');
+        $this->withPermissions('stock.view', 'stock-types.view', 'stock-types.create');
 
         $this->post(route('backoffice.stock-types.store'), [
             'nom' => 'Vêtements', 'statut' => StockType::STATUT_ACTIF,
-        ])->assertRedirect(route('backoffice.stock-types.index'));
+        ])->assertRedirect(route('backoffice.stock.index', ['tab' => 'types']));
 
         // The form NEVER creates a system type.
         $this->assertDatabaseHas('stock_types', [
@@ -116,12 +112,12 @@ final class StockTypesInertiaCrudTest extends TestCase
 
     public function test_a_custom_stock_type_can_be_updated(): void
     {
-        $this->withPermissions('stock-types.view', 'stock-types.update');
+        $this->withPermissions('stock.view', 'stock-types.view', 'stock-types.update');
         $type = StockType::create(['nom' => 'Papeterie', 'is_system' => false, 'statut' => StockType::STATUT_ACTIF]);
 
         $this->put(route('backoffice.stock-types.update', $type), [
             'nom' => 'Papeterie & fournitures', 'statut' => StockType::STATUT_INACTIF,
-        ])->assertRedirect(route('backoffice.stock-types.index'));
+        ])->assertRedirect(route('backoffice.stock.index', ['tab' => 'types']));
 
         $this->assertDatabaseHas('stock_types', [
             'id' => $type->id,
@@ -160,16 +156,16 @@ final class StockTypesInertiaCrudTest extends TestCase
         $this->admin();
         $this->seed(StockTypeSeeder::class);
 
-        $this->get(route('backoffice.stock-types.index'))
+        $this->get(route('backoffice.stock.index', ['tab' => 'types']))
             ->assertInertia(fn (Assert $page) => $page->where(
-                'types.data',
+                'stockTypesList.data',
                 fn ($rows) => collect($rows)->contains(fn ($row) => $row['nom'] === StockType::SYSTEM_LIVRE && $row['isSystem'] === true),
             ));
     }
 
     public function test_is_system_cannot_be_forged_from_client_input_on_create(): void
     {
-        $this->withPermissions('stock-types.view', 'stock-types.create');
+        $this->withPermissions('stock.view', 'stock-types.view', 'stock-types.create');
 
         $this->post(route('backoffice.stock-types.store'), [
             'nom' => 'Faux système', 'statut' => StockType::STATUT_ACTIF, 'is_system' => true,
@@ -200,7 +196,7 @@ final class StockTypesInertiaCrudTest extends TestCase
 
     public function test_an_unused_custom_stock_type_can_be_deleted(): void
     {
-        $this->withPermissions('stock-types.view', 'stock-types.delete');
+        $this->withPermissions('stock.view', 'stock-types.view', 'stock-types.delete');
         $type = StockType::create(['nom' => 'Obsolète', 'is_system' => false, 'statut' => StockType::STATUT_ACTIF]);
 
         $this->delete(route('backoffice.stock-types.destroy', $type))->assertRedirect();
@@ -210,7 +206,7 @@ final class StockTypesInertiaCrudTest extends TestCase
 
     public function test_deleting_is_forbidden_without_the_delete_permission(): void
     {
-        $this->withPermissions('stock-types.view');
+        $this->withPermissions('stock.view', 'stock-types.view');
         $type = StockType::create(['nom' => 'Obsolète', 'is_system' => false, 'statut' => StockType::STATUT_ACTIF]);
 
         $this->delete(route('backoffice.stock-types.destroy', $type))->assertForbidden();
@@ -226,10 +222,10 @@ final class StockTypesInertiaCrudTest extends TestCase
         StockType::create(['nom' => 'Papeterie', 'is_system' => false, 'statut' => StockType::STATUT_ACTIF]);
         StockType::create(['nom' => 'Électronique', 'is_system' => false, 'statut' => StockType::STATUT_ACTIF]);
 
-        $this->get(route('backoffice.stock-types.index', ['search' => 'Papeterie']))
+        $this->get(route('backoffice.stock.index', ['tab' => 'types', 'typeSearch' => 'Papeterie']))
             ->assertInertia(fn (Assert $page) => $page
-                ->where('types.data.0.nom', 'Papeterie')
-                ->where('types.total', 1)
+                ->where('stockTypesList.data.0.nom', 'Papeterie')
+                ->where('stockTypesList.total', 1)
             );
     }
 }

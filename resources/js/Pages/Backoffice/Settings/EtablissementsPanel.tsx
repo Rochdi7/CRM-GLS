@@ -138,7 +138,7 @@ export default function EtablissementsPanel({ etablissements, permissions }: Eta
                 <h5 className="mb-0">Centres</h5>
                 {permissions.create && (
                     <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                        <i className="ti ti-square-rounded-plus me-2" />
+                        <i className="fa fa-square-plus me-2" />
                         Ajouter un centre
                     </button>
                 )}
@@ -147,7 +147,7 @@ export default function EtablissementsPanel({ etablissements, permissions }: Eta
             <RelatedRecordsTable
                 isEmpty={etablissements.data.length === 0}
                 emptyTitle="Aucun centre pour le moment"
-                emptyIcon="ti ti-building"
+                emptyIcon="fa fa-building"
                 head={
                     <tr>
                         <th>Nom du centre</th>
@@ -177,13 +177,13 @@ export default function EtablissementsPanel({ etablissements, permissions }: Eta
                         <td className="text-end">
                             <RowActions>
                                 {permissions.update && (
-                                    <RowActionItem icon="ti-edit" onClick={() => openEdit(row)}>
+                                    <RowActionItem icon="fa-pen" onClick={() => openEdit(row)}>
                                         Modifier
                                     </RowActionItem>
                                 )}
                                 {permissions.delete && (
                                     <RowActionItem
-                                        icon="ti-trash"
+                                        icon="fa-trash"
                                         danger
                                         onClick={() => {
                                             setDeleteTarget(row);

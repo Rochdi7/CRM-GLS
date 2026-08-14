@@ -37,7 +37,7 @@ final class AnneeScolaireController extends Controller
         $this->persist($request->validated());
 
         return redirect()->route('backoffice.settings', ['tab' => 'annees-scolaires'])
-            ->with('status', __('Année scolaire créée.'));
+            ->with('success', __('Année scolaire créée.'));
     }
 
     public function edit(AnneeScolaire $annees_scolaire): RedirectResponse
@@ -50,7 +50,7 @@ final class AnneeScolaireController extends Controller
         $this->persist($request->validated(), $annees_scolaire);
 
         return redirect()->route('backoffice.settings', ['tab' => 'annees-scolaires'])
-            ->with('status', __('Année scolaire mise à jour.'));
+            ->with('success', __('Année scolaire mise à jour.'));
     }
 
     /**
@@ -69,7 +69,7 @@ final class AnneeScolaireController extends Controller
         $annees_scolaire->delete();
 
         return redirect()->route('backoffice.settings', ['tab' => 'annees-scolaires'])
-            ->with('status', __('Année scolaire supprimée.'));
+            ->with('success', __('Année scolaire supprimée.'));
     }
 
     /**

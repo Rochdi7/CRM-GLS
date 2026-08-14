@@ -708,7 +708,7 @@ export default function InscriptionsIndex({
             breadcrumbs={[{ label: 'Tableau de bord', href: '/backoffice/dashboard' }, { label: 'Inscriptions' }]}
             actions={
                 <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                    <i className="ti ti-square-rounded-plus me-2" />
+                    <i className="fa fa-square-plus me-2" />
                     Ajouter une inscription
                 </button>
             }
@@ -775,7 +775,7 @@ export default function InscriptionsIndex({
                 />
 
                 {inscriptions.data.length === 0 ? (
-                    <EmptyState title="Aucune inscription pour le moment" icon="ti ti-clipboard-list" />
+                    <EmptyState title="Aucune inscription pour le moment" icon="fa fa-clipboard-list" />
                 ) : (
                     <>
                         <DataTable
@@ -810,18 +810,18 @@ export default function InscriptionsIndex({
                                     </td>
                                     <td className="text-end">
                                         <RowActions view={inscription.showUrl}>
-                                            <RowActionItem icon="ti-edit" onClick={() => openEdit(inscription)}>
+                                            <RowActionItem icon="fa-pen" onClick={() => openEdit(inscription)}>
                                                 Modifier
                                             </RowActionItem>
 
                                             <RowActionDivider />
 
                                             {inscription.statut === 'Active' ? (
-                                                <RowActionItem icon="ti-x" danger onClick={() => confirmStatutChange(inscription, 'Annulée')}>
+                                                <RowActionItem icon="fa-xmark" danger onClick={() => confirmStatutChange(inscription, 'Annulée')}>
                                                     Annuler
                                                 </RowActionItem>
                                             ) : (
-                                                <RowActionItem icon="ti-refresh" onClick={() => confirmStatutChange(inscription, 'Active')}>
+                                                <RowActionItem icon="fa-rotate-right" onClick={() => confirmStatutChange(inscription, 'Active')}>
                                                     Réactiver
                                                 </RowActionItem>
                                             )}
@@ -829,7 +829,7 @@ export default function InscriptionsIndex({
                                             {canChangeGroup && inscription.statut === 'Active' && (
                                                 <>
                                                     <RowActionDivider />
-                                                    <RowActionItem icon="ti-replace" onClick={() => openChangeGroup(inscription)}>
+                                                    <RowActionItem icon="fa-arrow-right-arrow-left" onClick={() => openChangeGroup(inscription)}>
                                                         Changement de groupe
                                                     </RowActionItem>
                                                 </>
@@ -837,7 +837,7 @@ export default function InscriptionsIndex({
 
                                             <RowActionDivider />
 
-                                            <RowActionItem icon="ti-trash" danger onClick={() => confirmDelete(inscription)}>
+                                            <RowActionItem icon="fa-trash" danger onClick={() => confirmDelete(inscription)}>
                                                 Supprimer
                                             </RowActionItem>
                                         </RowActions>
@@ -934,7 +934,7 @@ export default function InscriptionsIndex({
                                                         className="btn btn-outline-primary d-inline-flex align-items-center justify-content-center px-4"
                                                         htmlFor={`ins-new-sexe-${sexe}`}
                                                     >
-                                                        <i className={`ti ${sexe === 'Homme' ? 'ti-man' : 'ti-woman'} me-1`} />
+                                                        <i className={`fa ${sexe === 'Homme' ? 'fa-mars' : 'fa-venus'} me-1`} />
                                                         {sexe === 'Homme' ? 'Masculin' : 'Féminin'}
                                                     </label>
                                                 </div>
@@ -1034,7 +1034,7 @@ export default function InscriptionsIndex({
                                 className={`nav-link d-inline-flex align-items-center${activeTab === 'affectation' ? ' active' : ''}`}
                                 onClick={() => setActiveTab('affectation')}
                             >
-                                <i className="ti ti-calendar-event me-1" />
+                                <i className="fa fa-calendar-days me-1" />
                                 Affectation
                             </button>
                         </li>
@@ -1046,7 +1046,7 @@ export default function InscriptionsIndex({
                                         className={`nav-link d-inline-flex align-items-center${activeTab === 'contact' ? ' active' : ''}`}
                                         onClick={() => setActiveTab('contact')}
                                     >
-                                        <i className="ti ti-mail me-1" />
+                                        <i className="fa fa-envelope me-1" />
                                         Contact
                                     </button>
                                 </li>
@@ -1056,7 +1056,7 @@ export default function InscriptionsIndex({
                                         className={`nav-link d-inline-flex align-items-center${activeTab === 'parent' ? ' active' : ''}`}
                                         onClick={() => setActiveTab('parent')}
                                     >
-                                        <i className="ti ti-user me-1" />
+                                        <i className="fa fa-user me-1" />
                                         Parent
                                     </button>
                                 </li>
@@ -1068,7 +1068,7 @@ export default function InscriptionsIndex({
                                 className={`nav-link d-inline-flex align-items-center${activeTab === 'autre' ? ' active' : ''}`}
                                 onClick={() => setActiveTab('autre')}
                             >
-                                <i className="ti ti-info-circle me-1" />
+                                <i className="fa fa-circle-info me-1" />
                                 Autres informations
                             </button>
                         </li>
@@ -1307,7 +1307,7 @@ export default function InscriptionsIndex({
                                                 disabled={newFeeToAdd === ''}
                                                 onClick={addEditingLine}
                                             >
-                                                <i className="ti ti-plus" />
+                                                <i className="fa fa-plus" />
                                             </button>
                                         </div>
                                     )}
@@ -1430,7 +1430,7 @@ export default function InscriptionsIndex({
                                                                             disabled={hideProcessingId === line.id}
                                                                             onClick={() => removeEditingLine(index)}
                                                                         >
-                                                                            <i className={hideProcessingId === line.id ? 'ti ti-loader-2' : 'ti ti-trash'} />
+                                                                            <i className={hideProcessingId === line.id ? 'fa fa-spinner fa-spin' : 'fa fa-trash'} />
                                                                         </button>
                                                                     </td>
                                                                 )}
@@ -1629,7 +1629,7 @@ export default function InscriptionsIndex({
                                                     className="btn btn-outline-primary d-inline-flex align-items-center justify-content-center px-4"
                                                     htmlFor={`ins-psexe-${sexe}`}
                                                 >
-                                                    <i className={`ti ${sexe === 'Homme' ? 'ti-man' : 'ti-woman'} me-1`} />
+                                                    <i className={`fa ${sexe === 'Homme' ? 'fa-mars' : 'fa-venus'} me-1`} />
                                                     {sexe === 'Homme' ? 'Masculin' : 'Féminin'}
                                                 </label>
                                             </div>
@@ -1714,7 +1714,7 @@ export default function InscriptionsIndex({
                         ? 'Voulez-vous vraiment annuler cette inscription ?'
                         : 'Voulez-vous vraiment réactiver cette inscription ?'
                 }
-                icon={statutTarget?.statut === 'Annulée' ? 'ti-x' : 'ti-refresh'}
+                icon={statutTarget?.statut === 'Annulée' ? 'fa-xmark' : 'fa-rotate-right'}
                 variant={statutTarget?.statut === 'Annulée' ? 'danger' : 'primary'}
                 confirmLabel={statutTarget?.statut === 'Annulée' ? 'Oui, annuler' : 'Oui, réactiver'}
                 processingLabel={statutTarget?.statut === 'Annulée' ? 'Annulation…' : 'Réactivation…'}

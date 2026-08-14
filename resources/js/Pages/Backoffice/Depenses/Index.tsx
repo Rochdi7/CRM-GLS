@@ -299,7 +299,7 @@ export default function DepensesIndex({
                             aria-current={tab === 'depenses' ? 'page' : undefined}
                             onClick={() => switchTab('depenses')}
                         >
-                            <i className="ti ti-receipt me-2" aria-hidden="true" />
+                            <i className="fa fa-receipt me-2" aria-hidden="true" />
                             Dépenses
                         </button>
                     </li>
@@ -312,7 +312,7 @@ export default function DepensesIndex({
                             aria-current={tab === 'remboursements' ? 'page' : undefined}
                             onClick={() => switchTab('remboursements')}
                         >
-                            <i className="ti ti-arrow-back-up me-2" aria-hidden="true" />
+                            <i className="fa fa-rotate-left me-2" aria-hidden="true" />
                             Remboursements
                         </button>
                     </li>
@@ -320,7 +320,7 @@ export default function DepensesIndex({
                 {canViewTypes && (
                     <li className="nav-item" role="presentation">
                         <Link href="/backoffice/types-depenses" className="nav-link d-inline-flex align-items-center">
-                            <i className="ti ti-receipt-tax me-2" aria-hidden="true" />
+                            <i className="fa fa-file-invoice-dollar me-2" aria-hidden="true" />
                             Types de dépenses
                         </Link>
                     </li>
@@ -337,7 +337,7 @@ export default function DepensesIndex({
                             className="btn btn-primary d-flex align-items-center mb-3"
                             onClick={openCreateDepense}
                         >
-                            <i className="ti ti-square-rounded-plus me-2" />
+                            <i className="fa fa-square-plus me-2" />
                             Ajouter une dépense
                         </button>
                     }
@@ -391,7 +391,7 @@ export default function DepensesIndex({
                     )}
 
                     {depenses.data.length === 0 ? (
-                        <EmptyState title="Aucune dépense" icon="ti ti-receipt" />
+                        <EmptyState title="Aucune dépense" icon="fa fa-receipt" />
                     ) : (
                         <>
                             <DataTable
@@ -420,7 +420,7 @@ export default function DepensesIndex({
                                         <td>
                                             {row.receiptsCount > 0 ? (
                                                 <span>
-                                                    <i className="ti ti-paperclip me-1" />
+                                                    <i className="fa fa-paperclip me-1" />
                                                     {row.receiptsCount}
                                                 </span>
                                             ) : (
@@ -429,7 +429,7 @@ export default function DepensesIndex({
                                         </td>
                                         <td>
                                             <RowActions view={row.showUrl}>
-                                                <RowActionItem icon="ti-edit" onClick={() => openEditDepense(row)}>
+                                                <RowActionItem icon="fa-pen" onClick={() => openEditDepense(row)}>
                                                     Modifier
                                                 </RowActionItem>
                                             </RowActions>
@@ -453,7 +453,7 @@ export default function DepensesIndex({
                             className="btn btn-primary d-flex align-items-center mb-3"
                             onClick={openCreateRemboursement}
                         >
-                            <i className="ti ti-square-rounded-plus me-2" />
+                            <i className="fa fa-square-plus me-2" />
                             Ajouter un remboursement
                         </button>
                     }
@@ -463,7 +463,7 @@ export default function DepensesIndex({
                     />
 
                     {remboursements.data.length === 0 ? (
-                        <EmptyState title="Aucun remboursement" icon="ti ti-arrow-back-up" />
+                        <EmptyState title="Aucun remboursement" icon="fa fa-rotate-left" />
                     ) : (
                         <>
                             <DataTable
@@ -492,7 +492,7 @@ export default function DepensesIndex({
                                         <td>{row.dateRemboursement ?? '—'}</td>
                                         <td>
                                             <RowActions>
-                                                <RowActionItem icon="ti-edit" onClick={() => openEditRemboursement(row)}>
+                                                <RowActionItem icon="fa-pen" onClick={() => openEditRemboursement(row)}>
                                                     Modifier
                                                 </RowActionItem>
                                             </RowActions>

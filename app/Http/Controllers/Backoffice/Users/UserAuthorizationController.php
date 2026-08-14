@@ -85,6 +85,6 @@ final class UserAuthorizationController extends Controller
         );
 
         return redirect()->route('backoffice.users.index')
-            ->with('status', __('Autorisations mises à jour.'));
+            ->with('success', __('Autorisations mises à jour.'));
     }
 }

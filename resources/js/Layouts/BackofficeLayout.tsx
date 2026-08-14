@@ -5,7 +5,7 @@ import Sidebar from '@/Components/Theme/Sidebar';
 import Footer from '@/Components/Theme/Footer';
 import MobileSidebarOverlay from '@/Components/Theme/MobileSidebarOverlay';
 import PageHeader from '@/Components/Theme/PageHeader';
-import FlashMessages from '@/Components/Feedback/FlashMessages';
+import ToastContainer from '@/Components/Feedback/ToastContainer';
 import type { Breadcrumb, SharedProps } from '@/Types';
 
 interface BackofficeLayoutProps extends PropsWithChildren {
@@ -67,9 +67,10 @@ export default function BackofficeLayout({ title, breadcrumbs = [], actions, chi
 
             <MobileSidebarOverlay visible={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
 
+            <ToastContainer flash={flash} />
+
             <div className="page-wrapper">
                 <div className="content">
-                    <FlashMessages flash={flash} />
                     <PageHeader title={title} breadcrumbs={breadcrumbs}>
                         {actions}
                     </PageHeader>

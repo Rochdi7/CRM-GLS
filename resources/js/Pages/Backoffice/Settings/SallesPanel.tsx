@@ -115,7 +115,7 @@ export default function SallesPanel({ salles, centerOptions, permissions }: Sall
                 <h5 className="mb-0">Salles</h5>
                 {permissions.create && (
                     <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                        <i className="ti ti-square-rounded-plus me-2" />
+                        <i className="fa fa-square-plus me-2" />
                         Ajouter une salle
                     </button>
                 )}
@@ -124,7 +124,7 @@ export default function SallesPanel({ salles, centerOptions, permissions }: Sall
             <RelatedRecordsTable
                 isEmpty={salles.data.length === 0}
                 emptyTitle="Aucune salle pour le moment"
-                emptyIcon="ti ti-door"
+                emptyIcon="fa fa-door-open"
                 head={
                     <tr>
                         <th>Nom de la salle</th>
@@ -148,13 +148,13 @@ export default function SallesPanel({ salles, centerOptions, permissions }: Sall
                         <td className="text-end">
                             <RowActions>
                                 {permissions.update && (
-                                    <RowActionItem icon="ti-edit" onClick={() => openEdit(row)}>
+                                    <RowActionItem icon="fa-pen" onClick={() => openEdit(row)}>
                                         Modifier
                                     </RowActionItem>
                                 )}
                                 {permissions.delete && (
                                     <RowActionItem
-                                        icon="ti-trash"
+                                        icon="fa-trash"
                                         danger
                                         onClick={() => {
                                             setDeleteTarget(row);

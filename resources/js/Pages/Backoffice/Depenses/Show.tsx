@@ -27,7 +27,7 @@ export default function DepenseShow({ depense }: DepenseShowProps) {
             actions={
                 depense.canViewList ? (
                     <a href="/backoffice/depenses" className="btn btn-light d-flex align-items-center">
-                        <i className="ti ti-arrow-left me-2" />
+                        <i className="fa fa-arrow-left me-2" />
                         Retour à la liste
                     </a>
                 ) : undefined
@@ -38,7 +38,7 @@ export default function DepenseShow({ depense }: DepenseShowProps) {
                     <Card>
                         <div className="text-center mb-3">
                             <span className="avatar avatar-xxl rounded-circle bg-danger-transparent d-inline-flex align-items-center justify-content-center mb-2">
-                                <i className="ti ti-cash-banknote fs-24 text-danger" />
+                                <i className="fa fa-cash-register-banknote fs-24 text-danger" />
                             </span>
                             <h5 className="mb-1 text-danger">- {Number(depense.montant).toFixed(2)} MAD</h5>
                             <p className="text-muted mb-2">
@@ -88,7 +88,7 @@ export default function DepenseShow({ depense }: DepenseShowProps) {
                             <EmptyState
                                 title="Aucun justificatif joint"
                                 message="Cette dépense n'a pas de document justificatif."
-                                icon="ti ti-paperclip"
+                                icon="fa fa-paperclip"
                             />
                         ) : (
                             <div className="row g-3">

@@ -41,7 +41,7 @@ final class BanqueController extends Controller
         Banque::create($request->validated());
 
         return redirect()->route('backoffice.settings', ['tab' => 'banques'])
-            ->with('status', __('Banque créée.'));
+            ->with('success', __('Banque créée.'));
     }
 
     public function edit(Banque $banque): RedirectResponse
@@ -54,7 +54,7 @@ final class BanqueController extends Controller
         $banque->update($request->validated());
 
         return redirect()->route('backoffice.settings', ['tab' => 'banques'])
-            ->with('status', __('Banque mise à jour.'));
+            ->with('success', __('Banque mise à jour.'));
     }
 
     /**
@@ -71,6 +71,6 @@ final class BanqueController extends Controller
         $banque->delete();
 
         return redirect()->route('backoffice.settings', ['tab' => 'banques'])
-            ->with('status', __('Banque supprimée.'));
+            ->with('success', __('Banque supprimée.'));
     }
 }

@@ -32,6 +32,8 @@ class DatabaseSeeder extends Seeder
             DemoDataSeeder::class,
             DemoFinanceSeeder::class,
             DemoStockSeeder::class,
+            DemoRecouvrementSeeder::class,
+            DemoDashboardSeeder::class,
         ]);
     }
 }

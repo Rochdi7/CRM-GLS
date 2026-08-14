@@ -62,7 +62,7 @@ final class TypeDepenseController extends Controller
         ]);
 
         return redirect()->route('backoffice.types-depenses.index')
-            ->with('status', __('Type de dépense créé.'));
+            ->with('success', __('Type de dépense créé.'));
     }
 
     public function update(UpdateTypeDepenseRequest $request, TypeDepense $types_depense): RedirectResponse
@@ -76,7 +76,7 @@ final class TypeDepenseController extends Controller
         $types_depense->update($request->validated());
 
         return redirect()->route('backoffice.types-depenses.index')
-            ->with('status', __('Type de dépense mis à jour.'));
+            ->with('success', __('Type de dépense mis à jour.'));
     }
 
     public function destroy(TypeDepense $types_depense): RedirectResponse
@@ -93,6 +93,6 @@ final class TypeDepenseController extends Controller
         $types_depense->delete();
 
         return redirect()->route('backoffice.types-depenses.index')
-            ->with('status', __('Type de dépense supprimé.'));
+            ->with('success', __('Type de dépense supprimé.'));
     }
 }

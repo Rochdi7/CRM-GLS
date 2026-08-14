@@ -99,7 +99,7 @@ export default function BanquesPanel({ banques, permissions }: BanquesPanelProps
                 <h5 className="mb-0">Catalogue des banques</h5>
                 {permissions.create && (
                     <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                        <i className="ti ti-square-rounded-plus me-2" />
+                        <i className="fa fa-square-plus me-2" />
                         Ajouter une banque
                     </button>
                 )}
@@ -108,7 +108,7 @@ export default function BanquesPanel({ banques, permissions }: BanquesPanelProps
             <RelatedRecordsTable
                 isEmpty={banques.data.length === 0}
                 emptyTitle="Aucune banque pour le moment"
-                emptyIcon="ti ti-building-bank"
+                emptyIcon="fa fa-building-columns"
                 head={
                     <tr>
                         <th>Nom de la banque</th>
@@ -128,13 +128,13 @@ export default function BanquesPanel({ banques, permissions }: BanquesPanelProps
                         <td className="text-end">
                             <RowActions>
                                 {permissions.update && (
-                                    <RowActionItem icon="ti-edit" onClick={() => openEdit(row)}>
+                                    <RowActionItem icon="fa-pen" onClick={() => openEdit(row)}>
                                         Modifier
                                     </RowActionItem>
                                 )}
                                 {permissions.delete && (
                                     <RowActionItem
-                                        icon="ti-trash"
+                                        icon="fa-trash"
                                         danger
                                         onClick={() => {
                                             setDeleteTarget(row);

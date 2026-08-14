@@ -62,7 +62,7 @@ export default function TagsInput({ id, label, value, onChange, error, placehold
                         <i
                             role="button"
                             aria-label={`Retirer ${tag}`}
-                            className="ti ti-x ms-1"
+                            className="fa fa-xmark ms-1"
                             onClick={(event) => {
                                 event.stopPropagation();
                                 removeTag(tag);

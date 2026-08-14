@@ -16,9 +16,13 @@ function feeStatusVariant(statut: string): 'success' | 'warning' | 'danger' {
 }
 
 /**
- * Replaces resources/views/backoffice/inscriptions/show.blade.php exactly
- * — registration summary, payment summary (due/paid/remaining, all
- * server-computed), fee-lines table. Read-only, no edit controls.
+ * Replaces resources/views/backoffice/inscriptions/show.blade.php — the top
+ * "Informations" card lays its fields out as label/value pairs across two
+ * columns (Référence/Statut, Étudiant/Groupe, Année scolaire/Enseignant,
+ * Date d'inscription/Date de fin), followed by the payment summary, the fee
+ * lines table and the full payments history (GetInscriptionPayments). All
+ * totals (due/paid/remaining) are server-computed. Read-only, no edit
+ * controls.
  */
 export default function InscriptionShow({ inscription }: InscriptionShowProps) {
     const reste = Number(inscription.reste);
@@ -33,27 +37,53 @@ export default function InscriptionShow({ inscription }: InscriptionShowProps) {
             ]}
         >
             <div className="row">
-                <div className="col-xl-4">
+                <div className="col-12">
                     <Card title="Inscription">
-                        <div className="d-flex justify-content-between mb-2">
-                            <span className="text-muted">Étudiant</span>
-                            {inscription.studentShowUrl ? (
-                                <a href={inscription.studentShowUrl} className="fw-medium">
-                                    {inscription.student}
-                                </a>
-                            ) : (
-                                <span className="fw-medium">—</span>
-                            )}
-                        </div>
-                        <DetailRow label="Groupe" value={inscription.groupe} />
-                        <DetailRow label="Année scolaire" value={inscription.anneeScolaire} />
-                        <DetailRow label="Date" value={inscription.date} />
-                        <div className="d-flex justify-content-between">
-                            <span className="text-muted">Statut</span>
-                            <StatusBadge label={inscription.statut} />
+                        <div className="row">
+                            <div className="col-md-6">
+                                <DetailRow label="Référence" value={<code>{inscription.reference}</code>} />
+                                <DetailRow
+                                    label="Étudiant"
+                                    value={
+                                        inscription.studentShowUrl ? (
+                                            <a href={inscription.studentShowUrl}>
+                                                {inscription.student} <i className="fa fa-arrow-up-right-from-square fs-14" />
+                                            </a>
+                                        ) : (
+                                            inscription.student
+                                        )
+                                    }
+                                />
+                                <DetailRow label="Année scolaire" value={inscription.anneeScolaire} />
+                                <DetailRow label="Date d'inscription" value={inscription.dateDebut ?? inscription.date} />
+                            </div>
+                            <div className="col-md-6">
+                                <div className="d-flex justify-content-between mb-2">
+                                    <span className="text-muted">Statut</span>
+                                    <StatusBadge label={inscription.statut} />
+                                </div>
+                                <DetailRow
+                                    label="Groupe"
+                                    value={
+                                        inscription.groupShowUrl ? (
+                                            <a href={inscription.groupShowUrl}>
+                                                {inscription.groupe} <i className="fa fa-arrow-up-right-from-square fs-14" />
+                                            </a>
+                                        ) : (
+                                            inscription.groupe
+                                        )
+                                    }
+                                />
+                                <DetailRow label="Enseignant" value={inscription.enseignant} />
+                                <DetailRow label="Date de fin" value={inscription.dateFin} />
+                            </div>
                         </div>
                     </Card>
+                </div>
+            </div>
 
+            <div className="row">
+                <div className="col-xl-4">
                     <Card title="Résumé des paiements">
                         <div className="d-flex justify-content-between mb-2">
                             <span className="text-muted">Total dû</span>
@@ -79,7 +109,7 @@ export default function InscriptionShow({ inscription }: InscriptionShowProps) {
                         <RelatedRecordsTable
                             isEmpty={inscription.fees.length === 0}
                             emptyTitle="Aucune ligne de frais"
-                            emptyIcon="ti ti-receipt"
+                            emptyIcon="fa fa-receipt"
                             head={
                                 <tr>
                                     <th>Nom du frais</th>
@@ -100,6 +130,47 @@ export default function InscriptionShow({ inscription }: InscriptionShowProps) {
                                         <span className={`badge badge-soft-${feeStatusVariant(fee.statut)}`}>
                                             {fee.statut}
                                         </span>
+                                    </td>
+                                </tr>
+                            ))}
+                        </RelatedRecordsTable>
+                    </Card>
+                </div>
+            </div>
+
+            <div className="row">
+                <div className="col-12">
+                    <Card title="Paiements">
+                        <RelatedRecordsTable
+                            isEmpty={inscription.payments.length === 0}
+                            emptyTitle="Aucun paiement enregistré"
+                            emptyIcon="fa fa-cash-register-banknote"
+                            head={
+                                <tr>
+                                    <th>Référence</th>
+                                    <th>Frais</th>
+                                    <th>Montant</th>
+                                    <th>Méthode</th>
+                                    <th>Date</th>
+                                    <th>Statut</th>
+                                </tr>
+                            }
+                        >
+                            {inscription.payments.map((payment) => (
+                                <tr key={payment.id}>
+                                    <td>
+                                        <code>{payment.reference}</code>
+                                    </td>
+                                    <td>{payment.feeNom ?? '—'}</td>
+                                    <td className="fw-medium">{Number(payment.montant).toFixed(2)} MAD</td>
+                                    <td>{payment.methode}</td>
+                                    <td>{payment.datePaiement ?? '—'}</td>
+                                    <td>
+                                        {payment.rembourse ? (
+                                            <span className="badge badge-soft-warning">Remboursé</span>
+                                        ) : (
+                                            <span className="badge badge-soft-success">Encaissé</span>
+                                        )}
                                     </td>
                                 </tr>
                             ))}

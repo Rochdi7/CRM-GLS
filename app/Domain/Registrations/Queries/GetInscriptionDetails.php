@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Registrations\Queries;
 
+use App\Domain\Payments\Queries\GetInscriptionPayments;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
 
@@ -15,6 +16,10 @@ use App\Models\InscriptionFee;
  */
 final class GetInscriptionDetails
 {
+    public function __construct(
+        private readonly GetInscriptionPayments $getInscriptionPayments,
+    ) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -32,8 +37,12 @@ final class GetInscriptionDetails
             'student' => $inscription->student?->nomComplet(),
             'studentShowUrl' => $inscription->student ? route('backoffice.students.show', $inscription->student) : null,
             'groupe' => $inscription->group?->nom,
+            'groupShowUrl' => $inscription->group ? route('backoffice.groups.show', $inscription->group) : null,
+            'enseignant' => $inscription->group?->enseignant?->nomComplet(),
             'anneeScolaire' => $inscription->anneeScolaire?->nom,
             'date' => $inscription->date_inscription?->format('d/m/Y'),
+            'dateDebut' => $inscription->date_debut?->format('d/m/Y'),
+            'dateFin' => $inscription->date_fin?->format('d/m/Y'),
             'statut' => $inscription->statut,
             'totalDu' => number_format($totalDu, 2, '.', ''),
             'totalPaye' => number_format($totalPaye, 2, '.', ''),
@@ -50,6 +59,15 @@ final class GetInscriptionDetails
                     'statut' => $fee->statut,
                 ];
             })->values()->all(),
+            'payments' => ($this->getInscriptionPayments)($inscription)
+                ->map(fn (array $p): array => [
+                    ...$p,
+                    'datePaiement' => $p['datePaiement'] !== null
+                        ? date('d/m/Y', strtotime($p['datePaiement']))
+                        : null,
+                ])
+                ->values()
+                ->all(),
         ];
     }
 }

@@ -138,7 +138,14 @@ export default function SelectField({
                                 {open && query !== '' ? (
                                     <>{query}<span className="text-muted">|</span></>
                                 ) : selected ? (
-                                    selected.label
+                                    selected.icon ? (
+                                        <span className="d-inline-flex align-items-center gap-2">
+                                            {selected.icon}
+                                            {selected.shortLabel ?? selected.label}
+                                        </span>
+                                    ) : (
+                                        selected.shortLabel ?? selected.label
+                                    )
                                 ) : (
                                     <span className="select2-selection__placeholder">{placeholder ?? 'Choisir…'}</span>
                                 )}
@@ -186,7 +193,14 @@ export default function SelectField({
                                                 choose(option);
                                             }}
                                         >
-                                            {option.label}
+                                            {option.icon ? (
+                                                <span className="d-inline-flex align-items-center gap-2">
+                                                    {option.icon}
+                                                    {option.label}
+                                                </span>
+                                            ) : (
+                                                option.label
+                                            )}
                                         </li>
                                     ))}
                                 </ul>

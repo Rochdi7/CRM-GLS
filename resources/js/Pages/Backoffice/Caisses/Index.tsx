@@ -73,7 +73,7 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
     if (journal.caissesInScope.length === 0) {
         return (
             <Card>
-                <EmptyState title="Aucune caisse" message="Votre compte n'est lié à aucune caisse." icon="ti ti-cash" />
+                <EmptyState title="Aucune caisse" message="Votre compte n'est lié à aucune caisse." icon="fa fa-cash-register" />
             </Card>
         );
     }
@@ -85,7 +85,7 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
                     <div className="card">
                         <div className="card-body d-flex align-items-center">
                             <span className="avatar avatar-md bg-success-transparent rounded-circle me-3 d-inline-flex align-items-center justify-content-center">
-                                <i className="ti ti-cash-banknote text-success fs-20" />
+                                <i className="fa fa-cash-register-banknote text-success fs-20" />
                             </span>
                             <div>
                                 <p className="mb-0 text-muted">Encaissments</p>
@@ -98,7 +98,7 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
                     <div className="card">
                         <div className="card-body d-flex align-items-center">
                             <span className="avatar avatar-md bg-danger-transparent rounded-circle me-3 d-inline-flex align-items-center justify-content-center">
-                                <i className="ti ti-cash-banknote-off text-danger fs-20" />
+                                <i className="fa fa-cash-register-banknote-off text-danger fs-20" />
                             </span>
                             <div>
                                 <p className="mb-0 text-muted">Dépenses</p>
@@ -111,7 +111,7 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
                     <div className="card">
                         <div className="card-body d-flex align-items-center">
                             <span className="avatar avatar-md bg-primary-transparent rounded-circle me-3 d-inline-flex align-items-center justify-content-center">
-                                <i className="ti ti-currency-dollar text-primary fs-20" />
+                                <i className="fa fa-coins text-primary fs-20" />
                             </span>
                             <div>
                                 <p className="mb-0 text-muted">Solde</p>
@@ -177,7 +177,7 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
                 {loading ? (
                     <p className="text-muted px-3">Chargement…</p>
                 ) : journal.rows.length === 0 ? (
-                    <EmptyState title="Aucune caisse n'a été trouvée." icon="ti ti-report-money" />
+                    <EmptyState title="Aucune caisse n'a été trouvée." icon="fa fa-money-bill-wave" />
                 ) : (
                     <>
                         <DataTable
@@ -415,7 +415,7 @@ export default function CaissesIndex({
             actions={
                 canViewTransfers ? (
                     <button type="button" className="btn btn-info d-flex align-items-center" onClick={openCreateTransfer}>
-                        <i className="ti ti-arrows-exchange me-2" />
+                        <i className="fa fa-arrows-rotate me-2" />
                         transférer
                     </button>
                 ) : undefined
@@ -425,7 +425,7 @@ export default function CaissesIndex({
                 {canViewCaisses && (
                     <li className="nav-item">
                         <button type="button" className={`nav-link${tab === 'ma-caisse' ? ' active' : ''}`} onClick={() => switchTab('ma-caisse')}>
-                            <i className="ti ti-cube me-1" />
+                            <i className="fa fa-cube me-1" />
                             Ma caisse
                         </button>
                     </li>
@@ -433,7 +433,7 @@ export default function CaissesIndex({
                 {canViewTransfers && (
                     <li className="nav-item">
                         <button type="button" className={`nav-link${tab === 'transferts' ? ' active' : ''}`} onClick={() => switchTab('transferts')}>
-                            <i className="ti ti-circle-check me-1" />
+                            <i className="fa fa-circle-check me-1" />
                             Validation de transfert
                         </button>
                     </li>
@@ -480,7 +480,7 @@ export default function CaissesIndex({
                     <p className="px-3 fw-semibold">Total : {transfers.data.reduce((sum, r) => sum + Number(r.montant), 0).toFixed(2)}</p>
 
                     {transfers.data.length === 0 ? (
-                        <EmptyState title="Aucun transfert" icon="ti ti-arrows-exchange" />
+                        <EmptyState title="Aucun transfert" icon="fa fa-arrows-rotate" />
                     ) : (
                         <>
                             <DataTable
@@ -519,17 +519,17 @@ export default function CaissesIndex({
                                                 request (self-validation is refused server-side). */}
                                             <RowActions view={row.showUrl}>
                                                 {row.isPending && canUpdateTransfers && (
-                                                    <RowActionItem icon="ti-edit" onClick={() => openEditTransfer(row)}>
+                                                    <RowActionItem icon="fa-pen" onClick={() => openEditTransfer(row)}>
                                                         Modifier
                                                     </RowActionItem>
                                                 )}
                                                 {row.isPending && canUpdateTransfers && (
-                                                    <RowActionItem icon="ti-x" onClick={() => openConfirmAction('cancel', row)}>
+                                                    <RowActionItem icon="fa-xmark" onClick={() => openConfirmAction('cancel', row)}>
                                                         Annuler
                                                     </RowActionItem>
                                                 )}
                                                 {row.isPending && canValidateTransfers && row.requestedById !== currentEmployeeId && (
-                                                    <RowActionItem icon="ti-check" onClick={() => openConfirmAction('validate', row)}>
+                                                    <RowActionItem icon="fa-check" onClick={() => openConfirmAction('validate', row)}>
                                                         Valider
                                                     </RowActionItem>
                                                 )}
@@ -565,7 +565,7 @@ export default function CaissesIndex({
                 processing={actionProcessing}
                 onConfirm={runConfirmAction}
                 onCancel={closeConfirmAction}
-                icon={confirmAction?.type === 'validate' ? 'ti-circle-check' : 'ti-circle-x'}
+                icon={confirmAction?.type === 'validate' ? 'fa-circle-check' : 'fa-circle-xmark'}
                 variant={confirmAction?.type === 'validate' ? 'primary' : 'danger'}
                 confirmLabel={confirmAction?.type === 'validate' ? 'Valider' : "Oui, annuler"}
                 processingLabel={confirmAction?.type === 'validate' ? 'Validation…' : 'Annulation…'}

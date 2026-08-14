@@ -4,43 +4,25 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
-use App\Domain\Stock\Queries\GetStockTypesList;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\StockTypes\StoreStockTypeRequest;
 use App\Http\Requests\Backoffice\StockTypes\UpdateStockTypeRequest;
 use App\Models\StockType;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
-use Inertia\Inertia;
-use Inertia\Response;
 
 /**
  * Types de stock CRUD — replaces StockArticle's old hardcoded CATEGORIES
  * array, mirroring TypeDepenseController one-for-one. is_system rows (the
  * original 6 categories) are LOCKED — guarded unconditionally before the
- * policy call so it also stops super-admin.
+ * policy call so it also stops super-admin. No index() here — the list
+ * lives in StockController@index as the "types" tab of the merged Gestion
+ * du stock page; these are only the mutation endpoints its forms submit to.
  */
 final class StockTypeController extends Controller
 {
     public function __construct()
     {
-        $this->authorizeResource(StockType::class, 'stock_type');
-    }
-
-    public function index(Request $request, GetStockTypesList $getStockTypesList): Response
-    {
-        $search = (string) $request->query('search', '');
-        $perPage = (int) $request->query('per_page', 10);
-
-        return Inertia::render('Backoffice/StockTypes/Index', [
-            'types' => $getStockTypesList($search, in_array($perPage, [10, 25, 50, 100], true) ? $perPage : 10),
-            'filters' => ['search' => $search],
-            'permissions' => [
-                'create' => $request->user()->can('create', StockType::class),
-                'update' => $request->user()->can('stock-types.update'),
-                'delete' => $request->user()->can('stock-types.delete'),
-            ],
-        ]);
+        $this->authorizeResource(StockType::class, 'stock_type', ['except' => ['index']]);
     }
 
     public function store(StoreStockTypeRequest $request): RedirectResponse
@@ -51,8 +33,8 @@ final class StockTypeController extends Controller
             'is_system' => false,
         ]);
 
-        return redirect()->route('backoffice.stock-types.index')
-            ->with('status', __('Type de stock créé.'));
+        return redirect()->route('backoffice.stock.index', ['tab' => 'types'])
+            ->with('success', __('Type de stock créé.'));
     }
 
     public function update(UpdateStockTypeRequest $request, StockType $stock_type): RedirectResponse
@@ -64,8 +46,8 @@ final class StockTypeController extends Controller
 
         $stock_type->update($request->validated());
 
-        return redirect()->route('backoffice.stock-types.index')
-            ->with('status', __('Type de stock mis à jour.'));
+        return redirect()->route('backoffice.stock.index', ['tab' => 'types'])
+            ->with('success', __('Type de stock mis à jour.'));
     }
 
     public function destroy(StockType $stock_type): RedirectResponse
@@ -81,7 +63,7 @@ final class StockTypeController extends Controller
 
         $stock_type->delete();
 
-        return redirect()->route('backoffice.stock-types.index')
-            ->with('status', __('Type de stock supprimé.'));
+        return redirect()->route('backoffice.stock.index', ['tab' => 'types'])
+            ->with('success', __('Type de stock supprimé.'));
     }
 }

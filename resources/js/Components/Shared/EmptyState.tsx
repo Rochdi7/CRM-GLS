@@ -7,7 +7,7 @@ interface EmptyStateProps extends PropsWithChildren {
 }
 
 /** Markup matches components/backoffice/ui/empty-state.blade.php exactly. */
-export default function EmptyState({ title, message, icon = 'ti ti-database-off', children }: EmptyStateProps) {
+export default function EmptyState({ title, message, icon = 'fa fa-database', children }: EmptyStateProps) {
     return (
         <div className="text-center py-5">
             <span className="avatar avatar-xl bg-light rounded-circle mb-3 d-inline-flex align-items-center justify-content-center">

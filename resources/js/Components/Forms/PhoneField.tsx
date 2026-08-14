@@ -1,5 +1,5 @@
 import FormError from '@/Components/Forms/FormError';
-import { COUNTRIES, dialFor } from '@/Data/countries';
+import { COUNTRIES } from '@/Data/countries';
 import SelectField from '@/Components/Forms/SelectField';
 
 interface PhoneFieldProps {
@@ -40,22 +40,36 @@ export default function PhoneField({
                 {required && <span className="text-danger ms-1">*</span>}
             </label>
             <div className="row g-2">
-                <div className="col-5">
+                <div className="col-6 col-sm-5">
                     {/* Same Select2-styled control as every other dropdown
-                        (bare mode: no label/margin of its own). */}
+                        (bare mode: no label/margin of its own). The closed
+                        control shows just flag + dial code (shortLabel) —
+                        the full country name doesn't fit this column —
+                        while the open option list still shows the full
+                        name via `label` for search/readability. */}
                     <SelectField
                         id={`${id}-country`}
                         options={COUNTRIES.map((country) => ({
                             value: country.iso,
-                            label: `${country.nom} ${country.dial}`,
+                            label: `${country.nom} (${country.dial})`,
+                            shortLabel: country.dial,
+                            icon: (
+                                <i
+                                    className={`flag flag-${country.iso.toLowerCase()} flex-shrink-0`}
+                                    aria-hidden="true"
+                                    title={country.nom}
+                                />
+                            ),
                         }))}
                         value={countryIso}
                         onChange={(event) => onCountryChange(event.target.value)}
                     />
                 </div>
-                <div className="col-7">
+                <div className="col-6 col-sm-7">
                     <div className="input-group">
-                        <span className="input-group-text">{dialFor(countryIso)}</span>
+                        <span className="input-group-text">
+                            <i className="fa fa-phone" aria-hidden="true" />
+                        </span>
                         <input
                             id={id}
                             type="tel"

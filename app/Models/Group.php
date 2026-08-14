@@ -175,6 +175,17 @@ class Group extends Model
     }
 
     /**
+     * Reverses activer() — brings a group that's actively "En formation"
+     * back to "En inscription" (e.g. training started too early / needs more
+     * enrollment). Only valid from En formation; refused otherwise by the
+     * caller's own guard, same pattern as annuler()/reactiver()/activer().
+     */
+    public function retournerEnInscription(): void
+    {
+        $this->update(['statut' => self::STATUT_EN_INSCRIPTION]);
+    }
+
+    /**
      * updateOrCreate rather than create(): a group can cycle
      * annuler() -> reactiver() -> annuler()/archiverCommeTermine() more than
      * once, and historique() is a HasOne — always keep the single snapshot

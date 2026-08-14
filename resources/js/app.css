@@ -5,6 +5,51 @@
  */
 
 /*
+ * Inter (self-hosted variable font, OFL license) replaces PreSkool's
+ * default Roboto body font — better tabular figures for finance tables,
+ * tighter legibility at dense CRM table sizes, full French accent coverage.
+ * Files live in public/assets/fonts/inter/ (absolute path so it resolves
+ * the same in dev and build, matching the static PreSkool asset strategy —
+ * no Google Fonts runtime request).
+ */
+@font-face {
+    font-family: 'Inter';
+    src: url('/assets/fonts/inter/InterVariable.woff2') format('woff2-variations'),
+         url('/assets/fonts/inter/InterVariable.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Inter';
+    src: url('/assets/fonts/inter/InterVariable-Italic.woff2') format('woff2-variations'),
+         url('/assets/fonts/inter/InterVariable-Italic.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: italic;
+    font-display: swap;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-feature-settings: 'cv11', 'ss01', 'tnum';
+    font-optical-sizing: auto;
+}
+
+/*
+ * FontAwesome Free ships solid (900-weight, filled) glyphs only — there is
+ * no free "regular"/thin-outline style to fall back to. That reads bulkier
+ * than the previous Tabler outline icons at the same container size
+ * (sidebar nav, stat cards, buttons), so scale glyphs down slightly instead
+ * of relying on a font-weight that FA Free doesn't actually offer.
+ */
+.sidebar .sidebar-menu i.fa,
+.sidebar .sidebar-menu i[class^='fa-'],
+.sidebar .sidebar-menu i[class*=' fa-'] {
+    font-size: 0.85em;
+}
+
+/*
  * Bordered nav-tabs (wimschool file-folder style, used by every page/modal
  * tab bar): the theme's own .nav-tabs override paints the ACTIVE tab black
  * with a grey line running under it — the intended look (blue label, white
@@ -125,4 +170,58 @@ html[data-theme='dark'] .select2-dropdown {
 }
 .header {
     z-index: 1042 !important;
+}
+
+/*
+ * Annual fees chart (Dashboard) — custom SVG, no chart-library dependency.
+ * Tokens follow the same html[data-theme='dark'] switch as the rest of the
+ * app (Header.tsx toggles the attribute; no prefers-color-scheme fallback
+ * anywhere else in this codebase, so none is added here either).
+ */
+.gls-frais-chart {
+    --gls-chart-grid: #e9edf4;
+    --gls-chart-muted: #6a7287;
+    --gls-chart-surface: #fff;
+}
+html[data-theme='dark'] .gls-frais-chart {
+    --gls-chart-grid: #2c2c3a;
+    --gls-chart-muted: #9ca1af;
+    --gls-chart-surface: #1b1632;
+}
+.gls-frais-tooltip {
+    position: absolute;
+    transform: translate(8px, 0);
+    background: #1b1632;
+    color: #fff;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12px;
+    min-width: 190px;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    z-index: 2;
+}
+.gls-frais-tooltip-header {
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+.gls-frais-tooltip-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+.gls-frais-tooltip-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+.gls-frais-tooltip-label {
+    color: #c3c2b7;
+}
+.gls-frais-tooltip-value {
+    margin-left: auto;
+    font-weight: 600;
 }

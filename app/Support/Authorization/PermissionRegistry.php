@@ -121,6 +121,9 @@ final class PermissionRegistry
                 'payments.create' => 'Enregistrer un encaissement',
                 'payments.update' => 'Modifier un encaissement',
             ],
+            'Recouvrement' => [
+                'collections.view' => 'Consulter la gestion des recouvrements',
+            ],
             'Types de dépenses' => [
                 'expense-types.view' => 'Consulter les types de dépenses',
                 'expense-types.create' => 'Créer un type de dépense',
@@ -240,6 +243,7 @@ final class PermissionRegistry
                 'attendance.view', 'attendance.create', 'attendance.update', 'attendance.delete', 'attendance.mark',
                 'cash-registers.view', 'cash-registers.create', 'cash-registers.update', 'cash-registers.delete',
                 'payments.view', 'payments.create', 'payments.update',
+                'collections.view',
                 'expense-types.view', 'expense-types.create', 'expense-types.update', 'expense-types.delete',
                 'expenses.view', 'expenses.create', 'expenses.update',
                 'refunds.view', 'refunds.create', 'refunds.update',
@@ -264,6 +268,7 @@ final class PermissionRegistry
                 'attendance.view', 'attendance.create', 'attendance.update', 'attendance.mark',
                 'cash-registers.view',
                 'payments.view',
+                'collections.view',
                 'expense-types.view',
                 'expenses.view',
                 'refunds.view',
@@ -288,6 +293,7 @@ final class PermissionRegistry
                 'attendance.view', 'attendance.create', 'attendance.mark',
                 'cash-registers.view',
                 'payments.view', 'payments.create', 'payments.update',
+                'collections.view',
                 'expense-types.view',
                 'expenses.view', 'expenses.create',
                 'refunds.view', 'refunds.create',

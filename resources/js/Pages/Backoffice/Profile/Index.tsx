@@ -41,7 +41,7 @@ function SexeIcon({ sexe }: { sexe: string | null }) {
     if (sexe === 'Homme') {
         return (
             <span className="d-inline-flex align-items-center">
-                <i className="ti ti-man fs-16 text-primary" />
+                <i className="fa fa-mars fs-16 text-primary" />
                 <span className="ms-1">Homme</span>
             </span>
         );
@@ -50,7 +50,7 @@ function SexeIcon({ sexe }: { sexe: string | null }) {
     if (sexe === 'Femme') {
         return (
             <span className="d-inline-flex align-items-center">
-                <i className="ti ti-woman fs-16 text-pink" />
+                <i className="fa fa-venus fs-16 text-pink" />
                 <span className="ms-1">Femme</span>
             </span>
         );

@@ -62,7 +62,7 @@ final class UserController extends Controller
             'is_active' => $data['is_active'] ?? $user->is_active,
         ]);
 
-        return back()->with('status', __('Utilisateur mis à jour.'));
+        return back()->with('success', __('Utilisateur mis à jour.'));
     }
 
     /**
@@ -84,7 +84,7 @@ final class UserController extends Controller
             ->log('password regenerated');
 
         return back()
-            ->with('status', __('Mot de passe régénéré.'))
+            ->with('success', __('Mot de passe régénéré.'))
             ->with('regeneratedPassword', $plain);
     }
 }

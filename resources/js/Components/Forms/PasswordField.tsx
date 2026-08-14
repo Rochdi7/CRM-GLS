@@ -36,7 +36,7 @@ export default function PasswordField({ id, label, error, required, className, .
                 />
                 <button
                     type="button"
-                    className={`ti toggle-password border-0 bg-transparent ${visible ? 'ti-eye' : 'ti-eye-off'}`}
+                    className={`fa toggle-password border-0 bg-transparent ${visible ? 'fa-eye' : 'fa-eye-slash'}`}
                     onClick={() => setVisible((value) => !value)}
                     aria-label={visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
                 />

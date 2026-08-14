@@ -67,7 +67,7 @@ final class DashboardInertiaTest extends TestCase
             ->get(route('backoffice.dashboard'))
             ->assertInertia(fn (Assert $page) => $page
                 ->where('stats', fn ($stats) => collect($stats)->keys()->all() === [
-                    'studentsTotal', 'employeesTotal', 'employeesActive', 'groupsTotal',
+                    'studentsTotal', 'employeesTotal', 'employeesActive', 'enseignantsTotal', 'parentsTotal', 'groupsTotal',
                     'groupsEnFormation', 'inscriptionsTotal', 'inscriptionsActives',
                     'paymentsMonth', 'anneeLabel', 'centreLabel',
                 ])

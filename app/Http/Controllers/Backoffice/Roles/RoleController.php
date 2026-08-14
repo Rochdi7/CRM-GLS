@@ -90,7 +90,7 @@ final class RoleController extends Controller
             ->log('role created');
 
         return redirect()->route('backoffice.roles.index')
-            ->with('status', __('Role created.'));
+            ->with('success', __('Role created.'));
     }
 
     public function edit(Role $role): Response
@@ -145,7 +145,7 @@ final class RoleController extends Controller
             ->log('role updated');
 
         return redirect()->route('backoffice.roles.index')
-            ->with('status', __('Role updated.'));
+            ->with('success', __('Role updated.'));
     }
 
     public function destroy(Request $request, Role $role): RedirectResponse
@@ -182,6 +182,6 @@ final class RoleController extends Controller
             ->log('role deleted');
 
         return redirect()->route('backoffice.roles.index')
-            ->with('status', __('Role deleted.'));
+            ->with('success', __('Role deleted.'));
     }
 }

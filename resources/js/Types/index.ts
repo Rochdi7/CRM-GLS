@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 export interface AuthUser {
     id: number;
     name: string;
@@ -87,6 +89,8 @@ export interface DashboardStats {
     studentsTotal: number;
     employeesTotal: number;
     employeesActive: number;
+    enseignantsTotal: number;
+    parentsTotal: number;
     groupsTotal: number;
     groupsEnFormation: number;
     inscriptionsTotal: number;
@@ -96,8 +100,21 @@ export interface DashboardStats {
     centreLabel: string | null;
 }
 
+/** Mirrors App\Domain\Reports\Actions\GetAnnualFraisSummary's return shape — 12 monthly points, 5 series, each a pre-formatted decimal string (money never floated over the wire). */
+export interface AnnualFraisSummary {
+    months: string[];
+    chiffreAffaire: string[];
+    collecte: string[];
+    resteAPayer: string[];
+    depenses: string[];
+    encaissements: string[];
+}
+
 export interface DashboardPageProps {
     stats: DashboardStats;
+    annualFrais: AnnualFraisSummary;
+    annualFraisYear: number;
+    annualFraisYears: number[];
     [key: string]: unknown;
 }
 
@@ -247,19 +264,35 @@ export interface InscriptionFeeRow {
     statut: string;
 }
 
+/** One row of the "Paiements" table on the Inscription Show page — GetInscriptionPayments's own shape, dates re-formatted to d/m/Y by GetInscriptionDetails. */
+export interface InscriptionPaymentRow {
+    id: number;
+    reference: string;
+    feeNom: string | null;
+    montant: MoneyDisplay;
+    methode: string;
+    datePaiement: string | null;
+    rembourse: boolean;
+}
+
 export interface InscriptionDetails {
     id: number;
     reference: string;
     student: string | null;
     studentShowUrl: string | null;
     groupe: string | null;
+    groupShowUrl: string | null;
+    enseignant: string | null;
     anneeScolaire: string | null;
     date: string | null;
+    dateDebut: string | null;
+    dateFin: string | null;
     statut: string;
     totalDu: MoneyDisplay;
     totalPaye: MoneyDisplay;
     reste: MoneyDisplay;
     fees: InscriptionFeeRow[];
+    payments: InscriptionPaymentRow[];
 }
 
 export interface CaisseMovementRow {
@@ -443,6 +476,7 @@ export interface SeanceDetails {
     enseignantId: number | null;
     statut: string;
     note: string | null;
+    motifAnnulation: string | null;
     students: SeanceStudentLine[];
 }
 
@@ -498,6 +532,10 @@ export interface StockMouvementForm {
 export interface SelectOption {
     value: string | number;
     label: string;
+    /** Optional leading visual (e.g. a country flag) rendered before the label, both in the closed control and the option list. */
+    icon?: ReactNode;
+    /** Optional compact label shown in the closed control only (e.g. a dial code); the option list always shows the full `label`. */
+    shortLabel?: string;
 }
 
 /** Machine-readable subset of Laravel validation errors (Inertia's `errors` shared prop shape). */
@@ -865,7 +903,6 @@ export interface StudentsPageProps {
     students: PaginatedData<StudentRow>;
     filters: StudentsFilters;
     perPageOptions: number[];
-    niveaux: string[];
     niveauxInteret: string[];
     domaines: string[];
     examenTypes: string[];
@@ -1359,5 +1396,46 @@ export interface DepensesPageProps {
     remboursements: PaginatedData<RemboursementRow> | null;
     students: FinanceOption[];
     filters: DepensesFilters;
+    [key: string]: unknown;
+}
+
+// --- Gestion des recouvrements (overdue fees report, GetRetardsList) ------
+
+/** One row of the Recouvrement list — mirrors GetRetardsList's ->mapRow() mapping exactly. */
+export interface RetardRow {
+    id: number;
+    reference: string | null;
+    studentId: number | null;
+    studentNom: string | null;
+    studentShowUrl: string | null;
+    telephone: string | null;
+    whatsapp: string | null;
+    groupe: string | null;
+    frais: string | null;
+    statut: string;
+    dateEcheance: string | null;
+    retardJours: number;
+    resteAPayer: string;
+    inscriptionShowUrl: string | null;
+}
+
+export interface RecouvrementFilters {
+    groupFilter: string;
+    fraisFilter: string;
+    statutFilter: string;
+    dateFrom: string;
+    dateTo: string;
+    dureeBucket: string;
+    perPage: number;
+}
+
+export interface RecouvrementPageProps {
+    retards: PaginatedData<RetardRow>;
+    bucketCounts: Record<string, number>;
+    filters: RecouvrementFilters;
+    perPageOptions: number[];
+    groupOptions: SelectOption[];
+    fraisOptions: SelectOption[];
+    statuts: string[];
     [key: string]: unknown;
 }

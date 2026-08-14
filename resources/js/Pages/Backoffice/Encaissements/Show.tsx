@@ -93,7 +93,7 @@ export default function EncaissementShow({ encaissement }: EncaissementShowProps
                 <div className="col-xl-5">
                     <Card title="Frais réglé">
                         {fee === null ? (
-                            <EmptyState title="Aucun frais lié" icon="ti ti-receipt" />
+                            <EmptyState title="Aucun frais lié" icon="fa fa-receipt" />
                         ) : (
                             <>
                                 <DetailRow label="Nom du frais" value={fee.nom} />

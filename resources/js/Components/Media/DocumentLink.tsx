@@ -27,7 +27,7 @@ export default function DocumentLink({ file }: DocumentLinkProps) {
                 {isImage ? (
                     <img src={file.url} alt={file.name} className="w-100 h-100" style={{ objectFit: 'cover' }} />
                 ) : (
-                    <i className="ti ti-file-type-pdf fs-24 text-danger" />
+                    <i className="fa fa-file-pdf fs-24 text-danger" />
                 )}
             </div>
             <div className="p-2">

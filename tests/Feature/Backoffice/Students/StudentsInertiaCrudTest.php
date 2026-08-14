@@ -54,7 +54,7 @@ final class StudentsInertiaCrudTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Backoffice/Students/Index', false)
                 ->has('students')
-                ->has('niveaux')
+                ->has('niveauxInteret')
                 ->has('domaines')
                 ->has('examenTypes')
                 ->has('sexes')

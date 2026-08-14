@@ -181,7 +181,7 @@ final class GroupController extends Controller
         $group->archiverCommeTermine($request->user()?->employee);
 
         return redirect()->route('backoffice.groups.show', $group)
-            ->with('status', __('Group archived (Fin de formation).'));
+            ->with('success', __('Group archived (Fin de formation).'));
     }
 
     /**
@@ -242,6 +242,25 @@ final class GroupController extends Controller
 
         return redirect()->route('backoffice.groups.index')
             ->with('success', __('Group started.'));
+    }
+
+    /**
+     * Quick row-menu action from the list — reverses activer(), bringing a
+     * group back to "En inscription". Only offered from the En formation tab
+     * in the UI, and only ever fires from that status.
+     */
+    public function retournerEnInscription(Request $request, Group $group): RedirectResponse
+    {
+        $this->authorize('archive', $group);
+
+        if ($group->statut !== Group::STATUT_EN_FORMATION) {
+            return back();
+        }
+
+        $group->retournerEnInscription();
+
+        return redirect()->route('backoffice.groups.index')
+            ->with('success', __('Group returned to En inscription.'));
     }
 
     /**

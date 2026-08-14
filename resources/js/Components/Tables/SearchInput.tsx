@@ -32,7 +32,7 @@ export default function SearchInput({ value, onSearch, placeholder = 'Rechercher
     return (
         <div className="input-icon-start position-relative">
             <span className="input-icon-addon">
-                <i className="ti ti-search" />
+                <i className="fa fa-magnifying-glass" />
             </span>
             <input
                 type="text"

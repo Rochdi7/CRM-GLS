@@ -1,4 +1,4 @@
-import { router, useForm } from '@inertiajs/react';
+import { router, useForm, usePage } from '@inertiajs/react';
 import { useState, type FormEvent } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
@@ -17,7 +17,7 @@ import SelectField from '@/Components/Forms/SelectField';
 import FormActions from '@/Components/Forms/FormActions';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
-import type { GroupFraisLigne, GroupRow, GroupsPageProps, GroupStudentSegmentRow, SelectOption } from '@/Types';
+import type { GroupFraisLigne, GroupRow, GroupsPageProps, GroupStudentSegmentRow, SelectOption, SharedProps } from '@/Types';
 
 type StatsSegment = 'total' | 'active' | 'annulee' | 'changement' | 'etudiants';
 
@@ -33,12 +33,12 @@ const STATS_SEGMENT_LABELS: Record<StatsSegment, string> = {
 };
 
 const STATUT_TABS: Array<{ key: string; icon: string; label: string }> = [
-    { key: 'En formation', icon: 'ti-school', label: 'En formation' },
-    { key: 'En inscription', icon: 'ti-folder', label: 'En inscription' },
-    { key: 'Fin de formation', icon: 'ti-history', label: 'Historique' },
+    { key: 'En formation', icon: 'fa-school', label: 'En formation' },
+    { key: 'En inscription', icon: 'fa-folder-open', label: 'En inscription' },
+    { key: 'Fin de formation', icon: 'fa-clock-rotate-left', label: 'Historique' },
 ];
 
-type LifecycleAction = 'archive' | 'annuler' | 'reactiver' | 'activer';
+type LifecycleAction = 'archive' | 'annuler' | 'reactiver' | 'activer' | 'retourner-en-inscription';
 
 /** Per-action copy for the row-menu lifecycle ConfirmDialog — one place to keep title/message/icon/labels in sync per action, instead of parallel ternary chains that can drift apart. */
 const LIFECYCLE_CONFIRM_COPY: Record<
@@ -48,7 +48,7 @@ const LIFECYCLE_CONFIRM_COPY: Record<
     archive: {
         title: 'Terminer la formation',
         message: 'Marquer ce groupe comme terminé (Fin de formation) ? Cette action est irréversible.',
-        icon: 'ti-archive',
+        icon: 'fa-box-archive',
         variant: 'danger',
         confirmLabel: 'Oui, terminer',
         processingLabel: 'Finalisation…',
@@ -56,7 +56,7 @@ const LIFECYCLE_CONFIRM_COPY: Record<
     annuler: {
         title: 'Annuler le groupe',
         message: 'Voulez-vous vraiment annuler ce groupe ?',
-        icon: 'ti-x',
+        icon: 'fa-xmark',
         variant: 'danger',
         confirmLabel: 'Oui, annuler',
         processingLabel: 'Annulation…',
@@ -64,7 +64,7 @@ const LIFECYCLE_CONFIRM_COPY: Record<
     reactiver: {
         title: 'Réactiver le groupe',
         message: 'Voulez-vous vraiment réactiver ce groupe (retour à En inscription) ?',
-        icon: 'ti-refresh',
+        icon: 'fa-rotate-right',
         variant: 'primary',
         confirmLabel: 'Oui, réactiver',
         processingLabel: 'Réactivation…',
@@ -72,10 +72,18 @@ const LIFECYCLE_CONFIRM_COPY: Record<
     activer: {
         title: 'Activer le groupe',
         message: 'Démarrer la formation pour ce groupe (passage à En formation) ?',
-        icon: 'ti-player-play',
+        icon: 'fa-circle-play',
         variant: 'primary',
         confirmLabel: 'Oui, activer',
         processingLabel: 'Activation…',
+    },
+    'retourner-en-inscription': {
+        title: 'Retourner en inscription',
+        message: 'Ramener ce groupe à "En inscription" (arrête la formation en cours) ?',
+        icon: 'fa-circle-pause',
+        variant: 'primary',
+        confirmLabel: 'Oui, retourner',
+        processingLabel: 'Retour en cours…',
     },
 };
 
@@ -128,6 +136,7 @@ export default function GroupsIndex({
     enseignants,
     fraisCatalog,
 }: GroupsPageProps) {
+    const { auth } = usePage<SharedProps>().props;
     const isLoading = useInertiaLoading();
     const [showModal, setShowModal] = useState(false);
     const [editingGroup, setEditingGroup] = useState<GroupRow | null>(null);
@@ -234,6 +243,11 @@ export default function GroupsIndex({
         setLifecycleError(undefined);
     }
 
+    function confirmRetournerEnInscription(group: GroupRow) {
+        setLifecycleTarget({ group, action: 'retourner-en-inscription' });
+        setLifecycleError(undefined);
+    }
+
     function handleLifecycleConfirm() {
         if (!lifecycleTarget) {
             return;
@@ -299,7 +313,7 @@ export default function GroupsIndex({
             breadcrumbs={[{ label: 'Tableau de bord', href: '/backoffice/dashboard' }, { label: 'Groupes' }]}
             actions={
                 <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                    <i className="ti ti-square-rounded-plus me-2" />
+                    <i className="fa fa-square-plus me-2" />
                     Ajouter un groupe
                 </button>
             }
@@ -313,7 +327,7 @@ export default function GroupsIndex({
                                 className={`nav-link rounded${filters.statutFilter === tab.key ? ' active' : ''}`}
                                 onClick={() => setStatutTab(tab.key)}
                             >
-                                <i className={`ti ${tab.icon} me-1`} />
+                                <i className={`fa ${tab.icon} me-1`} />
                                 {tab.label}
                                 <span className={`badge ${filters.statutFilter === tab.key ? 'bg-white text-dark' : 'badge-soft-secondary'} ms-1`}>
                                     {statutCounts[tab.key] ?? 0}
@@ -380,7 +394,7 @@ export default function GroupsIndex({
                 />
 
                 {groups.data.length === 0 ? (
-                    <EmptyState title="Aucun groupe avec ce statut" icon="ti ti-users-group" />
+                    <EmptyState title="Aucun groupe avec ce statut" icon="fa fa-people-group" />
                 ) : (
                     <>
                         <DataTable
@@ -412,7 +426,7 @@ export default function GroupsIndex({
                                             onClick={() => openStudentsSegment(group, 'etudiants')}
                                         >
                                             {group.etudiantsDistinctsCount}
-                                            <i className="ti ti-user" aria-hidden="true" />
+                                            <i className="fa fa-user" aria-hidden="true" />
                                         </button>
                                     </td>
                                     <td>
@@ -424,7 +438,7 @@ export default function GroupsIndex({
                                                 onClick={() => openStudentsSegment(group, 'active')}
                                             >
                                                 {group.inscriptionsActivesCount}
-                                                <i className="ti ti-user" aria-hidden="true" />
+                                                <i className="fa fa-user" aria-hidden="true" />
                                             </button>
                                             <button
                                                 type="button"
@@ -433,7 +447,7 @@ export default function GroupsIndex({
                                                 onClick={() => openStudentsSegment(group, 'changement')}
                                             >
                                                 {group.inscriptionsChangementCount}
-                                                <i className="ti ti-user" aria-hidden="true" />
+                                                <i className="fa fa-user" aria-hidden="true" />
                                             </button>
                                             <button
                                                 type="button"
@@ -442,7 +456,7 @@ export default function GroupsIndex({
                                                 onClick={() => openStudentsSegment(group, 'annulee')}
                                             >
                                                 {group.inscriptionsAnnuleesCount}
-                                                <i className="ti ti-user" aria-hidden="true" />
+                                                <i className="fa fa-user" aria-hidden="true" />
                                             </button>
                                         </div>
                                     </td>
@@ -464,33 +478,39 @@ export default function GroupsIndex({
                                     <td className="text-end">
                                         <RowActions view={group.showUrl}>
                                             {group.statut !== 'Fin de formation' && group.statut !== 'Annulée' && (
-                                                <RowActionItem icon="ti-edit" onClick={() => openEdit(group)}>
+                                                <RowActionItem icon="fa-pen" onClick={() => openEdit(group)}>
                                                     Modifier
                                                 </RowActionItem>
                                             )}
                                             {group.statut === 'En formation' && (
                                                 <>
                                                     <RowActionDivider />
-                                                    <RowActionItem icon="ti-archive" onClick={() => confirmArchive(group)}>
-                                                        Terminer
-                                                    </RowActionItem>
-                                                    <RowActionItem icon="ti-x" danger onClick={() => confirmAnnuler(group)}>
+                                                    <RowActionItem icon="fa-xmark" danger onClick={() => confirmAnnuler(group)}>
                                                         Annuler
+                                                    </RowActionItem>
+                                                    <RowActionItem
+                                                        icon="fa-circle-pause"
+                                                        onClick={() => confirmRetournerEnInscription(group)}
+                                                    >
+                                                        En inscription
+                                                    </RowActionItem>
+                                                    <RowActionItem icon="fa-check" onClick={() => confirmArchive(group)}>
+                                                        Terminer
                                                     </RowActionItem>
                                                 </>
                                             )}
-                                            {group.statut === 'Annulée' && (
+                                            {group.statut === 'Annulée' && auth.isSuperAdmin && (
                                                 <>
                                                     <RowActionDivider />
-                                                    <RowActionItem icon="ti-refresh" onClick={() => confirmReactiver(group)}>
-                                                        Activer
+                                                    <RowActionItem icon="fa-rotate-right" onClick={() => confirmReactiver(group)}>
+                                                        Réactiver
                                                     </RowActionItem>
                                                 </>
                                             )}
                                             {group.statut === 'En inscription' && (
                                                 <>
                                                     <RowActionDivider />
-                                                    <RowActionItem icon="ti-player-play" onClick={() => confirmActiver(group)}>
+                                                    <RowActionItem icon="fa-check" onClick={() => confirmActiver(group)}>
                                                         Activer
                                                     </RowActionItem>
                                                 </>
@@ -688,7 +708,7 @@ export default function GroupsIndex({
                 {loadingStudents ? (
                     <p className="text-muted mb-0">Chargement…</p>
                 ) : studentsRows.length === 0 ? (
-                    <EmptyState title="Aucun étudiant" icon="ti ti-users-group" />
+                    <EmptyState title="Aucun étudiant" icon="fa fa-people-group" />
                 ) : (
                     <div className="table-responsive">
                         <table className="table table-bordered align-middle mb-0">
@@ -716,7 +736,7 @@ export default function GroupsIndex({
                                         <td>
                                             {student.telephone ? (
                                                 <a href={`tel:${student.telephone}`} className="d-inline-flex align-items-center">
-                                                    <i className="ti ti-phone me-1" />
+                                                    <i className="fa fa-phone me-1" />
                                                     {student.telephone}
                                                 </a>
                                             ) : (

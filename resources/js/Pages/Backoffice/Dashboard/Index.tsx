@@ -1,14 +1,21 @@
+import { router } from '@inertiajs/react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import StatsGrid from '@/Components/Dashboard/StatsGrid';
+import AnnualFraisChart from '@/Components/Dashboard/AnnualFraisChart';
 import type { DashboardPageProps } from '@/Types';
 
 /**
  * Replaces resources/views/backoffice/dashboard/index.blade.php +
  * app/Livewire/Backoffice/Dashboard/DashboardStats — same welcome banner,
- * same 4 KPI cards, same "Add New Student" action link (a plain anchor:
- * Students is still a Livewire route — mixed-navigation rule).
+ * same KPI cards, same "Add New Student" action link (a plain anchor:
+ * Students is still a Livewire route — mixed-navigation rule), plus the
+ * "Résumé des frais annuels" chart (GetAnnualFraisSummary).
  */
-export default function DashboardIndex({ stats }: DashboardPageProps) {
+export default function DashboardIndex({ stats, annualFrais, annualFraisYear, annualFraisYears }: DashboardPageProps) {
+    function changeYear(year: number) {
+        router.get('/backoffice/dashboard', { year }, { preserveState: true, preserveScroll: true, replace: true });
+    }
+
     return (
         <BackofficeLayout
             title="Tableau de bord"
@@ -16,7 +23,7 @@ export default function DashboardIndex({ stats }: DashboardPageProps) {
             actions={
                 <div className="mb-2">
                     <a href="/backoffice/students" className="btn btn-primary d-flex align-items-center me-3">
-                        <i className="ti ti-square-rounded-plus me-1" />
+                        <i className="fa fa-square-plus me-1" />
                         Ajouter un étudiant
                     </a>
                 </div>
@@ -46,6 +53,17 @@ export default function DashboardIndex({ stats }: DashboardPageProps) {
             </div>
 
             <StatsGrid stats={stats} />
+
+            <div className="row">
+                <div className="col-md-12">
+                    <AnnualFraisChart
+                        data={annualFrais}
+                        year={annualFraisYear}
+                        years={annualFraisYears}
+                        onYearChange={changeYear}
+                    />
+                </div>
+            </div>
         </BackofficeLayout>
     );
 }

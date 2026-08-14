@@ -11,7 +11,7 @@ interface ConfirmDialogProps {
     processing: boolean;
     onConfirm: () => void;
     onCancel: () => void;
-    /** Icon class (without the `ti` prefix) shown above the title. Defaults to the delete mark. */
+    /** Icon class (without the `fa` prefix) shown above the title. Defaults to the delete mark. */
     icon?: string;
     /** Confirm button style. Defaults to danger (delete/destructive actions). */
     variant?: 'danger' | 'primary';
@@ -42,7 +42,7 @@ export default function ConfirmDialog({
     processing,
     onConfirm,
     onCancel,
-    icon = 'ti-trash-x',
+    icon = 'fa-trash',
     variant = 'danger',
     confirmLabel,
     processingLabel,
@@ -51,7 +51,7 @@ export default function ConfirmDialog({
         <Modal show={show} title={title} onClose={onCancel} processing={processing} hideHeader>
             <div className="text-center">
                 <span className="delete-icon">
-                    <i className={`ti ${icon}`} aria-hidden="true" />
+                    <i className={`fa ${icon}`} aria-hidden="true" />
                 </span>
                 <h4>{title}</h4>
                 <p className="mb-1">{message}</p>

@@ -75,8 +75,12 @@ export default function SeancesIndex({
     const [deleteTarget, setDeleteTarget] = useState<SeanceRow | null>(null);
     const [deleteError, setDeleteError] = useState<string>();
     const [deleting, setDeleting] = useState(false);
+    const [validateTarget, setValidateTarget] = useState<SeanceRow | null>(null);
+    const [validating, setValidating] = useState(false);
+    const [annulerTarget, setAnnulerTarget] = useState<SeanceRow | null>(null);
 
     const form = useForm<SeanceForm>(EMPTY_FORM);
+    const annulerForm = useForm<{ motif: string }>({ motif: '' });
 
     function reload(changes: Partial<Record<string, string | number>>) {
         router.get(
@@ -159,22 +163,87 @@ export default function SeancesIndex({
         });
     }
 
+    function confirmValider() {
+        if (!validateTarget) {
+            return;
+        }
+
+        setValidating(true);
+        router.post(
+            `/backoffice/seances/${validateTarget.id}/valider`,
+            {},
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onFinish: () => {
+                    setValidating(false);
+                    setValidateTarget(null);
+                },
+            },
+        );
+    }
+
+    function openAnnulerModal(row: SeanceRow) {
+        annulerForm.reset();
+        annulerForm.clearErrors();
+        setAnnulerTarget(row);
+    }
+
+    function closeAnnulerModal() {
+        setAnnulerTarget(null);
+        annulerForm.reset();
+        annulerForm.clearErrors();
+    }
+
+    function submitAnnuler(event: React.FormEvent) {
+        event.preventDefault();
+        if (!annulerTarget) {
+            return;
+        }
+
+        annulerForm.post(`/backoffice/seances/${annulerTarget.id}/annuler`, {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => closeAnnulerModal(),
+        });
+    }
+
     return (
         <BackofficeLayout
-            title="Présences"
+            title="Gestion des séances"
             breadcrumbs={[
                 { label: 'Tableau de bord', href: '/backoffice/dashboard' },
-                { label: 'Présences' },
+                { label: 'Gestion des séances' },
             ]}
             actions={
                 permissions.create && (
                     <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                        <i className="ti ti-square-rounded-plus me-2" />
+                        <i className="fa fa-square-plus me-2" />
                         Ajouter une séance
                     </button>
                 )
             }
         >
+            <ul className="nav nav-tabs mb-3" role="tablist">
+                <li className="nav-item" role="presentation">
+                    <button type="button" className="nav-link active fw-medium" role="tab" aria-selected="true">
+                        <i className="fa fa-calendar-check me-2" />
+                        Séances
+                    </button>
+                </li>
+                <li className="nav-item" role="presentation">
+                    <Link
+                        href="/backoffice/seances/saisir-absence"
+                        className="nav-link fw-medium"
+                        role="tab"
+                        aria-selected="false"
+                    >
+                        <i className="fa fa-clipboard-check me-2" />
+                        Saisir l'absence
+                    </Link>
+                </li>
+            </ul>
+
             <Card title="Séances" bodyClassName="p-0 py-3">
                 {/* Filter row (reference CRM's Séances filters): Groupe/
                     Statut/Enseignant/Date de début/Date de fin. */}
@@ -255,7 +324,7 @@ export default function SeancesIndex({
                 <RelatedRecordsTable
                     isEmpty={seances.data.length === 0}
                     emptyTitle="Aucune séance pour le moment"
-                    emptyIcon="ti ti-calendar-check"
+                    emptyIcon="fa fa-calendar-check"
                     head={
                         <tr>
                             <th>Date</th>
@@ -307,19 +376,32 @@ export default function SeancesIndex({
                                             href={row.showUrl}
                                             className="btn btn-outline-primary btn-sm d-inline-flex align-items-center"
                                         >
-                                            <i className="ti ti-checklist me-1" />
+                                            <i className="fa fa-clipboard-check me-1" />
                                             Faire l'appel
                                         </Link>
                                     )}
                                     <RowActions>
+                                        {permissions.mark && row.statut !== 'Effectuée' && (
+                                            <RowActionItem
+                                                icon="fa-circle-check"
+                                                onClick={() => setValidateTarget(row)}
+                                            >
+                                                Valider la séance
+                                            </RowActionItem>
+                                        )}
+                                        {permissions.mark && row.statut !== 'Annulée' && (
+                                            <RowActionItem icon="fa-circle-xmark" danger onClick={() => openAnnulerModal(row)}>
+                                                Annuler la séance
+                                            </RowActionItem>
+                                        )}
                                         {permissions.update && (
-                                            <RowActionItem icon="ti-edit" onClick={() => openEdit(row)}>
+                                            <RowActionItem icon="fa-pen" onClick={() => openEdit(row)}>
                                                 Modifier
                                             </RowActionItem>
                                         )}
                                         {permissions.delete && (
                                             <RowActionItem
-                                                icon="ti-trash"
+                                                icon="fa-trash"
                                                 danger
                                                 onClick={() => {
                                                     setDeleteTarget(row);
@@ -440,6 +522,49 @@ export default function SeancesIndex({
                 onConfirm={confirmDelete}
                 onCancel={() => setDeleteTarget(null)}
             />
+
+            <ConfirmDialog
+                show={validateTarget !== null}
+                title="Valider la séance"
+                recordLabel={validateTarget ? `${validateTarget.groupNom ?? ''} — ${validateTarget.dateSeance}` : ''}
+                message="Confirmer que cette séance a bien eu lieu (statut Effectuée) ?"
+                processing={validating}
+                icon="fa-circle-check"
+                variant="primary"
+                confirmLabel="Oui, valider"
+                processingLabel="Validation…"
+                onConfirm={confirmValider}
+                onCancel={() => setValidateTarget(null)}
+            />
+
+            <Modal
+                show={annulerTarget !== null}
+                title="Annuler la séance"
+                onClose={closeAnnulerModal}
+                processing={annulerForm.processing}
+            >
+                <form onSubmit={submitAnnuler}>
+                    <p className="fw-medium">
+                        {annulerTarget ? `${annulerTarget.groupNom ?? ''} — ${annulerTarget.dateSeance}` : ''}
+                    </p>
+                    <TextareaField
+                        id="seance-annuler-motif"
+                        label="Motif de l'annulation"
+                        rows={4}
+                        value={annulerForm.data.motif}
+                        onChange={(event) => annulerForm.setData('motif', event.target.value)}
+                        error={annulerForm.errors.motif}
+                    />
+                    <div className="d-flex justify-content-end gap-2 mt-3">
+                        <FormActions
+                            onCancel={closeAnnulerModal}
+                            processing={annulerForm.processing}
+                            submitLabel="Oui, annuler"
+                            processingLabel="Annulation…"
+                        />
+                    </div>
+                </form>
+            </Modal>
         </BackofficeLayout>
     );
 }

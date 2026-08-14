@@ -4,7 +4,7 @@ import type { SharedProps } from '@/Types';
 export interface PageTabDef {
     label: string;
     href: string;
-    /** Tabler icon class, e.g. "ti ti-cash-banknote". */
+    /** FontAwesome icon class, e.g. "fa fa-cash-register". */
     icon: string;
     /** ANY-of permission gate — omit for always-visible. */
     permissions?: string[];
