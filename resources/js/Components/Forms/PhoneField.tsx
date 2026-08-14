@@ -68,7 +68,7 @@ export default function PhoneField({
                 <div className="col-6 col-sm-7">
                     <div className="input-group">
                         <span className="input-group-text">
-                            <i className="fa fa-phone" aria-hidden="true" />
+                            <i className="ti ti-phone" aria-hidden="true" />
                         </span>
                         <input
                             id={id}

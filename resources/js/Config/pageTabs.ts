@@ -12,13 +12,13 @@ export const GROUPS_TABS: PageTabDef[] = [
     {
         label: t('Groups'),
         href: '/backoffice/groups',
-        icon: 'fa fa-people-group',
+        icon: 'ti ti-users-group',
         permissions: ['groups.view'],
     },
     {
         label: t('Groups History'),
         href: '/backoffice/groups-historique',
-        icon: 'fa fa-box-archive',
+        icon: 'ti ti-archive',
         permissions: ['groups.view'],
     },
 ];

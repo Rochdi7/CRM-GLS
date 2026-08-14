@@ -303,7 +303,7 @@ export default function StockIndex({
                 <div className="d-flex gap-2">
                     {tab === 'types' && typePermissions.create && (
                         <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreateType}>
-                            <i className="fa fa-square-plus me-2" />
+                            <i className="ti ti-square-rounded-plus me-2" />
                             Ajouter un type de stock
                         </button>
                     )}
@@ -313,13 +313,13 @@ export default function StockIndex({
                             className="btn btn-outline-primary d-flex align-items-center"
                             onClick={() => openMouvement()}
                         >
-                            <i className="fa fa-arrows-rotate me-2" />
+                            <i className="ti ti-arrows-exchange me-2" />
                             Nouveau mouvement
                         </button>
                     )}
                     {tab !== 'types' && permissions.create && (
                         <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreateArticle}>
-                            <i className="fa fa-square-plus me-2" />
+                            <i className="ti ti-square-rounded-plus me-2" />
                             Ajouter un article
                         </button>
                     )}
@@ -335,7 +335,7 @@ export default function StockIndex({
                         aria-current={tab === 'articles' ? 'page' : undefined}
                         onClick={() => switchTab('articles')}
                     >
-                        <i className="fa fa-boxes-stacked me-2" aria-hidden="true" />
+                        <i className="ti ti-packages me-2" aria-hidden="true" />
                         Articles
                     </button>
                 </li>
@@ -346,7 +346,7 @@ export default function StockIndex({
                         aria-current={tab === 'mouvements' ? 'page' : undefined}
                         onClick={() => switchTab('mouvements')}
                     >
-                        <i className="fa fa-arrows-rotate me-2" aria-hidden="true" />
+                        <i className="ti ti-arrows-exchange me-2" aria-hidden="true" />
                         Mouvements
                     </button>
                 </li>
@@ -358,7 +358,7 @@ export default function StockIndex({
                             aria-current={tab === 'types' ? 'page' : undefined}
                             onClick={() => switchTab('types')}
                         >
-                            <i className="fa fa-table-cells me-2" aria-hidden="true" />
+                            <i className="ti ti-category me-2" aria-hidden="true" />
                             Types de stock
                         </button>
                     </li>
@@ -424,7 +424,7 @@ export default function StockIndex({
                     <RelatedRecordsTable
                         isEmpty={articles.data.length === 0}
                         emptyTitle="Aucun article de stock pour le moment"
-                        emptyIcon="fa fa-boxes-stacked"
+                        emptyIcon="ti ti-packages"
                         head={
                             <tr>
                                 <th>Référence</th>
@@ -448,7 +448,7 @@ export default function StockIndex({
                                     </span>
                                     {row.enAlerte && (
                                         <i
-                                            className="fa fa-triangle-exclamation text-danger ms-2"
+                                            className="ti ti-alert-triangle text-danger ms-2"
                                             title="Stock sous le seuil d'alerte"
                                             aria-label="Stock sous le seuil d'alerte"
                                         />
@@ -465,18 +465,18 @@ export default function StockIndex({
                                 <td className="text-end">
                                     <RowActions>
                                         {permissions.move && (
-                                            <RowActionItem icon="fa-arrows-rotate" onClick={() => openMouvement(row.id)}>
+                                            <RowActionItem icon="ti-arrows-exchange" onClick={() => openMouvement(row.id)}>
                                                 Mouvement
                                             </RowActionItem>
                                         )}
                                         {permissions.update && (
-                                            <RowActionItem icon="fa-pen" onClick={() => openEditArticle(row)}>
+                                            <RowActionItem icon="ti-edit" onClick={() => openEditArticle(row)}>
                                                 Modifier
                                             </RowActionItem>
                                         )}
                                         {permissions.delete && row.mouvementsCount === 0 && (
                                             <RowActionItem
-                                                icon="fa-trash"
+                                                icon="ti-trash"
                                                 danger
                                                 onClick={() => {
                                                     setDeleteTarget(row);
@@ -549,7 +549,7 @@ export default function StockIndex({
                     <RelatedRecordsTable
                         isEmpty={mouvements.data.length === 0}
                         emptyTitle="Aucun mouvement de stock pour le moment"
-                        emptyIcon="fa fa-arrows-rotate"
+                        emptyIcon="ti ti-arrows-exchange"
                         head={
                             <tr>
                                 <th>Date</th>
@@ -603,7 +603,7 @@ export default function StockIndex({
                     <RelatedRecordsTable
                         isEmpty={stockTypesList.data.length === 0}
                         emptyTitle="Aucun type de stock pour le moment"
-                        emptyIcon="fa fa-table-cells"
+                        emptyIcon="ti ti-category"
                         head={
                             <tr>
                                 <th>Nom</th>
@@ -637,13 +637,13 @@ export default function StockIndex({
                                     {!row.isSystem && (
                                         <RowActions>
                                             {typePermissions.update && (
-                                                <RowActionItem icon="fa-pen" onClick={() => openEditType(row)}>
+                                                <RowActionItem icon="ti-edit" onClick={() => openEditType(row)}>
                                                     Modifier
                                                 </RowActionItem>
                                             )}
                                             {typePermissions.delete && (
                                                 <RowActionItem
-                                                    icon="fa-trash"
+                                                    icon="ti-trash"
                                                     danger
                                                     onClick={() => {
                                                         setDeleteTypeTarget(row);

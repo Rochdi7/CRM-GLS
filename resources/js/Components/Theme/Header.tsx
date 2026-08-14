@@ -100,7 +100,7 @@ export default function Header({ user, context, canManageSettings, onMobileMenuT
                     aria-label={t('Collapse sidebar')}
                     aria-pressed={miniSidebar}
                 >
-                    <i className="fa fa-bars" aria-hidden="true" />
+                    <i className="ti ti-menu-deep" aria-hidden="true" />
                 </button>
             </div>
 
@@ -131,7 +131,7 @@ export default function Header({ user, context, canManageSettings, onMobileMenuT
                                 aria-label={darkMode ? t('Switch to light mode') : t('Switch to dark mode')}
                                 aria-pressed={darkMode}
                             >
-                                <i className={darkMode ? 'fa fa-sun' : 'fa fa-moon'} aria-hidden="true" />
+                                <i className={darkMode ? 'ti ti-brightness-up' : 'ti ti-moon'} aria-hidden="true" />
                             </button>
                         </div>
                         <div className="dropdown ms-1" ref={menuRef}>
@@ -161,7 +161,7 @@ export default function Header({ user, context, canManageSettings, onMobileMenuT
                                         className="dropdown-item d-inline-flex align-items-center p-2"
                                         href="/backoffice/profile"
                                     >
-                                        <i className="fa fa-circle-user me-2" />
+                                        <i className="ti ti-user-circle me-2" />
                                         Profil
                                     </Link>
                                     {canManageSettings && (
@@ -169,7 +169,7 @@ export default function Header({ user, context, canManageSettings, onMobileMenuT
                                             className="dropdown-item d-inline-flex align-items-center p-2"
                                             href="/backoffice/settings"
                                         >
-                                            <i className="fa fa-gear me-2" />
+                                            <i className="ti ti-settings me-2" />
                                             Paramètres
                                         </a>
                                     )}
@@ -179,7 +179,7 @@ export default function Header({ user, context, canManageSettings, onMobileMenuT
                                         className="dropdown-item d-inline-flex align-items-center p-2 w-100 text-start border-0 bg-transparent"
                                         onClick={handleLogout}
                                     >
-                                        <i className="fa fa-right-to-bracket me-2" />
+                                        <i className="ti ti-login me-2" />
                                         Déconnexion
                                     </button>
                                 </div>

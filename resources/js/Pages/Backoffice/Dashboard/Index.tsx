@@ -23,7 +23,7 @@ export default function DashboardIndex({ stats, annualFrais, annualFraisYear, an
             actions={
                 <div className="mb-2">
                     <a href="/backoffice/students" className="btn btn-primary d-flex align-items-center me-3">
-                        <i className="fa fa-square-plus me-1" />
+                        <i className="ti ti-square-rounded-plus me-1" />
                         Ajouter un étudiant
                     </a>
                 </div>

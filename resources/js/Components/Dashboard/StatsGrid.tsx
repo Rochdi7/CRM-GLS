@@ -18,24 +18,24 @@ export default function StatsGrid({ stats }: StatsGridProps) {
             <div className="d-flex align-items-center flex-wrap gap-2 mb-3">
                 <span className="text-muted">Affichage des données pour :</span>
                 <span className="badge badge-soft-primary">
-                    <i className="fa fa-calendar me-1" />
+                    <i className="ti ti-calendar me-1" />
                     {stats.anneeLabel ?? '—'}
                 </span>
                 <span className="badge badge-soft-info">
-                    <i className="fa fa-building me-1" />
+                    <i className="ti ti-building me-1" />
                     {stats.centreLabel ?? 'Tous les centres'}
                 </span>
             </div>
 
             <StatCard
-                icon="fa-school"
+                icon="ti-school"
                 iconBg="bg-danger-transparent"
                 value={stats.studentsTotal}
                 label="Étudiants"
             />
 
             <StatCard
-                icon="fa-users"
+                icon="ti-users"
                 iconBg="bg-secondary-transparent"
                 value={stats.employeesTotal}
                 label="Employés"
@@ -44,7 +44,7 @@ export default function StatsGrid({ stats }: StatsGridProps) {
             />
 
             <StatCard
-                icon="fa-chalkboard-user"
+                icon="ti-user"
                 iconBg="bg-warning-transparent"
                 value={stats.enseignantsTotal}
                 label="Total d'enseignants"
@@ -53,7 +53,7 @@ export default function StatsGrid({ stats }: StatsGridProps) {
             />
 
             <StatCard
-                icon="fa-people-roof"
+                icon="ti-users"
                 iconBg="bg-secondary-transparent"
                 value={stats.parentsTotal}
                 label="Parents"
@@ -62,7 +62,7 @@ export default function StatsGrid({ stats }: StatsGridProps) {
             />
 
             <StatCard
-                icon="fa-people-group"
+                icon="ti-users-group"
                 iconBg="bg-primary-transparent"
                 value={stats.groupsEnFormation}
                 label="Groupes actifs"
@@ -71,7 +71,7 @@ export default function StatsGrid({ stats }: StatsGridProps) {
             />
 
             <StatCard
-                icon="fa-clipboard-list"
+                icon="ti-clipboard-list"
                 iconBg="bg-info-transparent"
                 value={stats.inscriptionsTotal}
                 label="Inscriptions"
@@ -80,7 +80,7 @@ export default function StatsGrid({ stats }: StatsGridProps) {
             />
 
             <StatCard
-                icon="fa-money-bill-1"
+                icon="ti-cash-banknote"
                 iconBg="bg-success-transparent"
                 value={`${Number(stats.paymentsMonth).toFixed(2)} MAD`}
                 label="Encaissements ce mois-ci"

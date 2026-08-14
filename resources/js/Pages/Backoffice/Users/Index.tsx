@@ -146,7 +146,7 @@ export default function UsersIndex({ users, filters, perPageOptions }: UsersInde
                 />
 
                 {users.data.length === 0 ? (
-                    <EmptyState title="Aucun utilisateur trouvé" icon="fa fa-user-slash" />
+                    <EmptyState title="Aucun utilisateur trouvé" icon="ti ti-user-off" />
                 ) : (
                     <>
                         <DataTable
@@ -189,10 +189,10 @@ export default function UsersIndex({ users, filters, perPageOptions }: UsersInde
                                     </td>
                                     <td className="text-end">
                                         <RowActions>
-                                            <RowActionItem icon="fa-pen" onClick={() => openEdit(user)}>
+                                            <RowActionItem icon="ti-edit" onClick={() => openEdit(user)}>
                                                 Modifier
                                             </RowActionItem>
-                                            <RowActionItem icon="fa-user-gear" href={`/backoffice/users/${user.id}/authorization`}>
+                                            <RowActionItem icon="ti-shield-cog" href={`/backoffice/users/${user.id}/authorization`}>
                                                 Gérer les autorisations
                                             </RowActionItem>
                                         </RowActions>
@@ -306,7 +306,7 @@ export default function UsersIndex({ users, filters, perPageOptions }: UsersInde
                                 {regenerating ? (
                                     <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" />
                                 ) : (
-                                    <i className="fa fa-key me-1" />
+                                    <i className="ti ti-key me-1" />
                                 )}
                                 Régénérer le mot de passe
                             </button>

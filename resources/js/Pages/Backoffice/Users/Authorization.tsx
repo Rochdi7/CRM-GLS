@@ -141,7 +141,7 @@ export default function UsersAuthorization({
 
                             <div className="border-top pt-3">
                                 <p className="text-muted mb-0">
-                                    <i className="fa fa-user-slash me-1" />
+                                    <i className="ti ti-user-off me-1" />
                                     Consultez la fiche employé associée depuis la liste des utilisateurs si besoin.
                                 </p>
                             </div>
@@ -192,7 +192,7 @@ export default function UsersAuthorization({
                                                 <span className="text-muted fs-12">
                                                     {role.name === SUPER_ADMIN_ROLE ? (
                                                         <>
-                                                            <i className="fa fa-shield-halved me-1" />
+                                                            <i className="ti ti-shield-star me-1" />
                                                             Toutes les permissions
                                                         </>
                                                     ) : (
@@ -221,7 +221,7 @@ export default function UsersAuthorization({
                                         </>
                                     ) : (
                                         <>
-                                            <i className="fa fa-floppy-disk me-1" />
+                                            <i className="ti ti-device-floppy me-1" />
                                             Enregistrer
                                         </>
                                     )}
@@ -248,7 +248,7 @@ export default function UsersAuthorization({
                         >
                             {isSuperAdmin ? (
                                 <div className="alert alert-warning d-flex align-items-center mb-0" role="alert">
-                                    <i className="fa fa-shield-halved fs-20 me-2" />
+                                    <i className="ti ti-shield-star fs-20 me-2" />
                                     <div>
                                         <strong>Super administrateur</strong> — cet utilisateur contourne toutes les
                                         vérifications de permissions.
@@ -258,7 +258,7 @@ export default function UsersAuthorization({
                                 <EmptyState
                                     title="Aucune permission pour le moment"
                                     message="Sélectionnez un rôle à gauche pour accorder des permissions."
-                                    icon="fa fa-lock"
+                                    icon="ti ti-lock"
                                 />
                             ) : (
                                 <>
@@ -333,9 +333,9 @@ export default function UsersAuthorization({
                                             className="btn btn-link p-0 text-dark text-decoration-none d-flex align-items-center"
                                             onClick={() => setAdvancedOpen((open) => !open)}
                                         >
-                                            <i className="fa fa-sliders me-2" />
+                                            <i className="ti ti-adjustments-cog me-2" />
                                             Permissions directes (avancé)
-                                            <i className={`fa ms-2 ${advancedOpen ? 'fa-chevron-up' : 'fa-chevron-down'}`} />
+                                            <i className={`ti ms-2 ${advancedOpen ? 'ti-chevron-up' : 'ti-chevron-down'}`} />
                                         </button>
                                     </h4>
                                     {directPermissions.length > 0 && (
@@ -349,7 +349,7 @@ export default function UsersAuthorization({
                                 {advancedOpen && (
                                     <div className="card-body">
                                         <div className="alert alert-warning d-flex align-items-center" role="alert">
-                                            <i className="fa fa-triangle-exclamation me-2" />
+                                            <i className="ti ti-alert-triangle me-2" />
                                             <span className="fs-13">
                                                 Préférez les rôles. Les permissions directes contournent le modèle de
                                                 rôles et sont plus difficiles à auditer.
@@ -441,7 +441,7 @@ function DirectPermissionGroup({
                     aria-expanded={open}
                     aria-controls={collapseId}
                 >
-                    <i className={`fa me-1 ${open ? 'fa-chevron-down' : 'fa-chevron-right'}`} />
+                    <i className={`ti me-1 ${open ? 'ti-chevron-down' : 'ti-chevron-right'}`} />
                     {group}
                     {groupHeld > 0 && <span className="badge badge-soft-warning ms-2">{groupHeld}</span>}
                 </button>
@@ -471,7 +471,7 @@ function DirectPermissionGroup({
                                         {label}
                                         {viaRoles.has(permission) && (
                                             <i
-                                                className="fa fa-circle-info text-info ms-1"
+                                                className="ti ti-info-circle text-info ms-1"
                                                 title="Déjà accordée par un rôle"
                                             />
                                         )}

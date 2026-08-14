@@ -197,7 +197,7 @@ export default function EmploiDuTempsIndex({
             actions={
                 permissions.create && (
                     <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                        <i className="fa fa-square-plus me-2" />
+                        <i className="ti ti-square-rounded-plus me-2" />
                         Ajouter
                     </button>
                 )

@@ -47,7 +47,7 @@ export default function InscriptionShow({ inscription }: InscriptionShowProps) {
                                     value={
                                         inscription.studentShowUrl ? (
                                             <a href={inscription.studentShowUrl}>
-                                                {inscription.student} <i className="fa fa-arrow-up-right-from-square fs-14" />
+                                                {inscription.student} <i className="ti ti-external-link fs-14" />
                                             </a>
                                         ) : (
                                             inscription.student
@@ -67,7 +67,7 @@ export default function InscriptionShow({ inscription }: InscriptionShowProps) {
                                     value={
                                         inscription.groupShowUrl ? (
                                             <a href={inscription.groupShowUrl}>
-                                                {inscription.groupe} <i className="fa fa-arrow-up-right-from-square fs-14" />
+                                                {inscription.groupe} <i className="ti ti-external-link fs-14" />
                                             </a>
                                         ) : (
                                             inscription.groupe
@@ -109,7 +109,7 @@ export default function InscriptionShow({ inscription }: InscriptionShowProps) {
                         <RelatedRecordsTable
                             isEmpty={inscription.fees.length === 0}
                             emptyTitle="Aucune ligne de frais"
-                            emptyIcon="fa fa-receipt"
+                            emptyIcon="ti ti-receipt"
                             head={
                                 <tr>
                                     <th>Nom du frais</th>
@@ -144,7 +144,7 @@ export default function InscriptionShow({ inscription }: InscriptionShowProps) {
                         <RelatedRecordsTable
                             isEmpty={inscription.payments.length === 0}
                             emptyTitle="Aucun paiement enregistré"
-                            emptyIcon="fa fa-cash-register-banknote"
+                            emptyIcon="ti ti-cash-banknote"
                             head={
                                 <tr>
                                     <th>Référence</th>

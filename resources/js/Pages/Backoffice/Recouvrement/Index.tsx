@@ -83,7 +83,7 @@ export default function RecouvrementIndex({
                             className={`nav-link rounded${tab === 'duree' ? ' active' : ''}`}
                             onClick={() => switchTab('duree')}
                         >
-                            <i className="fa fa-credit-card me-1" />
+                            <i className="ti ti-credit-card me-1" />
                             {t('Overdue by duration')}
                         </button>
                     </li>
@@ -93,7 +93,7 @@ export default function RecouvrementIndex({
                             className={`nav-link rounded${tab === 'criteres' ? ' active' : ''}`}
                             onClick={() => switchTab('criteres')}
                         >
-                            <i className="fa fa-credit-card me-1" />
+                            <i className="ti ti-credit-card me-1" />
                             {t('Overdue by criteria')}
                         </button>
                     </li>
@@ -108,7 +108,7 @@ export default function RecouvrementIndex({
                                 className={`btn btn-sm ${filters.dureeBucket === bucket.key ? 'btn-primary' : 'btn-link text-decoration-none'}`}
                                 onClick={() => setDureeBucket(bucket.key)}
                             >
-                                <i className="fa fa-magnifying-glass me-1" />
+                                <i className="ti ti-search me-1" />
                                 {t(bucket.label)}
                                 <span className={`badge ms-1 ${filters.dureeBucket === bucket.key ? 'bg-white text-dark' : 'badge-soft-secondary'}`}>
                                     {bucketCounts[bucket.key] ?? 0}
@@ -180,7 +180,7 @@ export default function RecouvrementIndex({
                 <TableLengthRow perPage={filters.perPage} perPageOptions={perPageOptions} onPerPageChange={(perPage) => reload({ perPage })} />
 
                 {retards.data.length === 0 ? (
-                    <EmptyState title={t('No collections found')} icon="fa fa-circle-exclamation" />
+                    <EmptyState title={t('No collections found')} icon="ti ti-alert-circle" />
                 ) : (
                     <>
                         <DataTable
@@ -225,7 +225,7 @@ export default function RecouvrementIndex({
                                         <div className="d-flex flex-column gap-1">
                                             {row.telephone && (
                                                 <a href={`tel:${row.telephone}`} className="d-inline-flex align-items-center">
-                                                    <i className="fa fa-phone me-1" />
+                                                    <i className="ti ti-phone me-1" />
                                                     {row.telephone}
                                                 </a>
                                             )}
@@ -236,7 +236,7 @@ export default function RecouvrementIndex({
                                                     rel="noreferrer"
                                                     className="d-inline-flex align-items-center text-success"
                                                 >
-                                                    <i className="fa fa-whatsapp me-1" />
+                                                    <i className="ti ti-brand-whatsapp me-1" />
                                                     {row.whatsapp}
                                                 </a>
                                             )}

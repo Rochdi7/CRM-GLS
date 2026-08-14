@@ -144,7 +144,7 @@ export default function RolePermissionsForm({
                         tools={
                             <div className="input-icon-start position-relative">
                                 <span className="input-icon-addon">
-                                    <i className="fa fa-magnifying-glass" />
+                                    <i className="ti ti-search" />
                                 </span>
                                 <input
                                     type="text"
@@ -163,7 +163,7 @@ export default function RolePermissionsForm({
                         )}
 
                         {groupEntries.length === 0 ? (
-                            <EmptyState title="Aucune permission ne correspond à votre recherche" icon="fa fa-key" />
+                            <EmptyState title="Aucune permission ne correspond à votre recherche" icon="ti ti-key-off" />
                         ) : (
                             groupEntries.map(([group, permissions]) => (
                                 <div className="border rounded p-3 mb-3" key={group}>

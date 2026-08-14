@@ -114,7 +114,7 @@ export default function AnneesScolairesPanel({ anneesScolaires, permissions }: A
                 <h5 className="mb-0">Années scolaires</h5>
                 {permissions.create && (
                     <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                        <i className="fa fa-square-plus me-2" />
+                        <i className="ti ti-square-rounded-plus me-2" />
                         Ajouter une année scolaire
                     </button>
                 )}
@@ -123,7 +123,7 @@ export default function AnneesScolairesPanel({ anneesScolaires, permissions }: A
             <RelatedRecordsTable
                 isEmpty={anneesScolaires.data.length === 0}
                 emptyTitle="Aucune année scolaire pour le moment"
-                emptyIcon="fa fa-calendar"
+                emptyIcon="ti ti-calendar"
                 head={
                     <tr>
                         <th>Nom</th>
@@ -155,13 +155,13 @@ export default function AnneesScolairesPanel({ anneesScolaires, permissions }: A
                         <td className="text-end">
                             <RowActions>
                                 {permissions.update && (
-                                    <RowActionItem icon="fa-pen" onClick={() => openEdit(row)}>
+                                    <RowActionItem icon="ti-edit" onClick={() => openEdit(row)}>
                                         Modifier
                                     </RowActionItem>
                                 )}
                                 {permissions.delete && (
                                     <RowActionItem
-                                        icon="fa-trash"
+                                        icon="ti-trash"
                                         danger
                                         onClick={() => {
                                             setDeleteTarget(row);

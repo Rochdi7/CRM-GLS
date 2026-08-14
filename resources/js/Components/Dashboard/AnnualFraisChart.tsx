@@ -99,7 +99,7 @@ export default function AnnualFraisChart({ data, year, years, onYearChange }: An
                     <p className="text-muted mb-0">{t('Annual fees overview')}</p>
                 </div>
                 <div className="d-flex align-items-center gap-2 mb-3">
-                    <i className="fa fa-calendar text-muted" />
+                    <i className="ti ti-calendar text-muted" />
                     <label className="text-muted mb-0" htmlFor="frais-chart-year">
                         {t('Year')}
                     </label>

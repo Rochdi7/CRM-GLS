@@ -32,7 +32,7 @@ export default function PermissionsIndex({ groups, seededCount }: PermissionsInd
                 <EmptyState
                     title="Aucune permission trouvée"
                     message="Exécutez le seeder des rôles et permissions pour initialiser le catalogue."
-                    icon="fa fa-key"
+                    icon="ti ti-key-off"
                 />
             ) : (
                 <div className="row">

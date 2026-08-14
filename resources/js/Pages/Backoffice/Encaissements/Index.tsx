@@ -433,12 +433,12 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
             actions={
                 filters.view === 'avance' ? (
                     <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreateAvance}>
-                        <i className="fa fa-right-left me-2" />
+                        <i className="ti ti-transfer me-2" />
                         Convertir en avance
                     </button>
                 ) : (
                     <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                        <i className="fa fa-square-plus me-2" />
+                        <i className="ti ti-square-rounded-plus me-2" />
                         Enregistrer un paiement
                     </button>
                 )
@@ -451,8 +451,8 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                 are still reachable by URL (?view=cheque), just no longer exposed as a tab. */}
             <ul className="nav nav-tabs p-0 border-bottom rounded-0 mb-4" role="tablist">
                 {[
-                    { view: '', label: 'Encaissements', icon: 'fa fa-cash-register-banknote' },
-                    { view: 'avance', label: 'Avances', icon: 'fa fa-circle-dollar-to-slot' },
+                    { view: '', label: 'Encaissements', icon: 'ti ti-cash-banknote' },
+                    { view: 'avance', label: 'Avances', icon: 'ti ti-clock-dollar' },
                 ].map((tab) => (
                     <li className="nav-item" key={tab.view} role="presentation">
                         <button
@@ -468,7 +468,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                 ))}
                 <li className="nav-item" role="presentation">
                     <a href="/backoffice/cheques" className="nav-link d-inline-flex align-items-center">
-                        <i className="fa fa-building-columns me-2" aria-hidden="true" />
+                        <i className="ti ti-building-bank me-2" aria-hidden="true" />
                         Chèques
                     </a>
                 </li>
@@ -593,7 +593,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                 {encaissements.data.length === 0 ? (
                     <EmptyState
                         title={filters.view === 'avance' ? 'Aucune avance' : 'Aucun paiement'}
-                        icon="fa fa-cash-register-banknote"
+                        icon="ti ti-cash-banknote"
                     />
                 ) : (
                     <>
@@ -629,7 +629,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                         <td className="text-end">
                                             <RowActions view={row.showUrl}>
                                                 {Number(row.montantRestant ?? row.montant) > 0 && (
-                                                    <RowActionItem icon="fa-arrow-right" onClick={() => openApplyAvance(row)}>
+                                                    <RowActionItem icon="ti-arrow-forward" onClick={() => openApplyAvance(row)}>
                                                         Appliquer à un frais
                                                     </RowActionItem>
                                                 )}
@@ -683,24 +683,24 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                         <td>{row.datePaiement ?? '—'}</td>
                                         <td>
                                             <RowActions view={row.showUrl}>
-                                                <RowActionItem icon="fa-pen" onClick={() => openEdit(row)}>
+                                                <RowActionItem icon="ti-edit" onClick={() => openEdit(row)}>
                                                     Modifier
                                                 </RowActionItem>
                                                 <RowActionDivider />
                                                 <RowActionItem
-                                                    icon="fa-file-lines"
+                                                    icon="ti-file-text"
                                                     onClick={() => window.open(`${row.recuUrl}?format=a6`, '_blank')}
                                                 >
                                                     Générer le reçu pour une imprimante ticket (format A6)
                                                 </RowActionItem>
                                                 <RowActionItem
-                                                    icon="fa-file-lines"
+                                                    icon="ti-file-text"
                                                     onClick={() => window.open(`${row.recuUrl}?format=a5`, '_blank')}
                                                 >
                                                     Générer le reçu format A5
                                                 </RowActionItem>
                                                 <RowActionItem
-                                                    icon="fa-file-lines"
+                                                    icon="ti-file-text"
                                                     onClick={() => window.open(`${row.recuUrl}?format=a5x2`, '_blank')}
                                                 >
                                                     Générer deux copies du reçu (Paysage A5)

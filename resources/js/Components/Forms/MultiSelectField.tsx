@@ -120,7 +120,7 @@ export default function MultiSelectField({
                                     <i
                                         role="button"
                                         aria-label={`Retirer ${option.label}`}
-                                        className="fa fa-xmark ms-1"
+                                        className="ti ti-x ms-1"
                                         onClick={(event) => remove(String(option.value), event)}
                                     />
                                 </span>

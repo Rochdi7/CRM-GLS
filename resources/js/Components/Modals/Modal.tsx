@@ -132,7 +132,7 @@ export default function Modal({ show, title, onClose, processing = false, size =
                                     disabled={processing}
                                     aria-label="Fermer"
                                 >
-                                    <i className="fa fa-xmark" />
+                                    <i className="ti ti-x" />
                                 </button>
                             </div>
                         )}

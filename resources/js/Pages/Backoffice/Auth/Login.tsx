@@ -49,7 +49,7 @@ export default function Login() {
                 <FormField
                     id="login"
                     label="Email ou nom d'utilisateur"
-                    icon="fa fa-user"
+                    icon="ti ti-user"
                     value={data.login}
                     onChange={(event) => setData('login', event.target.value)}
                     error={errors.login}

@@ -69,7 +69,7 @@ export default function RolesIndex({ roles, search }: RolesIndexPageProps) {
             ]}
             actions={
                 <Link href="/backoffice/roles/create" className="btn btn-primary d-flex align-items-center">
-                    <i className="fa fa-square-plus me-2" />
+                    <i className="ti ti-square-rounded-plus me-2" />
                     Nouveau rôle
                 </Link>
             }
@@ -78,7 +78,7 @@ export default function RolesIndex({ roles, search }: RolesIndexPageProps) {
                 <TableLengthRow search={<SearchInput value={search} onSearch={handleSearch} placeholder="Rechercher" />} />
 
                 {roles.data.length === 0 ? (
-                    <EmptyState title="Aucun rôle trouvé" icon="fa fa-shield" />
+                    <EmptyState title="Aucun rôle trouvé" icon="ti ti-shield-off" />
                 ) : (
                     <>
                         <DataTable
@@ -114,11 +114,11 @@ export default function RolesIndex({ roles, search }: RolesIndexPageProps) {
                                             <StatusBadge label="Protégé" variant="danger" dot />
                                         ) : (
                                             <RowActions>
-                                                <RowActionItem icon="fa-pen" href={`/backoffice/roles/${role.id}/edit`}>
+                                                <RowActionItem icon="ti-edit" href={`/backoffice/roles/${role.id}/edit`}>
                                                     Modifier
                                                 </RowActionItem>
                                                 <RowActionItem
-                                                    icon="fa-trash"
+                                                    icon="ti-trash"
                                                     danger
                                                     onClick={() => setDeleteTarget(role)}
                                                 >

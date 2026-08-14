@@ -218,7 +218,7 @@ export default function SeancesIndex({
             actions={
                 permissions.create && (
                     <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                        <i className="fa fa-square-plus me-2" />
+                        <i className="ti ti-square-rounded-plus me-2" />
                         Ajouter une séance
                     </button>
                 )
@@ -227,7 +227,7 @@ export default function SeancesIndex({
             <ul className="nav nav-tabs mb-3" role="tablist">
                 <li className="nav-item" role="presentation">
                     <button type="button" className="nav-link active fw-medium" role="tab" aria-selected="true">
-                        <i className="fa fa-calendar-check me-2" />
+                        <i className="ti ti-calendar-check me-2" />
                         Séances
                     </button>
                 </li>
@@ -238,7 +238,7 @@ export default function SeancesIndex({
                         role="tab"
                         aria-selected="false"
                     >
-                        <i className="fa fa-clipboard-check me-2" />
+                        <i className="ti ti-checklist me-2" />
                         Saisir l'absence
                     </Link>
                 </li>
@@ -324,7 +324,7 @@ export default function SeancesIndex({
                 <RelatedRecordsTable
                     isEmpty={seances.data.length === 0}
                     emptyTitle="Aucune séance pour le moment"
-                    emptyIcon="fa fa-calendar-check"
+                    emptyIcon="ti ti-calendar-check"
                     head={
                         <tr>
                             <th>Date</th>
@@ -376,32 +376,32 @@ export default function SeancesIndex({
                                             href={row.showUrl}
                                             className="btn btn-outline-primary btn-sm d-inline-flex align-items-center"
                                         >
-                                            <i className="fa fa-clipboard-check me-1" />
+                                            <i className="ti ti-checklist me-1" />
                                             Faire l'appel
                                         </Link>
                                     )}
                                     <RowActions>
                                         {permissions.mark && row.statut !== 'Effectuée' && (
                                             <RowActionItem
-                                                icon="fa-circle-check"
+                                                icon="ti-circle-check"
                                                 onClick={() => setValidateTarget(row)}
                                             >
                                                 Valider la séance
                                             </RowActionItem>
                                         )}
                                         {permissions.mark && row.statut !== 'Annulée' && (
-                                            <RowActionItem icon="fa-circle-xmark" danger onClick={() => openAnnulerModal(row)}>
+                                            <RowActionItem icon="ti-x" danger onClick={() => openAnnulerModal(row)}>
                                                 Annuler la séance
                                             </RowActionItem>
                                         )}
                                         {permissions.update && (
-                                            <RowActionItem icon="fa-pen" onClick={() => openEdit(row)}>
+                                            <RowActionItem icon="ti-edit" onClick={() => openEdit(row)}>
                                                 Modifier
                                             </RowActionItem>
                                         )}
                                         {permissions.delete && (
                                             <RowActionItem
-                                                icon="fa-trash"
+                                                icon="ti-trash"
                                                 danger
                                                 onClick={() => {
                                                     setDeleteTarget(row);
@@ -529,7 +529,7 @@ export default function SeancesIndex({
                 recordLabel={validateTarget ? `${validateTarget.groupNom ?? ''} — ${validateTarget.dateSeance}` : ''}
                 message="Confirmer que cette séance a bien eu lieu (statut Effectuée) ?"
                 processing={validating}
-                icon="fa-circle-check"
+                icon="ti-circle-check"
                 variant="primary"
                 confirmLabel="Oui, valider"
                 processingLabel="Validation…"

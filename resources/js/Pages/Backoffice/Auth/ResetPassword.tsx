@@ -50,7 +50,7 @@ export default function ResetPassword({ token, email }: ResetPasswordProps) {
                     id="email"
                     label="Adresse email"
                     type="email"
-                    icon="fa fa-envelope"
+                    icon="ti ti-mail"
                     value={data.email}
                     onChange={(event) => setData('email', event.target.value)}
                     error={errors.email}
@@ -87,7 +87,7 @@ export default function ResetPassword({ token, email }: ResetPasswordProps) {
                 <div className="text-center">
                     <h6 className="fw-normal text-dark mb-0">
                         <a href="/backoffice/login" className="hover-a">
-                            <i className="fa fa-arrow-left me-1" />
+                            <i className="ti ti-arrow-left me-1" />
                             Retour à la connexion
                         </a>
                     </h6>

@@ -32,7 +32,7 @@ export default function GroupsHistoriqueIndex({ historiques }: GroupsHistoriqueI
                 <RelatedRecordsTable
                     isEmpty={historiques.data.length === 0}
                     emptyTitle="Aucun groupe archivé"
-                    emptyIcon="fa fa-clock-rotate-left"
+                    emptyIcon="ti ti-history"
                     head={
                         <tr>
                             <th>Nom</th>

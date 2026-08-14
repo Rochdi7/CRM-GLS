@@ -99,7 +99,7 @@ export default function FraisPanel({ frais, permissions }: FraisPanelProps) {
                 <h5 className="mb-0">Catalogue des frais</h5>
                 {permissions.create && (
                     <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                        <i className="fa fa-square-plus me-2" />
+                        <i className="ti ti-square-rounded-plus me-2" />
                         Ajouter un frais
                     </button>
                 )}
@@ -108,7 +108,7 @@ export default function FraisPanel({ frais, permissions }: FraisPanelProps) {
             <RelatedRecordsTable
                 isEmpty={frais.data.length === 0}
                 emptyTitle="Aucun frais pour le moment"
-                emptyIcon="fa fa-receipt"
+                emptyIcon="ti ti-receipt"
                 head={
                     <tr>
                         <th>Nom du frais</th>
@@ -132,13 +132,13 @@ export default function FraisPanel({ frais, permissions }: FraisPanelProps) {
                         <td className="text-end">
                             <RowActions>
                                 {permissions.update && (
-                                    <RowActionItem icon="fa-pen" onClick={() => openEdit(row)}>
+                                    <RowActionItem icon="ti-edit" onClick={() => openEdit(row)}>
                                         Modifier
                                     </RowActionItem>
                                 )}
                                 {permissions.delete && (
                                     <RowActionItem
-                                        icon="fa-trash"
+                                        icon="ti-trash"
                                         danger
                                         onClick={() => {
                                             setDeleteTarget(row);

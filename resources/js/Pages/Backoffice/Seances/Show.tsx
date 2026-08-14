@@ -254,21 +254,21 @@ export default function SeanceShow({
                         <RowActions>
                             {canValidate && (
                                 <RowActionItem
-                                    icon="fa-circle-check"
+                                    icon="ti-circle-check"
                                     onClick={() => setValidateTarget(true)}
                                 >
                                     Valider la séance
                                 </RowActionItem>
                             )}
                             {canCancel && (
-                                <RowActionItem icon="fa-circle-xmark" danger onClick={openAnnulerModal}>
+                                <RowActionItem icon="ti-x" danger onClick={openAnnulerModal}>
                                     Annuler la séance
                                 </RowActionItem>
                             )}
                         </RowActions>
                     )}
                     <Link href="/backoffice/seances" className="btn btn-outline-light d-flex align-items-center">
-                        <i className="fa fa-arrow-left me-2" />
+                        <i className="ti ti-arrow-left me-2" />
                         Retour aux séances
                     </Link>
                 </div>
@@ -283,7 +283,7 @@ export default function SeanceShow({
                         aria-selected={activeTab === 'seances'}
                         onClick={() => setActiveTab('seances')}
                     >
-                        <i className="fa fa-calendar-check me-2" />
+                        <i className="ti ti-calendar-check me-2" />
                         Séances
                     </button>
                 </li>
@@ -295,7 +295,7 @@ export default function SeanceShow({
                         aria-selected={activeTab === 'appel'}
                         onClick={() => setActiveTab('appel')}
                     >
-                        <i className="fa fa-clipboard-check me-2" />
+                        <i className="ti ti-checklist me-2" />
                         Saisir l'absence
                     </button>
                 </li>
@@ -380,7 +380,7 @@ export default function SeanceShow({
                     <RelatedRecordsTable
                         isEmpty={seances.data.length === 0}
                         emptyTitle="Aucune séance pour le moment"
-                        emptyIcon="fa fa-calendar-check"
+                        emptyIcon="ti ti-calendar-check"
                         head={
                             <tr>
                                 <th>Date</th>
@@ -432,7 +432,7 @@ export default function SeanceShow({
                                                 href={row.showUrl}
                                                 className="btn btn-outline-primary btn-sm d-inline-flex align-items-center"
                                             >
-                                                <i className="fa fa-clipboard-check me-1" />
+                                                <i className="ti ti-checklist me-1" />
                                                 Faire l'appel
                                             </Link>
                                         )}
@@ -482,14 +482,14 @@ export default function SeanceShow({
 
                 {seance === null && (
                     <div className="alert alert-info d-flex align-items-start" role="alert">
-                        <i className="fa fa-circle-info me-2 mt-1" aria-hidden="true" />
+                        <i className="ti ti-info-circle me-2 mt-1" aria-hidden="true" />
                         <div>Aucune séance à cette date. Choisissez une autre date ou une séance ci-dessus.</div>
                     </div>
                 )}
 
                 {seance && seance.statut === 'Annulée' && seance.motifAnnulation && (
                     <div className="alert alert-danger d-flex align-items-start" role="alert">
-                        <i className="fa fa-circle-xmark me-2 mt-1" aria-hidden="true" />
+                        <i className="ti ti-circle-x me-2 mt-1" aria-hidden="true" />
                         <div>
                             <div className="fw-semibold">Séance annulée</div>
                             <div>{seance.motifAnnulation}</div>
@@ -501,7 +501,7 @@ export default function SeanceShow({
                     <ul className="nav nav-tabs mb-0" role="tablist">
                         <li className="nav-item" role="presentation">
                             <button type="button" className="nav-link active fw-medium" role="tab" aria-selected="true">
-                                <i className="fa fa-magnifying-glass me-2" />
+                                <i className="ti ti-search me-2" />
                                 Suivi des présences
                             </button>
                         </li>
@@ -514,7 +514,7 @@ export default function SeanceShow({
                     )}
                     {!saving && saveError && (
                         <span className="text-danger d-flex align-items-center">
-                            <i className="fa fa-circle-exclamation me-2" aria-hidden="true" />
+                            <i className="ti ti-alert-circle me-2" aria-hidden="true" />
                             Échec de l'enregistrement — réessayez
                         </span>
                     )}
@@ -527,7 +527,7 @@ export default function SeanceShow({
                     onClick={() => setSectionOpen((o) => !o)}
                 >
                     <i
-                        className={`fa ${sectionOpen ? 'fa-circle-chevron-down' : 'fa-circle-chevron-right'} me-2 fs-5 text-dark`}
+                        className={`ti ${sectionOpen ? 'ti-circle-chevron-down' : 'ti-circle-chevron-right'} me-2 fs-5 text-dark`}
                         aria-hidden="true"
                     />
                     <span className="fs-5 fw-bold text-dark">Formation</span>
@@ -592,7 +592,7 @@ export default function SeanceShow({
                                                             className="avatar avatar-md rounded-circle bg-light text-muted d-flex align-items-center justify-content-center me-2"
                                                             aria-hidden="true"
                                                         >
-                                                            <i className="fa fa-user fs-5" />
+                                                            <i className="ti ti-user fs-5" />
                                                         </span>
                                                     )}
                                                     <span className="fw-medium text-uppercase">
@@ -633,7 +633,7 @@ export default function SeanceShow({
                 recordLabel={seance ? `Séance du ${seance.dateSeance}` : ''}
                 message="Confirmer que cette séance a bien eu lieu (statut Effectuée) ?"
                 processing={validating}
-                icon="fa-circle-check"
+                icon="ti-circle-check"
                 variant="primary"
                 confirmLabel="Oui, valider"
                 processingLabel="Validation…"

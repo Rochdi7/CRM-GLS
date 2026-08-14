@@ -94,7 +94,7 @@ export default function RowActions({ view, viewLabel = 'Voir', children }: RowAc
                     className="btn btn-outline-light bg-white btn-icon d-flex align-items-center justify-content-center rounded-circle p-0 me-2"
                     title={viewLabel}
                 >
-                    <i className="fa fa-eye" />
+                    <i className="ti ti-eye" />
                 </a>
             )}
             {hasItems && (
@@ -107,7 +107,7 @@ export default function RowActions({ view, viewLabel = 'Voir', children }: RowAc
                         aria-expanded={open}
                         aria-label="Actions"
                     >
-                        <i className="fa fa-ellipsis-vertical fs-14" />
+                        <i className="ti ti-dots-vertical fs-14" />
                     </button>
                     <ul
                         className={`dropdown-menu dropdown-menu-end p-3${open ? ' show' : ''}`}
@@ -141,12 +141,12 @@ export function RowActionItem({ icon, href, danger = false, onClick, children }:
         <li>
             {href ? (
                 <a href={href} className={className}>
-                    {icon && <i className={`fa ${icon} me-2`} />}
+                    {icon && <i className={`ti ${icon} me-2`} />}
                     {children}
                 </a>
             ) : (
                 <button type="button" className={`${className} w-100 text-start border-0 bg-transparent`} onClick={onClick}>
-                    {icon && <i className={`fa ${icon} me-2`} />}
+                    {icon && <i className={`ti ${icon} me-2`} />}
                     {children}
                 </button>
             )}

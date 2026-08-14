@@ -119,7 +119,7 @@ export default function TypesDepensesIndex({ types, filters, permissions }: Type
             actions={
                 permissions.create && (
                     <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                        <i className="fa fa-square-plus me-2" />
+                        <i className="ti ti-square-rounded-plus me-2" />
                         Ajouter un type de dépense
                     </button>
                 )
@@ -131,7 +131,7 @@ export default function TypesDepensesIndex({ types, filters, permissions }: Type
                 {canViewDepenses && (
                     <li className="nav-item" role="presentation">
                         <Link href="/backoffice/depenses" className="nav-link d-inline-flex align-items-center">
-                            <i className="fa fa-receipt me-2" aria-hidden="true" />
+                            <i className="ti ti-receipt me-2" aria-hidden="true" />
                             Dépenses
                         </Link>
                     </li>
@@ -139,14 +139,14 @@ export default function TypesDepensesIndex({ types, filters, permissions }: Type
                 {canViewRemboursements && (
                     <li className="nav-item" role="presentation">
                         <Link href="/backoffice/depenses?tab=remboursements" className="nav-link d-inline-flex align-items-center">
-                            <i className="fa fa-rotate-left me-2" aria-hidden="true" />
+                            <i className="ti ti-arrow-back-up me-2" aria-hidden="true" />
                             Remboursements
                         </Link>
                     </li>
                 )}
                 <li className="nav-item" role="presentation">
                     <span className="nav-link active d-inline-flex align-items-center" aria-current="page">
-                        <i className="fa fa-file-invoice-dollar me-2" aria-hidden="true" />
+                        <i className="ti ti-receipt-tax me-2" aria-hidden="true" />
                         Types de dépenses
                     </span>
                 </li>
@@ -158,7 +158,7 @@ export default function TypesDepensesIndex({ types, filters, permissions }: Type
                 <RelatedRecordsTable
                     isEmpty={types.data.length === 0}
                     emptyTitle="Aucun type de dépense pour le moment"
-                    emptyIcon="fa fa-file-invoice-dollar"
+                    emptyIcon="ti ti-receipt-tax"
                     head={
                         <tr>
                             <th>Nom</th>
@@ -192,13 +192,13 @@ export default function TypesDepensesIndex({ types, filters, permissions }: Type
                                 {!row.isSystem && (
                                     <RowActions>
                                         {permissions.update && (
-                                            <RowActionItem icon="fa-pen" onClick={() => openEdit(row)}>
+                                            <RowActionItem icon="ti-edit" onClick={() => openEdit(row)}>
                                                 Modifier
                                             </RowActionItem>
                                         )}
                                         {permissions.delete && (
                                             <RowActionItem
-                                                icon="fa-trash"
+                                                icon="ti-trash"
                                                 danger
                                                 onClick={() => {
                                                     setDeleteTarget(row);

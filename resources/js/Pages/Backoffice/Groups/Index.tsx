@@ -33,9 +33,9 @@ const STATS_SEGMENT_LABELS: Record<StatsSegment, string> = {
 };
 
 const STATUT_TABS: Array<{ key: string; icon: string; label: string }> = [
-    { key: 'En formation', icon: 'fa-school', label: 'En formation' },
-    { key: 'En inscription', icon: 'fa-folder-open', label: 'En inscription' },
-    { key: 'Fin de formation', icon: 'fa-clock-rotate-left', label: 'Historique' },
+    { key: 'En formation', icon: 'ti-school', label: 'En formation' },
+    { key: 'En inscription', icon: 'ti-folder', label: 'En inscription' },
+    { key: 'Fin de formation', icon: 'ti-history', label: 'Historique' },
 ];
 
 type LifecycleAction = 'archive' | 'annuler' | 'reactiver' | 'activer' | 'retourner-en-inscription';
@@ -48,7 +48,7 @@ const LIFECYCLE_CONFIRM_COPY: Record<
     archive: {
         title: 'Terminer la formation',
         message: 'Marquer ce groupe comme terminé (Fin de formation) ? Cette action est irréversible.',
-        icon: 'fa-box-archive',
+        icon: 'ti-archive',
         variant: 'danger',
         confirmLabel: 'Oui, terminer',
         processingLabel: 'Finalisation…',
@@ -56,7 +56,7 @@ const LIFECYCLE_CONFIRM_COPY: Record<
     annuler: {
         title: 'Annuler le groupe',
         message: 'Voulez-vous vraiment annuler ce groupe ?',
-        icon: 'fa-xmark',
+        icon: 'ti-x',
         variant: 'danger',
         confirmLabel: 'Oui, annuler',
         processingLabel: 'Annulation…',
@@ -64,7 +64,7 @@ const LIFECYCLE_CONFIRM_COPY: Record<
     reactiver: {
         title: 'Réactiver le groupe',
         message: 'Voulez-vous vraiment réactiver ce groupe (retour à En inscription) ?',
-        icon: 'fa-rotate-right',
+        icon: 'ti-refresh',
         variant: 'primary',
         confirmLabel: 'Oui, réactiver',
         processingLabel: 'Réactivation…',
@@ -72,7 +72,7 @@ const LIFECYCLE_CONFIRM_COPY: Record<
     activer: {
         title: 'Activer le groupe',
         message: 'Démarrer la formation pour ce groupe (passage à En formation) ?',
-        icon: 'fa-circle-play',
+        icon: 'ti-player-play',
         variant: 'primary',
         confirmLabel: 'Oui, activer',
         processingLabel: 'Activation…',
@@ -80,7 +80,7 @@ const LIFECYCLE_CONFIRM_COPY: Record<
     'retourner-en-inscription': {
         title: 'Retourner en inscription',
         message: 'Ramener ce groupe à "En inscription" (arrête la formation en cours) ?',
-        icon: 'fa-circle-pause',
+        icon: 'ti-player-pause',
         variant: 'primary',
         confirmLabel: 'Oui, retourner',
         processingLabel: 'Retour en cours…',
@@ -313,7 +313,7 @@ export default function GroupsIndex({
             breadcrumbs={[{ label: 'Tableau de bord', href: '/backoffice/dashboard' }, { label: 'Groupes' }]}
             actions={
                 <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                    <i className="fa fa-square-plus me-2" />
+                    <i className="ti ti-square-rounded-plus me-2" />
                     Ajouter un groupe
                 </button>
             }
@@ -327,7 +327,7 @@ export default function GroupsIndex({
                                 className={`nav-link rounded${filters.statutFilter === tab.key ? ' active' : ''}`}
                                 onClick={() => setStatutTab(tab.key)}
                             >
-                                <i className={`fa ${tab.icon} me-1`} />
+                                <i className={`ti ${tab.icon} me-1`} />
                                 {tab.label}
                                 <span className={`badge ${filters.statutFilter === tab.key ? 'bg-white text-dark' : 'badge-soft-secondary'} ms-1`}>
                                     {statutCounts[tab.key] ?? 0}
@@ -394,7 +394,7 @@ export default function GroupsIndex({
                 />
 
                 {groups.data.length === 0 ? (
-                    <EmptyState title="Aucun groupe avec ce statut" icon="fa fa-people-group" />
+                    <EmptyState title="Aucun groupe avec ce statut" icon="ti ti-users-group" />
                 ) : (
                     <>
                         <DataTable
@@ -426,7 +426,7 @@ export default function GroupsIndex({
                                             onClick={() => openStudentsSegment(group, 'etudiants')}
                                         >
                                             {group.etudiantsDistinctsCount}
-                                            <i className="fa fa-user" aria-hidden="true" />
+                                            <i className="ti ti-user" aria-hidden="true" />
                                         </button>
                                     </td>
                                     <td>
@@ -438,7 +438,7 @@ export default function GroupsIndex({
                                                 onClick={() => openStudentsSegment(group, 'active')}
                                             >
                                                 {group.inscriptionsActivesCount}
-                                                <i className="fa fa-user" aria-hidden="true" />
+                                                <i className="ti ti-user" aria-hidden="true" />
                                             </button>
                                             <button
                                                 type="button"
@@ -447,7 +447,7 @@ export default function GroupsIndex({
                                                 onClick={() => openStudentsSegment(group, 'changement')}
                                             >
                                                 {group.inscriptionsChangementCount}
-                                                <i className="fa fa-user" aria-hidden="true" />
+                                                <i className="ti ti-user" aria-hidden="true" />
                                             </button>
                                             <button
                                                 type="button"
@@ -456,7 +456,7 @@ export default function GroupsIndex({
                                                 onClick={() => openStudentsSegment(group, 'annulee')}
                                             >
                                                 {group.inscriptionsAnnuleesCount}
-                                                <i className="fa fa-user" aria-hidden="true" />
+                                                <i className="ti ti-user" aria-hidden="true" />
                                             </button>
                                         </div>
                                     </td>
@@ -478,23 +478,23 @@ export default function GroupsIndex({
                                     <td className="text-end">
                                         <RowActions view={group.showUrl}>
                                             {group.statut !== 'Fin de formation' && group.statut !== 'Annulée' && (
-                                                <RowActionItem icon="fa-pen" onClick={() => openEdit(group)}>
+                                                <RowActionItem icon="ti-edit" onClick={() => openEdit(group)}>
                                                     Modifier
                                                 </RowActionItem>
                                             )}
                                             {group.statut === 'En formation' && (
                                                 <>
                                                     <RowActionDivider />
-                                                    <RowActionItem icon="fa-xmark" danger onClick={() => confirmAnnuler(group)}>
+                                                    <RowActionItem icon="ti-x" danger onClick={() => confirmAnnuler(group)}>
                                                         Annuler
                                                     </RowActionItem>
                                                     <RowActionItem
-                                                        icon="fa-circle-pause"
+                                                        icon="ti-player-pause"
                                                         onClick={() => confirmRetournerEnInscription(group)}
                                                     >
                                                         En inscription
                                                     </RowActionItem>
-                                                    <RowActionItem icon="fa-check" onClick={() => confirmArchive(group)}>
+                                                    <RowActionItem icon="ti-circle-check" onClick={() => confirmArchive(group)}>
                                                         Terminer
                                                     </RowActionItem>
                                                 </>
@@ -502,7 +502,7 @@ export default function GroupsIndex({
                                             {group.statut === 'Annulée' && auth.isSuperAdmin && (
                                                 <>
                                                     <RowActionDivider />
-                                                    <RowActionItem icon="fa-rotate-right" onClick={() => confirmReactiver(group)}>
+                                                    <RowActionItem icon="ti-refresh" onClick={() => confirmReactiver(group)}>
                                                         Réactiver
                                                     </RowActionItem>
                                                 </>
@@ -510,7 +510,7 @@ export default function GroupsIndex({
                                             {group.statut === 'En inscription' && (
                                                 <>
                                                     <RowActionDivider />
-                                                    <RowActionItem icon="fa-check" onClick={() => confirmActiver(group)}>
+                                                    <RowActionItem icon="ti-circle-check" onClick={() => confirmActiver(group)}>
                                                         Activer
                                                     </RowActionItem>
                                                 </>
@@ -661,6 +661,7 @@ export default function GroupsIndex({
                                                             id={`grp-fee-d-${fee.value}`}
                                                             value={ligne.date_echeance}
                                                             onChange={(event) => setLigne(fee.value as number, 'date_echeance', event.target.value)}
+                                                            panelAlign="right"
                                                         />
                                                     </td>
                                                     <td>
@@ -708,7 +709,7 @@ export default function GroupsIndex({
                 {loadingStudents ? (
                     <p className="text-muted mb-0">Chargement…</p>
                 ) : studentsRows.length === 0 ? (
-                    <EmptyState title="Aucun étudiant" icon="fa fa-people-group" />
+                    <EmptyState title="Aucun étudiant" icon="ti ti-users-group" />
                 ) : (
                     <div className="table-responsive">
                         <table className="table table-bordered align-middle mb-0">
@@ -736,7 +737,7 @@ export default function GroupsIndex({
                                         <td>
                                             {student.telephone ? (
                                                 <a href={`tel:${student.telephone}`} className="d-inline-flex align-items-center">
-                                                    <i className="fa fa-phone me-1" />
+                                                    <i className="ti ti-phone me-1" />
                                                     {student.telephone}
                                                 </a>
                                             ) : (

@@ -14,7 +14,7 @@ interface DateFieldProps {
     required?: boolean;
     disabled?: boolean;
     placeholder?: string;
-    /** 'right' opens the panel flush with the input's right edge instead of its left — use for fields near the right edge of a modal/table (e.g. a last table column) where a left-aligned panel would overflow off-screen. */
+    /** Preferred horizontal alignment: 'right' anchors the panel to the input's right edge instead of its left. Either way the panel is finally clamped into the viewport, so this only decides which edge it lines up with when there's room for both. */
     panelAlign?: 'left' | 'right';
 }
 
@@ -110,6 +110,10 @@ interface GridDay {
  * bold French month title, Monday-first French weekday header, muted
  * adjacent-month days, #3D5EE1 selected day.
  */
+const PANEL_WIDTH = 300;
+/** Rough panel height (header + 6 weeks of 32px rows + padding) — used to decide whether to flip upward. */
+const PANEL_HEIGHT = 300;
+
 export default function DateField({
     id,
     label,
@@ -123,6 +127,35 @@ export default function DateField({
 }: DateFieldProps) {
     const [open, setOpen] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    // The panel is `position: fixed` rather than absolute: inside a
+    // `.table-responsive` (overflow-x: auto) an absolutely-positioned panel is
+    // clipped at the table's edge — the bug seen on the group/inscription
+    // "Frais" tables, where the calendar was cut in half. Fixed positioning
+    // anchored to the input's own bounding rect escapes every scroll
+    // container (same fix as RowActions.tsx / ContextSwitcher.tsx).
+    const [panelPos, setPanelPos] = useState<{ top: number; left: number } | null>(null);
+
+    function measurePanel() {
+        const input = inputRef.current;
+        if (!input) {
+            return;
+        }
+        const rect = input.getBoundingClientRect();
+
+        // Prefer aligning to the requested edge, then clamp into the viewport
+        // so the panel is always fully visible regardless of table scroll.
+        let left = panelAlign === 'right' ? rect.right - PANEL_WIDTH : rect.left;
+        left = Math.min(left, window.innerWidth - PANEL_WIDTH - 8);
+        left = Math.max(8, left);
+
+        // Flip above the input when there isn't room below.
+        const openUpward = rect.bottom + PANEL_HEIGHT > window.innerHeight && rect.top > PANEL_HEIGHT;
+        const top = openUpward ? rect.top - PANEL_HEIGHT - 4 : rect.bottom + 4;
+
+        setPanelPos({ top, left });
+    }
 
     const parsed = parseIso(value);
     const formatted = parsed ? `${pad(parsed.day)}-${pad(parsed.month + 1)}-${parsed.year}` : '';
@@ -143,6 +176,7 @@ export default function DateField({
         const current = parseIso(value);
         setViewYear(current?.year ?? new Date().getFullYear());
         setViewMonth(current?.month ?? new Date().getMonth());
+        measurePanel();
         setOpen(true);
     }
 
@@ -191,9 +225,22 @@ export default function DateField({
             }
         }
 
-        document.addEventListener('mousedown', handleOutside);
+        // A fixed panel doesn't follow its anchor, so re-measure whenever
+        // anything scrolls (capture phase catches the table's own scroller)
+        // or the viewport resizes.
+        function reposition() {
+            measurePanel();
+        }
 
-        return () => document.removeEventListener('mousedown', handleOutside);
+        document.addEventListener('mousedown', handleOutside);
+        window.addEventListener('scroll', reposition, true);
+        window.addEventListener('resize', reposition);
+
+        return () => {
+            document.removeEventListener('mousedown', handleOutside);
+            window.removeEventListener('scroll', reposition, true);
+            window.removeEventListener('resize', reposition);
+        };
     }, [open]);
 
     function handleKeyDown(event: React.KeyboardEvent) {
@@ -239,6 +286,7 @@ export default function DateField({
             <div className="position-relative" ref={wrapperRef} onKeyDown={handleKeyDown}>
                 <input
                     id={id}
+                    ref={inputRef}
                     type="text"
                     inputMode="numeric"
                     autoComplete="off"
@@ -261,7 +309,7 @@ export default function DateField({
                     }}
                 />
                 <i
-                    className="fa fa-calendar text-muted"
+                    className="ti ti-calendar text-muted"
                     aria-hidden="true"
                     style={{
                         position: 'absolute',
@@ -271,18 +319,17 @@ export default function DateField({
                         pointerEvents: 'none',
                     }}
                 />
-                {open && (
+                {open && panelPos && (
                     <div
                         className="bg-white border rounded-3 shadow p-3"
                         role="dialog"
                         aria-label={monthTitle}
                         style={{
-                            position: 'absolute',
-                            top: '100%',
-                            ...(panelAlign === 'right' ? { right: 0 } : { left: 0 }),
+                            position: 'fixed',
+                            top: panelPos.top,
+                            left: panelPos.left,
                             zIndex: 1070,
-                            width: 300,
-                            marginTop: 4,
+                            width: PANEL_WIDTH,
                         }}
                     >
                         <div className="d-flex align-items-center justify-content-between mb-2">
@@ -292,7 +339,7 @@ export default function DateField({
                                 aria-label="Mois précédent"
                                 onClick={() => moveMonth(-1)}
                             >
-                                <i className="fa fa-chevron-left" aria-hidden="true" />
+                                <i className="ti ti-chevron-left" aria-hidden="true" />
                             </button>
                             <span className="fw-bold text-capitalize">{monthTitle}</span>
                             <button
@@ -301,7 +348,7 @@ export default function DateField({
                                 aria-label="Mois suivant"
                                 onClick={() => moveMonth(1)}
                             >
-                                <i className="fa fa-chevron-right" aria-hidden="true" />
+                                <i className="ti ti-chevron-right" aria-hidden="true" />
                             </button>
                         </div>
                         <div

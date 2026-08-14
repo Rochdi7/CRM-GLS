@@ -86,7 +86,7 @@ export default function FilterDropdown({ fields, onApply, onReset }: FilterDropd
                 aria-expanded={open}
                 onClick={() => setOpen((o) => !o)}
             >
-                <i className="fa fa-filter me-2" aria-hidden="true" />
+                <i className="ti ti-filter me-2" aria-hidden="true" />
                 {t('Filter')}
                 {activeCount > 0 && <span className="badge badge-soft-primary ms-2">{activeCount}</span>}
             </button>

@@ -54,7 +54,7 @@ export default function CaisseShow({ caisse }: CaisseShowProps) {
                         <RelatedRecordsTable
                             isEmpty={caisse.encaissements.length === 0}
                             emptyTitle="Aucun paiement"
-                            emptyIcon="fa fa-cash-register"
+                            emptyIcon="ti ti-cash"
                             head={
                                 <tr>
                                     <th>Référence</th>
@@ -88,7 +88,7 @@ export default function CaisseShow({ caisse }: CaisseShowProps) {
                         <RelatedRecordsTable
                             isEmpty={caisse.depenses.length === 0}
                             emptyTitle="Aucune dépense"
-                            emptyIcon="fa fa-receipt"
+                            emptyIcon="ti ti-receipt"
                             head={
                                 <tr>
                                     <th>Référence</th>
@@ -118,7 +118,7 @@ export default function CaisseShow({ caisse }: CaisseShowProps) {
                         <RelatedRecordsTable
                             isEmpty={caisse.remboursements.length === 0}
                             emptyTitle="Aucun remboursement"
-                            emptyIcon="fa fa-rotate-left"
+                            emptyIcon="ti ti-arrow-back-up"
                             head={
                                 <tr>
                                     <th>Référence</th>
@@ -148,7 +148,7 @@ export default function CaisseShow({ caisse }: CaisseShowProps) {
                         <RelatedRecordsTable
                             isEmpty={caisse.transfers.length === 0}
                             emptyTitle="Aucun transfert"
-                            emptyIcon="fa fa-right-left"
+                            emptyIcon="ti ti-transfer"
                             head={
                                 <tr>
                                     <th>Référence</th>

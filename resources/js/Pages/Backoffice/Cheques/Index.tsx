@@ -183,7 +183,7 @@ export default function ChequesIndex({
         'Déposé': {
             title: 'Remise à la banque',
             message: 'Marquer ce chèque comme déposé à la banque ?',
-            icon: 'fa-building-columns',
+            icon: 'ti-building-bank',
             variant: 'primary',
             confirmLabel: 'Oui, déposer',
             processingLabel: 'Dépôt…',
@@ -191,7 +191,7 @@ export default function ChequesIndex({
         'Encaissé': {
             title: 'Marquer comme encaissé',
             message: 'Confirmer que ce chèque a été encaissé par la banque ?',
-            icon: 'fa-check',
+            icon: 'ti-check',
             variant: 'primary',
             confirmLabel: 'Oui, encaissé',
             processingLabel: 'Enregistrement…',
@@ -199,7 +199,7 @@ export default function ChequesIndex({
         'Rejeté': {
             title: 'Marquer comme rejeté',
             message: 'Confirmer que ce chèque a été rejeté (impayé) par la banque ?',
-            icon: 'fa-xmark',
+            icon: 'ti-x',
             variant: 'danger',
             confirmLabel: 'Oui, rejeté',
             processingLabel: 'Enregistrement…',
@@ -213,7 +213,7 @@ export default function ChequesIndex({
             actions={
                 canCreate ? (
                     <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                        <i className="fa fa-square-plus me-2" />
+                        <i className="ti ti-square-rounded-plus me-2" />
                         Ajouter un chèque
                     </button>
                 ) : undefined
@@ -225,19 +225,19 @@ export default function ChequesIndex({
             <ul className="nav nav-tabs p-0 border-bottom rounded-0 mb-4" role="tablist">
                 <li className="nav-item" role="presentation">
                     <a href="/backoffice/encaissements" className="nav-link d-inline-flex align-items-center">
-                        <i className="fa fa-cash-register-banknote me-2" aria-hidden="true" />
+                        <i className="ti ti-cash-banknote me-2" aria-hidden="true" />
                         Encaissements
                     </a>
                 </li>
                 <li className="nav-item" role="presentation">
                     <a href="/backoffice/encaissements?view=avance" className="nav-link d-inline-flex align-items-center">
-                        <i className="fa fa-circle-dollar-to-slot me-2" aria-hidden="true" />
+                        <i className="ti ti-clock-dollar me-2" aria-hidden="true" />
                         Avances
                     </a>
                 </li>
                 <li className="nav-item" role="presentation">
                     <button type="button" className="nav-link d-inline-flex align-items-center active" aria-current="page">
-                        <i className="fa fa-building-columns me-2" aria-hidden="true" />
+                        <i className="ti ti-building-bank me-2" aria-hidden="true" />
                         Chèques
                     </button>
                 </li>
@@ -334,7 +334,7 @@ export default function ChequesIndex({
                 />
 
                 {cheques.data.length === 0 ? (
-                    <EmptyState title="Aucun chèque" message="Ajoutez votre premier chèque pour commencer." icon="fa fa-file-invoice" />
+                    <EmptyState title="Aucun chèque" message="Ajoutez votre premier chèque pour commencer." icon="ti ti-file-invoice" />
                 ) : (
                     <>
                         <DataTable
@@ -363,7 +363,7 @@ export default function ChequesIndex({
                                     <td>
                                         {cheque.telephone ? (
                                             <a href={`tel:${cheque.telephone}`} className="d-inline-flex align-items-center">
-                                                <i className="fa fa-phone me-1" />
+                                                <i className="ti ti-phone me-1" />
                                                 {cheque.telephone}
                                             </a>
                                         ) : (
@@ -381,14 +381,14 @@ export default function ChequesIndex({
                                     <td className="text-end">
                                         <RowActions>
                                             {canUpdate && (
-                                                <RowActionItem icon="fa-pen" onClick={() => openEdit(cheque)}>
+                                                <RowActionItem icon="ti-edit" onClick={() => openEdit(cheque)}>
                                                     Modifier
                                                 </RowActionItem>
                                             )}
                                             {canUpdate && cheque.statut === 'En possession' && (
                                                 <>
                                                     <RowActionDivider />
-                                                    <RowActionItem icon="fa-building-columns" onClick={() => confirmStatut(cheque, 'Déposé')}>
+                                                    <RowActionItem icon="ti-building-bank" onClick={() => confirmStatut(cheque, 'Déposé')}>
                                                         Remise à la banque
                                                     </RowActionItem>
                                                 </>
@@ -396,10 +396,10 @@ export default function ChequesIndex({
                                             {canUpdate && cheque.statut === 'Déposé' && (
                                                 <>
                                                     <RowActionDivider />
-                                                    <RowActionItem icon="fa-check" onClick={() => confirmStatut(cheque, 'Encaissé')}>
+                                                    <RowActionItem icon="ti-check" onClick={() => confirmStatut(cheque, 'Encaissé')}>
                                                         Marquer encaissé
                                                     </RowActionItem>
-                                                    <RowActionItem icon="fa-xmark" danger onClick={() => confirmStatut(cheque, 'Rejeté')}>
+                                                    <RowActionItem icon="ti-x" danger onClick={() => confirmStatut(cheque, 'Rejeté')}>
                                                         Marquer rejeté
                                                     </RowActionItem>
                                                 </>

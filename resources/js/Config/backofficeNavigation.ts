@@ -16,7 +16,7 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Dashboard'),
                 href: '/backoffice/dashboard',
-                icon: 'fa fa-gauge',
+                icon: 'ti ti-layout-dashboard',
                 matchPaths: ['/backoffice/dashboard'],
                 inertia: true,
             },
@@ -31,7 +31,7 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Registrations'),
                 href: '/backoffice/inscriptions',
-                icon: 'fa fa-clipboard-list',
+                icon: 'ti ti-clipboard-list',
                 permissions: ['registrations.view'],
                 matchPaths: ['/backoffice/inscriptions'],
                 inertia: true,
@@ -39,7 +39,7 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Groups'),
                 href: '/backoffice/groups',
-                icon: 'fa fa-people-group',
+                icon: 'ti ti-users-group',
                 permissions: ['groups.view'],
                 matchPaths: ['/backoffice/groups'],
                 inertia: true,
@@ -50,7 +50,7 @@ export const backofficeNavigation: NavGroup[] = [
             // {
             //     label: t('Groups History'),
             //     href: '/backoffice/groups-historique',
-            //     icon: 'fa fa-box-archive',
+            //     icon: 'ti ti-archive',
             //     permissions: ['groups.view'],
             //     matchPaths: ['/backoffice/groups-historique'],
             //     inertia: true,
@@ -66,7 +66,7 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Students'),
                 href: '/backoffice/students',
-                icon: 'fa fa-school',
+                icon: 'ti ti-school',
                 permissions: ['students.view'],
                 matchPaths: ['/backoffice/students'],
                 inertia: true,
@@ -74,7 +74,7 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Attendance'),
                 href: '/backoffice/seances',
-                icon: 'fa fa-calendar-check',
+                icon: 'ti ti-calendar-check',
                 permissions: ['attendance.view'],
                 matchPaths: ['/backoffice/seances'],
                 inertia: true,
@@ -82,7 +82,7 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Timetable'),
                 href: '/backoffice/emploi-du-temps',
-                icon: 'fa fa-clock',
+                icon: 'ti ti-calendar-time',
                 permissions: ['attendance.view'],
                 matchPaths: ['/backoffice/emploi-du-temps'],
                 inertia: true,
@@ -101,7 +101,7 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Payments'),
                 href: '/backoffice/encaissements',
-                icon: 'fa fa-cash-register-banknote',
+                icon: 'ti ti-cash-banknote',
                 // Chèques (physical-check inventory) has no sidebar entry of
                 // its own — reachable via this page's PageTabs cross-link,
                 // same "stays out of the sidebar" convention as Types de
@@ -116,7 +116,7 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Cash management'),
                 href: '/backoffice/caisses',
-                icon: 'fa fa-cash-register',
+                icon: 'ti ti-cash',
                 permissions: ['cash-registers.view', 'cash-transfers.view'],
                 matchPaths: ['/backoffice/caisses', '/backoffice/caisse-transfers'],
                 inertia: true,
@@ -124,7 +124,7 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Expense management'),
                 href: '/backoffice/depenses',
-                icon: 'fa fa-receipt',
+                icon: 'ti ti-receipt',
                 permissions: ['expenses.view', 'refunds.view'],
                 matchPaths: ['/backoffice/depenses', '/backoffice/remboursements'],
                 inertia: true,
@@ -132,7 +132,7 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Collections management'),
                 href: '/backoffice/recouvrement',
-                icon: 'fa fa-money-bill-transfer',
+                icon: 'ti ti-transfer',
                 permissions: ['collections.view'],
                 matchPaths: ['/backoffice/recouvrement'],
                 inertia: true,
@@ -150,7 +150,7 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Employees'),
                 href: '/backoffice/employees',
-                icon: 'fa fa-users',
+                icon: 'ti ti-users',
                 permissions: ['employees.view'],
                 matchPaths: ['/backoffice/employees'],
                 inertia: true,
@@ -167,7 +167,7 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Stock management'),
                 href: '/backoffice/stock',
-                icon: 'fa fa-boxes-stacked',
+                icon: 'ti ti-packages',
                 permissions: ['stock.view'],
                 matchPaths: ['/backoffice/stock'],
                 inertia: true,
@@ -180,7 +180,7 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Settings'),
                 href: '/backoffice/settings',
-                icon: 'fa fa-gear',
+                icon: 'ti ti-settings',
                 permissions: ['centers.view', 'academic-years.view', 'rooms.view', 'fees.view'],
                 matchPaths: ['/backoffice/settings'],
                 inertia: true,
@@ -188,7 +188,7 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Roles & Permissions'),
                 href: '/backoffice/roles',
-                icon: 'fa fa-shield-halved',
+                icon: 'ti ti-shield-lock',
                 permissions: ['roles.view'],
                 matchPaths: ['/backoffice/roles'],
                 inertia: true,
@@ -196,7 +196,7 @@ export const backofficeNavigation: NavGroup[] = [
             {
                 label: t('Permissions'),
                 href: '/backoffice/permissions',
-                icon: 'fa fa-key',
+                icon: 'ti ti-key',
                 permissions: ['permissions.view'],
                 matchPaths: ['/backoffice/permissions'],
                 inertia: true,
