@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Domain\Payments\Queries;
 
 use App\Models\Cheque;
+use App\Models\Student;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 
 /**
  * Read-model for the Chèques list page — same center/context scoping
@@ -42,7 +44,7 @@ final class GetChequesList
         }
 
         $cheques = Cheque::query()
-            ->with(['student'])
+            ->with(['student', 'agent', 'retournePar', 'encaissements' => fn ($q) => $q->with('student')])
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(function ($q): void {
                 $id = $this->context->etablissementId();
@@ -83,8 +85,42 @@ final class GetChequesList
             'dateEcheance' => $cheque->date_echeance?->toDateString(),
             'statut' => $cheque->statut,
             'note' => $cheque->note ?? '',
+            'agentNom' => $cheque->agent?->nomComplet(),
+            'retourneLe' => $cheque->retourne_le?->toDateTimeString(),
+            'retourneParNom' => $cheque->retournePar?->nomComplet(),
+            'encaissements' => $cheque->encaissements->map(fn ($e): array => [
+                'id' => $e->id,
+                'reference' => $e->reference,
+                'montant' => number_format((float) $e->montant, 2, '.', ''),
+                'studentId' => $e->student_id,
+                'studentNom' => $e->student?->nomComplet(),
+            ])->values()->all(),
         ]);
 
         return $cheques;
+    }
+
+    /**
+     * Students with a parent/guardian on file, for the "Source: Parents"
+     * owner picker — selecting one fills `proprietaire_nom` from the
+     * student's inline parent_nom (no separate parents table, see
+     * Student::PARENT_RELATIONS). Excludes students with no parent name.
+     *
+     * @return Collection<int, array{id:int, studentNom:string, parentNom:string, parentRelation:?string}>
+     */
+    public function parentOptions(User $user): Collection
+    {
+        return Student::query()
+            ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+            ->whereNotNull('parent_nom')
+            ->where('parent_nom', '!=', '')
+            ->orderBy('parent_nom')
+            ->get()
+            ->map(fn (Student $s): array => [
+                'id' => $s->id,
+                'studentNom' => $s->nomComplet(),
+                'parentNom' => $s->parent_nom,
+                'parentRelation' => $s->parent_relation,
+            ]);
     }
 }

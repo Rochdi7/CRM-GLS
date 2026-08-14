@@ -10,9 +10,10 @@ use Illuminate\Validation\Rule;
 
 /**
  * "Ajouter un chèque" — source drives the owner shape: Étudiant requires a
- * student_id (searchable picker), Parents/Autre require a free-text
- * proprietaire_nom instead. Banque is a name string suggested from the
- * banques catalog (same free-text convention as encaissements.banque).
+ * student_id (searchable picker), Parents requires a proprietaire_nom
+ * picked from a student's parent on file instead. Banque is a name string
+ * suggested from the banques catalog (same free-text convention as
+ * encaissements.banque).
  */
 final class StoreChequeRequest extends FormRequest
 {
@@ -33,7 +34,7 @@ final class StoreChequeRequest extends FormRequest
                 'nullable', 'exists:students,id',
             ],
             'proprietaire_nom' => [
-                Rule::requiredIf(in_array($this->input('source'), [Cheque::SOURCE_PARENTS, Cheque::SOURCE_AUTRE], true)),
+                Rule::requiredIf($this->input('source') === Cheque::SOURCE_PARENTS),
                 'nullable', 'string', 'max:150',
             ],
             'numero_cheque' => ['required', 'string', 'max:50'],

@@ -647,4 +647,43 @@ final class EncaissementsInertiaCrudTest extends TestCase
 
         $this->assertSame(0, Encaissement::count());
     }
+
+    public function test_recu_can_be_emailed_to_a_given_address(): void
+    {
+        \Illuminate\Support\Facades\Mail::fake();
+
+        $user = $this->userWith('payments.view');
+        $this->actingAs($user);
+        [$student, , $fee] = $this->enrolledStudentWithFee(1500);
+        $encaissement = Encaissement::create([
+            'reference' => 'ENC-MAIL', 'student_id' => $student->id, 'inscription_fee_id' => $fee->id,
+            'caisse_id' => Caisse::factory()->create(['etablissement_id' => $this->centre->id])->id,
+            'agent_id' => $user->employee->id, 'montant' => 1500, 'methode' => 'Espèces', 'date_paiement' => '2025-09-20',
+        ]);
+
+        $this->post(route('backoffice.encaissements.recu.email', $encaissement), [
+            'email' => 'parent@example.test',
+        ])->assertRedirect();
+
+        \Illuminate\Support\Facades\Mail::assertSent(
+            \App\Domain\Payments\Mail\EncaissementRecuMail::class,
+            fn ($mail) => $mail->hasTo('parent@example.test'),
+        );
+    }
+
+    public function test_recu_email_requires_a_valid_address(): void
+    {
+        $user = $this->userWith('payments.view');
+        $this->actingAs($user);
+        [$student, , $fee] = $this->enrolledStudentWithFee(1500);
+        $encaissement = Encaissement::create([
+            'reference' => 'ENC-MAIL2', 'student_id' => $student->id, 'inscription_fee_id' => $fee->id,
+            'caisse_id' => Caisse::factory()->create(['etablissement_id' => $this->centre->id])->id,
+            'agent_id' => $user->employee->id, 'montant' => 1500, 'methode' => 'Espèces', 'date_paiement' => '2025-09-20',
+        ]);
+
+        $this->post(route('backoffice.encaissements.recu.email', $encaissement), [
+            'email' => 'not-an-email',
+        ])->assertSessionHasErrors('email');
+    }
 }

@@ -21,11 +21,13 @@ return new class extends Migration
         Schema::create('cheques', function (Blueprint $table): void {
             $table->id();
             $table->string('reference', 20)->unique();
-            // Étudiant | Parents | Autre — who physically wrote the chèque.
+            // Étudiant | Parents — who physically wrote the chèque.
             $table->string('source', 20);
             // Set when source = Étudiant (searchable picker); NULL otherwise.
             $table->foreignId('student_id')->nullable()->constrained('students')->restrictOnDelete();
-            // Free-text owner name when source = Parents/Autre.
+            // Owner name when source = Parents, picked from a student's
+            // parent on file (Student::parent_nom) — free text at the DB
+            // layer, but the UI only offers known parents (§ ChequesIndex).
             $table->string('proprietaire_nom', 150)->nullable();
             $table->string('numero_cheque', 50);
             $table->decimal('montant', 12, 2);

@@ -34,7 +34,7 @@ final class UpdateChequeRequest extends FormRequest
                 'nullable', 'exists:students,id',
             ],
             'proprietaire_nom' => [
-                Rule::requiredIf(in_array($this->input('source'), [Cheque::SOURCE_PARENTS, Cheque::SOURCE_AUTRE], true)),
+                Rule::requiredIf($this->input('source') === Cheque::SOURCE_PARENTS),
                 'nullable', 'string', 'max:150',
             ],
             'numero_cheque' => ['required', 'string', 'max:50'],

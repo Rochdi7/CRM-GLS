@@ -30,12 +30,10 @@ class Cheque extends Model
 
     public const SOURCE_ETUDIANT = 'Étudiant';
     public const SOURCE_PARENTS = 'Parents';
-    public const SOURCE_AUTRE = 'Autre';
 
     public const SOURCES = [
         self::SOURCE_ETUDIANT,
         self::SOURCE_PARENTS,
-        self::SOURCE_AUTRE,
     ];
 
     public const TYPE_GARANTIE = 'Garantie (À encaisser)';
@@ -63,6 +61,7 @@ class Cheque extends Model
         'numero_cheque', 'montant', 'banque', 'date_reception',
         'type', 'date_echeance', 'statut', 'note',
         'etablissement_id', 'agent_id',
+        'retourne_le', 'retourne_par_id',
     ];
 
     protected function casts(): array
@@ -71,13 +70,14 @@ class Cheque extends Model
             'montant' => 'decimal:2',
             'date_reception' => 'date',
             'date_echeance' => 'date',
+            'retourne_le' => 'datetime',
         ];
     }
 
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['montant', 'statut', 'type', 'numero_cheque', 'student_id'])
+            ->logOnly(['montant', 'statut', 'type', 'numero_cheque', 'student_id', 'retourne_le', 'retourne_par_id'])
             ->logOnlyDirty()
             ->useLogName('cheque');
     }
@@ -95,6 +95,12 @@ class Cheque extends Model
     public function agent(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'agent_id');
+    }
+
+    /** Employee who physically handed a rejected chèque back to its owner. */
+    public function retournePar(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'retourne_par_id');
     }
 
     /** Payments made using this chèque — their montant sum is the used amount. */
@@ -119,5 +125,10 @@ class Cheque extends Model
     public function montantRestant(): float
     {
         return max(0.0, (float) $this->montant - $this->montantUtilise());
+    }
+
+    public function estRetourne(): bool
+    {
+        return $this->retourne_le !== null;
     }
 }

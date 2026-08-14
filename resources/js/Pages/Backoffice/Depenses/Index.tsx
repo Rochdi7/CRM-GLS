@@ -1,5 +1,5 @@
 import { Link, router, useForm, usePage } from '@inertiajs/react';
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
@@ -230,6 +230,35 @@ export default function DepensesIndex({
         setEditingRemboursement(null);
         setStudentPayments([]);
     }
+
+    // Pre-fill + auto-open the refund modal when arriving from the Chèques
+    // page ("Rejeté" chèque that funded exactly one encaissement) — the
+    // query string is the only channel between the two pages/routes, the
+    // refund itself is still a normal reviewed submit, nothing is
+    // auto-created (§11 money invariants: refunds are always a manual,
+    // user-confirmed EnregistrerRemboursement call).
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const prefillBeneficiaire = params.get('prefill_beneficiaire_id');
+        const prefillEncaissement = params.get('prefill_encaissement_id');
+        const prefillMontant = params.get('prefill_montant');
+        const prefillMotif = params.get('prefill_motif');
+
+        if (!canViewRemboursements || prefillBeneficiaire === null) {
+            return;
+        }
+
+        remboursementForm.setData({
+            beneficiaire_id: Number(prefillBeneficiaire),
+            encaissement_id: prefillEncaissement !== null ? Number(prefillEncaissement) : '',
+            montant: prefillMontant ?? '',
+            date_remboursement: new Date().toISOString().slice(0, 10),
+            motif: prefillMotif ?? '',
+            note: '',
+        });
+        setShowRemboursementModal(true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     async function onBeneficiaireChange(studentId: number | '') {
         remboursementForm.setData((previous) => ({

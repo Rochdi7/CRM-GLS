@@ -110,8 +110,10 @@ final class GetEncaissementsList
                 'agent' => $e->agent?->nomComplet(),
                 'montantUtilise' => $utilise !== null ? number_format($utilise, 2, '.', '') : null,
                 'montantRestant' => $utilise !== null ? number_format(max(0.0, (float) $e->montant - $utilise), 2, '.', '') : null,
+                'studentEmail' => $e->student?->email,
                 'showUrl' => route('backoffice.encaissements.show', $e),
                 'recuUrl' => route('backoffice.encaissements.recu', $e),
+                'recuEmailUrl' => route('backoffice.encaissements.recu.email', $e),
             ];
         });
 

@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Backoffice;
 use App\Domain\Payments\Actions\AppliquerAvance;
 use App\Domain\Payments\Actions\ConvertirEncaissementsEnAvance;
 use App\Domain\Payments\Actions\EnregistrerEncaissement;
+use App\Domain\Payments\Mail\EncaissementRecuMail;
 use App\Domain\Payments\Queries\GetEncaissementDetails;
 use App\Domain\Payments\Queries\GetEncaissementsList;
 use App\Domain\Payments\Queries\GetInscriptionPayments;
@@ -15,6 +16,7 @@ use App\Domain\Settings\Queries\GetBanquesList;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Encaissements\ApplyAvanceRequest;
 use App\Http\Requests\Backoffice\Encaissements\ConvertAvanceRequest;
+use App\Http\Requests\Backoffice\Encaissements\SendRecuEmailRequest;
 use App\Http\Requests\Backoffice\Encaissements\StoreAvanceRequest;
 use App\Http\Requests\Backoffice\Encaissements\StoreEncaissementRequest;
 use App\Http\Requests\Backoffice\Encaissements\UpdateEncaissementRequest;
@@ -26,6 +28,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -343,6 +346,29 @@ final class EncaissementController extends Controller
             'niveau' => $inscription?->group?->nom ?? $encaissement->student?->niveau,
             'fraisNom' => $encaissement->fee?->nom ?? 'Avance',
         ]);
+    }
+
+    /**
+     * Emails the same receipt (rendered as a PDF, A5) to a given address —
+     * defaults to the student's own email in the UI prompt, but any address
+     * can be typed since not every student has one on file. Reuses the
+     * "recu" Blade view via EncaissementRecuMail (dompdf attachment); mail
+     * is `log` in local dev per project convention (§15).
+     */
+    public function sendRecuEmail(SendRecuEmailRequest $request, Encaissement $encaissement): RedirectResponse
+    {
+        $this->authorize('view', $encaissement);
+
+        $encaissement->load([
+            'student.etablissement',
+            'fee.inscription.anneeScolaire',
+            'fee.inscription.group',
+            'fee.inscription.etablissement',
+        ]);
+
+        Mail::to($request->validated('email'))->send(new EncaissementRecuMail($encaissement));
+
+        return back()->with('success', __('Receipt sent by email.'));
     }
 
     public function show(Encaissement $encaissement, GetEncaissementDetails $getEncaissementDetails): Response

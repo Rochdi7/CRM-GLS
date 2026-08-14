@@ -348,6 +348,8 @@ Route::prefix('backoffice')
                 ->middleware('permission:payments.update')->name('encaissements.update');
             Route::get('encaissements/{encaissement}/recu', [EncaissementController::class, 'recu'])
                 ->middleware('permission:payments.view')->name('encaissements.recu');
+            Route::post('encaissements/{encaissement}/recu/email', [EncaissementController::class, 'sendRecuEmail'])
+                ->middleware('permission:payments.view')->name('encaissements.recu.email');
             Route::get('encaissements/{encaissement}', [EncaissementController::class, 'show'])
                 ->name('encaissements.show');
             Route::get('students/{student}/inscriptions-for-payment', [EncaissementController::class, 'studentInscriptions'])
@@ -390,6 +392,11 @@ Route::prefix('backoffice')
                 ->middleware('permission:cheques.update')->name('cheques.update');
             Route::patch('cheques/{cheque}/statut', [ChequeController::class, 'updateStatut'])
                 ->middleware('permission:cheques.update')->name('cheques.update-statut');
+            // Records that a rejected chèque was physically handed back to
+            // its owner — off-ledger bookkeeping only, same permission as
+            // every other chèque lifecycle move.
+            Route::patch('cheques/{cheque}/retour', [ChequeController::class, 'markRetourne'])
+                ->middleware('permission:cheques.update')->name('cheques.retour');
             // Feeds the "Payer avec un chèque" dropdown in the payment form.
             Route::get('students/{student}/cheques', [ChequeController::class, 'studentCheques'])
                 ->name('students.cheques');

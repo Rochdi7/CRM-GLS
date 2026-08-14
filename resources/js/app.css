@@ -109,9 +109,15 @@ html[data-theme='dark'] .select2-dropdown {
         width: 90px;
     }
 }
+/*
+ * On mobile the theme sizes BOTH .logo img and .dark-logo img at 140px. Only
+ * the light one was being overridden here, so dark mode kept rendering the
+ * full-size logo — it has to be listed explicitly, not inherited.
+ */
 @media (max-width: 991.98px) {
-    .header .header-left .logo img {
-        width: 70px;
+    .header .header-left .logo img,
+    .header .header-left .dark-logo img {
+        width: 62px;
     }
 }
 
@@ -155,8 +161,319 @@ html[data-theme='dark'] .select2-dropdown {
      */
     z-index: 1050;
 }
+/*
+ * The avatar menu (Header.tsx) is measured and positioned `fixed` for the
+ * same reason as the context switcher above — and needs the same
+ * `--gls-menu-left` escape hatch, because the theme's
+ * `.header .dropdown-menu { left: unset !important; right: 0 !important }`
+ * would otherwise drag it to the viewport's right edge. On mobile it also
+ * has to escape the context bar's `overflow: hidden`, which clips any
+ * absolutely-positioned child.
+ */
+.gls-avatar-menu.show {
+    left: var(--gls-menu-left, 0) !important;
+    right: auto !important;
+    /* Same reasoning as .gls-context-switcher .dropdown-menu — see note above. */
+    z-index: 1050;
+}
+
 .header {
     z-index: 1042 !important;
+}
+
+/*
+ * Mobile header: the theme hides the whole user menu below 992px
+ * (`.header .header-user .user-menu { display: none }`, style.css from
+ * _header.scss) because its own demo puts only search/notification icons
+ * there — things it deems droppable on a phone. This app puts the context
+ * switcher (académic year + centre) in that container, and context is not
+ * optional: every list, form and total on the page is scoped by it (§11),
+ * so a user who can't see or change it on mobile can't tell which centre's
+ * data they're looking at. Re-show it and let it flow onto its own row
+ * under the logo/burger line instead of competing for that row's width —
+ * `.header-user` is `display: contents`, so the row break has to come from
+ * the flex item itself (width: 100%), not from a wrapper.
+ */
+/*
+ * The "⋯" toggle only exists for the mobile collapsed bar — on desktop the
+ * context row is always visible, so the button would be dead weight.
+ */
+.gls-mobile-bar-toggle {
+    display: none;
+}
+
+/*
+ * Mobile burger (#mobile_btn > .bar-icon). The theme ships it oversized —
+ * 31px-wide, 3px-thick bars with 7px gaps, offset by `margin-top: 20px`
+ * inside a 60px button, which reads as a chunky, slightly-high-sitting icon.
+ * Slim it down and centre it properly.
+ *
+ * The theme also ships a burger→X animation, but it's keyed on
+ * `.menu-opened .slide-nav`; BackofficeLayout.tsx only ever sets
+ * `slide-nav` (on .main-wrapper), so that rule never matches and the icon
+ * stays a static burger while the drawer is open. The animation below is
+ * keyed on `.slide-nav` alone so it actually fires.
+ */
+@media (max-width: 991.98px) {
+    /*
+     * The theme absolutely-positions this at `top: 0` with `height: 60px` /
+     * `line-height: 60px` inside what is a 56px header row, so the glyph
+     * lands low and off-centre against the logo. Make the button a flex box
+     * exactly as tall as the row and centre the icon in it — no line-height
+     * arithmetic, so it stays centred if the row height ever changes.
+     */
+    .header .mobile_btn {
+        width: 48px;
+        height: 56px;
+        line-height: 1;
+        padding: 0 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        /* Round ripple-ish affordance on press, matching the theme's blue. */
+        border-radius: 8px;
+        transition: background-color 0.2s ease;
+    }
+
+    .header .mobile_btn:active {
+        background-color: rgba(61, 94, 225, 0.08);
+    }
+
+    .header .bar-icon {
+        /*
+         * Drop the theme's `margin-top: 20px` nudge and size the block to its
+         * own content so the three bars can be absolutely positioned against
+         * it. Centring is the flex parent's job (.mobile_btn above) — doing
+         * it here too would shift the icon up by half its height again.
+         */
+        width: 22px;
+        height: 16px;
+        margin-top: 0;
+        position: relative;
+        display: block;
+        flex: 0 0 auto;
+    }
+
+    .header .bar-icon span {
+        width: 22px;
+        height: 2px;
+        margin-bottom: 0;
+        border-radius: 2px;
+        float: none;
+        position: absolute;
+        left: 0;
+        /*
+         * `cubic-bezier` overshoot gives the collapse/rotate a little snap
+         * rather than a linear slide.
+         */
+        transition:
+            transform 0.28s cubic-bezier(0.68, -0.3, 0.32, 1.3),
+            opacity 0.18s ease,
+            width 0.28s ease;
+    }
+
+    .header .bar-icon span:first-child {
+        top: 0;
+    }
+
+    .header .bar-icon span:nth-child(2) {
+        top: 7px;
+        /* The theme's own half-width middle bar — kept, it reads as deliberate. */
+        width: 14px;
+    }
+
+    .header .bar-icon span:last-child {
+        top: 14px;
+    }
+
+    /*
+     * Open state: outer bars converge on the centre line and cross; the
+     * middle bar fades out sideways. Keyed on .slide-nav (see note above).
+     */
+    .slide-nav .header .bar-icon span:first-child {
+        transform: translateY(7px) rotate(45deg);
+    }
+
+    .slide-nav .header .bar-icon span:nth-child(2) {
+        opacity: 0;
+        width: 0;
+    }
+
+    .slide-nav .header .bar-icon span:last-child {
+        transform: translateY(-7px) rotate(-45deg);
+    }
+}
+
+@media (max-width: 991.98px) {
+    /*
+     * The bar is an overlay dropping out of the header rather than a second
+     * header row: the header keeps its native 56px, so .page-wrapper and
+     * .sidebar offsets stay untouched and no vertical space is spent on
+     * every page. Opening it never reflows the content underneath.
+     */
+    .gls-mobile-bar-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: absolute;
+        right: 16px;
+        top: 0;
+        height: 56px;
+        width: 40px;
+        font-size: 20px;
+        color: #6a7287;
+        z-index: 1;
+    }
+
+    .header .header-user .user-menu {
+        /*
+         * Beats the theme's `display: none` (style.css) only because app.css
+         * loads after style.css — same specificity, later wins.
+         */
+        display: flex;
+        width: 100%;
+        position: absolute;
+        top: 56px;
+        left: 0;
+        padding: 0 16px;
+        height: 56px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        /*
+         * Everything in this row must stay on ONE line. Without this the
+         * theme/avatar buttons wrap onto a second line and spill out of the
+         * bar onto the page title.
+         */
+        flex-wrap: nowrap;
+        background: #fff;
+        border-bottom: 1px solid #e9edf4;
+
+        /*
+         * Collapsed by default; .gls-bar-open (React state) reveals it.
+         * visibility/opacity rather than `display: none` so the transition
+         * runs, and so the collapsed bar can't be reached by the keyboard.
+         *
+         * ⚠ Deliberately NO `transform` and NO `overflow: hidden` here. Both
+         * break the dropdowns this bar contains: a transformed element
+         * becomes the containing block for its `position: fixed`
+         * descendants, so the avatar/context menus would be positioned
+         * against this 56px bar and then clipped by its overflow instead of
+         * escaping to the viewport. The slide is done with `top` (which
+         * animates fine and creates no containing block) and the row is kept
+         * on one line by flex-wrap + truncation instead of by clipping.
+         */
+        visibility: hidden;
+        opacity: 0;
+        top: 48px;
+        transition: opacity 0.15s ease, top 0.15s ease, visibility 0.15s;
+    }
+
+    .header .header-user .user-menu.gls-bar-open {
+        visibility: visible;
+        opacity: 1;
+        top: 56px;
+    }
+
+    /*
+     * Match the header's own dark surface (style.css: `html[data-theme=dark]
+     * .header { background: #0F0C1C; border-bottom-color: #1B1632 }`) so the
+     * bar doesn't drop as a white slab in dark mode. Both selectors the theme
+     * ships are covered — Header.tsx sets data-theme, but .darkmode is the
+     * theme's own alternate hook.
+     */
+    html .darkmode .header .header-user .user-menu,
+    html[data-theme='dark'] .header .header-user .user-menu {
+        background: #0f0c1c;
+        border-bottom-color: #1b1632;
+    }
+
+    /*
+     * The switcher sits inside a `.nav-item.me-auto` wrapper (Header.tsx),
+     * so the shrink has to be granted on that flex child too — `min-width:0`
+     * on an inner element is useless while its parent still refuses to go
+     * below content width. `me-auto` is also neutralised: its auto margin
+     * fights the row's own `justify-content: space-between`.
+     */
+    .header .header-user .user-menu > .nav-item {
+        min-width: 0;
+        flex: 1 1 auto;
+        margin-right: 0 !important;
+    }
+
+    /*
+     * The switcher's two buttons share the row with the theme/avatar
+     * controls. `min-width: 0` is what actually lets them shrink — a flex
+     * item's default `min-width: auto` refuses to go below its content
+     * width, which is what forced the wrap. The component also sets its own
+     * `flex-wrap: wrap` utility class (fine on desktop), overridden here so
+     * the year and centre buttons stay side by side.
+     */
+    .header .header-user .user-menu .gls-context-switcher {
+        min-width: 0;
+        flex: 1 1 auto;
+        flex-wrap: nowrap !important;
+        gap: 0.375rem !important;
+    }
+
+    /*
+     * Both dropdowns share the available width evenly and are allowed to
+     * shrink below their content — without `min-width: 0` here the button's
+     * text would keep the column at its natural width and force the wrap
+     * back, no matter what the ancestors allow.
+     */
+    .header .header-user .user-menu .gls-context-switcher > .dropdown {
+        min-width: 0;
+        flex: 1 1 0;
+    }
+
+    /*
+     * Compact buttons: the theme's default .btn padding/font is sized for a
+     * desktop toolbar and is most of why two of them can't share a phone
+     * row. `width: 100%` + `min-width: 0` makes the button fill (and shrink
+     * with) its column so the label can truncate instead of pushing out.
+     */
+    .header .header-user .user-menu .gls-context-switcher .btn {
+        width: 100%;
+        min-width: 0;
+        padding: 0.3rem 0.5rem;
+        font-size: 0.8125rem;
+    }
+
+    /*
+     * The label is the part that must truncate. Ellipsis needs the overflow
+     * on the text element itself — a flex item, hence its own `min-width: 0`
+     * — not on the button, whose icon must stay visible.
+     */
+    .header .header-user .user-menu .gls-context-switcher .btn > span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* Tighten the icon gutter; `me-2` (0.5rem) is wasteful at this size. */
+    .header .header-user .user-menu .gls-context-switcher .btn > i {
+        margin-right: 0.25rem !important;
+        flex: 0 0 auto;
+    }
+
+    /*
+     * Bootstrap's .dropdown-toggle caret is a fixed 0.3em triangle plus a
+     * 0.255em margin — pure noise once the label is already truncating.
+     */
+    .header .header-user .user-menu .gls-context-switcher .dropdown-toggle::after {
+        margin-left: 0.2rem;
+        flex: 0 0 auto;
+    }
+
+    /*
+     * The dark-mode toggle and avatar are fixed-size affordances — never let
+     * them be the thing that shrinks or wraps when a centre name is long.
+     */
+    .header .header-user .user-menu > .d-flex {
+        flex: 0 0 auto;
+    }
 }
 
 /*

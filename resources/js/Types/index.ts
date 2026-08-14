@@ -1201,9 +1201,12 @@ export interface EncaissementRow {
     montantUtilise: MoneyDisplay | null;
     /** Only populated on the Avances tab — montant minus montantUtilise. */
     montantRestant: MoneyDisplay | null;
+    studentEmail: string | null;
     showUrl: string;
     /** Printable receipt page — append ?format=a6|a5|a5x2. */
     recuUrl: string;
+    /** POST target to email the A5 receipt (SendRecuEmailRequest: { email }). */
+    recuEmailUrl: string;
 }
 
 export interface EncaissementsFilters {
@@ -1233,6 +1236,14 @@ export interface EncaissementsPageProps {
 }
 
 /** One row of the Chèques list — mirrors GetChequesList's ->through() mapping exactly. */
+export interface ChequeLinkedEncaissement {
+    id: number;
+    reference: string;
+    montant: MoneyDisplay;
+    studentId: number | null;
+    studentNom: string | null;
+}
+
 export interface ChequeRow {
     id: number;
     reference: string;
@@ -1251,6 +1262,10 @@ export interface ChequeRow {
     dateEcheance: string | null;
     statut: string;
     note: string;
+    agentNom: string | null;
+    retourneLe: string | null;
+    retourneParNom: string | null;
+    encaissements: ChequeLinkedEncaissement[];
 }
 
 export interface ChequesFilters {
@@ -1264,6 +1279,14 @@ export interface ChequesFilters {
     perPage: number;
 }
 
+/** A student with a parent/guardian on file — feeds the "Source: Parents" owner picker. */
+export interface ChequeParentOption {
+    id: number;
+    studentNom: string;
+    parentNom: string;
+    parentRelation: string | null;
+}
+
 export interface ChequesPageProps {
     cheques: PaginatedData<ChequeRow>;
     filters: ChequesFilters;
@@ -1273,6 +1296,7 @@ export interface ChequesPageProps {
     statuts: string[];
     banques: string[];
     students: FinanceOption[];
+    parents: ChequeParentOption[];
     canCreate: boolean;
     canUpdate: boolean;
     [key: string]: unknown;

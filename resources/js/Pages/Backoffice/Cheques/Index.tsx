@@ -72,6 +72,7 @@ export default function ChequesIndex({
     statuts,
     banques,
     students,
+    parents,
     canCreate,
     canUpdate,
 }: ChequesPageProps) {
@@ -81,6 +82,15 @@ export default function ChequesIndex({
     const [statutTarget, setStatutTarget] = useState<{ cheque: ChequeRow; statut: 'Déposé' | 'Encaissé' | 'Rejeté' } | null>(null);
     const [statutError, setStatutError] = useState<string | undefined>(undefined);
     const [statutProcessing, setStatutProcessing] = useState(false);
+    // After a chèque is marked Rejeté, offer to open the refund form —
+    // pre-filled only when it funded exactly one encaissement (the common
+    // case); with zero or several linked payments the user is pointed to
+    // record the refund(s) manually from the Remboursements tab instead.
+    const [rejectedCheque, setRejectedCheque] = useState<ChequeRow | null>(null);
+    const [retourTarget, setRetourTarget] = useState<ChequeRow | null>(null);
+    const [retourError, setRetourError] = useState<string | undefined>(undefined);
+    const [retourProcessing, setRetourProcessing] = useState(false);
+    const [detailsCheque, setDetailsCheque] = useState<ChequeRow | null>(null);
 
     const form = useForm<ChequeFormState>(emptyForm());
 
@@ -89,6 +99,10 @@ export default function ChequesIndex({
     const statutFilterOptions: SelectOption[] = statuts.map((s) => ({ value: s, label: s }));
     const banqueOptions: SelectOption[] = banques.map((b) => ({ value: b, label: b }));
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.nom }));
+    const parentOptions: SelectOption[] = parents.map((p) => ({
+        value: p.parentNom,
+        label: `${p.parentNom}${p.parentRelation ? ` (${p.parentRelation})` : ''} — ${p.studentNom}`,
+    }));
 
     function reload(nextFilters: Partial<typeof filters>) {
         router.get(
@@ -161,20 +175,68 @@ export default function ChequesIndex({
             return;
         }
 
+        const target = statutTarget;
         setStatutProcessing(true);
         router.patch(
-            `/backoffice/cheques/${statutTarget.cheque.id}/statut`,
-            { statut: statutTarget.statut },
+            `/backoffice/cheques/${target.cheque.id}/statut`,
+            { statut: target.statut },
             {
                 preserveScroll: true,
                 onSuccess: () => {
                     setStatutTarget(null);
                     setStatutError(undefined);
+                    if (target.statut === 'Rejeté') {
+                        setRejectedCheque(target.cheque);
+                    }
                 },
                 onError: (errors) => {
                     setStatutError(errors.statut ?? 'Action impossible.');
                 },
                 onFinish: () => setStatutProcessing(false),
+            },
+        );
+    }
+
+    /** Jumps to the Remboursements tab, pre-filled when the chèque funded exactly one encaissement. */
+    function goToRemboursement(cheque: ChequeRow) {
+        const params = new URLSearchParams({ tab: 'remboursements' });
+        const single = cheque.encaissements.length === 1 ? cheque.encaissements[0] : null;
+
+        if (single) {
+            params.set('prefill_beneficiaire_id', String(single.studentId ?? ''));
+            params.set('prefill_encaissement_id', String(single.id));
+            params.set('prefill_montant', single.montant);
+            params.set('prefill_motif', `Chèque ${cheque.numeroCheque} rejeté`);
+        }
+
+        setRejectedCheque(null);
+        router.get(`/backoffice/depenses?${params.toString()}`);
+    }
+
+    function confirmRetour(cheque: ChequeRow) {
+        setRetourTarget(cheque);
+        setRetourError(undefined);
+    }
+
+    function handleRetourConfirm() {
+        if (!retourTarget) {
+            return;
+        }
+
+        setRetourProcessing(true);
+        router.patch(
+            `/backoffice/cheques/${retourTarget.id}/retour`,
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setRetourTarget(null);
+                    setRetourError(undefined);
+                },
+                onError: (errors) => {
+                    setRetourError(errors.statut ?? 'Action impossible.');
+                },
+                onFinish: () => setRetourProcessing(false),
             },
         );
     }
@@ -376,7 +438,19 @@ export default function ChequesIndex({
                                     <td>{cheque.type}</td>
                                     <td>{cheque.dateEcheance ?? '—'}</td>
                                     <td>
-                                        <StatusBadge label={cheque.statut} variant={statutVariant(cheque.statut)} dot />
+                                        <div className="d-flex align-items-center gap-2">
+                                            <StatusBadge label={cheque.statut} variant={statutVariant(cheque.statut)} dot />
+                                            {cheque.statut === 'Rejeté' && (
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-link p-0"
+                                                    title="Voir les responsables"
+                                                    onClick={() => setDetailsCheque(cheque)}
+                                                >
+                                                    <i className={`ti ${cheque.retourneLe ? 'ti-circle-check text-success' : 'ti-info-circle text-muted'}`} />
+                                                </button>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className="text-end">
                                         <RowActions>
@@ -402,6 +476,21 @@ export default function ChequesIndex({
                                                     <RowActionItem icon="ti-x" danger onClick={() => confirmStatut(cheque, 'Rejeté')}>
                                                         Marquer rejeté
                                                     </RowActionItem>
+                                                </>
+                                            )}
+                                            {canUpdate && cheque.statut === 'Rejeté' && (
+                                                <>
+                                                    <RowActionDivider />
+                                                    {cheque.encaissements.length > 0 && (
+                                                        <RowActionItem icon="ti-arrow-back-up" onClick={() => goToRemboursement(cheque)}>
+                                                            Rembourser
+                                                        </RowActionItem>
+                                                    )}
+                                                    {!cheque.retourneLe && (
+                                                        <RowActionItem icon="ti-corner-up-left" onClick={() => confirmRetour(cheque)}>
+                                                            Marquer comme restitué
+                                                        </RowActionItem>
+                                                    )}
                                                 </>
                                             )}
                                         </RowActions>
@@ -450,14 +539,15 @@ export default function ChequesIndex({
                                     error={form.errors.student_id}
                                 />
                             ) : (
-                                <FormField
-                                    id="chq-proprietaire"
+                                <SelectField
+                                    id="chq-proprietaire-parent"
                                     label="Propriétaire"
                                     required
+                                    options={parentOptions}
+                                    placeholder="Choisir un parent"
                                     value={form.data.proprietaire_nom}
                                     onChange={(event) => form.setData('proprietaire_nom', event.target.value)}
                                     error={form.errors.proprietaire_nom}
-                                    placeholder="Nom du propriétaire"
                                 />
                             )}
                         </div>
@@ -558,6 +648,112 @@ export default function ChequesIndex({
                     setStatutError(undefined);
                 }}
             />
+
+            <ConfirmDialog
+                show={retourTarget !== null}
+                title="Restitution du chèque"
+                recordLabel={retourTarget?.numeroCheque ?? ''}
+                message="Confirmer que ce chèque a été restitué à son propriétaire ?"
+                icon="ti-corner-up-left"
+                variant="primary"
+                confirmLabel="Oui, restitué"
+                processingLabel="Enregistrement…"
+                error={retourError}
+                processing={retourProcessing}
+                onConfirm={handleRetourConfirm}
+                onCancel={() => {
+                    setRetourTarget(null);
+                    setRetourError(undefined);
+                }}
+            />
+
+            {/* After marking a chèque Rejeté: offer the refund follow-up. Never
+                auto-created — EnregistrerRemboursement always stays a reviewed,
+                user-submitted form (§11 money invariants); this only jumps
+                there, pre-filled when there's exactly one linked encaissement. */}
+            <Modal
+                show={rejectedCheque !== null}
+                title="Chèque rejeté"
+                onClose={() => setRejectedCheque(null)}
+                footer={
+                    <>
+                        <button type="button" className="btn btn-light" onClick={() => setRejectedCheque(null)}>
+                            Plus tard
+                        </button>
+                        {rejectedCheque && rejectedCheque.encaissements.length > 0 && (
+                            <button type="button" className="btn btn-primary" onClick={() => goToRemboursement(rejectedCheque)}>
+                                <i className="ti ti-arrow-back-up me-2" />
+                                Rembourser maintenant
+                            </button>
+                        )}
+                    </>
+                }
+            >
+                {rejectedCheque && rejectedCheque.encaissements.length === 0 && (
+                    <p className="mb-0">
+                        Ce chèque n'est lié à aucun encaissement — aucun remboursement n'est nécessaire.
+                    </p>
+                )}
+                {rejectedCheque && rejectedCheque.encaissements.length === 1 && (
+                    <p className="mb-0">
+                        Ce chèque a été utilisé pour payer l'encaissement{' '}
+                        <code>{rejectedCheque.encaissements[0].reference}</code>
+                        {' '}({Number(rejectedCheque.encaissements[0].montant).toFixed(2)} DH). Un remboursement est
+                        essentiel pour régulariser ce paiement.
+                    </p>
+                )}
+                {rejectedCheque && rejectedCheque.encaissements.length > 1 && (
+                    <p className="mb-0">
+                        Ce chèque a été utilisé pour payer {rejectedCheque.encaissements.length} encaissements
+                        différents. Un remboursement est essentiel pour chacun — enregistrez-les un par un depuis
+                        l'onglet Remboursements.
+                    </p>
+                )}
+            </Modal>
+
+            {/* Responsibility popup for a rejected chèque: who originally
+                received it (agent_id) and who returned it to its owner, if
+                already done — both already tracked (agent_id at creation,
+                retourne_par_id via the "Marquer comme restitué" action). */}
+            <Modal
+                show={detailsCheque !== null}
+                title="Responsables du chèque"
+                onClose={() => setDetailsCheque(null)}
+                footer={
+                    <button type="button" className="btn btn-light" onClick={() => setDetailsCheque(null)}>
+                        Fermer
+                    </button>
+                }
+            >
+                {detailsCheque && (
+                    <div className="d-flex flex-column gap-3">
+                        <div>
+                            <div className="text-muted small mb-1">Chèque</div>
+                            <div className="fw-medium">
+                                <code>{detailsCheque.numeroCheque}</code> — {detailsCheque.proprietaire ?? '—'}
+                            </div>
+                        </div>
+                        <div>
+                            <div className="text-muted small mb-1">Reçu par</div>
+                            <div className="fw-medium">{detailsCheque.agentNom ?? '—'}</div>
+                        </div>
+                        <div>
+                            <div className="text-muted small mb-1">Restitué au propriétaire</div>
+                            {detailsCheque.retourneLe ? (
+                                <div className="fw-medium">
+                                    <i className="ti ti-circle-check text-success me-1" />
+                                    Par {detailsCheque.retourneParNom ?? '—'} le {detailsCheque.retourneLe}
+                                </div>
+                            ) : (
+                                <div className="text-muted">
+                                    <i className="ti ti-alert-circle me-1" />
+                                    Pas encore restitué
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </Modal>
         </BackofficeLayout>
     );
 }

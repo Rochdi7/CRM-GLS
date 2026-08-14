@@ -110,6 +110,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
     const [loadingApplyInscriptions, setLoadingApplyInscriptions] = useState(false);
     const [loadingApplyFees, setLoadingApplyFees] = useState(false);
     const [studentCheques, setStudentCheques] = useState<StudentChequeOption[]>([]);
+    const [emailTarget, setEmailTarget] = useState<EncaissementRow | null>(null);
 
     const caisseOptions: SelectOption[] = caisses.map((c) => ({ value: c.id, label: c.nom }));
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.nom }));
@@ -126,6 +127,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
     });
     const avanceForm = useForm<AvanceFormState>(emptyAvanceForm());
     const applyForm = useForm<ApplyAvanceFormState>({ inscription_id: '', fee_id: '', montant: '' });
+    const emailForm = useForm<{ email: string }>({ email: '' });
 
     function reload(nextFilters: Partial<typeof filters>) {
         router.get('/backoffice/encaissements', { ...filters, ...nextFilters, page: undefined }, {
@@ -162,6 +164,27 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
     function closeModal() {
         setShowModal(false);
         setEditingRow(null);
+    }
+
+    function openEmailRecu(row: EncaissementRow) {
+        setEmailTarget(row);
+        emailForm.clearErrors();
+        emailForm.setData('email', row.studentEmail ?? '');
+    }
+
+    function closeEmailModal() {
+        setEmailTarget(null);
+    }
+
+    function submitEmailRecu(event: FormEvent) {
+        event.preventDefault();
+        if (!emailTarget) {
+            return;
+        }
+        emailForm.post(emailTarget.recuEmailUrl, {
+            preserveScroll: true,
+            onSuccess: () => closeEmailModal(),
+        });
     }
 
     function openCreateAvance() {
@@ -705,6 +728,10 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                                 >
                                                     Générer deux copies du reçu (Paysage A5)
                                                 </RowActionItem>
+                                                <RowActionDivider />
+                                                <RowActionItem icon="ti-mail" onClick={() => openEmailRecu(row)}>
+                                                    Envoyer le reçu par email
+                                                </RowActionItem>
                                             </RowActions>
                                         </td>
                                     </tr>
@@ -1066,6 +1093,41 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                             value={editForm.data.note}
                             onChange={(e) => editForm.setData('note', e.target.value)}
                             error={editForm.errors.note}
+                        />
+                    </form>
+                )}
+            </Modal>
+
+            {/* Email receipt modal — prompts/confirms the recipient address
+                (pre-filled from the student's own email when on file, but
+                editable since not every student has one) before posting to
+                recuEmailUrl; the server renders the same A5 receipt as a PDF
+                attachment (EncaissementRecuMail). */}
+            <Modal
+                show={emailTarget !== null}
+                title={emailTarget ? `Envoyer le reçu par email : ${emailTarget.reference}` : ''}
+                onClose={closeEmailModal}
+                processing={emailForm.processing}
+                footer={
+                    <FormActions
+                        form="encaissement-email-recu-form"
+                        onCancel={closeEmailModal}
+                        processing={emailForm.processing}
+                        submitLabel="Envoyer"
+                        cancelLabel="Annuler"
+                    />
+                }
+            >
+                {emailTarget && (
+                    <form id="encaissement-email-recu-form" onSubmit={submitEmailRecu}>
+                        <FormField
+                            id="e-email-recu"
+                            type="email"
+                            label="Adresse email"
+                            value={emailForm.data.email}
+                            onChange={(e) => emailForm.setData('email', e.target.value)}
+                            error={emailForm.errors.email}
+                            required
                         />
                     </form>
                 )}

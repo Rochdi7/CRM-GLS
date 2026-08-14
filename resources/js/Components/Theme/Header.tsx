@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { Link, router } from '@inertiajs/react';
 import ContextSwitcher from '@/Components/Context/ContextSwitcher';
 import type { AuthUser, Context } from '@/Types';
@@ -23,6 +24,23 @@ export default function Header({ user, context, canManageSettings, onMobileMenuT
     const [darkMode, setDarkMode] = useState(() => localStorage.getItem('gls-theme') === 'dark');
     const [miniSidebar, setMiniSidebar] = useState(() => localStorage.getItem('gls-mini-sidebar') === '1');
     const menuRef = useRef<HTMLDivElement>(null);
+    const avatarButtonRef = useRef<HTMLButtonElement>(null);
+
+    /*
+     * The avatar menu is measured and rendered `position: fixed`, the same
+     * way ContextSwitcher.tsx handles its own two dropdowns. On mobile this
+     * menu lives inside the context bar, which is `overflow: hidden`
+     * (app.css) so the bar can never paint onto the page underneath — an
+     * absolutely-positioned menu is clipped by that. Fixed positioning
+     * anchored to the trigger's own rect escapes the clip entirely.
+     */
+    const [avatarMenuPos, setAvatarMenuPos] = useState<{ top: number; left: number } | null>(null);
+
+    // Mobile only: the context switcher row is collapsed behind a "⋯" button
+    // (see app.css) rather than always occupying a second header row — that
+    // permanent row cost 48px of vertical space on every page. Desktop
+    // ignores this state entirely; the row is always visible there.
+    const [mobileBarOpen, setMobileBarOpen] = useState(false);
 
     // PreSkool dark mode: <html data-theme="dark"> (mainlayout.blade.php
     // variant) — the theme CSS handles everything else. Persisted like the
@@ -57,14 +75,65 @@ export default function Header({ user, context, canManageSettings, onMobileMenuT
             }
         }
 
+        // A fixed menu doesn't follow its trigger, so re-measure on scroll
+        // (capture phase, to catch scrolling containers too) and on resize.
+        function reposition() {
+            if (avatarButtonRef.current) {
+                const rect = avatarButtonRef.current.getBoundingClientRect();
+                setAvatarMenuPos({ top: rect.bottom + 4, left: rect.right });
+            }
+        }
+
         document.addEventListener('mousedown', handleClickOutside);
         document.addEventListener('keydown', handleEscape);
+        window.addEventListener('scroll', reposition, true);
+        window.addEventListener('resize', reposition);
 
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
             document.removeEventListener('keydown', handleEscape);
+            window.removeEventListener('scroll', reposition, true);
+            window.removeEventListener('resize', reposition);
         };
     }, [userMenuOpen]);
+
+    // Escape closes the mobile context bar, matching every other React-owned
+    // overlay in the app. No outside-click handler: the bar hosts its own
+    // ContextSwitcher dropdowns (which render as `position: fixed` menus
+    // outside the bar's own DOM subtree), so a containment test would close
+    // the bar the moment a user picked a year or centre from them.
+    useEffect(() => {
+        if (!mobileBarOpen) {
+            return;
+        }
+
+        function handleEscape(event: KeyboardEvent) {
+            if (event.key === 'Escape') {
+                setMobileBarOpen(false);
+            }
+        }
+
+        document.addEventListener('keydown', handleEscape);
+
+        // Close on navigation too — switching centre/year triggers an Inertia
+        // visit, and the bar shouldn't stay open over the next page.
+        const stopStart = router.on('start', () => setMobileBarOpen(false));
+
+        return () => {
+            document.removeEventListener('keydown', handleEscape);
+            stopStart();
+        };
+    }, [mobileBarOpen]);
+
+    function toggleUserMenu() {
+        if (!userMenuOpen && avatarButtonRef.current) {
+            const rect = avatarButtonRef.current.getBoundingClientRect();
+            // Anchored by its right edge (translateX(-100%) in the style
+            // below), matching .dropdown-menu-end's own alignment.
+            setAvatarMenuPos({ top: rect.bottom + 4, left: rect.right });
+        }
+        setUserMenuOpen((open) => !open);
+    }
 
     function handleLogout() {
         router.post('/backoffice/logout');
@@ -118,8 +187,23 @@ export default function Header({ user, context, canManageSettings, onMobileMenuT
                 </span>
             </button>
 
+            {/*
+             * Mobile-only "⋯" toggle for the context/user row below. Hidden on
+             * desktop via .gls-mobile-bar-toggle (app.css), where that row is
+             * always shown.
+             */}
+            <button
+                type="button"
+                className="gls-mobile-bar-toggle border-0 bg-transparent"
+                onClick={() => setMobileBarOpen((open) => !open)}
+                aria-label={t('Toggle context bar')}
+                aria-expanded={mobileBarOpen}
+            >
+                <i className="ti ti-dots" aria-hidden="true" />
+            </button>
+
             <div className="header-user">
-                <div className="nav user-menu">
+                <div className={`nav user-menu${mobileBarOpen ? ' gls-bar-open' : ''}`}>
                     <div className="nav-item me-auto">{context && <ContextSwitcher context={context} />}</div>
 
                     <div className="d-flex align-items-center">
@@ -136,16 +220,33 @@ export default function Header({ user, context, canManageSettings, onMobileMenuT
                         </div>
                         <div className="dropdown ms-1" ref={menuRef}>
                             <button
+                                ref={avatarButtonRef}
                                 type="button"
                                 className="dropdown-toggle d-flex align-items-center border-0 bg-transparent"
-                                onClick={() => setUserMenuOpen((open) => !open)}
+                                onClick={toggleUserMenu}
                                 aria-expanded={userMenuOpen}
                             >
                                 <span className="avatar avatar-md rounded">
                                     <img src={user?.photoUrl ?? '/assets/images/avatar/defaultman.webp'} alt="" className="img-fluid" />
                                 </span>
                             </button>
-                            <div className={`dropdown-menu dropdown-menu-end${userMenuOpen ? ' show' : ''}`}>
+                            <div
+                                className={`gls-avatar-menu dropdown-menu dropdown-menu-end${userMenuOpen ? ' show' : ''}`}
+                                style={
+                                    userMenuOpen && avatarMenuPos
+                                        ? ({
+                                              position: 'fixed',
+                                              top: avatarMenuPos.top,
+                                              right: 'auto',
+                                              transform: 'translateX(-100%)',
+                                              // Read back by app.css with !important — the theme's
+                                              // own `.header .dropdown-menu { left: unset !important }`
+                                              // would otherwise override a plain inline `left`.
+                                              ['--gls-menu-left' as string]: `${avatarMenuPos.left}px`,
+                                          } as CSSProperties)
+                                        : undefined
+                                }
+                            >
                                 <div className="d-block">
                                     <div className="d-flex align-items-center p-2">
                                         <span className="avatar avatar-md me-2 online avatar-rounded">

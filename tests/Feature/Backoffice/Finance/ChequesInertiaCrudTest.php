@@ -129,7 +129,7 @@ final class ChequesInertiaCrudTest extends TestCase
         $this->actingAs($this->userWith('cheques.view', 'cheques.create'));
 
         $this->post(route('backoffice.cheques.store'), [
-            'source' => Cheque::SOURCE_AUTRE,
+            'source' => Cheque::SOURCE_PARENTS,
             'numero_cheque' => 'A1',
             'montant' => '100',
             'date_reception' => '2026-08-11',
@@ -214,6 +214,67 @@ final class ChequesInertiaCrudTest extends TestCase
         $this->patch(route('backoffice.cheques.update-statut', $cheque), [
             'statut' => Cheque::STATUT_DEPOSE,
         ])->assertSessionHasErrors('statut');
+    }
+
+    // --- retour (returned to owner) tracking -------------------------------
+
+    public function test_a_rejete_cheque_can_be_marked_as_returned(): void
+    {
+        $user = $this->userWith('cheques.view', 'cheques.update');
+        $this->actingAs($user);
+        $cheque = $this->makeCheque(Cheque::STATUT_REJETE);
+
+        $this->patch(route('backoffice.cheques.retour', $cheque))
+            ->assertRedirect(route('backoffice.cheques.index'));
+
+        $cheque->refresh();
+        $this->assertNotNull($cheque->retourne_le);
+        $this->assertSame($user->employee->id, $cheque->retourne_par_id);
+        $this->assertTrue($cheque->estRetourne());
+    }
+
+    public function test_a_non_rejete_cheque_cannot_be_marked_as_returned(): void
+    {
+        $this->actingAs($this->userWith('cheques.view', 'cheques.update'));
+        $cheque = $this->makeCheque(Cheque::STATUT_EN_POSSESSION);
+
+        $this->patch(route('backoffice.cheques.retour', $cheque))
+            ->assertSessionHasErrors('statut');
+
+        $this->assertNull($cheque->fresh()->retourne_le);
+    }
+
+    public function test_a_cheque_cannot_be_marked_as_returned_twice(): void
+    {
+        $this->actingAs($this->userWith('cheques.view', 'cheques.update'));
+        $cheque = $this->makeCheque(Cheque::STATUT_REJETE);
+
+        $this->patch(route('backoffice.cheques.retour', $cheque))
+            ->assertRedirect(route('backoffice.cheques.index'));
+
+        $this->patch(route('backoffice.cheques.retour', $cheque))
+            ->assertSessionHasErrors('statut');
+    }
+
+    public function test_marking_a_cheque_as_returned_requires_update_permission(): void
+    {
+        $this->actingAs($this->userWith('cheques.view'));
+        $cheque = $this->makeCheque(Cheque::STATUT_REJETE);
+
+        $this->patch(route('backoffice.cheques.retour', $cheque))
+            ->assertForbidden();
+    }
+
+    public function test_marking_a_cheque_as_returned_does_not_touch_any_caisse_solde(): void
+    {
+        $this->actingAs($this->userWith('cheques.view', 'cheques.update'));
+        $cheque = $this->makeCheque(Cheque::STATUT_REJETE);
+        $caisse = \App\Models\Caisse::factory()->create(['etablissement_id' => $this->centre->id, 'solde' => 500]);
+
+        $this->patch(route('backoffice.cheques.retour', $cheque))
+            ->assertRedirect(route('backoffice.cheques.index'));
+
+        $this->assertSame('500.00', (string) $caisse->fresh()->solde);
     }
 
     // --- montant editing guard --------------------------------------------

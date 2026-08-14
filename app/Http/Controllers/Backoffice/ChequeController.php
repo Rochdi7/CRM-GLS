@@ -28,6 +28,15 @@ use Inertia\Response;
  * moves are pure lifecycle bookkeeping. No destroy route: like every
  * money-adjacent record, corrections go through edits/statut changes,
  * never deletion.
+ *
+ * A Rejeté chèque has two distinct, independent follow-ups (neither
+ * automatic — always a separate reviewed user action, matching how every
+ * other refund/money move in this app works):
+ *   - Refunding the encaissement(s) it funded goes through the normal
+ *     Remboursement flow (RemboursementController), pre-filled from the UI
+ *     when the chèque funded exactly one encaissement.
+ *   - Returning the physical chèque to its owner is recorded here via
+ *     markRetourne() — off-ledger, records who returned it.
  */
 final class ChequeController extends Controller
 {
@@ -78,6 +87,7 @@ final class ChequeController extends Controller
             'statuts' => Cheque::STATUTS,
             'banques' => $getBanquesList->activeNames(),
             'students' => $getEncaissementsList->studentOptions($request->user()),
+            'parents' => $getChequesList->parentOptions($request->user()),
             'canCreate' => $request->user()->can('cheques.create'),
             'canUpdate' => $request->user()->can('cheques.update'),
         ]);
@@ -159,6 +169,45 @@ final class ChequeController extends Controller
     }
 
     /**
+     * Records that a rejected chèque was physically handed back to its
+     * owner — off-ledger bookkeeping only (never touches money; a refund
+     * for the encaissement(s) it funded is recorded separately via
+     * Remboursement). Only allowed once, only from Rejeté.
+     */
+    public function markRetourne(Request $request, Cheque $cheque): RedirectResponse
+    {
+        $this->authorize('update', $cheque);
+
+        if ($cheque->statut !== Cheque::STATUT_REJETE) {
+            throw ValidationException::withMessages([
+                'statut' => __('Only a rejected cheque can be marked as returned.'),
+            ]);
+        }
+
+        if ($cheque->estRetourne()) {
+            throw ValidationException::withMessages([
+                'statut' => __('This cheque has already been marked as returned.'),
+            ]);
+        }
+
+        $agent = $request->user()->employee;
+
+        if ($agent === null) {
+            throw ValidationException::withMessages([
+                'statut' => __('Your account is not linked to any employee record.'),
+            ]);
+        }
+
+        $cheque->update([
+            'retourne_le' => now(),
+            'retourne_par_id' => $agent->id,
+        ]);
+
+        return redirect()->route('backoffice.cheques.index')
+            ->with('success', __('Cheque marked as returned to its owner.'));
+    }
+
+    /**
      * A student's chèques still holding value (Reste > 0) — feeds the
      * "Payer avec un chèque" dropdown in the Encaissements payment form.
      */
@@ -188,7 +237,7 @@ final class ChequeController extends Controller
     /**
      * Empty strings -> null for optional fields; the owner fields are
      * mutually exclusive by source (student_id only for Étudiant,
-     * proprietaire_nom only for Parents/Autre).
+     * proprietaire_nom only for Parents).
      *
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
