@@ -22,6 +22,7 @@ use App\Http\Controllers\Backoffice\FraisController;
 use App\Http\Controllers\Backoffice\GroupController;
 use App\Http\Controllers\Backoffice\GroupHistoriqueController;
 use App\Http\Controllers\Backoffice\InscriptionController;
+use App\Http\Controllers\Backoffice\MotifAnnulationController;
 use App\Http\Controllers\Backoffice\PermissionController;
 use App\Http\Controllers\Backoffice\ProfileController;
 use App\Http\Controllers\Backoffice\RecouvrementController;
@@ -126,6 +127,13 @@ Route::prefix('backoffice')
             // in PermissionRegistry::matrix()). Feeds the Chèque payment
             // form's Banque dropdown (Encaissements).
             Route::resource('banques', BanqueController::class)->except(['show']);
+            // Raisons d'annulation ou archivage — same super-admin-only
+            // pattern as Banques (cancellation-reasons.* permissions are
+            // absent from every role). "Changement de groupe" is a locked
+            // system row (written by the group-change flow).
+            Route::resource('motifs-annulation', MotifAnnulationController::class)
+                ->parameters(['motifs-annulation' => 'motifAnnulation'])
+                ->except(['show']);
 
             // People — Employees: Inertia/React list + modal add/edit
             // (docs/inertia-react-migration-plan.md Phase 7). The Livewire

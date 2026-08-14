@@ -572,7 +572,7 @@ export interface CrudPermissions {
 
 // --- Phase 6: simple CRUD modules ------------------------------------------
 
-export type SettingsTab = 'etablissements' | 'annees-scolaires' | 'salles' | 'frais' | 'banques';
+export type SettingsTab = 'etablissements' | 'annees-scolaires' | 'salles' | 'frais' | 'banques' | 'motifs-annulation';
 
 export interface EtablissementRow {
     id: number;
@@ -650,6 +650,18 @@ export interface BanqueForm {
     statut: string;
 }
 
+export interface MotifAnnulationRow {
+    id: number;
+    nom: string;
+    isSystem: boolean;
+    statut: string;
+}
+
+export interface MotifAnnulationForm {
+    nom: string;
+    statut: string;
+}
+
 export interface TypeDepenseRow {
     id: number;
     nom: string;
@@ -686,6 +698,7 @@ export interface SettingsPageProps {
     centerOptions?: SelectOption[];
     frais?: PaginatedData<FraisRow>;
     banques?: PaginatedData<BanqueRow>;
+    motifsAnnulation?: PaginatedData<MotifAnnulationRow>;
     [key: string]: unknown;
 }
 

@@ -11,6 +11,7 @@ use App\Models\Etablissement;
 use App\Models\Frais;
 use App\Models\Group;
 use App\Models\Inscription;
+use App\Models\MotifAnnulation;
 use App\Models\Role;
 use App\Models\Salle;
 use App\Models\Student;
@@ -471,5 +472,103 @@ final class SettingsTest extends TestCase
                 'availableTabs',
                 fn ($tabs) => ! collect($tabs)->contains('banques'),
             ));
+    }
+
+    // --- Raisons d'annulation tab ------------------------------------------------
+
+    public function test_a_cancellation_reason_can_be_created_and_updated(): void
+    {
+        $this->userWith('cancellation-reasons.view', 'cancellation-reasons.create', 'cancellation-reasons.update');
+
+        $this->post(route('backoffice.motifs-annulation.store'), ['nom' => 'Non-paiement', 'statut' => MotifAnnulation::STATUT_ACTIF])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('motifs_annulation', ['nom' => 'Non-paiement', 'is_system' => false]);
+
+        $motif = MotifAnnulation::first();
+        $this->put(route('backoffice.motifs-annulation.update', $motif), ['nom' => 'Non-paiement prolongé', 'statut' => MotifAnnulation::STATUT_INACTIF])
+            ->assertRedirect();
+
+        $this->assertSame('Non-paiement prolongé', $motif->fresh()->nom);
+    }
+
+    public function test_cancellation_reason_name_must_be_unique(): void
+    {
+        $this->userWith('cancellation-reasons.view', 'cancellation-reasons.create');
+        MotifAnnulation::create(['nom' => 'Autre', 'statut' => MotifAnnulation::STATUT_ACTIF]);
+
+        $this->post(route('backoffice.motifs-annulation.store'), ['nom' => 'Autre', 'statut' => MotifAnnulation::STATUT_ACTIF])
+            ->assertSessionHasErrors('nom');
+    }
+
+    public function test_system_cancellation_reason_cannot_be_updated_or_deleted_even_by_super_admin(): void
+    {
+        $this->admin();
+        $motif = MotifAnnulation::create([
+            'nom' => MotifAnnulation::MOTIF_CHANGEMENT_GROUPE,
+            'is_system' => true,
+            'statut' => MotifAnnulation::STATUT_ACTIF,
+        ]);
+
+        $this->put(route('backoffice.motifs-annulation.update', $motif), ['nom' => 'X', 'statut' => MotifAnnulation::STATUT_ACTIF])
+            ->assertForbidden();
+        $this->delete(route('backoffice.motifs-annulation.destroy', $motif))->assertForbidden();
+
+        $this->assertDatabaseHas('motifs_annulation', ['nom' => MotifAnnulation::MOTIF_CHANGEMENT_GROUPE]);
+    }
+
+    public function test_regular_cancellation_reason_can_be_deleted(): void
+    {
+        $this->userWith('cancellation-reasons.view', 'cancellation-reasons.delete');
+        $motif = MotifAnnulation::create(['nom' => 'Ar', 'statut' => MotifAnnulation::STATUT_ACTIF]);
+
+        $this->delete(route('backoffice.motifs-annulation.destroy', $motif))->assertRedirect();
+
+        $this->assertDatabaseMissing('motifs_annulation', ['id' => $motif->id]);
+    }
+
+    public function test_user_without_create_permission_cannot_add_a_cancellation_reason(): void
+    {
+        $this->userWith('cancellation-reasons.view');
+
+        $this->post(route('backoffice.motifs-annulation.store'), ['nom' => 'X', 'statut' => MotifAnnulation::STATUT_ACTIF])
+            ->assertForbidden();
+    }
+
+    /**
+     * cancellation-reasons.* is deliberately absent from every role in
+     * PermissionRegistry::matrix() — even the director role must NOT reach
+     * the Raisons d'annulation tab.
+     */
+    public function test_director_role_cannot_manage_cancellation_reasons(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('director');
+        $this->actingAs($user);
+
+        $this->post(route('backoffice.motifs-annulation.store'), ['nom' => 'X', 'statut' => MotifAnnulation::STATUT_ACTIF])
+            ->assertForbidden();
+
+        $this->get(route('backoffice.settings', ['tab' => 'motifs-annulation']))
+            ->assertInertia(fn (Assert $page) => $page->where(
+                'availableTabs',
+                fn ($tabs) => ! collect($tabs)->contains('motifs-annulation'),
+            ));
+    }
+
+    public function test_super_admin_can_manage_cancellation_reasons(): void
+    {
+        $this->admin();
+
+        $this->post(route('backoffice.motifs-annulation.store'), ['nom' => 'Déménagement', 'statut' => MotifAnnulation::STATUT_ACTIF])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('motifs_annulation', ['nom' => 'Déménagement', 'is_system' => false]);
+
+        $this->get(route('backoffice.settings', ['tab' => 'motifs-annulation']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/Settings/Index')
+                ->where('activeTab', 'motifs-annulation')
+                ->has('motifsAnnulation.data', 1));
     }
 }

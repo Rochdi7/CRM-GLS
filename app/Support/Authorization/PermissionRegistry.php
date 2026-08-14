@@ -63,6 +63,14 @@ final class PermissionRegistry
                 'banks.update' => 'Modifier une banque',
                 'banks.delete' => 'Supprimer une banque',
             ],
+            // Deliberately absent from every role in matrix() below — only
+            // the Gate::before super-admin bypass can manage them.
+            "Raisons d'annulation" => [
+                'cancellation-reasons.view' => "Consulter les raisons d'annulation ou archivage",
+                'cancellation-reasons.create' => "Créer une raison d'annulation",
+                'cancellation-reasons.update' => "Modifier une raison d'annulation",
+                'cancellation-reasons.delete' => "Supprimer une raison d'annulation",
+            ],
             'Employés' => [
                 'employees.view' => 'Consulter les employés',
                 'employees.create' => 'Créer un employé',

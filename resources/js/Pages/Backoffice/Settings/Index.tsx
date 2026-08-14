@@ -6,6 +6,7 @@ import AnneesScolairesPanel from '@/Pages/Backoffice/Settings/AnneesScolairesPan
 import SallesPanel from '@/Pages/Backoffice/Settings/SallesPanel';
 import FraisPanel from '@/Pages/Backoffice/Settings/FraisPanel';
 import BanquesPanel from '@/Pages/Backoffice/Settings/BanquesPanel';
+import MotifsAnnulationPanel from '@/Pages/Backoffice/Settings/MotifsAnnulationPanel';
 import type { SettingsPageProps, SettingsTab } from '@/Types';
 
 const TAB_LABELS: Record<SettingsTab, { label: string; icon: string }> = {
@@ -14,6 +15,7 @@ const TAB_LABELS: Record<SettingsTab, { label: string; icon: string }> = {
     salles: { label: 'Salles', icon: 'ti ti-door' },
     frais: { label: 'Frais', icon: 'ti ti-receipt' },
     banques: { label: 'Banques', icon: 'ti ti-building-bank' },
+    'motifs-annulation': { label: 'Raisons d’annulation ou archivage', icon: 'ti ti-refresh' },
 };
 
 /**
@@ -34,6 +36,7 @@ export default function SettingsIndex({
     centerOptions,
     frais,
     banques,
+    motifsAnnulation,
 }: SettingsPageProps) {
     function switchTab(tab: SettingsTab) {
         if (tab === activeTab) {
@@ -78,6 +81,9 @@ export default function SettingsIndex({
                     )}
                     {activeTab === 'frais' && frais && <FraisPanel frais={frais} permissions={permissions.frais} />}
                     {activeTab === 'banques' && banques && <BanquesPanel banques={banques} permissions={permissions.banques} />}
+                    {activeTab === 'motifs-annulation' && motifsAnnulation && (
+                        <MotifsAnnulationPanel motifsAnnulation={motifsAnnulation} permissions={permissions['motifs-annulation']} />
+                    )}
                 </div>
             </Card>
         </BackofficeLayout>

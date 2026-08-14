@@ -40,6 +40,13 @@ return new class extends Migration
             $table->date('date_echeance')->nullable();
             // En possession -> Déposé (Remise à la banque) -> Encaissé | Rejeté
             $table->string('statut', 20)->default('En possession');
+            // Physical return of a rejected chèque to its owner — off-ledger,
+            // like the rest of this table. retourne_par_id is the employee
+            // who physically handed the chèque back; agent_id (below) remains
+            // "who originally received it".
+            $table->timestamp('retourne_le')->nullable();
+            $table->foreignId('retourne_par_id')->nullable()
+                ->constrained('employees')->restrictOnDelete();
             $table->text('note')->nullable();
             $table->foreignId('etablissement_id')->nullable()->constrained('etablissements')->nullOnDelete();
             $table->foreignId('agent_id')->constrained('employees')->restrictOnDelete();

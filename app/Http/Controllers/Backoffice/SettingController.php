@@ -9,12 +9,14 @@ use App\Domain\Settings\Queries\GetAccessibleCenterOptions;
 use App\Domain\Settings\Queries\GetAnneesScolairesList;
 use App\Domain\Settings\Queries\GetBanquesList;
 use App\Domain\Settings\Queries\GetFraisList;
+use App\Domain\Settings\Queries\GetMotifsAnnulationList;
 use App\Domain\Settings\Queries\GetSallesList;
 use App\Http\Controllers\Controller;
 use App\Models\AnneeScolaire;
 use App\Models\Banque;
 use App\Models\Etablissement;
 use App\Models\Frais;
+use App\Models\MotifAnnulation;
 use App\Models\Salle;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -43,6 +45,7 @@ final class SettingController extends Controller
         'salles' => 'rooms.view',
         'frais' => 'fees.view',
         'banques' => 'banks.view',
+        'motifs-annulation' => 'cancellation-reasons.view',
     ];
 
     public function __invoke(
@@ -52,6 +55,7 @@ final class SettingController extends Controller
         GetSallesList $getSallesList,
         GetFraisList $getFraisList,
         GetBanquesList $getBanquesList,
+        GetMotifsAnnulationList $getMotifsAnnulationList,
         GetAccessibleCenterOptions $getAccessibleCenterOptions,
     ): Response {
         $user = $request->user();
@@ -88,6 +92,7 @@ final class SettingController extends Controller
             ],
             'frais' => $props['frais'] = $getFraisList(),
             'banques' => $props['banques'] = $getBanquesList(),
+            'motifs-annulation' => $props['motifsAnnulation'] = $getMotifsAnnulationList(),
             default => null,
         };
 
@@ -105,6 +110,7 @@ final class SettingController extends Controller
             'salles' => [Salle::class, 'rooms'],
             'frais' => [Frais::class, 'fees'],
             'banques' => [Banque::class, 'banks'],
+            'motifs-annulation' => [MotifAnnulation::class, 'cancellation-reasons'],
         };
 
         return [

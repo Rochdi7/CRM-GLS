@@ -28,6 +28,7 @@ return new class extends Migration
             $table->foreignId('annee_scolaire_id')->nullable()->constrained('annees_scolaires')->nullOnDelete();
             $table->string('statut', 20)->default('Prévue'); // Prévue / Effectuée / Annulée
             $table->text('note')->nullable();
+            $table->text('motif_annulation')->nullable();
             $table->foreignId('created_by')->nullable()->constrained('employees')->nullOnDelete();
             $table->timestamps();
 

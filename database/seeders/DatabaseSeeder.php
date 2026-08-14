@@ -25,6 +25,7 @@ class DatabaseSeeder extends Seeder
             BookStockSeeder::class,
             FraisSeeder::class,
             BanqueSeeder::class,
+            MotifAnnulationSeeder::class,
             // Demo data (local dev only — every seeder below is idempotent):
             // one login per role, academic records, then finance movements so
             // every CRUD screen has something to click through.
