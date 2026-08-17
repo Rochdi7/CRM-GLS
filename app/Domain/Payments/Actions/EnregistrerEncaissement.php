@@ -20,7 +20,10 @@ use Illuminate\Support\Facades\DB;
 final class EnregistrerEncaissement
 {
     /**
-     * @param array<string, mixed> $data validated StoreEncaissementRequest data
+     * @param array<string, mixed> $data validated StoreEncaissementRequest data.
+     *        May also carry 'legacy_ref'/'legacy_source' (both in
+     *        Encaissement::$fillable) — the legacy-import commit path uses
+     *        this to tag imported rows without a second write.
      */
     public function handle(array $data, Employee $agent): Encaissement
     {

@@ -21,6 +21,10 @@ use App\Http\Controllers\Backoffice\EtablissementController;
 use App\Http\Controllers\Backoffice\FraisController;
 use App\Http\Controllers\Backoffice\GroupController;
 use App\Http\Controllers\Backoffice\GroupHistoriqueController;
+use App\Http\Controllers\Backoffice\Import\EncaissementImportController;
+use App\Http\Controllers\Backoffice\Import\ImportBatchController;
+use App\Http\Controllers\Backoffice\Import\InscriptionImportController;
+use App\Http\Controllers\Backoffice\Import\StudentImportController;
 use App\Http\Controllers\Backoffice\InscriptionController;
 use App\Http\Controllers\Backoffice\MotifAnnulationController;
 use App\Http\Controllers\Backoffice\PermissionController;
@@ -500,5 +504,48 @@ Route::prefix('backoffice')
                 ->middleware('permission:users.assign-roles')->name('users.authorization.edit');
             Route::put('users/{user}/authorization', [UserAuthorizationController::class, 'update'])
                 ->middleware('permission:users.assign-roles')->name('users.authorization.update');
+
+            // Legacy-CRM Excel import — Centre + Année scolaire are
+            // mandatory, immutable batch scope (import plan). Non-CRUD
+            // multi-step flow (upload -> analyze -> preview -> commit ->
+            // result), one controller per entity.
+            Route::get('import', [ImportBatchController::class, 'index'])
+                ->middleware('permission:import.view')->name('import.index');
+            Route::get('import/students', [StudentImportController::class, 'create'])
+                ->middleware('permission:import.view')->name('import.students.create');
+            Route::post('import/students/analyze', [StudentImportController::class, 'analyze'])
+                ->middleware('permission:import.create')->name('import.students.analyze');
+            Route::get('import/students/{batch}/preview', [StudentImportController::class, 'preview'])
+                ->middleware('permission:import.view')->name('import.students.preview');
+            Route::post('import/students/{batch}/commit', [StudentImportController::class, 'commit'])
+                ->middleware('permission:import.create')->name('import.students.commit');
+            Route::get('import/students/{batch}/result', [StudentImportController::class, 'result'])
+                ->middleware('permission:import.view')->name('import.students.result');
+
+            Route::get('import/inscriptions', [InscriptionImportController::class, 'create'])
+                ->middleware('permission:import.view')->name('import.inscriptions.create');
+            Route::post('import/inscriptions/peek-groupes', [InscriptionImportController::class, 'peekGroupes'])
+                ->middleware('permission:import.create')->name('import.inscriptions.peek-groupes');
+            Route::post('import/inscriptions/analyze', [InscriptionImportController::class, 'analyze'])
+                ->middleware('permission:import.create')->name('import.inscriptions.analyze');
+            Route::get('import/inscriptions/{batch}/preview', [InscriptionImportController::class, 'preview'])
+                ->middleware('permission:import.view')->name('import.inscriptions.preview');
+            Route::post('import/inscriptions/{batch}/commit', [InscriptionImportController::class, 'commit'])
+                ->middleware('permission:import.create')->name('import.inscriptions.commit');
+            Route::get('import/inscriptions/{batch}/result', [InscriptionImportController::class, 'result'])
+                ->middleware('permission:import.view')->name('import.inscriptions.result');
+
+            Route::get('import/encaissements', [EncaissementImportController::class, 'create'])
+                ->middleware('permission:import.view')->name('import.encaissements.create');
+            Route::post('import/encaissements/peek-operateurs', [EncaissementImportController::class, 'peekOperateurs'])
+                ->middleware('permission:import.create')->name('import.encaissements.peek-operateurs');
+            Route::post('import/encaissements/analyze', [EncaissementImportController::class, 'analyze'])
+                ->middleware('permission:import.create')->name('import.encaissements.analyze');
+            Route::get('import/encaissements/{batch}/preview', [EncaissementImportController::class, 'preview'])
+                ->middleware('permission:import.view')->name('import.encaissements.preview');
+            Route::post('import/encaissements/{batch}/commit', [EncaissementImportController::class, 'commit'])
+                ->middleware('permission:import.create')->name('import.encaissements.commit');
+            Route::get('import/encaissements/{batch}/result', [EncaissementImportController::class, 'result'])
+                ->middleware('permission:import.view')->name('import.encaissements.result');
         });
     });

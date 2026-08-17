@@ -82,7 +82,7 @@ class Student extends Model implements HasMedia
     public const PARENT_RELATIONS = ['Le père', 'La mère', 'Le parrain'];
 
     protected $fillable = [
-        'reference', 'nom', 'prenom', 'sexe', 'date_naissance', 'cin',
+        'reference', 'legacy_ref', 'legacy_source', 'nom', 'prenom', 'sexe', 'date_naissance', 'cin',
         'telephone', 'whatsapp', 'email', 'adresse', 'niveau',
         'domaine', 'examen_type',
         'etablissement_id', 'parent_nom', 'parent_relation', 'parent_sexe',

@@ -201,6 +201,14 @@ export const backofficeNavigation: NavGroup[] = [
                 matchPaths: ['/backoffice/permissions'],
                 inertia: true,
             },
+            {
+                label: t('Data import'),
+                href: '/backoffice/import',
+                icon: 'ti ti-upload',
+                permissions: ['import.view'],
+                matchPaths: ['/backoffice/import'],
+                inertia: true,
+            },
         ],
     },
 ];

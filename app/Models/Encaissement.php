@@ -47,7 +47,7 @@ class Encaissement extends Model
     ];
 
     protected $fillable = [
-        'reference', 'student_id', 'inscription_fee_id', 'applied_from_encaissement_id', 'cheque_id', 'montant', 'methode',
+        'reference', 'legacy_ref', 'legacy_source', 'student_id', 'inscription_fee_id', 'applied_from_encaissement_id', 'cheque_id', 'montant', 'methode',
         'date_paiement', 'caisse_id', 'agent_id',
         'numero_cheque', 'banque', 'date_echeance_cheque', 'note',
     ];

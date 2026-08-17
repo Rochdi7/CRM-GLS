@@ -40,7 +40,7 @@ class Inscription extends Model
     ];
 
     protected $fillable = [
-        'reference', 'student_id', 'group_id', 'etablissement_id',
+        'reference', 'legacy_ref', 'legacy_source', 'student_id', 'group_id', 'etablissement_id',
         'annee_scolaire_id', 'statut', 'date_inscription',
         'date_debut', 'date_fin', 'montant_total', 'note', 'created_by',
     ];

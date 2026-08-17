@@ -97,6 +97,10 @@ final class PermissionRegistry
                 'students.update' => 'Modifier un étudiant',
                 'students.delete' => 'Supprimer un étudiant',
             ],
+            'Import de données' => [
+                'import.view' => "Consulter les imports de données",
+                'import.create' => "Importer des données depuis l'ancien CRM",
+            ],
             'Inscriptions' => [
                 'registrations.view' => 'Consulter les inscriptions',
                 'registrations.create' => 'Créer une inscription',
@@ -260,6 +264,7 @@ final class PermissionRegistry
                 'stock.view', 'stock.create', 'stock.update', 'stock.delete', 'stock.move',
                 'stock-types.view', 'stock-types.create', 'stock-types.update', 'stock-types.delete',
                 'audit-logs.view',
+                'import.view', 'import.create',
             ],
 
             'operations-director' => [
@@ -284,6 +289,7 @@ final class PermissionRegistry
                 'cash-transfers.view',
                 'stock.view', 'stock.create', 'stock.update', 'stock.delete', 'stock.move',
                 'stock-types.view', 'stock-types.create', 'stock-types.update', 'stock-types.delete',
+                'import.view', 'import.create',
             ],
 
             // Center-scoped day-to-day operator: records payments/expenses and
