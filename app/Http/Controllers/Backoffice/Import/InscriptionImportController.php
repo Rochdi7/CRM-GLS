@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice\Import;
 
 use App\Http\Controllers\Backoffice\Concerns\ResolvesActingEmployee;
+use App\Http\Controllers\Backoffice\Import\Concerns\BuildsImportPreview;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Import\AnalyzeInscriptionImportRequest;
 use App\Http\Requests\Backoffice\Import\CommitImportRequest;
@@ -26,6 +27,7 @@ use Inertia\Response;
 
 final class InscriptionImportController extends Controller
 {
+    use BuildsImportPreview;
     use ResolvesActingEmployee;
 
     public function create(Request $request, CenterAccessService $centerAccess): Response
@@ -88,18 +90,20 @@ final class InscriptionImportController extends Controller
         return redirect()->route('backoffice.import.inscriptions.preview', $batch);
     }
 
-    public function preview(ImportBatch $batch): Response
+    public function preview(Request $request, ImportBatch $batch): Response
     {
         $this->authorize('view', $batch);
         abort_unless($batch->module === ImportBatch::MODULE_INSCRIPTIONS, 404);
 
-        return Inertia::render('Backoffice/Import/Inscriptions/Preview', [
-            'batch' => $batch->load(['etablissement', 'anneeScolaire']),
-            'rows' => $batch->rows()->orderBy('source_row_number')->get(),
-        ]);
+        return Inertia::render('Backoffice/Import/Inscriptions/Preview', $this->previewProps($request, $batch));
     }
 
-    public function commit(CommitImportRequest $request, ImportBatch $batch, InscriptionImporter $importer): RedirectResponse
+    /**
+     * Commits one small chunk of the selection per call — the Preview
+     * screen calls this in a loop, updating a progress bar between calls,
+     * instead of one long synchronous request with no feedback.
+     */
+    public function commit(CommitImportRequest $request, ImportBatch $batch, InscriptionImporter $importer): JsonResponse
     {
         $this->authorize('create', ImportBatch::class);
         abort_unless($batch->module === ImportBatch::MODULE_INSCRIPTIONS, 404);
@@ -108,19 +112,20 @@ final class InscriptionImportController extends Controller
 
         $result = $importer->commit($batch, $request->validated('selected_row_ids'), $admin);
 
-        return redirect()->route('backoffice.import.inscriptions.result', $batch)
-            ->with('success', __(':count rows imported.', ['count' => $result->insertedCount]));
+        return response()->json([
+            'inserted' => $result->insertedCount,
+            'errors' => $result->errorCount,
+            'remaining' => $result->remaining,
+            'batch' => $batch->fresh(),
+        ]);
     }
 
-    public function result(ImportBatch $batch): Response
+    public function result(Request $request, ImportBatch $batch): Response
     {
         $this->authorize('view', $batch);
         abort_unless($batch->module === ImportBatch::MODULE_INSCRIPTIONS, 404);
 
-        return Inertia::render('Backoffice/Import/Inscriptions/Result', [
-            'batch' => $batch->load(['etablissement', 'anneeScolaire']),
-            'rows' => $batch->rows()->orderBy('source_row_number')->get(),
-        ]);
+        return Inertia::render('Backoffice/Import/Inscriptions/Result', $this->resultProps($request, $batch));
     }
 
     /**

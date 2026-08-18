@@ -10,6 +10,7 @@ use App\Models\Encaissement;
 use App\Models\ImportBatch;
 use App\Models\ImportRow;
 use App\Models\Inscription;
+use App\Models\InscriptionFee;
 use App\Models\Student;
 use App\Services\CaisseProvisioner;
 use App\Services\Import\Contracts\Importer;
@@ -18,6 +19,7 @@ use App\Services\Import\DTO\ImportResult;
 use App\Services\Import\Exceptions\ImportCellParseException;
 use App\Services\Import\Support\CellNormalizer;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -38,6 +40,9 @@ final class EncaissementImporter implements Importer
 
     private const string TYPE_REGLEMENT = 'Réglement';
 
+    /** ImportRow rows are buffered and mass-inserted every N rows — real exports run into the thousands of rows, and one create() call per row (Eloquent events + a round-trip each) was a large part of the 30s timeout. */
+    private const int INSERT_BUFFER_SIZE = 500;
+
     /** File label => Encaissement::METHODE_* — "Virement bancaire" is NOT a literal match. */
     private const array METHODE_MAP = [
         'Espèces' => Encaissement::METHODE_ESPECES,
@@ -45,6 +50,46 @@ final class EncaissementImporter implements Importer
         'Virement bancaire' => Encaissement::METHODE_VIREMENT,
         'Chèque' => Encaissement::METHODE_CHEQUE,
     ];
+
+    /**
+     * Per-analyze()-call caches, rebuilt fresh every call — real exports can
+     * be thousands of rows (the same student paying many times over a
+     * year), so resolving "which student"/"which fee"/"which caisse"/
+     * "already imported?" per row against the DB was timing out (30s
+     * execution limit) on real files. Preloading once and matching in
+     * memory turns O(rows) queries into O(1).
+     *
+     * @var array<string, int>|null normalized full name => students.id, scoped to the current batch's centre
+     */
+    private ?array $studentsByNormalizedName = null;
+
+    /** @var array<int, int> employees.id => caisses.id, memoized within one analyze() call */
+    private array $caisseIdByEmployeeId = [];
+
+    /** @var array<int, Inscription>|null student_id => their one active inscription in this batch's centre+année, preloaded once */
+    private ?array $activeInscriptionByStudentId = null;
+
+    /** @var array<int, Collection<int, InscriptionFee>>|null inscription_id => its fee lines, preloaded once */
+    private ?array $feesByInscriptionId = null;
+
+    /** @var array<string, true>|null every legacy_ref already imported before this batch started, preloaded once */
+    private ?array $existingEncaissementLegacyRefs = null;
+
+    /**
+     * @var array<string, true>|null fallback dedupe composite keys
+     * ("studentId|montant|date|methode|inscriptionFeeId") of every existing
+     * encaissement, preloaded once — used when a row has no legacy_ref.
+     */
+    private ?array $existingEncaissementCompositeKeys = null;
+
+    /** legacy_refs seen so far WITHIN this file — catches duplicate rows inside the same upload, which the preloaded DB set can't see. */
+    private array $legacyRefsSeenThisFile = [];
+
+    /** composite keys (see $existingEncaissementCompositeKeys) seen so far WITHIN this file. */
+    private array $compositeKeysSeenThisFile = [];
+
+    /** @var array<int, array<string, mixed>> buffered ImportRow attribute arrays, flushed every INSERT_BUFFER_SIZE rows */
+    private array $pendingRows = [];
 
     public function __construct(
         private readonly SheetReader $sheetReader,
@@ -66,6 +111,18 @@ final class EncaissementImporter implements Importer
         );
 
         $operateurEmployees = $this->resolveOperateurEmployees($context);
+        $this->caisseIdByEmployeeId = [];
+        $this->legacyRefsSeenThisFile = [];
+        $this->compositeKeysSeenThisFile = [];
+        $this->pendingRows = [];
+        $this->studentsByNormalizedName = $this->preloadStudents($context->etablissementId);
+        $this->activeInscriptionByStudentId = $this->preloadActiveInscriptions($context);
+        $this->feesByInscriptionId = $this->preloadFees(array_map(
+            fn (Inscription $inscription): int => $inscription->id,
+            $this->activeInscriptionByStudentId
+        ));
+        $this->existingEncaissementLegacyRefs = $this->preloadExistingLegacyRefs();
+        $this->existingEncaissementCompositeKeys = $this->preloadExistingCompositeKeys();
 
         return DB::transaction(function () use ($filePath, $headerRow, $headerMap, $file, $context, $importingAdmin, $operateurEmployees): ImportBatch {
             $batch = ImportBatch::create([
@@ -83,8 +140,10 @@ final class EncaissementImporter implements Importer
 
             foreach ($this->sheetReader->readDataRows($filePath, $headerRow, $headerMap) as $rowNumber => $rawRow) {
                 $total++;
-                $this->analyzeRow($batch, $rowNumber, $rawRow, $context, $operateurEmployees);
+                $this->analyzeRow($batch, $rowNumber, $rawRow, $operateurEmployees);
             }
+
+            $this->flushPendingRows();
 
             $batch->update(['total_rows' => $total]);
 
@@ -92,18 +151,26 @@ final class EncaissementImporter implements Importer
         });
     }
 
-    public function commit(ImportBatch $batch, array $selectedRowIds, Employee $importingAdmin): ImportResult
+    public function commit(ImportBatch $batch, array $selectedRowIds, Employee $importingAdmin, int $chunkSize = 5): ImportResult
     {
         // Chronological order keeps inscription_fees.statut transitions
         // (Non payé -> Payé partiellement -> Payé) readable across rows
         // targeting the same fee — the final caisse solde is order-
-        // independent (a pure sum) either way.
-        $rows = $batch->rows()
+        // independent (a pure sum) either way. Sorting the FULL eligible
+        // set before slicing (rather than sorting each chunk on its own)
+        // keeps that ordering correct across chunked commit() calls, since
+        // each call only ever re-sorts whatever is still eligible — the
+        // same stable ordering, just re-computed on a shrinking set.
+        $eligible = $batch->rows()
             ->whereIn('id', $selectedRowIds)
             ->whereIn('status', ImportRow::SELECTABLE_STATUTS)
             ->get()
             ->sortBy(fn (ImportRow $row) => [$row->raw['date_paiement'] ?? '', $row->source_row_number])
             ->values();
+
+        $totalEligible = $eligible->count();
+        $rows = $eligible->take($chunkSize);
+        $remaining = max(0, $totalEligible - $rows->count());
 
         $inserted = 0;
         $errors = 0;
@@ -147,17 +214,28 @@ final class EncaissementImporter implements Importer
         }
 
         $batch->update([
-            'status' => $errors > 0 ? ImportBatch::STATUT_COMMITTED_WITH_ERRORS : ImportBatch::STATUT_COMMITTED,
+            'status' => $this->nextBatchStatus($batch, $remaining, $errors),
             'inserted_rows' => $batch->inserted_rows + $inserted,
             'error_rows' => $batch->error_rows + $errors,
-            'committed_at' => now(),
+            'committed_at' => $remaining === 0 ? now() : $batch->committed_at,
         ]);
 
-        return new ImportResult(insertedCount: $inserted, skippedCount: 0, errorCount: $errors);
+        return new ImportResult(insertedCount: $inserted, skippedCount: 0, errorCount: $errors, remaining: $remaining);
+    }
+
+    private function nextBatchStatus(ImportBatch $batch, int $remaining, int $errorsThisChunk): string
+    {
+        if ($remaining > 0) {
+            return ImportBatch::STATUT_COMMITTING;
+        }
+
+        $hasAnyErrors = $errorsThisChunk > 0 || $batch->error_rows > 0;
+
+        return $hasAnyErrors ? ImportBatch::STATUT_COMMITTED_WITH_ERRORS : ImportBatch::STATUT_COMMITTED;
     }
 
     /** @param array<string, mixed> $rawRow */
-    private function analyzeRow(ImportBatch $batch, int $rowNumber, array $rawRow, ImportContext $context, array $operateurEmployees): void
+    private function analyzeRow(ImportBatch $batch, int $rowNumber, array $rawRow, array $operateurEmployees): void
     {
         $legacyRef = CellNormalizer::text($rawRow['Réf.'] ?? '');
         $type = CellNormalizer::text($rawRow['Type'] ?? '');
@@ -239,12 +317,12 @@ final class EncaissementImporter implements Importer
         $candidateFees = [];
 
         if (! $payerAmbiguous && $errors === [] && $parseErrors === []) {
-            $studentResolution = $this->resolveStudent($batch, $payeurName);
+            $studentResolution = $this->resolveStudent($payeurName);
             $studentId = $studentResolution['student_id'];
             $conflicts = [...$conflicts, ...$studentResolution['conflicts']];
 
             if ($studentId !== null) {
-                $feeResolution = $this->resolveInscriptionFee($batch, $context, $studentId, $fraisLabel);
+                $feeResolution = $this->resolveInscriptionFee($studentId, $fraisLabel);
                 $inscriptionFeeId = $feeResolution['inscription_fee_id'];
                 $candidateFees = $feeResolution['candidates'];
                 $conflicts = [...$conflicts, ...$feeResolution['conflicts']];
@@ -255,27 +333,29 @@ final class EncaissementImporter implements Importer
             }
         }
 
-        $duplicate = $this->findDuplicate($legacyRef, $studentId, $montant, $datePaiement, $methode, $inscriptionFeeId);
+        $duplicate = $this->isDuplicate($legacyRef, $studentId, $montant, $datePaiement, $methode, $inscriptionFeeId);
 
-        if ($duplicate !== null) {
-            ImportRow::create([
-                'import_batch_id' => $batch->id,
-                'source_row_number' => $rowNumber,
+        if ($duplicate) {
+            $this->pushPendingRow($batch, $rowNumber, [
                 'raw' => $raw,
                 'status' => ImportRow::STATUT_DOUBLON,
                 'legacy_ref' => $legacyRef ?: null,
-                'resolution' => ['matched_encaissement_id' => $duplicate->id],
+                'resolution' => null,
             ]);
 
             return;
         }
 
+        if ($legacyRef !== '') {
+            $this->legacyRefsSeenThisFile[$legacyRef] = true;
+        } elseif ($studentId !== null && $montant !== null && $datePaiement !== null && $methode !== null && $inscriptionFeeId !== null) {
+            $this->compositeKeysSeenThisFile[$this->compositeKey($studentId, $montant, $datePaiement, $methode, $inscriptionFeeId)] = true;
+        }
+
         $allErrors = [...$parseErrors, ...$errors];
 
         if ($allErrors !== []) {
-            ImportRow::create([
-                'import_batch_id' => $batch->id,
-                'source_row_number' => $rowNumber,
+            $this->pushPendingRow($batch, $rowNumber, [
                 'raw' => $raw,
                 'status' => ImportRow::STATUT_ERREUR,
                 'errors' => $allErrors,
@@ -286,9 +366,7 @@ final class EncaissementImporter implements Importer
         }
 
         if ($conflicts !== []) {
-            ImportRow::create([
-                'import_batch_id' => $batch->id,
-                'source_row_number' => $rowNumber,
+            $this->pushPendingRow($batch, $rowNumber, [
                 'raw' => $raw,
                 'status' => ImportRow::STATUT_CONFLIT,
                 'errors' => $conflicts,
@@ -312,9 +390,7 @@ final class EncaissementImporter implements Importer
 
         $validationErrors = $this->validator->validateEncaissement($normalized);
 
-        ImportRow::create([
-            'import_batch_id' => $batch->id,
-            'source_row_number' => $rowNumber,
+        $this->pushPendingRow($batch, $rowNumber, [
             'raw' => $raw,
             'status' => $validationErrors === [] ? ImportRow::STATUT_NOUVEAU : ImportRow::STATUT_ERREUR,
             'errors' => $validationErrors === [] ? null : $validationErrors,
@@ -328,6 +404,47 @@ final class EncaissementImporter implements Importer
         ]);
     }
 
+    /**
+     * Buffers one ImportRow's attributes instead of calling create() per
+     * row — flushed in bulk via flushPendingRows() every
+     * INSERT_BUFFER_SIZE rows, and once more at the end of analyze().
+     *
+     * @param array<string, mixed> $attributes
+     */
+    private function pushPendingRow(ImportBatch $batch, int $rowNumber, array $attributes): void
+    {
+        $now = now();
+
+        $this->pendingRows[] = [
+            'import_batch_id' => $batch->id,
+            'source_row_number' => $rowNumber,
+            'raw' => json_encode($attributes['raw']),
+            'status' => $attributes['status'],
+            'errors' => isset($attributes['errors']) ? json_encode($attributes['errors']) : null,
+            'resolution' => isset($attributes['resolution']) ? json_encode($attributes['resolution']) : null,
+            'legacy_ref' => $attributes['legacy_ref'] ?? null,
+            'created_model_type' => null,
+            'created_model_id' => null,
+            'selected' => true,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ];
+
+        if (count($this->pendingRows) >= self::INSERT_BUFFER_SIZE) {
+            $this->flushPendingRows();
+        }
+    }
+
+    private function flushPendingRows(): void
+    {
+        if ($this->pendingRows === []) {
+            return;
+        }
+
+        ImportRow::query()->insert($this->pendingRows);
+        $this->pendingRows = [];
+    }
+
     /** @return array<string, int> raw Opérateur label => employees.id */
     private function resolveOperateurEmployees(ImportContext $context): array
     {
@@ -336,16 +453,125 @@ final class EncaissementImporter implements Importer
 
     private function resolveCaisseFor(int $employeeId): int
     {
+        if (isset($this->caisseIdByEmployeeId[$employeeId])) {
+            return $this->caisseIdByEmployeeId[$employeeId];
+        }
+
         $employee = Employee::findOrFail($employeeId);
         $caisse = $employee->caisses()->first() ?? $this->caisseProvisioner->provisionFor($employee);
 
-        return $caisse->id;
+        return $this->caisseIdByEmployeeId[$employeeId] = $caisse->id;
+    }
+
+    /**
+     * Preloads every student of the batch's centre once, keyed by their
+     * normalized "prenom nom" — same normalization as the old per-row
+     * whereRaw(regexp_replace(...)) query, just computed in PHP instead of
+     * re-run against Postgres for every single row.
+     *
+     * @return array<string, int> normalized full name => students.id (a name matched by more than one student maps to -1, meaning "ambiguous")
+     */
+    private function preloadStudents(int $etablissementId): array
+    {
+        $index = [];
+
+        Student::query()
+            ->where('etablissement_id', $etablissementId)
+            ->get(['id', 'prenom', 'nom'])
+            ->each(function (Student $student) use (&$index): void {
+                $key = mb_strtolower(CellNormalizer::text("{$student->prenom} {$student->nom}"));
+                $index[$key] = array_key_exists($key, $index) ? -1 : $student->id;
+            });
+
+        return $index;
+    }
+
+    /**
+     * Every ACTIVE inscription in the batch's centre+année, one per
+     * student (schema-enforced by the business rule, never more than one
+     * active inscription per student per year) — preloaded once instead of
+     * one query per row.
+     *
+     * @return array<int, Inscription> student_id => Inscription
+     */
+    private function preloadActiveInscriptions(ImportContext $context): array
+    {
+        return Inscription::query()
+            ->where('etablissement_id', $context->etablissementId)
+            ->where('annee_scolaire_id', $context->anneeScolaireId)
+            ->where('statut', Inscription::STATUT_ACTIVE)
+            ->get(['id', 'student_id'])
+            ->keyBy('student_id')
+            ->all();
+    }
+
+    /**
+     * Every fee line of the preloaded active inscriptions, in one query
+     * instead of one per student.
+     *
+     * @param  array<int, int>  $inscriptionIds
+     * @return array<int, Collection<int, InscriptionFee>> inscription_id => its fees
+     */
+    private function preloadFees(array $inscriptionIds): array
+    {
+        if ($inscriptionIds === []) {
+            return [];
+        }
+
+        return InscriptionFee::query()
+            ->whereIn('inscription_id', $inscriptionIds)
+            ->get(['id', 'inscription_id', 'nom', 'montant', 'statut'])
+            ->groupBy('inscription_id')
+            ->all();
+    }
+
+    /** @return array<string, true> */
+    private function preloadExistingLegacyRefs(): array
+    {
+        return Encaissement::query()
+            ->whereNotNull('legacy_ref')
+            ->pluck('legacy_ref')
+            ->flip()
+            ->map(fn () => true)
+            ->all();
+    }
+
+    /**
+     * Fallback dedupe key when a row has no legacy_ref — preloaded once
+     * (only encaissements that actually have an inscription_fee_id, since
+     * that's the only shape this fallback ever matches against).
+     *
+     * @return array<string, true>
+     */
+    private function preloadExistingCompositeKeys(): array
+    {
+        $index = [];
+
+        Encaissement::query()
+            ->whereNotNull('inscription_fee_id')
+            ->get(['student_id', 'montant', 'date_paiement', 'methode', 'inscription_fee_id'])
+            ->each(function (Encaissement $e) use (&$index): void {
+                $index[$this->compositeKey(
+                    $e->student_id,
+                    (string) $e->montant,
+                    $e->date_paiement->toDateString(),
+                    $e->methode,
+                    $e->inscription_fee_id
+                )] = true;
+            });
+
+        return $index;
+    }
+
+    private function compositeKey(int $studentId, string $montant, string $datePaiement, string $methode, int $inscriptionFeeId): string
+    {
+        return "{$studentId}|{$montant}|{$datePaiement}|{$methode}|{$inscriptionFeeId}";
     }
 
     /**
      * @return array{student_id: ?int, conflicts: array<int, array{field: string, code: string, message: string}>}
      */
-    private function resolveStudent(ImportBatch $batch, string $payeurName): array
+    private function resolveStudent(string $payeurName): array
     {
         if ($payeurName === '') {
             return ['student_id' => null, 'conflicts' => [
@@ -354,26 +580,19 @@ final class EncaissementImporter implements Importer
         }
 
         $normalizedTarget = mb_strtolower(CellNormalizer::text($payeurName));
+        $match = $this->studentsByNormalizedName[$normalizedTarget] ?? null;
 
-        $matches = Student::query()
-            ->where('etablissement_id', $batch->etablissement_id)
-            ->whereRaw(
-                "lower(regexp_replace(trim(concat(prenom, ' ', nom)), '\\s+', ' ', 'g')) = ?",
-                [$normalizedTarget]
-            )
-            ->get(['id']);
-
-        if ($matches->count() === 1) {
-            return ['student_id' => $matches->first()->id, 'conflicts' => []];
-        }
-
-        if ($matches->count() > 1) {
+        if ($match === -1) {
             return ['student_id' => null, 'conflicts' => [
                 ['field' => 'student_id', 'code' => 'ambiguous_student', 'message' => sprintf(
                     'Plusieurs étudiants correspondent à "%s".',
                     $payeurName
                 )],
             ]];
+        }
+
+        if ($match !== null) {
+            return ['student_id' => $match, 'conflicts' => []];
         }
 
         return ['student_id' => null, 'conflicts' => [
@@ -383,20 +602,16 @@ final class EncaissementImporter implements Importer
 
     /**
      * Finds the student's ACTIVE inscription strictly within the batch's
-     * Centre+Année (never another year/centre as a fallback), then matches
-     * the file's Frais label against THAT inscription's own real fee
-     * lines. Never creates a frais/inscription_fees row.
+     * Centre+Année (never another year/centre as a fallback — the
+     * preloaded index is already scoped that way), then matches the file's
+     * Frais label against THAT inscription's own real fee lines. Never
+     * creates a frais/inscription_fees row.
      *
      * @return array{inscription_fee_id: ?int, candidates: array<int, array{id: int, nom: string, montant: string, statut: string}>, conflicts: array<int, array{field: string, code: string, message: string}>}
      */
-    private function resolveInscriptionFee(ImportBatch $batch, ImportContext $context, int $studentId, string $fraisLabel): array
+    private function resolveInscriptionFee(int $studentId, string $fraisLabel): array
     {
-        $inscription = Inscription::query()
-            ->where('student_id', $studentId)
-            ->where('etablissement_id', $batch->etablissement_id)
-            ->where('annee_scolaire_id', $context->anneeScolaireId)
-            ->where('statut', Inscription::STATUT_ACTIVE)
-            ->first();
+        $inscription = $this->activeInscriptionByStudentId[$studentId] ?? null;
 
         if ($inscription === null) {
             return ['inscription_fee_id' => null, 'candidates' => [], 'conflicts' => [
@@ -405,16 +620,16 @@ final class EncaissementImporter implements Importer
             ]];
         }
 
-        $fees = $inscription->fees()->get(['id', 'nom', 'montant', 'statut']);
+        $fees = $this->feesByInscriptionId[$inscription->id] ?? collect();
         $normalizedTarget = mb_strtolower(CellNormalizer::text($fraisLabel));
 
-        $exact = $fees->first(fn ($fee) => mb_strtolower(CellNormalizer::text($fee->nom)) === $normalizedTarget);
+        $exact = $fees->first(fn (InscriptionFee $fee) => mb_strtolower(CellNormalizer::text($fee->nom)) === $normalizedTarget);
 
         if ($exact !== null) {
             return ['inscription_fee_id' => $exact->id, 'candidates' => [], 'conflicts' => []];
         }
 
-        $candidates = $fees->map(fn ($fee): array => [
+        $candidates = $fees->map(fn (InscriptionFee $fee): array => [
             'id' => $fee->id,
             'nom' => $fee->nom,
             'montant' => (string) $fee->montant,
@@ -429,26 +644,27 @@ final class EncaissementImporter implements Importer
         ]];
     }
 
-    private function findDuplicate(string $legacyRef, ?int $studentId, ?string $montant, ?string $datePaiement, ?string $methode, ?int $inscriptionFeeId): ?Encaissement
+    /**
+     * Whether this row is a re-import of an already-processed payment.
+     * Primary key: legacy_ref, checked against both what existed in the DB
+     * before this run AND every legacy_ref already seen earlier in THIS
+     * SAME file (two rows in one upload sharing a Réf. are still a
+     * duplicate, but a DB-only snapshot can't see that). Fallback, when a
+     * row has no legacy_ref: the same student+montant+date+méthode+fee
+     * composite key, checked the same two ways.
+     */
+    private function isDuplicate(string $legacyRef, ?int $studentId, ?string $montant, ?string $datePaiement, ?string $methode, ?int $inscriptionFeeId): bool
     {
         if ($legacyRef !== '') {
-            $existing = Encaissement::query()->where('legacy_ref', $legacyRef)->first();
-
-            if ($existing !== null) {
-                return $existing;
-            }
+            return isset($this->existingEncaissementLegacyRefs[$legacyRef]) || isset($this->legacyRefsSeenThisFile[$legacyRef]);
         }
 
         if ($studentId === null || $montant === null || $datePaiement === null || $methode === null || $inscriptionFeeId === null) {
-            return null;
+            return false;
         }
 
-        return Encaissement::query()
-            ->where('student_id', $studentId)
-            ->where('montant', $montant)
-            ->where('date_paiement', $datePaiement)
-            ->where('methode', $methode)
-            ->where('inscription_fee_id', $inscriptionFeeId)
-            ->first();
+        $key = $this->compositeKey($studentId, $montant, $datePaiement, $methode, $inscriptionFeeId);
+
+        return isset($this->existingEncaissementCompositeKeys[$key]) || isset($this->compositeKeysSeenThisFile[$key]);
     }
 }

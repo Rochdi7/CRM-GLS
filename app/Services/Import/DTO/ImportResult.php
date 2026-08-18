@@ -11,5 +11,7 @@ final readonly class ImportResult
         public int $skippedCount,
         public int $errorCount,
         public ?string $errorReportPath = null,
+        /** Selected rows still pending after this call — chunked commit() calls loop until this reaches 0. */
+        public int $remaining = 0,
     ) {}
 }

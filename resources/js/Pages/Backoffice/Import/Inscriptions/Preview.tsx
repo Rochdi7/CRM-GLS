@@ -1,9 +1,11 @@
 import { router } from '@inertiajs/react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import DataTable from '@/Components/Tables/DataTable';
 import ImportRowStatusBadge from '@/Components/Import/ImportRowStatusBadge';
+import CommitProgressBar from '@/Components/Import/CommitProgressBar';
+import { useCommitProgress } from '@/Hooks/useCommitProgress';
 import type { ImportBatch, ImportRow } from '@/Types/import';
 
 interface InscriptionImportPreviewProps {
@@ -18,6 +20,12 @@ export default function InscriptionImportPreview({ batch, rows }: InscriptionImp
         () => new Set(rows.filter((r) => r.status === 'NOUVEAU').map((r) => r.id))
     );
     const [filter, setFilter] = useState<string>('');
+
+    const handleDone = useCallback(() => {
+        router.visit(`/backoffice/import/inscriptions/${batch.id}/result`);
+    }, [batch.id]);
+
+    const progress = useCommitProgress(`/backoffice/import/inscriptions/${batch.id}/commit`, handleDone);
 
     const filteredRows = filter === '' ? rows : rows.filter((r) => r.status === filter);
     const counts = rows.reduce<Record<string, number>>((acc, r) => {
@@ -34,12 +42,6 @@ export default function InscriptionImportPreview({ batch, rows }: InscriptionImp
                 next.add(id);
             }
             return next;
-        });
-    }
-
-    function commit() {
-        router.post(`/backoffice/import/inscriptions/${batch.id}/commit`, {
-            selected_row_ids: Array.from(selected),
         });
     }
 
@@ -74,6 +76,7 @@ export default function InscriptionImportPreview({ batch, rows }: InscriptionImp
                 </div>
 
                 <DataTable
+                    loading={progress.running}
                     head={
                         <tr>
                             <th />
@@ -113,10 +116,18 @@ export default function InscriptionImportPreview({ batch, rows }: InscriptionImp
                     ))}
                 </DataTable>
 
+                {progress.running && <CommitProgressBar inserted={progress.inserted} errors={progress.errors} total={progress.total} />}
+                {progress.failed && <div className="alert alert-danger mt-3">Une erreur est survenue pendant l'insertion.</div>}
+
                 <div className="d-flex justify-content-between align-items-center mt-3">
                     <span className="text-muted">{selected.size} ligne(s) sélectionnée(s)</span>
-                    <button type="button" className="btn btn-primary" onClick={commit} disabled={selected.size === 0}>
-                        Insérer la sélection
+                    <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => progress.start(Array.from(selected))}
+                        disabled={selected.size === 0 || progress.running}
+                    >
+                        {progress.running ? 'Insertion en cours…' : 'Insérer la sélection'}
                     </button>
                 </div>
             </Card>

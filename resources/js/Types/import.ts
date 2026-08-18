@@ -35,6 +35,9 @@ export interface ImportBatch {
     annee_scolaire?: { id: number; nom: string };
 }
 
+/** Per-status row counts for the whole batch (one grouped COUNT server-side, never a client-side tally of every row). */
+export type ImportStatusCounts = Partial<Record<ImportRowStatus, number>>;
+
 export interface ImportEtablissementOption {
     id: number;
     nom_centre: string;

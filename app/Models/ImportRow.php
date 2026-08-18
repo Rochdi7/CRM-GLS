@@ -36,6 +36,17 @@ class ImportRow extends Model
         self::STATUT_CONFLIT,
     ];
 
+    /** Every valid status — used to validate the Preview screen's status filter. */
+    public const STATUTS = [
+        self::STATUT_NOUVEAU,
+        self::STATUT_DOUBLON,
+        self::STATUT_ERREUR,
+        self::STATUT_CONFLIT,
+        self::STATUT_INSERE,
+        self::STATUT_IGNORE,
+        self::STATUT_ECHEC_COMMIT,
+    ];
+
     protected $fillable = [
         'import_batch_id', 'source_row_number', 'raw', 'status', 'errors',
         'resolution', 'legacy_ref', 'created_model_type', 'created_model_id',

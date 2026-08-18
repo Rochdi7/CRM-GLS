@@ -67,6 +67,23 @@ final class InscriptionImportTest extends TestCase
         return new UploadedFile(self::SAMPLE_FILE, 'liste-inscriptions.xlsx', null, null, true);
     }
 
+    /**
+     * commit() now processes a small chunk per call (progress-bar UX) —
+     * loops the JSON endpoint to completion the way the real Preview page's
+     * useCommitProgress hook does, and returns the final chunk's response.
+     */
+    private function commitAllSelected(User $user, ImportBatch $batch, array $rowIds): \Illuminate\Testing\TestResponse
+    {
+        do {
+            $response = $this->actingAs($user)->postJson(route('backoffice.import.inscriptions.commit', $batch), [
+                'selected_row_ids' => $rowIds,
+            ]);
+            $remaining = $response->json('remaining');
+        } while ($remaining > 0);
+
+        return $response;
+    }
+
     /** Creates a student whose name matches one of the real sample rows exactly. */
     private function makeStudent(string $prenom, string $nom, ?int $etablissementId = null): Student
     {
@@ -213,9 +230,7 @@ final class InscriptionImportTest extends TestCase
         $batch = ImportBatch::query()->firstOrFail();
         $row = $batch->rows()->where('legacy_ref', '373SL126')->firstOrFail();
 
-        $this->actingAs($user)->post(route('backoffice.import.inscriptions.commit', $batch), [
-            'selected_row_ids' => [$row->id],
-        ])->assertRedirect(route('backoffice.import.inscriptions.result', $batch));
+        $this->commitAllSelected($user, $batch, [$row->id])->assertOk();
 
         $inscription = Inscription::query()->where('legacy_ref', '373SL126')->firstOrFail();
         $this->assertSame(1, $inscription->fees()->count());
@@ -245,9 +260,7 @@ final class InscriptionImportTest extends TestCase
         ]);
         $firstBatch = ImportBatch::query()->firstOrFail();
         $row = $firstBatch->rows()->where('legacy_ref', '373SL126')->firstOrFail();
-        $this->actingAs($user)->post(route('backoffice.import.inscriptions.commit', $firstBatch), [
-            'selected_row_ids' => [$row->id],
-        ]);
+        $this->commitAllSelected($user, $firstBatch, [$row->id]);
         $this->assertSame(1, Inscription::query()->where('legacy_ref', '373SL126')->count());
 
         $this->actingAs($user)->post(route('backoffice.import.inscriptions.analyze'), [
@@ -258,9 +271,7 @@ final class InscriptionImportTest extends TestCase
         $secondRow = $secondBatch->rows()->where('legacy_ref', '373SL126')->firstOrFail();
         $this->assertSame(ImportRow::STATUT_DOUBLON, $secondRow->status);
 
-        $this->actingAs($user)->post(route('backoffice.import.inscriptions.commit', $secondBatch), [
-            'selected_row_ids' => $secondBatch->rows()->pluck('id')->all(),
-        ]);
+        $this->commitAllSelected($user, $secondBatch, $secondBatch->rows()->pluck('id')->all());
 
         $this->assertSame(1, Inscription::query()->where('legacy_ref', '373SL126')->count());
     }

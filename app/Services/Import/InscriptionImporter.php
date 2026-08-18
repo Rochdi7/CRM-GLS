@@ -36,6 +36,43 @@ final class InscriptionImporter implements Importer
 
     private const array EXPECTED_COLUMNS = ['Réf', 'Étudiant', 'Groupe', 'Statut', "Date d'inscription"];
 
+    /** ImportRow rows are buffered and mass-inserted every N rows — real exports run into the thousands of rows, and one create() call per row (Eloquent events + a round-trip each) was a large part of the 30s timeout. */
+    private const int INSERT_BUFFER_SIZE = 500;
+
+    /**
+     * Preloaded once per analyze() call — resolving each row's student
+     * against the DB via a per-row regexp_replace() query was timing out
+     * on real 100+-row files; matching against an in-memory index scales
+     * with the row count instead of row-count × query-cost.
+     *
+     * @var array<string, array<int, array{id: int, nom: string}>>|null normalized full name => candidate students, scoped to the current batch's centre
+     */
+    private ?array $studentsByNormalizedName = null;
+
+    /**
+     * Every group_id the mapping's "map" entries reference, verified once
+     * to belong to the batch's centre+année — resolveGroup() no longer
+     * queries per row for this.
+     *
+     * @var array<int, true>|null
+     */
+    private ?array $validMappedGroupIds = null;
+
+    /** @var array<string, true>|null every legacy_ref already imported before this batch started, scoped to the batch's centre */
+    private ?array $existingLegacyRefs = null;
+
+    /** @var array<string, true>|null fallback composite dedupe key ("studentId|groupId|dateInscription") of every existing inscription */
+    private ?array $existingCompositeKeys = null;
+
+    /** legacy_refs seen so far WITHIN this file. */
+    private array $legacyRefsSeenThisFile = [];
+
+    /** composite keys seen so far WITHIN this file. */
+    private array $compositeKeysSeenThisFile = [];
+
+    /** @var array<int, array<string, mixed>> buffered ImportRow attribute arrays, flushed every INSERT_BUFFER_SIZE rows */
+    private array $pendingRows = [];
+
     public function __construct(
         private readonly SheetReader $sheetReader,
         private readonly ImportValidator $validator,
@@ -54,6 +91,14 @@ final class InscriptionImporter implements Importer
             $filePath,
             self::EXPECTED_COLUMNS
         );
+
+        $this->legacyRefsSeenThisFile = [];
+        $this->compositeKeysSeenThisFile = [];
+        $this->pendingRows = [];
+        $this->studentsByNormalizedName = $this->preloadStudents($context->etablissementId);
+        $this->validMappedGroupIds = $this->preloadValidMappedGroupIds($context);
+        $this->existingLegacyRefs = $this->preloadExistingLegacyRefs($context->etablissementId);
+        $this->existingCompositeKeys = $this->preloadExistingCompositeKeys();
 
         return DB::transaction(function () use ($filePath, $headerRow, $headerMap, $file, $context, $importingAdmin): ImportBatch {
             $batch = ImportBatch::create([
@@ -74,18 +119,23 @@ final class InscriptionImporter implements Importer
                 $this->analyzeRow($batch, $rowNumber, $rawRow, $context);
             }
 
+            $this->flushPendingRows();
+
             $batch->update(['total_rows' => $total]);
 
             return $batch->fresh();
         });
     }
 
-    public function commit(ImportBatch $batch, array $selectedRowIds, Employee $importingAdmin): ImportResult
+    public function commit(ImportBatch $batch, array $selectedRowIds, Employee $importingAdmin, int $chunkSize = 5): ImportResult
     {
-        $rows = $batch->rows()
+        $eligibleQuery = $batch->rows()
             ->whereIn('id', $selectedRowIds)
-            ->whereIn('status', ImportRow::SELECTABLE_STATUTS)
-            ->get();
+            ->whereIn('status', ImportRow::SELECTABLE_STATUTS);
+
+        $totalEligible = (clone $eligibleQuery)->count();
+        $rows = (clone $eligibleQuery)->orderBy('id')->limit($chunkSize)->get();
+        $remaining = max(0, $totalEligible - $rows->count());
 
         $inserted = 0;
         $errors = 0;
@@ -145,13 +195,24 @@ final class InscriptionImporter implements Importer
         }
 
         $batch->update([
-            'status' => $errors > 0 ? ImportBatch::STATUT_COMMITTED_WITH_ERRORS : ImportBatch::STATUT_COMMITTED,
+            'status' => $this->nextBatchStatus($batch, $remaining, $errors),
             'inserted_rows' => $batch->inserted_rows + $inserted,
             'error_rows' => $batch->error_rows + $errors,
-            'committed_at' => now(),
+            'committed_at' => $remaining === 0 ? now() : $batch->committed_at,
         ]);
 
-        return new ImportResult(insertedCount: $inserted, skippedCount: 0, errorCount: $errors);
+        return new ImportResult(insertedCount: $inserted, skippedCount: 0, errorCount: $errors, remaining: $remaining);
+    }
+
+    private function nextBatchStatus(ImportBatch $batch, int $remaining, int $errorsThisChunk): string
+    {
+        if ($remaining > 0) {
+            return ImportBatch::STATUT_COMMITTING;
+        }
+
+        $hasAnyErrors = $errorsThisChunk > 0 || $batch->error_rows > 0;
+
+        return $hasAnyErrors ? ImportBatch::STATUT_COMMITTED_WITH_ERRORS : ImportBatch::STATUT_COMMITTED;
     }
 
     /**
@@ -190,7 +251,7 @@ final class InscriptionImporter implements Importer
             $parseErrors[] = ['field' => 'date_inscription', 'code' => 'unparseable', 'message' => $e->getMessage()];
         }
 
-        $studentResolution = $this->resolveStudent($batch, $etudiant);
+        $studentResolution = $this->resolveStudent($etudiant);
         $groupResolution = $this->resolveGroup($context, $groupe);
 
         $raw = [
@@ -203,27 +264,32 @@ final class InscriptionImporter implements Importer
             'group_id' => $groupResolution['group_id'],
         ];
 
-        $duplicate = $this->findDuplicate($batch, $legacyRef, $studentResolution['student_id'], $groupResolution['group_id'], $dateInscription);
+        $studentId = $studentResolution['student_id'];
+        $groupId = $groupResolution['group_id'];
 
-        if ($duplicate !== null) {
-            ImportRow::create([
-                'import_batch_id' => $batch->id,
-                'source_row_number' => $rowNumber,
+        $duplicate = $this->isDuplicate($legacyRef, $studentId, $groupId, $dateInscription);
+
+        if ($duplicate) {
+            $this->pushPendingRow($batch, $rowNumber, [
                 'raw' => $raw,
                 'status' => ImportRow::STATUT_DOUBLON,
                 'legacy_ref' => $legacyRef ?: null,
-                'resolution' => ['matched_inscription_id' => $duplicate->id],
+                'resolution' => null,
             ]);
 
             return;
         }
 
+        if ($legacyRef !== '') {
+            $this->legacyRefsSeenThisFile[$legacyRef] = true;
+        } elseif ($studentId !== null && $groupId !== null && $dateInscription !== null) {
+            $this->compositeKeysSeenThisFile[$this->compositeKey($studentId, $groupId, $dateInscription)] = true;
+        }
+
         $conflitReasons = [...$studentResolution['conflicts'], ...$groupResolution['conflicts']];
 
         if ($conflitReasons !== []) {
-            ImportRow::create([
-                'import_batch_id' => $batch->id,
-                'source_row_number' => $rowNumber,
+            $this->pushPendingRow($batch, $rowNumber, [
                 'raw' => $raw,
                 'status' => ImportRow::STATUT_CONFLIT,
                 'errors' => $conflitReasons,
@@ -238,29 +304,146 @@ final class InscriptionImporter implements Importer
         }
 
         $normalized = [
-            'student_id' => $studentResolution['student_id'],
-            'group_id' => $groupResolution['group_id'],
+            'student_id' => $studentId,
+            'group_id' => $groupId,
             'date_inscription' => $dateInscription,
             'statut' => $statut,
         ];
 
         $errors = [...$parseErrors, ...$this->validator->validateInscription($normalized)];
 
-        ImportRow::create([
-            'import_batch_id' => $batch->id,
-            'source_row_number' => $rowNumber,
+        $this->pushPendingRow($batch, $rowNumber, [
             'raw' => $raw,
             'status' => $errors === [] ? ImportRow::STATUT_NOUVEAU : ImportRow::STATUT_ERREUR,
             'errors' => $errors === [] ? null : $errors,
             'legacy_ref' => $legacyRef ?: null,
-            'resolution' => ['student_id' => $studentResolution['student_id'], 'group_id' => $groupResolution['group_id']],
+            'resolution' => ['student_id' => $studentId, 'group_id' => $groupId],
         ]);
+    }
+
+    /**
+     * Buffers one ImportRow's attributes instead of calling create() per
+     * row — flushed in bulk via flushPendingRows() every
+     * INSERT_BUFFER_SIZE rows, and once more at the end of analyze().
+     *
+     * @param array<string, mixed> $attributes
+     */
+    private function pushPendingRow(ImportBatch $batch, int $rowNumber, array $attributes): void
+    {
+        $now = now();
+
+        $this->pendingRows[] = [
+            'import_batch_id' => $batch->id,
+            'source_row_number' => $rowNumber,
+            'raw' => json_encode($attributes['raw']),
+            'status' => $attributes['status'],
+            'errors' => isset($attributes['errors']) ? json_encode($attributes['errors']) : null,
+            'resolution' => isset($attributes['resolution']) ? json_encode($attributes['resolution']) : null,
+            'legacy_ref' => $attributes['legacy_ref'] ?? null,
+            'created_model_type' => null,
+            'created_model_id' => null,
+            'selected' => true,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ];
+
+        if (count($this->pendingRows) >= self::INSERT_BUFFER_SIZE) {
+            $this->flushPendingRows();
+        }
+    }
+
+    private function flushPendingRows(): void
+    {
+        if ($this->pendingRows === []) {
+            return;
+        }
+
+        ImportRow::query()->insert($this->pendingRows);
+        $this->pendingRows = [];
+    }
+
+    /**
+     * @return array<string, array<int, array{id: int, nom: string}>>
+     */
+    private function preloadStudents(int $etablissementId): array
+    {
+        $index = [];
+
+        Student::query()
+            ->where('etablissement_id', $etablissementId)
+            ->get(['id', 'prenom', 'nom'])
+            ->each(function (Student $student) use (&$index): void {
+                $key = mb_strtolower(CellNormalizer::text("{$student->prenom} {$student->nom}"));
+                $index[$key][] = ['id' => $student->id, 'nom' => "{$student->prenom} {$student->nom}"];
+            });
+
+        return $index;
+    }
+
+    /**
+     * Verifies once (not per row) that every "map"-action group_id in the
+     * mapping actually belongs to the batch's centre+année.
+     *
+     * @return array<int, true>
+     */
+    private function preloadValidMappedGroupIds(ImportContext $context): array
+    {
+        $mappedIds = [];
+        foreach ($context->groupeMapping as $mapping) {
+            if ($mapping['action'] === 'map' && isset($mapping['group_id'])) {
+                $mappedIds[] = (int) $mapping['group_id'];
+            }
+        }
+
+        if ($mappedIds === []) {
+            return [];
+        }
+
+        return Group::query()
+            ->whereIn('id', $mappedIds)
+            ->where('etablissement_id', $context->etablissementId)
+            ->where('annee_scolaire_id', $context->anneeScolaireId)
+            ->pluck('id')
+            ->flip()
+            ->map(fn () => true)
+            ->all();
+    }
+
+    /** @return array<string, true> */
+    private function preloadExistingLegacyRefs(int $etablissementId): array
+    {
+        return Inscription::query()
+            ->where('etablissement_id', $etablissementId)
+            ->whereNotNull('legacy_ref')
+            ->pluck('legacy_ref')
+            ->flip()
+            ->map(fn () => true)
+            ->all();
+    }
+
+    /** @return array<string, true> */
+    private function preloadExistingCompositeKeys(): array
+    {
+        $index = [];
+
+        Inscription::query()
+            ->get(['student_id', 'group_id', 'date_inscription'])
+            ->each(function (Inscription $inscription) use (&$index): void {
+                $index[$this->compositeKey($inscription->student_id, $inscription->group_id, $inscription->date_inscription->toDateString())] = true;
+            });
+
+        return $index;
+    }
+
+    private function compositeKey(int $studentId, int $groupId, string $dateInscription): string
+    {
+        return "{$studentId}|{$groupId}|{$dateInscription}";
     }
 
     /**
      * @return array{student_id: ?int, candidates: array<int, array{id: int, nom: string}>, conflicts: array<int, array{field: string, code: string, message: string}>}
      */
-    private function resolveStudent(ImportBatch $batch, string $etudiant): array
+    private function resolveStudent(string $etudiant): array
     {
         if ($etudiant === '') {
             return ['student_id' => null, 'candidates' => [], 'conflicts' => [
@@ -269,23 +452,16 @@ final class InscriptionImporter implements Importer
         }
 
         $normalizedTarget = mb_strtolower(CellNormalizer::text($etudiant));
+        $matches = $this->studentsByNormalizedName[$normalizedTarget] ?? [];
 
-        $matches = Student::query()
-            ->where('etablissement_id', $batch->etablissement_id)
-            ->whereRaw(
-                "lower(regexp_replace(trim(concat(prenom, ' ', nom)), '\\s+', ' ', 'g')) = ?",
-                [$normalizedTarget]
-            )
-            ->get(['id', 'prenom', 'nom']);
-
-        if ($matches->count() === 1) {
-            return ['student_id' => $matches->first()->id, 'candidates' => [], 'conflicts' => []];
+        if (count($matches) === 1) {
+            return ['student_id' => $matches[0]['id'], 'candidates' => [], 'conflicts' => []];
         }
 
-        if ($matches->count() > 1) {
+        if (count($matches) > 1) {
             return [
                 'student_id' => null,
-                'candidates' => $matches->map(fn (Student $s): array => ['id' => $s->id, 'nom' => "{$s->prenom} {$s->nom}"])->all(),
+                'candidates' => $matches,
                 'conflicts' => [['field' => 'student_id', 'code' => 'ambiguous_student', 'message' => sprintf(
                     'Plusieurs étudiants correspondent à "%s".',
                     $etudiant
@@ -321,13 +497,9 @@ final class InscriptionImporter implements Importer
         }
 
         if ($mapping['action'] === 'map') {
-            $group = Group::query()
-                ->where('id', $mapping['group_id'])
-                ->where('etablissement_id', $context->etablissementId)
-                ->where('annee_scolaire_id', $context->anneeScolaireId)
-                ->first();
+            $groupId = (int) $mapping['group_id'];
 
-            if ($group === null) {
+            if (! isset($this->validMappedGroupIds[$groupId])) {
                 return ['group_id' => null, 'candidates' => [], 'conflicts' => [
                     ['field' => 'group_id', 'code' => 'group_out_of_scope', 'message' => sprintf(
                         'Le groupe associé à "%s" ne correspond pas au centre/année sélectionné.',
@@ -336,7 +508,7 @@ final class InscriptionImporter implements Importer
                 ]];
             }
 
-            return ['group_id' => $group->id, 'candidates' => [], 'conflicts' => []];
+            return ['group_id' => $groupId, 'candidates' => [], 'conflicts' => []];
         }
 
         // action === 'create': the group is created once, eagerly, when the
@@ -375,27 +547,18 @@ final class InscriptionImporter implements Importer
         })->all();
     }
 
-    private function findDuplicate(ImportBatch $batch, string $legacyRef, ?int $studentId, ?int $groupId, ?string $dateInscription): ?Inscription
+    private function isDuplicate(string $legacyRef, ?int $studentId, ?int $groupId, ?string $dateInscription): bool
     {
         if ($legacyRef !== '') {
-            $existing = Inscription::query()
-                ->where('etablissement_id', $batch->etablissement_id)
-                ->where('legacy_ref', $legacyRef)
-                ->first();
-
-            if ($existing !== null) {
-                return $existing;
-            }
+            return isset($this->existingLegacyRefs[$legacyRef]) || isset($this->legacyRefsSeenThisFile[$legacyRef]);
         }
 
         if ($studentId === null || $groupId === null || $dateInscription === null) {
-            return null;
+            return false;
         }
 
-        return Inscription::query()
-            ->where('student_id', $studentId)
-            ->where('group_id', $groupId)
-            ->where('date_inscription', $dateInscription)
-            ->first();
+        $key = $this->compositeKey($studentId, $groupId, $dateInscription);
+
+        return isset($this->existingCompositeKeys[$key]) || isset($this->compositeKeysSeenThisFile[$key]);
     }
 }

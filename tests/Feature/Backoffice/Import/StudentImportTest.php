@@ -57,6 +57,23 @@ final class StudentImportTest extends TestCase
         return new UploadedFile(self::SAMPLE_FILE, 'liste-etudiants.xlsx', null, null, true);
     }
 
+    /**
+     * commit() now processes a small chunk per call (progress-bar UX) —
+     * loops the JSON endpoint to completion the way the real Preview page's
+     * useCommitProgress hook does, and returns the final chunk's response.
+     */
+    private function commitAllSelected(User $user, ImportBatch $batch, array $rowIds): \Illuminate\Testing\TestResponse
+    {
+        do {
+            $response = $this->actingAs($user)->postJson(route('backoffice.import.students.commit', $batch), [
+                'selected_row_ids' => $rowIds,
+            ]);
+            $remaining = $response->json('remaining');
+        } while ($remaining > 0);
+
+        return $response;
+    }
+
     public function test_upload_page_renders_with_scoped_etablissement_options(): void
     {
         $user = $this->userWith('import.view', 'import.create');
@@ -137,9 +154,7 @@ final class StudentImportTest extends TestCase
         $batch = ImportBatch::query()->firstOrFail();
         $rowIds = $batch->rows()->pluck('id')->all();
 
-        $this->actingAs($user)->post(route('backoffice.import.students.commit', $batch), [
-            'selected_row_ids' => $rowIds,
-        ])->assertRedirect(route('backoffice.import.students.result', $batch));
+        $this->commitAllSelected($user, $batch, $rowIds)->assertOk();
 
         $this->assertSame(41, Student::query()->count());
 
@@ -161,6 +176,37 @@ final class StudentImportTest extends TestCase
                 ->where('batch.inserted_rows', 41));
     }
 
+    public function test_commit_processes_a_small_chunk_per_call_reporting_incremental_progress(): void
+    {
+        $user = $this->userWith('import.view', 'import.create');
+        $this->actingAs($user)->post(route('backoffice.import.students.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $rowIds = $batch->rows()->orderBy('id')->pluck('id')->all();
+        $this->assertGreaterThan(5, count($rowIds), 'This test needs more rows than one chunk to prove chunking.');
+
+        $first = $this->actingAs($user)->postJson(route('backoffice.import.students.commit', $batch), [
+            'selected_row_ids' => $rowIds,
+        ]);
+
+        $first->assertOk();
+        $this->assertSame(5, $first->json('inserted'));
+        $this->assertSame(count($rowIds) - 5, $first->json('remaining'));
+        $this->assertSame(5, Student::query()->count(), 'Only the first chunk should be inserted so far.');
+        $this->assertSame(ImportBatch::STATUT_COMMITTING, $batch->fresh()->status);
+
+        $second = $this->actingAs($user)->postJson(route('backoffice.import.students.commit', $batch), [
+            'selected_row_ids' => $rowIds,
+        ]);
+
+        $this->assertSame(5, $second->json('inserted'));
+        $this->assertSame(10, Student::query()->count());
+    }
+
     public function test_reupload_of_the_same_file_inserts_zero_rows_idempotent(): void
     {
         $user = $this->userWith('import.view', 'import.create');
@@ -171,9 +217,7 @@ final class StudentImportTest extends TestCase
             'annee_scolaire_id' => $this->annee->id,
         ]);
         $firstBatch = ImportBatch::query()->firstOrFail();
-        $this->actingAs($user)->post(route('backoffice.import.students.commit', $firstBatch), [
-            'selected_row_ids' => $firstBatch->rows()->pluck('id')->all(),
-        ]);
+        $this->commitAllSelected($user, $firstBatch, $firstBatch->rows()->pluck('id')->all());
 
         $this->assertSame(41, Student::query()->count());
 
@@ -187,9 +231,7 @@ final class StudentImportTest extends TestCase
         $this->assertSame(41, $secondBatch->rows()->where('status', ImportRow::STATUT_DOUBLON)->count());
         $this->assertSame(0, $secondBatch->rows()->where('status', ImportRow::STATUT_NOUVEAU)->count());
 
-        $this->actingAs($user)->post(route('backoffice.import.students.commit', $secondBatch), [
-            'selected_row_ids' => $secondBatch->rows()->pluck('id')->all(),
-        ]);
+        $this->commitAllSelected($user, $secondBatch, $secondBatch->rows()->pluck('id')->all());
 
         $this->assertSame(41, Student::query()->count(), 'Re-uploading the same file must insert 0 new rows.');
     }
@@ -228,9 +270,7 @@ final class StudentImportTest extends TestCase
             ['field' => 'sexe', 'code' => 'invalid_enum', 'message' => 'bad'],
         ]]);
 
-        $this->actingAs($user)->post(route('backoffice.import.students.commit', $batch), [
-            'selected_row_ids' => [$row->id],
-        ]);
+        $this->commitAllSelected($user, $batch, [$row->id]);
 
         $this->assertSame(0, Student::query()->where('legacy_ref', 'E931')->count());
     }

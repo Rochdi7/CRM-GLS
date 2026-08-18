@@ -98,6 +98,23 @@ final class EncaissementImportTest extends TestCase
         ];
     }
 
+    /**
+     * commit() now processes a small chunk per call (progress-bar UX) —
+     * loops the JSON endpoint to completion the way the real Preview page's
+     * useCommitProgress hook does, and returns the final chunk's response.
+     */
+    private function commitAllSelected(User $user, ImportBatch $batch, array $rowIds): \Illuminate\Testing\TestResponse
+    {
+        do {
+            $response = $this->actingAs($user)->postJson(route('backoffice.import.encaissements.commit', $batch), [
+                'selected_row_ids' => $rowIds,
+            ]);
+            $remaining = $response->json('remaining');
+        } while ($remaining > 0);
+
+        return $response;
+    }
+
     public function test_peek_operateurs_lists_distinct_labels_and_employees_scoped_to_centre(): void
     {
         $user = $this->userWith('import.view', 'import.create');
@@ -206,9 +223,7 @@ final class EncaissementImportTest extends TestCase
         $this->assertSame('fee_not_matched', $row->errors[0]['code']);
         $this->assertSame($fraisCountBefore, Frais::query()->count());
 
-        $this->actingAs($user)->post(route('backoffice.import.encaissements.commit', $batch), [
-            'selected_row_ids' => [$row->id],
-        ]);
+        $this->commitAllSelected($user, $batch, [$row->id]);
 
         $this->assertSame($fraisCountBefore, Frais::query()->count());
         $this->assertSame(0, Encaissement::query()->count());
@@ -259,9 +274,7 @@ final class EncaissementImportTest extends TestCase
         $row = $batch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
         $this->assertSame(ImportRow::STATUT_NOUVEAU, $row->status);
 
-        $this->actingAs($user)->post(route('backoffice.import.encaissements.commit', $batch), [
-            'selected_row_ids' => [$row->id],
-        ])->assertRedirect(route('backoffice.import.encaissements.result', $batch));
+        $this->commitAllSelected($user, $batch, [$row->id])->assertOk();
 
         $encaissement = Encaissement::query()->where('legacy_ref', 'P4255')->firstOrFail();
         $this->assertSame('50.00', (string) $encaissement->montant);
@@ -287,9 +300,7 @@ final class EncaissementImportTest extends TestCase
         ]);
         $firstBatch = ImportBatch::query()->firstOrFail();
         $row = $firstBatch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
-        $this->actingAs($user)->post(route('backoffice.import.encaissements.commit', $firstBatch), [
-            'selected_row_ids' => [$row->id],
-        ]);
+        $this->commitAllSelected($user, $firstBatch, [$row->id]);
         $this->assertSame(1, Encaissement::query()->where('legacy_ref', 'P4255')->count());
 
         $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
@@ -300,9 +311,7 @@ final class EncaissementImportTest extends TestCase
         $secondRow = $secondBatch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
         $this->assertSame(ImportRow::STATUT_DOUBLON, $secondRow->status);
 
-        $this->actingAs($user)->post(route('backoffice.import.encaissements.commit', $secondBatch), [
-            'selected_row_ids' => $secondBatch->rows()->pluck('id')->all(),
-        ]);
+        $this->commitAllSelected($user, $secondBatch, $secondBatch->rows()->pluck('id')->all());
 
         $this->assertSame(1, Encaissement::query()->where('legacy_ref', 'P4255')->count());
     }

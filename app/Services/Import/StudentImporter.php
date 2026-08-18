@@ -28,6 +28,25 @@ final class StudentImporter implements Importer
 
     private const array EXPECTED_COLUMNS = ['Réf', 'Prénom', 'Nom', 'Téléphone', 'Sexe', 'Date de naissance'];
 
+    /** ImportRow rows are buffered and mass-inserted every N rows — real exports run into the thousands of rows, and one create() call per row (Eloquent events + a round-trip each) was a large part of the 30s timeout. */
+    private const int INSERT_BUFFER_SIZE = 500;
+
+    /**
+     * Preloaded once per analyze() call, indexed (not a linear Collection
+     * scan) — real exports can be thousands of rows, so an O(rows ×
+     * students) linear findDuplicate() was itself a bottleneck once the
+     * per-row DB query was removed.
+     *
+     * @var array<string, Student>|null legacy_ref => Student
+     */
+    private ?array $existingByLegacyRef = null;
+
+    /** @var array<string, list<Student>>|null normalized "prenom|nom" => matching Students */
+    private ?array $existingByName = null;
+
+    /** @var array<int, array<string, mixed>> buffered ImportRow attribute arrays, flushed every INSERT_BUFFER_SIZE rows */
+    private array $pendingRows = [];
+
     public function __construct(
         private readonly SheetReader $sheetReader,
         private readonly ImportValidator $validator,
@@ -45,6 +64,9 @@ final class StudentImporter implements Importer
             $filePath,
             self::EXPECTED_COLUMNS
         );
+
+        $this->pendingRows = [];
+        [$this->existingByLegacyRef, $this->existingByName] = $this->preloadExistingStudents($context->etablissementId);
 
         return DB::transaction(function () use ($filePath, $headerRow, $headerMap, $file, $context, $importingAdmin): ImportBatch {
             $batch = ImportBatch::create([
@@ -64,18 +86,23 @@ final class StudentImporter implements Importer
                 $this->analyzeRow($batch, $rowNumber, $rawRow, $context);
             }
 
+            $this->flushPendingRows();
+
             $batch->update(['total_rows' => $total]);
 
             return $batch->fresh();
         });
     }
 
-    public function commit(ImportBatch $batch, array $selectedRowIds, Employee $importingAdmin): ImportResult
+    public function commit(ImportBatch $batch, array $selectedRowIds, Employee $importingAdmin, int $chunkSize = 5): ImportResult
     {
-        $rows = $batch->rows()
+        $eligibleQuery = $batch->rows()
             ->whereIn('id', $selectedRowIds)
-            ->whereIn('status', ImportRow::SELECTABLE_STATUTS)
-            ->get();
+            ->whereIn('status', ImportRow::SELECTABLE_STATUTS);
+
+        $totalEligible = (clone $eligibleQuery)->count();
+        $rows = (clone $eligibleQuery)->orderBy('id')->limit($chunkSize)->get();
+        $remaining = max(0, $totalEligible - $rows->count());
 
         $inserted = 0;
         $errors = 0;
@@ -115,13 +142,24 @@ final class StudentImporter implements Importer
         }
 
         $batch->update([
-            'status' => $errors > 0 ? ImportBatch::STATUT_COMMITTED_WITH_ERRORS : ImportBatch::STATUT_COMMITTED,
+            'status' => $this->nextBatchStatus($batch, $remaining, $errors),
             'inserted_rows' => $batch->inserted_rows + $inserted,
             'error_rows' => $batch->error_rows + $errors,
-            'committed_at' => now(),
+            'committed_at' => $remaining === 0 ? now() : $batch->committed_at,
         ]);
 
-        return new ImportResult(insertedCount: $inserted, skippedCount: 0, errorCount: $errors);
+        return new ImportResult(insertedCount: $inserted, skippedCount: 0, errorCount: $errors, remaining: $remaining);
+    }
+
+    private function nextBatchStatus(ImportBatch $batch, int $remaining, int $errorsThisChunk): string
+    {
+        if ($remaining > 0) {
+            return ImportBatch::STATUT_COMMITTING;
+        }
+
+        $hasAnyErrors = $errorsThisChunk > 0 || $batch->error_rows > 0;
+
+        return $hasAnyErrors ? ImportBatch::STATUT_COMMITTED_WITH_ERRORS : ImportBatch::STATUT_COMMITTED;
     }
 
     /** @param array<string, mixed> $rawRow */
@@ -156,12 +194,10 @@ final class StudentImporter implements Importer
             'date_naissance_raw' => $rawRow['Date de naissance'] ?? null,
         ];
 
-        $duplicate = $this->findDuplicate($batch, $legacyRef, $prenom, $nom, $dateNaissance, $telephone);
+        $duplicate = $this->findDuplicate($legacyRef, $prenom, $nom, $dateNaissance, $telephone);
 
         if ($duplicate !== null) {
-            ImportRow::create([
-                'import_batch_id' => $batch->id,
-                'source_row_number' => $rowNumber,
+            $this->pushPendingRow($batch, $rowNumber, [
                 'raw' => $raw,
                 'status' => ImportRow::STATUT_DOUBLON,
                 'legacy_ref' => $legacyRef ?: null,
@@ -173,9 +209,7 @@ final class StudentImporter implements Importer
 
         $errors = [...$parseErrors, ...$this->validator->validateStudent($normalized)];
 
-        ImportRow::create([
-            'import_batch_id' => $batch->id,
-            'source_row_number' => $rowNumber,
+        $this->pushPendingRow($batch, $rowNumber, [
             'raw' => $raw,
             'status' => $errors === [] ? ImportRow::STATUT_NOUVEAU : ImportRow::STATUT_ERREUR,
             'errors' => $errors === [] ? null : $errors,
@@ -183,36 +217,105 @@ final class StudentImporter implements Importer
         ]);
     }
 
+    /**
+     * Buffers one ImportRow's attributes instead of calling create() per
+     * row — flushed in bulk via flushPendingRows() every
+     * INSERT_BUFFER_SIZE rows, and once more at the end of analyze().
+     *
+     * @param array<string, mixed> $attributes
+     */
+    private function pushPendingRow(ImportBatch $batch, int $rowNumber, array $attributes): void
+    {
+        $now = now();
+
+        $this->pendingRows[] = [
+            'import_batch_id' => $batch->id,
+            'source_row_number' => $rowNumber,
+            'raw' => json_encode($attributes['raw']),
+            'status' => $attributes['status'],
+            'errors' => isset($attributes['errors']) ? json_encode($attributes['errors']) : null,
+            'resolution' => isset($attributes['resolution']) ? json_encode($attributes['resolution']) : null,
+            'legacy_ref' => $attributes['legacy_ref'] ?? null,
+            'created_model_type' => null,
+            'created_model_id' => null,
+            'selected' => true,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ];
+
+        if (count($this->pendingRows) >= self::INSERT_BUFFER_SIZE) {
+            $this->flushPendingRows();
+        }
+    }
+
+    private function flushPendingRows(): void
+    {
+        if ($this->pendingRows === []) {
+            return;
+        }
+
+        ImportRow::query()->insert($this->pendingRows);
+        $this->pendingRows = [];
+    }
+
+    /**
+     * @return array{0: array<string, Student>, 1: array<string, list<Student>>}
+     */
+    private function preloadExistingStudents(int $etablissementId): array
+    {
+        $students = Student::query()
+            ->where('etablissement_id', $etablissementId)
+            ->get(['id', 'prenom', 'nom', 'date_naissance', 'telephone', 'legacy_ref']);
+
+        $byLegacyRef = [];
+        $byName = [];
+
+        foreach ($students as $student) {
+            if ($student->legacy_ref !== null) {
+                $byLegacyRef[$student->legacy_ref] = $student;
+            }
+
+            $nameKey = mb_strtolower($student->prenom).'|'.mb_strtolower($student->nom);
+            $byName[$nameKey][] = $student;
+        }
+
+        return [$byLegacyRef, $byName];
+    }
+
     private function findDuplicate(
-        ImportBatch $batch,
         string $legacyRef,
         string $prenom,
         string $nom,
         ?string $dateNaissance,
         ?string $telephone,
     ): ?Student {
-        if ($legacyRef !== '') {
-            $existing = Student::query()
-                ->where('etablissement_id', $batch->etablissement_id)
-                ->where('legacy_ref', $legacyRef)
-                ->first();
-
-            if ($existing !== null) {
-                return $existing;
-            }
+        if ($legacyRef !== '' && isset($this->existingByLegacyRef[$legacyRef])) {
+            return $this->existingByLegacyRef[$legacyRef];
         }
 
-        $query = Student::query()
-            ->where('etablissement_id', $batch->etablissement_id)
-            ->whereRaw('lower(prenom) = ?', [mb_strtolower($prenom)])
-            ->whereRaw('lower(nom) = ?', [mb_strtolower($nom)]);
+        $nameKey = mb_strtolower($prenom).'|'.mb_strtolower($nom);
+        $sameName = $this->existingByName[$nameKey] ?? [];
+
+        if ($sameName === []) {
+            return null;
+        }
 
         if ($dateNaissance !== null) {
-            return (clone $query)->where('date_naissance', $dateNaissance)->first();
+            foreach ($sameName as $student) {
+                if ($student->date_naissance?->toDateString() === $dateNaissance) {
+                    return $student;
+                }
+            }
+
+            return null;
         }
 
         if ($telephone !== null) {
-            return (clone $query)->where('telephone', $telephone)->first();
+            foreach ($sameName as $student) {
+                if ($student->telephone === $telephone) {
+                    return $student;
+                }
+            }
         }
 
         return null;

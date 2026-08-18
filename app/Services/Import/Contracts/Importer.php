@@ -24,9 +24,12 @@ interface Importer
     public function analyze(UploadedFile $file, ImportContext $context, Employee $importingAdmin): ImportBatch;
 
     /**
-     * Phase 2 — writes only rows in $selectedRowIds whose status is
-     * NOUVEAU or a resolved CONFLIT (DOUBLON/ERREUR rows are always
-     * skipped, re-checked server-side regardless of what was posted).
+     * Phase 2 — writes up to $chunkSize rows from $selectedRowIds whose
+     * status is NOUVEAU or a resolved CONFLIT (DOUBLON/ERREUR rows are
+     * always skipped, re-checked server-side regardless of what was
+     * posted). Chunked so the frontend can call this repeatedly and show
+     * incremental progress instead of one long synchronous request —
+     * ImportResult::$remaining tells the caller whether to call again.
      */
-    public function commit(ImportBatch $batch, array $selectedRowIds, Employee $importingAdmin): ImportResult;
+    public function commit(ImportBatch $batch, array $selectedRowIds, Employee $importingAdmin, int $chunkSize = 5): ImportResult;
 }

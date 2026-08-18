@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice\Import;
 
 use App\Http\Controllers\Backoffice\Concerns\ResolvesActingEmployee;
+use App\Http\Controllers\Backoffice\Import\Concerns\BuildsImportPreview;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Import\AnalyzeStudentImportRequest;
 use App\Http\Requests\Backoffice\Import\CommitImportRequest;
@@ -14,6 +15,7 @@ use App\Models\ImportBatch;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Import\DTO\ImportContext;
 use App\Services\Import\StudentImporter;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -21,6 +23,7 @@ use Inertia\Response;
 
 final class StudentImportController extends Controller
 {
+    use BuildsImportPreview;
     use ResolvesActingEmployee;
 
     public function create(Request $request, CenterAccessService $centerAccess): Response
@@ -56,18 +59,20 @@ final class StudentImportController extends Controller
         return redirect()->route('backoffice.import.students.preview', $batch);
     }
 
-    public function preview(ImportBatch $batch): Response
+    public function preview(Request $request, ImportBatch $batch): Response
     {
         $this->authorize('view', $batch);
         abort_unless($batch->module === ImportBatch::MODULE_STUDENTS, 404);
 
-        return Inertia::render('Backoffice/Import/Students/Preview', [
-            'batch' => $batch->load(['etablissement', 'anneeScolaire']),
-            'rows' => $batch->rows()->orderBy('source_row_number')->get(),
-        ]);
+        return Inertia::render('Backoffice/Import/Students/Preview', $this->previewProps($request, $batch));
     }
 
-    public function commit(CommitImportRequest $request, ImportBatch $batch, StudentImporter $importer): RedirectResponse
+    /**
+     * Commits one small chunk of the selection per call — the Preview
+     * screen calls this in a loop, updating a progress bar between calls,
+     * instead of one long synchronous request with no feedback.
+     */
+    public function commit(CommitImportRequest $request, ImportBatch $batch, StudentImporter $importer): JsonResponse
     {
         $this->authorize('create', ImportBatch::class);
         abort_unless($batch->module === ImportBatch::MODULE_STUDENTS, 404);
@@ -76,19 +81,20 @@ final class StudentImportController extends Controller
 
         $result = $importer->commit($batch, $request->validated('selected_row_ids'), $admin);
 
-        return redirect()->route('backoffice.import.students.result', $batch)
-            ->with('success', __(':count rows imported.', ['count' => $result->insertedCount]));
+        return response()->json([
+            'inserted' => $result->insertedCount,
+            'errors' => $result->errorCount,
+            'remaining' => $result->remaining,
+            'batch' => $batch->fresh(),
+        ]);
     }
 
-    public function result(ImportBatch $batch): Response
+    public function result(Request $request, ImportBatch $batch): Response
     {
         $this->authorize('view', $batch);
         abort_unless($batch->module === ImportBatch::MODULE_STUDENTS, 404);
 
-        return Inertia::render('Backoffice/Import/Students/Result', [
-            'batch' => $batch->load(['etablissement', 'anneeScolaire']),
-            'rows' => $batch->rows()->orderBy('source_row_number')->get(),
-        ]);
+        return Inertia::render('Backoffice/Import/Students/Result', $this->resultProps($request, $batch));
     }
 
     /** @return \Illuminate\Support\Collection<int, array{id: int, nom_centre: string}> */
