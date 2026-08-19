@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import axios from 'axios';
 import { Link, router, useForm } from '@inertiajs/react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
@@ -133,8 +132,28 @@ export default function SeanceShow({
         saveTimer.current = window.setTimeout(() => {
             setSaving(true);
             setSaveError(false);
-            axios
-                .put(`/backoffice/seances/${seance.id}/presences`, { presences: marked })
+            const csrf =
+                document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
+                    ?.content ?? '';
+
+            fetch(`/backoffice/seances/${seance.id}/presences`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({ presences: marked }),
+            })
+                .then((response) => {
+                    // fetch only rejects on network failure, so a 4xx/5xx
+                    // has to be turned into an error explicitly.
+                    if (! response.ok) {
+                        throw new Error(String(response.status));
+                    }
+                })
                 .catch(() => setSaveError(true))
                 .finally(() => setSaving(false));
         }, 400);
