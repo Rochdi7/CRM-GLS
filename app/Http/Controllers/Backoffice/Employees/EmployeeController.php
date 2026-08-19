@@ -114,7 +114,7 @@ final class EmployeeController extends Controller
         $payload = $this->buildPayload($data, $request, $employee);
 
         $employee->update($payload);
-        $employee->syncEtablissements($this->resolveCenterIds($data));
+        $employee->syncEtablissements($this->resolveCenterIds($data, $employee));
         $this->storePhoto($employee, $request);
 
         return redirect()->route('backoffice.employees.index')
@@ -184,15 +184,30 @@ final class EmployeeController extends Controller
      * Guaranteed non-empty: the Form Requests require at least one id, and
      * the locked branch always yields the context center.
      *
+     * On EDIT the centers field is hidden in that same locked context, so
+     * rewriting the assignment from it would silently REVOKE any other
+     * center the employee holds (and with it their access to that center's
+     * data + its entry in their top-bar switcher) as a side effect of an
+     * unrelated edit. Revoking a center must be deliberate, so an existing
+     * employee keeps its assignment unless the field was actually shown.
+     *
      * @param  array<string, mixed>  $data
      * @return list<int>
      */
-    private function resolveCenterIds(array $data): array
+    private function resolveCenterIds(array $data, ?Employee $employee = null): array
     {
         $context = app(CurrentContext::class);
 
         if (! $context->isAllCenters() && $context->etablissementId() !== null) {
-            return [$context->etablissementId()];
+            if ($employee === null) {
+                // Create: the new record belongs to the active center.
+                return [$context->etablissementId()];
+            }
+
+            $existing = $employee->etablissements()->pluck('etablissements.id')
+                ->map(static fn ($id): int => (int) $id)->all();
+
+            return $existing !== [] ? $existing : [$context->etablissementId()];
         }
 
         /** @var list<int> $ids */

@@ -508,4 +508,39 @@ final class EmployeesInertiaCrudTest extends TestCase
                 ->count('employees.data', 1)
             );
     }
+
+    public function test_editing_from_a_locked_center_does_not_revoke_the_employees_other_centers(): void
+    {
+        $centre = Etablissement::factory()->create();
+        $autreCentre = Etablissement::factory()->create();
+
+        // The employee works in BOTH centers.
+        $employee = Employee::factory()->create(['etablissement_id' => $centre->id]);
+        $employee->etablissements()->sync([$centre->id, $autreCentre->id]);
+
+        // An admin confined to $centre edits an unrelated field. The centers
+        // field is hidden in that context, so the assignment must survive:
+        // silently dropping $autreCentre would revoke that employee's access
+        // to it (and remove it from their top-bar switcher).
+        $user = $this->userWith('employees.view', 'employees.update');
+        $user->employee()->save(Employee::factory()->make(['etablissement_id' => $centre->id]));
+        $user->employee->etablissements()->sync([$centre->id]);
+        $this->actingAs($user->fresh());
+
+        $this->put(route('backoffice.employees.update', $employee), [
+            'nom' => $employee->nom,
+            'prenom' => $employee->prenom,
+            'sexe' => $employee->sexe,
+            'categorie' => $employee->categorie,
+            'statut' => $employee->statut,
+            'telephone' => '661954125',
+            'phone_pays' => 'MA',
+            'etablissement_ids' => [$centre->id],
+        ])->assertSessionDoesntHaveErrors();
+
+        $this->assertEqualsCanonicalizing(
+            [$centre->id, $autreCentre->id],
+            $employee->fresh()->etablissements()->pluck('etablissements.id')->all(),
+        );
+    }
 }
