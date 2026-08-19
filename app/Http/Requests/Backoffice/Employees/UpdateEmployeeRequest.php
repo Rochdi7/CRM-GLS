@@ -42,7 +42,22 @@ final class UpdateEmployeeRequest extends FormRequest
             'date_naissance' => ['nullable', 'date', 'before:today'],
             'date_embauche' => ['nullable', 'date'],
             'salaire' => ['nullable', 'numeric', 'min:0'],
-            'etablissement_id' => ['nullable', 'exists:etablissements,id'],
+            // At least ONE center is mandatory — an employee is never
+            // unaffected. The controller still decides WHICH ids are honored
+            // (a center-locked admin is forced to its own context center).
+            'etablissement_ids' => ['required', 'array', 'min:1'],
+            'etablissement_ids.*' => ['integer', 'distinct', 'exists:etablissements,id'],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'etablissement_ids.required' => __('Select at least one center.'),
+            'etablissement_ids.min' => __('Select at least one center.'),
         ];
     }
 }

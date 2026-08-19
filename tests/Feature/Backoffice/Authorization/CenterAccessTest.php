@@ -11,6 +11,7 @@ use App\Models\Group;
 use App\Models\Student;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
+use App\Services\Context\CurrentContext;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -141,5 +142,105 @@ final class CenterAccessTest extends TestCase
 
         $this->assertTrue($user->can('view', $globalStudent));
         $this->assertFalse($user->can('view', $centerStudent));
+    }
+
+    // --- Multi-center employees --------------------------------------------
+
+    public function test_a_multi_center_employee_can_access_every_assigned_center(): void
+    {
+        $service = app(CenterAccessService::class);
+
+        $user = User::factory()->create();
+        $user->assignRole('administrative-assistant'); // no centers.access-all
+
+        $employee = Employee::factory()->create([
+            'user_id' => $user->id,
+            'etablissement_id' => $this->centerA->id,
+        ]);
+        $employee->etablissements()->sync([$this->centerA->id, $this->centerB->id]);
+
+        $user = $user->fresh();
+
+        $this->assertEqualsCanonicalizing(
+            [$this->centerA->id, $this->centerB->id],
+            $service->accessibleCenterIds($user),
+        );
+        $this->assertTrue($service->canAccessCenter($user, $this->centerA->id));
+        // The second center is reachable ONLY through the pivot.
+        $this->assertTrue($service->canAccessCenter($user, $this->centerB->id));
+    }
+
+    public function test_a_multi_center_employee_sees_records_from_all_its_centers(): void
+    {
+        $studentA = Student::factory()->create(['etablissement_id' => $this->centerA->id]);
+        $studentB = Student::factory()->create(['etablissement_id' => $this->centerB->id]);
+        $centerC = Etablissement::factory()->create();
+        $studentC = Student::factory()->create(['etablissement_id' => $centerC->id]);
+
+        $user = User::factory()->create();
+        $user->assignRole('administrative-assistant');
+
+        $employee = Employee::factory()->create([
+            'user_id' => $user->id,
+            'etablissement_id' => $this->centerA->id,
+        ]);
+        $employee->etablissements()->sync([$this->centerA->id, $this->centerB->id]);
+
+        $user = $user->fresh();
+
+        $this->assertTrue($user->can('view', $studentA));
+        $this->assertTrue($user->can('view', $studentB));
+        // A center they are NOT assigned to stays out of reach.
+        $this->assertFalse($user->can('view', $studentC));
+    }
+
+    public function test_a_multi_center_employee_may_switch_between_its_own_centers_only(): void
+    {
+        $centerC = Etablissement::factory()->create();
+
+        $user = User::factory()->create();
+        $user->assignRole('administrative-assistant'); // cannot switch centers today
+
+        $employee = Employee::factory()->create([
+            'user_id' => $user->id,
+            'etablissement_id' => $this->centerA->id,
+        ]);
+        $employee->etablissements()->sync([$this->centerA->id, $this->centerB->id]);
+
+        $this->actingAs($user->fresh());
+
+        $context = app(CurrentContext::class);
+
+        // Holding two centers unlocks the top-bar switcher...
+        $this->assertTrue($context->canSwitchCenter());
+        // ...and it offers exactly those two, never every center in the app.
+        $this->assertEqualsCanonicalizing(
+            [$this->centerA->id, $this->centerB->id],
+            $context->availableCentres()->pluck('id')->all(),
+        );
+
+        // Selecting one of their own centers is honored.
+        $context->setEtablissement($this->centerB->id);
+        $this->assertSame($this->centerB->id, $context->etablissementId());
+
+        // A center they don't hold is silently refused (stays on B).
+        $context->setEtablissement($centerC->id);
+        $this->assertSame($this->centerB->id, $context->etablissementId());
+    }
+
+    public function test_a_single_center_employee_still_cannot_switch_centers(): void
+    {
+        $assistant = $this->userInCenterA('administrative-assistant');
+        $this->actingAs($assistant);
+
+        $context = app(CurrentContext::class);
+
+        $this->assertFalse($context->canSwitchCenter());
+        $this->assertSame($this->centerA->id, $context->etablissementId());
+        $this->assertFalse($context->isAllCenters());
+
+        // Attempting to widen to "all centers" must not work.
+        $context->setEtablissement(null);
+        $this->assertSame($this->centerA->id, $context->etablissementId());
     }
 }

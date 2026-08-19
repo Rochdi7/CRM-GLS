@@ -8,7 +8,6 @@ use App\Models\Employee;
 use App\Models\Etablissement;
 use App\Models\Group;
 use App\Models\User;
-use App\Services\Context\CurrentContext;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -30,6 +29,18 @@ final class EmployeesInertiaCrudTest extends TestCase
     {
         parent::setUp();
         $this->seed(RolesAndPermissionsSeeder::class);
+    }
+
+    /**
+     * An employee must now be assigned to at least one center
+     * (employee_etablissement pivot), so every valid store/update payload
+     * carries `etablissement_ids`.
+     *
+     * @return list<int>
+     */
+    private function someCenterIds(): array
+    {
+        return [Etablissement::factory()->create()->id];
     }
 
     private function userWith(string ...$permissions): User
@@ -75,6 +86,7 @@ final class EmployeesInertiaCrudTest extends TestCase
             'sexe' => 'Femme',
             'categorie' => Employee::CATEGORIE_COMMERCIAL,
             'statut' => Employee::STATUT_ACTIF,
+            'etablissement_ids' => $this->someCenterIds(),
         ]);
 
         $response->assertRedirect(route('backoffice.employees.index'));
@@ -97,6 +109,7 @@ final class EmployeesInertiaCrudTest extends TestCase
             'sexe' => 'Homme',
             'categorie' => Employee::CATEGORIE_COMMERCIAL,
             'statut' => Employee::STATUT_ACTIF,
+            'etablissement_ids' => $this->someCenterIds(),
         ])->assertRedirect(route('backoffice.employees.index'));
 
         // The very next request (the redirect's target, exactly like the
@@ -170,6 +183,7 @@ final class EmployeesInertiaCrudTest extends TestCase
             'adresse' => '12 rue Al Massira',
             'phone_pays' => 'MA',
             'telephone' => '661954125',
+            'etablissement_ids' => $this->someCenterIds(),
         ])->assertSessionDoesntHaveErrors();
 
         $emp = Employee::where('nom', 'Idrissi')->firstOrFail();
@@ -193,6 +207,7 @@ final class EmployeesInertiaCrudTest extends TestCase
             'categorie' => Employee::CATEGORIE_ENSEIGNANT,
             'statut' => Employee::STATUT_ACTIF,
             'photo' => UploadedFile::fake()->image('staff.jpg'),
+            'etablissement_ids' => $this->someCenterIds(),
         ])->assertSessionDoesntHaveErrors();
 
         $employee = Employee::where('nom', 'Fassi')->firstOrFail();
@@ -219,6 +234,7 @@ final class EmployeesInertiaCrudTest extends TestCase
             'categorie' => $employee->categorie,
             'statut' => $employee->statut,
             'photo' => UploadedFile::fake()->image('new.jpg'),
+            'etablissement_ids' => $this->someCenterIds(),
         ])->assertSessionDoesntHaveErrors();
 
         $media = $employee->fresh()->getMedia('photo');
@@ -277,6 +293,7 @@ final class EmployeesInertiaCrudTest extends TestCase
             'sexe' => $emp->sexe,
             'categorie' => Employee::CATEGORIE_COMPTABLE,
             'statut' => Employee::STATUT_INACTIF,
+            'etablissement_ids' => $this->someCenterIds(),
         ])->assertRedirect(route('backoffice.employees.index'));
 
         $emp->refresh();
@@ -344,24 +361,26 @@ final class EmployeesInertiaCrudTest extends TestCase
             'sexe' => $employeeInB->sexe,
             'categorie' => $employeeInB->categorie,
             'statut' => $employeeInB->statut,
+            // A complete payload on purpose: the 403 must come from the
+            // policy (wrong center), not from a validation failure.
+            'etablissement_ids' => [$centerB->id],
         ])->assertForbidden();
 
         $this->delete(route('backoffice.employees.destroy', $employeeInB))
             ->assertForbidden();
     }
 
-    public function test_etablissement_id_is_forced_server_side_when_context_is_locked_to_one_center(): void
+    public function test_center_assignment_is_forced_server_side_when_context_is_locked_to_one_center(): void
     {
         $centre = Etablissement::factory()->create();
         $otherCentre = Etablissement::factory()->create();
 
+        // A user confined to $centre (its employee profile is based there),
+        // so CurrentContext resolves to $centre and is NOT "all centers".
         $user = $this->userWith('employees.view', 'employees.create');
-        $this->actingAs($user);
-
-        app(CurrentContext::class)->setEtablissement(null); // no-op for non-global user, ensures locked path
-
-        // Force the session context to the user's own center via a real request.
-        session(['context.etablissement_id' => $centre->id]);
+        $user->employee()->save(Employee::factory()->make(['etablissement_id' => $centre->id]));
+        $user->employee->etablissements()->sync([$centre->id]);
+        $this->actingAs($user->fresh());
 
         $this->post(route('backoffice.employees.store'), [
             'nom' => 'Ziani',
@@ -371,10 +390,122 @@ final class EmployeesInertiaCrudTest extends TestCase
             'statut' => Employee::STATUT_ACTIF,
             // Client attempts to set a different center — must be ignored
             // because this user has no centers.access-all permission.
-            'etablissement_id' => $otherCentre->id,
+            'etablissement_ids' => [$otherCentre->id],
         ])->assertSessionDoesntHaveErrors();
 
         $employee = Employee::where('nom', 'Ziani')->firstOrFail();
-        $this->assertNotSame($otherCentre->id, $employee->etablissement_id);
+        $this->assertSame($centre->id, $employee->etablissement_id);
+        $this->assertSame([$centre->id], $employee->etablissements()->pluck('etablissements.id')->all());
+    }
+
+    // --- Multi-center assignment -------------------------------------------
+
+    public function test_an_employee_must_be_assigned_to_at_least_one_center(): void
+    {
+        $this->actingAs($this->userWith('employees.view', 'employees.create'));
+
+        $base = [
+            'nom' => 'Sansu',
+            'prenom' => 'Amine',
+            'sexe' => 'Homme',
+            'categorie' => Employee::CATEGORIE_ENSEIGNANT,
+            'statut' => Employee::STATUT_ACTIF,
+        ];
+
+        // Omitted entirely.
+        $this->post(route('backoffice.employees.store'), $base)
+            ->assertSessionHasErrors('etablissement_ids');
+
+        // Explicitly empty.
+        $this->post(route('backoffice.employees.store'), [...$base, 'etablissement_ids' => []])
+            ->assertSessionHasErrors('etablissement_ids');
+
+        $this->assertDatabaseMissing('employees', ['nom' => 'Sansu']);
+    }
+
+    public function test_an_employee_can_be_assigned_to_several_centers(): void
+    {
+        $a = Etablissement::factory()->create();
+        $b = Etablissement::factory()->create();
+
+        $this->actingAs($this->userWith('employees.view', 'employees.create', 'centers.access-all'));
+
+        $this->post(route('backoffice.employees.store'), [
+            'nom' => 'Tazi',
+            'prenom' => 'Meryem',
+            'sexe' => 'Femme',
+            'categorie' => Employee::CATEGORIE_ENSEIGNANT,
+            'statut' => Employee::STATUT_ACTIF,
+            'etablissement_ids' => [$a->id, $b->id],
+        ])->assertSessionDoesntHaveErrors();
+
+        $employee = Employee::where('nom', 'Tazi')->firstOrFail();
+
+        $this->assertEqualsCanonicalizing(
+            [$a->id, $b->id],
+            $employee->etablissements()->pluck('etablissements.id')->all(),
+        );
+        // The primary column points at the first assigned center.
+        $this->assertSame($a->id, $employee->etablissement_id);
+    }
+
+    public function test_updating_centers_replaces_the_assignment_without_moving_the_primary_center(): void
+    {
+        $a = Etablissement::factory()->create();
+        $b = Etablissement::factory()->create();
+        $c = Etablissement::factory()->create();
+
+        $this->actingAs($this->userWith('employees.view', 'employees.update', 'centers.access-all'));
+
+        $employee = Employee::factory()->create(['etablissement_id' => $a->id]);
+        $employee->etablissements()->sync([$a->id]);
+
+        // Adding a center must NOT move the employee's base (its Caisse
+        // lives there) — $a is still among the ids, so it stays primary.
+        $this->put(route('backoffice.employees.update', $employee), [
+            'nom' => $employee->nom,
+            'prenom' => $employee->prenom,
+            'sexe' => $employee->sexe,
+            'categorie' => $employee->categorie,
+            'statut' => $employee->statut,
+            'etablissement_ids' => [$b->id, $a->id],
+        ])->assertSessionDoesntHaveErrors();
+
+        $employee->refresh();
+        $this->assertSame($a->id, $employee->etablissement_id);
+        $this->assertEqualsCanonicalizing([$a->id, $b->id], $employee->etablissements()->pluck('etablissements.id')->all());
+
+        // Dropping the primary center re-points it at the first remaining one.
+        $this->put(route('backoffice.employees.update', $employee), [
+            'nom' => $employee->nom,
+            'prenom' => $employee->prenom,
+            'sexe' => $employee->sexe,
+            'categorie' => $employee->categorie,
+            'statut' => $employee->statut,
+            'etablissement_ids' => [$c->id],
+        ])->assertSessionDoesntHaveErrors();
+
+        $employee->refresh();
+        $this->assertSame($c->id, $employee->etablissement_id);
+        $this->assertSame([$c->id], $employee->etablissements()->pluck('etablissements.id')->all());
+    }
+
+    public function test_a_multi_center_employee_is_listed_under_each_of_its_centers(): void
+    {
+        $a = Etablissement::factory()->create();
+        $b = Etablissement::factory()->create();
+
+        $shared = Employee::factory()->create(['nom' => 'Partagee', 'etablissement_id' => $a->id]);
+        $shared->etablissements()->sync([$a->id, $b->id]);
+
+        $this->actingAs($this->userWith('employees.view', 'centers.access-all'));
+
+        // Filtering on the SECONDARY center must still find the employee,
+        // even though its primary `etablissement_id` points at $a.
+        $this->get(route('backoffice.employees.index', ['etablissementFilter' => $b->id]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('employees.data.0.nom', 'Partagee')
+                ->count('employees.data', 1)
+            );
     }
 }

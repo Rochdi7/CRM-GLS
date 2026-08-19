@@ -40,7 +40,8 @@ interface EmployeeFormState {
     date_naissance: string;
     date_embauche: string;
     salaire: string;
-    etablissement_id: number | '';
+    /** An employee works in one or MORE centers — at least one is required. */
+    etablissement_ids: number[];
     username: string;
 }
 
@@ -61,7 +62,7 @@ function emptyForm(defaultCountry: string, contextCenterId: number | null): Empl
         date_naissance: '',
         date_embauche: '',
         salaire: '',
-        etablissement_id: contextCenterId ?? '',
+        etablissement_ids: contextCenterId ? [contextCenterId] : [],
         username: '',
     };
 }
@@ -170,7 +171,11 @@ export default function EmployeesIndex({
             date_naissance: employee.dateNaissance ?? '',
             date_embauche: employee.dateEmbauche ?? '',
             salaire: employee.salaire ?? '',
-            etablissement_id: employee.etablissementId ?? '',
+            etablissement_ids: employee.etablissementIds.length > 0
+                ? employee.etablissementIds
+                : employee.etablissementId
+                  ? [employee.etablissementId]
+                  : [],
         });
         setShowModal(true);
     }
@@ -410,7 +415,21 @@ export default function EmployeesIndex({
                                     <td>
                                         <span className="badge badge-soft-info">{employee.categorie}</span>
                                     </td>
-                                    {!centerLocked && <td>{employee.etablissement ?? '—'}</td>}
+                                    {!centerLocked && (
+                                        <td>
+                                            {employee.etablissementNoms.length > 0 ? (
+                                                <span className="d-inline-flex flex-wrap gap-1">
+                                                    {employee.etablissementNoms.map((nom) => (
+                                                        <span key={nom} className="badge badge-soft-secondary">
+                                                            {nom}
+                                                        </span>
+                                                    ))}
+                                                </span>
+                                            ) : (
+                                                (employee.etablissement ?? '—')
+                                            )}
+                                        </td>
+                                    )}
                                     <td>{employee.telephone ?? '—'}</td>
                                     <td>
                                         <StatusBadge
@@ -472,7 +491,7 @@ export default function EmployeesIndex({
                     </div>
                 ) : (
                     <form onSubmit={submit}>
-                        <FormErrorsSummary message={form.errors.etablissement_id && centerLocked ? form.errors.etablissement_id : undefined} />
+                        <FormErrorsSummary message={form.errors.etablissement_ids && centerLocked ? form.errors.etablissement_ids : undefined} />
 
                         <div className="d-flex align-items-center mb-4">
                             <span className="avatar avatar-xl rounded-circle bg-light me-3 overflow-hidden d-inline-flex align-items-center justify-content-center">
@@ -648,20 +667,53 @@ export default function EmployeesIndex({
                             )}
 
                             {/* A specific center active in the top bar assigns the record
-                                automatically — the field only shows on « Tous les centres ». */}
+                                automatically — the field only shows on « Tous les centres ».
+                                An employee may work in SEVERAL centers, and at least one
+                                is mandatory (enforced server-side by the Form Requests). */}
                             {!centerLocked && (
-                                <div className="col-md-4">
-                                    <SelectField
-                                        id="emp-etab"
-                                        label="Centre"
-                                        options={centerOptions}
-                                        placeholder="Choisir…"
-                                        value={form.data.etablissement_id}
-                                        onChange={(event) =>
-                                            form.setData('etablissement_id', event.target.value ? Number(event.target.value) : '')
-                                        }
-                                        error={form.errors.etablissement_id}
-                                    />
+                                <div className="col-12">
+                                    <div className="mb-3">
+                                        <label className="form-label">
+                                            Centres <span className="text-danger">*</span>
+                                        </label>
+                                        <div
+                                            className={`border rounded p-2 d-flex flex-wrap gap-3${form.errors.etablissement_ids ? ' border-danger' : ''}`}
+                                        >
+                                            {centerOptions.map((option) => {
+                                                const id = Number(option.value);
+                                                const checked = form.data.etablissement_ids.includes(id);
+
+                                                return (
+                                                    <div className="form-check" key={id}>
+                                                        <input
+                                                            className="form-check-input"
+                                                            type="checkbox"
+                                                            id={`emp-etab-${id}`}
+                                                            checked={checked}
+                                                            onChange={() =>
+                                                                form.setData(
+                                                                    'etablissement_ids',
+                                                                    checked
+                                                                        ? form.data.etablissement_ids.filter((value) => value !== id)
+                                                                        : [...form.data.etablissement_ids, id],
+                                                                )
+                                                            }
+                                                        />
+                                                        <label className="form-check-label" htmlFor={`emp-etab-${id}`}>
+                                                            {option.label}
+                                                        </label>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        {form.errors.etablissement_ids ? (
+                                            <div className="text-danger fs-13 mt-1">{form.errors.etablissement_ids}</div>
+                                        ) : (
+                                            <div className="text-muted fs-13 mt-1">
+                                                Sélectionnez au moins un centre.
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             )}
 

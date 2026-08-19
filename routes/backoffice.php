@@ -14,6 +14,7 @@ use App\Http\Controllers\Backoffice\ChequeController;
 use App\Http\Controllers\Backoffice\ContextController;
 use App\Http\Controllers\Backoffice\CreneauController;
 use App\Http\Controllers\Backoffice\DashboardController;
+use App\Http\Controllers\Backoffice\AuditLogController;
 use App\Http\Controllers\Backoffice\DepenseController;
 use App\Http\Controllers\Backoffice\Employees\EmployeeController;
 use App\Http\Controllers\Backoffice\EncaissementController;
@@ -557,5 +558,13 @@ Route::prefix('backoffice')
                 ->middleware('permission:import.create')->name('import.encaissements.retry-failed');
             Route::get('import/encaissements/{batch}/result', [EncaissementImportController::class, 'result'])
                 ->middleware('permission:import.view')->name('import.encaissements.result');
+
+            // Journal d'audit — read-only forensic trail (CLAUDE.md §11).
+            // ⚠ NEVER add a store/update/destroy route here: audit entries
+            // are evidence and the application must offer no way to alter
+            // them (App\Models\Activity refuses writes at the model level
+            // too, so the guarantee survives a super-admin).
+            Route::get('audit-logs', [AuditLogController::class, 'index'])
+                ->middleware('permission:audit-logs.view')->name('audit-logs.index');
         });
     });

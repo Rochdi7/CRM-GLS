@@ -304,11 +304,31 @@ the database layer. Non-negotiable invariants already enforced in code:
   against model constants (`Student::NIVEAUX`, `Employee::CATEGORIES`,
   `Group::STATUTS`…) — deliberate; do not "fix" with lookup tables (see the
   Deliberate Simplifications table in gls-crm-schema.md before extending).
-- **Audit log**: `spatie/laravel-activitylog` **v5** (⚠ v5 namespaces:
-  `Spatie\Activitylog\Models\Concerns\LogsActivity`,
-  `Spatie\Activitylog\Support\LogOptions`). Fraud-relevant models (Student,
-  Inscription, Encaissement, Depense, Remboursement, CaisseTransfer) carry the
-  trait; keep it on any new money-touching model.
+- **Audit log / Journal d'audit** — read `docs/audit-journal.md` before
+  touching anything audit-related. `spatie/laravel-activitylog` **v5**
+  (⚠ v5 namespaces: `Spatie\Activitylog\Models\Concerns\LogsActivity`,
+  `Spatie\Activitylog\Support\LogOptions`; there is no
+  `dontSubmitEmptyLogs()` — it is `dontLogEmptyChanges()`).
+  Non-negotiable rules:
+  - **Never add `LogsActivity` + a hand-written `getActivitylogOptions()` to a
+    model.** Use `App\Models\Concerns\Auditable` instead — it applies
+    `logAll()` (every column, no allowlist), excludes secrets, and takes its
+    `log_name` from `App\Support\Audit\AuditLogRegistry`. A per-model
+    `logOnly([...])` silently drops edits and is exactly the bug this replaced.
+  - **A new audited model = `use Auditable;` + one line in
+    `AuditLogRegistry::map()`.** Filters, labels and the finance scope all read
+    from that registry, so they never drift from what is recorded.
+  - **The journal is append-only.** `App\Models\Activity` throws on update
+    and delete (model level, below every Gate — so it holds even for a
+    super-admin), and `backoffice.audit-logs.index` is the ONLY route:
+    never add store/update/destroy. Pruning is `activitylog:clean` only.
+  - Entries carry IP, user-agent, HTTP method, URL, route name and a
+    `causer_label` frozen at write time, stamped automatically in
+    `Activity::creating()` — never add a second place that writes entries
+    without them.
+  - Auth events (login, logout, **failed logins**, lockout, password reset) go
+    through `App\Listeners\LogAuthenticationActivity`, subscribed in
+    `AppServiceProvider`. Add new sign-in paths there, not in a controller.
 - **`is_system` expense types** are seeded (TypeDepenseSeeder) and locked; the
   admin form only creates custom types.
 - **File uploads**: `spatie/laravel-medialibrary` v11 on the dedicated `media`

@@ -885,8 +885,12 @@ export interface EmployeeRow {
     dateNaissance: string | null;
     dateEmbauche: string | null;
     salaire: MoneyDisplay | null;
+    /** Primary center (first assigned) — kept for the detail/edit defaults. */
     etablissementId: number | null;
     etablissement: string | null;
+    /** Every center this employee is assigned to (always at least one). */
+    etablissementIds: number[];
+    etablissementNoms: string[];
     photoUrl: string | null;
     photoThumbUrl: string | null;
     userId: number | null;
@@ -1536,5 +1540,63 @@ export interface RecouvrementPageProps {
     groupOptions: SelectOption[];
     fraisOptions: SelectOption[];
     statuts: string[];
+    [key: string]: unknown;
+}
+
+// --- Journal d'audit -------------------------------------------------------
+
+/** One changed column on an audited record: what it was, what it became. */
+export interface AuditChange {
+    field: string;
+    old: string | null;
+    new: string | null;
+}
+
+export interface AuditLogRow {
+    id: number;
+    logName: string | null;
+    logLabel: string;
+    description: string;
+    event: string | null;
+    eventLabel: string | null;
+    /** Actor identity frozen at write time (see App\Models\Activity). */
+    causerLabel: string | null;
+    causerId: number | null;
+    subjectType: string | null;
+    subjectLabel: string | null;
+    subjectId: number | null;
+    subjectRef: string | null;
+    ipAddress: string | null;
+    userAgent: string | null;
+    method: string | null;
+    url: string | null;
+    routeName: string | null;
+    /** 'Y-m-d H:i:s' — second precision, deliberately (fraud ordering). */
+    createdAt: string | null;
+    createdAtHuman: string | null;
+    changes: AuditChange[];
+    properties: Record<string, unknown>;
+}
+
+export interface AuditLogFilters {
+    search: string;
+    logName: string;
+    event: string;
+    causerId: string;
+    subjectType: string;
+    dateFrom: string;
+    dateTo: string;
+    ip: string;
+    financeOnly: boolean;
+    perPage: number;
+}
+
+export interface AuditLogPageProps {
+    entries: PaginatedData<AuditLogRow>;
+    logNames: { value: string; label: string }[];
+    events: { value: string; label: string }[];
+    causers: { id: number; nom: string }[];
+    subjectTypes: { value: string; label: string }[];
+    filters: AuditLogFilters;
     [key: string]: unknown;
 }

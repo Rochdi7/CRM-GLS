@@ -14,8 +14,15 @@ use Illuminate\Support\Collection;
  * a selected academic year and a selected center (or "all centers").
  *
  * Persisted in the session (per user), so switching from the top bar sticks
- * across pages. Center choices are permission-aware — a user without
- * centers.access-all can only ever select their own center.
+ * across pages. Center choices are permission-aware:
+ *  - `centers.access-all` ⇒ every center, plus "Tous les centres";
+ *  - otherwise the centers the user's employee is assigned to
+ *    (employee_etablissement pivot). A multi-center employee may switch
+ *    freely between THEIR centers and pick "Tous les centres", which then
+ *    means "all of mine" — every query still runs through
+ *    CenterAccessService::scopeAccessibleCenters(), so it can never widen
+ *    beyond the assignment;
+ *  - a single-center employee stays locked to it, exactly as before.
  *
  * Registered as a singleton and shared to every view as $context
  * (see AppServiceProvider).
@@ -93,7 +100,9 @@ final class CurrentContext
     // --- Center ------------------------------------------------------------
 
     /**
-     * null = "all centers" (only meaningful for users with global access).
+     * null = "all centers" — every center for a global user, or all the
+     * centers they are assigned to for a multi-center employee. A
+     * single-center employee is always locked to its own center.
      */
     public function etablissement(): ?Etablissement
     {
@@ -103,11 +112,23 @@ final class CurrentContext
 
         $user = auth()->user();
 
-        // A user confined to one center is always locked to it.
         if ($user !== null && ! $this->centerAccess->hasGlobalAccess($user)) {
             $ids = $this->centerAccess->accessibleCenterIds($user);
 
-            $center = $ids === [] ? null : Etablissement::find($ids[0]);
+            if ($ids === []) {
+                $center = null;
+            } elseif (count($ids) === 1) {
+                // Single-center employee: always locked to it.
+                $center = Etablissement::find($ids[0]);
+            } else {
+                // Multi-center employee: honor the session choice as long as
+                // it is one of THEIR centers; null = "all of mine".
+                $id = session(self::SESSION_CENTER);
+
+                $center = ($id !== null && in_array((int) $id, $ids, true))
+                    ? Etablissement::find($id)
+                    : null;
+            }
         } else {
             $id = session(self::SESSION_CENTER);
 
@@ -128,21 +149,42 @@ final class CurrentContext
     /**
      * True when the context spans every center (global user, "all" selected).
      */
+    /**
+     * True when no single center is selected. For a global user that means
+     * literally every center; for a multi-center employee it means "all the
+     * centers I am assigned to" — the actual narrowing is always done by
+     * CenterAccessService::scopeAccessibleCenters(), which every list query
+     * applies regardless of this flag.
+     */
     public function isAllCenters(): bool
     {
         $user = auth()->user();
 
-        return $user !== null
-            && $this->centerAccess->hasGlobalAccess($user)
-            && session(self::SESSION_CENTER) === null;
+        if ($user === null) {
+            return false;
+        }
+
+        if ($this->centerAccess->hasGlobalAccess($user)) {
+            return session(self::SESSION_CENTER) === null;
+        }
+
+        // Only meaningful for employees holding more than one center.
+        return count($this->centerAccess->accessibleCenterIds($user)) > 1
+            && $this->etablissement() === null;
     }
 
     public function setEtablissement(?int $id): void
     {
         $user = auth()->user();
 
-        // Non-global users cannot change center.
-        if ($user === null || ! $this->centerAccess->hasGlobalAccess($user)) {
+        if ($user === null || ! $this->canSwitchCenter()) {
+            return;
+        }
+
+        // A non-global user may only ever select one of their own centers.
+        if ($id !== null
+            && ! $this->centerAccess->hasGlobalAccess($user)
+            && ! in_array((int) $id, $this->centerAccess->accessibleCenterIds($user), true)) {
             return;
         }
 
@@ -183,10 +225,19 @@ final class CurrentContext
         return $this->resolvedCentres = $query->get();
     }
 
+    /**
+     * Global users always may; an employee may switch only when assigned to
+     * more than one center (a single-center employee has nothing to pick).
+     */
     public function canSwitchCenter(): bool
     {
         $user = auth()->user();
 
-        return $user !== null && $this->centerAccess->hasGlobalAccess($user);
+        if ($user === null) {
+            return false;
+        }
+
+        return $this->centerAccess->hasGlobalAccess($user)
+            || count($this->centerAccess->accessibleCenterIds($user)) > 1;
     }
 }

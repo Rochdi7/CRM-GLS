@@ -11,6 +11,7 @@ use App\Http\Requests\Backoffice\Employees\StoreEmployeeRequest;
 use App\Http\Requests\Backoffice\Employees\UpdateEmployeeRequest;
 use App\Models\Employee;
 use App\Models\Etablissement;
+use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
 use App\Support\Phone\Countries;
 use Illuminate\Http\RedirectResponse;
@@ -85,13 +86,18 @@ final class EmployeeController extends Controller
         // see HandleInertiaRequests). Built unsaved first so the optional
         // requested username (read by EmployeeCredentialService, not a real
         // column) is present on the instance the "created" event receives.
+        $centerIds = $this->resolveCenterIds($data);
+
         $employee = new Employee([
             ...$payload,
+            // Primary center = the first assigned one (see Employee::syncEtablissements).
+            'etablissement_id' => $centerIds[0],
             'reference' => ReferenceGenerator::make('EMP', 'employees'),
         ]);
         $employee->requestedUsername = $data['username'] ?? null;
         $employee->save();
 
+        $employee->syncEtablissements($centerIds);
         $this->storePhoto($employee, $request);
 
         return redirect()->route('backoffice.employees.index')
@@ -108,6 +114,7 @@ final class EmployeeController extends Controller
         $payload = $this->buildPayload($data, $request, $employee);
 
         $employee->update($payload);
+        $employee->syncEtablissements($this->resolveCenterIds($data));
         $this->storePhoto($employee, $request);
 
         return redirect()->route('backoffice.employees.index')
@@ -138,24 +145,17 @@ final class EmployeeController extends Controller
      * the phone country + national parts into the stored "+212…" form and
      * normalizes empty strings to null exactly like EmployeesIndex::save().
      *
-     * `etablissement_id` is never trusted from client input when the top-bar
-     * context is locked to a specific center — it is forced to
-     * CurrentContext::etablissementId() server-side either way (on create,
-     * matching EmployeesIndex::create()'s auto-scoping; on update, so a
-     * locked admin can't reassign a record to another center by tampering
-     * with the request).
+     * Center assignment is NOT handled here — it lives in the
+     * employee_etablissement pivot and goes through resolveCenterIds() +
+     * Employee::syncEtablissements(), which also keeps the primary
+     * `etablissement_id` column in sync.
      *
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
     private function buildPayload(array $data, Request $request, ?Employee $employee = null): array
     {
-        $context = app(CurrentContext::class);
         $phonePays = $data['phone_pays'] ?? Countries::DEFAULT;
-
-        $etablissementId = $context->isAllCenters()
-            ? ($data['etablissement_id'] ?? null)
-            : $context->etablissementId();
 
         return [
             'nom' => $data['nom'],
@@ -171,8 +171,70 @@ final class EmployeeController extends Controller
             'date_naissance' => $data['date_naissance'] ?? null,
             'date_embauche' => $data['date_embauche'] ?? null,
             'salaire' => $data['salaire'] ?? null,
-            'etablissement_id' => $etablissementId,
         ];
+    }
+
+    /**
+     * The centers to assign, never trusted blindly from client input: when
+     * the top-bar context is locked to a specific center, the employee is
+     * forced into exactly that center (a locked admin cannot assign an
+     * employee to — or move one into — a center it cannot itself see).
+     * Only an "all centers" context may submit a real multi-center list.
+     *
+     * Guaranteed non-empty: the Form Requests require at least one id, and
+     * the locked branch always yields the context center.
+     *
+     * @param  array<string, mixed>  $data
+     * @return list<int>
+     */
+    private function resolveCenterIds(array $data): array
+    {
+        $context = app(CurrentContext::class);
+
+        if (! $context->isAllCenters() && $context->etablissementId() !== null) {
+            return [$context->etablissementId()];
+        }
+
+        /** @var list<int> $ids */
+        $ids = array_values(array_filter(
+            array_unique(array_map('intval', $data['etablissement_ids'] ?? [])),
+            static fn (int $id): bool => $id > 0,
+        ));
+
+        // "All centers" also covers a multi-center employee viewing all of
+        // THEIRS — narrow the submitted list to what they may actually
+        // access, so they can never assign an employee to a center they
+        // don't hold themselves.
+        //
+        // Only applies to users who ARE confined to specific centers: a user
+        // with no employee profile has no assignment to narrow against, and
+        // intersecting with its empty list would wrongly strip every id.
+        $centerAccess = app(CenterAccessService::class);
+        $user = request()->user();
+
+        if ($user !== null && ! $centerAccess->hasGlobalAccess($user)) {
+            $allowed = $centerAccess->accessibleCenterIds($user);
+
+            if ($allowed !== []) {
+                $narrowed = array_values(array_intersect($ids, $allowed));
+                $ids = $narrowed === [] ? $allowed : $narrowed;
+            }
+        }
+
+        // Defensive: an employee is never left unaffected. The Form Requests
+        // already require a non-empty list, so this only guards against a
+        // caller that bypasses them.
+        if ($ids === []) {
+            if ($context->etablissementId() !== null) {
+                return [$context->etablissementId()];
+            }
+
+            throw ValidationException::withMessages([
+                'etablissement_ids' => __('Select at least one center.'),
+            ]);
+        }
+
+        return $ids;
     }
 
     /**

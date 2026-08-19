@@ -209,6 +209,14 @@ export const backofficeNavigation: NavGroup[] = [
                 matchPaths: ['/backoffice/import'],
                 inertia: true,
             },
+            {
+                label: t('Audit journal'),
+                href: '/backoffice/audit-logs',
+                icon: 'ti ti-history',
+                permissions: ['audit-logs.view'],
+                matchPaths: ['/backoffice/audit-logs'],
+                inertia: true,
+            },
         ],
     },
 ];

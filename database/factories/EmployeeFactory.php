@@ -29,4 +29,18 @@ final class EmployeeFactory extends Factory
             'statut' => Employee::STATUT_ACTIF,
         ];
     }
+
+    /**
+     * Keeps the employee_etablissement pivot in sync with whatever
+     * `etablissement_id` a test passed, so factory-made employees behave
+     * like real ones (CenterAccessService reads the pivot).
+     */
+    public function configure(): self
+    {
+        return $this->afterCreating(function (Employee $employee): void {
+            if ($employee->etablissement_id !== null) {
+                $employee->etablissements()->syncWithoutDetaching([$employee->etablissement_id]);
+            }
+        });
+    }
 }

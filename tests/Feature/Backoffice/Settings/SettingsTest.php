@@ -337,6 +337,58 @@ final class SettingsTest extends TestCase
         $this->assertSame('Frais renommé', $frais->fresh()->nom);
     }
 
+    public function test_a_fee_carries_a_default_amount_that_groups_inherit(): void
+    {
+        // The catalog amount is what every group starts from; without it
+        // group_frais lines were created at 0.00 and the payment modal
+        // listed no fees at all (reste = montant - payé is never > 0).
+        $this->userWith('fees.view', 'fees.create', 'fees.update');
+
+        $this->post(route('backoffice.frais.store'), [
+            'nom' => 'Frais de Juillet',
+            'montant_defaut' => '1300.00',
+            'statut' => Frais::STATUT_ACTIF,
+        ])->assertRedirect();
+
+        $this->assertSame('1300.00', (string) Frais::firstOrFail()->montant_defaut);
+
+        $frais = Frais::firstOrFail();
+        $this->put(route('backoffice.frais.update', $frais), [
+            'nom' => 'Frais de Juillet',
+            'montant_defaut' => '1450.50',
+            'statut' => Frais::STATUT_ACTIF,
+        ])->assertRedirect();
+
+        $this->assertSame('1450.50', (string) $frais->fresh()->montant_defaut);
+    }
+
+    public function test_omitting_the_default_amount_falls_back_to_zero_rather_than_failing(): void
+    {
+        // A *default* amount must itself default — requiring it would break
+        // every caller that does not send one.
+        $this->userWith('fees.view', 'fees.create');
+
+        $this->post(route('backoffice.frais.store'), [
+            'nom' => 'Frais sans montant',
+            'statut' => Frais::STATUT_ACTIF,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame('0.00', (string) Frais::firstOrFail()->montant_defaut);
+    }
+
+    public function test_a_negative_default_amount_is_rejected(): void
+    {
+        $this->userWith('fees.view', 'fees.create');
+
+        $this->post(route('backoffice.frais.store'), [
+            'nom' => 'Frais négatif',
+            'montant_defaut' => '-10',
+            'statut' => Frais::STATUT_ACTIF,
+        ])->assertSessionHasErrors('montant_defaut');
+
+        $this->assertDatabaseCount('frais', 0);
+    }
+
     public function test_fee_name_must_be_unique(): void
     {
         $this->userWith('fees.view', 'fees.create');

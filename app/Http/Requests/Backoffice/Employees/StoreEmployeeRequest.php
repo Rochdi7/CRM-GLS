@@ -19,11 +19,13 @@ use Illuminate\Validation\Rule;
  *
  * Note: `reference` is system-generated (ReferenceGenerator) and `user_id`
  * is set by EmployeeObserver (auto-credentials) — neither is accepted here.
- * `etablissement_id` is validated as an existing center id, but the
- * controller — not this request — decides whether the client-submitted
- * value is actually honored (only when the top-bar context is "All
- * centers"; otherwise the controller forces CurrentContext::etablissementId()
- * server-side, matching EmployeesIndex::create()'s own auto-scoping).
+ * `etablissement_ids` (an employee may work in SEVERAL centers) is
+ * validated as a non-empty list of existing center ids — an employee is
+ * never left unaffected. The controller — not this request — decides
+ * whether the client-submitted list is actually honored (only when the
+ * top-bar context is "All centers"; otherwise the controller forces
+ * CurrentContext::etablissementId() server-side, matching
+ * EmployeesIndex::create()'s own auto-scoping).
  */
 final class StoreEmployeeRequest extends FormRequest
 {
@@ -53,10 +55,25 @@ final class StoreEmployeeRequest extends FormRequest
             'date_naissance' => ['nullable', 'date', 'before:today'],
             'date_embauche' => ['nullable', 'date'],
             'salaire' => ['nullable', 'numeric', 'min:0'],
-            'etablissement_id' => ['nullable', 'exists:etablissements,id'],
+            // At least ONE center is mandatory — an employee is never
+            // unaffected. The controller still decides WHICH ids are honored
+            // (a center-locked admin is forced to its own context center).
+            'etablissement_ids' => ['required', 'array', 'min:1'],
+            'etablissement_ids.*' => ['integer', 'distinct', 'exists:etablissements,id'],
             // Optional — EmployeeCredentialService auto-generates one from
             // nom/prenom when left blank. Validated here only if provided.
             'username' => ['nullable', 'string', 'max:50', 'regex:/^[a-zA-Z0-9._-]+$/', Rule::unique(User::class, 'username')],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'etablissement_ids.required' => __('Select at least one center.'),
+            'etablissement_ids.min' => __('Select at least one center.'),
         ];
     }
 }

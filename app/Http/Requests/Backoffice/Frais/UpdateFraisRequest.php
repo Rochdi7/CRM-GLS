@@ -25,7 +25,11 @@ final class UpdateFraisRequest extends FormRequest
                 'required', 'string', 'max:150',
                 Rule::unique('frais', 'nom')->ignore($this->route('frai')),
             ],
-            'montant_defaut' => ['required', 'numeric', 'min:0', 'max:9999999.99'],
+            // A default amount must itself default: when the key is absent
+            // it stays out of validated(), so the column's own 0.00 default
+            // applies. Required would break every caller that omits it;
+            // nullable would push a null into a NOT NULL column.
+            'montant_defaut' => ['sometimes', 'numeric', 'min:0', 'max:9999999.99'],
             'statut' => ['required', Rule::in(Frais::STATUTS)],
         ];
     }

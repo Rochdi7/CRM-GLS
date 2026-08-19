@@ -46,7 +46,11 @@ final class GetUsersList
             ->when($this->context->etablissementId(), function ($query, int $centreId): void {
                 $query->where(function ($q) use ($centreId): void {
                     $q->whereDoesntHave('employee')
-                        ->orWhereHas('employee', fn ($e) => $e->where('etablissement_id', $centreId));
+                        // An employee may work in SEVERAL centers — match on the
+                        // pivot as well as the primary column, so a shared
+                        // account shows up under each of its centers.
+                        ->orWhereHas('employee', fn ($e) => $e->where('etablissement_id', $centreId))
+                        ->orWhereHas('employee.etablissements', fn ($e) => $e->where('etablissements.id', $centreId));
                 });
             })
             ->when($search !== '', function ($query) use ($search): void {

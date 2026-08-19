@@ -44,12 +44,32 @@ final class GetEmployeesList
         $employees = Employee::query()
             // `media` eager-loaded for the avatar column, `user` for the
             // "Voir le compte" action (avoids N+1 on both).
-            ->with(['etablissement', 'media', 'user'])
-            ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+            ->with(['etablissement', 'etablissements', 'media', 'user'])
+            // Center scoping matches on ANY assigned center (pivot), not just
+            // the primary column — an employee working in Marrakech + Rabat
+            // is visible to admins of BOTH centers.
+            ->tap(function ($q) use ($user): void {
+                if ($this->centerAccess->hasGlobalAccess($user)) {
+                    return;
+                }
+
+                $ids = $this->centerAccess->accessibleCenterIds($user);
+
+                $q->where(function ($sub) use ($ids): void {
+                    $sub->whereNull('etablissement_id')
+                        ->orWhereIn('etablissement_id', $ids)
+                        ->orWhereHas('etablissements', fn ($e) => $e->whereIn('etablissements.id', $ids));
+                });
+            })
             // Narrow to the center selected in the top-bar switcher.
             ->tap(function ($q): void {
-                if (! $this->context->isAllCenters()) {
-                    $q->where('etablissement_id', $this->context->etablissementId());
+                if (! $this->context->isAllCenters() && $this->context->etablissementId() !== null) {
+                    $centreId = $this->context->etablissementId();
+
+                    $q->where(function ($sub) use ($centreId): void {
+                        $sub->where('etablissement_id', $centreId)
+                            ->orWhereHas('etablissements', fn ($e) => $e->where('etablissements.id', $centreId));
+                    });
                 }
             })
             ->when($search !== '', function ($q) use ($search): void {
@@ -63,7 +83,14 @@ final class GetEmployeesList
             })
             ->when($categorieFilter !== '', fn ($q) => $q->where('categorie', $categorieFilter))
             ->when($statutFilter !== '', fn ($q) => $q->where('statut', $statutFilter))
-            ->when($etablissementFilter !== '', fn ($q) => $q->where('etablissement_id', (int) $etablissementFilter))
+            ->when($etablissementFilter !== '', function ($q) use ($etablissementFilter): void {
+                $centreId = (int) $etablissementFilter;
+
+                $q->where(function ($sub) use ($centreId): void {
+                    $sub->where('etablissement_id', $centreId)
+                        ->orWhereHas('etablissements', fn ($e) => $e->where('etablissements.id', $centreId));
+                });
+            })
             ->latest()
             ->paginate($perPage)
             ->withQueryString();
@@ -87,6 +114,9 @@ final class GetEmployeesList
             'salaire' => $employee->salaire !== null ? (string) $employee->salaire : null,
             'etablissementId' => $employee->etablissement_id,
             'etablissement' => $employee->etablissement?->nom_centre,
+            'etablissementIds' => $employee->etablissements->pluck('id')->all(),
+            // Every assigned center, for the list's "Centre" column.
+            'etablissementNoms' => $employee->etablissements->pluck('nom_centre')->all(),
             'userId' => $employee->user?->id,
             'username' => $employee->user?->username,
             'photoUrl' => $employee->getFirstMediaUrl('photo') ?: null,

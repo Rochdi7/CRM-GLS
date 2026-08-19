@@ -8,6 +8,7 @@ use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
@@ -121,9 +122,56 @@ class Employee extends Model implements HasMedia
             ->performOnCollections('photo');
     }
 
+    /**
+     * The employee's PRIMARY center — the first of `etablissements`, kept in
+     * the `etablissement_id` column so existing filters, the Caisse
+     * provisioner and every center-scoped query keep working unchanged.
+     */
     public function etablissement(): BelongsTo
     {
         return $this->belongsTo(Etablissement::class);
+    }
+
+    /**
+     * All centers this employee works in (at least one — enforced by the
+     * Form Requests). This pivot, not the single column, is what
+     * CenterAccessService uses to decide which centers the linked user may
+     * see and switch to in the top-bar context switcher.
+     */
+    public function etablissements(): BelongsToMany
+    {
+        return $this->belongsToMany(Etablissement::class, 'employee_etablissement')
+            ->withTimestamps();
+    }
+
+    /**
+     * Replaces the employee's center assignment in one place: syncs the
+     * pivot and re-points the primary `etablissement_id` column at the first
+     * given center (or keeps the current one when it is still among them, so
+     * an edit that merely ADDS a center doesn't silently move the employee's
+     * base — which would also move its Caisse).
+     *
+     * @param  list<int>  $etablissementIds
+     */
+    public function syncEtablissements(array $etablissementIds): void
+    {
+        $ids = array_values(array_unique(array_map('intval', $etablissementIds)));
+
+        if ($ids === []) {
+            return; // "At least one" is a validation rule; never wipe the assignment here.
+        }
+
+        $this->etablissements()->sync($ids);
+
+        $primary = in_array((int) $this->etablissement_id, $ids, true)
+            ? (int) $this->etablissement_id
+            : $ids[0];
+
+        if ((int) $this->etablissement_id !== $primary) {
+            $this->forceFill(['etablissement_id' => $primary])->save();
+        }
+
+        $this->unsetRelation('etablissements');
     }
 
     public function user(): BelongsTo
