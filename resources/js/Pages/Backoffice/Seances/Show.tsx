@@ -527,10 +527,10 @@ export default function SeanceShow({
                     onClick={() => setSectionOpen((o) => !o)}
                 >
                     <i
-                        className={`ti ${sectionOpen ? 'ti-circle-chevron-down' : 'ti-circle-chevron-right'} me-2 fs-5 text-dark`}
+                        className={`ti ${sectionOpen ? 'ti-circle-chevron-down' : 'ti-circle-chevron-right'} me-2 fs-20 text-dark`}
                         aria-hidden="true"
                     />
-                    <span className="fs-5 fw-bold text-dark">Formation</span>
+                    <span className="fs-18 fw-bold text-dark">Formation</span>
                 </button>
 
                 {sectionOpen && (
@@ -592,7 +592,7 @@ export default function SeanceShow({
                                                             className="avatar avatar-md rounded-circle bg-light text-muted d-flex align-items-center justify-content-center me-2"
                                                             aria-hidden="true"
                                                         >
-                                                            <i className="ti ti-user fs-5" />
+                                                            <i className="ti ti-user fs-18" />
                                                         </span>
                                                     )}
                                                     <span className="fw-medium text-uppercase">

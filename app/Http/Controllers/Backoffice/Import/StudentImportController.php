@@ -12,6 +12,7 @@ use App\Http\Requests\Backoffice\Import\CommitImportRequest;
 use App\Models\AnneeScolaire;
 use App\Models\Etablissement;
 use App\Models\ImportBatch;
+use App\Models\ImportRow;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Import\DTO\ImportContext;
 use App\Services\Import\StudentImporter;
@@ -108,4 +109,24 @@ final class StudentImportController extends Controller
 
         return $query->get(['id', 'nom_centre']);
     }
+
+    /**
+     * Re-queues previously-failed rows so the next commit pass picks them up.
+     * A failed row keeps ECHEC_COMMIT and is intentionally not commit-
+     * eligible (that made the progress loop spin forever), so retrying is an
+     * explicit action that flips it back to CONFLIT — where the resolution
+     * guard and duplicate check run again exactly as before.
+     */
+    public function retryFailed(Request $request, ImportBatch $batch): RedirectResponse
+    {
+        $this->authorize('create', ImportBatch::class);
+        abort_unless($batch->module === ImportBatch::MODULE_STUDENTS, 404);
+
+        $requeued = $batch->rows()
+            ->whereIn('status', ImportRow::RETRYABLE_STATUTS)
+            ->update(['status' => ImportRow::STATUT_CONFLIT, 'errors' => null]);
+
+        return back()->with('success', __(':count rows queued for retry.', ['count' => $requeued]));
+    }
+
 }

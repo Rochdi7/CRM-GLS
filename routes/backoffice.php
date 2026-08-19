@@ -519,6 +519,8 @@ Route::prefix('backoffice')
                 ->middleware('permission:import.view')->name('import.students.preview');
             Route::post('import/students/{batch}/commit', [StudentImportController::class, 'commit'])
                 ->middleware('permission:import.create')->name('import.students.commit');
+            Route::post('import/students/{batch}/retry-failed', [StudentImportController::class, 'retryFailed'])
+                ->middleware('permission:import.create')->name('import.students.retry-failed');
             Route::get('import/students/{batch}/result', [StudentImportController::class, 'result'])
                 ->middleware('permission:import.view')->name('import.students.result');
 
@@ -532,6 +534,8 @@ Route::prefix('backoffice')
                 ->middleware('permission:import.view')->name('import.inscriptions.preview');
             Route::post('import/inscriptions/{batch}/commit', [InscriptionImportController::class, 'commit'])
                 ->middleware('permission:import.create')->name('import.inscriptions.commit');
+            Route::post('import/inscriptions/{batch}/retry-failed', [InscriptionImportController::class, 'retryFailed'])
+                ->middleware('permission:import.create')->name('import.inscriptions.retry-failed');
             Route::get('import/inscriptions/{batch}/result', [InscriptionImportController::class, 'result'])
                 ->middleware('permission:import.view')->name('import.inscriptions.result');
 
@@ -545,6 +549,8 @@ Route::prefix('backoffice')
                 ->middleware('permission:import.view')->name('import.encaissements.preview');
             Route::post('import/encaissements/{batch}/commit', [EncaissementImportController::class, 'commit'])
                 ->middleware('permission:import.create')->name('import.encaissements.commit');
+            Route::post('import/encaissements/{batch}/retry-failed', [EncaissementImportController::class, 'retryFailed'])
+                ->middleware('permission:import.create')->name('import.encaissements.retry-failed');
             Route::get('import/encaissements/{batch}/result', [EncaissementImportController::class, 'result'])
                 ->middleware('permission:import.view')->name('import.encaissements.result');
         });

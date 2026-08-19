@@ -14,6 +14,7 @@ use App\Models\ImportRow;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
 use App\Models\Student;
+use App\Services\Import\Concerns\TracksBatchProgress;
 use App\Services\Import\Contracts\Importer;
 use App\Services\Import\DTO\ImportContext;
 use App\Services\Import\DTO\ImportResult;
@@ -32,12 +33,70 @@ use Illuminate\Support\Facades\DB;
  */
 final class InscriptionImporter implements Importer
 {
+    use TracksBatchProgress;
+
     private const string LEGACY_SOURCE = 'ancien-crm';
 
     private const array EXPECTED_COLUMNS = ['Réf', 'Étudiant', 'Groupe', 'Statut', "Date d'inscription"];
 
     /** ImportRow rows are buffered and mass-inserted every N rows — real exports run into the thousands of rows, and one create() call per row (Eloquent events + a round-trip each) was a large part of the 30s timeout. */
     private const int INSERT_BUFFER_SIZE = 500;
+
+    /**
+     * Translates the old CRM's inscription statuts into this app's vocabulary.
+     *
+     * The two systems agree on every statut EXCEPT one: what the old CRM
+     * calls "Archivée" is what this app calls "Changement" (the student
+     * moved to another group / another arrangement rather than the record
+     * being filed away). That is the single difference between the two
+     * vocabularies — everything else maps to itself:
+     *
+     *   Active    -> Active
+     *   Annulée   -> Annulée
+     *   Archivée  -> Changement   <-- the only real translation
+     *
+     * The map also absorbs spelling variants of the SAME statut (the export
+     * writes "Annulé"/"Expiré" in the masculine, and sometimes drops
+     * accents). Those are not translations — they are the same value spelled
+     * differently — but without them a perfectly valid cancelled
+     * inscription is rejected as an unknown statut.
+     *
+     * "Expirée" is accepted as-is because it exists in this schema too
+     * (a deprecated value kept for historical rows, see Inscription).
+     * Unknown labels are deliberately left untouched so ImportValidator
+     * still rejects them loudly instead of being silently coerced into
+     * some default statut.
+     */
+    private const array STATUT_MAP = [
+        'Archivée' => Inscription::STATUT_CHANGEMENT,
+        // The legacy export is not consistent about the accent.
+        'Archivee' => Inscription::STATUT_CHANGEMENT,
+        'Archive' => Inscription::STATUT_CHANGEMENT,
+
+        // Same statut, different spelling: the old CRM writes the masculine
+        // "Annulé" where this app stores "Annulée". Not a translation —
+        // just the same word — but it has to be listed or every cancelled
+        // inscription is rejected as an unknown statut.
+        'Annulé' => Inscription::STATUT_ANNULEE,
+        'Annule' => Inscription::STATUT_ANNULEE,
+        'Annulee' => Inscription::STATUT_ANNULEE,
+
+        // Likewise for the other statuts the export may spell without
+        // accents or in the masculine form.
+        'Expiré' => Inscription::STATUT_EXPIREE,
+        'Expire' => Inscription::STATUT_EXPIREE,
+        'Expiree' => Inscription::STATUT_EXPIREE,
+        'Actif' => Inscription::STATUT_ACTIVE,
+    ];
+
+    /**
+     * Maps a legacy statut label onto this app's statut, leaving anything
+     * unrecognised alone for the validator to reject.
+     */
+    private static function translateStatut(string $legacyStatut): string
+    {
+        return self::STATUT_MAP[$legacyStatut] ?? $legacyStatut;
+    }
 
     /**
      * Preloaded once per analyze() call — resolving each row's student
@@ -138,13 +197,36 @@ final class InscriptionImporter implements Importer
         $remaining = max(0, $totalEligible - $rows->count());
 
         $inserted = 0;
+        $skipped = 0;
         $errors = 0;
 
         foreach ($rows as $row) {
             try {
-                DB::transaction(function () use ($row, $batch, $importingAdmin): void {
+                $wasInserted = DB::transaction(function () use ($row, $batch, $importingAdmin): bool {
                     $data = $row->raw;
                     $resolution = $row->resolution ?? [];
+
+                    // analyze() dedupes against a snapshot; re-check live
+                    // data before writing so a re-committed batch marks the
+                    // row "déjà importé" instead of hitting the unique index.
+                    if ($this->alreadyImported($row, $batch)) {
+                        $row->update([
+                            'status' => ImportRow::STATUT_DOUBLON,
+                            'errors' => [[
+                                'field' => 'legacy_ref',
+                                'code' => 'already_imported',
+                                'message' => 'Inscription déjà importée — ligne ignorée.',
+                            ]],
+                        ]);
+
+                        return false;
+                    }
+
+                    // A CONFLIT row carries candidates, not decisions. Without
+                    // this it reached Inscription::create() with a null
+                    // student_id and died on the NOT NULL constraint — a raw
+                    // SQL error in the failure list instead of a reason.
+                    $this->assertResolved($resolution, $data);
 
                     $groupId = $resolution['group_id'] ?? $data['group_id'] ?? null;
                     $group = Group::findOrFail($groupId);
@@ -182,9 +264,15 @@ final class InscriptionImporter implements Importer
                         'created_model_type' => Inscription::class,
                         'created_model_id' => $inscription->id,
                     ]);
+
+                    return true;
                 });
 
-                $inserted++;
+                if ($wasInserted) {
+                    $inserted++;
+                } else {
+                    $skipped++;
+                }
             } catch (\Throwable $e) {
                 $row->update([
                     'status' => ImportRow::STATUT_ECHEC_COMMIT,
@@ -194,26 +282,61 @@ final class InscriptionImporter implements Importer
             }
         }
 
-        $batch->update([
-            'status' => $this->nextBatchStatus($batch, $remaining, $errors),
-            'inserted_rows' => $batch->inserted_rows + $inserted,
-            'error_rows' => $batch->error_rows + $errors,
-            'committed_at' => $remaining === 0 ? now() : $batch->committed_at,
-        ]);
+        $this->syncBatchProgress($batch, $remaining);
 
-        return new ImportResult(insertedCount: $inserted, skippedCount: 0, errorCount: $errors, remaining: $remaining);
+        return new ImportResult(insertedCount: $inserted, skippedCount: $skipped, errorCount: $errors, remaining: $remaining);
     }
 
-    private function nextBatchStatus(ImportBatch $batch, int $remaining, int $errorsThisChunk): string
+    /**
+     * Every link an inscription needs before it can be written. Reports the
+     * cause in French rather than letting a null reach the database.
+     *
+     * @param  array<string, mixed>  $resolution
+     * @param  array<string, mixed>  $data
+     */
+    private function assertResolved(array $resolution, array $data): void
     {
-        if ($remaining > 0) {
-            return ImportBatch::STATUT_COMMITTING;
+        if (($resolution['student_id'] ?? $data['student_id'] ?? null) === null) {
+            throw new \RuntimeException(
+                "Étudiant introuvable dans ce centre — vérifier l'orthographe ou importer d'abord les étudiants."
+            );
         }
 
-        $hasAnyErrors = $errorsThisChunk > 0 || $batch->error_rows > 0;
+        if (($resolution['group_id'] ?? $data['group_id'] ?? null) === null) {
+            throw new \RuntimeException(
+                "Groupe non associé — revenir à l'écran d'association des groupes."
+            );
+        }
 
-        return $hasAnyErrors ? ImportBatch::STATUT_COMMITTED_WITH_ERRORS : ImportBatch::STATUT_COMMITTED;
+        if (($data['date_inscription'] ?? null) === null) {
+            throw new \RuntimeException("Date d'inscription illisible dans le fichier.");
+        }
     }
+
+    /** Live re-check of the analyze()-time dedupe, run just before writing. */
+    private function alreadyImported(ImportRow $row, ImportBatch $batch): bool
+    {
+        if ($row->legacy_ref !== null && $row->legacy_ref !== '') {
+            return Inscription::query()
+                ->where('etablissement_id', $batch->etablissement_id)
+                ->where('legacy_ref', $row->legacy_ref)
+                ->exists();
+        }
+
+        $data = $row->raw;
+        $resolution = $row->resolution ?? [];
+
+        if (($resolution['student_id'] ?? null) === null || ($resolution['group_id'] ?? null) === null) {
+            return false;
+        }
+
+        return Inscription::query()
+            ->where('student_id', $resolution['student_id'])
+            ->where('group_id', $resolution['group_id'])
+            ->where('date_inscription', $data['date_inscription'])
+            ->exists();
+    }
+
 
     /**
      * Every active catalog Frais row gets a pivot line on a newly-created
@@ -241,7 +364,8 @@ final class InscriptionImporter implements Importer
         $legacyRef = CellNormalizer::text($rawRow['Réf'] ?? '');
         $etudiant = CellNormalizer::text($rawRow['Étudiant'] ?? '');
         $groupe = CellNormalizer::text($rawRow['Groupe'] ?? '');
-        $statut = CellNormalizer::text($rawRow['Statut'] ?? '');
+        $statutLabel = CellNormalizer::text($rawRow['Statut'] ?? '');
+        $statut = self::translateStatut($statutLabel);
 
         $parseErrors = [];
         try {
@@ -259,6 +383,7 @@ final class InscriptionImporter implements Importer
             'etudiant' => $etudiant,
             'groupe' => $groupe,
             'statut' => $statut,
+            'statut_label' => $statutLabel,
             'date_inscription' => $dateInscription,
             'student_id' => $studentResolution['student_id'],
             'group_id' => $groupResolution['group_id'],
@@ -267,12 +392,15 @@ final class InscriptionImporter implements Importer
         $studentId = $studentResolution['student_id'];
         $groupId = $groupResolution['group_id'];
 
-        $duplicate = $this->isDuplicate($legacyRef, $studentId, $groupId, $dateInscription);
+        $duplicateReason = $this->duplicateReason($legacyRef, $studentId, $groupId, $dateInscription, $etudiant);
 
-        if ($duplicate) {
+        if ($duplicateReason !== null) {
             $this->pushPendingRow($batch, $rowNumber, [
                 'raw' => $raw,
                 'status' => ImportRow::STATUT_DOUBLON,
+                // Without this the row showed up only as an anonymous bump
+                // in the "Ignorées" counter.
+                'errors' => [$duplicateReason],
                 'legacy_ref' => $legacyRef ?: null,
                 'resolution' => null,
             ]);
@@ -547,18 +675,77 @@ final class InscriptionImporter implements Importer
         })->all();
     }
 
-    private function isDuplicate(string $legacyRef, ?int $studentId, ?int $groupId, ?string $dateInscription): bool
+    /**
+     * Returns WHY the row is a duplicate, or null when it is not one.
+     *
+     * A bare boolean left every skipped row unexplained on the Result
+     * screen ("Ignorées: 4" with nothing to click); the four causes below
+     * are genuinely different problems — already in the database vs. the
+     * same row twice inside one file — and the operator needs to tell them
+     * apart to know whether anything was actually lost.
+     *
+     * @return array{field: string, code: string, message: string}|null
+     */
+    private function duplicateReason(string $legacyRef, ?int $studentId, ?int $groupId, ?string $dateInscription, string $etudiant = ''): ?array
     {
         if ($legacyRef !== '') {
-            return isset($this->existingLegacyRefs[$legacyRef]) || isset($this->legacyRefsSeenThisFile[$legacyRef]);
+            if (isset($this->existingLegacyRefs[$legacyRef])) {
+                return [
+                    'field' => 'legacy_ref',
+                    'code' => 'already_in_database',
+                    'message' => sprintf(
+                        'Déjà importée : %sla réf. %s existe déjà dans ce centre (import précédent).',
+                        $etudiant !== '' ? $etudiant.' — ' : '',
+                        $legacyRef
+                    ),
+                ];
+            }
+
+            if (isset($this->legacyRefsSeenThisFile[$legacyRef])) {
+                return [
+                    'field' => 'legacy_ref',
+                    'code' => 'duplicate_in_file',
+                    'message' => sprintf(
+                        'Doublon dans le fichier : %sla réf. %s apparaît sur une ligne précédente.',
+                        $etudiant !== '' ? $etudiant.' — ' : '',
+                        $legacyRef
+                    ),
+                ];
+            }
+
+            return null;
         }
 
         if ($studentId === null || $groupId === null || $dateInscription === null) {
-            return false;
+            return null;
         }
 
         $key = $this->compositeKey($studentId, $groupId, $dateInscription);
 
-        return isset($this->existingCompositeKeys[$key]) || isset($this->compositeKeysSeenThisFile[$key]);
+        if (isset($this->existingCompositeKeys[$key])) {
+            return [
+                'field' => 'student_id',
+                'code' => 'already_in_database',
+                'message' => sprintf(
+                    'Déjà importée : %sa déjà une inscription dans ce groupe au %s.',
+                    $etudiant !== '' ? $etudiant.' ' : 'cet étudiant ',
+                    $dateInscription
+                ),
+            ];
+        }
+
+        if (isset($this->compositeKeysSeenThisFile[$key])) {
+            return [
+                'field' => 'student_id',
+                'code' => 'duplicate_in_file',
+                'message' => sprintf(
+                    'Doublon dans le fichier : %smême groupe et même date (%s) sur une ligne précédente.',
+                    $etudiant !== '' ? $etudiant.' — ' : 'même étudiant, ',
+                    $dateInscription
+                ),
+            ];
+        }
+
+        return null;
     }
 }

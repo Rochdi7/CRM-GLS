@@ -64,11 +64,21 @@ final class StudentImportTest extends TestCase
      */
     private function commitAllSelected(User $user, ImportBatch $batch, array $rowIds): \Illuminate\Testing\TestResponse
     {
+        $guard = 0;
+
         do {
             $response = $this->actingAs($user)->postJson(route('backoffice.import.students.commit', $batch), [
                 'selected_row_ids' => $rowIds,
             ]);
             $remaining = $response->json('remaining');
+
+            // Without this, a chunk that fails to shrink the eligible set
+            // spins forever and the whole suite just stops reporting.
+            $this->assertLessThan(
+                500,
+                ++$guard,
+                'commit() stopped making progress — remaining never reached 0.'
+            );
         } while ($remaining > 0);
 
         return $response;
@@ -135,11 +145,45 @@ final class StudentImportTest extends TestCase
         $row = $batch->rows()->where('source_row_number', 18)->firstOrFail();
         $this->assertNull($row->raw['date_naissance']);
 
+        // rows is a paginator now (a real export is thousands of rows, so
+        // the Preview screen never loads them all at once) — the full row
+        // count lives in rows.total, and every selectable id is sent
+        // separately for the "select all"/commit loop.
         $this->actingAs($user)->get(route('backoffice.import.students.preview', $batch))
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Backoffice/Import/Students/Preview')
                 ->where('batch.id', $batch->id)
-                ->has('rows', 41));
+                ->where('rows.total', 41)
+                ->has('rows.data', 41)
+                ->has('selectableRowIds', 41)
+                ->where('statusCounts.NOUVEAU', 41));
+    }
+
+    public function test_preview_paginates_rows_and_filters_by_status(): void
+    {
+        $user = $this->userWith('import.view', 'import.create');
+        $this->actingAs($user)->post(route('backoffice.import.students.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+        $batch = ImportBatch::query()->firstOrFail();
+
+        // Force a mix of statuses so the filter has something to narrow to.
+        $batch->rows()->limit(5)->update(['status' => ImportRow::STATUT_ERREUR]);
+
+        $this->actingAs($user)->get(route('backoffice.import.students.preview', $batch).'?status=ERREUR')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('rows.total', 5)
+                ->where('filters.status', ImportRow::STATUT_ERREUR)
+                ->where('statusCounts.ERREUR', 5)
+                ->where('statusCounts.NOUVEAU', 36));
+
+        // An unknown status is ignored rather than 500ing or filtering to nothing.
+        $this->actingAs($user)->get(route('backoffice.import.students.preview', $batch).'?status=BOGUS')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('filters.status', '')
+                ->where('rows.total', 41));
     }
 
     public function test_commit_inserts_selected_rows_with_legacy_ref_and_reference(): void

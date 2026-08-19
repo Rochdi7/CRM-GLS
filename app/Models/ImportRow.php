@@ -30,10 +30,23 @@ class ImportRow extends Model
 
     public const STATUT_ECHEC_COMMIT = 'ECHEC_COMMIT';
 
-    /** Rows a user is ever allowed to select for commit. */
+    /**
+     * Rows one commit() pass will process.
+     *
+     * ECHEC_COMMIT is deliberately NOT here: a failed row keeps its status,
+     * so leaving it eligible made commit() hand back the same row forever —
+     * `remaining` never reached 0 and the progress loop spun indefinitely.
+     * Retrying a failure is an explicit user action instead (see
+     * RETRYABLE_STATUTS), which re-queues it as CONFLIT for the next pass.
+     */
     public const SELECTABLE_STATUTS = [
         self::STATUT_NOUVEAU,
         self::STATUT_CONFLIT,
+    ];
+
+    /** Statuses the user may explicitly re-queue once their cause is fixed. */
+    public const RETRYABLE_STATUTS = [
+        self::STATUT_ECHEC_COMMIT,
     ];
 
     /** Every valid status — used to validate the Preview screen's status filter. */

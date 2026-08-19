@@ -397,6 +397,15 @@ the database layer. Non-negotiable invariants already enforced in code:
 - Preserve Bootstrap 5 and PreSkool visuals, spacing, breakpoints exactly.
 - Reuse theme classes/markup (find them via `theme-reference/` demo pages).
 - Never introduce another UI framework or redesign components.
+- ⚠ **`fs-*` is a PIXEL scale here, not Bootstrap's heading scale.** PreSkool's
+  `style.css` loads *after* `bootstrap.min.css` and redefines the whole
+  `.fs-*` range so **the number is the pixel size**: `fs-24` = 1.5rem (24px),
+  `fs-18` = 18px, `fs-13` = 13px. That means Bootstrap's `fs-1`…`fs-6` become
+  1px…6px — `fs-4` renders 4px text, `fs-5` renders 5px. Never write
+  `fs-1`…`fs-9` expecting a heading size; use the pixel value you actually
+  want (`fs-24`, `fs-20`, `fs-18`, `fs-16`, `fs-14`, `fs-13`). The only
+  legitimate single-digit use is the theme's own `ti-circle-filled fs-5`
+  status-badge dot, where a 5px glyph is the intent.
 - Verify changes in: **desktop + mobile** (sidebar/mobile menu), **dark mode**
   (header toggle), and **RTL** (Arabic locale loads `bootstrap.rtl.min.css`;
   layouts set `dir` from locale).

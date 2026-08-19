@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEventHandler } from 'react';
 import FormError from '@/Components/Forms/FormError';
+import { t } from '@/Lib/i18n';
 import type { SelectOption } from '@/Types';
 
 interface SelectFieldProps {
@@ -14,6 +15,17 @@ interface SelectFieldProps {
     disabled?: boolean;
     value?: string | number;
     onChange?: ChangeEventHandler<HTMLSelectElement>;
+    /** Hide the dropdown search box (defaults to shown). */
+    searchable?: boolean;
+}
+
+/** Accent/case-insensitive normalisation so "eleve" matches "Élève". */
+export function normalizeSearch(text: string): string {
+    return text
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .toLowerCase()
+        .trim();
 }
 
 /**
@@ -22,8 +34,11 @@ interface SelectFieldProps {
  * React-native: only select2.min.css is loaded (app.blade.php), never the
  * jQuery plugin (CLAUDE.md §5/§6). Same API as the previous native-select
  * version (onChange receives an event-like object exposing target.value).
- * No search box, matching the add-student.blade.php selects (product
- * decision); keyboard navigation (arrows/Enter/Escape) still works.
+ *
+ * The dropdown carries a real `<input type="search">` so the filter text can be
+ * pasted (Ctrl+V, right-click → Coller, mobile paste), selected and copied —
+ * the previous keydown-buffer on the button could not support any of that.
+ * Keyboard navigation (arrows/Enter/Escape/Tab) still works.
  */
 export default function SelectField({
     id,
@@ -35,24 +50,35 @@ export default function SelectField({
     disabled = false,
     value = '',
     onChange,
+    searchable = true,
 }: SelectFieldProps) {
     const [open, setOpen] = useState(false);
     const [highlight, setHighlight] = useState(0);
     const [query, setQuery] = useState('');
     const wrapperRef = useRef<HTMLDivElement>(null);
+    const searchRef = useRef<HTMLInputElement>(null);
+    const buttonRef = useRef<HTMLButtonElement>(null);
 
     const selected = options.find((o) => String(o.value) === String(value));
-    const norm = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-    const shown = query === '' ? options : options.filter((o) => norm(o.label).includes(norm(query)));
+    const needle = normalizeSearch(query);
+    const shown = needle === '' ? options : options.filter((o) => normalizeSearch(o.label).includes(needle));
 
     function emit(next: string) {
         onChange?.({ target: { value: next } } as unknown as React.ChangeEvent<HTMLSelectElement>);
     }
 
-    function choose(option: SelectOption | null) {
-        emit(option === null ? '' : String(option.value));
+    function close(focusButton = false) {
         setOpen(false);
         setQuery('');
+
+        if (focusButton) {
+            buttonRef.current?.focus();
+        }
+    }
+
+    function choose(option: SelectOption | null) {
+        emit(option === null ? '' : String(option.value));
+        close(true);
     }
 
     useEffect(() => {
@@ -61,6 +87,7 @@ export default function SelectField({
         }
 
         setHighlight(0);
+        searchRef.current?.focus();
 
         function handleOutside(event: MouseEvent) {
             if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
@@ -76,30 +103,30 @@ export default function SelectField({
 
     function handleKeyDown(event: React.KeyboardEvent) {
         if (!open) {
+            if (!disabled && (event.key === 'ArrowDown' || event.key === 'Enter')) {
+                event.preventDefault();
+                setOpen(true);
+            }
+
             return;
         }
 
         if (event.key === 'Escape') {
             event.stopPropagation();
-            setOpen(false);
-            setQuery('');
+            close(true);
         } else if (event.key === 'ArrowDown') {
             event.preventDefault();
             setHighlight((h) => Math.min(h + 1, shown.length - 1));
         } else if (event.key === 'ArrowUp') {
             event.preventDefault();
             setHighlight((h) => Math.max(h - 1, 0));
-        } else if (event.key === 'Backspace') {
-            setQuery((q) => q.slice(0, -1));
-            setHighlight(0);
-        } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey) {
-            setQuery((q) => q + event.key);
-            setHighlight(0);
         } else if (event.key === 'Enter') {
             event.preventDefault();
             if (shown[highlight]) {
                 choose(shown[highlight]);
             }
+        } else if (event.key === 'Tab') {
+            close();
         }
     }
 
@@ -120,6 +147,7 @@ export default function SelectField({
                         <button
                             type="button"
                             id={id}
+                            ref={buttonRef}
                             className={`select2-selection select2-selection--single w-100 text-start${error ? ' gls-select2-invalid' : ''}`}
                             style={{ display: 'block' }}
                             role="combobox"
@@ -135,9 +163,7 @@ export default function SelectField({
                             }}
                         >
                             <span className="select2-selection__rendered">
-                                {open && query !== '' ? (
-                                    <>{query}<span className="text-muted">|</span></>
-                                ) : selected ? (
+                                {selected ? (
                                     selected.icon ? (
                                         <span className="d-inline-flex align-items-center gap-2">
                                             {selected.icon}
@@ -147,7 +173,7 @@ export default function SelectField({
                                         selected.shortLabel ?? selected.label
                                     )
                                 ) : (
-                                    <span className="select2-selection__placeholder">{placeholder ?? 'Choisir…'}</span>
+                                    <span className="select2-selection__placeholder">{placeholder ?? t('Choose…')}</span>
                                 )}
                             </span>
                             <span className="select2-selection__arrow" role="presentation">
@@ -160,12 +186,50 @@ export default function SelectField({
                 {open && (
                     <span
                         className="select2-container select2-container--default select2-container--open"
-                        style={{ position: 'absolute', top: '100%', left: 0, width: '100%', zIndex: 1070 }}
+                        style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, width: '100%', zIndex: 1070 }}
                     >
                         <span className="select2-dropdown select2-dropdown--below" style={{ position: 'static', width: '100%' }}>
+                            {searchable && (
+                                <span className="gls-select2-search">
+                                    <span className="gls-select2-search__wrap">
+                                        <i className="ti ti-search gls-select2-search__icon" aria-hidden="true" />
+                                        <input
+                                            ref={searchRef}
+                                            type="search"
+                                            className="gls-select2-search__field"
+                                            value={query}
+                                            placeholder={t('Search…')}
+                                            aria-label={t('Search…')}
+                                            autoComplete="off"
+                                            autoCorrect="off"
+                                            autoCapitalize="off"
+                                            spellCheck={false}
+                                            onChange={(event) => {
+                                                setQuery(event.target.value);
+                                                setHighlight(0);
+                                            }}
+                                        />
+                                        {query !== '' && (
+                                            <button
+                                                type="button"
+                                                className="gls-select2-search__clear"
+                                                aria-label={t('Clear')}
+                                                onMouseDown={(e) => e.preventDefault()}
+                                                onClick={() => {
+                                                    setQuery('');
+                                                    setHighlight(0);
+                                                    searchRef.current?.focus();
+                                                }}
+                                            >
+                                                <i className="ti ti-x" aria-hidden="true" />
+                                            </button>
+                                        )}
+                                    </span>
+                                </span>
+                            )}
                             <span className="select2-results">
-                                <ul className="select2-results__options" role="listbox" style={{ maxHeight: 220, overflowY: 'auto' }}>
-                                    {placeholder && (
+                                <ul className="select2-results__options" role="listbox" style={{ maxHeight: 260, overflowY: 'auto' }}>
+                                    {placeholder && needle === '' && (
                                         <li
                                             className="select2-results__option"
                                             role="option"
@@ -179,7 +243,7 @@ export default function SelectField({
                                         </li>
                                     )}
                                     {shown.length === 0 && (
-                                        <li className="select2-results__option select2-results__message">Aucun résultat</li>
+                                        <li className="select2-results__option select2-results__message">{t('No results')}</li>
                                     )}
                                     {shown.map((option, index) => (
                                         <li

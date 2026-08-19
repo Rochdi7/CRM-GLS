@@ -25,6 +25,9 @@ final class AnalyzeEncaissementImportRequest extends FormRequest
             'operateur_mapping' => ['present', 'array'],
             'operateur_mapping.*.label' => ['required', 'string'],
             'operateur_mapping.*.employee_id' => ['required', 'integer', 'exists:employees,id'],
+            // Off by default: attaching money to a cancelled enrolment is a
+            // deliberate choice the operator makes, not a silent behaviour.
+            'include_inactive_inscriptions' => ['sometimes', 'boolean'],
         ];
     }
 }

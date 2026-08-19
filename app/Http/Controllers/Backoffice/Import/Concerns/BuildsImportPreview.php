@@ -43,8 +43,25 @@ trait BuildsImportPreview
                 ->paginate(self::PREVIEW_PER_PAGE)
                 ->withQueryString(),
             'statusCounts' => $this->statusCounts($batch),
+            // Only NOUVEAU rows are pre-checked. CONFLIT rows stay
+            // selectable (the operator can still resolve one by hand) but
+            // are never swept into the default selection — committing an
+            // unresolved row can only ever fail, and on a real export that
+            // meant thousands of guaranteed failures in one click.
             'selectableRowIds' => $batch->rows()
-                ->whereIn('status', ImportRow::SELECTABLE_STATUTS)
+                ->where('status', ImportRow::STATUT_NOUVEAU)
+                ->orderBy('source_row_number')
+                ->pluck('id'),
+            'conflictRowIds' => $batch->rows()
+                ->where('status', ImportRow::STATUT_CONFLIT)
+                ->orderBy('source_row_number')
+                ->pluck('id'),
+            // Previously-failed rows can be re-queued once their cause is
+            // fixed. They are NOT commit-eligible as-is (that made the
+            // progress loop spin forever) — the Preview screen posts them to
+            // the retry endpoint, which flips them back to CONFLIT.
+            'failedRowIds' => $batch->rows()
+                ->whereIn('status', ImportRow::RETRYABLE_STATUTS)
                 ->orderBy('source_row_number')
                 ->pluck('id'),
             'filters' => ['status' => $statusFilter],
@@ -61,10 +78,46 @@ trait BuildsImportPreview
             'failedRows' => $batch->rows()
                 ->where('status', ImportRow::STATUT_ECHEC_COMMIT)
                 ->orderBy('source_row_number')
-                ->paginate(self::PREVIEW_PER_PAGE)
+                ->paginate(self::PREVIEW_PER_PAGE, ['*'], 'failed_page')
+                ->withQueryString(),
+            // "Ignorées" used to be a bare number with nothing behind it —
+            // the operator could see 4 rows had been skipped but not which
+            // ones or why. Every skipped row now carries a reason (set at
+            // analyze time by each importer's duplicateReason()) and is
+            // listed here so the count can actually be audited.
+            'skippedRows' => $batch->rows()
+                ->whereIn('status', [ImportRow::STATUT_DOUBLON, ImportRow::STATUT_IGNORE])
+                ->orderBy('source_row_number')
+                ->paginate(self::PREVIEW_PER_PAGE, ['*'], 'skipped_page')
                 ->withQueryString(),
             'statusCounts' => $this->statusCounts($batch),
         ];
+    }
+
+    /**
+     * Sums the parsed `montant` out of import_rows.raw in SQL — the
+     * Encaissements reconciliation total, which used to be tallied
+     * client-side over every row (impossible now that rows are paginated,
+     * and a memory hazard even before that).
+     */
+    protected function rawMontantTotal(ImportBatch $batch): string
+    {
+        $total = $batch->rows()
+            ->selectRaw("coalesce(sum((raw->>'montant')::numeric), 0) as total")
+            ->value('total');
+
+        return number_format((float) $total, 2, '.', '');
+    }
+
+    /** Same SQL sum as rawMontantTotal(), but only over rows actually committed. */
+    protected function importedMontantTotal(ImportBatch $batch): string
+    {
+        $total = $batch->rows()
+            ->where('status', ImportRow::STATUT_INSERE)
+            ->selectRaw("coalesce(sum((raw->>'montant')::numeric), 0) as total")
+            ->value('total');
+
+        return number_format((float) $total, 2, '.', '');
     }
 
     /**

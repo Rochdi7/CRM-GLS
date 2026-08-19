@@ -9,6 +9,7 @@ use App\Models\Employee;
 use App\Models\ImportBatch;
 use App\Models\ImportRow;
 use App\Models\Student;
+use App\Services\Import\Concerns\TracksBatchProgress;
 use App\Services\Import\Contracts\Importer;
 use App\Services\Import\DTO\ImportContext;
 use App\Services\Import\DTO\ImportResult;
@@ -24,6 +25,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class StudentImporter implements Importer
 {
+    use TracksBatchProgress;
+
     private const string LEGACY_SOURCE = 'ancien-crm';
 
     private const array EXPECTED_COLUMNS = ['Réf', 'Prénom', 'Nom', 'Téléphone', 'Sexe', 'Date de naissance'];
@@ -105,12 +108,29 @@ final class StudentImporter implements Importer
         $remaining = max(0, $totalEligible - $rows->count());
 
         $inserted = 0;
+        $skipped = 0;
         $errors = 0;
 
         foreach ($rows as $row) {
             try {
-                DB::transaction(function () use ($row, $batch): void {
+                $wasInserted = DB::transaction(function () use ($row, $batch): bool {
                     $data = $row->raw;
+
+                    // analyze() dedupes against a snapshot; re-check live
+                    // data before writing so a re-committed batch marks the
+                    // row "déjà importé" instead of hitting the unique index.
+                    if ($this->alreadyImported($row, $batch)) {
+                        $row->update([
+                            'status' => ImportRow::STATUT_DOUBLON,
+                            'errors' => [[
+                                'field' => 'legacy_ref',
+                                'code' => 'already_imported',
+                                'message' => 'Étudiant déjà importé — ligne ignorée.',
+                            ]],
+                        ]);
+
+                        return false;
+                    }
 
                     $student = Student::create([
                         'reference' => ReferenceGenerator::make('ETU', 'students'),
@@ -129,9 +149,15 @@ final class StudentImporter implements Importer
                         'created_model_type' => Student::class,
                         'created_model_id' => $student->id,
                     ]);
+
+                    return true;
                 });
 
-                $inserted++;
+                if ($wasInserted) {
+                    $inserted++;
+                } else {
+                    $skipped++;
+                }
             } catch (\Throwable $e) {
                 $row->update([
                     'status' => ImportRow::STATUT_ECHEC_COMMIT,
@@ -141,26 +167,24 @@ final class StudentImporter implements Importer
             }
         }
 
-        $batch->update([
-            'status' => $this->nextBatchStatus($batch, $remaining, $errors),
-            'inserted_rows' => $batch->inserted_rows + $inserted,
-            'error_rows' => $batch->error_rows + $errors,
-            'committed_at' => $remaining === 0 ? now() : $batch->committed_at,
-        ]);
+        $this->syncBatchProgress($batch, $remaining);
 
-        return new ImportResult(insertedCount: $inserted, skippedCount: 0, errorCount: $errors, remaining: $remaining);
+        return new ImportResult(insertedCount: $inserted, skippedCount: $skipped, errorCount: $errors, remaining: $remaining);
     }
 
-    private function nextBatchStatus(ImportBatch $batch, int $remaining, int $errorsThisChunk): string
+    /** Live re-check of the analyze()-time dedupe, run just before writing. */
+    private function alreadyImported(ImportRow $row, ImportBatch $batch): bool
     {
-        if ($remaining > 0) {
-            return ImportBatch::STATUT_COMMITTING;
+        if ($row->legacy_ref !== null && $row->legacy_ref !== '') {
+            return Student::query()
+                ->where('etablissement_id', $batch->etablissement_id)
+                ->where('legacy_ref', $row->legacy_ref)
+                ->exists();
         }
 
-        $hasAnyErrors = $errorsThisChunk > 0 || $batch->error_rows > 0;
-
-        return $hasAnyErrors ? ImportBatch::STATUT_COMMITTED_WITH_ERRORS : ImportBatch::STATUT_COMMITTED;
+        return false;
     }
+
 
     /** @param array<string, mixed> $rawRow */
     private function analyzeRow(ImportBatch $batch, int $rowNumber, array $rawRow, ImportContext $context): void
@@ -197,9 +221,34 @@ final class StudentImporter implements Importer
         $duplicate = $this->findDuplicate($legacyRef, $prenom, $nom, $dateNaissance, $telephone);
 
         if ($duplicate !== null) {
+            // Name the rule that matched. "Ignorées: 4" with no reason left
+            // the operator unable to tell a genuine re-import from a
+            // same-name collision that silently dropped a real student.
+            $reason = $legacyRef !== '' && $duplicate->legacy_ref === $legacyRef
+                ? sprintf(
+                    'Déjà importé : %s %s — la réf. %s existe déjà dans ce centre (import précédent).',
+                    $prenom,
+                    $nom,
+                    $legacyRef,
+                )
+                : sprintf(
+                    'Doublon : %s %s existe déjà dans ce centre (%s) — réf. %s.',
+                    $duplicate->prenom,
+                    $duplicate->nom,
+                    $dateNaissance !== null
+                        ? 'même date de naissance '.$dateNaissance
+                        : 'même téléphone',
+                    $duplicate->reference,
+                );
+
             $this->pushPendingRow($batch, $rowNumber, [
                 'raw' => $raw,
                 'status' => ImportRow::STATUT_DOUBLON,
+                'errors' => [[
+                    'field' => 'legacy_ref',
+                    'code' => 'already_imported',
+                    'message' => $reason,
+                ]],
                 'legacy_ref' => $legacyRef ?: null,
                 'resolution' => ['matched_student_id' => $duplicate->id],
             ]);

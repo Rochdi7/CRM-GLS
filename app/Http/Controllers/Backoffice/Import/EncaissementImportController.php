@@ -14,6 +14,9 @@ use App\Models\AnneeScolaire;
 use App\Models\Employee;
 use App\Models\Etablissement;
 use App\Models\ImportBatch;
+use App\Models\ImportRow;
+use App\Models\Inscription;
+use App\Models\Student;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Import\DTO\ImportContext;
 use App\Services\Import\EncaissementImporter;
@@ -58,7 +61,40 @@ final class EncaissementImportController extends Controller
             ->orderBy('nom')
             ->get(['id', 'nom', 'prenom']);
 
-        return response()->json(['operateurLabels' => $labels, 'employees' => $employees]);
+        return response()->json([
+            'operateurLabels' => $labels,
+            'employees' => $employees,
+            'readiness' => $this->inscriptionReadiness(
+                (int) $data['etablissement_id'],
+                (int) $data['annee_scolaire_id'],
+            ),
+        ]);
+    }
+
+    /**
+     * A payment can only attach to a fee line of an ACTIVE inscription, so a
+     * centre whose students mostly have no inscription yet will produce a
+     * wall of conflicts. Surfacing that here — before analysing thousands of
+     * rows — is far kinder than discovering it on the result screen.
+     *
+     * @return array{students: int, withInscription: int, missing: int}
+     */
+    private function inscriptionReadiness(int $etablissementId, int $anneeScolaireId): array
+    {
+        $students = Student::query()->where('etablissement_id', $etablissementId)->count();
+
+        $withInscription = Inscription::query()
+            ->where('etablissement_id', $etablissementId)
+            ->where('annee_scolaire_id', $anneeScolaireId)
+            ->where('statut', Inscription::STATUT_ACTIVE)
+            ->distinct('student_id')
+            ->count('student_id');
+
+        return [
+            'students' => $students,
+            'withInscription' => $withInscription,
+            'missing' => max(0, $students - $withInscription),
+        ];
     }
 
     public function analyze(AnalyzeEncaissementImportRequest $request, EncaissementImporter $importer, CenterAccessService $centerAccess): RedirectResponse
@@ -79,6 +115,7 @@ final class EncaissementImportController extends Controller
             etablissementId: (int) $data['etablissement_id'],
             anneeScolaireId: (int) $data['annee_scolaire_id'],
             operateurMapping: $operateurMapping,
+            includeInactiveInscriptions: (bool) ($data['include_inactive_inscriptions'] ?? false),
         );
 
         $batch = $importer->analyze($request->file('file'), $context, $admin);
@@ -91,7 +128,10 @@ final class EncaissementImportController extends Controller
         $this->authorize('view', $batch);
         abort_unless($batch->module === ImportBatch::MODULE_ENCAISSEMENTS, 404);
 
-        return Inertia::render('Backoffice/Import/Encaissements/Preview', $this->previewProps($request, $batch));
+        return Inertia::render('Backoffice/Import/Encaissements/Preview', [
+            ...$this->previewProps($request, $batch),
+            'excelTotal' => $this->rawMontantTotal($batch),
+        ]);
     }
 
     /**
@@ -121,7 +161,11 @@ final class EncaissementImportController extends Controller
         $this->authorize('view', $batch);
         abort_unless($batch->module === ImportBatch::MODULE_ENCAISSEMENTS, 404);
 
-        return Inertia::render('Backoffice/Import/Encaissements/Result', $this->resultProps($request, $batch));
+        return Inertia::render('Backoffice/Import/Encaissements/Result', [
+            ...$this->resultProps($request, $batch),
+            'excelTotal' => $this->rawMontantTotal($batch),
+            'importedTotal' => $this->importedMontantTotal($batch),
+        ]);
     }
 
     /** @return \Illuminate\Support\Collection<int, array{id: int, nom_centre: string}> */
@@ -135,4 +179,24 @@ final class EncaissementImportController extends Controller
 
         return $query->get(['id', 'nom_centre']);
     }
+
+    /**
+     * Re-queues previously-failed rows so the next commit pass picks them up.
+     * A failed row keeps ECHEC_COMMIT and is intentionally not commit-
+     * eligible (that made the progress loop spin forever), so retrying is an
+     * explicit action that flips it back to CONFLIT — where the resolution
+     * guard and duplicate check run again exactly as before.
+     */
+    public function retryFailed(Request $request, ImportBatch $batch): RedirectResponse
+    {
+        $this->authorize('create', ImportBatch::class);
+        abort_unless($batch->module === ImportBatch::MODULE_ENCAISSEMENTS, 404);
+
+        $requeued = $batch->rows()
+            ->whereIn('status', ImportRow::RETRYABLE_STATUTS)
+            ->update(['status' => ImportRow::STATUT_CONFLIT, 'errors' => null]);
+
+        return back()->with('success', __(':count rows queued for retry.', ['count' => $requeued]));
+    }
+
 }

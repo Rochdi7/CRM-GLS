@@ -74,11 +74,21 @@ final class InscriptionImportTest extends TestCase
      */
     private function commitAllSelected(User $user, ImportBatch $batch, array $rowIds): \Illuminate\Testing\TestResponse
     {
+        $guard = 0;
+
         do {
             $response = $this->actingAs($user)->postJson(route('backoffice.import.inscriptions.commit', $batch), [
                 'selected_row_ids' => $rowIds,
             ]);
             $remaining = $response->json('remaining');
+
+            // Without this, a chunk that fails to shrink the eligible set
+            // spins forever and the whole suite just stops reporting.
+            $this->assertLessThan(
+                500,
+                ++$guard,
+                'commit() stopped making progress — remaining never reached 0.'
+            );
         } while ($remaining > 0);
 
         return $response;
@@ -240,6 +250,117 @@ final class InscriptionImportTest extends TestCase
         $this->assertSame('300.00', (string) $inscription->montant_total);
         // date_debut/date_fin come from the group's own training period, never the xlsx.
         $this->assertSame($group->date_debut_formation?->toDateString(), $inscription->date_debut?->toDateString());
+    }
+
+    public function test_legacy_archivee_statut_becomes_changement(): void
+    {
+        // The old CRM and this app agree on every inscription statut EXCEPT
+        // one: their "Archivée" is our "Changement". That single rename is
+        // the entire difference between the two vocabularies.
+        $map = (new \ReflectionClassConstant(\App\Services\Import\InscriptionImporter::class, 'STATUT_MAP'))->getValue();
+
+        $this->assertSame(Inscription::STATUT_CHANGEMENT, $map['Archivée'] ?? null);
+
+        // Everything else must pass through untouched — mapping any other
+        // statut would rewrite history rather than translate it.
+        foreach ([Inscription::STATUT_ACTIVE, Inscription::STATUT_ANNULEE, Inscription::STATUT_CHANGEMENT, Inscription::STATUT_EXPIREE] as $statut) {
+            $this->assertArrayNotHasKey($statut, $map, "{$statut} must not be translated.");
+        }
+    }
+
+    public function test_annulee_and_changement_inscriptions_are_accepted_by_the_validator(): void
+    {
+        // These are legitimate historical statuts — an import must accept
+        // them, not reject the row.
+        $validator = new \App\Services\Import\ImportValidator();
+
+        foreach ([Inscription::STATUT_ACTIVE, Inscription::STATUT_ANNULEE, Inscription::STATUT_CHANGEMENT] as $statut) {
+            $errors = $validator->validateInscription([
+                'etudiant' => 'HASNA TIMOUN',
+                'groupe' => 'Herr Driss 13h',
+                'statut' => $statut,
+                'date_inscription' => '2026-07-01',
+            ]);
+
+            $statutErrors = array_filter($errors, fn ($e) => $e['field'] === 'statut');
+            $this->assertSame([], $statutErrors, "Statut {$statut} must be accepted.");
+        }
+    }
+
+    public function test_a_skipped_row_records_why_it_was_skipped(): void
+    {
+        // "Ignorées: 4" with nothing behind it gave the operator no way to
+        // tell a harmless re-import from a real row silently dropped.
+        $this->makeStudent('HASNA', 'TIMOUN');
+        $group = Group::factory()->create([
+            'nom' => 'Herr Driss 13h',
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $user = $this->userWith('import.view', 'import.create');
+        $mapping = [['label' => 'Herr Driss 13h', 'action' => 'map', 'group_id' => $group->id]];
+        $payload = [
+            'file' => $this->sampleUpload(), 'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id, 'groupe_mapping' => $mapping,
+        ];
+
+        $this->actingAs($user)->post(route('backoffice.import.inscriptions.analyze'), $payload);
+        $first = ImportBatch::query()->firstOrFail();
+        $row = $first->rows()->where('legacy_ref', '373SL126')->firstOrFail();
+        $this->commitAllSelected($user, $first, [$row->id]);
+
+        // Re-uploading the same file makes that row a duplicate.
+        $this->actingAs($user)->post(route('backoffice.import.inscriptions.analyze'), [
+            ...$payload, 'file' => $this->sampleUpload(),
+        ]);
+        $second = ImportBatch::query()->where('id', '!=', $first->id)->firstOrFail();
+        $skipped = $second->rows()->where('legacy_ref', '373SL126')->firstOrFail();
+
+        $this->assertSame(ImportRow::STATUT_DOUBLON, $skipped->status);
+        $this->assertNotEmpty($skipped->errors, 'A skipped row must record why it was skipped.');
+        $this->assertSame('already_in_database', $skipped->errors[0]['code']);
+        $this->assertStringContainsString('373SL126', $skipped->errors[0]['message']);
+        // A réf. alone is unreadable — the operator has to see who it is.
+        $this->assertStringContainsString('TIMOUN', $skipped->errors[0]['message']);
+        $this->assertNotSame('', (string) ($skipped->raw['etudiant'] ?? ''));
+    }
+
+    public function test_result_screen_lists_skipped_rows_with_their_reason(): void
+    {
+        $this->makeStudent('HASNA', 'TIMOUN');
+        $group = Group::factory()->create([
+            'nom' => 'Herr Driss 13h',
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $user = $this->userWith('import.view', 'import.create');
+        $payload = [
+            'file' => $this->sampleUpload(), 'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'groupe_mapping' => [['label' => 'Herr Driss 13h', 'action' => 'map', 'group_id' => $group->id]],
+        ];
+
+        $this->actingAs($user)->post(route('backoffice.import.inscriptions.analyze'), $payload);
+        $first = ImportBatch::query()->firstOrFail();
+        $this->commitAllSelected($user, $first, [$first->rows()->where('legacy_ref', '373SL126')->firstOrFail()->id]);
+
+        $this->actingAs($user)->post(route('backoffice.import.inscriptions.analyze'), [
+            ...$payload, 'file' => $this->sampleUpload(),
+        ]);
+        $second = ImportBatch::query()->where('id', '!=', $first->id)->firstOrFail();
+
+        $this->actingAs($user)
+            ->get(route('backoffice.import.inscriptions.result', $second))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/Import/Inscriptions/Result')
+                ->where('skippedRows.total', fn ($total) => $total > 0)
+                ->has('skippedRows.data.0.errors.0.message')
+                // The table's Étudiant column reads this off raw.
+                ->has('skippedRows.data.0.raw.etudiant')
+            );
     }
 
     public function test_reupload_is_idempotent(): void

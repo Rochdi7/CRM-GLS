@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import FormError from '@/Components/Forms/FormError';
+import { normalizeSearch } from '@/Components/Forms/SelectField';
+import { t } from '@/Lib/i18n';
 import type { SelectOption } from '@/Types';
 
 interface MultiSelectFieldProps {
@@ -13,6 +15,8 @@ interface MultiSelectFieldProps {
     /** Selected values as strings (option.value is coerced with String()). */
     values: string[];
     onChange: (values: string[]) => void;
+    /** Hide the dropdown search box (defaults to shown). */
+    searchable?: boolean;
 }
 
 /**
@@ -21,6 +25,9 @@ interface MultiSelectFieldProps {
  * control, the dropdown shows a checkbox per option, and picking toggles
  * membership instead of closing the list. 100% React-owned (no jQuery
  * Select2 plugin, CLAUDE.md §5/§6).
+ *
+ * Like SelectField, the dropdown carries a real `<input type="search">` so the
+ * filter text supports paste/copy/select-all.
  */
 export default function MultiSelectField({
     id,
@@ -32,12 +39,18 @@ export default function MultiSelectField({
     disabled = false,
     values,
     onChange,
+    searchable = true,
 }: MultiSelectFieldProps) {
     const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState('');
     const wrapperRef = useRef<HTMLDivElement>(null);
+    const searchRef = useRef<HTMLInputElement>(null);
+    const buttonRef = useRef<HTMLButtonElement>(null);
 
     const selectedSet = new Set(values.map(String));
     const selectedOptions = options.filter((o) => selectedSet.has(String(o.value)));
+    const needle = normalizeSearch(query);
+    const shown = needle === '' ? options : options.filter((o) => normalizeSearch(o.label).includes(needle));
 
     function toggle(value: string) {
         if (selectedSet.has(value)) {
@@ -57,9 +70,12 @@ export default function MultiSelectField({
             return;
         }
 
+        searchRef.current?.focus();
+
         function handleOutside(event: MouseEvent) {
             if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
                 setOpen(false);
+                setQuery('');
             }
         }
 
@@ -72,6 +88,8 @@ export default function MultiSelectField({
         if (event.key === 'Escape') {
             event.stopPropagation();
             setOpen(false);
+            setQuery('');
+            buttonRef.current?.focus();
         }
     }
 
@@ -92,6 +110,7 @@ export default function MultiSelectField({
                         <button
                             type="button"
                             id={id}
+                            ref={buttonRef}
                             className={`select2-selection select2-selection--multiple w-100 text-start d-flex align-items-center flex-wrap${error ? ' gls-select2-invalid' : ''}`}
                             style={{ display: 'flex', minHeight: 44, padding: '4px 8px', gap: 4 }}
                             role="listbox"
@@ -108,7 +127,7 @@ export default function MultiSelectField({
                         >
                             {selectedOptions.length === 0 && (
                                 <span className="select2-selection__placeholder text-muted">
-                                    {placeholder ?? 'Choisir…'}
+                                    {placeholder ?? t('Choose…')}
                                 </span>
                             )}
                             {selectedOptions.map((option) => (
@@ -135,15 +154,49 @@ export default function MultiSelectField({
                 {open && (
                     <span
                         className="select2-container select2-container--default select2-container--open"
-                        style={{ position: 'absolute', top: '100%', left: 0, width: '100%', zIndex: 1070 }}
+                        style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, width: '100%', zIndex: 1070 }}
                     >
                         <span className="select2-dropdown select2-dropdown--below" style={{ position: 'static', width: '100%' }}>
+                            {searchable && (
+                                <span className="gls-select2-search">
+                                    <span className="gls-select2-search__wrap">
+                                        <i className="ti ti-search gls-select2-search__icon" aria-hidden="true" />
+                                        <input
+                                            ref={searchRef}
+                                            type="search"
+                                            className="gls-select2-search__field"
+                                            value={query}
+                                            placeholder={t('Search…')}
+                                            aria-label={t('Search…')}
+                                            autoComplete="off"
+                                            autoCorrect="off"
+                                            autoCapitalize="off"
+                                            spellCheck={false}
+                                            onChange={(event) => setQuery(event.target.value)}
+                                        />
+                                        {query !== '' && (
+                                            <button
+                                                type="button"
+                                                className="gls-select2-search__clear"
+                                                aria-label={t('Clear')}
+                                                onMouseDown={(e) => e.preventDefault()}
+                                                onClick={() => {
+                                                    setQuery('');
+                                                    searchRef.current?.focus();
+                                                }}
+                                            >
+                                                <i className="ti ti-x" aria-hidden="true" />
+                                            </button>
+                                        )}
+                                    </span>
+                                </span>
+                            )}
                             <span className="select2-results">
-                                <ul className="select2-results__options" role="listbox" style={{ maxHeight: 220, overflowY: 'auto' }}>
-                                    {options.length === 0 && (
-                                        <li className="select2-results__option select2-results__message">Aucun résultat</li>
+                                <ul className="select2-results__options" role="listbox" style={{ maxHeight: 260, overflowY: 'auto' }}>
+                                    {shown.length === 0 && (
+                                        <li className="select2-results__option select2-results__message">{t('No results')}</li>
                                     )}
-                                    {options.map((option) => {
+                                    {shown.map((option) => {
                                         const value = String(option.value);
                                         const checked = selectedSet.has(value);
 

@@ -10,6 +10,12 @@ interface EncaissementImportUploadProps {
     anneesScolaires: ImportAnneeScolaireOption[];
 }
 
+interface Readiness {
+    students: number;
+    withInscription: number;
+    missing: number;
+}
+
 interface EmployeeOption {
     id: number;
     nom: string;
@@ -26,6 +32,7 @@ interface UploadFormState {
     etablissement_id: string;
     annee_scolaire_id: string;
     operateur_mapping: OperateurMappingEntry[];
+    include_inactive_inscriptions: boolean;
 }
 
 /**
@@ -39,6 +46,7 @@ export default function EncaissementImportUpload({ etablissements, anneesScolair
     const defaultAnnee = anneesScolaires.find((a) => a.par_defaut) ?? anneesScolaires[0];
     const [step, setStep] = useState<'scope' | 'mapping'>('scope');
     const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+    const [readiness, setReadiness] = useState<Readiness | null>(null);
     const [peeking, setPeeking] = useState(false);
     const [peekError, setPeekError] = useState<string | null>(null);
 
@@ -47,6 +55,9 @@ export default function EncaissementImportUpload({ etablissements, anneesScolair
         etablissement_id: '',
         annee_scolaire_id: defaultAnnee ? String(defaultAnnee.id) : '',
         operateur_mapping: [],
+        // Off by default: money only attaches to a live enrolment unless
+        // the operator deliberately says otherwise.
+        include_inactive_inscriptions: false,
     });
 
     async function handlePeekSubmit(event: FormEvent) {
@@ -72,9 +83,14 @@ export default function EncaissementImportUpload({ etablissements, anneesScolair
                 return;
             }
 
-            const json = (await response.json()) as { operateurLabels: string[]; employees: EmployeeOption[] };
+            const json = (await response.json()) as {
+                operateurLabels: string[];
+                employees: EmployeeOption[];
+                readiness: Readiness;
+            };
 
             setEmployees(json.employees);
+            setReadiness(json.readiness);
             form.setData(
                 'operateur_mapping',
                 json.operateurLabels.map((label) => ({ label, employee_id: '' }))
@@ -165,6 +181,16 @@ export default function EncaissementImportUpload({ etablissements, anneesScolair
 
             {step === 'mapping' && (
                 <Card title="Associer les opérateurs">
+                    {readiness !== null && readiness.missing > 0 && (
+                        <div className="alert alert-warning">
+                            <strong>{readiness.missing} étudiant(s) sans inscription active</strong> pour ce centre et
+                            cette année scolaire ({readiness.withInscription} sur {readiness.students} en ont une).
+                            <br />
+                            Un paiement doit être rattaché à une ligne de frais d'une inscription active : les
+                            paiements de ces étudiants resteront en conflit.{' '}
+                            <strong>Importez d'abord les inscriptions</strong> pour éviter cela.
+                        </div>
+                    )}
                     <form onSubmit={submitAnalyze}>
                         <table className="table">
                             <thead>
@@ -195,6 +221,26 @@ export default function EncaissementImportUpload({ etablissements, anneesScolair
                                 ))}
                             </tbody>
                         </table>
+
+                        <div className="form-check mb-3">
+                            <input
+                                className="form-check-input"
+                                type="checkbox"
+                                id="include_inactive_inscriptions"
+                                checked={form.data.include_inactive_inscriptions}
+                                onChange={(e) => form.setData('include_inactive_inscriptions', e.target.checked)}
+                            />
+                            <label className="form-check-label" htmlFor="include_inactive_inscriptions">
+                                Accepter les inscriptions annulées / changement
+                            </label>
+                            <div className="form-text">
+                                Par défaut, un paiement ne peut être rattaché qu&apos;à une inscription
+                                <strong> active</strong>. Cochez cette case pour accepter aussi les inscriptions
+                                <strong> annulées</strong> et <strong>changement</strong> (« archivée » dans l&apos;ancien CRM) :
+                                ces étudiants ont réellement payé pendant l&apos;année, et refuser leurs paiements
+                                fausserait les totaux de caisse. Une inscription active reste toujours prioritaire.
+                            </div>
+                        </div>
 
                         <button type="button" className="btn btn-outline-secondary me-2" onClick={() => setStep('scope')}>
                             Retour

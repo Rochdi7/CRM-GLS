@@ -44,11 +44,13 @@ final class EncaissementImportTest extends TestCase
             'par_defaut' => true, 'inscription_ouverte' => true,
         ]);
         $this->centre = Etablissement::factory()->create();
+        // EmployeeObserver already provisions exactly one caisse per employee
+        // (CaisseProvisioner). Creating a second one here gave the operator
+        // TWO tills, so the assertions below — which read the balance back
+        // with firstOrFail() — picked whichever row Postgres happened to
+        // return first and failed non-deterministically depending on test
+        // order. Use the auto-provisioned till instead of making another.
         $this->operatorEmployee = Employee::factory()->create(['etablissement_id' => $this->centre->id]);
-        Caisse::create([
-            'nom' => 'Caisse test', 'etablissement_id' => $this->centre->id,
-            'responsable_employee_id' => $this->operatorEmployee->id, 'solde' => 0, 'statut' => Caisse::STATUT_ACTIVE,
-        ]);
     }
 
     private function userWith(string ...$permissions): User
@@ -105,11 +107,21 @@ final class EncaissementImportTest extends TestCase
      */
     private function commitAllSelected(User $user, ImportBatch $batch, array $rowIds): \Illuminate\Testing\TestResponse
     {
+        $guard = 0;
+
         do {
             $response = $this->actingAs($user)->postJson(route('backoffice.import.encaissements.commit', $batch), [
                 'selected_row_ids' => $rowIds,
             ]);
             $remaining = $response->json('remaining');
+
+            // Without this, a chunk that fails to shrink the eligible set
+            // spins forever and the whole suite just stops reporting.
+            $this->assertLessThan(
+                500,
+                ++$guard,
+                'commit() stopped making progress — remaining never reached 0.'
+            );
         } while ($remaining > 0);
 
         return $response;
@@ -205,7 +217,13 @@ final class EncaissementImportTest extends TestCase
 
     public function test_unresolved_frais_is_conflit_never_creates_a_frais_row(): void
     {
-        $this->studentWithActiveFee('ABDERRAHMANE', 'BOUGMA', 'Un autre nom de frais', 300);
+        // A student with NO inscription at all: nothing to attach the
+        // payment to. (A student WITH an inscription now attaches loosely
+        // to its first unpaid line — covered by
+        // test_a_payment_attaches_to_the_active_inscription_....)
+        Student::factory()->create([
+            'etablissement_id' => $this->centre->id, 'prenom' => 'ABDERRAHMANE', 'nom' => 'BOUGMA',
+        ]);
         $fraisCountBefore = Frais::query()->count();
         $user = $this->userWith('import.view', 'import.create');
 
@@ -220,13 +238,81 @@ final class EncaissementImportTest extends TestCase
         $row = $batch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
 
         $this->assertSame(ImportRow::STATUT_CONFLIT, $row->status);
-        $this->assertSame('fee_not_matched', $row->errors[0]['code']);
+        $this->assertSame('no_inscription', $row->errors[0]['code']);
         $this->assertSame($fraisCountBefore, Frais::query()->count());
 
         $this->commitAllSelected($user, $batch, [$row->id]);
 
         $this->assertSame($fraisCountBefore, Frais::query()->count());
         $this->assertSame(0, Encaissement::query()->count());
+    }
+
+    public function test_committing_an_unresolved_conflit_row_fails_cleanly_with_a_french_reason(): void
+    {
+        // Regression: CONFLIT rows carry candidates, not decisions, so their
+        // resolution has no agent_id/caisse_id/inscription_fee_id. commit()
+        // used to dereference those keys and blow up with a raw PHP
+        // "Undefined array key" on every single unresolved row.
+        // A student with NO inscription at all: nothing to attach the
+        // payment to. (A student WITH an inscription now attaches loosely
+        // to its first unpaid line — covered by
+        // test_a_payment_attaches_to_the_active_inscription_....)
+        Student::factory()->create([
+            'etablissement_id' => $this->centre->id, 'prenom' => 'ABDERRAHMANE', 'nom' => 'BOUGMA',
+        ]);
+        $user = $this->userWith('import.view', 'import.create');
+
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+        ]);
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $row = $batch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
+        $this->assertSame(ImportRow::STATUT_CONFLIT, $row->status);
+
+        $this->commitAllSelected($user, $batch, [$row->id]);
+
+        $row->refresh();
+        $this->assertSame(ImportRow::STATUT_ECHEC_COMMIT, $row->status);
+
+        $message = $row->errors[0]['message'];
+        $this->assertStringNotContainsString('Undefined array key', $message);
+        $this->assertStringContainsString('aucune inscription', $message);
+        $this->assertSame(0, Encaissement::query()->count());
+    }
+
+    public function test_preview_pre_checks_only_nouveau_rows_and_lists_conflicts_separately(): void
+    {
+        // The default selection must never include CONFLIT rows: on a real
+        // export that meant thousands of guaranteed commit failures in one
+        // click.
+        $this->studentWithActiveFee('ABDERRAHMANE', 'BOUGMA', 'Un autre nom de frais', 300);
+        $user = $this->userWith('import.view', 'import.create');
+
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+        ]);
+        $batch = ImportBatch::query()->firstOrFail();
+
+        $conflictIds = $batch->rows()->where('status', ImportRow::STATUT_CONFLIT)->pluck('id')->all();
+        $nouveauIds = $batch->rows()->where('status', ImportRow::STATUT_NOUVEAU)->pluck('id')->all();
+        $this->assertNotEmpty($conflictIds, 'This fixture is expected to produce CONFLIT rows.');
+
+        $response = $this->actingAs($user)->get(route('backoffice.import.encaissements.preview', $batch));
+        $props = $response->viewData('page')['props'];
+
+        $this->assertEqualsCanonicalizing($nouveauIds, $props['selectableRowIds']);
+        $this->assertEqualsCanonicalizing($conflictIds, $props['conflictRowIds']);
+
+        foreach ($conflictIds as $conflictId) {
+            $this->assertNotContains($conflictId, $props['selectableRowIds']);
+        }
     }
 
     public function test_no_active_inscription_in_selected_annee_is_erreur_never_falls_back_to_another_year(): void
@@ -255,7 +341,154 @@ final class EncaissementImportTest extends TestCase
         $row = $batch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
 
         $this->assertSame(ImportRow::STATUT_CONFLIT, $row->status);
-        $this->assertSame('no_active_inscription', $row->errors[0]['code']);
+        $this->assertSame('no_inscription', $row->errors[0]['code']);
+    }
+
+    public function test_by_default_a_cancelled_inscription_does_not_receive_payments(): void
+    {
+        // The opt-in must really be opt-in: without the checkbox the
+        // previous behaviour stands, and money never lands on a cancelled
+        // enrolment by accident.
+        $student = Student::factory()->create([
+            'etablissement_id' => $this->centre->id, 'prenom' => 'ABDERRAHMANE', 'nom' => 'BOUGMA',
+        ]);
+        $group = Group::factory()->create([
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+        $inscription = Inscription::create([
+            'reference' => 'INS-'.fake()->unique()->numerify('#####'),
+            'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => Inscription::STATUT_ANNULEE, 'date_inscription' => '2026-07-01',
+        ]);
+        InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => "Frais d'inscription A1/A2/B1",
+            'montant_initial' => 300, 'montant' => 300,
+            'date_echeance' => '2026-09-01', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+
+        $user = $this->userWith('import.view', 'import.create');
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+            // no include_inactive_inscriptions -> default behaviour
+        ]);
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $row = $batch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
+
+        $this->assertSame(ImportRow::STATUT_CONFLIT, $row->status);
+        $this->assertSame('no_inscription', $row->errors[0]['code']);
+        // The message must point at the checkbox, not leave the operator guessing.
+        $this->assertStringContainsString('annulées', $row->errors[0]['message']);
+    }
+
+    public function test_a_payment_attaches_to_a_cancelled_or_changed_inscription_rather_than_being_refused(): void
+    {
+        // A student whose inscription was annulée / changement (the old
+        // CRM's "archivée") still really paid during the year. Refusing
+        // those payments silently dropped historical revenue and left the
+        // caisse short — they must attach to the inscription that exists.
+        $student = Student::factory()->create([
+            'etablissement_id' => $this->centre->id, 'prenom' => 'ABDERRAHMANE', 'nom' => 'BOUGMA',
+        ]);
+        $group = Group::factory()->create([
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+        $inscription = Inscription::create([
+            'reference' => 'INS-'.fake()->unique()->numerify('#####'),
+            'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            // NOT Active — this is the whole point of the test.
+            'statut' => Inscription::STATUT_CHANGEMENT, 'date_inscription' => '2026-07-01',
+        ]);
+        InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => "Frais d'inscription A1/A2/B1",
+            'montant_initial' => 300, 'montant' => 300,
+            'date_echeance' => '2026-09-01', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+
+        $user = $this->userWith('import.view', 'import.create');
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+            // The operator has to ask for this explicitly.
+            'include_inactive_inscriptions' => true,
+        ]);
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $row = $batch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
+        $this->assertSame(
+            ImportRow::STATUT_NOUVEAU,
+            $row->status,
+            'Row should resolve against the non-active inscription: '.json_encode($row->errors),
+        );
+
+        $this->commitAllSelected($user, $batch, [$row->id])->assertOk();
+
+        $encaissement = Encaissement::query()->where('legacy_ref', 'P4255')->firstOrFail();
+        $this->assertSame($student->id, $encaissement->student_id);
+        $this->assertNotNull($encaissement->inscription_fee_id);
+        $this->assertSame('50.00', (string) Caisse::query()
+            ->where('responsable_employee_id', $this->operatorEmployee->id)->sole()->solde);
+    }
+
+    public function test_an_active_inscription_still_wins_over_a_cancelled_one(): void
+    {
+        // The fallback must not demote Active — where both exist, the
+        // payment belongs to the live inscription.
+        $student = Student::factory()->create([
+            'etablissement_id' => $this->centre->id, 'prenom' => 'ABDERRAHMANE', 'nom' => 'BOUGMA',
+        ]);
+        $group = Group::factory()->create([
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $cancelled = Inscription::create([
+            'reference' => 'INS-'.fake()->unique()->numerify('#####'),
+            'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => Inscription::STATUT_ANNULEE, 'date_inscription' => '2026-06-01',
+        ]);
+        InscriptionFee::create([
+            'inscription_id' => $cancelled->id, 'nom' => "Frais d'inscription A1/A2/B1",
+            'montant_initial' => 300, 'montant' => 300,
+            'date_echeance' => '2026-09-01', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+
+        $active = Inscription::create([
+            'reference' => 'INS-'.fake()->unique()->numerify('#####'),
+            'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => Inscription::STATUT_ACTIVE, 'date_inscription' => '2026-07-01',
+        ]);
+        $activeFee = InscriptionFee::create([
+            'inscription_id' => $active->id, 'nom' => "Frais d'inscription A1/A2/B1",
+            'montant_initial' => 300, 'montant' => 300,
+            'date_echeance' => '2026-09-01', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+
+        $user = $this->userWith('import.view', 'import.create');
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+            'include_inactive_inscriptions' => true,
+        ]);
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $row = $batch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
+        $this->commitAllSelected($user, $batch, [$row->id])->assertOk();
+
+        $this->assertSame(
+            $activeFee->id,
+            Encaissement::query()->where('legacy_ref', 'P4255')->firstOrFail()->inscription_fee_id,
+        );
     }
 
     public function test_commit_uses_enregistrer_encaissement_action_updates_caisse_solde_and_fee_statut(): void
@@ -281,11 +514,337 @@ final class EncaissementImportTest extends TestCase
         $this->assertSame($student->id, $encaissement->student_id);
         $this->assertSame('ancien-crm', $encaissement->legacy_source);
 
-        $caisse = Caisse::query()->where('responsable_employee_id', $this->operatorEmployee->id)->firstOrFail();
+        $caisse = Caisse::query()->where('responsable_employee_id', $this->operatorEmployee->id)->sole();
         $this->assertSame('50.00', (string) $caisse->solde);
 
         $fee = InscriptionFee::query()->where('nom', "Frais d'inscription A1/A2/B1")->firstOrFail();
         $this->assertSame(InscriptionFee::STATUT_PAYE_PARTIELLEMENT, $fee->statut);
+    }
+
+    public function test_committing_the_same_batch_twice_never_double_writes_a_payment(): void
+    {
+        // analyze() dedupes against a snapshot taken at upload time. Committing
+        // the SAME batch again (double-click, refresh, retry) must still not
+        // duplicate the payment — the write path re-checks live data.
+        $this->studentWithActiveFee('ABDERRAHMANE', 'BOUGMA', "Frais d'inscription A1/A2/B1", 300);
+        $user = $this->userWith('import.view', 'import.create');
+
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+        ]);
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $row = $batch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
+
+        $this->commitAllSelected($user, $batch, [$row->id]);
+        $this->assertSame(1, Encaissement::query()->where('legacy_ref', 'P4255')->count());
+
+        $caisse = Caisse::query()->where('responsable_employee_id', $this->operatorEmployee->id)->sole();
+        $soldeAfterFirstCommit = (string) $caisse->fresh()->solde;
+
+        // Force the row back to a committable state, exactly as a retry would
+        // (write straight through the query builder — the in-memory $row is
+        // stale, the app updated the DB copy during the first commit).
+        ImportRow::query()->whereKey($row->id)->update([
+            'status' => ImportRow::STATUT_NOUVEAU,
+            'created_model_id' => null,
+            'created_model_type' => null,
+        ]);
+        ImportBatch::query()->whereKey($batch->id)->update(['status' => ImportBatch::STATUT_ANALYZED]);
+
+        $this->commitAllSelected($user, $batch->fresh(), [$row->id]);
+
+        $this->assertSame(1, Encaissement::query()->where('legacy_ref', 'P4255')->count());
+        $this->assertSame($soldeAfterFirstCommit, (string) $caisse->fresh()->solde, 'A skipped duplicate must not move the till.');
+        $this->assertSame(ImportRow::STATUT_DOUBLON, $row->fresh()->status);
+    }
+
+    public function test_legacy_cheque_spelling_maps_to_the_real_methode_constant(): void
+    {
+        // The legacy CRM writes "Chéque" (e-acute) where the app's constant
+        // is "Chèque" (e-grave). Treating them as different values sent the
+        // entire cheque column to ERREUR as an unknown méthode.
+        $acute = 'Chéque';
+        $grave = Encaissement::METHODE_CHEQUE;
+
+        $this->assertNotSame($acute, $grave, 'Fixture guard: the two spellings must really differ.');
+
+        $map = (new \ReflectionClassConstant(\App\Services\Import\EncaissementImporter::class, 'METHODE_MAP'))->getValue();
+
+        $this->assertSame($grave, $map[$acute] ?? null, 'The misspelt legacy label must map to Chèque.');
+        $this->assertSame($grave, $map[$grave] ?? null, 'The correct spelling must keep working.');
+    }
+
+    public function test_a_cheque_payment_also_lands_in_the_cheques_table(): void
+    {
+        // The legacy paiements export mixes cheques in with every other
+        // méthode. Importing one as a bare Encaissement left the Chèques
+        // module blind to money the school is still waiting to clear.
+        $student = $this->studentWithActiveFee('ABDERRAHMANE', 'BOUGMA', "Frais d'inscription A1/A2/B1", 300);
+        $user = $this->userWith('import.view', 'import.create');
+
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+        ]);
+
+        // The small sample carries no cheque row, so one is made here rather
+        // than depending on a fixture that may or may not contain one.
+        $batch = ImportBatch::query()->firstOrFail();
+        $row = $batch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
+        $row->update(['raw' => [...$row->raw, 'methode' => Encaissement::METHODE_CHEQUE]]);
+
+        $this->commitAllSelected($user, $batch, [$row->id])->assertOk();
+
+        $encaissement = Encaissement::query()->where('legacy_ref', 'P4255')->firstOrFail();
+        $this->assertNotNull($encaissement->cheque_id, 'A Chèque payment must point at a Chèques-module record.');
+
+        $cheque = \App\Models\Cheque::query()->findOrFail($encaissement->cheque_id);
+        $this->assertSame($student->id, $cheque->student_id);
+        $this->assertSame('50.00', (string) $cheque->montant);
+        $this->assertSame($this->centre->id, $cheque->etablissement_id);
+        $this->assertSame($this->operatorEmployee->id, $cheque->agent_id);
+        // The money was received in the old CRM — the cheque is not pending.
+        $this->assertSame(\App\Models\Cheque::STATUT_ENCAISSE, $cheque->statut);
+        // No number exists in the export, so none is invented — the
+        // placeholder traces back to the legacy réf instead.
+        $this->assertStringContainsString('P4255', (string) $cheque->numero_cheque);
+    }
+
+    public function test_a_non_cheque_payment_creates_no_cheque_record(): void
+    {
+        $this->studentWithActiveFee('ABDERRAHMANE', 'BOUGMA', "Frais d'inscription A1/A2/B1", 300);
+        $user = $this->userWith('import.view', 'import.create');
+
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+        ]);
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $row = $batch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
+        $this->assertSame(Encaissement::METHODE_ESPECES, $row->raw['methode']);
+
+        $this->commitAllSelected($user, $batch, [$row->id])->assertOk();
+
+        $this->assertNull(Encaissement::query()->where('legacy_ref', 'P4255')->firstOrFail()->cheque_id);
+        $this->assertSame(0, \App\Models\Cheque::query()->count());
+    }
+
+    public function test_a_payment_with_no_frais_label_is_imported_as_an_avance(): void
+    {
+        // In the legacy export an empty Frais cell means the student paid
+        // ahead of any fee line. Requiring a fee there sent every avance to
+        // ERREUR; it must import with inscription_fee_id left null instead.
+        $student = $this->studentWithActiveFee('ABDERRAHMANE', 'BOUGMA', "Frais d'inscription A1/A2/B1", 300);
+        $user = $this->userWith('import.view', 'import.create');
+
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+        ]);
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $row = $batch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
+        $row->update([
+            'raw' => [...$row->raw, 'is_avance' => true],
+            'resolution' => [...($row->resolution ?? []), 'inscription_fee_id' => null],
+        ]);
+
+        $this->commitAllSelected($user, $batch, [$row->id])->assertOk();
+
+        $encaissement = Encaissement::query()->where('legacy_ref', 'P4255')->firstOrFail();
+        $this->assertNull($encaissement->inscription_fee_id);
+        $this->assertTrue($encaissement->isAvance());
+        $this->assertSame($student->id, $encaissement->student_id);
+
+        // The money still reaches the till — an avance is a real payment.
+        $caisse = Caisse::query()->where('responsable_employee_id', $this->operatorEmployee->id)->sole();
+        $this->assertSame('50.00', (string) $caisse->solde);
+    }
+
+    public function test_conflict_rows_keep_the_operator_and_caisse_that_did_resolve(): void
+    {
+        // A row conflicting on the student/frais still has a perfectly valid
+        // opérateur -> caisse. Dropping them made the commit guard report
+        // "opérateur, caisse" as missing on rows where they were mapped fine.
+        $user = $this->userWith('import.view', 'import.create');
+
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+        ]);
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $conflict = $batch->rows()->where('status', ImportRow::STATUT_CONFLIT)->firstOrFail();
+
+        $this->assertSame($this->operatorEmployee->id, $conflict->resolution['agent_id'] ?? null);
+        $this->assertNotNull($conflict->resolution['caisse_id'] ?? null);
+    }
+
+    public function test_a_failed_row_can_be_retried_once_its_cause_is_fixed(): void
+    {
+        // A commit failure used to be a dead end: ECHEC_COMMIT wasn't
+        // selectable, so fixing the underlying data (creating the missing
+        // inscription, say) still meant re-uploading the whole file.
+        $user = $this->userWith('import.view', 'import.create');
+
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+        ]);
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $row = $batch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
+
+        // No student/inscription exists yet, so this row cannot resolve.
+        $this->assertSame(ImportRow::STATUT_CONFLIT, $row->status);
+        $this->commitAllSelected($user, $batch, [$row->id]);
+        $this->assertSame(ImportRow::STATUT_ECHEC_COMMIT, $row->fresh()->status);
+        $this->assertSame(0, Encaissement::query()->count());
+
+        // Fix the cause, then re-analyze so the row picks up the now-
+        // resolvable student/fee, and retry it.
+        $this->studentWithActiveFee('ABDERRAHMANE', 'BOUGMA', "Frais d'inscription A1/A2/B1", 300);
+
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+        ]);
+
+        $retryBatch = ImportBatch::query()->where('id', '!=', $batch->id)->firstOrFail();
+        $retryRow = $retryBatch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
+
+        $this->assertSame(ImportRow::STATUT_NOUVEAU, $retryRow->status);
+        $this->commitAllSelected($user, $retryBatch, [$retryRow->id]);
+
+        $this->assertSame(1, Encaissement::query()->where('legacy_ref', 'P4255')->count());
+    }
+
+    public function test_failed_rows_are_offered_for_retry_but_never_pre_selected(): void
+    {
+        $user = $this->userWith('import.view', 'import.create');
+
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+        ]);
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $conflict = $batch->rows()->where('status', ImportRow::STATUT_CONFLIT)->firstOrFail();
+        $this->commitAllSelected($user, $batch, [$conflict->id]);
+
+        $response = $this->actingAs($user)->get(route('backoffice.import.encaissements.preview', $batch));
+        $props = $response->viewData('page')['props'];
+
+        $this->assertContains($conflict->id, $props['failedRowIds'], 'A failed row must be offered for retry.');
+        $this->assertNotContains($conflict->id, $props['selectableRowIds'], 'It must never be pre-selected.');
+    }
+
+    public function test_a_payment_attaches_to_the_active_inscription_even_when_the_fee_label_does_not_match(): void
+    {
+        // Legacy labels drift, and some rows pay several fees at once
+        // ("Frais A, Frais B"). When the student HAS an active inscription
+        // the payment still belongs to it, so it attaches to the first
+        // unpaid line rather than blocking.
+        $student = Student::factory()->create([
+            'etablissement_id' => $this->centre->id, 'prenom' => 'ABDERRAHMANE', 'nom' => 'BOUGMA',
+        ]);
+        $group = Group::factory()->create([
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+        $inscription = Inscription::create([
+            'reference' => 'INS-'.fake()->unique()->numerify('#####'),
+            'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => Inscription::STATUT_ACTIVE, 'date_inscription' => '2026-07-01',
+        ]);
+        // Deliberately NOT the label the file uses.
+        $fee = InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => 'Frais annuel',
+            'montant_initial' => 5000, 'montant' => 5000,
+            'date_echeance' => '2026-09-01', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+
+        $user = $this->userWith('import.view', 'import.create');
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+        ]);
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $row = $batch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
+
+        $this->assertSame(ImportRow::STATUT_NOUVEAU, $row->status);
+        $this->assertSame($fee->id, $row->resolution['inscription_fee_id']);
+        $this->assertSame('Frais annuel', $row->resolution['fee_matched_loosely']['attached_to'] ?? null);
+
+        $this->commitAllSelected($user, $batch, [$row->id]);
+
+        $encaissement = Encaissement::query()->where('legacy_ref', 'P4255')->firstOrFail();
+        $this->assertSame($fee->id, $encaissement->inscription_fee_id);
+        $this->assertStringContainsString('rattaché à "Frais annuel"', $encaissement->note);
+    }
+
+    public function test_batch_counters_are_derived_from_rows_not_accumulated_across_retries(): void
+    {
+        // Counters used to be written as `$batch->x + $n` per chunk, so a
+        // retried batch inflated them — 5 real failures were reported as 675.
+        $user = $this->userWith('import.view', 'import.create');
+
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+        ]);
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $conflict = $batch->rows()->where('status', ImportRow::STATUT_CONFLIT)->firstOrFail();
+
+        // Commit the same unresolvable row three times over. Each pass uses a
+        // single POST rather than commitAllSelected(): resetting the row to
+        // CONFLIT inside that helper's "loop until remaining === 0" would
+        // never terminate, since the row becomes eligible again every time.
+        foreach (range(1, 3) as $ignored) {
+            ImportRow::query()->whereKey($conflict->id)->update(['status' => ImportRow::STATUT_CONFLIT]);
+
+            $this->actingAs($user)->postJson(
+                route('backoffice.import.encaissements.commit', $batch),
+                ['selected_row_ids' => [$conflict->id]]
+            );
+        }
+
+        $batch->refresh();
+
+        $this->assertSame(
+            $batch->rows()->where('status', ImportRow::STATUT_ECHEC_COMMIT)->count(),
+            $batch->error_rows,
+            'error_rows must equal the real number of failed rows, however many retries happened.'
+        );
+        $this->assertSame(
+            $batch->rows()->where('status', ImportRow::STATUT_DOUBLON)->count(),
+            $batch->skipped_rows,
+        );
     }
 
     public function test_reupload_is_idempotent(): void

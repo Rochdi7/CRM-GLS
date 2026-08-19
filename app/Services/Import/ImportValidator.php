@@ -20,6 +20,13 @@ final class ImportValidator
      * Inscription::STATUTS only lists the 3 UI-offered values; the
      * historical schema space also includes Expirée/Archivée (CLAUDE.md
      * §11) which legacy exports may legitimately carry.
+     *
+     * Note that InscriptionImporter::translateStatut() already rewrites the
+     * old CRM's "Archivée" to this app's "Changement" before validation
+     * runs — the two systems mean the same thing by different names, and
+     * that is the ONLY vocabulary difference between them. Archivée stays
+     * in this list anyway so a pre-existing row or another import path
+     * carrying it is never rejected by the validator itself.
      */
     public const array INSCRIPTION_STATUTS_ACCEPTED = [
         Inscription::STATUT_ACTIVE,

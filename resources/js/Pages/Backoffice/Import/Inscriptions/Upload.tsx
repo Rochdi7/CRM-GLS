@@ -30,6 +30,47 @@ interface UploadFormState {
     groupe_mapping: GroupeMappingEntry[];
 }
 
+/** Case/accent/space-insensitive key so "Herr  Driss 13h" matches "Herr Driss 13h". */
+function groupKey(name: string): string {
+    return name
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+}
+
+/**
+ * Pre-selects the existing group whose name matches the file's label, so an
+ * already-imported group never has to be picked by hand (and is never
+ * accidentally re-created as a duplicate).
+ *
+ * A label matching SEVERAL existing groups is deliberately left unselected:
+ * the centre genuinely has duplicates with that name, and guessing which one
+ * the enrolments belong to would silently attach students to the wrong group.
+ */
+function buildMapping(labels: string[], groups: ExistingGroup[]): GroupeMappingEntry[] {
+    const byKey = new Map<string, ExistingGroup[]>();
+
+    groups.forEach((group) => {
+        const key = groupKey(group.nom);
+        byKey.set(key, [...(byKey.get(key) ?? []), group]);
+    });
+
+    return labels.map((label) => {
+        const matches = byKey.get(groupKey(label)) ?? [];
+        const unique = matches.length === 1 ? matches[0] : null;
+
+        return {
+            label,
+            action: 'map',
+            group_id: unique ? String(unique.id) : '',
+            nom: label,
+            niveau: '',
+        };
+    });
+}
+
 /**
  * Two steps: (1) pick Centre + Année + file, peek the file's distinct
  * "Groupe" labels scoped to that centre/année; (2) map every label to an
@@ -85,10 +126,7 @@ export default function InscriptionImportUpload({ etablissements, anneesScolaire
 
             setExistingGroups(json.existingGroups);
             setNiveaux(json.niveaux);
-            form.setData(
-                'groupe_mapping',
-                json.groupeLabels.map((label) => ({ label, action: 'map', group_id: '', nom: label, niveau: '' }))
-            );
+            form.setData('groupe_mapping', buildMapping(json.groupeLabels, json.existingGroups));
             setStep('mapping');
         } finally {
             setPeeking(false);
@@ -106,6 +144,14 @@ export default function InscriptionImportUpload({ etablissements, anneesScolaire
         event.preventDefault();
         form.post('/backoffice/import/inscriptions/analyze', { forceFormData: true });
     }
+
+    // Group names are not unique in practice (two "Herr Driss 13h" exist), so
+    // ambiguous ones are labelled with their id and never auto-selected.
+    const duplicateNames = new Set(
+        existingGroups
+            .map((g) => groupKey(g.nom))
+            .filter((key, index, all) => all.indexOf(key) !== index)
+    );
 
     const canPeek = form.data.file !== null && form.data.etablissement_id !== '' && form.data.annee_scolaire_id !== '';
     const canAnalyze = form.data.groupe_mapping.every((e) =>
@@ -206,18 +252,27 @@ export default function InscriptionImportUpload({ etablissements, anneesScolaire
                                         </td>
                                         <td>
                                             {entry.action === 'map' && (
-                                                <select
-                                                    className="form-select"
-                                                    value={entry.group_id}
-                                                    onChange={(e) => updateMapping(index, { group_id: e.target.value })}
-                                                >
-                                                    <option value="">Choisir…</option>
-                                                    {existingGroups.map((g) => (
-                                                        <option key={g.id} value={g.id}>
-                                                            {g.nom}
-                                                        </option>
-                                                    ))}
-                                                </select>
+                                                <>
+                                                    <select
+                                                        className="form-select"
+                                                        value={entry.group_id}
+                                                        onChange={(e) => updateMapping(index, { group_id: e.target.value })}
+                                                    >
+                                                        <option value="">Choisir…</option>
+                                                        {existingGroups.map((g) => (
+                                                            <option key={g.id} value={g.id}>
+                                                                {duplicateNames.has(groupKey(g.nom))
+                                                                    ? `${g.nom} (#${g.id})`
+                                                                    : g.nom}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    {entry.group_id === '' && duplicateNames.has(groupKey(entry.label)) && (
+                                                        <small className="text-warning d-block mt-1">
+                                                            Plusieurs groupes portent ce nom — choisir lequel.
+                                                        </small>
+                                                    )}
+                                                </>
                                             )}
                                         </td>
                                         <td>

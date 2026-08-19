@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Services\Import;
 
 use App\Domain\Payments\Actions\EnregistrerEncaissement;
+use App\Domain\Shared\Support\ReferenceGenerator;
+use App\Models\Cheque;
 use App\Models\Employee;
 use App\Models\Encaissement;
 use App\Models\ImportBatch;
@@ -13,6 +15,7 @@ use App\Models\Inscription;
 use App\Models\InscriptionFee;
 use App\Models\Student;
 use App\Services\CaisseProvisioner;
+use App\Services\Import\Concerns\TracksBatchProgress;
 use App\Services\Import\Contracts\Importer;
 use App\Services\Import\DTO\ImportContext;
 use App\Services\Import\DTO\ImportResult;
@@ -34,11 +37,20 @@ use Illuminate\Support\Facades\DB;
  */
 final class EncaissementImporter implements Importer
 {
+    use TracksBatchProgress;
+
     private const string LEGACY_SOURCE = 'ancien-crm';
 
     private const array EXPECTED_COLUMNS = ['Réf.', 'Élève / Payeur', 'Type', 'Montant', 'Méthode', 'Frais', 'Date', 'Opérateur'];
 
     private const string TYPE_REGLEMENT = 'Réglement';
+
+    /** resolution key => French label, used to explain exactly what a row is still missing. */
+    private const array REQUIRED_RESOLUTION_LABELS = [
+        'student_id' => 'étudiant',
+        'agent_id' => 'opérateur',
+        'caisse_id' => 'caisse',
+    ];
 
     /** ImportRow rows are buffered and mass-inserted every N rows — real exports run into the thousands of rows, and one create() call per row (Eloquent events + a round-trip each) was a large part of the 30s timeout. */
     private const int INSERT_BUFFER_SIZE = 500;
@@ -49,6 +61,10 @@ final class EncaissementImporter implements Importer
         'TPE' => Encaissement::METHODE_TPE,
         'Virement bancaire' => Encaissement::METHODE_VIREMENT,
         'Chèque' => Encaissement::METHODE_CHEQUE,
+        // The legacy CRM writes "Chéque" (e-acute) — a misspelling of
+        // "Chèque". Both map to the same method; without this the whole
+        // cheque column lands in ERREUR as an unknown méthode.
+        'Chéque' => Encaissement::METHODE_CHEQUE,
     ];
 
     /**
@@ -68,6 +84,13 @@ final class EncaissementImporter implements Importer
 
     /** @var array<int, Inscription>|null student_id => their one active inscription in this batch's centre+année, preloaded once */
     private ?array $activeInscriptionByStudentId = null;
+
+    /**
+     * Mirrors ImportContext::$includeInactiveInscriptions for the duration
+     * of one analyze() run, so the "no inscription" message can say which
+     * statuts were actually searched rather than guessing.
+     */
+    private bool $includeInactiveInscriptions = false;
 
     /** @var array<int, Collection<int, InscriptionFee>>|null inscription_id => its fee lines, preloaded once */
     private ?array $feesByInscriptionId = null;
@@ -116,6 +139,7 @@ final class EncaissementImporter implements Importer
         $this->compositeKeysSeenThisFile = [];
         $this->pendingRows = [];
         $this->studentsByNormalizedName = $this->preloadStudents($context->etablissementId);
+        $this->includeInactiveInscriptions = $context->includeInactiveInscriptions;
         $this->activeInscriptionByStudentId = $this->preloadActiveInscriptions($context);
         $this->feesByInscriptionId = $this->preloadFees(array_map(
             fn (Inscription $inscription): int => $inscription->id,
@@ -173,25 +197,65 @@ final class EncaissementImporter implements Importer
         $remaining = max(0, $totalEligible - $rows->count());
 
         $inserted = 0;
+        $skipped = 0;
         $errors = 0;
 
         foreach ($rows as $row) {
             try {
-                DB::transaction(function () use ($row): void {
+                $wasInserted = DB::transaction(function () use ($row, $batch): bool {
                     $data = $row->raw;
                     $resolution = $row->resolution ?? [];
+
+                    // A CONFLIT row reaches commit() only once the operator
+                    // has resolved it on the preview screen. Until then its
+                    // resolution carries candidates, not decisions — fail it
+                    // with a message naming the missing link instead of
+                    // dereferencing keys that were never written.
+                    $this->assertResolved($resolution, (bool) ($data['is_avance'] ?? false));
+
+                    // Re-check at write time, not just against the snapshot
+                    // taken during analyze(): the batch may have been
+                    // committed already, or another import may have written
+                    // the same payment in between. The DB's unique index on
+                    // legacy_ref is the real backstop — this turns that
+                    // constraint violation into a row marked "déjà importé"
+                    // instead of a raw SQL error in the failure list.
+                    if ($this->alreadyImported($row)) {
+                        $row->update([
+                            'status' => ImportRow::STATUT_DOUBLON,
+                            'errors' => [[
+                                'field' => 'legacy_ref',
+                                'code' => 'already_imported',
+                                'message' => 'Encaissement déjà importé — ligne ignorée.',
+                            ]],
+                        ]);
+
+                        return false;
+                    }
 
                     $agent = Employee::findOrFail($resolution['agent_id']);
                     $action = app(EnregistrerEncaissement::class);
 
+                    // A Chèque payment must exist in the Chèques module too —
+                    // that is where cheques are tracked and followed up. The
+                    // export carries no cheque number, so one is not invented:
+                    // the record is created already "Encaissé" (the money was
+                    // received) and says so in its note.
+                    $cheque = $data['methode'] === Encaissement::METHODE_CHEQUE
+                        ? $this->createChequeRecord($row, $data, $resolution, $agent, $batch)
+                        : null;
+
                     $encaissement = $action->handle([
                         'student_id' => $resolution['student_id'],
-                        'inscription_fee_id' => $resolution['inscription_fee_id'],
+                        'inscription_fee_id' => $resolution['inscription_fee_id'] ?? null,
+                        'cheque_id' => $cheque?->id,
+                        'numero_cheque' => $cheque?->numero_cheque,
+                        'banque' => $cheque?->banque,
                         'montant' => $data['montant'],
                         'methode' => $data['methode'],
                         'date_paiement' => $data['date_paiement'],
                         'caisse_id' => $resolution['caisse_id'],
-                        'note' => sprintf('Importé de l\'ancien CRM (Réf. %s)', $row->legacy_ref),
+                        'note' => $this->importNote($row, $data),
                         'legacy_ref' => $row->legacy_ref,
                         'legacy_source' => self::LEGACY_SOURCE,
                     ], $agent);
@@ -201,9 +265,15 @@ final class EncaissementImporter implements Importer
                         'created_model_type' => Encaissement::class,
                         'created_model_id' => $encaissement->id,
                     ]);
+
+                    return true;
                 });
 
-                $inserted++;
+                if ($wasInserted) {
+                    $inserted++;
+                } else {
+                    $skipped++;
+                }
             } catch (\Throwable $e) {
                 $row->update([
                     'status' => ImportRow::STATUT_ECHEC_COMMIT,
@@ -213,26 +283,140 @@ final class EncaissementImporter implements Importer
             }
         }
 
-        $batch->update([
-            'status' => $this->nextBatchStatus($batch, $remaining, $errors),
-            'inserted_rows' => $batch->inserted_rows + $inserted,
-            'error_rows' => $batch->error_rows + $errors,
-            'committed_at' => $remaining === 0 ? now() : $batch->committed_at,
-        ]);
+        $this->syncBatchProgress($batch, $remaining);
 
-        return new ImportResult(insertedCount: $inserted, skippedCount: 0, errorCount: $errors, remaining: $remaining);
+        return new ImportResult(insertedCount: $inserted, skippedCount: $skipped, errorCount: $errors, remaining: $remaining);
     }
 
-    private function nextBatchStatus(ImportBatch $batch, int $remaining, int $errorsThisChunk): string
+    /**
+     * Every link an encaissement needs before it can be written. A row
+     * still missing one is unresolved (student introuvable, frais non
+     * rapproché, opérateur non associé...) and must never reach
+     * EnregistrerEncaissement.
+     *
+     * @param  array<string, mixed>  $resolution
+     */
+    /**
+     * Whether this row's payment is already in the database right now.
+     * analyze() dedupes against a snapshot; by commit() time that snapshot
+     * can be stale (batch re-committed, concurrent import), so the check is
+     * repeated against live data before writing.
+     */
+    /**
+     * Creates the Chèques-module record behind an imported cheque payment.
+     *
+     * The export has no numéro/banque/échéance columns, so nothing is
+     * invented: the numéro records that it is missing (traceable back to the
+     * legacy Réf.) and the cheque is stored as Encaissé, since the payment
+     * it belongs to was actually received in the old CRM.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $resolution
+     */
+    private function createChequeRecord(ImportRow $row, array $data, array $resolution, Employee $agent, ImportBatch $batch): Cheque
     {
-        if ($remaining > 0) {
-            return ImportBatch::STATUT_COMMITTING;
+        return Cheque::create([
+            'reference' => ReferenceGenerator::make('CHQ', 'cheques'),
+            'source' => Cheque::SOURCE_ETUDIANT,
+            'student_id' => $resolution['student_id'],
+            'numero_cheque' => sprintf('IMPORT-%s', $row->legacy_ref ?: $row->id),
+            'montant' => $data['montant'],
+            'date_reception' => $data['date_paiement'],
+            'type' => Cheque::TYPE_A_DEPOSER,
+            'statut' => Cheque::STATUT_ENCAISSE,
+            'note' => "Importé de l'ancien CRM — numéro de chèque absent de l'export.",
+            'etablissement_id' => $batch->etablissement_id,
+            'agent_id' => $agent->id,
+        ]);
+    }
+
+    /**
+     * A Chèque payment now gets a real Chèques-module record (see
+     * createChequeRecord); the note flags that its numéro was absent from the
+     * export, so nobody mistakes the placeholder for a real cheque number.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function importNote(ImportRow $row, array $data): string
+    {
+        $note = sprintf("Importé de l'ancien CRM (Réf. %s)", $row->legacy_ref);
+
+        $loose = $row->resolution['fee_matched_loosely'] ?? null;
+
+        if ($loose !== null) {
+            $note .= sprintf(
+                ' — frais "%s" rattaché à "%s" (libellé absent de cette inscription)',
+                $loose['requested'],
+                $loose['attached_to']
+            );
         }
 
-        $hasAnyErrors = $errorsThisChunk > 0 || $batch->error_rows > 0;
+        if ($data['is_avance'] ?? false) {
+            $note .= " — avance (aucun frais indiqué dans l'export)";
+        }
 
-        return $hasAnyErrors ? ImportBatch::STATUT_COMMITTED_WITH_ERRORS : ImportBatch::STATUT_COMMITTED;
+        if (($data['methode'] ?? null) === Encaissement::METHODE_CHEQUE) {
+            $note .= " — chèque enregistré sans numéro (absent de l'export)";
+        }
+
+        return $note;
     }
+
+    private function alreadyImported(ImportRow $row): bool
+    {
+        if ($row->legacy_ref !== null && $row->legacy_ref !== '') {
+            return Encaissement::query()->where('legacy_ref', $row->legacy_ref)->exists();
+        }
+
+        $data = $row->raw;
+        $resolution = $row->resolution ?? [];
+
+        return Encaissement::query()
+            ->where('student_id', $resolution['student_id'])
+            ->where('inscription_fee_id', $resolution['inscription_fee_id'])
+            ->where('montant', $data['montant'])
+            ->where('date_paiement', $data['date_paiement'])
+            ->where('methode', $data['methode'])
+            ->exists();
+    }
+
+    private function assertResolved(array $resolution, bool $isAvance = false): void
+    {
+        // Report the CAUSE, not the symptom. A missing inscription_fee_id is
+        // almost always "this student has no inscription", not "the fee is
+        // named differently" — saying "frais à rapprocher" sent people
+        // hunting through fee labels for a problem that isn't there.
+        if (($resolution['student_id'] ?? null) === null) {
+            throw new \RuntimeException(
+                "Étudiant introuvable dans ce centre — vérifier l'orthographe du payeur ou importer d'abord les étudiants."
+            );
+        }
+
+        // An avance is money received with no fee attached yet
+        // (Encaissement::isAvance()), so a null inscription_fee_id is the
+        // correct shape for it, not a failure.
+        if (! $isAvance && ($resolution['inscription_fee_id'] ?? null) === null) {
+            throw new \RuntimeException(
+                "Cet étudiant n'a aucune inscription utilisable pour le centre/année de ce lot — importer d'abord les inscriptions, ou relancer l'analyse en acceptant les inscriptions annulées / changement."
+            );
+        }
+
+        $missing = [];
+
+        foreach (self::REQUIRED_RESOLUTION_LABELS as $key => $label) {
+            if (($resolution[$key] ?? null) === null) {
+                $missing[] = $label;
+            }
+        }
+
+        if ($missing !== []) {
+            throw new \RuntimeException(sprintf(
+                'Ligne non résolue — %s à rapprocher avant insertion.',
+                implode(', ', $missing)
+            ));
+        }
+    }
+
 
     /** @param array<string, mixed> $rawRow */
     private function analyzeRow(ImportBatch $batch, int $rowNumber, array $rawRow, array $operateurEmployees): void
@@ -242,6 +426,7 @@ final class EncaissementImporter implements Importer
         $payeurRaw = CellNormalizer::text($rawRow['Élève / Payeur'] ?? '');
         $methodeLabel = CellNormalizer::text($rawRow['Méthode'] ?? '');
         $fraisLabel = CellNormalizer::text($rawRow['Frais'] ?? '');
+        $isAvance = $fraisLabel === '';
         $operateurLabel = CellNormalizer::text($rawRow['Opérateur'] ?? '');
 
         $collapsed = CellNormalizer::collapseDoubledName($payeurRaw);
@@ -301,6 +486,7 @@ final class EncaissementImporter implements Importer
             'montant' => $montant,
             'methode' => $methode,
             'date_paiement' => $datePaiement,
+            'is_avance' => $isAvance,
         ];
 
         if ($payerAmbiguous) {
@@ -315,30 +501,39 @@ final class EncaissementImporter implements Importer
         $inscriptionFeeId = null;
         $caisseId = null;
         $candidateFees = [];
+        $looseFeeMatch = null;
+
+        // The caisse depends only on the mapped opérateur, so it resolves
+        // regardless of how the payer/frais lookups turn out — a row that
+        // conflicts on the student must still keep its valid caisse.
+        if ($agentId !== null) {
+            $caisseId = $this->resolveCaisseFor((int) $agentId);
+        }
 
         if (! $payerAmbiguous && $errors === [] && $parseErrors === []) {
             $studentResolution = $this->resolveStudent($payeurName);
             $studentId = $studentResolution['student_id'];
             $conflicts = [...$conflicts, ...$studentResolution['conflicts']];
 
-            if ($studentId !== null) {
+            // No Frais label at all = an avance: money received now, to be
+            // allocated to a fee later (Encaissement::isAvance()). It is a
+            // valid payment, not an unresolved one, so no fee lookup runs.
+            if ($studentId !== null && ! $isAvance) {
                 $feeResolution = $this->resolveInscriptionFee($studentId, $fraisLabel);
                 $inscriptionFeeId = $feeResolution['inscription_fee_id'];
                 $candidateFees = $feeResolution['candidates'];
+                $looseFeeMatch = $feeResolution['fee_matched_loosely'] ?? null;
                 $conflicts = [...$conflicts, ...$feeResolution['conflicts']];
-            }
-
-            if ($agentId !== null) {
-                $caisseId = $this->resolveCaisseFor((int) $agentId);
             }
         }
 
-        $duplicate = $this->isDuplicate($legacyRef, $studentId, $montant, $datePaiement, $methode, $inscriptionFeeId);
+        $duplicateReason = $this->duplicateReason($legacyRef, $studentId, $montant, $datePaiement, $methode, $inscriptionFeeId, $payeurName);
 
-        if ($duplicate) {
+        if ($duplicateReason !== null) {
             $this->pushPendingRow($batch, $rowNumber, [
                 'raw' => $raw,
                 'status' => ImportRow::STATUT_DOUBLON,
+                'errors' => [$duplicateReason],
                 'legacy_ref' => $legacyRef ?: null,
                 'resolution' => null,
             ]);
@@ -373,6 +568,13 @@ final class EncaissementImporter implements Importer
                 'legacy_ref' => $legacyRef ?: null,
                 'resolution' => [
                     'student_id' => $studentId,
+                    // Whatever DID resolve is kept, not just the student:
+                    // a row conflicting on frais alone still has a valid
+                    // opérateur/caisse, and dropping them made the commit
+                    // guard report them as missing too.
+                    'inscription_fee_id' => $inscriptionFeeId,
+                    'agent_id' => $agentId,
+                    'caisse_id' => $caisseId,
                     'candidate_fees' => $candidateFees,
                     'payer_guess' => $payerAmbiguous ? CellNormalizer::bestEffortNameGuess($payeurRaw) : null,
                 ],
@@ -400,6 +602,7 @@ final class EncaissementImporter implements Importer
                 'inscription_fee_id' => $inscriptionFeeId,
                 'agent_id' => $agentId,
                 'caisse_id' => $caisseId,
+                'fee_matched_loosely' => $looseFeeMatch,
             ],
         ]);
     }
@@ -487,20 +690,41 @@ final class EncaissementImporter implements Importer
     }
 
     /**
-     * Every ACTIVE inscription in the batch's centre+année, one per
-     * student (schema-enforced by the business rule, never more than one
-     * active inscription per student per year) — preloaded once instead of
-     * one query per row.
+     * One inscription per student in the batch's centre+année, preloaded
+     * once instead of one query per row.
+     *
+     * By DEFAULT only ACTIVE inscriptions are eligible — attaching money to
+     * a cancelled enrolment is not something that should happen silently.
+     *
+     * When the operator ticks "inclure les inscriptions annulées /
+     * changement" on the upload screen, cancelled ("Annulée") and changed
+     * ("Changement" — what the old CRM calls "Archivée") inscriptions are
+     * accepted as a fallback too: those students really did pay during the
+     * year, and refusing their payments drops historical revenue and leaves
+     * the caisse totals short. Active still wins wherever both exist.
      *
      * @return array<int, Inscription> student_id => Inscription
      */
     private function preloadActiveInscriptions(ImportContext $context): array
     {
-        return Inscription::query()
+        $query = Inscription::query()
             ->where('etablissement_id', $context->etablissementId)
-            ->where('annee_scolaire_id', $context->anneeScolaireId)
-            ->where('statut', Inscription::STATUT_ACTIVE)
-            ->get(['id', 'student_id'])
+            ->where('annee_scolaire_id', $context->anneeScolaireId);
+
+        if (! $context->includeInactiveInscriptions) {
+            // Default: only a live enrolment may receive money.
+            $query->where('statut', Inscription::STATUT_ACTIVE);
+        }
+
+        return $query
+            // Active always wins when the fallback is on and a student has
+            // both — the money belongs to the live enrolment.
+            ->orderByRaw('case when statut = ? then 0 else 1 end', [Inscription::STATUT_ACTIVE])
+            ->orderByDesc('date_inscription')
+            ->get(['id', 'student_id', 'statut'])
+            // keyBy keeps the LAST occurrence, so reverse first to make the
+            // highest-priority (Active, most recent) row the one that wins.
+            ->reverse()
             ->keyBy('student_id')
             ->all();
     }
@@ -615,8 +839,9 @@ final class EncaissementImporter implements Importer
 
         if ($inscription === null) {
             return ['inscription_fee_id' => null, 'candidates' => [], 'conflicts' => [
-                ['field' => 'inscription_fee_id', 'code' => 'no_active_inscription', 'message' =>
-                    "Aucune inscription active pour cet étudiant sur le centre/année sélectionné."],
+                ['field' => 'inscription_fee_id', 'code' => 'no_inscription', 'message' => $this->includeInactiveInscriptions
+                    ? "Aucune inscription pour cet étudiant sur le centre/année sélectionné (ni active, ni annulée, ni changement) — importer d'abord les inscriptions."
+                    : "Aucune inscription active pour cet étudiant sur le centre/année sélectionné. Si son inscription a été annulée ou changée, cochez « Accepter les inscriptions annulées / changement » avant d'analyser."],
             ]];
         }
 
@@ -636,9 +861,36 @@ final class EncaissementImporter implements Importer
             'statut' => $fee->statut,
         ])->all();
 
+        // The student HAS an active inscription, the label just doesn't match
+        // one of its lines by name (legacy wording drift, or one payment
+        // covering several fees: "Frais A, Frais B"). Rather than blocking a
+        // payment we know belongs to this inscription, attach it to the
+        // inscription's first still-unpaid line so the money lands on the
+        // right registration and the balance stays correct.
+        //
+        // Deliberately the FIRST UNPAID line, not just any line: dropping it
+        // on an already-settled fee would flip a correct "Payé" into an
+        // overpayment. When everything is already paid there is nothing
+        // sensible to attach to, so that stays a conflict for a human.
+        $fallback = $fees->first(
+            fn (InscriptionFee $fee): bool => $fee->statut !== InscriptionFee::STATUT_PAYE
+        );
+
+        if ($fallback !== null) {
+            return [
+                'inscription_fee_id' => $fallback->id,
+                'candidates' => $candidates,
+                'conflicts' => [],
+                'fee_matched_loosely' => [
+                    'requested' => $fraisLabel,
+                    'attached_to' => $fallback->nom,
+                ],
+            ];
+        }
+
         return ['inscription_fee_id' => null, 'candidates' => $candidates, 'conflicts' => [
             ['field' => 'inscription_fee_id', 'code' => 'fee_not_matched', 'message' => sprintf(
-                'Le libellé de frais "%s" ne correspond à aucune ligne de cette inscription.',
+                'Le libellé de frais "%s" ne correspond à aucune ligne, et toutes les lignes de cette inscription sont déjà payées.',
                 $fraisLabel
             )],
         ]];
@@ -653,18 +905,78 @@ final class EncaissementImporter implements Importer
      * row has no legacy_ref: the same student+montant+date+méthode+fee
      * composite key, checked the same two ways.
      */
-    private function isDuplicate(string $legacyRef, ?int $studentId, ?string $montant, ?string $datePaiement, ?string $methode, ?int $inscriptionFeeId): bool
+    /**
+     * Returns WHY the payment is a duplicate, or null when it is not one.
+     *
+     * Skipped payments are the ones an operator most needs explained — an
+     * unexplained "Ignorées" count on a money import is indistinguishable
+     * from lost revenue.
+     *
+     * @return array{field: string, code: string, message: string}|null
+     */
+    private function duplicateReason(string $legacyRef, ?int $studentId, ?string $montant, ?string $datePaiement, ?string $methode, ?int $inscriptionFeeId, string $payeur = ''): ?array
     {
         if ($legacyRef !== '') {
-            return isset($this->existingEncaissementLegacyRefs[$legacyRef]) || isset($this->legacyRefsSeenThisFile[$legacyRef]);
+            if (isset($this->existingEncaissementLegacyRefs[$legacyRef])) {
+                return [
+                    'field' => 'legacy_ref',
+                    'code' => 'already_in_database',
+                    'message' => sprintf(
+                        "Déjà importé : %sla réf. %s existe déjà (import précédent) — le montant n'a pas été compté deux fois.",
+                        $payeur !== '' ? $payeur.' — ' : '',
+                        $legacyRef
+                    ),
+                ];
+            }
+
+            if (isset($this->legacyRefsSeenThisFile[$legacyRef])) {
+                return [
+                    'field' => 'legacy_ref',
+                    'code' => 'duplicate_in_file',
+                    'message' => sprintf(
+                        'Doublon dans le fichier : %sla réf. %s apparaît sur une ligne précédente.',
+                        $payeur !== '' ? $payeur.' — ' : '',
+                        $legacyRef
+                    ),
+                ];
+            }
+
+            return null;
         }
 
         if ($studentId === null || $montant === null || $datePaiement === null || $methode === null || $inscriptionFeeId === null) {
-            return false;
+            return null;
         }
 
         $key = $this->compositeKey($studentId, $montant, $datePaiement, $methode, $inscriptionFeeId);
 
-        return isset($this->existingEncaissementCompositeKeys[$key]) || isset($this->compositeKeysSeenThisFile[$key]);
+        if (isset($this->existingEncaissementCompositeKeys[$key])) {
+            return [
+                'field' => 'montant',
+                'code' => 'already_in_database',
+                'message' => sprintf(
+                    'Déjà importé : un paiement identique (%s DH, %s, %s) existe déjà pour %s et ce frais.',
+                    $montant,
+                    $methode,
+                    $datePaiement,
+                    $payeur !== '' ? $payeur : 'cet étudiant'
+                ),
+            ];
+        }
+
+        if (isset($this->compositeKeysSeenThisFile[$key])) {
+            return [
+                'field' => 'montant',
+                'code' => 'duplicate_in_file',
+                'message' => sprintf(
+                    'Doublon dans le fichier : %s— même frais, même montant (%s DH) et même date (%s) sur une ligne précédente.',
+                    $payeur !== '' ? $payeur.' ' : 'même étudiant ',
+                    $montant,
+                    $datePaiement
+                ),
+            ];
+        }
+
+        return null;
     }
 }

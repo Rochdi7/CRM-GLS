@@ -1,21 +1,21 @@
 import { Link } from '@inertiajs/react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
-import DataTable from '@/Components/Tables/DataTable';
-import ImportRowStatusBadge from '@/Components/Import/ImportRowStatusBadge';
-import type { ImportBatch, ImportRow } from '@/Types/import';
+import ImportRowReasonTable from '@/Components/Import/ImportRowReasonTable';
+import type { PaginatedData } from '@/Types';
+import type { ImportBatch, ImportRow, ImportStatusCounts } from '@/Types/import';
 
 interface StudentImportResultProps {
     batch: ImportBatch;
-    rows: ImportRow[];
+    failedRows: PaginatedData<ImportRow>;
+    skippedRows: PaginatedData<ImportRow>;
+    statusCounts: ImportStatusCounts;
 }
 
-export default function StudentImportResult({ batch, rows }: StudentImportResultProps) {
-    const failedRows = rows.filter((r) => r.status === 'ECHEC_COMMIT');
-
+export default function StudentImportResult({ batch, failedRows, skippedRows }: StudentImportResultProps) {
     return (
         <BackofficeLayout
-            title="Résultat de l'import — Étudiants"
+            title="Résultat de l'import — Students"
             breadcrumbs={[
                 { label: 'Tableau de bord', href: '/backoffice/dashboard' },
                 { label: 'Import de données', href: '/backoffice/import' },
@@ -25,49 +25,34 @@ export default function StudentImportResult({ batch, rows }: StudentImportResult
             <Card title={`${batch.original_filename} — ${batch.etablissement?.nom_centre ?? ''} / ${batch.annee_scolaire?.nom ?? ''}`}>
                 <div className="row mb-4">
                     <div className="col-md-3">
-                        <div className="text-muted">Lignes dans le fichier</div>
-                        <div className="fs-4 fw-semibold">{batch.total_rows}</div>
+                        <div className="text-muted fs-13 mb-1">Lignes dans le fichier</div>
+                        <div className="fs-24 fw-semibold">{batch.total_rows}</div>
                     </div>
                     <div className="col-md-3">
-                        <div className="text-muted">Insérées</div>
-                        <div className="fs-4 fw-semibold text-success">{batch.inserted_rows}</div>
+                        <div className="text-muted fs-13 mb-1">Insérées</div>
+                        <div className="fs-24 fw-semibold text-success">{batch.inserted_rows}</div>
                     </div>
                     <div className="col-md-3">
-                        <div className="text-muted">Ignorées</div>
-                        <div className="fs-4 fw-semibold">{batch.skipped_rows}</div>
+                        <div className="text-muted fs-13 mb-1">Ignorées</div>
+                        <div className="fs-24 fw-semibold">{batch.skipped_rows}</div>
                     </div>
                     <div className="col-md-3">
-                        <div className="text-muted">Erreurs</div>
-                        <div className="fs-4 fw-semibold text-danger">{batch.error_rows}</div>
+                        <div className="text-muted fs-13 mb-1">Erreurs</div>
+                        <div className="fs-24 fw-semibold text-danger">{batch.error_rows}</div>
                     </div>
                 </div>
 
-                {failedRows.length > 0 && (
-                    <>
-                        <h6>Lignes en échec</h6>
-                        <DataTable
-                            head={
-                                <tr>
-                                    <th>N°</th>
-                                    <th>Réf</th>
-                                    <th>Statut</th>
-                                    <th>Erreur</th>
-                                </tr>
-                            }
-                        >
-                            {failedRows.map((row) => (
-                                <tr key={row.id}>
-                                    <td>{row.source_row_number}</td>
-                                    <td>{String(row.raw.legacy_ref ?? '')}</td>
-                                    <td>
-                                        <ImportRowStatusBadge status={row.status} />
-                                    </td>
-                                    <td>{row.errors?.map((e) => e.message).join(' ') ?? ''}</td>
-                                </tr>
-                            ))}
-                        </DataTable>
-                    </>
-                )}
+                <ImportRowReasonTable
+                    title="Lignes en échec"
+                    hint="Ces lignes ont été tentées mais refusées à l'écriture. Corrigez la cause puis relancez-les depuis l'aperçu."
+                    rows={failedRows}
+                />
+
+                <ImportRowReasonTable
+                    title="Lignes ignorées"
+                    hint="Ces lignes n'ont volontairement pas été écrites — le plus souvent parce que les étudiants existaient déjà, ou parce que la même ligne apparaît deux fois dans le fichier. Rien n'a été perdu."
+                    rows={skippedRows}
+                />
 
                 <Link href="/backoffice/import/students" className="btn btn-primary mt-3">
                     Nouvel import

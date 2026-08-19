@@ -23,7 +23,7 @@
                 <div class="col-md-4">
                     <div class="card h-100 border-0 shadow-sm">
                         <div class="card-body p-4">
-                            <span class="badge bg-primary rounded-circle p-3 mb-3"><i class="ti ti-language fs-4"></i></span>
+                            <span class="badge bg-primary rounded-circle p-3 mb-3"><i class="ti ti-language fs-24"></i></span>
                             <h5>{{ __('Language Courses') }}</h5>
                             <p class="text-muted mb-0">{{ __('French, Arabic, English and German programs for all levels.') }}</p>
                         </div>
@@ -32,7 +32,7 @@
                 <div class="col-md-4">
                     <div class="card h-100 border-0 shadow-sm">
                         <div class="card-body p-4">
-                            <span class="badge bg-success rounded-circle p-3 mb-3"><i class="ti ti-school fs-4"></i></span>
+                            <span class="badge bg-success rounded-circle p-3 mb-3"><i class="ti ti-school fs-24"></i></span>
                             <h5>{{ __('Student Portal') }}</h5>
                             <p class="text-muted mb-0">{{ __('Follow your registrations, schedule and results online.') }}</p>
                         </div>
@@ -41,7 +41,7 @@
                 <div class="col-md-4">
                     <div class="card h-100 border-0 shadow-sm">
                         <div class="card-body p-4">
-                            <span class="badge bg-info rounded-circle p-3 mb-3"><i class="ti ti-calendar-check fs-4"></i></span>
+                            <span class="badge bg-info rounded-circle p-3 mb-3"><i class="ti ti-calendar-check fs-24"></i></span>
                             <h5>{{ __('Easy Registration') }}</h5>
                             <p class="text-muted mb-0">{{ __('Register to a group in minutes and pay at the center.') }}</p>
                         </div>
