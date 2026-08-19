@@ -18,7 +18,15 @@ import FormActions from '@/Components/Forms/FormActions';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { blockImplicitSubmit } from '@/Lib/forms';
-import type { GroupFraisLigne, GroupRow, GroupsPageProps, GroupStudentSegmentRow, SelectOption, SharedProps } from '@/Types';
+import type {
+    GroupFraisCatalogOption,
+    GroupFraisLigne,
+    GroupRow,
+    GroupsPageProps,
+    GroupStudentSegmentRow,
+    SelectOption,
+    SharedProps,
+} from '@/Types';
 
 type StatsSegment = 'total' | 'active' | 'annulee' | 'changement' | 'etudiants';
 
@@ -98,16 +106,61 @@ interface GroupFormState {
     fraisLignes: Record<number, GroupFraisLigne>;
 }
 
-function emptyFraisLignes(fraisCatalog: SelectOption[]): Record<number, GroupFraisLigne> {
+/**
+ * The due date a monthly fee implies: the month from its own name
+ * (`moisEcheance`, resolved server-side by FraisEcheanceResolver) on the
+ * group's start day, in the current year — the client-side twin of that
+ * resolver, kept in sync with it so the pre-filled value the user sees is
+ * the same one the server would have derived from a blank field.
+ * Returns '' when the fee names no month, leaving the date to be typed.
+ */
+function defaultEcheance(moisEcheance: number | null, dateDebutFormation: string): string {
+    if (moisEcheance === null) {
+        return '';
+    }
+
+    const annee = new Date().getFullYear();
+    const jourDebut = dateDebutFormation !== '' ? Number(dateDebutFormation.slice(8, 10)) : 1;
+    const jour = Number.isFinite(jourDebut) && jourDebut > 0 ? jourDebut : 1;
+    // Clamp to the month's real length, same as the server: "31" in February
+    // becomes the 28th/29th instead of spilling into March.
+    const dernierJour = new Date(annee, moisEcheance, 0).getDate();
+    const jourClamped = Math.min(jour, dernierJour);
+
+    return `${annee}-${String(moisEcheance).padStart(2, '0')}-${String(jourClamped).padStart(2, '0')}`;
+}
+
+/**
+ * Fee lines for a NEW group: every active catalog fee pre-filled with its
+ * own catalog default amount and derived due date. These are defaults, not
+ * locks — each row stays editable, and the edited value is what is saved.
+ * Editing an existing group never runs through here; that form shows the
+ * amounts the group was actually saved with (see openEdit).
+ */
+function defaultFraisLignes(fraisCatalog: GroupFraisCatalogOption[], dateDebutFormation: string): Record<number, GroupFraisLigne> {
     const lignes: Record<number, GroupFraisLigne> = {};
     fraisCatalog.forEach((f) => {
-        lignes[f.value as number] = { montant: '0', date_echeance: '', classification: '' };
+        lignes[f.id] = {
+            montant: f.montantDefaut,
+            date_echeance: defaultEcheance(f.moisEcheance, dateDebutFormation),
+            classification: '',
+        };
     });
 
     return lignes;
 }
 
-function emptyForm(fraisCatalog: SelectOption[]): GroupFormState {
+/** Blank lines, used only as the fallback base when loading an existing group. */
+function emptyFraisLignes(fraisCatalog: GroupFraisCatalogOption[]): Record<number, GroupFraisLigne> {
+    const lignes: Record<number, GroupFraisLigne> = {};
+    fraisCatalog.forEach((f) => {
+        lignes[f.id] = { montant: '0', date_echeance: '', classification: '' };
+    });
+
+    return lignes;
+}
+
+function emptyForm(fraisCatalog: GroupFraisCatalogOption[]): GroupFormState {
     return {
         nom: '',
         niveau: '',
@@ -115,7 +168,7 @@ function emptyForm(fraisCatalog: SelectOption[]): GroupFormState {
         statut: 'En inscription',
         date_debut_formation: '',
         date_fin_formation: '',
-        fraisLignes: emptyFraisLignes(fraisCatalog),
+        fraisLignes: defaultFraisLignes(fraisCatalog, ''),
     };
 }
 
@@ -164,7 +217,7 @@ export default function GroupsIndex({
         { value: 'Fin de formation', label: 'Fin de formation' },
     ];
 
-    const form = useForm<GroupFormState>(emptyForm(fraisCatalogOptions));
+    const form = useForm<GroupFormState>(emptyForm(fraisCatalog));
 
     function reload(nextFilters: Partial<typeof filters>) {
         router.get(
@@ -182,7 +235,7 @@ export default function GroupsIndex({
         setEditingGroup(null);
         form.reset();
         form.clearErrors();
-        form.setData(emptyForm(fraisCatalogOptions));
+        form.setData(emptyForm(fraisCatalog));
         setFraisPage(1);
         setShowModal(true);
     }
@@ -193,7 +246,7 @@ export default function GroupsIndex({
 
         // The list row already carries this group's own fee-line amounts
         // (GetGroupsList keys them by frais_id) — no second request needed.
-        const lignes = emptyFraisLignes(fraisCatalogOptions);
+        const lignes = emptyFraisLignes(fraisCatalog);
         Object.entries(group.fraisLignes).forEach(([fraisId, ligne]) => {
             lignes[Number(fraisId)] = {
                 montant: ligne.montant,
@@ -288,6 +341,37 @@ export default function GroupsIndex({
     function closeStudentsModal() {
         setStudentsModal(null);
         setStudentsRows([]);
+    }
+
+    /**
+     * Re-derives the monthly due dates when the group's start date changes,
+     * since the derived day comes from that date. Only rows still holding
+     * the previously derived value are rewritten — once the user types a
+     * date of their own it is never overwritten. Edit mode is left alone
+     * entirely: those dates are the group's saved data, not defaults.
+     */
+    function setDateDebut(value: string) {
+        if (editingGroup) {
+            form.setData('date_debut_formation', value);
+
+            return;
+        }
+
+        const previous = form.data.date_debut_formation;
+        const lignes = { ...form.data.fraisLignes };
+
+        fraisCatalog.forEach((f) => {
+            const ligne = lignes[f.id];
+            if (ligne === undefined || f.moisEcheance === null) {
+                return;
+            }
+
+            if (ligne.date_echeance === '' || ligne.date_echeance === defaultEcheance(f.moisEcheance, previous)) {
+                lignes[f.id] = { ...ligne, date_echeance: defaultEcheance(f.moisEcheance, value) };
+            }
+        });
+
+        form.setData({ ...form.data, date_debut_formation: value, fraisLignes: lignes });
     }
 
     function setLigne(fraisId: number, field: keyof GroupFraisLigne, value: string) {
@@ -580,7 +664,7 @@ export default function GroupsIndex({
                                 label="Date de début"
                                 required
                                 value={form.data.date_debut_formation}
-                                onChange={(event) => form.setData('date_debut_formation', event.target.value)}
+                                onChange={(event) => setDateDebut(event.target.value)}
                                 error={form.errors.date_debut_formation}
                             />
                         </div>
@@ -599,8 +683,9 @@ export default function GroupsIndex({
                     <div className="border-top pt-3">
                         <h6 className="mb-1">Frais du groupe</h6>
                         <p className="text-muted fs-13 mb-3">
-                            Définissez le montant (et la date d'échéance) de chaque frais pour ce groupe — les montants sont à 0 par
-                            défaut. Tous les frais sont reportés sur l'inscription lorsqu'un étudiant est assigné à ce groupe.
+                            Les montants et les échéances sont pré-remplis depuis le catalogue des frais — modifiez-les si ce
+                            groupe diffère du standard. Tous les frais sont reportés sur l'inscription lorsqu'un étudiant est
+                            assigné à ce groupe.
                         </p>
 
                         {fraisCatalogOptions.length === 0 ? (

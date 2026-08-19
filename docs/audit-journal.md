@@ -73,7 +73,7 @@ year's evidence).
 | Entry model + forensic stamping + immutability | `app/Models/Activity.php` |
 | Per-model logging defaults | `app/Models/Concerns/Auditable.php` |
 | Model → log name/label map | `app/Support/Audit/AuditLogRegistry.php` |
-| Auth event capture | `app/Listeners/LogAuthenticationActivity.php` (subscribed in `AppServiceProvider`) |
+| Auth event capture | `app/Listeners/LogAuthenticationActivity.php` (auto-discovered — never also subscribe it) |
 | Read model (filters, diff shaping) | `app/Domain/Audit/Queries/GetActivityLogList.php` |
 | Controller (read-only) | `app/Http/Controllers/Backoffice/AuditLogController.php` |
 | Page | `resources/js/Pages/Backoffice/AuditLogs/Index.tsx` |

@@ -2,14 +2,12 @@
 
 namespace App\Providers;
 
-use App\Listeners\LogAuthenticationActivity;
 use App\Models\Employee;
 use App\Models\Role;
 use App\Models\User;
 use App\Observers\EmployeeObserver;
 use App\Services\Context\CurrentContext;
 use Illuminate\Auth\Notifications\ResetPassword;
-use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -33,11 +31,6 @@ class AppServiceProvider extends ServiceProvider
         // Auto-generates login credentials when an Employee is created
         // (gls-crm-laravel-structure.md §5).
         Employee::observe(EmployeeObserver::class);
-
-        // Audit journal: every sign-in, sign-out and FAILED attempt is
-        // recorded with its IP (CLAUDE.md §11). Subscribed explicitly —
-        // Laravel auto-discovers listeners, not subscribers.
-        Event::subscribe(LogAuthenticationActivity::class);
 
         // Super-admin bypasses every gate/policy/permission check
         // (Spatie-recommended pattern — never hasRole() checks in code).

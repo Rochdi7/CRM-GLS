@@ -265,6 +265,39 @@ final class AuditLogTest extends TestCase
         $this->assertStringNotContainsString('wrong-password', json_encode($entry->properties->toArray()));
     }
 
+    public function test_a_failed_login_for_an_unknown_account_is_recorded_without_crashing(): void
+    {
+        // Regression: performedOn() only accepts a real Model, so passing null
+        // for an unknown username threw a TypeError and 500'd the login page.
+        $this->post(route('backoffice.login.store'), [
+            'login' => 'compte-inexistant',
+            'password' => 'peu-importe',
+        ])->assertRedirect();
+
+        $entry = Activity::query()->where('event', 'login_failed')->latest('id')->firstOrFail();
+
+        $this->assertNull($entry->causer_id);
+        $this->assertNull($entry->subject_id);
+        $this->assertSame('compte-inexistant', $entry->getProperty('login'));
+    }
+
+    public function test_each_authentication_event_is_recorded_exactly_once(): void
+    {
+        // Regression: the listener was both auto-discovered AND registered via
+        // Event::subscribe(), so every auth event was journalled twice.
+        $user = User::factory()->create(['password' => 'password', 'is_active' => true]);
+
+        $this->post(route('backoffice.login.store'), [
+            'login' => $user->email,
+            'password' => 'password',
+        ]);
+
+        $this->assertSame(
+            1,
+            Activity::query()->where('log_name', 'authentication')->where('event', 'login')->count(),
+        );
+    }
+
     // ── Filtering ───────────────────────────────────────────────────────
 
     public function test_the_money_only_scope_returns_finance_entries_only(): void

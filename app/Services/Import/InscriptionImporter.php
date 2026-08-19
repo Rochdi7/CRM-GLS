@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Import;
 
 use App\Domain\Registrations\Queries\GetGroupInscriptionFees;
+use App\Domain\Settings\Support\FraisEcheanceResolver;
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Models\Employee;
 use App\Models\Frais;
@@ -348,9 +349,22 @@ final class InscriptionImporter implements Importer
         return DB::transaction(function () use ($attributes): Group {
             $group = Group::create($attributes);
 
+            // Same defaults a group created through the normal UI gets
+            // (GroupController::normalizedFraisLignes): the catalog's own
+            // amount, and a due date derived from the fee's month. Pinning
+            // these to 0/null made every imported inscription carry 18 empty
+            // fee lines, which in turn made the "Enregistrer un paiement"
+            // modal list nothing at all — its query keeps only fees whose
+            // reste (montant - payé) is above zero.
+            $dateDebut = $group->date_debut_formation?->toDateString();
+
             $sync = [];
-            foreach (Frais::query()->where('statut', Frais::STATUT_ACTIF)->pluck('id') as $fraisId) {
-                $sync[$fraisId] = ['montant' => 0, 'date_echeance' => null, 'classification' => null];
+            foreach (Frais::query()->where('statut', Frais::STATUT_ACTIF)->get(['id', 'nom', 'montant_defaut']) as $frais) {
+                $sync[$frais->id] = [
+                    'montant' => (float) $frais->montant_defaut,
+                    'date_echeance' => FraisEcheanceResolver::defaultFor($frais->nom, $dateDebut),
+                    'classification' => null,
+                ];
             }
             $group->frais()->sync($sync);
 
@@ -671,14 +685,15 @@ final class InscriptionImporter implements Importer
                 'montant' => InscriptionFee::computeMontant($initial, null, null),
                 'date_echeance' => $fee['dateEcheance'],
                 'statut' => InscriptionFee::STATUT_NON_PAYE,
-                // The legacy export carries no fee amounts, so every one of
-                // the group's ~18 catalog lines would otherwise appear on
-                // the inscription priced at 0.00 — 15 of them fees the
-                // student never owed. Import-created lines therefore start
-                // MASKED; EncaissementImporter unmasks (and prices) the ones
-                // a real payment lands on. masque_le is the app's own
-                // existing hide mechanism, so anything wrongly masked can be
-                // restored from the inscription's "Frais masqués" list.
+                // A priced fee behaves exactly like one added through the
+                // normal UI: visible, and offered by the payment modal.
+                // Only a fee still worth 0.00 is hidden — the legacy export
+                // has no amount columns, so that is a fee whose price is
+                // genuinely unknown rather than one the student owes.
+                // EncaissementImporter unmasks (and prices) such a line if a
+                // real payment later lands on it, and masque_le is the app's
+                // own hide mechanism, so anything hidden here is restorable
+                // from the inscription's "Frais masqués" list.
                 'masque_le' => $initial > 0 ? null : now(),
             ];
         })->all();

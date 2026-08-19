@@ -1044,6 +1044,18 @@ export interface GroupFormOption {
     nom: string;
 }
 
+/**
+ * One active catalog fee as offered to the Groups form. Beyond the label it
+ * carries the catalog default the create form pre-fills (`montantDefaut`)
+ * and the month the fee's own name implies (`moisEcheance`, 1-12, null when
+ * the name names no month) used to pre-fill the due date from the group's
+ * start date.
+ */
+export interface GroupFraisCatalogOption extends GroupFormOption {
+    montantDefaut: string;
+    moisEcheance: number | null;
+}
+
 export interface GroupsPageProps {
     groups: PaginatedData<GroupRow>;
     statutCounts: Record<string, number>;
@@ -1052,7 +1064,7 @@ export interface GroupsPageProps {
     niveaux: string[];
     statuts: string[];
     enseignants: GroupFormOption[];
-    fraisCatalog: GroupFormOption[];
+    fraisCatalog: GroupFraisCatalogOption[];
     [key: string]: unknown;
 }
 

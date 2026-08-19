@@ -252,6 +252,49 @@ final class InscriptionImportTest extends TestCase
         $this->assertSame($group->date_debut_formation?->toDateString(), $inscription->date_debut?->toDateString());
     }
 
+    public function test_a_group_created_by_the_import_inherits_the_catalog_amounts(): void
+    {
+        // An imported inscription must end up looking exactly like one
+        // created through the UI. Pinning importer-created groups to
+        // montant 0 meant every imported inscription carried empty fee
+        // lines, and "Enregistrer un paiement" then listed nothing at all
+        // (its query keeps only fees whose reste is above zero).
+        $frais = Frais::query()->create([
+            'nom' => 'Frais de Septembre',
+            'montant_defaut' => 1300,
+            'statut' => Frais::STATUT_ACTIF,
+        ]);
+        $inscriptionFrais = Frais::query()->create([
+            'nom' => "Frais d'inscription A1/A2/B1",
+            'montant_defaut' => 300,
+            'statut' => Frais::STATUT_ACTIF,
+        ]);
+
+        $group = app(\App\Services\Import\InscriptionImporter::class)->createGroupWithFullCatalogSync([
+            'nom' => 'GROUPE IMPORTÉ',
+            'niveau' => 'A1',
+            'statut' => Group::STATUT_EN_FORMATION,
+            'date_debut_formation' => '2025-09-23',
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $pivots = $group->fresh()->frais->keyBy('id');
+
+        // The catalog's amount, not zero.
+        $this->assertSame('1300.00', (string) $pivots[$frais->id]->pivot->montant);
+        $this->assertSame('300.00', (string) $pivots[$inscriptionFrais->id]->pivot->montant);
+
+        // Septembre = month 9, day from the group's start, year = today.
+        $this->assertSame(
+            now()->format('Y').'-09-23',
+            $pivots[$frais->id]->pivot->date_echeance,
+        );
+
+        // A fee naming no month keeps no derived due date.
+        $this->assertNull($pivots[$inscriptionFrais->id]->pivot->date_echeance);
+    }
+
     public function test_legacy_archivee_statut_becomes_changement(): void
     {
         // The old CRM and this app agree on every inscription statut EXCEPT

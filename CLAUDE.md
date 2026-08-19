@@ -327,8 +327,11 @@ the database layer. Non-negotiable invariants already enforced in code:
     `Activity::creating()` — never add a second place that writes entries
     without them.
   - Auth events (login, logout, **failed logins**, lockout, password reset) go
-    through `App\Listeners\LogAuthenticationActivity`, subscribed in
-    `AppServiceProvider`. Add new sign-in paths there, not in a controller.
+    through `App\Listeners\LogAuthenticationActivity`. It is bound by
+    Laravel's automatic listener discovery (one `handleX()` per event type) —
+    ⚠ never ALSO register it via `Event::subscribe()` or a listen array, or
+    every auth event is written to the journal twice. Add new sign-in paths
+    there, not in a controller.
 - **`is_system` expense types** are seeded (TypeDepenseSeeder) and locked; the
   admin form only creates custom types.
 - **File uploads**: `spatie/laravel-medialibrary` v11 on the dedicated `media`
@@ -412,7 +415,10 @@ the database layer. Non-negotiable invariants already enforced in code:
   the next Inertia navigation/reload, since context lives server-side in the
   session, not in client state. Center switching is permission-aware — only
   `centers.access-all` users can change center or pick "Tous les centres";
-  others are locked to their employee's `etablissement_id`. The header no
+  others are locked to the centers their employee is assigned to (see the
+  multi-center rule below) — a single-center employee cannot switch at all,
+  while one assigned to several may switch among *those* centers and pick
+  "Tous les centres", which then means "all of mine". The header no
   longer has the language or notification dropdowns. Seed data:
   `ReferentialDataSeeder` (years 2024/2025 + 2025/2026-default, 7 GLS
   branches, 2 rooms each). Tests: `tests/Feature/Backoffice/Context/`,
@@ -531,7 +537,14 @@ deferred; use `<x-frontoffice.layout.guest>` when building it.
 ## 16. Roles & permissions (implemented — read docs/roles-and-permissions.md first)
 
 `spatie/laravel-permission` v8 on the `web` guard, `User` model (`HasRoles`).
-Teams OFF (employees have ONE center). Non-negotiable rules:
+Teams OFF. **An employee may work in SEVERAL centers, and must have at least
+one** — the `employee_etablissement` pivot (`Employee::etablissements()`) is
+the source of truth for ACCESS, while `employees.etablissement_id` remains its
+PRIMARY center (where its Caisse lives). Always change both through
+`Employee::syncEtablissements()`, never by writing either side directly; it
+keeps the primary column stable when an edit merely adds a center. Enforcing
+"at least one" lives in the Employees Form Requests
+(`etablissement_ids` ⇒ `required|array|min:1`). Non-negotiable rules:
 
 - **Authorization is server-side**: routes use `permission:` middleware,
   resource controllers use policies (`authorizeResource` — base Controller
@@ -548,8 +561,12 @@ Teams OFF (employees have ONE center). Non-negotiable rules:
   (idempotent), protect routes, add allowed+denied tests.
 - **Center scoping is part of authorization**: policies extend
   `App\Policies\Concerns\ResourcePolicy` and combine permission +
-  `CenterAccessService` (`centers.access-all` ⇒ all centers; else the
-  employee's `etablissement_id`; NULL-center records are global).
+  `CenterAccessService` (`centers.access-all` ⇒ all centers; else
+  every center the employee is assigned to via the `employee_etablissement`
+  pivot, with `etablissement_id` as a fallback for legacy rows; NULL-center
+  records are global). Center-scoped list queries must therefore match on the
+  pivot too, not only the primary column — see `GetEmployeesList` and
+  `GetUsersList` for the pattern.
 - **Super-admin safety**: role `super-admin` bypasses everything via
   `Gate::before`; it is protected (no rename/edit/delete), only super-admins
   grant/remove it, the last one can never lose it. First assignment:

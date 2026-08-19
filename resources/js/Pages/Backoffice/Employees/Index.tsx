@@ -206,11 +206,28 @@ export default function EmployeesIndex({
         }
     }
 
+    /**
+     * While the top bar is locked to one center the centers field is hidden
+     * (the record is auto-assigned to the active center), so the payload
+     * must always carry that center — otherwise `etablissement_ids`
+     * (required) could fail validation on a field the user cannot see or
+     * fix. The server re-forces the same value in
+     * EmployeeController::resolveCenterIds(), so this only keeps the hidden
+     * case valid; it never means the client is trusted.
+     */
+    function withLockedCenter<T extends { etablissement_ids: number[] }>(data: T): T {
+        if (!centerLocked || contextCenterId === null) {
+            return data;
+        }
+
+        return { ...data, etablissement_ids: [contextCenterId] };
+    }
+
     function submit(event: FormEvent) {
         event.preventDefault();
 
         if (editingEmployee) {
-            form.transform((data) => ({ ...data, _method: 'put' }));
+            form.transform((data) => ({ ...withLockedCenter(data), _method: 'put' }));
             form.post(`/backoffice/employees/${editingEmployee.id}`, {
                 forceFormData: true,
                 preserveScroll: true,
@@ -223,6 +240,7 @@ export default function EmployeesIndex({
             return;
         }
 
+        form.transform((data) => withLockedCenter(data));
         form.post('/backoffice/employees', {
             forceFormData: true,
             preserveScroll: true,
@@ -231,6 +249,7 @@ export default function EmployeesIndex({
                 // prop drives the credentials view via the effect above.
                 form.reset();
             },
+            onFinish: () => form.transform((data) => data),
         });
     }
 

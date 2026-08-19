@@ -10,6 +10,7 @@ use Illuminate\Auth\Events\Lockout;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Auth\Events\PasswordReset;
+use Illuminate\Contracts\Auth\Authenticatable;
 
 /**
  * Records every authentication event into the audit journal
@@ -22,6 +23,11 @@ use Illuminate\Auth\Events\PasswordReset;
  * sign-in path is covered the moment it exists, with no second place to
  * remember to update.
  *
+ * ⚠ Registration is Laravel's automatic listener discovery: each `handleX()`
+ * method is bound from its type-hinted event parameter. Do NOT also register
+ * this class (Event::subscribe / a listen array) — that binds every handler a
+ * second time and writes each auth event to the journal TWICE.
+ *
  * Failed attempts matter as much as successful ones: a run of failures from
  * one IP just before a suspicious encaissement is exactly the pattern a fraud
  * investigation looks for, and it is invisible if only successes are logged.
@@ -33,30 +39,26 @@ final class LogAuthenticationActivity
 {
     public function handleLogin(Login $event): void
     {
-        $user = $event->user;
-
-        activity('authentication')
-            ->causedBy($user)
-            ->performedOn($user instanceof User ? $user : null)
-            ->event('login')
-            ->withProperties(['guard' => $event->guard, 'remember' => $event->remember])
-            ->log('Connexion réussie');
+        $this->record(
+            event: 'login',
+            description: 'Connexion réussie',
+            user: $event->user,
+            properties: ['guard' => $event->guard, 'remember' => $event->remember],
+        );
     }
 
     public function handleLogout(Logout $event): void
     {
-        $user = $event->user;
-
-        if ($user === null) {
+        if ($event->user === null) {
             return;
         }
 
-        activity('authentication')
-            ->causedBy($user)
-            ->performedOn($user instanceof User ? $user : null)
-            ->event('logout')
-            ->withProperties(['guard' => $event->guard])
-            ->log('Déconnexion');
+        $this->record(
+            event: 'logout',
+            description: 'Déconnexion',
+            user: $event->user,
+            properties: ['guard' => $event->guard],
+        );
     }
 
     /**
@@ -66,52 +68,71 @@ final class LogAuthenticationActivity
      */
     public function handleFailed(Failed $event): void
     {
-        activity('authentication')
-            ->causedBy($event->user)
-            ->performedOn($event->user instanceof User ? $event->user : null)
-            ->event('login_failed')
-            ->withProperties([
+        $this->record(
+            event: 'login_failed',
+            description: 'Échec de connexion',
+            user: $event->user,
+            properties: [
                 'guard' => $event->guard,
                 'login' => $event->credentials['email']
                     ?? $event->credentials['username']
                     ?? null,
                 'account_exists' => $event->user !== null,
-            ])
-            ->log('Échec de connexion');
+            ],
+        );
     }
 
     public function handleLockout(Lockout $event): void
     {
-        activity('authentication')
-            ->event('lockout')
-            ->withProperties([
-                'login' => $event->request->input('login'),
-            ])
-            ->log('Compte temporairement bloqué (trop de tentatives)');
+        $this->record(
+            event: 'lockout',
+            description: 'Compte temporairement bloqué (trop de tentatives)',
+            user: null,
+            properties: ['login' => $event->request->input('login')],
+        );
     }
 
     public function handlePasswordReset(PasswordReset $event): void
     {
-        $user = $event->user;
-
-        activity('authentication')
-            ->causedBy($user)
-            ->performedOn($user instanceof User ? $user : null)
-            ->event('password_reset')
-            ->log('Mot de passe réinitialisé');
+        $this->record(
+            event: 'password_reset',
+            description: 'Mot de passe réinitialisé',
+            user: $event->user,
+        );
     }
 
     /**
-     * @return array<class-string, string>
+     * Write one `authentication` entry.
+     *
+     * Centralised because the null cases are the norm here, not the exception:
+     * a failed login for an unknown username has no user at all, and a lockout
+     * has neither user nor causer. `performedOn()` only accepts a real Model,
+     * so it must be skipped rather than called with null - doing that at each
+     * call site is what made the login page 500.
+     *
+     * `causedBy()` is likewise only called with a User: the auth events type
+     * their subject as Authenticatable, which is not necessarily this app's
+     * User model, and the journal's causer is always a User.
+     *
+     * @param  array<string, mixed>  $properties
      */
-    public function subscribe(): array
-    {
-        return [
-            Login::class => 'handleLogin',
-            Logout::class => 'handleLogout',
-            Failed::class => 'handleFailed',
-            Lockout::class => 'handleLockout',
-            PasswordReset::class => 'handlePasswordReset',
-        ];
+    private function record(
+        string $event,
+        string $description,
+        ?Authenticatable $user,
+        array $properties = [],
+    ): void {
+        $logger = activity('authentication')->event($event);
+
+        if ($user instanceof User) {
+            $logger->causedBy($user)->performedOn($user);
+        }
+
+        if ($properties !== []) {
+            $logger->withProperties($properties);
+        }
+
+        $logger->log($description);
     }
+
 }

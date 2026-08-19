@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Groups\Queries;
 
+use App\Domain\Settings\Support\FraisEcheanceResolver;
 use App\Models\Employee;
 use App\Models\Frais;
 use App\Models\Group;
@@ -43,7 +44,13 @@ final class GetGroupFormOptions
     /**
      * Active catalog fees — every one becomes a fraisLignes row on the form.
      *
-     * @return Collection<int, array{id: int, nom: string}>
+     * Each row also carries the catalog's own default amount and the month
+     * its name implies, so the create form can pre-fill both instead of
+     * showing 0 / blank and making the user retype the standard values.
+     * The pre-fill is a starting point only: the fields stay editable, and
+     * whatever ends up in them is what gets saved.
+     *
+     * @return Collection<int, array{id: int, nom: string, montantDefaut: string, moisEcheance: ?int}>
      */
     public function fraisCatalog(): Collection
     {
@@ -51,7 +58,12 @@ final class GetGroupFormOptions
             ->where('statut', Frais::STATUT_ACTIF)
             ->orderBy('nom')
             ->get()
-            ->map(fn (Frais $f): array => ['id' => $f->id, 'nom' => $f->nom]);
+            ->map(fn (Frais $f): array => [
+                'id' => $f->id,
+                'nom' => $f->nom,
+                'montantDefaut' => (string) $f->montant_defaut,
+                'moisEcheance' => FraisEcheanceResolver::moisFromNom($f->nom),
+            ]);
     }
 
     /** @return list<string> */

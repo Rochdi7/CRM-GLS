@@ -227,19 +227,17 @@ export default function EncaissementImportUpload({ etablissements, anneesScolair
                                 className="form-check-input"
                                 type="checkbox"
                                 id="include_inactive_inscriptions"
+                                title="Accepter les inscriptions annulées / changement"
                                 checked={form.data.include_inactive_inscriptions}
                                 onChange={(e) => form.setData('include_inactive_inscriptions', e.target.checked)}
                             />
-                            <label className="form-check-label" htmlFor="include_inactive_inscriptions">
+                            <label
+                                className="form-check-label visually-hidden"
+                                htmlFor="include_inactive_inscriptions"
+                                title="Accepter les inscriptions annulées / changement"
+                            >
                                 Accepter les inscriptions annulées / changement
                             </label>
-                            <div className="form-text">
-                                Par défaut, un paiement ne peut être rattaché qu&apos;à une inscription
-                                <strong> active</strong>. Cochez cette case pour accepter aussi les inscriptions
-                                <strong> annulées</strong> et <strong>changement</strong> (« archivée » dans l&apos;ancien CRM) :
-                                ces étudiants ont réellement payé pendant l&apos;année, et refuser leurs paiements
-                                fausserait les totaux de caisse. Une inscription active reste toujours prioritaire.
-                            </div>
                         </div>
 
                         <button type="button" className="btn btn-outline-secondary me-2" onClick={() => setStep('scope')}>
