@@ -70,7 +70,7 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
      * transfers they sent), labeled relative to them (Réception when money
      * is arriving into one of their tills, Transfert when it's leaving
      * one), with Expéditeur/Destinataire showing the owning EMPLOYEE's name
-     * (not the raw "Caisse — Name" label).
+     * (resolved via the relation, not read off caisses.nom).
      */
     public function test_transfer_list_labels_direction_relative_to_the_viewer(): void
     {

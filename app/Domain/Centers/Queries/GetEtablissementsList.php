@@ -19,7 +19,7 @@ final class GetEtablissementsList
             ->withCount('salles')
             ->orderByDesc('siege_social')
             ->orderBy('nom_centre')
-            ->paginate($perPage);
+            ->paginate($perPage)->withQueryString();
 
         $etablissements->through(fn (Etablissement $e): array => [
             'id' => $e->id,

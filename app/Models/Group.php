@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -26,6 +27,7 @@ use Illuminate\Support\Facades\DB;
  */
 class Group extends Model
 {
+    use Auditable;
     use HasFactory;
 
     // statut lifecycle — enforced here, not at the database level (schema §6)
@@ -95,6 +97,32 @@ class Group extends Model
     public function inscriptions(): HasMany
     {
         return $this->hasMany(Inscription::class);
+    }
+
+    /**
+     * Full teaching-assignment history (one row per period, newest first) —
+     * exactly one is Actif, the rest are Archivé. See GroupEnseignant and
+     * Domain\Groups\Actions\ChangerEnseignantGroupe; `enseignant_id` above
+     * is only a denormalized mirror of the Actif row.
+     */
+    public function enseignants(): HasMany
+    {
+        return $this->hasMany(GroupEnseignant::class)
+            ->orderByDesc('date_debut')
+            ->orderByDesc('id');
+    }
+
+    /** The single currently-running assignment, if any. */
+    public function enseignantActif(): HasOne
+    {
+        return $this->hasOne(GroupEnseignant::class)
+            ->where('statut', GroupEnseignant::STATUT_ACTIF);
+    }
+
+    /** Weekly recurring schedule slots (emploi du temps) of this group. */
+    public function creneaux(): HasMany
+    {
+        return $this->hasMany(Creneau::class);
     }
 
     /**

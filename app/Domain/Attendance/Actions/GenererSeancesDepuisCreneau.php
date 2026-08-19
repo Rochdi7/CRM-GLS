@@ -31,9 +31,22 @@ final class GenererSeancesDepuisCreneau
             return;
         }
 
+        // A créneau closed by a teacher changeover never generates again —
+        // the incoming teacher gets their OWN emploi du temps instead
+        // (Domain\Groups\Actions\ChangerEnseignantGroupe).
+        if ($creneau->date_fin !== null) {
+            return;
+        }
+
         $debut = Carbon::today();
         if ($group->date_debut_formation !== null && $group->date_debut_formation->gt($debut)) {
             $debut = $group->date_debut_formation->copy();
+        }
+
+        // A créneau that only starts on a later date (typically the day a new
+        // teacher took over) must not back-fill séances before that date.
+        if ($creneau->date_debut !== null && $creneau->date_debut->gt($debut)) {
+            $debut = $creneau->date_debut->copy();
         }
 
         $fin = Carbon::parse($anneeFin);
@@ -85,6 +98,10 @@ final class GenererSeancesDepuisCreneau
      */
     public function resynchroniser(Creneau $creneau): void
     {
+        if ($creneau->date_fin !== null) {
+            return;
+        }
+
         $creneau->seances()
             ->where('statut', Seance::STATUT_PREVUE)
             ->where('date_seance', '>=', Carbon::today()->toDateString())

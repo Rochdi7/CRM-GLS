@@ -571,4 +571,32 @@ final class SettingsTest extends TestCase
                 ->where('activeTab', 'motifs-annulation')
                 ->has('motifsAnnulation.data', 1));
     }
+
+    public function test_pagination_links_keep_the_active_tab(): void
+    {
+        $this->admin();
+        for ($i = 1; $i <= 20; $i++) {
+            Frais::create(['nom' => "Frais {$i}", 'statut' => Frais::STATUT_ACTIF]);
+        }
+
+        $this->get('/backoffice/settings?tab=frais')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('activeTab', 'frais')
+                // Without withQueryString() the paginator emits "?page=2"
+                // with no tab, so page 2 falls back to the first tab.
+                ->where('frais.links.2.url', fn ($url) => str_contains((string) $url, 'tab=frais')));
+    }
+
+    public function test_page_two_of_a_tab_stays_on_that_tab(): void
+    {
+        $this->admin();
+        for ($i = 1; $i <= 20; $i++) {
+            Frais::create(['nom' => "Frais {$i}", 'statut' => Frais::STATUT_ACTIF]);
+        }
+
+        $this->get('/backoffice/settings?tab=frais&page=2')
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('activeTab', 'frais')
+                ->where('frais.current_page', 2));
+    }
 }

@@ -4,11 +4,10 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Spatie\Activitylog\Models\Concerns\LogsActivity;
-use Spatie\Activitylog\Support\LogOptions;
 
 /**
  * Stock movement — the audit trail of stock_articles.quantite. Never edited
@@ -18,7 +17,7 @@ use Spatie\Activitylog\Support\LogOptions;
 class StockMouvement extends Model
 {
     use HasFactory;
-    use LogsActivity;
+    use Auditable;
 
     public const TYPE_ENTREE = 'Entrée';
 
@@ -38,13 +37,6 @@ class StockMouvement extends Model
         'quantite_apres', 'note', 'created_by',
     ];
 
-    public function getActivitylogOptions(): LogOptions
-    {
-        return LogOptions::defaults()
-            ->logOnly(['stock_article_id', 'type', 'quantite', 'quantite_apres'])
-            ->logOnlyDirty()
-            ->useLogName('stock');
-    }
 
     public function article(): BelongsTo
     {

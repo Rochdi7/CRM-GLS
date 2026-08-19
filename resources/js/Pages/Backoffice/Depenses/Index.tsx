@@ -19,7 +19,7 @@ import FormActions from '@/Components/Forms/FormActions';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import type { DepenseRow, DepensesPageProps, EncaissementFormOption, RemboursementRow, SelectOption, SharedProps } from '@/Types';
 
-type Tab = 'depenses' | 'remboursements';
+type Tab = 'depenses' | 'paiements-prof' | 'remboursements';
 
 interface DepenseFormState {
     type_depense_id: number | '';
@@ -88,7 +88,10 @@ export default function DepensesIndex({
     soldeActuel,
     depenses,
     montantTotal,
+    paiementsProf,
+    paiementsProfTotal,
     typesDepenses,
+    paiementProfTypeId,
     groups,
     methodes,
     justificatifMimes,
@@ -102,11 +105,14 @@ export default function DepensesIndex({
     // sidebar does (server enforcement unchanged).
     const { auth } = usePage<SharedProps>().props;
     const canViewTypes = auth.isSuperAdmin || auth.permissions.includes('expense-types.view');
-    const initialTab: Tab = new URLSearchParams(window.location.search).get('tab') === 'remboursements' && canViewRemboursements
+    const requestedTab = new URLSearchParams(window.location.search).get('tab');
+    const initialTab: Tab = requestedTab === 'remboursements' && canViewRemboursements
         ? 'remboursements'
-        : canViewDepenses
-            ? 'depenses'
-            : 'remboursements';
+        : requestedTab === 'paiements-prof' && canViewDepenses
+            ? 'paiements-prof'
+            : canViewDepenses
+                ? 'depenses'
+                : 'remboursements';
     const [tab, setTab] = useState<Tab>(initialTab);
 
     const [showDepenseModal, setShowDepenseModal] = useState(false);
@@ -118,6 +124,9 @@ export default function DepensesIndex({
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const typeOptions: SelectOption[] = typesDepenses.map((t) => ({ value: t.id, label: t.nom }));
+    // The Dépenses table excludes "Paiement prof", so filtering by it there
+    // could only ever return nothing — drop it from that filter only.
+    const filterTypeOptions: SelectOption[] = typeOptions.filter((o) => o.value !== paiementProfTypeId);
     const groupOptions: SelectOption[] = groups.map((g) => ({ value: g.id, label: g.nom }));
     const methodeOptions: SelectOption[] = methodes.map((m) => ({ value: m, label: m }));
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.nom }));
@@ -126,7 +135,7 @@ export default function DepensesIndex({
     const remboursementForm = useForm<RemboursementFormState>(emptyRemboursementForm());
 
     function reload(nextFilters: Partial<typeof filters>) {
-        router.get('/backoffice/depenses', { ...filters, ...nextFilters, page: undefined, tab }, {
+        router.get('/backoffice/depenses', { ...filters, ...nextFilters, page: undefined, pageProf: undefined, tab }, {
             preserveState: true,
             preserveScroll: true,
             replace: true,
@@ -135,7 +144,7 @@ export default function DepensesIndex({
 
     function switchTab(next: Tab) {
         setTab(next);
-        router.get('/backoffice/depenses', { ...filters, tab: next }, { preserveState: true, preserveScroll: true, replace: true });
+        router.get('/backoffice/depenses', { ...filters, page: undefined, pageProf: undefined, tab: next }, { preserveState: true, preserveScroll: true, replace: true });
     }
 
     // --- Dépenses ---
@@ -334,6 +343,19 @@ export default function DepensesIndex({
                         </button>
                     </li>
                 )}
+                {canViewDepenses && (
+                    <li className="nav-item" role="presentation">
+                        <button
+                            type="button"
+                            className={`nav-link d-inline-flex align-items-center${tab === 'paiements-prof' ? ' active' : ''}`}
+                            aria-current={tab === 'paiements-prof' ? 'page' : undefined}
+                            onClick={() => switchTab('paiements-prof')}
+                        >
+                            <i className="ti ti-user-dollar me-2" aria-hidden="true" />
+                            Paiements prof
+                        </button>
+                    </li>
+                )}
                 {canViewRemboursements && (
                     <li className="nav-item" role="presentation">
                         <button
@@ -380,7 +402,7 @@ export default function DepensesIndex({
                                 </label>
                                 <SelectField
                                     id="dep-f-type"
-                                    options={typeOptions}
+                                    options={filterTypeOptions}
                                     placeholder="Tous les types"
                                     value={filters.typeFilter}
                                     onChange={(event) => reload({ typeFilter: event.target.value })}
@@ -468,6 +490,111 @@ export default function DepensesIndex({
                                 ))}
                             </DataTable>
                             <Pagination paginator={depenses} showJumpToPage />
+                        </>
+                    )}
+                </Card>
+            )}
+
+            {/* Paiements prof — the same dépenses (same table, same caisse,
+                same modal), only the "Paiement prof" type, listed apart so
+                the Dépenses table above stays readable. */}
+            {tab === 'paiements-prof' && canViewDepenses && paiementsProf && (
+                <Card
+                    title="Paiements prof"
+                    bodyClassName="p-0 py-3"
+                    tools={
+                        <button
+                            type="button"
+                            className="btn btn-primary d-flex align-items-center mb-3"
+                            onClick={openCreateDepense}
+                        >
+                            <i className="ti ti-square-rounded-plus me-2" />
+                            Ajouter une dépense
+                        </button>
+                    }
+                >
+                    <div className="px-3 pt-2">
+                        <TableToolbar>
+                            <div style={{ width: 170 }}>
+                                <label className="form-label" htmlFor="prof-f-du">
+                                    Du
+                                </label>
+                                <DateField
+                                    id="prof-f-du"
+                                    value={filters.dateFrom}
+                                    onChange={(event) => reload({ dateFrom: event.target.value })}
+                                />
+                            </div>
+                            <div style={{ width: 170 }}>
+                                <label className="form-label" htmlFor="prof-f-au">
+                                    Au
+                                </label>
+                                <DateField
+                                    id="prof-f-au"
+                                    value={filters.dateTo}
+                                    onChange={(event) => reload({ dateTo: event.target.value })}
+                                />
+                            </div>
+                        </TableToolbar>
+                    </div>
+
+                    <TableLengthRow
+                        perPage={filters.perPage}
+                        perPageOptions={PER_PAGE_OPTIONS}
+                        onPerPageChange={(perPage) => reload({ perPage })}
+                        search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} />}
+                    />
+
+                    {paiementsProfTotal !== null && (
+                        <p className="fw-medium px-3 mb-3">Montant total : {Number(paiementsProfTotal).toFixed(2)} MAD</p>
+                    )}
+
+                    {paiementsProf.data.length === 0 ? (
+                        <EmptyState title="Aucun paiement prof" icon="ti ti-user-dollar" />
+                    ) : (
+                        <>
+                            <DataTable
+                                loading={isLoading}
+                                head={
+                                    <tr>
+                                        <th>Référence</th>
+                                        <th>Caisse</th>
+                                        <th className="text-end">Montant</th>
+                                        <th>Date</th>
+                                        <th>Justificatifs</th>
+                                        <th className="text-end">Action</th>
+                                    </tr>
+                                }
+                            >
+                                {paiementsProf.data.map((row) => (
+                                    <tr key={row.id}>
+                                        <td>
+                                            <code>{row.reference}</code>
+                                        </td>
+                                        <td>{row.caisse ?? '—'}</td>
+                                        <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} MAD</td>
+                                        <td>{row.dateDepense ?? '—'}</td>
+                                        <td>
+                                            {row.receiptsCount > 0 ? (
+                                                <span>
+                                                    <i className="ti ti-paperclip me-1" />
+                                                    {row.receiptsCount}
+                                                </span>
+                                            ) : (
+                                                '—'
+                                            )}
+                                        </td>
+                                        <td>
+                                            <RowActions view={row.showUrl}>
+                                                <RowActionItem icon="ti-edit" onClick={() => openEditDepense(row)}>
+                                                    Modifier
+                                                </RowActionItem>
+                                            </RowActions>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </DataTable>
+                            <Pagination paginator={paiementsProf} showJumpToPage />
                         </>
                     )}
                 </Card>

@@ -15,6 +15,8 @@ interface SallesPanelProps {
     salles: PaginatedData<SalleRow>;
     centerOptions: SelectOption[];
     permissions: CrudPermissions;
+    /** False only on "Tous les centres" — gates the redundant Centre column. */
+    centerLocked: boolean;
 }
 
 const STATUT_OPTIONS: SelectOption[] = [
@@ -34,7 +36,7 @@ const EMPTY_FORM: SalleForm = {
  * picker only lists centers the acting user can access (Phase 6 §Q3 fix) —
  * never a raw, unrestricted center list.
  */
-export default function SallesPanel({ salles, centerOptions, permissions }: SallesPanelProps) {
+export default function SallesPanel({ salles, centerOptions, permissions, centerLocked }: SallesPanelProps) {
     const [showModal, setShowModal] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<SalleRow | null>(null);
@@ -128,7 +130,7 @@ export default function SallesPanel({ salles, centerOptions, permissions }: Sall
                 head={
                     <tr>
                         <th>Nom de la salle</th>
-                        <th>Centre</th>
+                        {!centerLocked && <th>Centre</th>}
                         <th>Capacité</th>
                         <th>Statut</th>
                         <th className="text-end">Action</th>
@@ -138,7 +140,7 @@ export default function SallesPanel({ salles, centerOptions, permissions }: Sall
                 {salles.data.map((row) => (
                     <tr key={row.id}>
                         <td className="fw-medium">{row.nom}</td>
-                        <td>{row.centre ?? '—'}</td>
+                        {!centerLocked && <td>{row.centre ?? '—'}</td>}
                         <td>{row.capacite ?? '—'}</td>
                         <td>
                             <span className={`badge badge-soft-${row.statut === 'Active' ? 'success' : 'secondary'}`}>

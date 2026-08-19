@@ -183,6 +183,10 @@ Route::prefix('backoffice')
             Route::put('groups/{group}', [GroupController::class, 'update'])
                 ->middleware('permission:groups.update')->name('groups.update');
             Route::get('groups/{group}', [GroupController::class, 'show'])->name('groups.show');
+            // Teacher changeover — archives the outgoing assignment, opens
+            // the new one and stops the group's emploi du temps.
+            Route::post('groups/{group}/changer-enseignant', [GroupController::class, 'changerEnseignant'])
+                ->middleware('permission:groups.update')->name('groups.changer-enseignant');
             Route::post('groups/{group}/archive', [GroupController::class, 'archive'])->name('groups.archive');
             // Quick lifecycle actions from the list's row menu — "Annuler"
             // (-> Annulée, terminal, same groups.archive gate as Fin de

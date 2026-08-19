@@ -4,11 +4,10 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Spatie\Activitylog\Models\Concerns\LogsActivity;
-use Spatie\Activitylog\Support\LogOptions;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 
@@ -20,7 +19,7 @@ class Depense extends Model implements HasMedia
 {
     use HasFactory;
     use InteractsWithMedia;
-    use LogsActivity;
+    use Auditable;
 
     /** Same fixed list as Encaissement::METHODES (validated, no lookup table). */
     public const METHODES = Encaissement::METHODES;
@@ -49,13 +48,6 @@ class Depense extends Model implements HasMedia
             ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
     }
 
-    public function getActivitylogOptions(): LogOptions
-    {
-        return LogOptions::defaults()
-            ->logOnly(['montant', 'type_depense_id', 'caisse_id'])
-            ->logOnlyDirty()
-            ->useLogName('depense');
-    }
 
     public function typeDepense(): BelongsTo
     {

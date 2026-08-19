@@ -15,7 +15,7 @@ final class GetMotifsAnnulationList
 {
     public function __invoke(int $perPage = 8): LengthAwarePaginator
     {
-        $motifs = MotifAnnulation::query()->orderBy('nom')->paginate($perPage);
+        $motifs = MotifAnnulation::query()->orderBy('nom')->paginate($perPage)->withQueryString();
 
         $motifs->through(fn (MotifAnnulation $m): array => [
             'id' => $m->id,

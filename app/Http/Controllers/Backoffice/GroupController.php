@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Domain\Groups\Actions\ChangerEnseignantGroupe;
 use App\Domain\Groups\Queries\GetGroupDetails;
 use App\Domain\Groups\Queries\GetGroupFormOptions;
 use App\Domain\Groups\Queries\GetGroupsList;
 use App\Domain\Groups\Queries\GetGroupStudentsBySegment;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Backoffice\Groups\ChangerEnseignantRequest;
 use App\Http\Requests\Backoffice\Groups\StoreGroupRequest;
 use App\Http\Requests\Backoffice\Groups\UpdateGroupRequest;
+use App\Domain\Settings\Support\FraisEcheanceResolver;
 use App\Models\Frais;
 use App\Models\Group;
 use App\Services\Context\CurrentContext;
@@ -71,12 +74,18 @@ final class GroupController extends Controller
         ]);
     }
 
-    public function show(Request $request, Group $group, GetGroupDetails $getGroupDetails): Response
-    {
+    public function show(
+        Request $request,
+        Group $group,
+        GetGroupDetails $getGroupDetails,
+        GetGroupFormOptions $getGroupFormOptions,
+    ): Response {
         $this->authorize('view', $group);
 
         return Inertia::render('Backoffice/Groups/Show', [
             'group' => $getGroupDetails($group, $request->user()),
+            // Options for the "Changer d'enseignant" modal.
+            'enseignants' => $getGroupFormOptions->enseignants(),
         ]);
     }
 
@@ -103,9 +112,9 @@ final class GroupController extends Controller
         $this->authorize('create', Group::class);
 
         $data = $request->validated();
-        $fraisLignes = $this->normalizedFraisLignes($request);
+        $fraisLignes = $this->normalizedFraisLignes($request, $data['date_debut_formation'] ?? null);
 
-        DB::transaction(function () use ($data, $fraisLignes, &$group): void {
+        DB::transaction(function () use ($request, $data, $fraisLignes, &$group): void {
             // Center + academic year are inherited from the active working
             // context (top-bar switchers), never picked in the form — same
             // as GroupsIndex::save().
@@ -123,6 +132,14 @@ final class GroupController extends Controller
             ]);
 
             $group->frais()->sync($fraisLignes);
+
+            // Opens the group's first teaching-assignment period so the
+            // payroll trail starts at creation, not at the first change.
+            app(ChangerEnseignantGroupe::class)->ouvrirInitiale(
+                $group,
+                $data['enseignant_id'] ?? null,
+                $request->user()?->employee,
+            );
         });
 
         return redirect()->route('backoffice.groups.index')
@@ -134,9 +151,12 @@ final class GroupController extends Controller
         $this->authorize('update', $group);
 
         $data = $request->validated();
-        $fraisLignes = $this->normalizedFraisLignes($request);
+        $fraisLignes = $this->normalizedFraisLignes(
+            $request,
+            $data['date_debut_formation'] ?? $group->date_debut_formation?->toDateString(),
+        );
 
-        DB::transaction(function () use ($data, $fraisLignes, $group): void {
+        DB::transaction(function () use ($request, $data, $fraisLignes, $group): void {
             $statut = $data['statut'];
 
             // A raw statut change to either terminal status (Fin de
@@ -151,11 +171,23 @@ final class GroupController extends Controller
             $group->update([
                 'nom' => $data['nom'],
                 'niveau' => $data['niveau'],
-                'enseignant_id' => $data['enseignant_id'] ?? null,
                 'statut' => $statut,
                 'date_debut_formation' => $data['date_debut_formation'] ?? null,
                 'date_fin_formation' => $data['date_fin_formation'] ?? null,
             ]);
+
+            // `enseignant_id` is NEVER written straight from the form: a
+            // teacher change has to archive the outgoing assignment, open a
+            // new one and stop the emploi du temps — all of which lives in
+            // ChangerEnseignantGroupe. When the teacher is unchanged the
+            // action is a no-op, so the plain edit modal stays harmless.
+            app(ChangerEnseignantGroupe::class)(
+                $group,
+                isset($data['enseignant_id']) ? (int) $data['enseignant_id'] : null,
+                null,
+                null,
+                $request->user()?->employee,
+            );
 
             // Every catalog fee is assigned to the group (no checkbox): each
             // line carries the amount entered for this group — 0 DH included.
@@ -164,6 +196,43 @@ final class GroupController extends Controller
 
         return redirect()->route('backoffice.groups.index')
             ->with('success', __('Group updated.'));
+    }
+
+    /**
+     * Explicit teacher changeover from the group detail page: archives the
+     * outgoing assignment with its date_fin, opens the incoming one with its
+     * date_debut, and STOPS the group's emploi du temps so a fresh schedule
+     * is built for the new teacher (per-teacher séance separation → payroll).
+     * Gated by groups.update, like every other edit of a group.
+     */
+    public function changerEnseignant(
+        ChangerEnseignantRequest $request,
+        Group $group,
+        ChangerEnseignantGroupe $changerEnseignant,
+    ): RedirectResponse {
+        $this->authorize('update', $group);
+
+        $data = $request->validated();
+
+        $result = $changerEnseignant(
+            $group,
+            isset($data['enseignant_id']) ? (int) $data['enseignant_id'] : null,
+            $data['date_debut'],
+            $data['motif'] ?? null,
+            $request->user()?->employee,
+        );
+
+        if (! $result['changed']) {
+            return back()->with('info', __('This teacher is already assigned to the group.'));
+        }
+
+        return redirect()->route('backoffice.groups.show', $group)
+            ->with('success', __('Teacher changed. Create a new timetable for the new teacher.'))
+            ->with('emploiDuTempsArrete', [
+                'creneaux' => $result['creneauxFermes'],
+                'seances' => $result['seancesSupprimees'],
+                'url' => route('backoffice.emploi-du-temps.index', ['group' => $group->id]),
+            ]);
     }
 
     /**
@@ -272,19 +341,40 @@ final class GroupController extends Controller
      * effect as the Livewire version which only ever renders active-catalog
      * keys in the first place).
      *
+     * A blank amount/échéance falls back to the catalog's own default
+     * (frais.montant_defaut) and to the month-derived due date — see
+     * FraisEcheanceResolver — so a group only has to type the values that
+     * actually differ from the standard.
+     *
      * @return array<int, array{montant: float, date_echeance: ?string, classification: ?string}>
      */
-    private function normalizedFraisLignes(Request $request): array
+    private function normalizedFraisLignes(Request $request, ?string $dateDebutFormation = null): array
     {
-        $activeIds = Frais::query()->where('statut', Frais::STATUT_ACTIF)->pluck('id');
+        // Whole catalog rows, not just ids: each one carries the default
+        // amount a fee is worth unless this group says otherwise.
+        $catalogue = Frais::query()
+            ->where('statut', Frais::STATUT_ACTIF)
+            ->get(['id', 'nom', 'montant_defaut']);
+
         $submitted = (array) $request->input('fraisLignes', []);
 
         $sync = [];
-        foreach ($activeIds as $fraisId) {
-            $ligne = $submitted[$fraisId] ?? [];
-            $sync[$fraisId] = [
-                'montant' => ($ligne['montant'] ?? '') !== '' ? (float) $ligne['montant'] : 0,
-                'date_echeance' => ($ligne['date_echeance'] ?? '') !== '' ? $ligne['date_echeance'] : null,
+        foreach ($catalogue as $frais) {
+            $ligne = $submitted[$frais->id] ?? [];
+
+            // Blank means "use the catalog default" — not "free". A zero the
+            // user typed on purpose is still respected, since '0' !== ''.
+            $montant = ($ligne['montant'] ?? '') !== ''
+                ? (float) $ligne['montant']
+                : (float) $frais->montant_defaut;
+
+            $echeance = ($ligne['date_echeance'] ?? '') !== ''
+                ? $ligne['date_echeance']
+                : FraisEcheanceResolver::defaultFor($frais->nom, $dateDebutFormation);
+
+            $sync[$frais->id] = [
+                'montant' => $montant,
+                'date_echeance' => $echeance,
                 'classification' => ($ligne['classification'] ?? '') !== '' ? $ligne['classification'] : null,
             ];
         }

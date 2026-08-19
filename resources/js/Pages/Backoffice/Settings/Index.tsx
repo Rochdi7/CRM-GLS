@@ -34,6 +34,7 @@ export default function SettingsIndex({
     anneesScolaires,
     salles,
     centerOptions,
+    centerLocked,
     frais,
     banques,
     motifsAnnulation,
@@ -43,6 +44,9 @@ export default function SettingsIndex({
             return;
         }
 
+        // No `page` in the payload: switching tabs always lands on page 1.
+        // Each tab paginates on the same shared `page` param, so carrying it
+        // over would drop you on page 3 of a tab that may not have one.
         router.get('/backoffice/settings', { tab }, { preserveState: false, preserveScroll: true });
     }
 
@@ -77,7 +81,12 @@ export default function SettingsIndex({
                         <AnneesScolairesPanel anneesScolaires={anneesScolaires} permissions={permissions['annees-scolaires']} />
                     )}
                     {activeTab === 'salles' && salles && (
-                        <SallesPanel salles={salles} centerOptions={centerOptions ?? []} permissions={permissions.salles} />
+                        <SallesPanel
+                            salles={salles}
+                            centerOptions={centerOptions ?? []}
+                            permissions={permissions.salles}
+                            centerLocked={centerLocked ?? false}
+                        />
                     )}
                     {activeTab === 'frais' && frais && <FraisPanel frais={frais} permissions={permissions.frais} />}
                     {activeTab === 'banques' && banques && <BanquesPanel banques={banques} permissions={permissions.banques} />}

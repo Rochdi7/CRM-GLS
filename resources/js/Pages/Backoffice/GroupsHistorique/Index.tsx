@@ -9,6 +9,8 @@ import type { GroupsHistoriqueRow, PaginatedData } from '@/Types';
 
 interface GroupsHistoriqueIndexProps {
     historiques: PaginatedData<GroupsHistoriqueRow>;
+    /** False only on "Tous les centres" — gates the redundant Centre column. */
+    centerLocked: boolean;
 }
 
 /**
@@ -16,7 +18,7 @@ interface GroupsHistoriqueIndexProps {
  * same columns, same order, same empty state, same pagination. Read-only:
  * rows only ever come from Group::archiverCommeTermine().
  */
-export default function GroupsHistoriqueIndex({ historiques }: GroupsHistoriqueIndexProps) {
+export default function GroupsHistoriqueIndex({ historiques, centerLocked }: GroupsHistoriqueIndexProps) {
     return (
         <BackofficeLayout
             title="Historique des groupes"
@@ -38,7 +40,7 @@ export default function GroupsHistoriqueIndex({ historiques }: GroupsHistoriqueI
                             <th>Nom</th>
                             <th>Niveau</th>
                             <th>Enseignant</th>
-                            <th>Centre</th>
+                            {!centerLocked && <th>Centre</th>}
                             <th>Année scolaire</th>
                             <th>Étudiants</th>
                             <th>Période</th>
@@ -56,7 +58,7 @@ export default function GroupsHistoriqueIndex({ historiques }: GroupsHistoriqueI
                                 <StatusBadge label={row.niveau} />
                             </td>
                             <td>{row.enseignant ?? '—'}</td>
-                            <td>{row.centre ?? '—'}</td>
+                            {!centerLocked && <td>{row.centre ?? '—'}</td>}
                             <td>{row.anneeScolaire ?? '—'}</td>
                             <td>
                                 <StatusBadge label={String(row.nombreEtudiants)} variant="secondary" />

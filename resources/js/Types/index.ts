@@ -37,6 +37,12 @@ export interface FlashMessages {
      * sentinel form-state id) — never persisted, never re-shown on reload.
      */
     newEmployeeCredentials?: { username: string; password: string } | null;
+    /**
+     * One-time notice after a group's teacher changeover: the group's emploi
+     * du temps was stopped (créneaux closed, future "Prévue" séances removed)
+     * and a new one must be built for the incoming teacher.
+     */
+    emploiDuTempsArrete?: { creneaux: number; seances: number; url: string } | null;
     /** One-time regenerated password for an existing user (Users module) — not consumed by the Employees page. */
     regeneratedPassword?: string | null;
 }
@@ -275,6 +281,26 @@ export interface GroupDetails {
     inscriptionsAnnuleesCount: number;
     fees: GroupFeeRow[];
     inscriptions: GroupInscriptionRow[];
+    /** Full teaching-assignment history — the Actif period first, then the archived ones. */
+    enseignantsHistorique: GroupEnseignantRow[];
+    canChangeEnseignant: boolean;
+    changerEnseignantUrl: string;
+    emploiDuTempsUrl: string;
+}
+
+/**
+ * One teaching-assignment period of a group. Exactly one row is `isActif`;
+ * the others are archived past periods kept for per-teacher payroll
+ * (dateDebut → dateFin).
+ */
+export interface GroupEnseignantRow {
+    id: number;
+    enseignant: string | null;
+    dateDebut: string | null;
+    dateFin: string | null;
+    statut: string;
+    isActif: boolean;
+    motif: string | null;
 }
 
 export interface InscriptionFeeRow {
@@ -630,12 +656,15 @@ export interface SalleForm {
 export interface FraisRow {
     id: number;
     nom: string;
+    /** Catalog default every group starts from; a group may override it. */
+    montantDefaut: string;
     statut: string;
     groupsCount: number;
 }
 
 export interface FraisForm {
     nom: string;
+    montant_defaut: string;
     statut: string;
 }
 
@@ -696,6 +725,8 @@ export interface SettingsPageProps {
     anneesScolaires?: PaginatedData<AnneeScolaireRow>;
     salles?: PaginatedData<SalleRow>;
     centerOptions?: SelectOption[];
+    /** Salles tab: false only on "Tous les centres" — gates the redundant Centre column. */
+    centerLocked?: boolean;
     frais?: PaginatedData<FraisRow>;
     banques?: PaginatedData<BanqueRow>;
     motifsAnnulation?: PaginatedData<MotifAnnulationRow>;
@@ -779,6 +810,8 @@ export interface UsersIndexPageProps {
     users: PaginatedData<UserRow>;
     filters: { search: string; perPage: number };
     perPageOptions: number[];
+    /** False only on "Tous les centres" — gates the redundant Centre column. */
+    centerLocked: boolean;
     [key: string]: unknown;
 }
 
@@ -1173,7 +1206,7 @@ export interface CaisseJournalData {
 export interface CaisseTransferRow {
     id: number;
     reference: string;
-    /** Owning employee's name (Caisse::responsable()), not the raw "Caisse — Name" label. */
+    /** Owning employee's name (Caisse::responsable()), resolved rather than read off caisses.nom. */
     expediteur: string | null;
     destinataire: string | null;
     caisseSourceId: number | null;
@@ -1449,7 +1482,12 @@ export interface DepensesPageProps {
     soldeActuel: MoneyDisplay | null;
     depenses: PaginatedData<DepenseRow> | null;
     montantTotal: MoneyDisplay | null;
+    /** Only the "Paiement prof" system type — its own tab, excluded from `depenses`. */
+    paiementsProf: PaginatedData<DepenseRow> | null;
+    paiementsProfTotal: MoneyDisplay | null;
     typesDepenses: FinanceOption[];
+    /** id of the "Paiement prof" type — filtered out of the Dépenses tab's Type filter. */
+    paiementProfTypeId: number | null;
     groups: FinanceOption[];
     methodes: string[];
     justificatifMimes: string[];

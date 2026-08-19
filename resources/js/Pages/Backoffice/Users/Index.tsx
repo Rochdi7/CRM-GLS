@@ -22,7 +22,7 @@ import type { SharedProps, UserEditForm, UserRow, UsersIndexPageProps } from '@/
  * come exclusively from Employee creation via EmployeeObserver) — no
  * "New user" action exists anywhere on this page.
  */
-export default function UsersIndex({ users, filters, perPageOptions }: UsersIndexPageProps) {
+export default function UsersIndex({ users, filters, perPageOptions, centerLocked }: UsersIndexPageProps) {
     const { flash } = usePage<SharedProps>().props;
     const isLoading = useInertiaLoading();
 
@@ -156,7 +156,7 @@ export default function UsersIndex({ users, filters, perPageOptions }: UsersInde
                                     <th>Nom</th>
                                     <th>Nom d'utilisateur</th>
                                     <th>Email</th>
-                                    <th>Centre</th>
+                                    {!centerLocked && <th>Centre</th>}
                                     <th>Rôles</th>
                                     <th>Statut</th>
                                     <th className="text-end">Action</th>
@@ -166,9 +166,10 @@ export default function UsersIndex({ users, filters, perPageOptions }: UsersInde
                             {users.data.map((user) => (
                                 <tr key={user.id}>
                                     <td className="fw-medium">{user.name}</td>
-                                    <td>{user.username ? `@${user.username}` : '—'}</td>
-                                    <td>{user.email}</td>
-                                    <td>{user.employee?.etablissement ?? '—'}</td>
+                                    {/* Login identifiers stay verbatim — see the table-uppercase rule in app.css. */}
+                                    <td className="text-normal-case">{user.username ? `@${user.username}` : '—'}</td>
+                                    <td className="text-normal-case">{user.email}</td>
+                                    {!centerLocked && <td>{user.employee?.etablissement ?? '—'}</td>}
                                     <td>
                                         {user.roles.length === 0 ? (
                                             <span className="text-muted">Aucun rôle</span>

@@ -953,3 +953,37 @@ html[data-theme='dark'] .gls-seancecal-day.has-seances:hover {
 html[data-theme='dark'] .gls-seancecal-day.is-today {
     background: rgba(46, 157, 126, 0.18);
 }
+
+/* ---------------------------------------------------------------------------
+ * Uppercase table display
+ * ---------------------------------------------------------------------------
+ * Product decision: backoffice tables read in caps for a cleaner, more
+ * scannable grid — headers AND cell values ("rochdi karouali" displays as
+ * "ROCHDI KAROUALI") regardless of how the data was typed in.
+ *
+ * Done with text-transform on purpose: it is a DISPLAY-ONLY transform, so the
+ * stored value, server-side search/sort (CLAUDE.md §5) and anything copied out
+ * of the DOM keep their original casing. Never "fix" this by uppercasing in
+ * the query or in the React props — that would corrupt the data.
+ *
+ * Scoped to .table so it covers both <DataTable> and the pages that still
+ * render a raw <table> (Depenses, Encaissements, Groups, Inscriptions,
+ * Seances/Show, CaisseTransfers/Show, EmploiDuTemps, Import).
+ */
+.table thead th,
+.table tbody td {
+    text-transform: uppercase;
+}
+
+/* Content that must keep its exact casing. Emails and usernames are
+ * identifiers users copy out, and form controls / dropdown menus are UI
+ * chrome, not data — uppercasing either reads as a bug. */
+.table tbody td a[href^='mailto:'],
+.table tbody td input,
+.table tbody td select,
+.table tbody td textarea,
+.table tbody td .dropdown-menu,
+.table tbody td .text-normal-case,
+.table tbody td .text-normal-case * {
+    text-transform: none;
+}

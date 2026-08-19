@@ -372,7 +372,7 @@ export default function EmployeesIndex({
                                     <th>Référence</th>
                                     <th>Nom</th>
                                     <th>Catégorie</th>
-                                    <th>Centre</th>
+                                    {!centerLocked && <th>Centre</th>}
                                     <th>Téléphone</th>
                                     <th>Statut</th>
                                     <th className="text-end">Action</th>
@@ -410,7 +410,7 @@ export default function EmployeesIndex({
                                     <td>
                                         <span className="badge badge-soft-info">{employee.categorie}</span>
                                     </td>
-                                    <td>{employee.etablissement ?? '—'}</td>
+                                    {!centerLocked && <td>{employee.etablissement ?? '—'}</td>}
                                     <td>{employee.telephone ?? '—'}</td>
                                     <td>
                                         <StatusBadge

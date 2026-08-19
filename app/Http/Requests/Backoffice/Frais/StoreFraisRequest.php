@@ -22,6 +22,7 @@ final class StoreFraisRequest extends FormRequest
     {
         return [
             'nom' => ['required', 'string', 'max:150', 'unique:frais,nom'],
+            'montant_defaut' => ['required', 'numeric', 'min:0', 'max:9999999.99'],
             'statut' => ['required', Rule::in(Frais::STATUTS)],
         ];
     }

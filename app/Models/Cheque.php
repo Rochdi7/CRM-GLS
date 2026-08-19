@@ -4,12 +4,11 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Spatie\Activitylog\Models\Concerns\LogsActivity;
-use Spatie\Activitylog\Support\LogOptions;
 
 /**
  * Physical chèque in hand — OFF-LEDGER inventory (never touches
@@ -26,7 +25,7 @@ use Spatie\Activitylog\Support\LogOptions;
 class Cheque extends Model
 {
     use HasFactory;
-    use LogsActivity;
+    use Auditable;
 
     public const SOURCE_ETUDIANT = 'Étudiant';
     public const SOURCE_PARENTS = 'Parents';
@@ -74,13 +73,6 @@ class Cheque extends Model
         ];
     }
 
-    public function getActivitylogOptions(): LogOptions
-    {
-        return LogOptions::defaults()
-            ->logOnly(['montant', 'statut', 'type', 'numero_cheque', 'student_id', 'retourne_le', 'retourne_par_id'])
-            ->logOnlyDirty()
-            ->useLogName('cheque');
-    }
 
     public function student(): BelongsTo
     {

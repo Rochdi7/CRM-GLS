@@ -20,12 +20,16 @@ const STATUT_OPTIONS: SelectOption[] = [
     { value: 'Inactif', label: 'Inactif' },
 ];
 
-const EMPTY_FORM: FraisForm = { nom: '', statut: 'Actif' };
+const EMPTY_FORM: FraisForm = { nom: '', montant_defaut: '0.00', statut: 'Actif' };
 
 /**
- * Frais (fee catalog) CRUD panel — replaces the Livewire FraisTab. Catalog
- * CRUD only (name/status) — never touches group_frais amounts/due-dates or
- * inscription_fees math (Groups/Registrations modules, out of Phase 6 scope).
+ * Frais (fee catalog) CRUD panel — replaces the Livewire FraisTab.
+ *
+ * Catalog-level only: name, status, and the DEFAULT amount every group
+ * starts from. It still never writes group_frais or inscription_fees
+ * directly — a group inherits montant_defaut when its own amount is left
+ * blank (GroupController::normalizedFraisLignes) and can always override
+ * it.
  */
 export default function FraisPanel({ frais, permissions }: FraisPanelProps) {
     const [showModal, setShowModal] = useState(false);
@@ -44,7 +48,7 @@ export default function FraisPanel({ frais, permissions }: FraisPanelProps) {
     }
 
     function openEdit(row: FraisRow) {
-        form.setData({ nom: row.nom, statut: row.statut });
+        form.setData({ nom: row.nom, montant_defaut: row.montantDefaut, statut: row.statut });
         form.clearErrors();
         setEditingId(row.id);
         setShowModal(true);
@@ -112,6 +116,7 @@ export default function FraisPanel({ frais, permissions }: FraisPanelProps) {
                 head={
                     <tr>
                         <th>Nom du frais</th>
+                        <th>Montant par défaut</th>
                         <th>Groupes</th>
                         <th>Statut</th>
                         <th className="text-end">Action</th>
@@ -121,6 +126,7 @@ export default function FraisPanel({ frais, permissions }: FraisPanelProps) {
                 {frais.data.map((row) => (
                     <tr key={row.id}>
                         <td className="fw-medium">{row.nom}</td>
+                        <td>{row.montantDefaut} MAD</td>
                         <td>
                             <span className="badge badge-soft-secondary">{row.groupsCount}</span>
                         </td>
@@ -166,6 +172,22 @@ export default function FraisPanel({ frais, permissions }: FraisPanelProps) {
                         error={form.errors.nom}
                         placeholder="ex : Frais de Juillet"
                     />
+                    <FormField
+                        id="f-montant-defaut"
+                        label="Montant par défaut (MAD)"
+                        required
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={form.data.montant_defaut}
+                        onChange={(event) => form.setData('montant_defaut', event.target.value)}
+                        error={form.errors.montant_defaut}
+                        placeholder="ex : 1300.00"
+                    />
+                    <p className="form-text mb-3">
+                        Montant appliqué automatiquement à ce frais dans chaque groupe. Il reste
+                        modifiable groupe par groupe.
+                    </p>
                     <SelectField
                         id="f-statut"
                         label="Statut"

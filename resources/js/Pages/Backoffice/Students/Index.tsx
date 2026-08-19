@@ -416,7 +416,7 @@ export default function StudentsIndex({
                                             />
                                         </a>
                                     </th>
-                                    <th>Centre</th>
+                                    {!centerLocked && <th>Centre</th>}
                                     <th>Téléphone</th>
                                     <th>WhatsApp</th>
                                     <th className="text-end">Action</th>
@@ -462,7 +462,7 @@ export default function StudentsIndex({
                                         )}
                                     </td>
                                     <td>{student.age ?? '—'}</td>
-                                    <td>{student.etablissement ?? '—'}</td>
+                                    {!centerLocked && <td>{student.etablissement ?? '—'}</td>}
                                     <td>{student.telephone ?? '—'}</td>
                                     <td>{student.whatsapp ?? '—'}</td>
                                     <td className="text-end">

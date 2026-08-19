@@ -156,7 +156,22 @@ Shared components (reuse these — do not re-invent per page):
   existing `centerLocked` prop so the rule stays in sync with the context
   switcher automatically. Apply this to any new module's list page that adds
   a Centre column/filter (Groups, Inscriptions, Encaissements, Depenses,
-  Remboursements, Stock, etc.) as soon as it gets one.
+  Remboursements, Stock, etc.) as soon as it gets one. **The same rule covers
+  the Centre *column*, not just the filter** — wrap both the `<th>` and its
+  matching `<td>` in `{!centerLocked && …}` (done for Employees, Students,
+  Users, GroupsHistorique, Import, Settings/SallesPanel), and remember to make
+  any hard-coded `colSpan` on the empty-state row conditional too. Detail/Show
+  pages are exempt: there the centre is an attribute of the single record being
+  viewed, not a redundant repeat of the active context (see `Groups/Show.tsx`).
+- **Tables display in UPPERCASE.** `.table thead th` and `.table tbody td`
+  carry `text-transform: uppercase` in `resources/js/app.css`, so headers and
+  cell values render in caps ("rochdi karouali" shows as "ROCHDI KAROUALI")
+  however the data was typed. This is deliberately a DISPLAY-ONLY CSS
+  transform — the stored value and server-side search/sort keep their original
+  casing. Never uppercase in a query, a Domain action, or a React prop; that
+  corrupts the data. Cells that must keep exact casing (emails, usernames,
+  raw references) get `className="text-normal-case"`; inputs, selects and
+  `.dropdown-menu` are already excluded by the stylesheet.
 - `resources/js/Components/Forms/SelectField.tsx` — a plain native `<select>`
   styled with Bootstrap's `.form-select`. **Never Select2 or any jQuery
   plugin** — Inertia pages load no jQuery/Select2 assets at all; native

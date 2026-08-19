@@ -15,11 +15,12 @@ final class GetFraisList
 {
     public function __invoke(int $perPage = 8): LengthAwarePaginator
     {
-        $frais = Frais::query()->withCount('groups')->orderBy('nom')->paginate($perPage);
+        $frais = Frais::query()->withCount('groups')->orderBy('nom')->paginate($perPage)->withQueryString();
 
         $frais->through(fn (Frais $f): array => [
             'id' => $f->id,
             'nom' => $f->nom,
+            'montantDefaut' => number_format((float) $f->montant_defaut, 2, '.', ''),
             'statut' => $f->statut,
             'groupsCount' => $f->groups_count,
         ]);

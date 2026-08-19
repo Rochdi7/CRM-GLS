@@ -4,12 +4,11 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Spatie\Activitylog\Models\Concerns\LogsActivity;
-use Spatie\Activitylog\Support\LogOptions;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
@@ -23,7 +22,7 @@ class Student extends Model implements HasMedia
 {
     use HasFactory;
     use InteractsWithMedia;
-    use LogsActivity;
+    use Auditable;
 
     /** Fixed CEFR sublevels used by GLS — enforce in validation, never a FK. */
     public const NIVEAUX_CEFR = [
@@ -128,13 +127,6 @@ class Student extends Model implements HasMedia
             ->performOnCollections('photo');
     }
 
-    public function getActivitylogOptions(): LogOptions
-    {
-        return LogOptions::defaults()
-            ->logOnly(['nom', 'prenom', 'telephone', 'niveau', 'etablissement_id'])
-            ->logOnlyDirty()
-            ->useLogName('student');
-    }
 
     public function etablissement(): BelongsTo
     {

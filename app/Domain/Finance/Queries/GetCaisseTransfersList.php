@@ -21,7 +21,7 @@ use Illuminate\Support\Collection;
  * into one of their tills, Transfert when it's leaving one), and
  * Expéditeur/Destinataire show the owning EMPLOYEE's name
  * (Caisse::responsable(), e.g. "Rochdi Karouali") rather than the raw
- * caisse label ("Caisse — Rochdi Karouali").
+ * caisse label (which is the same employee name).
  */
 final class GetCaisseTransfersList
 {

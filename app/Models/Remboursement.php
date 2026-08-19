@@ -4,11 +4,10 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Spatie\Activitylog\Models\Concerns\LogsActivity;
-use Spatie\Activitylog\Support\LogOptions;
 
 /**
  * Refund to a student (gls-crm-schema.md §14) — separate audit trail from
@@ -17,7 +16,7 @@ use Spatie\Activitylog\Support\LogOptions;
 class Remboursement extends Model
 {
     use HasFactory;
-    use LogsActivity;
+    use Auditable;
 
     protected $fillable = [
         'reference', 'beneficiaire_id', 'encaissement_id', 'caisse_id', 'montant',
@@ -32,13 +31,6 @@ class Remboursement extends Model
         ];
     }
 
-    public function getActivitylogOptions(): LogOptions
-    {
-        return LogOptions::defaults()
-            ->logOnly(['montant', 'beneficiaire_id', 'caisse_id'])
-            ->logOnlyDirty()
-            ->useLogName('remboursement');
-    }
 
     public function beneficiaire(): BelongsTo
     {

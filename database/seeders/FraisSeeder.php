@@ -15,32 +15,51 @@ final class FraisSeeder extends Seeder
 {
     public function run(): void
     {
+        // nom => montant par defaut. The amount is what a group starts
+        // from when its own fee line is left blank - it stays editable per
+        // group (group_frais.montant remains the authority).
         $frais = [
-            'Frais d\'inscription A1/A2/B1',
-            'Frais d\'inscription B2',
-            'Frais annuel',
-            'Frais de Septembre',
-            'Frais d\'Octobre',
-            'Frais de Novembre',
-            'Frais de Décembre',
-            'Frais de Janvier',
-            'Frais de Février',
-            'Frais de Mars',
-            'Frais d\'Avril',
-            'Frais de Mai',
-            'Frais de Juin',
-            'Frais de Juillet',
-            'Frais de Août',
-            'Frais dexam ÖSD A1',
-            'Frais dexam ÖSD B1',
-            'Frais dexam ÖSD B2',
+            "Frais d'inscription A1/A2/B1" => 300,
+            "Frais d'inscription B2" => 300,
+            'Frais annuel' => 0,
+            'Frais de Septembre' => 1300,
+            "Frais d'Octobre" => 1300,
+            'Frais de Novembre' => 1300,
+            'Frais de Décembre' => 1300,
+            'Frais de Janvier' => 1300,
+            'Frais de Février' => 1300,
+            'Frais de Mars' => 1300,
+            "Frais d'Avril" => 1300,
+            'Frais de Mai' => 1300,
+            'Frais de Juin' => 1300,
+            'Frais de Juillet' => 1300,
+            'Frais de Août' => 1300,
+            'Frais dexam ÖSD A1' => 0,
+            'Frais dexam ÖSD B1' => 0,
+            'Frais dexam ÖSD B2' => 0,
         ];
 
-        foreach ($frais as $nom) {
-            Frais::query()->updateOrCreate(
-                ['nom' => $nom],
-                ['statut' => Frais::STATUT_ACTIF],
-            );
+        foreach ($frais as $nom => $montantDefaut) {
+            $existing = Frais::query()->where('nom', $nom)->first();
+
+            if ($existing === null) {
+                Frais::query()->create([
+                    'nom' => $nom,
+                    'montant_defaut' => $montantDefaut,
+                    'statut' => Frais::STATUT_ACTIF,
+                ]);
+
+                continue;
+            }
+
+            // Never reset an amount an admin has already tuned in
+            // Paramètres — only fill one still sitting at zero.
+            $existing->update([
+                'statut' => Frais::STATUT_ACTIF,
+                'montant_defaut' => (float) $existing->montant_defaut > 0
+                    ? $existing->montant_defaut
+                    : $montantDefaut,
+            ]);
         }
     }
 }

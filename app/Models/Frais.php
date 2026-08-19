@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -15,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  */
 class Frais extends Model
 {
+    use Auditable;
     use HasFactory;
 
     protected $table = 'frais';
@@ -28,7 +30,17 @@ class Frais extends Model
         self::STATUT_INACTIF,
     ];
 
-    protected $fillable = ['nom', 'statut'];
+    protected $fillable = ['nom', 'montant_defaut', 'statut'];
+
+    /**
+     * The catalog's default amount is only a starting point: group_frais
+     * .montant remains the authority for what a given group charges, so a
+     * group can always override it.
+     */
+    protected function casts(): array
+    {
+        return ['montant_defaut' => 'decimal:2'];
+    }
 
     public function groups(): BelongsToMany
     {

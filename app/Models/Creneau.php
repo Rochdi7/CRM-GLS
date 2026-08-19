@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class Creneau extends Model
 {
+    use Auditable;
     use HasFactory;
 
     protected $table = 'creneaux';
@@ -32,9 +34,27 @@ class Creneau extends Model
     ];
 
     protected $fillable = [
-        'group_id', 'jour_semaine', 'heure_debut', 'heure_fin',
-        'enseignant_id', 'salle_id',
+        'group_id', 'jour_semaine', 'date_debut', 'date_fin',
+        'heure_debut', 'heure_fin', 'enseignant_id', 'salle_id',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'date_debut' => 'date',
+            'date_fin' => 'date',
+        ];
+    }
+
+    /**
+     * A créneau is "closed" once its teacher's assignment ended — it stops
+     * generating séances but stays as the record of what that teacher's
+     * emploi du temps was. See Domain\Groups\Actions\ChangerEnseignantGroupe.
+     */
+    public function estActif(): bool
+    {
+        return $this->date_fin === null;
+    }
 
     public function group(): BelongsTo
     {

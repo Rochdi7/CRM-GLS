@@ -15,7 +15,7 @@ final class GetBanquesList
 {
     public function __invoke(int $perPage = 8): LengthAwarePaginator
     {
-        $banques = Banque::query()->orderBy('nom')->paginate($perPage);
+        $banques = Banque::query()->orderBy('nom')->paginate($perPage)->withQueryString();
 
         $banques->through(fn (Banque $b): array => [
             'id' => $b->id,

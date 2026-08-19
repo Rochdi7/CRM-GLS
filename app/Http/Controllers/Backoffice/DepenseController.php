@@ -52,7 +52,14 @@ final class DepenseController extends Controller
         $perPage = (int) $request->integer('perPage', GetDepensesList::DEFAULT_PER_PAGE);
 
         $depensesList = $user->can('expenses.view')
-            ? $getDepensesList($user, $search, $typeFilter, $caisseFilter, $dateFrom, $dateTo, $perPage)
+            ? $getDepensesList($user, $search, $typeFilter, $caisseFilter, $dateFrom, $dateTo, $perPage, GetDepensesList::SCOPE_HORS_PAIEMENT_PROF)
+            : null;
+
+        // "Paiement prof" dépenses live in their own tab — same records,
+        // same money rules, just listed apart to keep the Dépenses table
+        // readable (they are excluded from $depensesList above).
+        $paiementsProfList = $user->can('expenses.view')
+            ? $getDepensesList($user, $search, $typeFilter, $caisseFilter, $dateFrom, $dateTo, $perPage, GetDepensesList::SCOPE_PAIEMENT_PROF)
             : null;
 
         // The acting employee's own till balance — shown read-only in the
@@ -69,7 +76,13 @@ final class DepenseController extends Controller
             'soldeActuel' => $soldeActuel,
             'depenses' => $depensesList['data'] ?? null,
             'montantTotal' => $depensesList['montantTotal'] ?? null,
+            'paiementsProf' => $paiementsProfList['data'] ?? null,
+            'paiementsProfTotal' => $paiementsProfList['montantTotal'] ?? null,
             'typesDepenses' => $user->can('expenses.view') ? $getDepensesList->typeDepenseOptions() : [],
+            // The Dépenses tab's Type filter must not offer "Paiement prof"
+            // (that type now has its own tab and is excluded there); the
+            // create/edit modal still offers every type.
+            'paiementProfTypeId' => $user->can('expenses.view') ? $getDepensesList->paiementProfTypeId() : null,
             'groups' => $user->can('expenses.view') ? $getDepensesList->groupOptions($user) : [],
             'methodes' => Depense::METHODES,
             'justificatifMimes' => self::JUSTIFICATIF_MIMES,

@@ -6,6 +6,8 @@ import type { ImportBatch } from '@/Types/import';
 
 interface ImportIndexProps {
     recentBatches: ImportBatch[];
+    /** False only on "Tous les centres" — gates the redundant Centre column. */
+    centerLocked: boolean;
 }
 
 const MODULE_LABELS: Record<ImportBatch['module'], string> = {
@@ -33,7 +35,7 @@ function statusLabel(status: ImportBatch['status']): string {
     }
 }
 
-export default function ImportIndex({ recentBatches }: ImportIndexProps) {
+export default function ImportIndex({ recentBatches, centerLocked }: ImportIndexProps) {
     return (
         <BackofficeLayout
             title="Import de données"
@@ -63,7 +65,7 @@ export default function ImportIndex({ recentBatches }: ImportIndexProps) {
                         <tr>
                             <th>Module</th>
                             <th>Fichier</th>
-                            <th>Centre</th>
+                            {!centerLocked && <th>Centre</th>}
                             <th>Année scolaire</th>
                             <th>Statut</th>
                             <th>Insérées</th>
@@ -76,7 +78,7 @@ export default function ImportIndex({ recentBatches }: ImportIndexProps) {
                         <tr key={batch.id}>
                             <td>{MODULE_LABELS[batch.module]}</td>
                             <td>{batch.original_filename}</td>
-                            <td>{batch.etablissement?.nom_centre ?? '—'}</td>
+                            {!centerLocked && <td>{batch.etablissement?.nom_centre ?? '—'}</td>}
                             <td>{batch.annee_scolaire?.nom ?? '—'}</td>
                             <td>{statusLabel(batch.status)}</td>
                             <td>{batch.inserted_rows}</td>
@@ -90,7 +92,7 @@ export default function ImportIndex({ recentBatches }: ImportIndexProps) {
                     ))}
                     {recentBatches.length === 0 && (
                         <tr>
-                            <td colSpan={8} className="text-center text-muted">
+                            <td colSpan={centerLocked ? 7 : 8} className="text-center text-muted">
                                 Aucun import pour le moment.
                             </td>
                         </tr>

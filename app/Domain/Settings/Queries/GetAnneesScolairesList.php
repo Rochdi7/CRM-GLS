@@ -16,7 +16,7 @@ final class GetAnneesScolairesList
 {
     public function __invoke(int $perPage = 8): LengthAwarePaginator
     {
-        $annees = AnneeScolaire::query()->orderByDesc('date_debut')->paginate($perPage);
+        $annees = AnneeScolaire::query()->orderByDesc('date_debut')->paginate($perPage)->withQueryString();
 
         $annees->through(fn (AnneeScolaire $a): array => [
             'id' => $a->id,

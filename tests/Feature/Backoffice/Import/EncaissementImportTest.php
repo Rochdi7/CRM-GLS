@@ -491,6 +491,93 @@ final class EncaissementImportTest extends TestCase
         );
     }
 
+    public function test_an_imported_fee_priced_at_zero_is_backfilled_from_the_payment(): void
+    {
+        // The legacy inscriptions export has no amount columns, so imported
+        // fee lines are created at 0.00. Without back-filling, the
+        // inscription page read "Montant 0.00 / Payé 1300.00" and the total
+        // dû stayed at zero however much had really been paid.
+        $student = Student::factory()->create([
+            'etablissement_id' => $this->centre->id, 'prenom' => 'ABDERRAHMANE', 'nom' => 'BOUGMA',
+        ]);
+        $group = Group::factory()->create([
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+        $inscription = Inscription::create([
+            'reference' => 'INS-'.fake()->unique()->numerify('#####'),
+            // Marks this as import-created — the guard the back-fill checks.
+            'legacy_ref' => '373SL126', 'legacy_source' => 'ancien-crm',
+            'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => Inscription::STATUT_ACTIVE, 'date_inscription' => '2026-07-01',
+        ]);
+        $fee = InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => "Frais d'inscription A1/A2/B1",
+            // Exactly the state the inscriptions import leaves behind.
+            'montant_initial' => 0, 'montant' => 0, 'masque_le' => now(),
+            'date_echeance' => '2026-09-01', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+
+        $user = $this->userWith('import.view', 'import.create');
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+        ]);
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $row = $batch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
+        $this->commitAllSelected($user, $batch, [$row->id])->assertOk();
+
+        $fee->refresh();
+        // P4255 is a 50.00 payment in the sample file.
+        $this->assertSame('50.00', (string) $fee->montant);
+        $this->assertSame('50.00', (string) $fee->montant_initial);
+        // A fee that received money is really charged — it must be visible.
+        $this->assertNull($fee->masque_le);
+        // ...and the inscription's total dû must follow.
+        $this->assertSame('50.00', (string) $inscription->fresh()->montant_total);
+    }
+
+    public function test_backfill_never_touches_a_fee_from_normal_crud(): void
+    {
+        // Import-only, as asked: a fee created through the UI keeps whatever
+        // amount the user set, even when it is deliberately 0.00.
+        $student = Student::factory()->create([
+            'etablissement_id' => $this->centre->id, 'prenom' => 'ABDERRAHMANE', 'nom' => 'BOUGMA',
+        ]);
+        $group = Group::factory()->create([
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+        $inscription = Inscription::create([
+            'reference' => 'INS-'.fake()->unique()->numerify('#####'),
+            // No legacy_source -> not an import -> untouchable.
+            'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => Inscription::STATUT_ACTIVE, 'date_inscription' => '2026-07-01',
+        ]);
+        $fee = InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => "Frais d'inscription A1/A2/B1",
+            'montant_initial' => 0, 'montant' => 0,
+            'date_echeance' => '2026-09-01', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+
+        $user = $this->userWith('import.view', 'import.create');
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+        ]);
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $row = $batch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
+        $this->commitAllSelected($user, $batch, [$row->id])->assertOk();
+
+        $this->assertSame('0.00', (string) $fee->fresh()->montant, 'A CRUD fee must keep its own amount.');
+    }
+
     public function test_commit_uses_enregistrer_encaissement_action_updates_caisse_solde_and_fee_statut(): void
     {
         $student = $this->studentWithActiveFee('ABDERRAHMANE', 'BOUGMA', "Frais d'inscription A1/A2/B1", 300);

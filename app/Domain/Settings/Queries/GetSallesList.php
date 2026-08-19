@@ -27,7 +27,7 @@ final class GetSallesList
                 fn ($q2) => $q2->whereNull('etablissement_id')->orWhere('etablissement_id', $centerId),
             ))
             ->orderBy('nom')
-            ->paginate($perPage);
+            ->paginate($perPage)->withQueryString();
 
         $salles->through(fn (Salle $s): array => [
             'id' => $s->id,

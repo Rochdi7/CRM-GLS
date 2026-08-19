@@ -79,6 +79,13 @@ final class HandleInertiaRequests extends Middleware
                 // flashes a translated string under this key — ForgotPasswordController and
                 // ResetPasswordController already do `->with('status', ...)` unchanged.
                 'status' => fn () => $request->session()->get('status'),
+                // Set once by GroupController@changerEnseignant: the group's
+                // emploi du temps was stopped by a teacher changeover and a
+                // new one must be created. `pull()` for the same reason as
+                // newEmployeeCredentials below — the banner is a one-time
+                // notice, not a state that should reappear on every later
+                // visit to the group page.
+                'emploiDuTempsArrete' => fn () => $request->session()->pull('emploiDuTempsArrete'),
                 // One-time login credentials for a just-created employee
                 // (Backoffice\Employees\EmployeeController::store() →
                 // EmployeeObserver → EmployeeCredentialService). Shown once by

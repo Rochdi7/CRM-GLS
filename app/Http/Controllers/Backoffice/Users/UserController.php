@@ -8,6 +8,7 @@ use App\Domain\Employees\Queries\GetUsersList;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Users\UpdateUserRequest;
 use App\Models\User;
+use App\Services\Context\CurrentContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -29,7 +30,7 @@ use Inertia\Response;
  */
 final class UserController extends Controller
 {
-    public function index(Request $request, GetUsersList $getUsersList): Response
+    public function index(Request $request, GetUsersList $getUsersList, CurrentContext $context): Response
     {
         $this->authorize('users.view');
 
@@ -43,6 +44,9 @@ final class UserController extends Controller
                 'perPage' => $request->integer('perPage', GetUsersList::DEFAULT_PER_PAGE),
             ],
             'perPageOptions' => GetUsersList::PER_PAGE_OPTIONS,
+            // Hides the redundant Centre column once the context switcher is
+            // on a single center (CLAUDE.md §5 centre-filter rule).
+            'centerLocked' => ! $context->isAllCenters(),
         ]);
     }
 

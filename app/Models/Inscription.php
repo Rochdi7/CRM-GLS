@@ -4,13 +4,12 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Spatie\Activitylog\Models\Concerns\LogsActivity;
-use Spatie\Activitylog\Support\LogOptions;
 
 /**
  * Enrollment — Student × Group (gls-crm-schema.md §8).
@@ -18,7 +17,7 @@ use Spatie\Activitylog\Support\LogOptions;
 class Inscription extends Model
 {
     use HasFactory;
-    use LogsActivity;
+    use Auditable;
 
     public const STATUT_ACTIVE = 'Active';
 
@@ -55,13 +54,6 @@ class Inscription extends Model
         ];
     }
 
-    public function getActivitylogOptions(): LogOptions
-    {
-        return LogOptions::defaults()
-            ->logOnly(['student_id', 'group_id', 'statut', 'montant_total'])
-            ->logOnlyDirty()
-            ->useLogName('inscription');
-    }
 
     public function student(): BelongsTo
     {

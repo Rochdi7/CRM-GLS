@@ -12,7 +12,8 @@ use App\Models\Employee;
  *
  * The caisse is created automatically with the employee (EmployeeObserver) —
  * there is no manual "add a caisse" screen anywhere. It is named after the
- * employee, lives in their center and opens at 0,00 DH; the balance then moves
+ * employee (their full name only — the screen's column header already says
+ * "Caisse"), lives in their center and opens at 0,00 DH; the balance then moves
  * only through encaissements / depenses / remboursements / validated transfers.
  */
 final class CaisseProvisioner
@@ -38,6 +39,6 @@ final class CaisseProvisioner
 
     public function nameFor(Employee $employee): string
     {
-        return 'Caisse — '.$employee->nomComplet();
+        return $employee->nomComplet();
     }
 }

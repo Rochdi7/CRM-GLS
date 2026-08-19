@@ -4,12 +4,11 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Spatie\Activitylog\Models\Concerns\LogsActivity;
-use Spatie\Activitylog\Support\LogOptions;
 
 /**
  * Payment received from a student (gls-crm-schema.md §11).
@@ -32,7 +31,7 @@ use Spatie\Activitylog\Support\LogOptions;
 class Encaissement extends Model
 {
     use HasFactory;
-    use LogsActivity;
+    use Auditable;
 
     public const METHODE_ESPECES = 'Espèces';
     public const METHODE_TPE = 'TPE';
@@ -61,13 +60,6 @@ class Encaissement extends Model
         ];
     }
 
-    public function getActivitylogOptions(): LogOptions
-    {
-        return LogOptions::defaults()
-            ->logOnly(['montant', 'methode', 'caisse_id', 'inscription_fee_id'])
-            ->logOnlyDirty()
-            ->useLogName('encaissement');
-    }
 
     public function student(): BelongsTo
     {

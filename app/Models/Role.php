@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Spatie\Permission\Models\Role as SpatieRole;
 
 /**
@@ -12,6 +13,8 @@ use Spatie\Permission\Models\Role as SpatieRole;
  */
 class Role extends SpatieRole
 {
+    use Auditable;
+
     public const SUPER_ADMIN = 'super-admin';
 
     /** Roles whose machine name / existence must never change from the UI. */

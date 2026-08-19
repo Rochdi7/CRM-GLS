@@ -68,6 +68,39 @@ final class DepensesInertiaCrudTest extends TestCase
             );
     }
 
+    public function test_paiement_prof_depenses_are_listed_in_their_own_tab_only(): void
+    {
+        $user = $this->userWith('expenses.view');
+        $this->actingAs($user);
+        $caisse = $user->employee->caisses()->first();
+        $profType = TypeDepense::create([
+            'nom' => TypeDepense::SYSTEM_PAIEMENT_PROF,
+            'is_system' => true,
+            'statut' => TypeDepense::STATUT_ACTIF,
+        ]);
+
+        $ordinaire = Depense::create([
+            'reference' => 'DEP-ORD', 'type_depense_id' => $this->type->id, 'caisse_id' => $caisse->id,
+            'montant' => 120, 'methode_paiement' => 'Espèces', 'date_depense' => '2025-09-15',
+            'agent_id' => $user->employee->id,
+        ]);
+        $paiementProf = Depense::create([
+            'reference' => 'DEP-PROF', 'type_depense_id' => $profType->id, 'caisse_id' => $caisse->id,
+            'montant' => 800, 'methode_paiement' => 'Espèces', 'date_depense' => '2025-09-16',
+            'agent_id' => $user->employee->id,
+        ]);
+
+        $this->get(route('backoffice.depenses.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/Depenses/Index', false)
+                ->where('depenses.data.0.id', $ordinaire->id)
+                ->where('depenses.total', 1)
+                ->where('paiementsProf.data.0.id', $paiementProf->id)
+                ->where('paiementsProf.total', 1)
+            );
+    }
+
     public function test_a_depense_can_be_created_and_decrements_the_caisse(): void
     {
         $user = $this->userWith('expenses.view', 'expenses.create');

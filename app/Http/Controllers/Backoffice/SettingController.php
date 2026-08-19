@@ -19,6 +19,7 @@ use App\Models\Frais;
 use App\Models\MotifAnnulation;
 use App\Models\Salle;
 use App\Models\User;
+use App\Services\Context\CurrentContext;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -57,6 +58,7 @@ final class SettingController extends Controller
         GetBanquesList $getBanquesList,
         GetMotifsAnnulationList $getMotifsAnnulationList,
         GetAccessibleCenterOptions $getAccessibleCenterOptions,
+        CurrentContext $context,
     ): Response {
         $user = $request->user();
 
@@ -89,6 +91,9 @@ final class SettingController extends Controller
             'salles' => $props += [
                 'salles' => $getSallesList(),
                 'centerOptions' => $getAccessibleCenterOptions($user)->values()->all(),
+                // Hides the redundant Centre column once the context switcher
+                // is on a single center (CLAUDE.md §5 centre-filter rule).
+                'centerLocked' => ! $context->isAllCenters(),
             ],
             'frais' => $props['frais'] = $getFraisList(),
             'banques' => $props['banques'] = $getBanquesList(),

@@ -26,7 +26,10 @@ final class GetGroupDetails
      */
     public function __invoke(Group $group, User $user): array
     {
-        $group->loadMissing(['enseignant', 'salle', 'etablissement', 'anneeScolaire', 'frais', 'inscriptions.student']);
+        $group->loadMissing([
+            'enseignant', 'salle', 'etablissement', 'anneeScolaire', 'frais',
+            'inscriptions.student', 'enseignants.enseignant',
+        ]);
 
         $isFinished = $group->statut === Group::STATUT_FIN_FORMATION;
 
@@ -46,6 +49,21 @@ final class GetGroupDetails
             'inscriptionsActivesCount' => $group->inscriptions->where('statut', Inscription::STATUT_ACTIVE)->count(),
             'inscriptionsChangementCount' => $group->inscriptions->where('statut', Inscription::STATUT_CHANGEMENT)->count(),
             'inscriptionsAnnuleesCount' => $group->inscriptions->where('statut', Inscription::STATUT_ANNULEE)->count(),
+            'canChangeEnseignant' => $user->can('update', $group) && ! $isFinished,
+            'changerEnseignantUrl' => route('backoffice.groups.changer-enseignant', $group),
+            'emploiDuTempsUrl' => route('backoffice.emploi-du-temps.index', ['group' => $group->id]),
+            // Full assignment history — one row per teaching period, the
+            // Actif one first. This is what makes "who taught this group,
+            // from when to when" answerable for payroll.
+            'enseignantsHistorique' => $group->enseignants->map(fn ($a): array => [
+                'id' => $a->id,
+                'enseignant' => $a->enseignant?->nomComplet(),
+                'dateDebut' => $a->date_debut?->format('d/m/Y'),
+                'dateFin' => $a->date_fin?->format('d/m/Y'),
+                'statut' => $a->statut,
+                'isActif' => $a->isActif(),
+                'motif' => $a->motif,
+            ])->values()->all(),
             'canArchive' => ! $isFinished && $user->can('groups.archive') && $this->centerAccess->canAccessCenter($user, $group->etablissement_id),
             'archiveUrl' => route('backoffice.groups.archive', $group),
             'fees' => $group->frais->map(fn ($fee): array => [

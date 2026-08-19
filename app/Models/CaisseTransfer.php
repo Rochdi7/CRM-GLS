@@ -4,11 +4,10 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Spatie\Activitylog\Models\Concerns\LogsActivity;
-use Spatie\Activitylog\Support\LogOptions;
 
 /**
  * Till-to-till transfer (gls-crm-schema.md §15) — the highest fraud-risk
@@ -23,7 +22,7 @@ use Spatie\Activitylog\Support\LogOptions;
 class CaisseTransfer extends Model
 {
     use HasFactory;
-    use LogsActivity;
+    use Auditable;
 
     public const STATUT_EN_ATTENTE = 'En attente';
     public const STATUT_VALIDE = 'Validé';
@@ -54,13 +53,6 @@ class CaisseTransfer extends Model
         ];
     }
 
-    public function getActivitylogOptions(): LogOptions
-    {
-        return LogOptions::defaults()
-            ->logOnly(['montant', 'caisse_source_id', 'caisse_destination_id', 'statut', 'validated_by'])
-            ->logOnlyDirty()
-            ->useLogName('caisse_transfer');
-    }
 
     public function caisseSource(): BelongsTo
     {
