@@ -245,6 +245,19 @@ final class EncaissementImporter implements Importer
                         ? $this->createChequeRecord($row, $data, $resolution, $agent, $batch)
                         : null;
 
+                    // The legacy inscriptions export carries no fee amounts,
+                    // so imported fee lines start at 0.00 and every payment
+                    // against them showed "Montant 0.00 / Payé 1300.00".
+                    // The payments export is the only place the real amount
+                    // exists, so an imported fee priced at zero is back-filled
+                    // from the money that actually arrived. Import-only: a
+                    // fee created through normal CRUD always has its montant
+                    // set by the user and is never touched here.
+                    $this->backfillImportedFeeAmount(
+                        $resolution['inscription_fee_id'] ?? null,
+                        (string) $data['montant'],
+                    );
+
                     $encaissement = $action->handle([
                         'student_id' => $resolution['student_id'],
                         'inscription_fee_id' => $resolution['inscription_fee_id'] ?? null,
@@ -302,6 +315,72 @@ final class EncaissementImporter implements Importer
      * can be stale (batch re-committed, concurrent import), so the check is
      * repeated against live data before writing.
      */
+    /**
+     * Prices an imported fee line from the payment that lands on it.
+     *
+     * The legacy inscriptions export has no amount columns, so
+     * InscriptionImporter can only create fee lines at montant 0.00 (they
+     * come from the group's group_frais pivot, which is itself created at
+     * zero). The payments export is where the real figures live. Without
+     * this the inscription detail page shows every line as
+     * "Montant 0.00 / Payé 1300.00", and the inscription's total dû stays
+     * at zero however much was actually paid.
+     *
+     * Deliberately narrow, so this can never disturb normal CRUD:
+     *  - only fee lines still priced at exactly 0.00 are touched;
+     *  - only fees belonging to an inscription that came from an import
+     *    (legacy_source set) — a fee a user created and left at zero on
+     *    purpose is left alone;
+     *  - montant_initial is set alongside montant so no phantom remise
+     *    appears (InscriptionFee::computeMontant()'s inputs stay coherent);
+     *  - the parent inscription's montant_total is recomputed from its own
+     *    fee lines afterwards.
+     *
+     * Repeat payments against the same fee ADD to its amount, so a fee paid
+     * in several instalments ends up priced at the full sum rather than at
+     * whichever instalment happened to be committed first.
+     */
+    private function backfillImportedFeeAmount(?int $inscriptionFeeId, string $montant): void
+    {
+        if ($inscriptionFeeId === null) {
+            return; // avance — no fee line to price.
+        }
+
+        $fee = InscriptionFee::query()
+            ->with('inscription')
+            ->find($inscriptionFeeId);
+
+        if ($fee === null || $fee->inscription?->legacy_source === null) {
+            return; // not an imported inscription — untouched.
+        }
+
+        $alreadyPaid = (float) Encaissement::query()
+            ->where('inscription_fee_id', $fee->id)
+            ->sum('montant');
+
+        // Only ever price a line the import left at zero. Once it carries a
+        // real amount (here or from the UI) it is authoritative.
+        if ((float) $fee->montant > 0.0) {
+            return;
+        }
+
+        $newMontant = round($alreadyPaid + (float) $montant, 2);
+
+        $fee->update([
+            'montant_initial' => $newMontant,
+            'montant' => $newMontant,
+            // Import-created lines start masked (see InscriptionImporter's
+            // buildFeeLines) precisely so only the ones actually charged
+            // surface. A payment proves this one was charged.
+            'masque_le' => null,
+        ]);
+
+        $inscription = $fee->inscription;
+        $inscription->update([
+            'montant_total' => $inscription->fees()->sum('montant'),
+        ]);
+    }
+
     /**
      * Creates the Chèques-module record behind an imported cheque payment.
      *

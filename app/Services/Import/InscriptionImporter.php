@@ -671,6 +671,15 @@ final class InscriptionImporter implements Importer
                 'montant' => InscriptionFee::computeMontant($initial, null, null),
                 'date_echeance' => $fee['dateEcheance'],
                 'statut' => InscriptionFee::STATUT_NON_PAYE,
+                // The legacy export carries no fee amounts, so every one of
+                // the group's ~18 catalog lines would otherwise appear on
+                // the inscription priced at 0.00 — 15 of them fees the
+                // student never owed. Import-created lines therefore start
+                // MASKED; EncaissementImporter unmasks (and prices) the ones
+                // a real payment lands on. masque_le is the app's own
+                // existing hide mechanism, so anything wrongly masked can be
+                // restored from the inscription's "Frais masqués" list.
+                'masque_le' => $initial > 0 ? null : now(),
             ];
         })->all();
     }

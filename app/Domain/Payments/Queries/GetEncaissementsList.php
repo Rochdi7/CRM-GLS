@@ -79,7 +79,9 @@ final class GetEncaissementsList
                             ->orWhere('reference', 'ilike', $term));
                 });
             })
-            ->latest()
+            ->orderByDesc('date_paiement')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->paginate($perPage)
             ->withQueryString();
 
