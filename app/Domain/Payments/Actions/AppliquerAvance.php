@@ -36,7 +36,7 @@ final class AppliquerAvance
             ]);
         }
 
-        return DB::transaction(function () use ($avance, $fee, $montant): Encaissement {
+        return DB::transaction(function () use ($avance, $fee, $montant, $restant): Encaissement {
             $application = Encaissement::create([
                 'reference' => ReferenceGenerator::make('ENC', 'encaissements'),
                 'student_id' => $avance->student_id,

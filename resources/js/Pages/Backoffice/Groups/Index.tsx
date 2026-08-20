@@ -100,10 +100,26 @@ interface GroupFormState {
     nom: string;
     niveau: string;
     enseignant_id: number | '';
+    /**
+     * Changeover date + reason, sent ONLY when the edit modal actually swaps
+     * the teacher of an existing group. They are the very fields the
+     * dedicated « Changer d'enseignant » form on the group detail page asks
+     * for, so a change made from here lands in "Historique des affectations"
+     * with a real date and motif instead of a silent, undated one.
+     */
+    enseignant_date_debut: string;
+    enseignant_motif: string;
     statut: string;
     date_debut_formation: string;
     date_fin_formation: string;
     fraisLignes: Record<number, GroupFraisLigne>;
+}
+
+/** Today as yyyy-mm-dd — the default changeover date, same as Groups/Show.tsx. */
+function todayIso(): string {
+    const now = new Date();
+
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
 /**
@@ -165,6 +181,8 @@ function emptyForm(fraisCatalog: GroupFraisCatalogOption[]): GroupFormState {
         nom: '',
         niveau: '',
         enseignant_id: '',
+        enseignant_date_debut: todayIso(),
+        enseignant_motif: '',
         statut: 'En inscription',
         date_debut_formation: '',
         date_fin_formation: '',
@@ -190,7 +208,10 @@ export default function GroupsIndex({
     enseignants,
     fraisCatalog,
 }: GroupsPageProps) {
-    const { auth } = usePage<SharedProps>().props;
+    const { auth, flash } = usePage<SharedProps>().props;
+    // Same banner as Groups/Show.tsx: a teacher swap made from the edit modal
+    // stops the emploi du temps, and the user has to rebuild it.
+    const emploiDuTempsArrete = flash.emploiDuTempsArrete;
     const isLoading = useInertiaLoading();
     const [showModal, setShowModal] = useState(false);
     const [editingGroup, setEditingGroup] = useState<GroupRow | null>(null);
@@ -218,6 +239,21 @@ export default function GroupsIndex({
     ];
 
     const form = useForm<GroupFormState>(emptyForm(fraisCatalog));
+
+    /**
+     * Non-null while the edit modal holds a teacher DIFFERENT from the one the
+     * group is saved with — the condition that turns a plain save into a real
+     * changeover, and the trigger for the date + motif fields below. Creating a
+     * group is never a changeover (it opens the first assignment period), so
+     * this stays null there.
+     */
+    const enseignantChange =
+        editingGroup !== null && form.data.enseignant_id !== (editingGroup.enseignantId ?? '')
+            ? {
+                  nouveau:
+                      enseignants.find((e) => e.id === form.data.enseignant_id)?.nom ?? 'Aucun enseignant',
+              }
+            : null;
 
     function reload(nextFilters: Partial<typeof filters>) {
         router.get(
@@ -259,6 +295,8 @@ export default function GroupsIndex({
             nom: group.nom,
             niveau: group.niveau,
             enseignant_id: group.enseignantId ?? '',
+            enseignant_date_debut: todayIso(),
+            enseignant_motif: '',
             statut: group.statut,
             date_debut_formation: group.dateDebutFormation ?? '',
             date_fin_formation: group.dateFinFormation ?? '',
@@ -403,6 +441,21 @@ export default function GroupsIndex({
                 </button>
             }
         >
+            {emploiDuTempsArrete && (
+                <div className="alert alert-warning d-flex flex-wrap align-items-center gap-2" role="alert">
+                    <i className="ti ti-alert-triangle fs-20" aria-hidden="true" />
+                    <span className="flex-grow-1">
+                        L'emploi du temps du groupe a été arrêté ({emploiDuTempsArrete.creneaux} créneau(x) clôturé(s),{' '}
+                        {emploiDuTempsArrete.seances} séance(s) prévue(s) supprimée(s)). Créez un nouvel emploi du temps
+                        pour le nouvel enseignant.
+                    </span>
+                    <a href={emploiDuTempsArrete.url} className="btn btn-warning btn-sm d-inline-flex align-items-center">
+                        <i className="ti ti-calendar-plus me-1" />
+                        Créer l'emploi du temps
+                    </a>
+                </div>
+            )}
+
             <Card title="Groupes" bodyClassName="p-0 py-3">
                 <ul className="nav nav-tabs nav-tabs-solid nav-tabs-rounded-fill mb-3 px-3" role="tablist">
                     {STATUT_TABS.map((tab) => (
@@ -641,7 +694,7 @@ export default function GroupsIndex({
                                 id="grp-ens"
                                 label="Enseignant"
                                 options={enseignantOptions}
-                                placeholder="Choisir…"
+                                placeholder={editingGroup ? 'Aucun enseignant' : 'Choisir…'}
                                 value={form.data.enseignant_id}
                                 onChange={(event) => form.setData('enseignant_id', event.target.value ? Number(event.target.value) : '')}
                                 error={form.errors.enseignant_id}
@@ -679,6 +732,47 @@ export default function GroupsIndex({
                             />
                         </div>
                     </div>
+
+                    {enseignantChange && (
+                        /* Same contract as « Changer d'enseignant » on the group detail
+                           page: a teacher swap is a dated, motivated changeover that
+                           archives the outgoing period and stops the emploi du temps —
+                           never a silent overwrite of groups.enseignant_id. */
+                        <div className="border-top pt-3 mb-3">
+                            <div className="alert alert-info d-flex align-items-start gap-2" role="alert">
+                                <i className="ti ti-info-circle fs-18 mt-1" aria-hidden="true" />
+                                <span>
+                                    <strong>{editingGroup?.enseignant ?? 'Aucun enseignant'}</strong> sera archivé à la
+                                    date choisie et l'emploi du temps du groupe sera arrêté. Vous devrez créer un nouvel
+                                    emploi du temps pour <strong>{enseignantChange.nouveau}</strong>. Les séances déjà
+                                    effectuées ne sont pas modifiées.
+                                </span>
+                            </div>
+
+                            <div className="row">
+                                <div className="col-md-6">
+                                    <DateField
+                                        id="grp-ens-date"
+                                        label="Date de prise en charge"
+                                        required
+                                        value={form.data.enseignant_date_debut}
+                                        onChange={(event) => form.setData('enseignant_date_debut', event.target.value)}
+                                        error={form.errors.enseignant_date_debut}
+                                    />
+                                </div>
+                                <div className="col-md-6">
+                                    <FormField
+                                        id="grp-ens-motif"
+                                        label="Motif"
+                                        value={form.data.enseignant_motif}
+                                        onChange={(event) => form.setData('enseignant_motif', event.target.value)}
+                                        error={form.errors.enseignant_motif}
+                                        placeholder="ex : indisponibilité de l'enseignant"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="border-top pt-3">
                         <h6 className="mb-1">Frais du groupe</h6>

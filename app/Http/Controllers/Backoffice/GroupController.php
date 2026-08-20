@@ -158,7 +158,9 @@ final class GroupController extends Controller
             $data['date_debut_formation'] ?? $group->date_debut_formation?->toDateString(),
         );
 
-        DB::transaction(function () use ($request, $data, $fraisLignes, $group): void {
+        $changement = null;
+
+        DB::transaction(function () use ($request, $data, $fraisLignes, $group, &$changement): void {
             $statut = $data['statut'];
 
             // A raw statut change to either terminal status (Fin de
@@ -183,11 +185,17 @@ final class GroupController extends Controller
             // new one and stop the emploi du temps — all of which lives in
             // ChangerEnseignantGroupe. When the teacher is unchanged the
             // action is a no-op, so the plain edit modal stays harmless.
-            app(ChangerEnseignantGroupe::class)(
+            //
+            // When it IS a change, the modal has revealed the same two fields
+            // as « Changer d'enseignant » on the detail page, so the archived
+            // period carries a real changeover date and motif instead of a
+            // silent "today" with no reason. A blank date still falls back to
+            // today inside the action.
+            $changement = app(ChangerEnseignantGroupe::class)(
                 $group,
                 isset($data['enseignant_id']) ? (int) $data['enseignant_id'] : null,
-                null,
-                null,
+                $data['enseignant_date_debut'] ?? null,
+                $data['enseignant_motif'] ?? null,
                 $request->user()?->employee,
             );
 
@@ -196,8 +204,21 @@ final class GroupController extends Controller
             $group->frais()->sync($fraisLignes);
         });
 
-        return redirect()->route('backoffice.groups.index')
+        $redirect = redirect()->route('backoffice.groups.index')
             ->with('success', __('Group updated.'));
+
+        // A teacher swap made from the list page stops the emploi du temps
+        // just like the detail-page flow does — tell the user what stopped and
+        // where to rebuild it, with the very same flash payload.
+        if ($changement !== null && $changement['changed']) {
+            $redirect->with('emploiDuTempsArrete', [
+                'creneaux' => $changement['creneauxFermes'],
+                'seances' => $changement['seancesSupprimees'],
+                'url' => route('backoffice.emploi-du-temps.index', ['group' => $group->id]),
+            ]);
+        }
+
+        return $redirect;
     }
 
     /**

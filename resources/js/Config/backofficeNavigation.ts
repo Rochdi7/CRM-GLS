@@ -201,22 +201,27 @@ export const backofficeNavigation: NavGroup[] = [
                 matchPaths: ['/backoffice/permissions'],
                 inertia: true,
             },
-            {
-                label: t('Data import'),
-                href: '/backoffice/import',
-                icon: 'ti ti-upload',
-                permissions: ['import.view'],
-                matchPaths: ['/backoffice/import'],
-                inertia: true,
-            },
-            {
-                label: t('Audit journal'),
-                href: '/backoffice/audit-logs',
-                icon: 'ti ti-history',
-                permissions: ['audit-logs.view'],
-                matchPaths: ['/backoffice/audit-logs'],
-                inertia: true,
-            },
+            // Masque du menu a la demande (route backoffice.import.index reste
+            // active et protegee, accessible par URL directe) - retirer les
+            // commentaires pour reafficher.
+            // {
+            //     label: t('Data import'),
+            //     href: '/backoffice/import',
+            //     icon: 'ti ti-upload',
+            //     permissions: ['import.view'],
+            //     matchPaths: ['/backoffice/import'],
+            //     inertia: true,
+            // },
+            // Masque du menu a la demande (route backoffice.audit-logs.index
+            // reste active et protegee) - retirer les commentaires pour reafficher.
+            // {
+            //     label: t('Audit journal'),
+            //     href: '/backoffice/audit-logs',
+            //     icon: 'ti ti-history',
+            //     permissions: ['audit-logs.view'],
+            //     matchPaths: ['/backoffice/audit-logs'],
+            //     inertia: true,
+            // },
         ],
     },
 ];

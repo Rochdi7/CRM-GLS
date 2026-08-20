@@ -1,0 +1,44 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git stash list:*)",
+      "Bash(C:\\php84\\php.exe artisan test:*)",
+      "Bash(C:\\php84\\php.exe artisan route:list:*)",
+      "Bash(C:\\php84\\php.exe artisan migrate:status:*)",
+      "Bash(C:\\php84\\php.exe artisan view:clear:*)",
+      "Bash(C:\\php84\\php.exe artisan config:clear:*)",
+      "Bash(C:\\php84\\php.exe artisan cache:clear:*)",
+      "Bash(C:\\php84\\php.exe artisan optimize:clear:*)",
+      "Bash(C:\\php84\\php.exe artisan about:*)",
+      "Bash(npx tsc --noEmit:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run dev:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(cat:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(sort:*)",
+      "Bash(uniq:*)",
+      "Bash(find:*)",
+      "Bash(which:*)",
+      "Bash(echo:*)"
+    ],
+    "deny": [
+      "Bash(C:\\php84\\php.exe artisan migrate:fresh:*)",
+      "Bash(git push --force:*)",
+      "Bash(git reset --hard:*)",
+      "Read(./.env)",
+      "Read(./.env.*)"
+    ]
+  }
+}

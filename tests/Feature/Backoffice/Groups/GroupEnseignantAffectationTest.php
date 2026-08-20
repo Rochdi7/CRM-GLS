@@ -327,6 +327,90 @@ final class GroupEnseignantAffectationTest extends TestCase
         $this->assertSame(2, GroupEnseignant::where('group_id', $group->id)->count());
     }
 
+    public function test_the_edit_modal_records_the_changeover_date_and_motif_like_the_detail_page(): void
+    {
+        // The modal reveals "Date de prise en charge" + "Motif" as soon as the
+        // selected teacher differs from the saved one, so a swap made from the
+        // list page lands in "Historique des affectations" with the same
+        // information the dedicated « Changer d'enseignant » form records —
+        // not an undated, unexplained row.
+        Carbon::setTestNow('2025-11-20');
+
+        $ancien = $this->enseignant();
+        $nouveau = $this->enseignant();
+        $group = $this->group($ancien);
+        $this->assignmentActive($group, $ancien, '2025-09-01');
+
+        $this->actingAs($this->userWith('groups.view', 'groups.update'))
+            ->put(route('backoffice.groups.update', $group), [
+                'nom' => $group->nom,
+                'niveau' => $group->niveau,
+                'enseignant_id' => $nouveau->id,
+                'enseignant_date_debut' => '2025-10-15',
+                'enseignant_motif' => "indisponibilité de l'enseignant",
+                'statut' => $group->statut,
+                'date_debut_formation' => '2025-09-01',
+                'date_fin_formation' => '2026-06-30',
+            ])->assertRedirect();
+
+        // The outgoing period closes on the chosen date, not on "today".
+        $archive = GroupEnseignant::where('group_id', $group->id)
+            ->where('enseignant_id', $ancien->id)->sole();
+        $this->assertSame(GroupEnseignant::STATUT_ARCHIVE, $archive->statut);
+        $this->assertSame('2025-10-15', $archive->date_fin->toDateString());
+
+        // The incoming period opens on it, carrying the motif.
+        $actif = GroupEnseignant::where('group_id', $group->id)
+            ->where('enseignant_id', $nouveau->id)->sole();
+        $this->assertSame(GroupEnseignant::STATUT_ACTIF, $actif->statut);
+        $this->assertSame('2025-10-15', $actif->date_debut->toDateString());
+        $this->assertSame("indisponibilité de l'enseignant", $actif->motif);
+        $this->assertNull($actif->date_fin);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_the_edit_modal_changeover_stops_the_timetable_and_reports_it(): void
+    {
+        Carbon::setTestNow('2025-11-20');
+
+        $ancien = $this->enseignant();
+        $nouveau = $this->enseignant();
+        $group = $this->group($ancien);
+        $this->assignmentActive($group, $ancien, '2025-09-01');
+
+        $creneau = Creneau::create([
+            'group_id' => $group->id, 'jour_semaine' => 1,
+            'heure_debut' => '10:00', 'heure_fin' => '12:00',
+            'enseignant_id' => $ancien->id,
+        ]);
+        $future = Seance::create([
+            'group_id' => $group->id, 'creneau_id' => $creneau->id,
+            'date_seance' => '2025-12-01', 'enseignant_id' => $ancien->id,
+            'statut' => Seance::STATUT_PREVUE,
+        ]);
+
+        $this->actingAs($this->userWith('groups.view', 'groups.update'))
+            ->put(route('backoffice.groups.update', $group), [
+                'nom' => $group->nom,
+                'niveau' => $group->niveau,
+                'enseignant_id' => $nouveau->id,
+                'enseignant_date_debut' => '2025-11-20',
+                'statut' => $group->statut,
+                'date_debut_formation' => '2025-09-01',
+                'date_fin_formation' => '2026-06-30',
+            ])
+            ->assertRedirect()
+            // Same one-time notice as the detail-page flow, so the user knows
+            // a new emploi du temps has to be built.
+            ->assertSessionHas('emploiDuTempsArrete');
+
+        $this->assertSame('2025-11-20', $creneau->fresh()->date_fin->toDateString());
+        $this->assertModelMissing($future);
+
+        Carbon::setTestNow();
+    }
+
     public function test_teacher_options_include_teachers_attached_to_the_center_through_the_pivot(): void
     {
         // Primary center is ANOTHER branch, but the teacher is assigned to the
