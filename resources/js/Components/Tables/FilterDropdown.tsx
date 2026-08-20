@@ -91,7 +91,7 @@ export default function FilterDropdown({ fields, onApply, onReset }: FilterDropd
                 {activeCount > 0 && <span className="badge badge-soft-primary ms-2">{activeCount}</span>}
             </button>
             {open && (
-                // Markup copied from theme-reference/preskool/hrm/payroll.blade.php's
+                // Markup copied from theme-reference/crm-gls/hrm/payroll.blade.php's
                 // filter dropdown (drop-width = the theme's 350px panel).
                 // dropdown-menu-end anchors the panel to the trigger's right
                 // edge in pure CSS — the theme demo gets the same result from

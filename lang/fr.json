@@ -438,6 +438,7 @@
     "Next": "Suivant",
     "No": "Non",
     "No academic years yet": "Aucune année scolaire pour le moment",
+    "No employee record is linked to your account.": "Aucune fiche employé n'est liée à votre compte.",
     "No archived groups yet": "Aucun groupe archivé pour le moment",
     "No cash register": "Aucune caisse",
     "No cash register is visible in the current context.": "Aucune caisse n’est visible dans le contexte actuel.",
@@ -545,6 +546,8 @@
     "Permissions are defined by the application and cannot be created from the interface.": "Les permissions sont définies par l’application et ne peuvent pas être créées depuis l’interface.",
     "Phone": "Téléphone",
     "Photo": "Photo",
+    "Photo removed.": "Photo supprimée.",
+    "Photo updated.": "Photo mise à jour.",
     "Pick the fee this payment settles — the amount defaults to what is still owed on it.": "Choisissez le frais réglé par ce paiement — le montant est pré-rempli avec le reste à payer.",
     "Please click the button below to verify your email address.": "Veuillez cliquer sur le bouton ci-dessous pour vérifier votre adresse e-mail :",
     "Please enter your details to sign in": "Veuillez saisir vos identifiants pour vous connecter",
@@ -858,5 +861,14 @@
     "Request": "Requête",
     "Route": "Route",
     "Browser": "Navigateur",
-    "Select at least one center.": "Sélectionnez au moins un centre."
+    "Select at least one center.": "Sélectionnez au moins un centre.",
+    "Audit entry": "Entrée du journal",
+    "Back to the journal": "Retour au journal",
+    "Summary": "Résumé",
+    "Cash movement": "Mouvement de caisse",
+    "Movement": "Mouvement",
+    "was": "était",
+    "Inconsistent": "Incohérent",
+    "MAD": "DH",
+    "Inconsistency: the balance difference does not match the recorded amount.": "Incohérence : l'écart de solde ne correspond pas au montant enregistré."
 }

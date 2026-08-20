@@ -12,7 +12,7 @@ interface PasswordFieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>,
 /**
  * Matches the `.pass-group`/`.toggle-password` markup used by the existing
  * auth Blade pages, but the visibility toggle is React state instead of the
- * jQuery click handler in public/assets/preskool/js/script.js (that script
+ * jQuery click handler in public/assets/crm-gls/js/script.js (that script
  * is never loaded on Inertia pages — see docs/bootstrap-react-integration-decision.md).
  */
 export default function PasswordField({ id, label, error, required, className, ...inputProps }: PasswordFieldProps) {

@@ -167,7 +167,7 @@ php artisan route:list       → all routes resolve correctly
 ```
 
 Manual smoke check (server started on :8123): `backoffice/login` → HTTP 200
-with all PreSkool theme CSS/JS asset paths resolving (`assets/preskool/...`,
+with all PreSkool theme CSS/JS asset paths resolving (`assets/crm-gls/...`,
 no 404s); `/` → HTTP 302 (expected admin-first redirect).
 
 All 15 verification areas from the task brief are covered by the above: the

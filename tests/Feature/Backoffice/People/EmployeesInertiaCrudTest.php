@@ -370,13 +370,15 @@ final class EmployeesInertiaCrudTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_center_assignment_is_forced_server_side_when_context_is_locked_to_one_center(): void
+    public function test_a_user_cannot_assign_an_employee_to_a_center_it_does_not_hold(): void
     {
         $centre = Etablissement::factory()->create();
         $otherCentre = Etablissement::factory()->create();
 
-        // A user confined to $centre (its employee profile is based there),
-        // so CurrentContext resolves to $centre and is NOT "all centers".
+        // A user confined to $centre (its employee profile is based there).
+        // The "Centres affectés" field is always shown, so the submitted list
+        // is honored — but only after being narrowed to the centres this user
+        // may actually assign.
         $user = $this->userWith('employees.view', 'employees.create');
         $user->employee()->save(Employee::factory()->make(['etablissement_id' => $centre->id]));
         $user->employee->etablissements()->sync([$centre->id]);
@@ -388,8 +390,8 @@ final class EmployeesInertiaCrudTest extends TestCase
             'sexe' => 'Femme',
             'categorie' => Employee::CATEGORIE_ENSEIGNANT,
             'statut' => Employee::STATUT_ACTIF,
-            // Client attempts to set a different center — must be ignored
-            // because this user has no centers.access-all permission.
+            // Client attempts to assign a center this user cannot reach —
+            // narrowed back to its own centre server-side.
             'etablissement_ids' => [$otherCentre->id],
         ])->assertSessionDoesntHaveErrors();
 
@@ -509,23 +511,20 @@ final class EmployeesInertiaCrudTest extends TestCase
             );
     }
 
-    public function test_editing_from_a_locked_center_does_not_revoke_the_employees_other_centers(): void
+    public function test_the_submitted_centers_are_honored_even_while_the_top_bar_is_locked(): void
     {
         $centre = Etablissement::factory()->create();
         $autreCentre = Etablissement::factory()->create();
 
-        // The employee works in BOTH centers.
+        // The "Centres affectés" multi-select is shown in every context, so a
+        // user who may reach both centres can assign both even while the top
+        // bar is locked to one of them — that assignment is what grants the
+        // employee access and builds its own centre switcher.
         $employee = Employee::factory()->create(['etablissement_id' => $centre->id]);
-        $employee->etablissements()->sync([$centre->id, $autreCentre->id]);
+        $employee->etablissements()->sync([$centre->id]);
 
-        // An admin confined to $centre edits an unrelated field. The centers
-        // field is hidden in that context, so the assignment must survive:
-        // silently dropping $autreCentre would revoke that employee's access
-        // to it (and remove it from their top-bar switcher).
-        $user = $this->userWith('employees.view', 'employees.update');
-        $user->employee()->save(Employee::factory()->make(['etablissement_id' => $centre->id]));
-        $user->employee->etablissements()->sync([$centre->id]);
-        $this->actingAs($user->fresh());
+        $this->actingAs($this->userWith('employees.view', 'employees.update', 'centers.access-all'));
+        session(['context.etablissement_id' => $centre->id]);
 
         $this->put(route('backoffice.employees.update', $employee), [
             'nom' => $employee->nom,
@@ -533,9 +532,7 @@ final class EmployeesInertiaCrudTest extends TestCase
             'sexe' => $employee->sexe,
             'categorie' => $employee->categorie,
             'statut' => $employee->statut,
-            'telephone' => '661954125',
-            'phone_pays' => 'MA',
-            'etablissement_ids' => [$centre->id],
+            'etablissement_ids' => [$centre->id, $autreCentre->id],
         ])->assertSessionDoesntHaveErrors();
 
         $this->assertEqualsCanonicalizing(

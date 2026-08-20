@@ -9,7 +9,7 @@ import SelectField from '@/Components/Forms/SelectField';
 import FormField from '@/Components/Forms/FormField';
 import FormActions from '@/Components/Forms/FormActions';
 import { blockImplicitSubmit } from '@/Lib/forms';
-import type { GroupDetails, SelectOption, SharedProps } from '@/Types';
+import type { GroupDetails, GroupEnseignantRow, SelectOption, SharedProps } from '@/Types';
 
 interface GroupShowProps {
     group: GroupDetails;
@@ -76,6 +76,39 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
         changerForm.post(group.changerEnseignantUrl, {
             preserveScroll: true,
             onSuccess: () => setShowEnseignantModal(false),
+        });
+    }
+
+    // Correcting an already-recorded period. A changeover stamps "today" as
+    // the outgoing teacher's date de fin, so the real handover date often
+    // needs fixing afterwards — hence this edit, which touches dates/motif
+    // only (never the row's teacher: swapping one is a changeover).
+    const [affectationEnCours, setAffectationEnCours] = useState<GroupEnseignantRow | null>(null);
+
+    const affectationForm = useForm({
+        date_debut: '',
+        date_fin: '',
+        motif: '',
+    });
+
+    function openModifierAffectation(row: GroupEnseignantRow) {
+        affectationForm.clearErrors();
+        affectationForm.setData({
+            date_debut: row.dateDebutIso ?? '',
+            date_fin: row.dateFinIso ?? '',
+            motif: row.motif ?? '',
+        });
+        setAffectationEnCours(row);
+    }
+
+    function submitModifierAffectation(event: FormEvent) {
+        event.preventDefault();
+        if (!affectationEnCours) {
+            return;
+        }
+        affectationForm.put(affectationEnCours.updateUrl, {
+            preserveScroll: true,
+            onSuccess: () => setAffectationEnCours(null),
         });
     }
 
@@ -322,6 +355,7 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                                         <th>Date de fin</th>
                                         <th>Motif</th>
                                         <th>Statut</th>
+                                        {group.canChangeEnseignant && <th className="text-end">Actions</th>}
                                     </tr>
                                 }
                             >
@@ -338,6 +372,18 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                                                 dot
                                             />
                                         </td>
+                                        {group.canChangeEnseignant && (
+                                            <td className="text-end">
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-sm btn-outline-primary d-inline-flex align-items-center"
+                                                    onClick={() => openModifierAffectation(row)}
+                                                >
+                                                    <i className="ti ti-edit me-1" aria-hidden="true" />
+                                                    Modifier
+                                                </button>
+                                            </td>
+                                        )}
                                     </tr>
                                 ))}
                             </RelatedRecordsTable>
@@ -463,6 +509,71 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                         processing={changerForm.processing}
                         onCancel={() => setShowEnseignantModal(false)}
                         submitLabel="Confirmer le changement"
+                    />
+                </form>
+            </Modal>
+
+            <Modal
+                show={affectationEnCours !== null}
+                title="Modifier la période d'affectation"
+                onClose={() => setAffectationEnCours(null)}
+                processing={affectationForm.processing}
+            >
+                <form onSubmit={submitModifierAffectation} onKeyDown={blockImplicitSubmit}>
+                    <div className="alert alert-info d-flex align-items-start gap-2" role="alert">
+                        <i className="ti ti-info-circle fs-18 mt-1" aria-hidden="true" />
+                        <span>
+                            Correction des dates et du motif de la période de{' '}
+                            <strong>{affectationEnCours?.enseignant ?? '—'}</strong>. L'enseignant de cette période ne
+                            change pas ici : pour le remplacer, utilisez « Changer d'enseignant ».
+                        </span>
+                    </div>
+
+                    <div className="row">
+                        <div className="col-md-6">
+                            <DateField
+                                id="grp-aff-debut"
+                                label="Date de début"
+                                required
+                                value={affectationForm.data.date_debut}
+                                onChange={(event) => affectationForm.setData('date_debut', event.target.value)}
+                                error={affectationForm.errors.date_debut}
+                            />
+                        </div>
+                        <div className="col-md-6">
+                            {affectationEnCours?.isActif ? (
+                                // The active period is still running — it has
+                                // no end date to correct.
+                                <>
+                                    <DateField id="grp-aff-fin" label="Date de fin" value="" disabled />
+                                    <p className="text-muted fs-12 mt-1 mb-0">Période en cours — sans date de fin.</p>
+                                </>
+                            ) : (
+                                <DateField
+                                    id="grp-aff-fin"
+                                    label="Date de fin"
+                                    value={affectationForm.data.date_fin}
+                                    onChange={(event) => affectationForm.setData('date_fin', event.target.value)}
+                                    error={affectationForm.errors.date_fin}
+                                />
+                            )}
+                        </div>
+                        <div className="col-12">
+                            <FormField
+                                id="grp-aff-motif"
+                                label="Motif"
+                                value={affectationForm.data.motif}
+                                onChange={(event) => affectationForm.setData('motif', event.target.value)}
+                                error={affectationForm.errors.motif}
+                                placeholder="ex : indisponibilité de l'enseignant"
+                            />
+                        </div>
+                    </div>
+
+                    <FormActions
+                        processing={affectationForm.processing}
+                        onCancel={() => setAffectationEnCours(null)}
+                        submitLabel="Enregistrer"
                     />
                 </form>
             </Modal>

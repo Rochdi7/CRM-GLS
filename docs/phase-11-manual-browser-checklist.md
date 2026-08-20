@@ -80,7 +80,7 @@ groups never deletable, etc.), and no console errors appear.
 - [ ] Top-bar context switcher (year + center) persists across navigation and correctly locks non-`centers.access-all` users to their own center
 - [ ] Every modal: Escape closes it, backdrop click closes it, focus trap/restore works, body scroll locks while open (per `resources/js/Components/Modals/Modal.tsx`)
 - [ ] No Bootstrap modal JS / jQuery modal init / `data-bs-toggle`/`data-bs-dismiss` / `wire:*` attributes fire anywhere (should be structurally impossible now — Livewire and its Blade views are deleted — but worth a console/network-tab spot check)
-- [ ] No 404s in the Network tab for `build/…`, `assets/preskool/…`, or `/media/…` asset paths
+- [ ] No 404s in the Network tab for `build/…`, `assets/crm-gls/…`, or `/media/…` asset paths
 - [ ] No duplicate-Select2/Alpine console errors (moot now since Alpine/Select2 no longer ship on backoffice pages at all — confirm no leftover references trigger errors)
 - [ ] French is the default displayed language across every page visited
 

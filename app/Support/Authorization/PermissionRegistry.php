@@ -132,6 +132,10 @@ final class PermissionRegistry
                 'payments.view' => 'Consulter les encaissements',
                 'payments.create' => 'Enregistrer un encaissement',
                 'payments.update' => 'Modifier un encaissement',
+                // Deliberately in NO role preset below. Money records are
+                // append-only by default (CLAUDE.md §11); a super-admin grants
+                // this one by hand when a real correction case needs it.
+                'payments.delete' => 'Supprimer un encaissement',
             ],
             'Recouvrement' => [
                 'collections.view' => 'Consulter la gestion des recouvrements',

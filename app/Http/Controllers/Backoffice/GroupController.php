@@ -12,10 +12,12 @@ use App\Domain\Groups\Queries\GetGroupStudentsBySegment;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Groups\ChangerEnseignantRequest;
 use App\Http\Requests\Backoffice\Groups\StoreGroupRequest;
+use App\Http\Requests\Backoffice\Groups\UpdateGroupEnseignantRequest;
 use App\Http\Requests\Backoffice\Groups\UpdateGroupRequest;
 use App\Domain\Settings\Support\FraisEcheanceResolver;
 use App\Models\Frais;
 use App\Models\Group;
+use App\Models\GroupEnseignant;
 use App\Services\Context\CurrentContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -233,6 +235,48 @@ final class GroupController extends Controller
                 'seances' => $result['seancesSupprimees'],
                 'url' => route('backoffice.emploi-du-temps.index', ['group' => $group->id]),
             ]);
+    }
+
+    /**
+     * Corrects an already-recorded assignment period (dates / motif) from
+     * the "Historique des affectations" table — the typing mistake escape
+     * hatch, since a changeover stamps date_fin with "today" and the real
+     * handover may have happened on another day.
+     *
+     * Deliberately narrow: only date_debut / date_fin / motif are writable.
+     * The row's teacher is NEVER swapped here (that has to archive the old
+     * period, open a new one and stop the emploi du temps —
+     * ChangerEnseignantGroupe), and `statut` stays derived from the row's
+     * place in the chain. Assignment rows are still never deleted.
+     *
+     * The chain must stay ordered, so an edit may not make a period overlap
+     * its neighbours; the Actif row keeps its open date_fin (NULL).
+     */
+    public function updateEnseignantAffectation(
+        UpdateGroupEnseignantRequest $request,
+        Group $group,
+        GroupEnseignant $affectation,
+    ): RedirectResponse {
+        $this->authorize('update', $group);
+
+        abort_unless($affectation->group_id === $group->id, 404);
+
+        $data = $request->validated();
+
+        // The single Actif period is by definition still running — it can
+        // never be given an end date from this form.
+        $dateFin = $affectation->isActif() ? null : ($data['date_fin'] ?? null);
+
+        $affectation->update([
+            'date_debut' => $data['date_debut'],
+            'date_fin' => $dateFin,
+            'motif' => $data['motif'] ?? null,
+        ]);
+
+        // groups.enseignant_id mirrors the Actif row only, and the teacher
+        // is untouched here — so nothing else needs re-syncing.
+        return redirect()->route('backoffice.groups.show', $group)
+            ->with('success', __('Assignment period updated.'));
     }
 
     /**

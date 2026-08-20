@@ -28,11 +28,11 @@ decision" below.**
 
 **Package used**: none — no `bootstrap` npm package, no `react-bootstrap`
 installed for the React entry. The static PreSkool Bootstrap CSS
-(`public/assets/preskool/css/bootstrap.min.css`) is loaded once, from
+(`public/assets/crm-gls/css/bootstrap.min.css`) is loaded once, from
 `resources/views/app.blade.php`, exactly as the Blade/Livewire shell already
 does. **Its Bootstrap JS bundle is deliberately NOT loaded on Inertia
 pages** — `app.blade.php` does not include
-`assets/preskool/js/bootstrap.bundle.min.js` or jQuery. React owns
+`assets/crm-gls/js/bootstrap.bundle.min.js` or jQuery. React owns
 interactive state instead (see below), so Bootstrap's JS has nothing to
 scan for on this root view.
 
@@ -58,7 +58,7 @@ against (plan doc §2.2).
 ## What happens for the same CSS classes on Blade/Livewire pages
 
 Nothing changes there. Those pages continue to load
-`assets/preskool/js/bootstrap.bundle.min.js` + jQuery exactly as before —
+`assets/crm-gls/js/bootstrap.bundle.min.js` + jQuery exactly as before —
 this decision only governs the Inertia/React root (`app.blade.php`) and its
 component tree. The two stacks stay isolated (migration plan's "keep each
 frontend root isolated" rule).

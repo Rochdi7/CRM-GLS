@@ -8,6 +8,7 @@ use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Models\Caisse;
 use App\Models\Depense;
 use App\Models\Employee;
+use App\Domain\Finance\Support\CaisseLedger;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -17,6 +18,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class EnregistrerDepense
 {
+    public function __construct(private readonly CaisseLedger $ledger) {}
+
     /**
      * @param array<string, mixed> $data validated StoreDepenseRequest data
      */
@@ -29,7 +32,16 @@ final class EnregistrerDepense
                 'agent_id' => $agent->id,
             ]);
 
-            Caisse::query()->whereKey($data['caisse_id'])->decrement('solde', (float) $data['montant']);
+            $this->ledger->debit(
+                (int) $data['caisse_id'],
+                (float) $data['montant'],
+                "Dépense {$depense->reference}",
+                $depense,
+                [
+                    'type_depense_id' => $depense->type_depense_id,
+                    'methode' => $depense->methode_paiement,
+                ],
+            );
 
             return $depense;
         });

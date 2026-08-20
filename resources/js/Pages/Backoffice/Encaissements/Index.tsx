@@ -11,6 +11,7 @@ import Pagination from '@/Components/Tables/Pagination';
 import LocalPagination from '@/Components/Tables/LocalPagination';
 import RowActions, { RowActionDivider, RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
+import ConfirmDialog from '@/Components/Modals/ConfirmDialog';
 import SelectField from '@/Components/Forms/SelectField';
 import DateField from '@/Components/Forms/DateField';
 import FormField from '@/Components/Forms/FormField';
@@ -90,8 +91,11 @@ function emptyAvanceForm(): AvanceFormState {
  * directly under that row; numéro/banque/échéance are always read off that
  * Cheque record server-side (EncaissementController@store).
  */
-export default function EncaissementsIndex({ encaissements, caisses, students, methodes, banques, filters }: EncaissementsPageProps) {
+export default function EncaissementsIndex({ encaissements, caisses, students, methodes, banques, filters, can }: EncaissementsPageProps) {
     const isLoading = useInertiaLoading();
+    const [deleteTarget, setDeleteTarget] = useState<EncaissementRow | null>(null);
+    const [deleting, setDeleting] = useState(false);
+    const [deleteError, setDeleteError] = useState<string | undefined>(undefined);
     const [showModal, setShowModal] = useState(false);
     const [editingRow, setEditingRow] = useState<EncaissementRow | null>(null);
     const [inscriptionOptions, setInscriptionOptions] = useState<SelectOption[]>([]);
@@ -164,6 +168,33 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
     function closeModal() {
         setShowModal(false);
         setEditingRow(null);
+    }
+
+    /**
+     * Hard-deletes a payment (super-admin, or whoever they granted
+     * payments.delete). The server reverses caisses.solde in the same
+     * transaction and refuses entangled rows, surfacing that as a validation
+     * error shown inside this dialog.
+     */
+    function confirmDeleteEncaissement() {
+        if (!deleteTarget) {
+            return;
+        }
+
+        setDeleting(true);
+        setDeleteError(undefined);
+
+        router.delete(`/backoffice/encaissements/${deleteTarget.id}`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setDeleteTarget(null);
+                setDeleting(false);
+            },
+            onError: (errors: Record<string, string>) => {
+                setDeleteError(errors.encaissement ?? 'Suppression impossible.');
+                setDeleting(false);
+            },
+        });
     }
 
     function openEmailRecu(row: EncaissementRow) {
@@ -732,6 +763,21 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                                 <RowActionItem icon="ti-mail" onClick={() => openEmailRecu(row)}>
                                                     Envoyer le reçu par email
                                                 </RowActionItem>
+                                                {can?.delete && (
+                                                    <>
+                                                        <RowActionDivider />
+                                                        <RowActionItem
+                                                            icon="ti-trash"
+                                                            danger
+                                                            onClick={() => {
+                                                                setDeleteError(undefined);
+                                                                setDeleteTarget(row);
+                                                            }}
+                                                        >
+                                                            Supprimer
+                                                        </RowActionItem>
+                                                    </>
+                                                )}
                                             </RowActions>
                                         </td>
                                     </tr>
@@ -1340,6 +1386,17 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                     <option key={nom} value={nom} />
                 ))}
             </datalist>
+
+            <ConfirmDialog
+                show={deleteTarget !== null}
+                title="Supprimer cet encaissement ?"
+                recordLabel={deleteTarget?.reference ?? ''}
+                message="Cette action est définitive. Le solde de la caisse sera diminué du montant de ce paiement et le statut du frais recalculé."
+                error={deleteError}
+                processing={deleting}
+                onConfirm={confirmDeleteEncaissement}
+                onCancel={() => setDeleteTarget(null)}
+            />
         </BackofficeLayout>
     );
 }

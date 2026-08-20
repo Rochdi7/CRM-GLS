@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Backoffice\Groups;
 
 use App\Domain\Attendance\Actions\GenererSeancesDepuisCreneau;
+use App\Domain\Groups\Queries\GetGroupFormOptions;
 use App\Models\AnneeScolaire;
 use App\Models\Creneau;
 use App\Models\Employee;
@@ -13,6 +14,7 @@ use App\Models\Group;
 use App\Models\GroupEnseignant;
 use App\Models\Seance;
 use App\Models\User;
+use App\Services\Context\CurrentContext;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -265,5 +267,170 @@ final class GroupEnseignantAffectationTest extends TestCase
                 'enseignant_id' => $this->enseignant()->id,
                 'date_debut' => '2025-10-01',
             ])->assertForbidden();
+    }
+
+    public function test_assigning_a_teacher_from_the_edit_modal_opens_an_assignment_period(): void
+    {
+        // A group created without a teacher, then given one through the plain
+        // edit modal (not the dedicated changeover screen): the assignment
+        // history must start there too.
+        $group = $this->group(null);
+        $prof = $this->enseignant();
+
+        $this->actingAs($this->userWith('groups.view', 'groups.update'))
+            ->put(route('backoffice.groups.update', $group), [
+                'nom' => $group->nom,
+                'niveau' => $group->niveau,
+                'enseignant_id' => $prof->id,
+                'statut' => $group->statut,
+                'date_debut_formation' => '2025-09-01',
+                'date_fin_formation' => '2026-06-30',
+            ])->assertRedirect();
+
+        $this->assertDatabaseHas('group_enseignants', [
+            'group_id' => $group->id,
+            'enseignant_id' => $prof->id,
+            'statut' => GroupEnseignant::STATUT_ACTIF,
+            'date_fin' => null,
+        ]);
+        $this->assertSame($prof->id, $group->fresh()->enseignant_id);
+    }
+
+    public function test_replacing_the_teacher_from_the_edit_modal_archives_the_previous_period(): void
+    {
+        $ancien = $this->enseignant();
+        $nouveau = $this->enseignant();
+        $group = $this->group($ancien);
+        $this->assignmentActive($group, $ancien, '2025-09-01');
+
+        $this->actingAs($this->userWith('groups.view', 'groups.update'))
+            ->put(route('backoffice.groups.update', $group), [
+                'nom' => $group->nom,
+                'niveau' => $group->niveau,
+                'enseignant_id' => $nouveau->id,
+                'statut' => $group->statut,
+                'date_debut_formation' => '2025-09-01',
+                'date_fin_formation' => '2026-06-30',
+            ])->assertRedirect();
+
+        $this->assertDatabaseHas('group_enseignants', [
+            'group_id' => $group->id,
+            'enseignant_id' => $ancien->id,
+            'statut' => GroupEnseignant::STATUT_ARCHIVE,
+        ]);
+        $this->assertDatabaseHas('group_enseignants', [
+            'group_id' => $group->id,
+            'enseignant_id' => $nouveau->id,
+            'statut' => GroupEnseignant::STATUT_ACTIF,
+            'date_fin' => null,
+        ]);
+        $this->assertSame(2, GroupEnseignant::where('group_id', $group->id)->count());
+    }
+
+    public function test_teacher_options_include_teachers_attached_to_the_center_through_the_pivot(): void
+    {
+        // Primary center is ANOTHER branch, but the teacher is assigned to the
+        // active one through employee_etablissement — the group form must still
+        // offer them, or no assignment period can ever be opened for them here.
+        $autreCentre = Etablissement::factory()->create();
+        $prof = Employee::factory()->create([
+            'categorie' => Employee::CATEGORIE_ENSEIGNANT,
+            'etablissement_id' => $autreCentre->id,
+        ]);
+        $prof->etablissements()->sync([$autreCentre->id, $this->centre->id]);
+
+        app(CurrentContext::class)->setEtablissement($this->centre->id);
+
+        $this->assertContains(
+            $prof->id,
+            app(GetGroupFormOptions::class)->enseignants()->pluck('id')->all(),
+        );
+    }
+
+    public function test_an_archived_assignment_period_can_be_corrected_afterwards(): void
+    {
+        // The changeover stamps today as the outgoing teacher date de fin; the
+        // real handover may have been another day, so the row stays editable —
+        // dates and motif only.
+        $prof = $this->enseignant();
+        $group = $this->group($prof);
+        $affectation = $this->assignmentActive($group, $prof, '2025-09-01');
+        $affectation->update([
+            'date_fin' => '2025-10-01',
+            'statut' => GroupEnseignant::STATUT_ARCHIVE,
+        ]);
+
+        $this->actingAs($this->userWith('groups.view', 'groups.update'))
+            ->put(route('backoffice.groups.affectations.update', [$group, $affectation]), [
+                'date_debut' => '2025-09-15',
+                'date_fin' => '2025-11-20',
+                'motif' => 'Date de passation corrigee',
+            ])->assertRedirect();
+
+        $affectation->refresh();
+        $this->assertSame('2025-09-15', $affectation->date_debut->toDateString());
+        $this->assertSame('2025-11-20', $affectation->date_fin->toDateString());
+        $this->assertSame('Date de passation corrigee', $affectation->motif);
+        // The teacher of the row is never swapped by this endpoint.
+        $this->assertSame($prof->id, $affectation->enseignant_id);
+    }
+
+    public function test_correcting_the_active_period_keeps_it_open_ended(): void
+    {
+        $prof = $this->enseignant();
+        $group = $this->group($prof);
+        $affectation = $this->assignmentActive($group, $prof, '2025-09-01');
+
+        $this->actingAs($this->userWith('groups.view', 'groups.update'))
+            ->put(route('backoffice.groups.affectations.update', [$group, $affectation]), [
+                'date_debut' => '2025-09-08',
+                // Even if a date_fin is posted, the running period stays open.
+                'date_fin' => '2025-12-31',
+                'motif' => null,
+            ])->assertRedirect();
+
+        $affectation->refresh();
+        $this->assertSame('2025-09-08', $affectation->date_debut->toDateString());
+        $this->assertNull($affectation->date_fin);
+        $this->assertTrue($affectation->isActif());
+    }
+
+    public function test_a_period_cannot_end_before_it_begins(): void
+    {
+        $prof = $this->enseignant();
+        $group = $this->group($prof);
+        $affectation = $this->assignmentActive($group, $prof, '2025-09-01');
+        $affectation->update(['date_fin' => '2025-10-01', 'statut' => GroupEnseignant::STATUT_ARCHIVE]);
+
+        $this->actingAs($this->userWith('groups.view', 'groups.update'))
+            ->put(route('backoffice.groups.affectations.update', [$group, $affectation]), [
+                'date_debut' => '2025-10-01',
+                'date_fin' => '2025-09-01',
+            ])->assertSessionHasErrors('date_fin');
+    }
+
+    public function test_correcting_an_assignment_period_requires_the_groups_update_permission(): void
+    {
+        $prof = $this->enseignant();
+        $group = $this->group($prof);
+        $affectation = $this->assignmentActive($group, $prof, '2025-09-01');
+
+        $this->actingAs($this->userWith('groups.view'))
+            ->put(route('backoffice.groups.affectations.update', [$group, $affectation]), [
+                'date_debut' => '2025-09-08',
+            ])->assertForbidden();
+    }
+
+    public function test_an_assignment_of_another_group_cannot_be_edited_through_this_group(): void
+    {
+        $prof = $this->enseignant();
+        $group = $this->group($prof);
+        $autreGroup = $this->group($prof);
+        $affectationAutre = $this->assignmentActive($autreGroup, $prof, '2025-09-01');
+
+        $this->actingAs($this->userWith('groups.view', 'groups.update'))
+            ->put(route('backoffice.groups.affectations.update', [$group, $affectationAutre]), [
+                'date_debut' => '2025-09-08',
+            ])->assertNotFound();
     }
 }

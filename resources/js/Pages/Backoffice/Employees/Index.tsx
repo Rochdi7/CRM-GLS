@@ -13,11 +13,11 @@ import Modal from '@/Components/Modals/Modal';
 import ConfirmDialog from '@/Components/Modals/ConfirmDialog';
 import DateField from '@/Components/Forms/DateField';
 import FormField from '@/Components/Forms/FormField';
+import MultiSelectField from '@/Components/Forms/MultiSelectField';
 import SelectField from '@/Components/Forms/SelectField';
 import TextareaField from '@/Components/Forms/TextareaField';
 import PhoneField from '@/Components/Forms/PhoneField';
 import FormActions from '@/Components/Forms/FormActions';
-import FormErrorsSummary from '@/Components/Forms/FormErrorsSummary';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import SexeIcon from '@/Components/Details/SexeIcon';
 import { splitPhone } from '@/Data/countries';
@@ -206,28 +206,11 @@ export default function EmployeesIndex({
         }
     }
 
-    /**
-     * While the top bar is locked to one center the centers field is hidden
-     * (the record is auto-assigned to the active center), so the payload
-     * must always carry that center — otherwise `etablissement_ids`
-     * (required) could fail validation on a field the user cannot see or
-     * fix. The server re-forces the same value in
-     * EmployeeController::resolveCenterIds(), so this only keeps the hidden
-     * case valid; it never means the client is trusted.
-     */
-    function withLockedCenter<T extends { etablissement_ids: number[] }>(data: T): T {
-        if (!centerLocked || contextCenterId === null) {
-            return data;
-        }
-
-        return { ...data, etablissement_ids: [contextCenterId] };
-    }
-
     function submit(event: FormEvent) {
         event.preventDefault();
 
         if (editingEmployee) {
-            form.transform((data) => ({ ...withLockedCenter(data), _method: 'put' }));
+            form.transform((data) => ({ ...data, _method: 'put' }));
             form.post(`/backoffice/employees/${editingEmployee.id}`, {
                 forceFormData: true,
                 preserveScroll: true,
@@ -240,7 +223,6 @@ export default function EmployeesIndex({
             return;
         }
 
-        form.transform((data) => withLockedCenter(data));
         form.post('/backoffice/employees', {
             forceFormData: true,
             preserveScroll: true,
@@ -510,7 +492,6 @@ export default function EmployeesIndex({
                     </div>
                 ) : (
                     <form onSubmit={submit}>
-                        <FormErrorsSummary message={form.errors.etablissement_ids && centerLocked ? form.errors.etablissement_ids : undefined} />
 
                         <div className="d-flex align-items-center mb-4">
                             <span className="avatar avatar-xl rounded-circle bg-light me-3 overflow-hidden d-inline-flex align-items-center justify-content-center">
@@ -685,56 +666,28 @@ export default function EmployeesIndex({
                                 </div>
                             )}
 
-                            {/* A specific center active in the top bar assigns the record
-                                automatically — the field only shows on « Tous les centres ».
-                                An employee may work in SEVERAL centers, and at least one
-                                is mandatory (enforced server-side by the Form Requests). */}
-                            {!centerLocked && (
-                                <div className="col-12">
-                                    <div className="mb-3">
-                                        <label className="form-label">
-                                            Centres <span className="text-danger">*</span>
-                                        </label>
-                                        <div
-                                            className={`border rounded p-2 d-flex flex-wrap gap-3${form.errors.etablissement_ids ? ' border-danger' : ''}`}
-                                        >
-                                            {centerOptions.map((option) => {
-                                                const id = Number(option.value);
-                                                const checked = form.data.etablissement_ids.includes(id);
-
-                                                return (
-                                                    <div className="form-check" key={id}>
-                                                        <input
-                                                            className="form-check-input"
-                                                            type="checkbox"
-                                                            id={`emp-etab-${id}`}
-                                                            checked={checked}
-                                                            onChange={() =>
-                                                                form.setData(
-                                                                    'etablissement_ids',
-                                                                    checked
-                                                                        ? form.data.etablissement_ids.filter((value) => value !== id)
-                                                                        : [...form.data.etablissement_ids, id],
-                                                                )
-                                                            }
-                                                        />
-                                                        <label className="form-check-label" htmlFor={`emp-etab-${id}`}>
-                                                            {option.label}
-                                                        </label>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                        {form.errors.etablissement_ids ? (
-                                            <div className="text-danger fs-13 mt-1">{form.errors.etablissement_ids}</div>
-                                        ) : (
-                                            <div className="text-muted fs-13 mt-1">
-                                                Sélectionnez au moins un centre.
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
+                            {/* Centers the employee WORKS IN — always shown, in both
+                                create and edit, whatever the top-bar context is: this is
+                                what grants their access and builds their own centre
+                                switcher, so it must stay editable even while the top bar
+                                is locked to one centre. At least one is mandatory
+                                (enforced server-side by the Form Requests). The list is
+                                limited to the centres the signed-in user may assign;
+                                the server re-checks it in resolveCenterIds(). */}
+                            <div className="col-12">
+                                <MultiSelectField
+                                    id="emp-etab"
+                                    label="Centres affectés"
+                                    required
+                                    options={centerOptions}
+                                    placeholder="Choisir un ou plusieurs centres…"
+                                    values={form.data.etablissement_ids.map(String)}
+                                    onChange={(values) =>
+                                        form.setData('etablissement_ids', values.map(Number))
+                                    }
+                                    error={form.errors.etablissement_ids}
+                                />
+                            </div>
 
                             <div className="col-md-4">
                                 <DateField

@@ -18,7 +18,7 @@ PHP suite and a Playwright walk.
 
 ## 2. Theme reference files inspected
 
-`resources/views/theme-reference/preskool/**` (Blade copies — untouched,
+`resources/views/theme-reference/crm-gls/**` (Blade copies — untouched,
 verified via `git status`), plus the purchase archive's static-HTML build
 extracted to a scratch directory as rendering ground truth (identical
 markup; screenshots of `students.html`, `fees-type.html` + its modal, and

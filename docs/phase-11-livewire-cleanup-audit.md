@@ -136,7 +136,7 @@ Frontoffice was never migrated to Livewire (its `app/Livewire/Frontoffice/*` dir
 | `layout/header.blade.php` | Dead — only pulled in by `layout/app.blade.php`. **Contains the last surviving literal `@livewire('backoffice.context.context-switcher')` tag in the codebase** — transitively dead since its parent shell is dead. This is exactly the scenario the removal plan's §0/§0a explicitly warned about ("a simple route-list check won't surface every caller" for `ContextSwitcher`) — now traced and confirmed dead. |
 | `layout/{footer,sidebar,theme-settings,toasts,scripts,page-header,breadcrumbs,print}.blade.php` | All dead — pulled in directly or transitively only by `layout/app.blade.php`. |
 
-Grep for `x-backoffice.layout.app`/`x-backoffice.layout.guest` confirms callers are exclusively the dead Blade pages in C.1, `layout/app.blade.php` itself, and one unrelated hit in `resources/views/theme-reference/preskool/README.md` (permanent reference material per CLAUDE.md §3 — must not be touched).
+Grep for `x-backoffice.layout.app`/`x-backoffice.layout.guest` confirms callers are exclusively the dead Blade pages in C.1, `layout/app.blade.php` itself, and one unrelated hit in `resources/views/theme-reference/crm-gls/README.md` (permanent reference material per CLAUDE.md §3 — must not be touched).
 
 ### C.4 — `resources/views/components/backoffice/{forms,ui}/*` (shared widgets, Livewire-coupled)
 
@@ -187,7 +187,7 @@ Directly grepped `resources/js/**/*.{tsx,ts}` for `select2`/`jquery` (not just i
 - `Components/Context/ContextSwitcher.tsx` — "no Select2, no jQuery."
 - `Components/Forms/PhoneField.tsx` — "native `<select>` (no Select2/jQuery on Inertia pages...)"
 - `Components/Forms/SelectField.tsx` — explains why Select2's Blade-side rule doesn't apply to Inertia modals.
-- `Components/Forms/PasswordField.tsx` — references the OLD jQuery handler in `public/assets/preskool/js/script.js` (vendor file, untouched, correctly not imported).
+- `Components/Forms/PasswordField.tsx` — references the OLD jQuery handler in `public/assets/crm-gls/js/script.js` (vendor file, untouched, correctly not imported).
 - `Components/Modals/Modal.tsx` — "no bootstrap.bundle.js... no jQuery."
 - `Layouts/BackofficeLayout.tsx` — "React-owned instead of jQuery/Bootstrap-JS."
 
@@ -321,8 +321,8 @@ That document (361 lines) is itself already a near-complete deletion manifest, b
 - **§1**: States cleanup cannot begin until all 22 components have tested Inertia equivalents, every route is repointed, the full suite passes, and explicit sign-off is given. This audit is the first step toward satisfying that precondition — deletion itself has not yet started.
 - **§2-§3**: Safe-to-remove criteria and removal order (read-only → simple CRUD → People → Academic → Finance last) — this audit's Section D of the task's recommended order matches.
 - **§4**: Package-level Livewire/Alpine removal conditions — conditioned on zero remaining referenced Livewire classes/directives, which Section A/D now confirms. Also flags removing only the `livewire:navigated` listener from `app.js`, a **more conservative** framing than this audit's Section E.1 finding that the *entire* `app.js` file is dead (because zero backoffice Blade pages route anywhere anymore, not just the one listener). This audit's finding supersedes §4's more cautious original framing — full removal of `app.js`/`theme.js`, not just one listener, is justified given the confirmed-dead status of every caller.
-- **§5**: Static asset (`public/assets/preskool/`) removal — explicitly out of scope, not investigated.
-- **§6 (permanent, never remove)**: `resources/views/theme-reference/preskool/`, all Domain actions, Policies, Form Requests, Models, migrations, seeders, the DB schema, and the principle that existing tests must be **adapted, never simply deleted** without equivalent coverage — this is the exact rule driving Section G's stop-condition treatment.
+- **§5**: Static asset (`public/assets/crm-gls/`) removal — explicitly out of scope, not investigated.
+- **§6 (permanent, never remove)**: `resources/views/theme-reference/crm-gls/`, all Domain actions, Policies, Form Requests, Models, migrations, seeders, the DB schema, and the principle that existing tests must be **adapted, never simply deleted** without equivalent coverage — this is the exact rule driving Section G's stop-condition treatment.
 - **§7/§8**: Rollback-via-git-revert strategy; explicit non-goals (no bulk `rm -rf`, no "looks right" as proof).
 
 **This audit independently re-derives the same conclusions as the removal plan via direct verification**, with 3 refinements: (1) the old un-namespaced `EmployeeController` + its dead Blade views (Section C.5, not previously documented), (2) the full transitive-dead status of `components/backoffice/layout/*` and the entire `resources/js/backoffice/` bundle (Section C.3/E.1, more complete than §4's partial framing), (3) the 2 confirmed test-coverage gaps in Section G.5 that must be closed before `SallesTab`/`UsersIndex` can be safely deleted.

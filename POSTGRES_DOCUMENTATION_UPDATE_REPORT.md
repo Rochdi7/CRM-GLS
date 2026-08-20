@@ -23,7 +23,7 @@ docs/center-scoping.md
 docs/roles-and-permissions.md
 gls-crm-laravel-structure.md
 gls-crm-schema.md
-resources/views/theme-reference/preskool/README.md
+resources/views/theme-reference/crm-gls/README.md
 skills/CLAUDE-MD-SUGGESTIONS.md
 skills/README.md
 skills/architecture-reviewer/SKILL.md
@@ -32,7 +32,7 @@ skills/code-review/SKILL.md
 skills/database-designer/SKILL.md
 skills/laravel-feature-generator/SKILL.md
 skills/livewire-component-builder/SKILL.md
-skills/preskool-theme-converter/SKILL.md
+skills/crm-gls-theme-converter/SKILL.md
 ```
 
 Case-insensitive search for `SQLite|MySQL|MariaDB|SQL Server|sqlsrv|:memory:`

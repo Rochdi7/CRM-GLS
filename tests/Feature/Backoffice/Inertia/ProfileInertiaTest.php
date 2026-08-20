@@ -9,6 +9,7 @@ use App\Models\Role;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -100,5 +101,94 @@ final class ProfileInertiaTest extends TestCase
         ]);
 
         $this->assertNull($employee->fresh()->etablissement_id);
+    }
+
+    public function test_a_user_can_upload_their_own_avatar(): void
+    {
+        // Deliberately NOT faking the `media` disk — Storage::fake() rewrites
+        // the disk's custom `url` to the generic /storage/{disk} convention,
+        // which would make the /media/ assertion below meaningless (same
+        // rationale as DepensesInertiaCrudTest's receipt test).
+        $user = User::factory()->create();
+        $employee = Employee::factory()->create(['user_id' => $user->id]);
+
+        $this->actingAs($user)->post(route('backoffice.profile.photo.update'), [
+            'photo' => UploadedFile::fake()->image('moi.jpg'),
+        ])->assertSessionDoesntHaveErrors();
+
+        $employee->refresh();
+        $this->assertSame(1, $employee->getMedia('photo')->count());
+        $this->assertStringContainsString('/media/', $employee->getFirstMediaUrl('photo'));
+
+        // Clean up the real file this test wrote to storage/app/media.
+        $employee->clearMediaCollection('photo');
+    }
+
+    public function test_a_new_avatar_replaces_the_previous_one(): void
+    {
+        $user = User::factory()->create();
+        $employee = Employee::factory()->create(['user_id' => $user->id]);
+
+        $this->actingAs($user);
+        $this->post(route('backoffice.profile.photo.update'), ['photo' => UploadedFile::fake()->image('un.jpg')]);
+        $this->post(route('backoffice.profile.photo.update'), ['photo' => UploadedFile::fake()->image('deux.jpg')]);
+
+        // singleFile() collection — the second upload supersedes the first.
+        $this->assertSame(1, $employee->refresh()->getMedia('photo')->count());
+
+        $employee->clearMediaCollection('photo');
+    }
+
+    public function test_a_user_can_remove_their_own_avatar(): void
+    {
+        $user = User::factory()->create();
+        $employee = Employee::factory()->create(['user_id' => $user->id]);
+
+        $this->actingAs($user);
+        $this->post(route('backoffice.profile.photo.update'), ['photo' => UploadedFile::fake()->image('moi.jpg')]);
+        $this->assertSame(1, $employee->refresh()->getMedia('photo')->count());
+
+        $this->delete(route('backoffice.profile.photo.destroy'))->assertSessionDoesntHaveErrors();
+
+        $this->assertSame(0, $employee->refresh()->getMedia('photo')->count());
+    }
+
+    public function test_a_non_image_upload_is_refused(): void
+    {
+        $user = User::factory()->create();
+        $employee = Employee::factory()->create(['user_id' => $user->id]);
+
+        $this->actingAs($user)->post(route('backoffice.profile.photo.update'), [
+            'photo' => UploadedFile::fake()->create('virus.exe', 10),
+        ])->assertSessionHasErrors('photo');
+
+        $this->assertSame(0, $employee->refresh()->getMedia('photo')->count());
+    }
+
+    public function test_a_user_cannot_change_another_users_avatar(): void
+    {
+        $user = User::factory()->create();
+        Employee::factory()->create(['user_id' => $user->id]);
+
+        $victim = User::factory()->create();
+        $victimEmployee = Employee::factory()->create(['user_id' => $victim->id]);
+
+        // The endpoint takes no id — it always resolves the employee from the
+        // authenticated user, so a forged employee_id changes nothing.
+        $this->actingAs($user)->post(route('backoffice.profile.photo.update'), [
+            'photo' => UploadedFile::fake()->image('moi.jpg'),
+            'employee_id' => $victimEmployee->id,
+        ]);
+
+        $this->assertSame(0, $victimEmployee->refresh()->getMedia('photo')->count());
+
+        $user->employee->refresh()->clearMediaCollection('photo');
+    }
+
+    public function test_a_guest_cannot_upload_an_avatar(): void
+    {
+        $this->post(route('backoffice.profile.photo.update'), [
+            'photo' => UploadedFile::fake()->image('moi.jpg'),
+        ])->assertRedirect(route('backoffice.login'));
     }
 }

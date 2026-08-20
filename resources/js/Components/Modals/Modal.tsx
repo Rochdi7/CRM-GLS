@@ -32,7 +32,7 @@ interface ModalProps extends PropsWithChildren {
  * (resources/views/livewire/backoffice/{employees,users}/*.blade.php) —
  * same `.modal-dialog-centered` + `.modal-backdrop` visual structure,
  * translated from `x-data="{ show: @entangle(...) }"` to React state. The
- * theme's own React modal demo (theme-reference/preskool-react/src/
+ * theme's own React modal demo (theme-reference/crm-gls-react/src/
  * feature-module/uiInterface/base-ui/modals.tsx) was inspected and
  * rejected — it is lorem-ipsum demo content wired to
  * data-bs-toggle/data-bs-target and react-router-dom, not a real

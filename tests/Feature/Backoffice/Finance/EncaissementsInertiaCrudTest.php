@@ -78,6 +78,105 @@ final class EncaissementsInertiaCrudTest extends TestCase
         return [$student, $inscription, $fee];
     }
 
+    // --- Destroy (payments.delete) -------------------------------------
+    // The single exception to the append-only money rule (CLAUDE.md §11):
+    // reachable only with payments.delete, which no role preset carries.
+
+    public function test_destroy_is_forbidden_without_payments_delete(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.update');
+        $agent = $user->employee;
+        [$student, , $fee] = $this->enrolledStudentWithFee(1000);
+        $caisse = Caisse::factory()->create(['etablissement_id' => $this->centre->id, 'solde' => 500]);
+        $encaissement = Encaissement::create([
+            'reference' => 'ENC-KEEP', 'agent_id' => $agent->id, 'student_id' => $student->id, 'inscription_fee_id' => $fee->id,
+            'caisse_id' => $caisse->id, 'montant' => 200, 'methode' => Encaissement::METHODE_ESPECES,
+            'date_paiement' => '2025-09-20',
+        ]);
+
+        $this->actingAs($user)
+            ->delete(route('backoffice.encaissements.destroy', $encaissement))
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('encaissements', ['id' => $encaissement->id]);
+        $this->assertSame(500.0, (float) $caisse->fresh()->solde);
+    }
+
+    public function test_destroy_removes_the_row_and_reverses_the_till_balance(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.delete');
+        $agent = $user->employee;
+        [$student, , $fee] = $this->enrolledStudentWithFee(1000);
+        $caisse = Caisse::factory()->create(['etablissement_id' => $this->centre->id, 'solde' => 500]);
+        $encaissement = Encaissement::create([
+            'reference' => 'ENC-DEL', 'agent_id' => $agent->id, 'student_id' => $student->id, 'inscription_fee_id' => $fee->id,
+            'caisse_id' => $caisse->id, 'montant' => 200, 'methode' => Encaissement::METHODE_ESPECES,
+            'date_paiement' => '2025-09-20',
+        ]);
+        $fee->update(['statut' => InscriptionFee::STATUT_PAYE_PARTIELLEMENT]);
+
+        $this->actingAs($user)
+            ->delete(route('backoffice.encaissements.destroy', $encaissement))
+            ->assertRedirect(route('backoffice.encaissements.index'));
+
+        $this->assertDatabaseMissing('encaissements', ['id' => $encaissement->id]);
+        // solde was incremented by 200 when recorded, so it must drop back.
+        $this->assertSame(300.0, (float) $caisse->fresh()->solde);
+        // and the fee falls back to unpaid now that nothing is paid against it.
+        $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $fee->fresh()->statut);
+    }
+
+    public function test_destroy_refuses_an_advance_that_was_already_applied(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.delete');
+        $agent = $user->employee;
+        [$student, , $fee] = $this->enrolledStudentWithFee(1000);
+        $caisse = Caisse::factory()->create(['etablissement_id' => $this->centre->id, 'solde' => 500]);
+        $avance = Encaissement::create([
+            'reference' => 'ENC-AV', 'agent_id' => $agent->id, 'student_id' => $student->id, 'inscription_fee_id' => null,
+            'caisse_id' => $caisse->id, 'montant' => 300, 'methode' => Encaissement::METHODE_ESPECES,
+            'date_paiement' => '2025-09-20',
+        ]);
+        Encaissement::create([
+            'reference' => 'ENC-AV-APP', 'agent_id' => $agent->id, 'student_id' => $student->id, 'inscription_fee_id' => $fee->id,
+            'caisse_id' => $caisse->id, 'montant' => 100, 'methode' => Encaissement::METHODE_ESPECES,
+            'date_paiement' => '2025-09-21', 'applied_from_encaissement_id' => $avance->id,
+        ]);
+
+        $this->actingAs($user)
+            ->delete(route('backoffice.encaissements.destroy', $avance))
+            ->assertSessionHasErrors('encaissement');
+
+        $this->assertDatabaseHas('encaissements', ['id' => $avance->id]);
+        $this->assertSame(500.0, (float) $caisse->fresh()->solde);
+    }
+
+    public function test_destroy_of_an_apply_row_leaves_the_till_balance_untouched(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.delete');
+        $agent = $user->employee;
+        [$student, , $fee] = $this->enrolledStudentWithFee(1000);
+        $caisse = Caisse::factory()->create(['etablissement_id' => $this->centre->id, 'solde' => 500]);
+        $avance = Encaissement::create([
+            'reference' => 'ENC-AV2', 'agent_id' => $agent->id, 'student_id' => $student->id, 'inscription_fee_id' => null,
+            'caisse_id' => $caisse->id, 'montant' => 300, 'methode' => Encaissement::METHODE_ESPECES,
+            'date_paiement' => '2025-09-20',
+        ]);
+        $apply = Encaissement::create([
+            'reference' => 'ENC-AV2-APP', 'agent_id' => $agent->id, 'student_id' => $student->id, 'inscription_fee_id' => $fee->id,
+            'caisse_id' => $caisse->id, 'montant' => 100, 'methode' => Encaissement::METHODE_ESPECES,
+            'date_paiement' => '2025-09-21', 'applied_from_encaissement_id' => $avance->id,
+        ]);
+
+        $this->actingAs($user)
+            ->delete(route('backoffice.encaissements.destroy', $apply))
+            ->assertRedirect(route('backoffice.encaissements.index'));
+
+        $this->assertDatabaseMissing('encaissements', ['id' => $apply->id]);
+        // An apply row never incremented solde, so deleting it must not decrement it.
+        $this->assertSame(500.0, (float) $caisse->fresh()->solde);
+    }
+
     public function test_index_requires_payments_view(): void
     {
         $this->actingAs($this->userWith('dashboard.view'))
@@ -559,9 +658,42 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame($caisse->id, $fresh->caisse_id);
     }
 
-    public function test_no_delete_route_exists_for_payments(): void
+    /**
+     * Encaissements are the ONE money record with a destroy route (the others
+     * — depenses/remboursements/transferts — stay append-only). It must stay
+     * behind permission:payments.delete, a permission carried by no role
+     * preset, so only a super-admin has it until they grant it by hand.
+     */
+    public function test_delete_route_is_gated_by_the_payments_delete_permission(): void
     {
-        $this->assertFalse(\Illuminate\Support\Facades\Route::has('backoffice.encaissements.destroy'));
+        $this->assertTrue(\Illuminate\Support\Facades\Route::has('backoffice.encaissements.destroy'));
+
+        $middleware = \Illuminate\Support\Facades\Route::getRoutes()
+            ->getByName('backoffice.encaissements.destroy')
+            ->gatherMiddleware();
+
+        $this->assertContains('permission:payments.delete', $middleware);
+    }
+
+    public function test_no_delete_route_exists_for_the_other_money_records(): void
+    {
+        foreach (['depenses', 'remboursements', 'caisse-transfers'] as $module) {
+            $this->assertFalse(
+                \Illuminate\Support\Facades\Route::has("backoffice.{$module}.destroy"),
+                "backoffice.{$module}.destroy must not exist — money records are append-only.",
+            );
+        }
+    }
+
+    public function test_payments_delete_is_granted_to_no_role_preset(): void
+    {
+        foreach (\App\Support\Authorization\PermissionRegistry::matrix() as $role => $permissions) {
+            $this->assertNotContains(
+                'payments.delete',
+                $permissions,
+                "Role {$role} must not carry payments.delete — a super-admin grants it by hand.",
+            );
+        }
     }
 
     // --- paying with a tracked chèque (Chèques module) --------------------

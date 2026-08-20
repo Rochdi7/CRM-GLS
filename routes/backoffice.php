@@ -57,8 +57,12 @@ use Illuminate\Support\Facades\Route;
 | logic in closures.
 |
 | Pattern: each module is an Inertia+React list/modal CRUD page backed by
-| a thin controller. Money records (encaissements, depenses, remboursements,
-| transferts) have NO destroy route — ever.
+| a thin controller. Money records (depenses, remboursements, transferts)
+| have NO destroy route. Encaissements are the single exception: a destroy
+| route exists behind `payments.delete`, a permission held by no role preset
+| and granted by hand by a super-admin. It reverses caisses.solde in the same
+| transaction (Domain\Payments\Actions\SupprimerEncaissement). Normal
+| corrections still use a compensating entry, not a delete.
 |
 */
 
@@ -108,6 +112,10 @@ Route::prefix('backoffice')
             Route::get('/profile', [ProfileController::class, 'show'])->name('profile');
             Route::post('/profile', [ProfileController::class, 'updateProfile'])->name('profile.update');
             Route::post('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password.update');
+            // Own avatar — stored in the linked Employee's `photo` media
+            // collection, the same one the Employees module writes.
+            Route::post('/profile/photo', [ProfileController::class, 'updatePhoto'])->name('profile.photo.update');
+            Route::delete('/profile/photo', [ProfileController::class, 'deletePhoto'])->name('profile.photo.destroy');
 
             // Referential data — managed through the tabbed Settings page
             // (Livewire CRUD tabs: établissements, années scolaires, salles).
@@ -188,6 +196,12 @@ Route::prefix('backoffice')
             // the new one and stops the group's emploi du temps.
             Route::post('groups/{group}/changer-enseignant', [GroupController::class, 'changerEnseignant'])
                 ->middleware('permission:groups.update')->name('groups.changer-enseignant');
+            // Corrects the dates/motif of an already-recorded assignment
+            // period (the changeover stamps "today"; the real handover may
+            // have been another day). Never swaps the row's teacher, never
+            // deletes the row — see the controller method.
+            Route::put('groups/{group}/affectations/{affectation}', [GroupController::class, 'updateEnseignantAffectation'])
+                ->middleware('permission:groups.update')->name('groups.affectations.update');
             Route::post('groups/{group}/archive', [GroupController::class, 'archive'])->name('groups.archive');
             // Quick lifecycle actions from the list's row menu — "Annuler"
             // (-> Annulée, terminal, same groups.archive gate as Fin de
@@ -367,6 +381,8 @@ Route::prefix('backoffice')
                 ->middleware('permission:payments.view')->name('encaissements.recu');
             Route::post('encaissements/{encaissement}/recu/email', [EncaissementController::class, 'sendRecuEmail'])
                 ->middleware('permission:payments.view')->name('encaissements.recu.email');
+            Route::delete('encaissements/{encaissement}', [EncaissementController::class, 'destroy'])
+                ->middleware('permission:payments.delete')->name('encaissements.destroy');
             Route::get('encaissements/{encaissement}', [EncaissementController::class, 'show'])
                 ->name('encaissements.show');
             Route::get('students/{student}/inscriptions-for-payment', [EncaissementController::class, 'studentInscriptions'])
@@ -566,5 +582,7 @@ Route::prefix('backoffice')
             // too, so the guarantee survives a super-admin).
             Route::get('audit-logs', [AuditLogController::class, 'index'])
                 ->middleware('permission:audit-logs.view')->name('audit-logs.index');
+            Route::get('audit-logs/{activity}', [AuditLogController::class, 'show'])
+                ->middleware('permission:audit-logs.view')->name('audit-logs.show');
         });
     });

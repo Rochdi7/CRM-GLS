@@ -1,4 +1,5 @@
 import StatCard from '@/Components/Dashboard/StatCard';
+import { formatMontant, formatMontantCompact } from '@/Lib/money';
 import type { DashboardStats } from '@/Types';
 
 interface StatsGridProps {
@@ -93,14 +94,18 @@ export default function StatsGrid({ stats }: StatsGridProps) {
             <StatCard
                 icon="ti-cash-banknote"
                 iconBg="bg-success-transparent"
-                value={`${Number(stats.paymentsMonth).toFixed(2)} MAD`}
+                value={formatMontantCompact(stats.paymentsMonth)}
+                valueTitle={`${formatMontant(stats.paymentsMonth)} MAD`}
+                unit="MAD"
                 label="Encaissements ce mois-ci"
             />
 
             <StatCard
                 icon="ti-cash-banknote-off"
                 iconBg="bg-danger-transparent"
-                value={`${Number(stats.depensesMonth).toFixed(2)} MAD`}
+                value={formatMontantCompact(stats.depensesMonth)}
+                valueTitle={`${formatMontant(stats.depensesMonth)} MAD`}
+                unit="MAD"
                 label="Dépenses ce mois-ci"
                 secondaryLabel="Nombre de dépenses"
                 secondaryValue={stats.depensesMonthCount}

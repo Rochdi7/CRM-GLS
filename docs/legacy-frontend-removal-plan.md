@@ -272,7 +272,7 @@ Livewire components, "safe to remove" means:
 | Any Blade page wrapping it (`resources/views/backoffice/<module>/*.blade.php`, if any) | Same — only once nothing routes to it |
 | Module-specific JS/Alpine glue (if any exists beyond the shared `app.js`) | Confirmed zero references via `grep` before deletion |
 
-**Never remove**: `resources/views/theme-reference/preskool/` (permanent
+**Never remove**: `resources/views/theme-reference/crm-gls/` (permanent
 reference copies per CLAUDE.md §3 — this rule is independent of the
 Inertia migration and continues to apply). These are not "legacy frontend"
 in the sense this document means; they are a permanent build-time reference
@@ -307,7 +307,7 @@ available as a fallback the longest:
 | Bundled Alpine (comes with Livewire) | Removed automatically when Livewire is removed — verify nothing else added a standalone Alpine dependency in the interim (re-check CLAUDE.md §6's "zero results outside vendor" grep) |
 | `resources/js/backoffice/app.js`'s `initializeBackofficePlugins()` Livewire-navigation hook (`livewire:navigated` listener) | Remove only the Livewire-specific event listener; the plugin-init logic itself may still be needed if any static Blade page (non-Livewire) remains |
 
-## 5. Static asset removal (`public/assets/preskool/`)
+## 5. Static asset removal (`public/assets/crm-gls/`)
 
 Only remove a static PreSkool asset (CSS/JS/font/icon file) once:
 
@@ -319,14 +319,14 @@ Only remove a static PreSkool asset (CSS/JS/font/icon file) once:
 3. A manual visual check confirms no regression (per the Quality Checks in
    CLAUDE.md §14 — theme rendering, dark mode, mobile, RTL).
 
-Do not remove `public/assets/preskool/` wholesale — remove individual proven-
+Do not remove `public/assets/crm-gls/` wholesale — remove individual proven-
 unused files/directories only, in small reviewable commits.
 
 ---
 
 ## 6. What never gets removed, regardless of migration progress
 
-- `resources/views/theme-reference/preskool/` (252 permanent reference pages)
+- `resources/views/theme-reference/crm-gls/` (252 permanent reference pages)
 - Any Domain action (`EnregistrerEncaissement`, `EnregistrerDepense`,
   `EnregistrerRemboursement`, `DemanderTransfertCaisse`,
   `ValiderTransfertCaisse`, `ReferenceGenerator`)

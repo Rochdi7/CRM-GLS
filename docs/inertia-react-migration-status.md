@@ -1727,7 +1727,7 @@ completely unstyled (bulleted lists instead of the sidebar, plain links
 instead of buttons). Root cause: the dev server had been restarted using
 `php -S 127.0.0.1:8000 -t public public/index.php` (a fixed router-script
 argument), which routes **every** request — including static asset
-requests like `/assets/preskool/css/bootstrap.min.css` — through Laravel's
+requests like `/assets/crm-gls/css/bootstrap.min.css` — through Laravel's
 front controller instead of letting PHP's built-in server serve static
 files directly. Static asset requests were hitting the `auth` middleware's
 guest-redirect and 302'ing to `/backoffice/login`, hence the missing CSS/JS.

@@ -192,6 +192,37 @@ final class InscriptionLivresTest extends TestCase
     }
 
     /**
+     * The exact round-trip the edit modal performs: assign a book, then
+     * re-open the modal (GET livres) and read the selection back. This
+     * regressed in the UI — the modal's "Modifier" button saved only the
+     * base fields, so the book picker came back empty and stock never moved
+     * — and the endpoints are what the fixed submit() now chains.
+     */
+    public function test_assigned_book_is_returned_when_the_edit_modal_reopens(): void
+    {
+        $group = $this->makeGroup();
+        $book = $this->makeBook('Daf Kompakt neu A2', 40);
+        [, $inscription] = $this->enrolledStudent($group);
+        $user = $this->userWith('registrations.view', 'registrations.manage-fees');
+
+        $this->actingAs($user)
+            ->put(route('backoffice.inscriptions.livres.update', $inscription), [
+                'livre_ids' => [$book->id],
+            ])->assertRedirect();
+
+        // Re-opening the modal must show the book still selected AND the
+        // decremented stock count in its label.
+        $this->actingAs($user)
+            ->get(route('backoffice.inscriptions.livres', $inscription))
+            ->assertOk()
+            ->assertJson(fn ($json) => $json
+                ->where('assignedIds', [$book->id])
+                ->where('livres.0.quantite', 39)
+                ->etc()
+            );
+    }
+
+    /**
      * Re-submitting the same already-assigned book must NOT decrement stock
      * a second time — this is the core "no double-decrement on re-edit"
      * guarantee, and the reason a later level change can add a further book

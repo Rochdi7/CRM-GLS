@@ -41,7 +41,7 @@ and `gls-crm-laravel-structure.md`. This file is a map, not a rulebook.
 > component/view for every migrated module above is still on disk,
 > unreferenced, for rollback. A permanent, read-only reference copy of the
 > purchased PreSkool React theme also now lives at
-> `resources/theme-reference/preskool-react/` (see
+> `resources/theme-reference/crm-gls-react/` (see
 > `docs/preskool-react-reference-inventory.md`) — never a build input,
 > never imported directly.
 
@@ -121,7 +121,7 @@ resources/views/
 ├── frontoffice/ (home; auth & pages reserved/empty)
 ├── components/  (backoffice/{layout,ui,forms}, frontoffice/layout, shared(empty))
 ├── livewire/backoffice/<module>/
-├── theme-reference/preskool/       ← permanent reference copies, never edited
+├── theme-reference/crm-gls/       ← permanent reference copies, never edited
 └── vendor/pagination
 
 routes/        backoffice.php · frontoffice.php · web.php (requires only) · console.php

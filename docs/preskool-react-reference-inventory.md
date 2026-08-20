@@ -1,7 +1,7 @@
 # PreSkool React Theme — Reference Copy Inventory
 
 Created: 2026-07-30 (Phase 4 of the Inertia/React migration).
-Destination: `resources/theme-reference/preskool-react/`.
+Destination: `resources/theme-reference/crm-gls-react/`.
 Original source: `C:\Users\ASUS\Downloads\themeforest-jeUxtzLq-preskool-bootstrap-admin-html-template\preskool-v1.9.7\react`.
 
 ---
@@ -110,13 +110,13 @@ not change which packages this project actually installs.
    component has already been adapted (and where) before starting fresh.
 3. **When adapting a new component**, add a row to
    `docs/react-theme-file-map.md` with the exact
-   `resources/theme-reference/preskool-react/src/...` source path.
+   `resources/theme-reference/crm-gls-react/src/...` source path.
 4. **Never re-run the copy script wholesale** without re-checking this
    inventory's exclusion list still makes sense (e.g. if the theme is ever
    updated to a newer version).
 5. **If disk space or repo size ever becomes a concern**, the icon-font
    files listed in §4 are the safest candidates to trim further (e.g. keep
    only `woff2` and drop legacy `eot`/`ttf` — those still exist for the
-   *actual* production assets in `public/assets/preskool/`, this reference
+   *actual* production assets in `public/assets/crm-gls/`, this reference
    copy's fonts are read-only comparison material, not something the build
    depends on).

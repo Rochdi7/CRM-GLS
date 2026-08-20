@@ -8,6 +8,7 @@ use App\Domain\Payments\Actions\AppliquerAvance;
 use App\Domain\Payments\Actions\ConvertirEncaissementsEnAvance;
 use App\Domain\Payments\Actions\EnregistrerEncaissement;
 use App\Domain\Payments\Mail\EncaissementRecuMail;
+use App\Domain\Payments\Actions\SupprimerEncaissement;
 use App\Domain\Payments\Queries\GetEncaissementDetails;
 use App\Domain\Payments\Queries\GetEncaissementsList;
 use App\Domain\Payments\Queries\GetInscriptionPayments;
@@ -101,6 +102,14 @@ final class EncaissementController extends Controller
                 'studentFilter' => $studentFilter,
                 'numeroChequeFilter' => $numeroChequeFilter,
                 'banqueFilter' => $banqueFilter,
+            ],
+            // UI convenience only — destroy() re-authorizes server-side and the
+            // route itself is behind permission:payments.delete.
+            'can' => [
+                // Permission only (not the policy): the policy's delete() needs a
+                // concrete row for its center check, which destroy() applies
+                // per-record. Super-admin passes via Gate::before.
+                'delete' => $request->user()?->can('payments.delete') ?? false,
             ],
         ]);
     }
@@ -376,6 +385,20 @@ final class EncaissementController extends Controller
         return Inertia::render('Backoffice/Encaissements/Show', [
             'encaissement' => $getEncaissementDetails($encaissement),
         ]);
+    }
+
+    /**
+     * The one destroy path on a money record (CLAUDE.md §11). Reachable only
+     * with `payments.delete` — a permission no role preset carries, granted by
+     * a super-admin. SupprimerEncaissement reverses caisses.solde in the same
+     * transaction and refuses entangled rows (applied avances, tracked chèques).
+     */
+    public function destroy(Encaissement $encaissement, SupprimerEncaissement $action): RedirectResponse
+    {
+        $action->handle($encaissement);
+
+        return redirect()->route('backoffice.encaissements.index')
+            ->with('success', __('Payment deleted.'));
     }
 
     public function update(UpdateEncaissementRequest $request, Encaissement $encaissement): RedirectResponse

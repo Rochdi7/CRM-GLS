@@ -90,7 +90,7 @@ By category (full per-file detail in the individual commit messages):
 ## 5. Files preserved and why
 
 - `resources/views/theme-reference/**` and
-  `resources/theme-reference/preskool-react/**` — permanent theme
+  `resources/theme-reference/crm-gls-react/**` — permanent theme
   references (CLAUDE.md §3, never deleted).
 - `resources/views/app.blade.php` — the Inertia root template (active).
 - The Frontoffice Blade views/layouts + `resources/js/frontoffice/app.js`

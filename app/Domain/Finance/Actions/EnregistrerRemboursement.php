@@ -8,6 +8,7 @@ use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Models\Caisse;
 use App\Models\Employee;
 use App\Models\Remboursement;
+use App\Domain\Finance\Support\CaisseLedger;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -16,6 +17,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class EnregistrerRemboursement
 {
+    public function __construct(private readonly CaisseLedger $ledger) {}
+
     /**
      * @param array<string, mixed> $data validated StoreRemboursementRequest data
      */
@@ -28,7 +31,13 @@ final class EnregistrerRemboursement
                 'agent_id' => $agent->id,
             ]);
 
-            Caisse::query()->whereKey($data['caisse_id'])->decrement('solde', (float) $data['montant']);
+            $this->ledger->debit(
+                (int) $data['caisse_id'],
+                (float) $data['montant'],
+                "Remboursement {$remboursement->reference}",
+                $remboursement,
+                ['beneficiaire_id' => $remboursement->beneficiaire_id],
+            );
 
             return $remboursement;
         });

@@ -30,11 +30,11 @@
     <link rel="manifest" href="{{ asset('assets/images/favicon/site.webmanifest') }}">
 
     @if (app()->getLocale() === 'ar')
-        <link rel="stylesheet" href="{{ asset('assets/preskool/css/bootstrap.rtl.min.css') }}">
+        <link rel="stylesheet" href="{{ asset('assets/crm-gls/css/bootstrap.rtl.min.css') }}">
     @else
-        <link rel="stylesheet" href="{{ asset('assets/preskool/css/bootstrap.min.css') }}">
+        <link rel="stylesheet" href="{{ asset('assets/crm-gls/css/bootstrap.min.css') }}">
     @endif
-    <link rel="stylesheet" href="{{ asset('assets/preskool/plugins/tabler-icons/tabler-icons.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/crm-gls/plugins/tabler-icons/tabler-icons.css') }}">
 
     @stack('styles')
     @vite(['resources/scss/frontoffice/app.scss', 'resources/js/frontoffice/app.js'])
@@ -50,7 +50,7 @@
 
     <x-frontoffice.layout.footer />
 
-    <script src="{{ asset('assets/preskool/js/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ asset('assets/crm-gls/js/bootstrap.bundle.min.js') }}"></script>
     @stack('scripts')
 </body>
 

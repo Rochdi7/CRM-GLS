@@ -33,7 +33,7 @@ PostgreSQL performance-optimization pass (per `PERFORMANCE_AUDIT.md`,
   `TypesDepensesIndex`, `UsersIndex`) and their matching blade views, plus 4
   Settings tabs — consistent with per-page-size / query-count optimization
 - `resources/js/backoffice/app.js`, `select2.blade.php`, `pagination.blade.php`
-- `public/assets/preskool/js/script.js` (the documented Select2 double-init
+- `public/assets/crm-gls/js/script.js` (the documented Select2 double-init
   fix from CLAUDE.md §7)
 - 4 test files under `Finance/` and `Inscriptions/`
 - Docs: `README.md`, `.env.example`, `phpunit.xml`, `gls-crm-schema.md`,
@@ -102,7 +102,7 @@ No branch has been created yet — this is a decision point, not a completed ste
   are **not** ES modules and are **not** managed by Vite. Vite
   (`vite.config.js`) manages only `resources/js/{backoffice,frontoffice}/app.js`
   and the two SCSS entrypoints; PreSkool's own JS/CSS/img/fonts are served as
-  static prebuilt files from `public/assets/preskool/`.
+  static prebuilt files from `public/assets/crm-gls/`.
 - `resources/js/backoffice/app.js` exposes `initializeBackofficePlugins()`,
   which (re-)initializes all jQuery plugins on both `DOMContentLoaded` and
   Livewire's `livewire:navigated` event — this is the mechanism that makes
@@ -135,13 +135,13 @@ No branch has been created yet — this is a decision point, not a completed ste
   `<x-backoffice.layout.theme-settings />`.
 - `wire:ignore` is used surgically where a jQuery plugin (e.g. Select2) must
   own DOM inside a Livewire-managed component, with a documented double-init
-  fix (CLAUDE.md §7) already applied to `public/assets/preskool/js/script.js`.
+  fix (CLAUDE.md §7) already applied to `public/assets/crm-gls/js/script.js`.
 
 ## 5. Current PreSkool HTML/static assets
 
-- `public/assets/preskool/{css,js,img,fonts,icons,plugins}` — vendor,
+- `public/assets/crm-gls/{css,js,img,fonts,icons,plugins}` — vendor,
   prebuilt, treated as read-only (copied from the theme's own `public/build`).
-- `resources/views/theme-reference/preskool/` — 252 **permanent** reference
+- `resources/views/theme-reference/crm-gls/` — 252 **permanent** reference
   Blade copies of the original HTML theme pages (CLAUDE.md §3). These are
   **never deleted, never edited, never routed to** — they exist purely as a
   copy-source for building real pages. This convention is orthogonal to the
@@ -391,7 +391,7 @@ demo/mock-auth-adjacent and **must not** be carried into the real login page.
 | **No TypeScript configured yet in this project** | Theme is fully TS; this repo is plain JS | New `tsconfig.json` needed, scoped to `resources/js/**`; does not affect PHP or existing JS |
 | **Redux + React Router are structurally incompatible with Inertia's navigation/state model** | Theme's `main.tsx` wraps everything in `<Provider>` + `<BrowserRouter>` | Both discarded at the entry point; theme-settings (dark mode etc.) re-implemented via existing `theme.js`-style localStorage, not Redux |
 | **jQuery-plugin reinitialization pattern (`livewire:navigated`) has no Inertia equivalent yet** | Select2/daterangepicker/etc. currently re-init on Livewire's DOM-swap event | Needs an explicit Inertia `router.on('navigate')` (or per-page effect) replacement — flagged for Phase 2, not solved by this audit |
-| **Duplicate Bootstrap JS risk** | Theme imports Bootstratp bundle from `node_modules`; current app loads it as a static `<script>` from `public/assets/preskool/js/` | Exactly one Bootstrap JS instance must remain once React pages mount — needs an explicit decision in Phase 2 (see plan doc) |
+| **Duplicate Bootstrap JS risk** | Theme imports Bootstratp bundle from `node_modules`; current app loads it as a static `<script>` from `public/assets/crm-gls/js/` | Exactly one Bootstrap JS instance must remain once React pages mount — needs an explicit decision in Phase 2 (see plan doc) |
 | **Duplicate icon-font risk** | Theme entry imports 7 separate icon-font CSS files; current app already serves Feather/Boxicons/etc. as static PreSkool assets | Reuse the **existing static font assets**, do not double-import from `node_modules` per theme page |
 | **Financial-module conversion risk** | Highest business risk in the whole migration | Explicitly scheduled **last** (Phase 9), after every non-financial module is converted and tested; Domain actions untouched throughout |
 | **Money records / Group deletion invariants** | Must never regress during UI rewrite | No delete route/button may be introduced for Encaissements/Depenses/Remboursements/CaisseTransfers/Groups at any phase — enforced by keeping existing routes as the only source of truth |

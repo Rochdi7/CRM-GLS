@@ -5,7 +5,7 @@ This package contains five project skills:
 1. `architecture-reviewer`
 2. `laravel-feature-generator`
 3. `database-designer`
-4. `preskool-theme-converter`
+4. `crm-gls-theme-converter`
 5. `code-review`
 
 They are tailored to:
@@ -38,7 +38,7 @@ your-project/
         │   └── SKILL.md
         ├── database-designer/
         │   └── SKILL.md
-        ├── preskool-theme-converter/
+        ├── crm-gls-theme-converter/
         │   └── SKILL.md
         └── code-review/
             └── SKILL.md
@@ -83,7 +83,7 @@ Use laravel-feature-generator to implement employee management in the backoffice
 ```
 
 ```text
-Use preskool-theme-converter to convert the students list reference page into reusable Blade components.
+Use crm-gls-theme-converter to convert the students list reference page into reusable Blade components.
 ```
 
 ```text

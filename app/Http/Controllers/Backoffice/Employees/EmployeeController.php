@@ -114,7 +114,7 @@ final class EmployeeController extends Controller
         $payload = $this->buildPayload($data, $request, $employee);
 
         $employee->update($payload);
-        $employee->syncEtablissements($this->resolveCenterIds($data, $employee));
+        $employee->syncEtablissements($this->resolveCenterIds($data));
         $this->storePhoto($employee, $request);
 
         return redirect()->route('backoffice.employees.index')
@@ -175,40 +175,26 @@ final class EmployeeController extends Controller
     }
 
     /**
-     * The centers to assign, never trusted blindly from client input: when
-     * the top-bar context is locked to a specific center, the employee is
-     * forced into exactly that center (a locked admin cannot assign an
-     * employee to — or move one into — a center it cannot itself see).
-     * Only an "all centers" context may submit a real multi-center list.
+     * The centers to assign. The "Centres affectés" multi-select is shown in
+     * every context (an employee may work in several centers, and that
+     * assignment is what grants their access + builds their own centre
+     * switcher), so the submitted list is authoritative — the active top-bar
+     * centre no longer overrides it.
+     *
+     * It is still never trusted blindly: the list is narrowed to the centres
+     * the signed-in user may actually assign, so a centre-confined admin can
+     * neither assign an employee to a centre it cannot see nor move one out
+     * of its own reach.
      *
      * Guaranteed non-empty: the Form Requests require at least one id, and
      * the locked branch always yields the context center.
      *
-     * On EDIT the centers field is hidden in that same locked context, so
-     * rewriting the assignment from it would silently REVOKE any other
-     * center the employee holds (and with it their access to that center's
-     * data + its entry in their top-bar switcher) as a side effect of an
-     * unrelated edit. Revoking a center must be deliberate, so an existing
-     * employee keeps its assignment unless the field was actually shown.
-     *
      * @param  array<string, mixed>  $data
      * @return list<int>
      */
-    private function resolveCenterIds(array $data, ?Employee $employee = null): array
+    private function resolveCenterIds(array $data): array
     {
         $context = app(CurrentContext::class);
-
-        if (! $context->isAllCenters() && $context->etablissementId() !== null) {
-            if ($employee === null) {
-                // Create: the new record belongs to the active center.
-                return [$context->etablissementId()];
-            }
-
-            $existing = $employee->etablissements()->pluck('etablissements.id')
-                ->map(static fn ($id): int => (int) $id)->all();
-
-            return $existing !== [] ? $existing : [$context->etablissementId()];
-        }
 
         /** @var list<int> $ids */
         $ids = array_values(array_filter(

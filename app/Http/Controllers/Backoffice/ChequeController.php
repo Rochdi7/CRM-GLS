@@ -162,7 +162,30 @@ final class ChequeController extends Controller
             ]);
         }
 
+        $ancien = $cheque->statut;
+
         $cheque->update(['statut' => $statut]);
+
+        // The Auditable trait already records the statut column change, but a
+        // bare "statut: Déposé → Rejeté" hides what it MEANS for the money.
+        // A rejected cheque is cash the school counted and will not receive,
+        // so the amount, the payer and the bank belong on the same line as
+        // the transition an investigator is reading.
+        activity('cheque')
+            ->performedOn($cheque)
+            ->event('cheque_statut')
+            ->withProperties([
+                'reference' => $cheque->reference,
+                'statut_avant' => $ancien,
+                'statut_apres' => $statut,
+                'montant' => number_format((float) $cheque->montant, 2, '.', ''),
+                'numero_cheque' => $cheque->numero_cheque,
+                'banque' => $cheque->banque,
+                'proprietaire' => $cheque->proprietaire_nom,
+                'etudiant_id' => $cheque->student_id,
+                'date_echeance' => $cheque->date_echeance?->toDateString(),
+            ])
+            ->log("Chèque {$cheque->reference} : {$ancien} → {$statut}");
 
         return redirect()->route('backoffice.cheques.index')
             ->with('success', __('Cheque status updated.'));

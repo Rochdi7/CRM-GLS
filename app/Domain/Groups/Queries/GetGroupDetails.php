@@ -60,9 +60,15 @@ final class GetGroupDetails
                 'enseignant' => $a->enseignant?->nomComplet(),
                 'dateDebut' => $a->date_debut?->format('d/m/Y'),
                 'dateFin' => $a->date_fin?->format('d/m/Y'),
+                // Raw ISO values too: the d/m/Y strings above are for
+                // display, but the "Modifier" modal needs <input type=date>
+                // values (Y-m-d) to prefill the period being corrected.
+                'dateDebutIso' => $a->date_debut?->format('Y-m-d'),
+                'dateFinIso' => $a->date_fin?->format('Y-m-d'),
                 'statut' => $a->statut,
                 'isActif' => $a->isActif(),
                 'motif' => $a->motif,
+                'updateUrl' => route('backoffice.groups.affectations.update', [$group, $a]),
             ])->values()->all(),
             'canArchive' => ! $isFinished && $user->can('groups.archive') && $this->centerAccess->canAccessCenter($user, $group->etablissement_id),
             'archiveUrl' => route('backoffice.groups.archive', $group),

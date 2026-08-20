@@ -18,20 +18,20 @@
     <link rel="shortcut icon" href="{{ asset('favicon.ico') }}">
 
     @if (app()->getLocale() === 'ar')
-        <link rel="stylesheet" href="{{ asset('assets/preskool/css/bootstrap.rtl.min.css') }}">
+        <link rel="stylesheet" href="{{ asset('assets/crm-gls/css/bootstrap.rtl.min.css') }}">
     @else
-        <link rel="stylesheet" href="{{ asset('assets/preskool/css/bootstrap.min.css') }}">
+        <link rel="stylesheet" href="{{ asset('assets/crm-gls/css/bootstrap.min.css') }}">
     @endif
 
-    <link rel="stylesheet" href="{{ asset('assets/preskool/plugins/tabler-icons/tabler-icons.css') }}">
-    <link rel="stylesheet" href="{{ asset('assets/preskool/plugins/fontawesome/css/all.min.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/crm-gls/plugins/tabler-icons/tabler-icons.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/crm-gls/plugins/fontawesome/css/all.min.css') }}">
     {{-- Select2 CSS only (no jQuery/Select2 JS anywhere): SelectField.tsx
          renders Select2's own markup as a React-native searchable dropdown. --}}
-    <link rel="stylesheet" href="{{ asset('assets/preskool/css/select2.min.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/crm-gls/css/select2.min.css') }}">
     {{-- Flag sprite classes (.flag.flag-xx, ISO-3166 lowercase codes) used by
          PhoneField's country dropdown — see icons/icon-flag.blade.php reference. --}}
-    <link rel="stylesheet" href="{{ asset('assets/preskool/plugins/icons/flags/flags.css') }}">
-    <link rel="stylesheet" href="{{ asset('assets/preskool/css/style.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/crm-gls/plugins/icons/flags/flags.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/crm-gls/css/style.css') }}">
 
     {{--
         No @routes/Ziggy yet — not installed (migration plan §"Routing":

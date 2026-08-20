@@ -234,7 +234,7 @@ item.
 `<x-backoffice.ui.table>` (`components/backoffice/ui/table.blade.php:17`)
 renders `class="table datatable ..."`; dashboard KPI cards render
 `class="counter"` (`dashboard-stats.blade.php:19,36,56,76`). The vendor
-`public/assets/preskool/js/script.js` (never edited — read only) calls,
+`public/assets/crm-gls/js/script.js` (never edited — read only) calls,
 unconditionally guarded only by element *existence*:
 
 ```js
@@ -416,7 +416,7 @@ Views: `resources/views/components/backoffice/ui/table.blade.php`,
 New: one migration `database/migrations/*_add_performance_indexes_to_finance_and_academic_tables.php`.
 
 Untouched (confirmed by design and re-confirmed at the end):
-`resources/views/theme-reference/preskool/`, `public/assets/preskool/`,
+`resources/views/theme-reference/crm-gls/`, `public/assets/crm-gls/`,
 all route files/names, all controller/Livewire namespaces, all Form Requests,
 all Domain actions, `lang/fr.json` (only additions, no deletions).
 

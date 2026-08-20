@@ -106,6 +106,63 @@ html[data-theme='dark'] .select2-dropdown {
  * colour and radius, one step smaller in height) instead of the oversized
  * .form-control default that made the box look bolted on.
  */
+/*
+ * The panel is positioned by React (fixed, measured off the trigger's bounding
+ * rect) so it can escape .table-responsive / .modal overflow. select2.min.css
+ * ships `.select2-dropdown { position: absolute; left: -100000px; width: 100% }`
+ * for its own jQuery positioning — that has to be cancelled here, or the panel
+ * stretches to viewport width and detaches from its trigger.
+ */
+/*
+ * THE width bug: style.css ships `.select2-container { min-width: 100%
+ * !important }` for the jQuery plugin. Our panel IS a .select2-container and is
+ * `position: fixed`, so that 100% resolves against the VIEWPORT — forcing the
+ * dropdown to full screen width regardless of the measured inline width
+ * (Etudiant on Inscriptions, Type on the caisse journal). !important can only
+ * be beaten by !important, so cancel it here. Also drop the theme's
+ * container-level shadow so it doesn't double the dropdown's own.
+ */
+.gls-select2-panel.select2-container {
+    min-width: 0 !important;
+    box-shadow: none;
+}
+.gls-select2-panel > .select2-dropdown {
+    position: static;
+    left: auto;
+    width: 100%;
+    max-height: inherit;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Inside a compact table row the control is short — keep the panel's own
+ * chrome proportional to it rather than to a full-width form field. */
+.gls-select2-panel .gls-select2-search {
+    padding: 6px;
+}
+.gls-select2-panel input.gls-select2-search__field {
+    height: 32px;
+    font-size: 13px;
+}
+.gls-select2-panel .select2-results__options {
+    padding: 3px;
+}
+
+/*
+ * The panel is `fixed`, but it is still a DOM descendant of the cell it was
+ * opened from — so inside a table it inherits `.table tbody td`'s uppercase
+ * transform and the cell's `text-align: center`, which is why the options
+ * rendered centred and in caps. The panel is UI chrome, not table data: reset
+ * both, and keep options left-aligned and readable.
+ */
+.gls-select2-panel,
+.gls-select2-panel * {
+    text-transform: none;
+    text-align: left;
+    white-space: normal;
+    vertical-align: baseline;
+}
+
 /* Floating panel look — the plugin's own JS normally positions/styles this. */
 .select2-dropdown.select2-dropdown--below {
     border: 1px solid #e9edf4;
@@ -197,9 +254,10 @@ input.gls-select2-search__field::-webkit-search-decoration {
     margin: 0;
 }
 .select2-results__option {
-    padding: 7px 10px;
+    padding: 6px 10px;
     border-radius: 5px;
-    font-size: 14px;
+    font-size: 13px;
+    line-height: 1.4;
 }
 /*
  * select2.min.css hard-codes a harsh #5897fb/#3875d7 highlight. Replace it
@@ -986,4 +1044,51 @@ html[data-theme='dark'] .gls-seancecal-day.is-today {
 .table tbody td .text-normal-case,
 .table tbody td .text-normal-case * {
     text-transform: none;
+}
+
+/* ---------------------------------------------------------------------------
+ * Dashboard KPI card figures (.stat-counter — StatCard.tsx)
+ *
+ * The money cards ("Encaissements ce mois-ci", "Dépenses ce mois-ci") carry a
+ * far longer figure than the plain counts next to them. Rendered at the same
+ * weight as a 2-digit count, "21356.88 MAD" wrapped onto a second line and
+ * pushed that card's label out of alignment with the rest of the row.
+ *
+ * Fix is typographic, not a layout change: the amount gets a slightly smaller
+ * clamped size and tabular figures so digits line up column-wise, and the
+ * currency unit becomes a muted suffix instead of competing with the number
+ * for the same weight. `fs-*` is deliberately avoided — it is PreSkool's
+ * PIXEL scale here (CLAUDE.md §12), not Bootstrap's heading scale.
+ * ------------------------------------------------------------------------- */
+.stat-counter {
+    display: flex;
+    align-items: baseline;
+    gap: 0.25rem;
+    margin-bottom: 0.25rem;
+    /* Digits share one advance width, so the two money cards stay aligned
+     * with each other however the amounts change. */
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+}
+
+.stat-counter-value {
+    /* Never break the amount across lines — that was the original defect. */
+    white-space: nowrap;
+}
+
+/* Money figures only: scale with the viewport so a long amount shrinks
+ * instead of wrapping, and never exceed the default heading size. */
+.stat-counter-money .stat-counter-value {
+    font-size: clamp(1.125rem, 1.6vw + 0.55rem, 1.5rem);
+    line-height: 1.2;
+}
+
+.stat-counter-unit {
+    flex-shrink: 0;
+    font-size: 0.75em;
+    font-weight: 500;
+    /* Same muted tone as the card's label line, so "MAD" reads as a unit
+     * rather than as part of the number. */
+    color: var(--bs-secondary-color, #6c757d);
+    letter-spacing: 0.02em;
 }

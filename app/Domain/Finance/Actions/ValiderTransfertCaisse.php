@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Finance\Actions;
 
+use App\Domain\Finance\Support\CaisseLedger;
 use App\Models\Caisse;
 use App\Models\CaisseTransfer;
 use App\Models\Employee;
@@ -19,6 +20,8 @@ use Illuminate\Validation\ValidationException;
  */
 final class ValiderTransfertCaisse
 {
+    public function __construct(private readonly CaisseLedger $ledger) {}
+
     public function handle(CaisseTransfer $transfer, Employee $validatedBy): CaisseTransfer
     {
         if ($transfer->statut !== CaisseTransfer::STATUT_EN_ATTENTE) {
@@ -37,8 +40,27 @@ final class ValiderTransfertCaisse
             $source = Caisse::query()->lockForUpdate()->findOrFail($transfer->caisse_source_id);
             $destination = Caisse::query()->lockForUpdate()->findOrFail($transfer->caisse_destination_id);
 
-            $source->decrement('solde', (float) $transfer->montant);
-            $destination->increment('solde', (float) $transfer->montant);
+            // Both legs go through the ledger so the journal shows the money
+            // leaving one till AND arriving in the other — a transfer that only
+            // logged one side would look like a loss.
+            $this->ledger->debit(
+                $source->id,
+                (float) $transfer->montant,
+                "Transfert {$transfer->reference} vers {$destination->nom}",
+                $transfer,
+                ['caisse_destination' => $destination->nom, 'valide_par' => $validatedBy->nomComplet()],
+            );
+
+            $this->ledger->credit(
+                $destination->id,
+                (float) $transfer->montant,
+                "Transfert {$transfer->reference} depuis {$source->nom}",
+                $transfer,
+                ['caisse_source' => $source->nom, 'valide_par' => $validatedBy->nomComplet()],
+            );
+
+            $source->refresh();
+            $destination->refresh();
 
             $transfer->update([
                 'statut' => CaisseTransfer::STATUT_VALIDE,

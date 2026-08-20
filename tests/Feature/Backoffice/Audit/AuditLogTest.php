@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Backoffice\Audit;
 
+use App\Domain\Audit\Queries\GetActivityLogList;
 use App\Models\Activity;
+use App\Models\AnneeScolaire;
 use App\Models\Etablissement;
 use App\Models\Frais;
 use App\Models\Role;
+use App\Models\Salle;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -224,11 +227,17 @@ final class AuditLogTest extends TestCase
     {
         $this->actingAs($this->userWith('audit-logs.view'));
 
-        // 404, not 405: the write endpoints are not merely disallowed, they
-        // were never registered — there is no controller action to reach.
-        $this->post('/backoffice/audit-logs')->assertNotFound();
-        $this->put('/backoffice/audit-logs/1')->assertNotFound();
-        $this->delete('/backoffice/audit-logs/1')->assertNotFound();
+        // Both URLs answer GET only (index and show), so every write verb is
+        // 405 Method Not Allowed — there is no action to route to. Pinning the
+        // exact code matters: asserting merely "not 2xx" would still pass if a
+        // store/update/destroy route were added later, which is precisely the
+        // regression this guards against.
+        $this->post('/backoffice/audit-logs')->assertStatus(405);
+        $this->put('/backoffice/audit-logs')->assertStatus(405);
+        $this->delete('/backoffice/audit-logs')->assertStatus(405);
+        $this->post('/backoffice/audit-logs/1')->assertStatus(405);
+        $this->put('/backoffice/audit-logs/1')->assertStatus(405);
+        $this->delete('/backoffice/audit-logs/1')->assertStatus(405);
     }
 
     // ── Authentication trail ────────────────────────────────────────────
@@ -296,6 +305,112 @@ final class AuditLogTest extends TestCase
             1,
             Activity::query()->where('log_name', 'authentication')->where('event', 'login')->count(),
         );
+    }
+
+    // ── Detail page & readability ───────────────────────────────────────
+
+    public function test_the_detail_page_opens_for_one_entry(): void
+    {
+        $this->actingAs($this->userWith('audit-logs.view', 'fees.view'));
+
+        Frais::create(['nom' => 'Frais détail', 'montant_defaut' => '75.00', 'statut' => 'Actif']);
+        $entry = Activity::query()->latest('id')->firstOrFail();
+
+        $this->get(route('backoffice.audit-logs.show', $entry->id))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/AuditLogs/Show')
+                ->where('entry.id', $entry->id));
+    }
+
+    public function test_the_detail_page_requires_the_permission(): void
+    {
+        $this->actingAs($this->userWith('fees.view'));
+
+        Frais::create(['nom' => 'Frais', 'montant_defaut' => '10.00', 'statut' => 'Actif']);
+        $entry = Activity::query()->latest('id')->firstOrFail();
+
+        $this->get(route('backoffice.audit-logs.show', $entry->id))->assertForbidden();
+    }
+
+    public function test_an_unknown_entry_is_a_404(): void
+    {
+        $this->actingAs($this->userWith('audit-logs.view'));
+
+        $this->get(route('backoffice.audit-logs.show', 999999))->assertNotFound();
+    }
+
+    public function test_foreign_keys_are_shown_as_names_not_raw_ids(): void
+    {
+        // The reason this page exists: "ENSEIGNANT_ID: 11" means nothing to a
+        // director. The id stays (it is what was stored), but the name must be
+        // resolved alongside it.
+        $viewer = $this->userWith('audit-logs.view');
+        $centre = Etablissement::create(['nom_centre' => 'GLS Marrakech', 'ville' => 'Marrakech']);
+
+        $this->actingAs($viewer);
+        Salle::create(['nom' => 'Salle 1', 'etablissement_id' => $centre->id, 'capacite' => 20, 'statut' => 'Actif']);
+
+        $entry = Activity::query()->where('log_name', 'salle')->latest('id')->firstOrFail();
+        $presented = app(GetActivityLogList::class)->find($entry->id);
+
+        $centreChange = collect($presented['changes'])->firstWhere('field', 'etablissement_id');
+
+        $this->assertNotNull($centreChange);
+        $this->assertSame('Centre', $centreChange['label']);
+        $this->assertSame((string) $centre->id, $centreChange['new']);
+        $this->assertSame('GLS Marrakech', $centreChange['newLabel']);
+    }
+
+    public function test_columns_get_french_labels(): void
+    {
+        $this->actingAs($this->userWith('audit-logs.view', 'fees.view'));
+
+        $frais = Frais::create(['nom' => 'Ancien', 'montant_defaut' => '10.00', 'statut' => 'Actif']);
+        $frais->update(['montant_defaut' => '20.00']);
+
+        $entry = Activity::query()->where('event', 'updated')->latest('id')->firstOrFail();
+        $presented = app(GetActivityLogList::class)->find($entry->id);
+
+        $change = collect($presented['changes'])->firstWhere('field', 'montant_defaut');
+
+        $this->assertSame('Montant par défaut', $change['label']);
+    }
+
+    public function test_plumbing_columns_are_hidden_on_a_creation(): void
+    {
+        // id/created_at/updated_at on a creation are noise that pushed the
+        // meaningful fields out of view.
+        $this->actingAs($this->userWith('audit-logs.view', 'fees.view'));
+
+        Frais::create(['nom' => 'Frais propre', 'montant_defaut' => '30.00', 'statut' => 'Actif']);
+
+        $entry = Activity::query()->where('event', 'created')->latest('id')->firstOrFail();
+        $fields = collect(app(GetActivityLogList::class)->find($entry->id)['changes'])->pluck('field');
+
+        $this->assertNotContains('id', $fields);
+        $this->assertNotContains('created_at', $fields);
+        $this->assertNotContains('updated_at', $fields);
+        $this->assertContains('nom', $fields);
+    }
+
+    public function test_dates_are_shown_in_french_format(): void
+    {
+        $this->actingAs($this->userWith('audit-logs.view', 'academic-years.view'));
+
+        AnneeScolaire::create([
+            'nom' => '2026/2027',
+            'date_debut' => '2026-09-01',
+            'date_fin' => '2027-06-30',
+            'par_defaut' => false,
+        ]);
+
+        $entry = Activity::query()->where('log_name', 'annee_scolaire')->latest('id')->firstOrFail();
+        $change = collect(app(GetActivityLogList::class)->find($entry->id)['changes'])
+            ->firstWhere('field', 'date_debut');
+
+        // Not 2026-09-01T00:00:00.000000Z, and no meaningless midnight.
+        $this->assertSame('01/09/2026', $change['new']);
     }
 
     // ── Filtering ───────────────────────────────────────────────────────

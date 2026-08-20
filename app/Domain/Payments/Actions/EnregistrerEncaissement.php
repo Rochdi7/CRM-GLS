@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Payments\Actions;
 
+use App\Domain\Finance\Support\CaisseLedger;
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Models\Caisse;
 use App\Models\Employee;
@@ -19,6 +20,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class EnregistrerEncaissement
 {
+    public function __construct(private readonly CaisseLedger $ledger) {}
+
     /**
      * @param array<string, mixed> $data validated StoreEncaissementRequest data.
      *        May also carry 'legacy_ref'/'legacy_source' (both in
@@ -34,7 +37,19 @@ final class EnregistrerEncaissement
                 'agent_id' => $agent->id,
             ]);
 
-            Caisse::query()->whereKey($data['caisse_id'])->increment('solde', (float) $data['montant']);
+            // Through the ledger, never increment(): a raw SQL bump fires no
+            // model events and would leave the balance change unaudited.
+            $this->ledger->credit(
+                (int) $data['caisse_id'],
+                (float) $data['montant'],
+                "Encaissement {$encaissement->reference}",
+                $encaissement,
+                [
+                    'methode' => $encaissement->methode,
+                    'etudiant_id' => $encaissement->student_id,
+                    'agent' => $agent->nomComplet(),
+                ],
+            );
 
             // An avance (no fee attached — see Encaissement::isAvance()) has
             // nothing to recompute here.

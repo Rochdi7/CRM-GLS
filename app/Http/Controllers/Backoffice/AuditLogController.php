@@ -40,11 +40,12 @@ final class AuditLogController extends Controller
         $dateTo = (string) $request->string('dateTo');
         $ip = (string) $request->string('ip');
         $financeOnly = $request->boolean('financeOnly');
+        $caisseId = (string) $request->string('caisseId');
         $perPage = (int) $request->integer('perPage', GetActivityLogList::DEFAULT_PER_PAGE);
 
         $list = $getActivityLogList(
             $search, $logName, $event, $causerId, $subjectType,
-            $dateFrom, $dateTo, $ip, $financeOnly, $perPage,
+            $dateFrom, $dateTo, $ip, $financeOnly, $caisseId, $perPage,
         );
 
         return Inertia::render('Backoffice/AuditLogs/Index', [
@@ -53,6 +54,7 @@ final class AuditLogController extends Controller
             'events' => $getActivityLogList->eventOptions(),
             'causers' => $getActivityLogList->causerOptions(),
             'subjectTypes' => AuditLogRegistry::subjectTypeOptions(),
+            'caisses' => $getActivityLogList->caisseOptions(),
             'filters' => [
                 'search' => $search,
                 'logName' => $logName,
@@ -63,8 +65,30 @@ final class AuditLogController extends Controller
                 'dateTo' => $dateTo,
                 'ip' => $ip,
                 'financeOnly' => $financeOnly,
+                'caisseId' => $caisseId,
                 'perPage' => $perPage,
             ],
+        ]);
+    }
+
+    /**
+     * One entry, in full, on its own page.
+     *
+     * A dedicated page (rather than only the inline expand) because reading a
+     * single change is the common case for a non-technical reader: it gets a
+     * shareable URL, the browser back button, and room to show every field
+     * with its resolved value instead of a cramped drawer.
+     */
+    public function show(Request $request, GetActivityLogList $getActivityLogList, int $activity): Response
+    {
+        abort_unless($request->user()->can('audit-logs.view'), 403);
+
+        $entry = $getActivityLogList->find($activity);
+
+        abort_if($entry === null, 404);
+
+        return Inertia::render('Backoffice/AuditLogs/Show', [
+            'entry' => $entry,
         ]);
     }
 }

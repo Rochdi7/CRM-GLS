@@ -35,14 +35,14 @@ catalog fee and never user-added/removed).
 
 ## 0e. Phase 6 — simple CRUD modules + modal architecture (source → destination)
 
-Inspected `resources/theme-reference/preskool-react/src/core/modals/*.tsx`
+Inspected `resources/theme-reference/crm-gls-react/src/core/modals/*.tsx`
 and `src/feature-module/uiInterface/base-ui/modals.tsx` for modal/settings-
 table/action-menu patterns before building anything.
 
 | Destination | Theme file(s) inspected | Verdict | Notes |
 |---|---|---|---|
 | `resources/js/Components/Modals/Modal.tsx` | `src/feature-module/uiInterface/base-ui/modals.tsx` | **Rejected as demo-only** — GLS-adapted Blade markup used instead | Lorem-ipsum demo content wired to `data-bs-toggle`/`data-bs-target` and a full `react-router-dom` import; not a controlled component. The real source is the existing Alpine-driven modal markup already shipping in `resources/views/livewire/backoffice/settings/*.blade.php` (`.modal-dialog-centered` + `.modal-backdrop` structure), translated from `x-data="{ show: @entangle(...) }"` to React `useState` — see `docs/bootstrap-react-integration-decision.md`'s "Phase 6 modal decision" |
-| `resources/js/Components/Tables/RowActions.tsx` | `theme-reference/preskool/students/students.blade.php` pattern (eye button + dropdown), referenced via `components/backoffice/ui/action-menu.blade.php` | **GLS Blade markup adapted, not the raw theme demo** | Same visual structure (`.btn-outline-light` eye button + `.dropdown`/`.dropdown-menu`), `data-bs-toggle="dropdown"` replaced with React `useState` + click-outside/Escape (same technique as Phase 2's `Header.tsx` user-menu dropdown) |
+| `resources/js/Components/Tables/RowActions.tsx` | `theme-reference/crm-gls/students/students.blade.php` pattern (eye button + dropdown), referenced via `components/backoffice/ui/action-menu.blade.php` | **GLS Blade markup adapted, not the raw theme demo** | Same visual structure (`.btn-outline-light` eye button + `.dropdown`/`.dropdown-menu`), `data-bs-toggle="dropdown"` replaced with React `useState` + click-outside/Escape (same technique as Phase 2's `Header.tsx` user-menu dropdown) |
 | `resources/js/Pages/Backoffice/Settings/{EtablissementsPanel,AnneesScolairesPanel,SallesPanel,FraisPanel}.tsx` | No close theme analog (theme demo tables are generic kitchen-sink CRUD, not GLS's referential-data domain) | **Not sourced from the theme** | Built from the existing Livewire tab views (`resources/views/livewire/backoffice/settings/*-tab.blade.php`) — same fields, same validation, same delete-guard messages, same table columns |
 | `resources/js/Pages/Backoffice/TypesDepenses/Index.tsx` | No theme analog | **Not sourced from the theme** | Built from the retired `resources/views/livewire/backoffice/types-depenses/types-depenses-index.blade.php` — same search/pagination/lock-badge behavior, now a standalone page instead of a tab (docs/phase-6-simple-crud-inventory.md §Q2) |
 | `resources/js/Components/Forms/{SelectField,TextareaField,CheckboxField,PhoneField,FormActions,FormErrorsSummary}.tsx` | No theme analog (theme repeats raw inline markup per page, same finding as Phase 3) | **New, GLS-specific** | `SelectField` is a plain native `<select>` — no Select2/jQuery on Inertia pages; `PhoneField` ports `App\Support\Phone\Countries`' split/join logic to TypeScript (`resources/js/Data/countries.ts`), keeping the country-dial + national-number two-part UX the Livewire `WithPhoneCountry` trait provides |
@@ -73,9 +73,9 @@ Theme source root (original, external — read-only, unchanged):
 `C:\Users\ASUS\Downloads\themeforest-jeUxtzLq-preskool-bootstrap-admin-html-template\preskool-v1.9.7\react`
 
 **Permanent in-repo reference copy** (added Phase 4):
-`resources/theme-reference/preskool-react/` — see
+`resources/theme-reference/crm-gls-react/` — see
 `docs/preskool-react-reference-inventory.md` for what was copied/excluded
-and `resources/theme-reference/preskool-react/README-GLS.md` for usage
+and `resources/theme-reference/crm-gls-react/README-GLS.md` for usage
 rules. From Phase 4 onward, source-path references in this file point to
 paths **inside that reference copy**, not the external Downloads folder —
 both contain the same files for anything not excluded (the `eps/` icon-source
@@ -93,7 +93,7 @@ inventory doc), so either path resolves to the same content.
 | `resources/js/Pages/Backoffice/Auth/ResetPassword.tsx` | `react/src/feature-module/auth/resetPassword/resetPassword.tsx` (+ `-2`, `-3` variants) | **Rejected as demo-only** — same reasoning; `resources/views/backoffice/auth/reset-password.blade.php` is the real source | Same profile as ForgotPassword: no demo-auth/localStorage, but `react-router-dom`-dependent, wrong layout family for this project |
 | `resources/js/Pages/Backoffice/Profile/Index.tsx` | Not sourced from the theme at all | **Not copied — no theme equivalent audited** | The theme's `feature-module/peoples`/generic profile pages (if any) were not the closest match; the existing `resources/views/livewire/backoffice/profile/profile-page.blade.php` (already a GLS-specific adaptation of the theme's card/table conventions) is the sole structural source |
 | `resources/js/Layouts/GuestLayout.tsx` | `react/src/feature-module/auth/*` layout wrappers (implicit — no dedicated guest-layout component found; each demo page inlines its own wrapper) | **Rejected — no reusable theme component to adapt** | Built from `resources/views/components/backoffice/layout/guest.blade.php` + the shared structural pattern already present in all three existing Blade auth pages (`vh-100` flex column, centered card, GLS light/dark logo pair) |
-| `resources/js/Components/Forms/{FormField,PasswordField,FormError,SubmitButton}.tsx` | Password-toggle technique only, from `login.tsx`'s `togglePasswordVisibility` state pattern; `public/assets/preskool/js/script.js`'s `.toggle-password`/`ti-eye`/`ti-eye-off` class contract (grepped directly) | **Technique reused, markup authored fresh** | No direct theme component for these — the theme repeats raw `<input>`/`<label>` markup inline on every page rather than extracting reusable field components |
+| `resources/js/Components/Forms/{FormField,PasswordField,FormError,SubmitButton}.tsx` | Password-toggle technique only, from `login.tsx`'s `togglePasswordVisibility` state pattern; `public/assets/crm-gls/js/script.js`'s `.toggle-password`/`ti-eye`/`ti-eye-off` class contract (grepped directly) | **Technique reused, markup authored fresh** | No direct theme component for these — the theme repeats raw `<input>`/`<label>` markup inline on every page rather than extracting reusable field components |
 | `resources/js/Components/Feedback/AuthStatus.tsx` | No theme equivalent (theme has no `session('status')`-style flash concept — it's a demo with no real backend) | **New, GLS-specific** | Sourced from the existing Blade `@if (session('status'))` pattern |
 
 **Demo-specific code explicitly NOT carried over** (per this phase's stop
@@ -136,7 +136,7 @@ demo-auth carried over).
 | `resources/js/Components/Theme/Breadcrumbs.tsx` | `resources/views/components/backoffice/layout/breadcrumbs.blade.php` | Rewritten (markup copied exactly: `<nav><ol class="breadcrumb mb-0"><li class="breadcrumb-item">`) | Typed `Breadcrumb[]` prop instead of Blade's `label => url` array convention |
 | `resources/js/Components/Theme/PageHeader.tsx` | `resources/views/components/backoffice/layout/page-header.blade.php` | Rewritten (markup copied exactly) | `children` fills the `actions` slot |
 | `resources/js/Components/Theme/Footer.tsx` | `resources/views/components/backoffice/layout/footer.blade.php` | Rewritten (markup copied exactly) | No theme equivalent — original PreSkool pages have no footer; this project added a minimal one, ported as-is |
-| `resources/js/Components/Theme/MobileSidebarOverlay.tsx` | `public/assets/preskool/js/script.js`'s `.sidebar-overlay`/`opened` class contract (grepped directly, since the React theme's own mobile-overlay handling wasn't separately isolated in the audited files) | Rewritten | React renders/removes the overlay element by state instead of jQuery `.toggleClass('opened')`; click closes, matching existing behavior |
+| `resources/js/Components/Theme/MobileSidebarOverlay.tsx` | `public/assets/crm-gls/js/script.js`'s `.sidebar-overlay`/`opened` class contract (grepped directly, since the React theme's own mobile-overlay handling wasn't separately isolated in the audited files) | Rewritten | React renders/removes the overlay element by state instead of jQuery `.toggleClass('opened')`; click closes, matching existing behavior |
 | `resources/js/Components/Feedback/FlashMessages.tsx` | `resources/views/components/backoffice/ui/alert.blade.php` | Rewritten (markup copied exactly) | Dismiss is `useState`, not `data-bs-dismiss="alert"` (no Bootstrap JS on Inertia pages — see `docs/bootstrap-react-integration-decision.md`) |
 | `resources/js/Components/Shared/Card.tsx` | `resources/views/components/backoffice/ui/card.blade.php` | Rewritten (markup copied exactly) | |
 | `resources/js/Components/Tables/DataTable.tsx` | `resources/views/components/backoffice/ui/table.blade.php` | Rewritten (markup copied exactly) | Visual/structural only — no client-side sort/filter/pagination logic adopted from the theme's own `core/common/dataTable/index.tsx` (that component was screened 🎨 reference-only in §1, and stays that way; CLAUDE.md's DataTables rule applies) |
@@ -148,12 +148,12 @@ demo-auth carried over).
 **Assets**: no new image/font/icon files were copied this phase — the shell
 reuses the exact same static files already serving the Blade/Livewire pages
 (`/assets/images/logo/gls-noir.png`, `/assets/images/logo/gls-blanc.webp`,
-`/assets/preskool/img/profiles/avatar-27.jpg`, and the already-loaded
+`/assets/crm-gls/img/profiles/avatar-27.jpg`, and the already-loaded
 `tabler-icons`/`fontawesome` icon-font classes). Confirms the "no duplicate
 asset loading" rule end to end for this phase.
 
 **Theme SCSS**: none imported — `resources/views/app.blade.php` loads the
-exact same static `assets/preskool/css/{bootstrap.min,style}.css` the
+exact same static `assets/crm-gls/css/{bootstrap.min,style}.css` the
 Blade/Livewire shell uses, so every class referenced above (`.card`,
 `.table`, `.sidebar`, `.header`, `.breadcrumb`, `.alert`) resolves from CSS
 that was already being served — zero new stylesheet requests introduced.
@@ -192,7 +192,7 @@ that was already being served — zero new stylesheet requests introduced.
 | `core/common/sidebar/index.tsx` | ✅ | Visual/structural reference for the nav sidebar; the full theme nav tree (200+ demo links) must be replaced with GLS's actual permission-gated module list | `resources/js/Components/Theme/Sidebar.tsx` |
 | `core/common/theme-settings/` | ✅ | Direct analog of existing `<x-backoffice.layout.theme-settings />` + `theme.js` — reuse the *visual* offcanvas panel, keep the existing localStorage persistence logic/keys so dark-mode preference isn't reset for existing users | `resources/js/Components/Theme/ThemeSettings.tsx` |
 | `core/common/loader/` | ✅ | Small, generic loading-spinner component; low risk | `resources/js/Components/Feedback/Loader.tsx` |
-| `core/common/imageWithBasePath/` | 🎨 | Wraps images with the theme's own `base_path` — GLS already has `asset('assets/preskool/…')` and Media Library `/media/<uuid8>/…` URL conventions; do not adopt this component's path logic, only its lazy-loading/fallback pattern if useful | n/a |
+| `core/common/imageWithBasePath/` | 🎨 | Wraps images with the theme's own `base_path` — GLS already has `asset('assets/crm-gls/…')` and Media Library `/media/<uuid8>/…` URL conventions; do not adopt this component's path logic, only its lazy-loading/fallback pattern if useful | n/a |
 | `core/common/Taginput/` | ✅ | Candidate replacement for `components/backoffice/forms/tags-input.blade.php`, only if/when that field is rebuilt in React (Phase 6+, not required for the pilot) | `resources/js/Components/Forms/TagInput.tsx` (deferred) |
 | `core/common/selectoption/selectoption.tsx` | 🎨 | Wraps `react-select`; reference for how the theme integrates it, but GLS's actual Select2 replacement decision (§2.2 of the plan doc) determines the real component built | `resources/js/Components/Forms/Select.tsx` (deferred to Phase 6+) |
 | `core/common/dataTable/index.tsx` | 🎨 | **Visual reference only** — do not adopt any client-side pagination/sort/filter logic from this component; every GLS list stays server-driven per CLAUDE.md's DataTables rule | `resources/js/Components/Tables/DataTable.tsx` (styling only, logic rebuilt) |
@@ -249,11 +249,11 @@ authored fresh once the react-bootstrap-vs-hand-rolled decision is made.
 
 | Source | Verdict | Notes | Proposed destination |
 |---|---|---|---|
-| `style/scss/*` | 🎨 | Compare against the existing `resources/scss/preskool/` reference copy (already in this project, kept for reference, not compiled — CLAUDE.md §12) before importing anything, to avoid re-introducing a duplicate Bootstrap import chain | Only import specific partials actually needed, into `resources/scss/backoffice/` — never wholesale |
-| `style/css/*` | 🚫 | Prebuilt/compiled CSS — this project already has the equivalent prebuilt CSS under `public/assets/preskool/css/`; do not double-serve | n/a |
-| `style/icon/*` (boxicons, weathericons, typicons, fontawesome, ionicons, tabler-icons webfont) | 🚫 (as npm/import), reuse existing static copies | This project already serves these exact icon-font families as static assets (`public/assets/preskool/icons/`). Importing them again via the React entry duplicates every icon-font file. React pages should reference the **already-loaded** static icon-font classes (`<i class="ti ti-...">` etc.), same markup convention as current Blade views | n/a — no new files, reuse existing `public/assets/preskool/` |
+| `style/scss/*` | 🎨 | Compare against the existing `resources/scss/crm-gls/` reference copy (already in this project, kept for reference, not compiled — CLAUDE.md §12) before importing anything, to avoid re-introducing a duplicate Bootstrap import chain | Only import specific partials actually needed, into `resources/scss/backoffice/` — never wholesale |
+| `style/css/*` | 🚫 | Prebuilt/compiled CSS — this project already has the equivalent prebuilt CSS under `public/assets/crm-gls/css/`; do not double-serve | n/a |
+| `style/icon/*` (boxicons, weathericons, typicons, fontawesome, ionicons, tabler-icons webfont) | 🚫 (as npm/import), reuse existing static copies | This project already serves these exact icon-font families as static assets (`public/assets/crm-gls/icons/`). Importing them again via the React entry duplicates every icon-font file. React pages should reference the **already-loaded** static icon-font classes (`<i class="ti ti-...">` etc.), same markup convention as current Blade views | n/a — no new files, reuse existing `public/assets/crm-gls/` |
 | `style/icon/tabler-icons/eps/*` (4,694 files) | 🚫 | Illustrator source files for the icon set, never used at runtime by any web build | n/a — never copied |
-| `style/fonts/*` (46 woff/woff2/ttf/eot files) | 🚫 (as new copies) | Cross-check filenames against `public/assets/preskool/fonts/` before assuming any are missing — if the current static asset set already has the same font family (likely, since both are PreSkool v1.9.7), no copy is needed at all | n/a unless a genuine gap is found |
+| `style/fonts/*` (46 woff/woff2/ttf/eot files) | 🚫 (as new copies) | Cross-check filenames against `public/assets/crm-gls/fonts/` before assuming any are missing — if the current static asset set already has the same font family (likely, since both are PreSkool v1.9.7), no copy is needed at all | n/a unless a genuine gap is found |
 
 ## 9. Types (`src/types/`)
 

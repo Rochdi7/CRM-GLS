@@ -1,5 +1,4 @@
-import { router } from '@inertiajs/react';
-import { useState } from 'react';
+import { Link, router } from '@inertiajs/react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import DataTable from '@/Components/Tables/DataTable';
@@ -16,14 +15,10 @@ import type { AuditLogFilters, AuditLogPageProps, AuditLogRow } from '@/Types';
 /**
  * « Journal d'audit » — the read-only forensic trail (CLAUDE.md §11).
  *
- * Every row answers who / what / when / from where, and expands to the exact
- * before→after diff of each changed column. There is no edit or delete
- * affordance anywhere on this page by design: the journal is evidence, and the
- * backend refuses to mutate it regardless of what the UI offers.
- *
- * The row is expandable rather than a detail page because an investigation
- * reads a SEQUENCE — comparing several entries around a suspicious payment —
- * and navigating away to a detail page for each one loses that context.
+ * Every row answers who / what / when / from where at a glance, and links to
+ * its own detail page for the full before→after breakdown. There is no edit or
+ * delete affordance anywhere on this page by design: the journal is evidence,
+ * and the backend refuses to mutate it regardless of what the UI offers.
  */
 
 /** Colour cue per event so a page of entries can be scanned, not read. */
@@ -53,10 +48,10 @@ export default function AuditLogsIndex({
     events,
     causers,
     subjectTypes,
+    caisses,
     filters,
 }: AuditLogPageProps) {
     const loading = useInertiaLoading();
-    const [expanded, setExpanded] = useState<number | null>(null);
 
     // Any filter change resets to page 1 — staying on page 7 of a narrower
     // result set silently shows nothing and reads as "no activity".
@@ -77,6 +72,7 @@ export default function AuditLogsIndex({
         filters.dateFrom !== '' ||
         filters.dateTo !== '' ||
         filters.ip !== '' ||
+        filters.caisseId !== '' ||
         filters.financeOnly;
 
     return (
@@ -112,6 +108,7 @@ export default function AuditLogsIndex({
                                             dateFrom: '',
                                             dateTo: '',
                                             ip: '',
+                                            caisseId: '',
                                             financeOnly: false,
                                         })
                                     }
@@ -130,6 +127,17 @@ export default function AuditLogsIndex({
                                 placeholder={t('All modules')}
                                 options={logNames.map((o) => ({ value: o.value, label: o.label }))}
                                 onChange={(event) => reload({ logName: event.target.value })}
+                            />
+                        </div>
+
+                        <div style={{ width: 200 }}>
+                            <SelectField
+                                id="audit-caisse"
+                                label={t('Cash register')}
+                                value={filters.caisseId}
+                                placeholder={t('All cash registers')}
+                                options={caisses.map((o) => ({ value: o.value, label: o.label }))}
+                                onChange={(event) => reload({ caisseId: event.target.value })}
                             />
                         </div>
 
@@ -233,18 +241,15 @@ export default function AuditLogsIndex({
                                 <th>{t('Performed by')}</th>
                                 <th>{t('Action')}</th>
                                 <th>{t('Record')}</th>
+                                <th className="text-end">{t('Amount')}</th>
+                                <th>{t('Balance after')}</th>
                                 <th>{t('Changes')}</th>
                                 <th>{t('IP address')}</th>
                             </tr>
                         }
                     >
                         {entries.data.map((row) => (
-                            <AuditRow
-                                key={row.id}
-                                row={row}
-                                expanded={expanded === row.id}
-                                onToggle={() => setExpanded(expanded === row.id ? null : row.id)}
-                            />
+                            <AuditRow key={row.id} row={row} />
                         ))}
                     </DataTable>
                 )}
@@ -259,124 +264,82 @@ export default function AuditLogsIndex({
 
 interface AuditRowProps {
     row: AuditLogRow;
-    expanded: boolean;
-    onToggle: () => void;
 }
 
-function AuditRow({ row, expanded, onToggle }: AuditRowProps) {
+/**
+ * One journal line. The whole entry opens on its own page (Show.tsx) rather
+ * than unfolding here: the readers who use this are not developers, and a
+ * cramped drawer of raw column names is what made the trail unreadable. The
+ * row keeps only what is scannable — when, who, what, and how many fields
+ * moved — and defers the explanation to the detail page.
+ */
+function AuditRow({ row }: AuditRowProps) {
     const changeCount = row.changes.length;
-    const hasDetail = changeCount > 0 || Object.keys(row.properties).length > 0 || row.url !== null;
 
     return (
-        <>
-            <tr>
-                <td>
-                    {hasDetail && (
-                        <button
-                            type="button"
-                            className="btn btn-sm btn-icon btn-outline-light"
-                            onClick={onToggle}
-                            aria-expanded={expanded}
-                            aria-label={expanded ? t('Hide details') : t('Show details')}
-                        >
-                            <i
-                                className={`ti ${expanded ? 'ti-chevron-down' : 'ti-chevron-right'}`}
-                                aria-hidden="true"
-                            />
-                        </button>
-                    )}
-                </td>
-                <td className="text-nowrap">
-                    <span className="fw-medium">{row.createdAt ?? '—'}</span>
-                    {row.createdAtHuman && (
-                        <span className="d-block fs-12 text-muted">{row.createdAtHuman}</span>
-                    )}
-                </td>
-                <td>{row.causerLabel ?? <span className="text-muted">{t('System')}</span>}</td>
-                <td>
-                    <StatusBadge label={row.eventLabel ?? row.description} variant={eventVariant(row.event)} />
-                </td>
-                <td>
-                    <span className="fw-medium">{row.subjectLabel ?? row.logLabel}</span>
-                    {row.subjectRef && <span className="d-block fs-12 text-muted">{row.subjectRef}</span>}
-                </td>
-                <td>
-                    {changeCount > 0 ? (
-                        <StatusBadge
-                            label={`${changeCount} ${changeCount > 1 ? t('fields') : t('field')}`}
-                            variant="secondary"
-                        />
-                    ) : (
-                        <span className="text-muted">—</span>
-                    )}
-                </td>
-                <td className="text-nowrap">{row.ipAddress ?? '—'}</td>
-            </tr>
-
-            {expanded && (
-                <tr>
-                    <td colSpan={7} className="bg-light">
-                        <div className="p-3">
-                            {changeCount > 0 && (
-                                <>
-                                    <h6 className="mb-2">{t('Changed fields')}</h6>
-                                    <div className="table-responsive mb-3">
-                                        <table className="table table-sm mb-0">
-                                            <thead>
-                                                <tr>
-                                                    <th>{t('Field')}</th>
-                                                    <th>{t('Before')}</th>
-                                                    <th>{t('After')}</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {row.changes.map((change) => (
-                                                    <tr key={change.field}>
-                                                        <td className="fw-medium">{change.field}</td>
-                                                        <td className="text-danger">
-                                                            {change.old ?? <span className="text-muted">{t('empty')}</span>}
-                                                        </td>
-                                                        <td className="text-success">
-                                                            {change.new ?? <span className="text-muted">{t('empty')}</span>}
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </>
-                            )}
-
-                            {Object.keys(row.properties).length > 0 && (
-                                <>
-                                    <h6 className="mb-2">{t('Context')}</h6>
-                                    <pre className="mb-3 fs-12 bg-white border rounded p-2 overflow-auto">
-                                        {JSON.stringify(row.properties, null, 2)}
-                                    </pre>
-                                </>
-                            )}
-
-                            <h6 className="mb-2">{t('Origin')}</h6>
-                            <dl className="row mb-0 fs-13">
-                                <dt className="col-sm-3">{t('IP address')}</dt>
-                                <dd className="col-sm-9">{row.ipAddress ?? '—'}</dd>
-
-                                <dt className="col-sm-3">{t('Request')}</dt>
-                                <dd className="col-sm-9">
-                                    {row.method ? `${row.method} ` : ''}
-                                    {row.url ?? '—'}
-                                </dd>
-
-                                <dt className="col-sm-3">{t('Route')}</dt>
-                                <dd className="col-sm-9">{row.routeName ?? '—'}</dd>
-
-                                <dt className="col-sm-3">{t('Browser')}</dt>
-                                <dd className="col-sm-9 text-break">{row.userAgent ?? '—'}</dd>
-                            </dl>
-                        </div>
-                    </td>
-                </tr>
-            )}
-        </>
+        <tr>
+            <td>
+                <Link
+                    href={`/backoffice/audit-logs/${row.id}`}
+                    className="btn btn-sm btn-icon btn-outline-light"
+                    aria-label={t('Show details')}
+                    title={t('Show details')}
+                >
+                    <i className="ti ti-eye" aria-hidden="true" />
+                </Link>
+            </td>
+            <td className="text-nowrap">
+                <span className="fw-medium">{row.createdAt ?? '—'}</span>
+                {row.createdAtHuman && (
+                    <span className="d-block fs-12 text-muted">{row.createdAtHuman}</span>
+                )}
+            </td>
+            <td>{row.causerLabel ?? <span className="text-muted">{t('System')}</span>}</td>
+            <td>
+                <StatusBadge label={row.eventLabel ?? row.description} variant={eventVariant(row.event)} />
+            </td>
+            <td>
+                <span className="fw-medium">{row.subjectLabel ?? row.logLabel}</span>
+                {row.subjectRef && <span className="d-block fs-12 text-muted">{row.subjectRef}</span>}
+            </td>
+            <td className="text-end text-nowrap text-normal-case">
+                {row.money ? (
+                    <span className={`fw-bold ${row.money.isCredit ? 'text-success' : 'text-danger'}`}>
+                        {row.money.isCredit ? '+' : '−'} {row.money.montant}
+                    </span>
+                ) : (
+                    <span className="text-muted">—</span>
+                )}
+            </td>
+            <td className="text-nowrap text-normal-case">
+                {row.money ? (
+                    <>
+                        <span className="fw-medium">{row.money.soldeApres}</span>
+                        <span className="d-block fs-12 text-muted">
+                            {t('was')} {row.money.soldeAvant}
+                        </span>
+                        {!row.money.coherent && (
+                            <span className="d-block fs-12 text-danger">
+                                <i className="ti ti-alert-triangle me-1" aria-hidden="true" />
+                                {t('Inconsistent')}
+                            </span>
+                        )}
+                    </>
+                ) : (
+                    <span className="text-muted">—</span>
+                )}
+            </td>
+            <td>
+                {changeCount > 0 ? (
+                    <StatusBadge
+                        label={`${changeCount} ${changeCount > 1 ? t('fields') : t('field')}`}
+                        variant="secondary"
+                    />
+                ) : (
+                    <span className="text-muted">—</span>
+                )}
+            </td>
+            <td className="text-nowrap text-normal-case">{row.ipAddress ?? '—'}</td>
+        </tr>
     );
 }

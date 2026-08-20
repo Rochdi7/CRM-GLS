@@ -33,7 +33,15 @@ final class GetGroupFormOptions
             ->tap(function ($q): void {
                 $id = $this->context->etablissementId();
                 if ($id !== null) {
-                    $q->where(fn ($sub) => $sub->whereNull('etablissement_id')->orWhere('etablissement_id', $id));
+                    // Center access follows the employee_etablissement pivot,
+                    // not only the primary column (CLAUDE.md §16) — a teacher
+                    // whose PRIMARY center is elsewhere but who is assigned to
+                    // this one must still be selectable, otherwise the group
+                    // form silently drops them and no assignment period (i.e.
+                    // no teacher history) can ever be opened for them here.
+                    $q->where(fn ($sub) => $sub->whereNull('etablissement_id')
+                        ->orWhere('etablissement_id', $id)
+                        ->orWhereHas('etablissements', fn ($e) => $e->where('etablissements.id', $id)));
                 }
             })
             ->orderBy('nom')

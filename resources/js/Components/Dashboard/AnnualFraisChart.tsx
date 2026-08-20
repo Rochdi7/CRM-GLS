@@ -16,7 +16,7 @@ interface SeriesSpec {
 }
 
 /**
- * Theme colors (public/assets/preskool/css/style.css) — matches the app's
+ * Theme colors (public/assets/crm-gls/css/style.css) — matches the app's
  * existing badge/status palette (StatusBadge variants) rather than a new
  * chart-specific one, so the dashboard stays visually consistent with the
  * rest of the backoffice.

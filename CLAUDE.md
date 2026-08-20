@@ -63,14 +63,14 @@ Cross-area shared components go to `resources/views/components/shared/` only.
 
 ## 3. Theme reference rules
 
-`resources/views/theme-reference/preskool/` holds **permanent** copies of all 252
+`resources/views/theme-reference/crm-gls/` holds **permanent** copies of all 252
 PreSkool views (categorized; see its README.md).
 
 - **Never delete** a reference page — even after using it.
 - **Never edit** reference pages (except an intentional theme re-sync).
 - **Never route** to reference pages or use them directly in production.
 - To build a page: **copy** the reference file into `backoffice/` or `frontoffice/`,
-  adapt the copy (layout component, `asset('assets/preskool/…')` paths, `__()` strings,
+  adapt the copy (layout component, `asset('assets/crm-gls/…')` paths, `__()` strings,
   named routes), and leave the original untouched.
 - Reuse theme CSS classes and markup patterns — do not invent a parallel design.
 - The original download at `C:\Users\ASUS\Downloads\themeforest-…\preskool-v1.9.7\`
@@ -78,7 +78,7 @@ PreSkool views (categorized; see its README.md).
 
 **PreSkool React theme reference** (added during the Inertia/React
 migration, see `docs/inertia-react-migration-plan.md`):
-`resources/theme-reference/preskool-react/` is a **reference-only** copy of
+`resources/theme-reference/crm-gls-react/` is a **reference-only** copy of
 the purchased React variant of the same theme. **Never import production
 components directly from it.** Copy and adapt reviewed components into
 `resources/js/` instead, document the mapping in
@@ -289,6 +289,14 @@ the database layer. Non-negotiable invariants already enforced in code:
   `EnregistrerEncaissement`, `EnregistrerDepense`, `EnregistrerRemboursement`,
   `DemanderTransfertCaisse` / `ValiderTransfertCaisse`. Never move money in a
   controller or with raw updates.
+  ⚠ **The balance itself moves ONLY through
+  `App\Domain\Finance\Support\CaisseLedger`** (`credit()` / `debit()`).
+  Never `increment('solde')` / `decrement('solde')` / a raw update on that
+  column: those are raw SQL, fire no Eloquent events, and leave the movement
+  **invisible to the audit journal** — which is exactly the fraud hole this
+  replaced. The ledger records solde avant → montant → solde après plus the
+  source record, and transfers must journal BOTH legs. See
+  `docs/audit-journal.md` §5b.
 - **Till transfers are two-step**: request (balances untouched) → validation by
   a **different** employee (balances move). Self-validation is refused.
 - **Money records (encaissements/depenses/remboursements/transfers) are never
@@ -318,6 +326,13 @@ the database layer. Non-negotiable invariants already enforced in code:
   - **A new audited model = `use Auditable;` + one line in
     `AuditLogRegistry::map()`.** Filters, labels and the finance scope all read
     from that registry, so they never drift from what is recorded.
+  - **The journal page resolves ids to names at READ time** via
+    `App\Support\Audit\AuditValueResolver` (FK → name, French column
+    labels, `19/08/2026` dates, plumbing columns hidden on creations). A new
+    FK column that should read as a name gets one line in its
+    `FOREIGN_KEYS`/`FIELD_LABELS` map. Never resolve names INTO the stored
+    row — the entry must stay the literal values written, or a later rename
+    silently rewrites history.
   - **The journal is append-only.** `App\Models\Activity` throws on update
     and delete (model level, below every Gate — so it holds even for a
     super-admin), and `backoffice.audit-logs.index` is the ONLY route:
@@ -451,12 +466,12 @@ the database layer. Non-negotiable invariants already enforced in code:
   (header toggle), and **RTL** (Arabic locale loads `bootstrap.rtl.min.css`;
   layouts set `dir` from locale).
 - Assets:
-  - Static theme assets: `public/assets/preskool/{css,js,img,fonts,icons,plugins}`
-    → referenced with `{{ asset('assets/preskool/…') }}`. Copied from the theme's
+  - Static theme assets: `public/assets/crm-gls/{css,js,img,fonts,icons,plugins}`
+    → referenced with `{{ asset('assets/crm-gls/…') }}`. Copied from the theme's
     prebuilt `public/build`; treat as vendor files (don't edit).
   - Vite-managed (ours only): `resources/js/{backoffice,frontoffice}/`,
     `resources/scss/{backoffice,frontoffice}/` — loaded via `@vite`.
-  - Theme SCSS source kept at `resources/scss/preskool/` for reference — **not**
+  - Theme SCSS source kept at `resources/scss/crm-gls/` for reference — **not**
     compiled, **not** imported (would duplicate Bootstrap).
 - Languages: **French is the default UI language** (`APP_LOCALE=fr`; fallback en).
   All page content must display in French. User-facing strings always use
@@ -517,7 +532,7 @@ Two independent auth surfaces — do not merge them.
   no email, their username is always auto-generated). Deactivated accounts
   (`users.is_active = false`) can never sign in — enforced in `LoginRequest`.
 - View: `backoffice/auth/login.blade.php` on `<x-backoffice.layout.guest>`,
-  adapted from `theme-reference/preskool/authentication/login.blade.php`.
+  adapted from `theme-reference/crm-gls/authentication/login.blade.php`.
 - Local dev credentials (AdminUserSeeder): `admin@gls.test` / `password` —
   **local only, replace before any deployment**.
 - Tests: `tests/Feature/Backoffice/AuthTest.php` — keep green.

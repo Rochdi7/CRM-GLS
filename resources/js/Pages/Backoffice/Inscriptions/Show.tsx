@@ -1,13 +1,24 @@
+import { useState } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import DetailRow from '@/Components/Details/DetailRow';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import RelatedRecordsTable from '@/Components/Details/RelatedRecordsTable';
+import LocalPagination from '@/Components/Tables/LocalPagination';
 import type { InscriptionDetails } from '@/Types';
 
 interface InscriptionShowProps {
     inscription: InscriptionDetails;
 }
+
+/**
+ * A group can assign a dozen-plus catalog fees (one per month plus exam and
+ * inscription fees), which made the "Lignes de frais" card dwarf the rest of
+ * the page. The lines arrive whole as an Inertia prop, so paging them is
+ * purely client-side — no extra round-trip, and the payment summary above
+ * still totals every line, not just the visible page.
+ */
+const FEES_PER_PAGE = 5;
 
 function feeStatusVariant(statut: string): 'success' | 'warning' | 'danger' {
     if (statut === 'Payé') return 'success';
@@ -26,6 +37,15 @@ function feeStatusVariant(statut: string): 'success' | 'warning' | 'danger' {
  */
 export default function InscriptionShow({ inscription }: InscriptionShowProps) {
     const reste = Number(inscription.reste);
+    const [feesPage, setFeesPage] = useState(1);
+
+    const feesPageCount = Math.max(1, Math.ceil(inscription.fees.length / FEES_PER_PAGE));
+    // Clamped rather than stored, so the page can never point past the end.
+    const currentFeesPage = Math.min(feesPage, feesPageCount);
+    const visibleFees = inscription.fees.slice(
+        (currentFeesPage - 1) * FEES_PER_PAGE,
+        currentFeesPage * FEES_PER_PAGE,
+    );
 
     return (
         <BackofficeLayout
@@ -121,7 +141,7 @@ export default function InscriptionShow({ inscription }: InscriptionShowProps) {
                                 </tr>
                             }
                         >
-                            {inscription.fees.map((fee) => {
+                            {visibleFees.map((fee) => {
                                 // Derived here rather than server-side: montant and paye are
                                 // both already on the prop, so a `reste` key would be redundant
                                 // state that could drift from them.
@@ -145,6 +165,13 @@ export default function InscriptionShow({ inscription }: InscriptionShowProps) {
                                 );
                             })}
                         </RelatedRecordsTable>
+                        <LocalPagination
+                            total={inscription.fees.length}
+                            perPage={FEES_PER_PAGE}
+                            page={currentFeesPage}
+                            pageCount={feesPageCount}
+                            onPageChange={setFeesPage}
+                        />
                     </Card>
                 </div>
             </div>

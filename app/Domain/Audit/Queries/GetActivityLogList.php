@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Domain\Audit\Queries;
 
 use App\Models\Activity;
+use App\Models\Caisse;
 use App\Models\User;
 use App\Support\Audit\AuditLogRegistry;
+use App\Support\Audit\AuditValueResolver;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -41,6 +43,7 @@ final class GetActivityLogList
         string $dateTo = '',
         string $ip = '',
         bool $financeOnly = false,
+        string $caisseId = '',
         int $perPage = self::DEFAULT_PER_PAGE,
     ): array {
         $query = Activity::query()
@@ -51,6 +54,12 @@ final class GetActivityLogList
             ->when($causerId !== '', fn (Builder $q) => $q->where('causer_id', (int) $causerId)
                 ->where('causer_type', (new User)->getMorphClass()))
             ->when($ip !== '', fn (Builder $q) => $q->where('ip_address', $ip))
+            // Verifying ONE till: every movement it received, in order. Matches
+            // the subject (the caisse row itself) so both the ledger movements
+            // and direct edits to the caisse show up together.
+            ->when($caisseId !== '', fn (Builder $q) => $q
+                ->where('subject_type', (new Caisse)->getMorphClass())
+                ->where('subject_id', (int) $caisseId))
             // Date filters are inclusive of the whole end day: the journal is
             // read by date, not by timestamp, and "au 19/08" must include
             // everything that happened during the 19th.
@@ -78,7 +87,12 @@ final class GetActivityLogList
             ->paginate($perPage)
             ->withQueryString();
 
-        $entries->through(fn (Activity $a): array => $this->present($a));
+        // One resolver per page load: warm it with every FK value on the page
+        // so the id -> name lookups cost a few queries, not one per field.
+        $resolver = new AuditValueResolver();
+        $resolver->warm($this->foreignKeyPairs($entries->getCollection()));
+
+        $entries->through(fn (Activity $a): array => $this->present($a, $resolver));
 
         return ['data' => $entries];
     }
@@ -88,16 +102,19 @@ final class GetActivityLogList
      *
      * @return array<string, mixed>
      */
-    private function present(Activity $a): array
+    private function present(Activity $a, AuditValueResolver $resolver): array
     {
         $changes = $a->attribute_changes?->toArray() ?? [];
         $old = $changes['old'] ?? [];
         $new = $changes['attributes'] ?? [];
 
         // One row per changed attribute — the journal's core question is
-        // "what exactly changed, from what, to what".
+        // "what exactly changed, from what, to what". Each side carries both
+        // the raw stored value AND, for a foreign key, the name behind it, so
+        // a reader never has to know that `enseignant_id: 11` means Karim.
         $diff = [];
         foreach (array_keys($new + $old) as $field) {
+            $field = (string) $field;
             $before = $old[$field] ?? null;
             $after = $new[$field] ?? null;
 
@@ -105,10 +122,19 @@ final class GetActivityLogList
                 continue;
             }
 
+            // Plumbing columns (id/created_at on a creation) would push the
+            // meaningful fields off the top of the list.
+            if (AuditValueResolver::isNoise($field, $a->event)) {
+                continue;
+            }
+
             $diff[] = [
-                'field' => (string) $field,
+                'field' => $field,
+                'label' => AuditValueResolver::label($field),
                 'old' => $this->stringify($before),
+                'oldLabel' => $resolver->resolve($field, $before),
                 'new' => $this->stringify($after),
+                'newLabel' => $resolver->resolve($field, $after),
             ];
         }
 
@@ -135,8 +161,144 @@ final class GetActivityLogList
             'createdAt' => $a->created_at?->format('Y-m-d H:i:s'),
             'createdAtHuman' => $a->created_at?->diffForHumans(),
             'changes' => $diff,
-            'properties' => $a->properties?->toArray() ?? [],
+            'properties' => $this->labelledProperties($a),
+            // Money summary — present only when the entry actually moved cash,
+            // so the page can lead with the arithmetic instead of burying it
+            // among the raw properties (see GetActivityLogList::moneySummary).
+            'money' => $this->moneySummary($a),
         ];
+    }
+
+    /**
+     * Context properties, French-labelled and stripped of what the page already
+     * shows elsewhere.
+     *
+     * The money block and the origin panel render `solde_avant`, `montant`,
+     * `caisse` etc. in their own sections; repeating them here as raw
+     * snake_case keys would just be noise under a heading called « Contexte ».
+     *
+     * @return list<array{key: string, label: string, value: string}>
+     */
+    private function labelledProperties(Activity $a): array
+    {
+        $raw = $a->properties?->toArray() ?? [];
+
+        // Already rendered by the dedicated money/origin sections.
+        $handledElsewhere = [
+            'solde_avant', 'solde_apres', 'montant', 'caisse', 'sens', 'motif',
+            'origine_type', 'origine_id', 'origine_reference',
+        ];
+
+        $out = [];
+
+        foreach ($raw as $key => $value) {
+            if (in_array($key, $handledElsewhere, true) || $value === null || $value === '') {
+                continue;
+            }
+
+            if (is_bool($value)) {
+                $display = $value ? 'Oui' : 'Non';
+            } elseif (is_array($value)) {
+                $display = json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
+            } else {
+                $display = $this->humanizeTimestamp((string) $value);
+            }
+
+            $out[] = [
+                'key' => (string) $key,
+                'label' => AuditValueResolver::label((string) $key),
+                'value' => $display,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * The cash arithmetic behind an entry, when there is any.
+     *
+     * A till is verified by reading "balance before → movement → balance
+     * after" in sequence. That arithmetic is recorded by CaisseLedger on
+     * `solde_movement` entries, and it is the single most important thing on
+     * the page for a finance check — so it is lifted out of `properties` into
+     * its own typed block rather than left as anonymous key/value noise.
+     *
+     * Returns null for everything that did not move money, so the UI can
+     * simply test for its presence.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function moneySummary(Activity $a): ?array
+    {
+        $p = $a->properties?->toArray() ?? [];
+
+        if (! isset($p['solde_avant'], $p['solde_apres'], $p['montant'])) {
+            return null;
+        }
+
+        $avant = (float) $p['solde_avant'];
+        $apres = (float) $p['solde_apres'];
+
+        return [
+            'caisse' => $p['caisse'] ?? null,
+            'sens' => $p['sens'] ?? null,
+            'isCredit' => ($p['sens'] ?? null) === 'Entrée',
+            'montant' => number_format((float) $p['montant'], 2, ',', ' '),
+            'soldeAvant' => number_format($avant, 2, ',', ' '),
+            'soldeApres' => number_format($apres, 2, ',', ' '),
+            // Recomputed here rather than trusted from the row: if the stored
+            // before/after do not agree with the recorded amount, that
+            // discrepancy is itself the finding an auditor is looking for.
+            'delta' => number_format($apres - $avant, 2, ',', ' '),
+            'coherent' => abs(abs($apres - $avant) - (float) $p['montant']) < 0.005,
+            'motif' => $p['motif'] ?? null,
+            'origineReference' => $p['origine_reference'] ?? null,
+        ];
+    }
+
+    /**
+     * Every [column, value] pair on a page that might be a foreign key, so the
+     * resolver can batch-load the names in one pass.
+     *
+     * @param  Collection<int, Activity>  $entries
+     * @return list<array{0: string, 1: mixed}>
+     */
+    private function foreignKeyPairs(Collection $entries): array
+    {
+        $pairs = [];
+
+        foreach ($entries as $entry) {
+            $changes = $entry->attribute_changes?->toArray() ?? [];
+
+            foreach ([$changes['old'] ?? [], $changes['attributes'] ?? []] as $side) {
+                foreach ($side as $column => $value) {
+                    $pairs[] = [(string) $column, $value];
+                }
+            }
+        }
+
+        return $pairs;
+    }
+
+    /**
+     * One entry, fully presented, for the detail page. Returns null when the
+     * id does not exist so the controller can 404 rather than render an empty
+     * shell.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function find(int $id): ?array
+    {
+        $entry = Activity::query()->with(['causer', 'subject'])->find($id);
+
+        if ($entry === null) {
+            return null;
+        }
+
+        $resolver = new AuditValueResolver();
+        $resolver->warm($this->foreignKeyPairs(collect([$entry])));
+
+        return $this->present($entry, $resolver);
     }
 
     /**
@@ -177,6 +339,9 @@ final class GetActivityLogList
             'login_failed' => 'Échec de connexion',
             'lockout' => 'Blocage',
             'password_reset' => 'Réinitialisation du mot de passe',
+            'solde_movement' => 'Mouvement de caisse',
+            'avance_applied' => "Avance affectée à un frais",
+            'cheque_statut' => 'Changement de statut du chèque',
             null => null,
             default => $event,
         };
@@ -196,7 +361,33 @@ final class GetActivityLogList
             return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: null;
         }
 
-        return (string) $value;
+        return $this->humanizeTimestamp((string) $value);
+    }
+
+    /**
+     * Eloquent serialises dates as `2026-08-19T00:00:00.000000Z`, which is
+     * precise and unreadable. Rendered as `19/08/2026` (or with the time when
+     * there is one), since the journal is read by people, not parsers.
+     *
+     * Anything that is not an ISO timestamp is returned untouched — this must
+     * never reshape a reference, an amount or a free-text note.
+     */
+    private function humanizeTimestamp(string $value): string
+    {
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/', $value, $m) !== 1) {
+            return $value;
+        }
+
+        [, $year, $month, $day, $hour, $minute, $second] = $m;
+
+        $date = "{$day}/{$month}/{$year}";
+
+        // A pure date (midnight) reads better without a meaningless 00:00:00.
+        if ($hour === '00' && $minute === '00' && $second === '00') {
+            return $date;
+        }
+
+        return "{$date} {$hour}:{$minute}:{$second}";
     }
 
     /**
@@ -220,6 +411,31 @@ final class GetActivityLogList
                 'id' => $u->id,
                 'nom' => $u->name.($u->username ? " ({$u->username})" : ''),
             ]);
+    }
+
+    /**
+     * Tills that have something recorded — the « Caisse » filter, which is how
+     * a finance check starts: pick the till, read its movements in order.
+     *
+     * @return list<array{value:string, label:string}>
+     */
+    public function caisseOptions(): array
+    {
+        $ids = Activity::query()
+            ->where('subject_type', (new Caisse)->getMorphClass())
+            ->whereNotNull('subject_id')
+            ->distinct()
+            ->pluck('subject_id');
+
+        return Caisse::query()
+            ->whereIn('id', $ids)
+            ->orderBy('nom')
+            ->get()
+            ->map(fn (Caisse $c): array => [
+                'value' => (string) $c->id,
+                'label' => $c->nom,
+            ])
+            ->all();
     }
 
     /**

@@ -159,8 +159,11 @@ final class InscriptionController extends Controller
 
         $action->hide($inscription, $fee);
 
-        return redirect()->route('backoffice.inscriptions.index')
-            ->with('success', __('Fee hidden.'));
+        // back(), not a redirect to index: this is an in-modal action, and
+        // redirecting to the list route re-mounts the page, resetting the
+        // modal's own React state (showModal/editingInscription) and closing
+        // it mid-edit — losing every unsaved change in the form.
+        return back()->with('success', __('Fee hidden.'));
     }
 
     public function restoreFee(
@@ -172,8 +175,8 @@ final class InscriptionController extends Controller
 
         $action->restore($inscription, $fee);
 
-        return redirect()->route('backoffice.inscriptions.index')
-            ->with('success', __('Fee restored.'));
+        // back() — see hideFee(): keeps the edit modal mounted.
+        return back()->with('success', __('Fee restored.'));
     }
 
     /**
@@ -280,8 +283,11 @@ final class InscriptionController extends Controller
         $action->validateAvailability($livreIds, $inscription->livres()->pluck('stock_article_id')->all());
         $action->handle($inscription, $livreIds, $request->user()?->employee);
 
-        return redirect()->route('backoffice.inscriptions.index')
-            ->with('success', __('Registration books updated.'));
+        // back() — see hideFee(): redirecting to index closed the edit modal,
+        // which is why saving books looked like it "did nothing" (the stock
+        // movement did happen, but the modal vanished before the refreshed
+        // quantities could be shown).
+        return back()->with('success', __('Registration books updated.'));
     }
 
     /**

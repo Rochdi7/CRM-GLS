@@ -138,8 +138,8 @@ Reusable building blocks (all under `resources/js/Components/`):
   in-flight Inertia visit (global router listener).
 
 New pages are still built by **copying** a demo page from
-`resources/views/theme-reference/preskool/` or
-`resources/theme-reference/preskool-react/` (never edited, never deleted,
+`resources/views/theme-reference/crm-gls/` or
+`resources/theme-reference/crm-gls-react/` (never edited, never deleted,
 never routed) and adapting the copy into a real `.tsx` page — see
 `docs/react-theme-file-map.md` for the copy-and-adapt mapping already done.
 

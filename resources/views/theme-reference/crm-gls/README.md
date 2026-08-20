@@ -17,7 +17,7 @@ original download either).
 5. When a page is needed:
    - Find it here (categories below),
    - **Copy** it into `resources/views/backoffice/…` or `resources/views/frontoffice/…`,
-   - Adapt the **copy** (asset paths → `asset('assets/preskool/…')`, layout →
+   - Adapt the **copy** (asset paths → `asset('assets/crm-gls/…')`, layout →
      `<x-backoffice.layout.app>`, strings → `__()`),
    - Leave the original untouched.
 
@@ -26,7 +26,7 @@ original download either).
 | Original theme code | Production replacement |
 |---|---|
 | `@extends('layout.mainlayout')` + `@section('content')` | `<x-backoffice.layout.app :title="…">` |
-| `{{ URL::asset('build/…') }}` / `url('build/…')` / `src="build/…"` | `{{ asset('assets/preskool/…') }}` |
+| `{{ URL::asset('build/…') }}` / `url('build/…')` / `src="build/…"` | `{{ asset('assets/crm-gls/…') }}` |
 | `Route::is([...])` conditional asset loading | `@push('styles')` / `@push('scripts')` |
 | `{{ url('some-page') }}` links | `route('backoffice.…')` named routes |
 | `<x-breadcrumb>` (theme component) | `<x-backoffice.layout.page-header>` |
@@ -60,6 +60,6 @@ original download either).
 
 ## Related reference material
 
-- Static theme assets (CSS/JS/img/fonts/plugins): `public/assets/preskool/`
-- Theme SCSS source (reference only, not compiled): `resources/scss/preskool/`
+- Static theme assets (CSS/JS/img/fonts/plugins): `public/assets/crm-gls/`
+- Theme SCSS source (reference only, not compiled): `resources/scss/crm-gls/`
 - Official docs: original download → `preskool-v1.9.7/documentation/laravel.html`

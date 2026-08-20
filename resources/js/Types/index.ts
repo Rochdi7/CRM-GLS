@@ -296,11 +296,17 @@ export interface GroupDetails {
 export interface GroupEnseignantRow {
     id: number;
     enseignant: string | null;
+    /** Display strings (d/m/Y). */
     dateDebut: string | null;
     dateFin: string | null;
+    /** Raw Y-m-d values, for the "Modifier" modal's date inputs. */
+    dateDebutIso: string | null;
+    dateFinIso: string | null;
     statut: string;
     isActif: boolean;
     motif: string | null;
+    /** Endpoint correcting this period's dates/motif — never its teacher. */
+    updateUrl: string;
 }
 
 export interface InscriptionFeeRow {
@@ -1318,6 +1324,8 @@ export interface EncaissementsPageProps {
     /** Active bank names from the catalog (Paramètres → Banques) — the Chèque form's dropdown source. */
     banques: string[];
     filters: EncaissementsFilters;
+    /** UI convenience only — the destroy endpoint re-authorizes server-side. */
+    can?: { delete: boolean };
     [key: string]: unknown;
 }
 
@@ -1559,9 +1567,16 @@ export interface RecouvrementPageProps {
 
 /** One changed column on an audited record: what it was, what it became. */
 export interface AuditChange {
+    /** Raw column name, e.g. `enseignant_id` — kept for the technical reader. */
     field: string;
+    /** French label for the column, e.g. « Enseignant ». */
+    label: string;
     old: string | null;
+    /** Name behind `old` when the column is a foreign key, else null. */
+    oldLabel: string | null;
     new: string | null;
+    /** Name behind `new` when the column is a foreign key, else null. */
+    newLabel: string | null;
 }
 
 export interface AuditLogRow {
@@ -1587,7 +1602,28 @@ export interface AuditLogRow {
     createdAt: string | null;
     createdAtHuman: string | null;
     changes: AuditChange[];
-    properties: Record<string, unknown>;
+    /** Context key/values, French-labelled; money/origin keys are excluded. */
+    properties: { key: string; label: string; value: string }[];
+    /** Non-null only for entries that moved a till balance. */
+    money: AuditMoney | null;
+}
+
+/**
+ * The cash arithmetic behind an entry — present only when money actually
+ * moved. `coherent` is false when the recorded before/after do not agree with
+ * the amount, which is itself a finding.
+ */
+export interface AuditMoney {
+    caisse: string | null;
+    sens: string | null;
+    isCredit: boolean;
+    montant: string;
+    soldeAvant: string;
+    soldeApres: string;
+    delta: string;
+    coherent: boolean;
+    motif: string | null;
+    origineReference: string | null;
 }
 
 export interface AuditLogFilters {
@@ -1600,6 +1636,7 @@ export interface AuditLogFilters {
     dateTo: string;
     ip: string;
     financeOnly: boolean;
+    caisseId: string;
     perPage: number;
 }
 
@@ -1609,6 +1646,12 @@ export interface AuditLogPageProps {
     events: { value: string; label: string }[];
     causers: { id: number; nom: string }[];
     subjectTypes: { value: string; label: string }[];
+    caisses: { value: string; label: string }[];
     filters: AuditLogFilters;
+    [key: string]: unknown;
+}
+
+export interface AuditLogShowPageProps {
+    entry: AuditLogRow;
     [key: string]: unknown;
 }

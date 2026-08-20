@@ -1,5 +1,5 @@
-import { useForm } from '@inertiajs/react';
-import type { FormEvent } from 'react';
+import { router, useForm } from '@inertiajs/react';
+import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import FormField from '@/Components/Forms/FormField';
@@ -23,6 +23,7 @@ interface EmployeeSummary {
     date_naissance: string | null;
     date_embauche: string | null;
     centre: string | null;
+    photo_url: string | null;
 }
 
 interface ProfileIndexProps {
@@ -80,6 +81,63 @@ export default function ProfileIndex({ user, employee, phonePays, telephone, wha
         password_confirmation: '',
     });
 
+    // Avatar upload — its own tiny form, posted the moment a file is picked
+    // (no "Enregistrer" step, matching the pic-2 camera-badge interaction).
+    // It writes to the linked Employee's `photo` media collection, so the
+    // header avatar refreshes on the same Inertia response.
+    const photoInputRef = useRef<HTMLInputElement>(null);
+    const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+    const [photoBusy, setPhotoBusy] = useState(false);
+    const [photoError, setPhotoError] = useState<string | null>(null);
+
+    const currentPhotoUrl = photoPreview ?? employee?.photo_url ?? null;
+
+    function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
+        const file = event.target.files?.[0];
+
+        // Reset the input right away so re-picking the SAME file still fires
+        // onChange (a browser quirk: identical value ⇒ no event).
+        event.target.value = '';
+
+        if (!file) {
+            return;
+        }
+
+        setPhotoError(null);
+
+        const reader = new FileReader();
+        reader.onload = () => setPhotoPreview(reader.result as string);
+        reader.readAsDataURL(file);
+
+        setPhotoBusy(true);
+        router.post(
+            '/backoffice/profile/photo',
+            { photo: file },
+            {
+                preserveScroll: true,
+                forceFormData: true,
+                onError: (errors) => {
+                    // Upload refused (too large / not an image) — drop the
+                    // optimistic preview so the UI never lies about what
+                    // was actually stored.
+                    setPhotoPreview(null);
+                    setPhotoError(errors.photo ?? 'Le téléversement de la photo a échoué.');
+                },
+                onFinish: () => setPhotoBusy(false),
+            },
+        );
+    }
+
+    function removePhoto() {
+        setPhotoError(null);
+        setPhotoBusy(true);
+        router.delete('/backoffice/profile/photo', {
+            preserveScroll: true,
+            onSuccess: () => setPhotoPreview(null),
+            onFinish: () => setPhotoBusy(false),
+        });
+    }
+
     function submitProfile(event: FormEvent) {
         event.preventDefault();
         profileForm.post('/backoffice/profile', { preserveScroll: true });
@@ -104,9 +162,68 @@ export default function ProfileIndex({ user, employee, phonePays, telephone, wha
                 <div className="col-xl-4">
                     <Card>
                         <div className="text-center">
-                            <span className="avatar avatar-xxl bg-primary-transparent rounded-circle d-inline-flex align-items-center justify-content-center mb-3">
-                                <span className="fs-24 fw-bold text-primary">{user.name.charAt(0).toUpperCase()}</span>
-                            </span>
+                            <div className="position-relative d-inline-block mb-3">
+                                <span className="avatar avatar-xxl bg-primary-transparent rounded-circle d-inline-flex align-items-center justify-content-center overflow-hidden border border-2 border-white shadow-sm">
+                                    {currentPhotoUrl ? (
+                                        <img
+                                            src={currentPhotoUrl}
+                                            alt={user.name}
+                                            className="w-100 h-100"
+                                            style={{ objectFit: 'cover' }}
+                                        />
+                                    ) : (
+                                        <span className="fs-24 fw-bold text-primary">
+                                            {user.name.charAt(0).toUpperCase()}
+                                        </span>
+                                    )}
+                                </span>
+
+                                {employee && (
+                                    <>
+                                        <button
+                                            type="button"
+                                            className="btn btn-primary btn-sm rounded-circle position-absolute d-inline-flex align-items-center justify-content-center p-0 border border-2 border-white"
+                                            style={{ width: 34, height: 34, right: 0, bottom: 4 }}
+                                            onClick={() => photoInputRef.current?.click()}
+                                            disabled={photoBusy}
+                                            title="Changer la photo"
+                                            aria-label="Changer la photo"
+                                        >
+                                            {photoBusy ? (
+                                                <span
+                                                    className="spinner-border spinner-border-sm"
+                                                    role="status"
+                                                    aria-hidden="true"
+                                                />
+                                            ) : (
+                                                <i className="ti ti-camera fs-16" />
+                                            )}
+                                        </button>
+                                        <input
+                                            ref={photoInputRef}
+                                            type="file"
+                                            accept="image/*"
+                                            className="d-none"
+                                            onChange={handlePhotoChange}
+                                        />
+                                    </>
+                                )}
+                            </div>
+
+                            {photoError && <div className="text-danger fs-13 mb-2">{photoError}</div>}
+
+                            {employee?.photo_url && !photoBusy && (
+                                <div className="mb-2">
+                                    <button
+                                        type="button"
+                                        className="btn btn-link btn-sm text-danger p-0 fs-13"
+                                        onClick={removePhoto}
+                                    >
+                                        Supprimer la photo
+                                    </button>
+                                </div>
+                            )}
+
                             <h5 className="mb-1">{user.name}</h5>
                             <p className="text-muted mb-2">{user.email}</p>
                             {user.roles.map((role) => (

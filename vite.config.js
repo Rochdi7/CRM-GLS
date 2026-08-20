@@ -7,7 +7,7 @@ import react from '@vitejs/plugin-react';
  *
  * Vite manages ONLY our own code (Frontoffice overrides/behaviour + the
  * Inertia/React app). The PreSkool theme itself is served as static,
- * pre-built assets from public/assets/preskool/ (see CLAUDE.md § Assets).
+ * pre-built assets from public/assets/crm-gls/ (see CLAUDE.md § Assets).
  *
  * Tailwind was removed from the default Laravel skeleton on purpose:
  * this project uses Bootstrap 5 (PreSkool). Do not re-add Tailwind.

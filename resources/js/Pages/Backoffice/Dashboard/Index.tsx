@@ -1,9 +1,9 @@
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import StatsGrid from '@/Components/Dashboard/StatsGrid';
 import AnnualFraisChart from '@/Components/Dashboard/AnnualFraisChart';
 import SeancesCalendar from '@/Components/Dashboard/SeancesCalendar';
-import type { DashboardPageProps } from '@/Types';
+import type { DashboardPageProps, SharedProps } from '@/Types';
 
 /**
  * Replaces resources/views/backoffice/dashboard/index.blade.php +
@@ -13,6 +13,9 @@ import type { DashboardPageProps } from '@/Types';
  * "Résumé des frais annuels" chart (GetAnnualFraisSummary).
  */
 export default function DashboardIndex({ stats, annualFrais, annualFraisYear, annualFraisYears, seancesCalendar }: DashboardPageProps) {
+    // auth.user is a shared prop (HandleInertiaRequests) — no page prop needed.
+    const { auth } = usePage<SharedProps>().props;
+
     function changeYear(year: number) {
         router.get(
             '/backoffice/dashboard',
@@ -48,16 +51,18 @@ export default function DashboardIndex({ stats, annualFrais, annualFraisYear, an
                 <div className="col-md-12">
                     <div className="card bg-dark">
                         <div className="overlay-img">
-                            <img src="/assets/preskool/img/bg/shape-04.png" alt="" className="img-fluid shape-01" />
-                            <img src="/assets/preskool/img/bg/shape-01.png" alt="" className="img-fluid shape-02" />
-                            <img src="/assets/preskool/img/bg/shape-02.png" alt="" className="img-fluid shape-03" />
-                            <img src="/assets/preskool/img/bg/shape-03.png" alt="" className="img-fluid shape-04" />
+                            <img src="/assets/crm-gls/img/bg/shape-04.png" alt="" className="img-fluid shape-01" />
+                            <img src="/assets/crm-gls/img/bg/shape-01.png" alt="" className="img-fluid shape-02" />
+                            <img src="/assets/crm-gls/img/bg/shape-02.png" alt="" className="img-fluid shape-03" />
+                            <img src="/assets/crm-gls/img/bg/shape-03.png" alt="" className="img-fluid shape-04" />
                         </div>
                         <div className="card-body">
                             <div className="d-flex align-items-xl-center justify-content-xl-between flex-xl-row flex-column">
                                 <div className="mb-3 mb-xl-0">
                                     <div className="d-flex align-items-center flex-wrap mb-2">
-                                        <h1 className="text-white me-2">Bienvenue sur GLS CRM</h1>
+                                        <h1 className="text-white me-2">
+                                            Bienvenue{auth.user ? `, ${auth.user.name}` : ''} sur GLS CRM
+                                        </h1>
                                     </div>
                                     <p className="text-white">Passez une bonne journée de travail</p>
                                 </div>

@@ -79,7 +79,10 @@ final class InscriptionFeeVisibilityTest extends TestCase
         [$inscription, $fee] = $this->inscriptionWithFee();
 
         $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
+            ->from(route('backoffice.inscriptions.index'))
             ->post(route('backoffice.inscriptions.fees.hide', [$inscription, $fee]))
+            // back(), not a redirect to index — the edit modal must survive the
+            // request, so the response returns to the referring page.
             ->assertRedirect(route('backoffice.inscriptions.index'));
 
         $this->assertNotNull($fee->fresh()->masque_le);
@@ -100,7 +103,10 @@ final class InscriptionFeeVisibilityTest extends TestCase
         ]);
 
         $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
+            ->from(route('backoffice.inscriptions.index'))
             ->post(route('backoffice.inscriptions.fees.hide', [$inscription, $fee]))
+            // back(), not a redirect to index — the edit modal must survive the
+            // request, so the response returns to the referring page.
             ->assertRedirect(route('backoffice.inscriptions.index'));
 
         $this->assertSame('200.00', (string) $inscription->fresh()->montant_total);
@@ -118,7 +124,10 @@ final class InscriptionFeeVisibilityTest extends TestCase
         ]);
 
         $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
+            ->from(route('backoffice.inscriptions.index'))
             ->post(route('backoffice.inscriptions.fees.hide', [$inscription, $fee]))
+            // back(), not a redirect to index — the edit modal must survive the
+            // request, so the response returns to the referring page.
             ->assertRedirect(route('backoffice.inscriptions.index'));
 
         $fresh = $fee->fresh();
@@ -135,7 +144,10 @@ final class InscriptionFeeVisibilityTest extends TestCase
         $inscription->update(['montant_total' => null]);
 
         $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
+            ->from(route('backoffice.inscriptions.index'))
             ->post(route('backoffice.inscriptions.fees.restore', [$inscription, $fee]))
+            // back(), not a redirect to index — the edit modal must survive the
+            // request, so the response returns to the referring page.
             ->assertRedirect(route('backoffice.inscriptions.index'));
 
         $this->assertNull($fee->fresh()->masque_le);

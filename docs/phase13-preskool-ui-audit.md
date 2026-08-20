@@ -1,7 +1,7 @@
 # Phase 13 — PreSkool Theme Reference UI Audit
 
 Source of truth inspected (read-only):
-- `resources/views/theme-reference/preskool/**` (Blade copies, 252 views)
+- `resources/views/theme-reference/crm-gls/**` (Blade copies, 252 views)
 - The theme's own static-HTML build (extracted from the original purchase
   archive to a scratch directory for rendering/screenshot ground truth —
   byte-for-byte the same markup as the Blade copies; only asset paths differ).

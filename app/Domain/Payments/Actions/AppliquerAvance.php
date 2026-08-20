@@ -51,6 +51,28 @@ final class AppliquerAvance
 
             $this->recalculerStatutFee($fee);
 
+            // The till does not move here, so no CaisseLedger entry — but the
+            // ALLOCATION is precisely what an avance investigation follows:
+            // who decided this student's unallocated money should settle this
+            // particular fee, and how much of the avance is left afterwards.
+            // Without this line the journal would show a new payment row with
+            // no trace of the advance it consumed.
+            activity('encaissement')
+                ->performedOn($application)
+                ->event('avance_applied')
+                ->withProperties([
+                    'avance_reference' => $avance->reference,
+                    'avance_id' => $avance->id,
+                    'montant' => number_format($montant, 2, '.', ''),
+                    'avance_restant_avant' => number_format($restant, 2, '.', ''),
+                    'avance_restant_apres' => number_format($restant - $montant, 2, '.', ''),
+                    'frais' => $fee->nom,
+                    'frais_id' => $fee->id,
+                    'etudiant_id' => $avance->student_id,
+                    'caisse_id' => $avance->caisse_id,
+                ])
+                ->log("Avance {$avance->reference} appliquée au frais « {$fee->nom} »");
+
             return $application;
         });
     }

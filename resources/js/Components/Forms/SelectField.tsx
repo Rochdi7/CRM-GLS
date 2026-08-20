@@ -40,6 +40,9 @@ export function normalizeSearch(text: string): string {
  * the previous keydown-buffer on the button could not support any of that.
  * Keyboard navigation (arrows/Enter/Escape/Tab) still works.
  */
+/** Rough dropdown height (search box + results list) — used to decide whether to flip upward. */
+const PANEL_MAX_HEIGHT = 320;
+
 export default function SelectField({
     id,
     label,
@@ -58,6 +61,34 @@ export default function SelectField({
     const wrapperRef = useRef<HTMLDivElement>(null);
     const searchRef = useRef<HTMLInputElement>(null);
     const buttonRef = useRef<HTMLButtonElement>(null);
+
+    // The dropdown is `position: fixed` rather than absolute: inside a
+    // `.table-responsive` (overflow-x: auto) or any other scroll container an
+    // absolutely-positioned panel is clipped at the container's edge — the bug
+    // seen on the group/inscription "Frais" tables, where the Classification
+    // dropdown was cut off and slid under the following rows. Fixed
+    // positioning anchored to the button's own bounding rect escapes every
+    // scroll container (same fix as DateField.tsx / RowActions.tsx).
+    const [panelPos, setPanelPos] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
+
+    function measurePanel() {
+        const button = buttonRef.current;
+        if (!button) {
+            return;
+        }
+        const rect = button.getBoundingClientRect();
+
+        // Flip above the control when there isn't room below.
+        const openUpward = rect.bottom + PANEL_MAX_HEIGHT > window.innerHeight && rect.top > PANEL_MAX_HEIGHT;
+        const height = Math.min(PANEL_MAX_HEIGHT, openUpward ? rect.top - 8 : window.innerHeight - rect.bottom - 8);
+
+        setPanelPos({
+            top: openUpward ? rect.top - height - 4 : rect.bottom + 4,
+            left: Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)),
+            width: rect.width,
+            maxHeight: height,
+        });
+    }
 
     const selected = options.find((o) => String(o.value) === String(value));
     const needle = normalizeSearch(query);
@@ -96,15 +127,29 @@ export default function SelectField({
             }
         }
 
-        document.addEventListener('mousedown', handleOutside);
+        // A fixed panel doesn't follow its anchor, so re-measure whenever
+        // anything scrolls (capture phase catches the table's own scroller)
+        // or the viewport resizes.
+        function reposition() {
+            measurePanel();
+        }
 
-        return () => document.removeEventListener('mousedown', handleOutside);
+        document.addEventListener('mousedown', handleOutside);
+        window.addEventListener('scroll', reposition, true);
+        window.addEventListener('resize', reposition);
+
+        return () => {
+            document.removeEventListener('mousedown', handleOutside);
+            window.removeEventListener('scroll', reposition, true);
+            window.removeEventListener('resize', reposition);
+        };
     }, [open]);
 
     function handleKeyDown(event: React.KeyboardEvent) {
         if (!open) {
             if (!disabled && (event.key === 'ArrowDown' || event.key === 'Enter')) {
                 event.preventDefault();
+                measurePanel();
                 setOpen(true);
             }
 
@@ -158,6 +203,9 @@ export default function SelectField({
                             disabled={disabled}
                             onClick={() => {
                                 if (!disabled) {
+                                    if (!open) {
+                                        measurePanel();
+                                    }
                                     setOpen((o) => !o);
                                 }
                             }}
@@ -183,12 +231,27 @@ export default function SelectField({
                     </span>
                 </span>
 
-                {open && (
+                {open && panelPos && (
                     <span
-                        className="select2-container select2-container--default select2-container--open"
-                        style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, width: '100%', zIndex: 1070 }}
+                        className="select2-container select2-container--default select2-container--open gls-select2-panel"
+                        style={{
+                            position: 'fixed',
+                            top: panelPos.top,
+                            left: panelPos.left,
+                            width: panelPos.width,
+                            maxHeight: panelPos.maxHeight,
+                            zIndex: 1070,
+                        }}
                     >
-                        <span className="select2-dropdown select2-dropdown--below" style={{ position: 'static', width: '100%' }}>
+                        {/*
+                          * `position: static` inline is not enough here: the plugin stylesheet
+                          * ships `.select2-dropdown { position: absolute; left: -100000px;
+                          * width: 100% }`, which — once the outer container became `fixed` —
+                          * blew the panel out to viewport width and detached it from its
+                          * trigger. `.gls-select2-panel > .select2-dropdown` in app.css pins
+                          * it back to the measured anchor box.
+                          */}
+                        <span className="select2-dropdown select2-dropdown--below">
                             {searchable && (
                                 <span className="gls-select2-search">
                                     <span className="gls-select2-search__wrap">
@@ -228,7 +291,11 @@ export default function SelectField({
                                 </span>
                             )}
                             <span className="select2-results">
-                                <ul className="select2-results__options" role="listbox" style={{ maxHeight: 260, overflowY: 'auto' }}>
+                                <ul
+                                    className="select2-results__options"
+                                    role="listbox"
+                                    style={{ maxHeight: panelPos.maxHeight - (searchable ? 56 : 8), overflowY: 'auto' }}
+                                >
                                     {placeholder && needle === '' && (
                                         <li
                                             className="select2-results__option"

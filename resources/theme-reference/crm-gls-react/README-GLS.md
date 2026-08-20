@@ -47,7 +47,7 @@ Net result: **596 files, ~37 MB** (down from the original ~127 MB).
    no localStorage-based auth/demo state, no mock APIs).
 3. **Document every adaptation** in `docs/react-theme-file-map.md`, with the
    exact source-relative path inside this reference copy (e.g.
-   `resources/theme-reference/preskool-react/src/core/common/header/index.tsx`)
+   `resources/theme-reference/crm-gls-react/src/core/common/header/index.tsx`)
    and its real destination under `resources/js/`.
 4. **Never run `npm install` inside this directory.** It has its own
    `package.json`/`package-lock.json` kept only so a future agent can read
@@ -60,7 +60,7 @@ Net result: **596 files, ~37 MB** (down from the original ~127 MB).
    `docs/inertia-react-migration-audit.md`).
 6. **Never load its full CSS/JS bundle.** The Inertia app's root view
    (`resources/views/app.blade.php`) loads only the project's own static
-   PreSkool assets, already served from `public/assets/preskool/` — this
+   PreSkool assets, already served from `public/assets/crm-gls/` — this
    reference copy's `src/style/` is for reading Sass source and class names,
    not for direct `@import`.
 7. **Review a component's own dependencies before adapting it.** Several

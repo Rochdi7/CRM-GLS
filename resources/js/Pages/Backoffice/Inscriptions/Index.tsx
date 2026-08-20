@@ -166,6 +166,10 @@ export default function InscriptionsIndex({
     const [livresError, setLivresError] = useState<string | undefined>(undefined);
     const [livresProcessing, setLivresProcessing] = useState(false);
     const [hiddenFees, setHiddenFees] = useState<HiddenInscriptionFee[]>([]);
+    // Hidden fees are the exception, not the norm — collapsed by default so
+    // they stop pushing the "Livres" picker below the fold on inscriptions
+    // that carry several of them.
+    const [showHiddenFees, setShowHiddenFees] = useState(false);
     const [hideProcessingId, setHideProcessingId] = useState<number | null>(null);
     const [restoreProcessingId, setRestoreProcessingId] = useState<number | null>(null);
     const [availableFeesPage, setAvailableFeesPage] = useState(1);
@@ -262,6 +266,7 @@ export default function InscriptionsIndex({
         feesForm.setData('fee_lines', []);
         feesForm.clearErrors();
         setHiddenFees([]);
+        setShowHiddenFees(false);
         setNewFeeToAdd('');
         setLoadingEditingFees(true);
         fetch(`/backoffice/inscriptions/${inscription.id}/fees`, { headers: { Accept: 'application/json' } })
@@ -291,6 +296,7 @@ export default function InscriptionsIndex({
         feesForm.setData('fee_lines', []);
         feesForm.clearErrors();
         setHiddenFees([]);
+        setShowHiddenFees(false);
         setNewFeeToAdd('');
         setAvailableLivres([]);
         setEditingLivreIds([]);
@@ -545,6 +551,7 @@ export default function InscriptionsIndex({
         setHideProcessingId(line.id);
         router.post(`/backoffice/inscriptions/${editingInscription.id}/fees/${line.id}/hide`, {}, {
             preserveScroll: true,
+            preserveState: true,
             onSuccess: () => {
                 feesForm.setData('fee_lines', feesForm.data.fee_lines.filter((_, i) => i !== index));
                 setHiddenFees((previous) => [
@@ -564,6 +571,7 @@ export default function InscriptionsIndex({
         setRestoreProcessingId(fee.id);
         router.post(`/backoffice/inscriptions/${editingInscription.id}/fees/${fee.id}/restore`, {}, {
             preserveScroll: true,
+            preserveState: true,
             onSuccess: () => {
                 setHiddenFees((previous) => previous.filter((f) => f.id !== fee.id));
                 setLoadingEditingFees(true);
@@ -584,8 +592,10 @@ export default function InscriptionsIndex({
      * how a later level change can add a further book without re-charging
      * stock for ones already given.
      */
-    function submitEditingLivres() {
+    function saveEditingLivres(onDone?: () => void) {
         if (!editingInscription) {
+            onDone?.();
+
             return;
         }
 
@@ -596,6 +606,33 @@ export default function InscriptionsIndex({
             { livre_ids: editingLivreIds },
             {
                 preserveScroll: true,
+                preserveState: true,
+                // `onDone` continues the caller's flow (the modal's own
+                // "Modifier" submit). It runs on success only — if the book
+                // sync fails (out of stock), the base-fields PUT is skipped
+                // so the modal stays open showing the error instead of
+                // closing as though everything saved.
+                onSuccess: () => {
+                    if (onDone) {
+                        onDone();
+
+                        return;
+                    }
+
+                    // Standalone save: re-read the assignment + stock counts
+                    // the action just changed, so the "(N en stock)" labels
+                    // show the decremented quantities, not the pre-save ones.
+                    setLoadingEditingLivres(true);
+                    fetch(`/backoffice/inscriptions/${editingInscription.id}/livres`, {
+                        headers: { Accept: 'application/json' },
+                    })
+                        .then((response) => response.json())
+                        .then((data: { assignedIds: number[]; livres: Array<{ id: number; nom: string; quantite: number }> }) => {
+                            setEditingLivreIds(data.assignedIds);
+                            setEditingAvailableLivres(data.livres);
+                        })
+                        .finally(() => setLoadingEditingLivres(false));
+                },
                 onError: (errors) => setLivresError(errors.livre_ids ?? 'Action impossible.'),
                 onFinish: () => setLivresProcessing(false),
             },
@@ -604,6 +641,17 @@ export default function InscriptionsIndex({
 
     function submit(event: FormEvent) {
         event.preventDefault();
+
+        // Fee lines auto-save on a 600ms debounce. Submitting inside that
+        // window would close the modal with the timer still pending, so the
+        // last edit to an amount/discount would be thrown away — flush it
+        // now, before anything else runs.
+        if (feesSaveTimeout.current) {
+            clearTimeout(feesSaveTimeout.current);
+            feesSaveTimeout.current = null;
+            persistFees(feesForm.data.fee_lines);
+        }
+
         const options = {
             preserveScroll: true,
             onSuccess: () => closeModal(),
@@ -632,7 +680,15 @@ export default function InscriptionsIndex({
         }));
 
         if (editingInscription) {
-            form.put(`/backoffice/inscriptions/${editingInscription.id}`, options);
+            // The book selection lives outside this form (its own endpoint,
+            // AssignerLivresInscription, because assigning a book moves
+            // stock). It used to be saved ONLY by a separate "Enregistrer les
+            // livres" button, so the normal "Modifier" flow silently dropped
+            // it — books picked in the modal were never persisted and the
+            // stock was never decremented. Chain it here so one click saves
+            // the whole modal, and only run the base-fields PUT once the
+            // book sync has succeeded.
+            saveEditingLivres(() => form.put(`/backoffice/inscriptions/${editingInscription.id}`, options));
         } else {
             form.post('/backoffice/inscriptions', options);
         }
@@ -1509,8 +1565,25 @@ export default function InscriptionsIndex({
 
                                     {hiddenFees.length > 0 && (
                                         <div className="mt-3">
-                                            <h6 className="mb-1">Frais masqués</h6>
-                                            <div className="table-responsive">
+                                            <button
+                                                type="button"
+                                                className="btn btn-link p-0 d-flex align-items-center gap-2 text-decoration-none mb-1"
+                                                onClick={() => setShowHiddenFees((previous) => !previous)}
+                                                aria-expanded={showHiddenFees}
+                                                aria-controls="ins-hidden-fees"
+                                            >
+                                                <i
+                                                    className={`ti ${showHiddenFees ? 'ti-chevron-down' : 'ti-chevron-right'}`}
+                                                    aria-hidden="true"
+                                                />
+                                                <h6 className="mb-0">Frais masqués</h6>
+                                                <span className="badge badge-soft-secondary">{hiddenFees.length}</span>
+                                            </button>
+                                            <div
+                                                id="ins-hidden-fees"
+                                                className="table-responsive"
+                                                hidden={!showHiddenFees}
+                                            >
                                                 <table className="table table-sm align-middle mb-0">
                                                     <thead className="thead-light">
                                                         <tr>
@@ -1570,12 +1643,15 @@ export default function InscriptionsIndex({
                                                 error={livresError}
                                             />
                                             {canManageFees && (
-                                                <div className="d-flex justify-content-end mt-1">
+                                                <div className="d-flex justify-content-end align-items-center gap-2 mt-1">
+                                                    <span className="text-muted fs-13">
+                                                        Enregistré aussi avec « Modifier ».
+                                                    </span>
                                                     <button
                                                         type="button"
                                                         className="btn btn-outline-primary btn-sm"
                                                         disabled={livresProcessing}
-                                                        onClick={submitEditingLivres}
+                                                        onClick={() => saveEditingLivres()}
                                                     >
                                                         {livresProcessing ? 'Enregistrement…' : 'Enregistrer les livres'}
                                                     </button>

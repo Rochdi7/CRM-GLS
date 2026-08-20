@@ -75,10 +75,14 @@ year's evidence).
 | Model → log name/label map | `app/Support/Audit/AuditLogRegistry.php` |
 | Auth event capture | `app/Listeners/LogAuthenticationActivity.php` (auto-discovered — never also subscribe it) |
 | Read model (filters, diff shaping) | `app/Domain/Audit/Queries/GetActivityLogList.php` |
+| Id → name resolution + French field labels | `app/Support/Audit/AuditValueResolver.php` |
+| **Till balance movements (the money trail)** | `app/Domain/Finance/Support/CaisseLedger.php` |
 | Controller (read-only) | `app/Http/Controllers/Backoffice/AuditLogController.php` |
-| Page | `resources/js/Pages/Backoffice/AuditLogs/Index.tsx` |
+| List page | `resources/js/Pages/Backoffice/AuditLogs/Index.tsx` |
+| Detail page | `resources/js/Pages/Backoffice/AuditLogs/Show.tsx` |
 | Schema | `database/migrations/2026_08_19_210000_add_forensic_context_to_activity_log_table.php` |
 | Tests | `tests/Feature/Backoffice/Audit/AuditLogTest.php` |
+| Money-trail tests | `tests/Feature/Backoffice/Audit/CaisseAuditTrailTest.php` |
 
 ## 5. Using it
 
@@ -92,9 +96,31 @@ record type, date range, IP, and an **« Argent uniquement »** toggle that narr
 to the money-touching logs (encaissement, dépense, remboursement, transfert,
 chèque, caisse, frais d'inscription).
 
-Each row expands in place — rather than opening a detail page — because an
-investigation reads a *sequence* of entries around a suspicious payment, and
-navigating away for each one loses that context.
+The list stays scannable (when / who / what / how many fields moved) and each
+row opens its own **detail page** (`backoffice.audit-logs.show`) with the full
+breakdown: a shareable URL, the back button, and room to spell every value out.
+
+### Readability — why the detail page shows names, not ids
+
+The journal records what the database stores, which is correct but unreadable:
+`ENSEIGNANT_ID: 11` tells a director nothing. `AuditValueResolver` fixes this at
+**read time**:
+
+- **Foreign keys resolve to names** — `enseignant_id: 11` renders as
+  « Enseignant : Karim Fassi » with `#11` underneath. The id is still shown,
+  because it is what was actually written; the name is a display aid layered on
+  top, never a replacement.
+- **Columns get French labels** — `montant_defaut` → « Montant par défaut ».
+- **Dates are humanised** — `2026-08-19T00:00:00.000000Z` → `19/08/2026`
+  (midnight is dropped; a real time is kept).
+- **Plumbing is hidden on creations** — `id`, `created_at`, `updated_at` add
+  nothing to “what did this person do” and pushed the meaningful fields out of
+  view.
+
+Resolution is deliberately NOT baked into the stored row: the journal must stay
+an immutable record of the literal values written, and a name that changes later
+must not silently rewrite history. Names are batch-loaded per page (a few
+queries), not one lookup per field.
 
 ### Following a suspected encaissement fraud
 
@@ -106,6 +132,52 @@ navigating away for each one loses that context.
 5. Filter by that actor (or that IP) to see everything else they touched.
 6. Cross-check `authentication` entries for the same IP — who was signed in,
    and whether failed attempts preceded it.
+
+## 5b. The money trail — verifying a caisse
+
+**`caisses.solde` is a stored number with no ledger table behind it**
+(gls-crm-schema.md §10, a deliberate trade-off). Every money action used to
+move it with `Caisse::query()->increment('solde', …)` — raw SQL that never
+loads the model, so **Eloquent fired no events and the journal recorded
+nothing**. The payment row was logged; the cash it moved was invisible. In a
+CRM where money is everything, that was the hole a fraud would slip through.
+
+Every movement now goes through **`CaisseLedger`**, which writes a
+`solde_movement` entry carrying the complete arithmetic:
+
+| Property | Meaning |
+|---|---|
+| `caisse` | which till |
+| `sens` | Entrée / Sortie |
+| `montant` | the amount moved |
+| `solde_avant` | balance **before** |
+| `solde_apres` | balance **after** |
+| `motif` | « Encaissement ENC-2026-0042 » |
+| `origine_type` / `origine_id` / `origine_reference` | the record that caused it |
+
+⚠ **Never call `increment('solde')` / `decrement('solde')` or a raw update on
+that column again.** A movement that skips `CaisseLedger` is a movement nobody
+can audit. The five actions routed through it are `EnregistrerEncaissement`,
+`SupprimerEncaissement`, `EnregistrerDepense`, `EnregistrerRemboursement` and
+`ValiderTransfertCaisse`.
+
+**Transfers journal BOTH legs** — the debit on the source and the credit on the
+destination. A transfer logged on one side only would read as money vanishing.
+
+**Coherence check.** The page recomputes `solde_apres - solde_avant` and
+compares it with the recorded `montant`. When they disagree the entry is
+flagged « Incohérent » in red — that mismatch is itself the finding.
+
+### Verifying one till, step by step
+
+1. Open **Journal d'audit** and pick the till in the **« Caisse »** filter.
+2. Set the date range for the period under review.
+3. Read the movements in order: each line shows *solde avant → montant →
+   solde après*, so the running balance is checkable without recomputing
+   anything from the encaissements/dépenses tables.
+4. Any line marked « Incohérent » is a balance that does not add up.
+5. Each movement names the actor, the IP and the source record (ENC-…, DEP-…),
+   so a suspicious line leads straight to the payment and the person.
 
 ## 6. Adding a new module
 

@@ -1,5 +1,5 @@
 ---
-name: preskool-theme-converter
+name: crm-gls-theme-converter
 description: Convert PreSkool Laravel or HTML theme pages into reusable Laravel Blade components while preserving Bootstrap, assets, JavaScript behavior, responsiveness, and a strict backoffice/frontoffice structure.
 ---
 
@@ -16,7 +16,7 @@ The original reference files must remain unchanged.
 Typical source folders may include:
 
 ```text
-resources/views/theme-reference/preskool/
+resources/views/theme-reference/crm-gls/
 documentation/
 public/theme-reference/
 ```
@@ -30,7 +30,7 @@ resources/views/components/backoffice/
 resources/views/components/frontoffice/
 resources/views/backoffice/
 resources/views/frontoffice/
-public/assets/preskool/
+public/assets/crm-gls/
 ```
 
 Use the repository's actual conventions.
