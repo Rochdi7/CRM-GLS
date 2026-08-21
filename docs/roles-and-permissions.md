@@ -74,6 +74,18 @@ Autorisations screen remains the only way to *change* access. `Autre` maps to
 no role — an employee with no defined post gets no access until one is
 granted by hand (or their real catégorie is set).
 
+For everything already in the database (a restored dump, an import, accounts
+seeded before the auto-role fix), the bulk repair is:
+
+```powershell
+C:\php84\php.exe artisan auth:sync-default-roles            # assign
+C:\php84\php.exe artisan auth:sync-default-roles --dry-run  # report only
+```
+
+Same vacuum-only rule, idempotent, audited (`authorization` log). It reports
+« Autre » accounts separately — those still need a human to say what the
+person's job is.
+
 ## 4. Permissions
 
 Single source of truth: **`App\Support\Authorization\PermissionRegistry`**

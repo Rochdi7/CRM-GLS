@@ -668,8 +668,10 @@ keeps the primary column stable when an edit merely adds a center. Enforcing
   unmapped ⇒ no access). The names line up so granting is obvious, but
   `categorie` is NEVER consulted in an authorization check and changing an
   employee's job title does not change their access. The catégorie→role map
-  in `GlsStaffSeeder::ROLE_PAR_CATEGORIE` is seeding-time only; keep it in
-  sync when a category or role is added.
+  is `PermissionRegistry::defaultRoleFor()` (single source shared by
+  `EmployeeObserver`, `GlsStaffSeeder` and `auth:sync-default-roles` — the
+  idempotent bulk repair for role-less logins after a restore/import); keep
+  it in sync when a category or role is added.
 - **⚠ Only super-admin deletes.** `PermissionRegistry::superAdminOnly()`
   lists what no role preset may hold, and `matrix()` FILTERS every preset
   through it — so writing a `*.delete` into a preset has no effect, and a
