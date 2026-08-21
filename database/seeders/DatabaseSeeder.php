@@ -44,6 +44,7 @@ class DatabaseSeeder extends Seeder
             FraisSeeder::class,
             BanqueSeeder::class,
             MotifAnnulationSeeder::class,
+            GlsStaffSeeder::class,
         ]);
     }
 }
