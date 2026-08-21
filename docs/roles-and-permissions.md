@@ -52,21 +52,27 @@ their access. The names line up only so granting is obvious.
 The catégorie→default-role map lives in ONE place:
 **`PermissionRegistry::defaultRoleFor()`**, shared by both consumers:
 
-- **`EmployeeObserver`** — when creating an employee auto-creates its login
-  (user_id was null), the new user gets the default role for the job title
-  immediately. Without it the account authenticates but every
+- **`EmployeeObserver@created`** — when creating an employee auto-creates its
+  login (user_id was null), the new user gets the default role for the job
+  title immediately. Without it the account authenticates but every
   `permission:`-guarded page answers 403 — a dead end that looks like a
   broken deployment (this bit production on 21/08/2026). When `user_id` is
   passed explicitly the caller owns the account and its roles; the observer
-  assigns nothing.
+  assigns nothing at creation.
+- **`EmployeeObserver@updated`** — a catégorie change assigns the default
+  role **only when the login still has no role at all**. This is the
+  « Autre » escape hatch: an account seeded/created as « Autre » is unlocked
+  by simply setting its real job title on the Employees screen — no separate
+  Autorisations trip needed.
 - **`GlsStaffSeeder`** — same default at seed time, and never overwrites a
   role already on the account (a promotion made on Autorisations survives a
   re-seed).
 
-It is a **creation-time default only**: editing the catégorie later changes
-nothing, and the Autorisations screen remains the way to change access.
-`Autre` maps to no role — an employee with no defined post gets no access
-until one is granted by hand.
+In every path the default only **fills a vacuum**: a user holding ANY role is
+never touched, so `categorie` still never drives access at runtime and the
+Autorisations screen remains the only way to *change* access. `Autre` maps to
+no role — an employee with no defined post gets no access until one is
+granted by hand (or their real catégorie is set).
 
 ## 4. Permissions
 

@@ -353,10 +353,13 @@ the database layer. Non-negotiable invariants already enforced in code:
   **and assigns the default role for its catégorie**
   (`PermissionRegistry::defaultRoleFor()` — the single catégorie→role map,
   shared with `GlsStaffSeeder`) so the account is never role-less/403-locked.
-  Creation-time default only: `Autre` ⇒ no role, an existing role is never
-  overwritten, and editing the catégorie later changes nothing (`categorie`
-  never drives access at runtime, §16). Pass `user_id` explicitly to skip
-  both. No public registration ever.
+  A later catégorie EDIT re-fires this **only when the login still has no
+  role at all** (the « Autre » escape hatch: fixing the job title unlocks the
+  account). In every path the default only fills a vacuum: `Autre` ⇒ no
+  role, and a user holding ANY role is never touched — `categorie` never
+  drives access at runtime (§16); changing access remains the Autorisations
+  screen's job. Pass `user_id` explicitly to skip credential creation.
+  No public registration ever.
 - **`niveau` / `categorie` / all `statut` fields are plain VARCHARs** validated
   against model constants (`Student::NIVEAUX`, `Employee::CATEGORIES`,
   `Group::STATUTS`…) — deliberate; do not "fix" with lookup tables (see the

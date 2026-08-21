@@ -38,23 +38,45 @@ final class EmployeeObserver
     }
 
     /**
-     * A login the observer just created gets the default role for the
-     * employee's job title (PermissionRegistry::defaultRoleFor()) — without
-     * one the account authenticates but every `permission:`-guarded page
-     * answers 403, a dead end that looks like a broken deployment (this
-     * bit production on 21/08/2026).
+     * Setting a real catégorie on an employee whose login is still
+     * ROLE-LESS assigns the matching default role — the escape hatch for
+     * accounts seeded/created as « Autre » (e.g. the hors-fichier GLS
+     * mailboxes): the admin fixes the job title on the Employees screen and
+     * the account starts working, no separate Autorisations trip needed.
      *
-     * Scope — auto-created credentials ONLY (inside the user_id-was-null
-     * branch): when user_id is passed explicitly the caller owns the
-     * account and its roles (GlsStaffSeeder assigns its own, tests build
-     * users with exact permission sets). Creation-time default only:
+     * Only ever fills a VACUUM: a user who already holds ANY role is never
+     * touched, so changing the catégorie of a normal employee re-derives
+     * nothing — `categorie` still never drives access at runtime
+     * (CLAUDE.md §16), and Autorisations remains the way to CHANGE access.
+     */
+    public function updated(Employee $employee): void
+    {
+        if ($employee->wasChanged('categorie')) {
+            $this->assignDefaultRole($employee);
+        }
+    }
+
+    /**
+     * Gives the employee's login the default role for its job title
+     * (PermissionRegistry::defaultRoleFor()) — without one the account
+     * authenticates but every `permission:`-guarded page answers 403, a
+     * dead end that looks like a broken deployment (this bit production
+     * on 21/08/2026).
+     *
+     * Called from two places, both only to fill a vacuum:
+     *  - created(): auto-created credentials only (inside the
+     *    user_id-was-null branch) — when user_id is passed explicitly the
+     *    caller owns the account and its roles (GlsStaffSeeder assigns its
+     *    own, tests build users with exact permission sets);
+     *  - updated(): when the catégorie changes and the login still has no
+     *    role at all.
+     * Guards, in every path:
+     *  - a user holding ANY role is left untouched — a decision made on
+     *    the Autorisations screen always wins;
      *  - « Autre » maps to no role — deliberately: no defined post ⇒ no
-     *    access until someone decides on the Autorisations screen;
-     *  - editing the catégorie later does NOT re-fire this (observer is
-     *    `created` only) — `categorie` never drives access at runtime
-     *    (CLAUDE.md §16), it only picks the starting role here;
+     *    access until someone decides;
      *  - the role row may not exist on a bare database (seeder not run):
-     *    quietly skip rather than block the employee creation.
+     *    quietly skip rather than block the employee save.
      */
     private function assignDefaultRole(Employee $employee): void
     {

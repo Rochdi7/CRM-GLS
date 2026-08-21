@@ -151,7 +151,7 @@ final class EmployeesInertiaCrudTest extends TestCase
     }
 
     /**
-     * The default role is creation-time only: when the employee is created
+     * The default role only fills a vacuum: when the employee is created
      * with an explicit pre-existing user (user_id passed, observer skips
      * credential generation), a role that user already holds is never
      * overwritten or supplemented.
@@ -169,6 +169,54 @@ final class EmployeesInertiaCrudTest extends TestCase
         $existing->refresh();
         $this->assertTrue($existing->hasRole('teacher'));
         $this->assertFalse($existing->hasRole('consultant'));
+    }
+
+    /**
+     * The « Autre » escape hatch: giving a real catégorie to an employee
+     * whose login is still role-less assigns the matching default role —
+     * fixing the job title on the Employees screen is enough to unlock the
+     * account (this is how the hors-fichier GLS accounts get repaired).
+     */
+    public function test_setting_a_real_category_on_a_roleless_account_assigns_the_default_role(): void
+    {
+        $roleless = User::factory()->create();
+
+        $employee = Employee::factory()->create([
+            'user_id' => $roleless->id,
+            'categorie' => Employee::CATEGORIE_AUTRE,
+        ]);
+
+        $this->assertSame(0, $roleless->roles()->count());
+        $this->assertFalse($roleless->can('dashboard.view'));
+
+        $employee->update(['categorie' => Employee::CATEGORIE_CONSULTANT]);
+
+        $roleless->refresh();
+        $this->assertTrue($roleless->hasRole('consultant'));
+        $this->assertTrue($roleless->can('dashboard.view'));
+        $this->assertTrue($roleless->can('registrations.create'));
+    }
+
+    /**
+     * …but a catégorie change never touches a user who already holds a
+     * role: `categorie` does not drive access at runtime (CLAUDE.md §16) —
+     * changing access remains the Autorisations screen's job.
+     */
+    public function test_a_category_change_never_rewrites_an_existing_role(): void
+    {
+        $promoted = User::factory()->create();
+        $promoted->assignRole('director');
+
+        $employee = Employee::factory()->create([
+            'user_id' => $promoted->id,
+            'categorie' => Employee::CATEGORIE_ASSISTANTE_ADMINISTRATIVE,
+        ]);
+
+        $employee->update(['categorie' => Employee::CATEGORIE_ENSEIGNANT]);
+
+        $promoted->refresh();
+        $this->assertTrue($promoted->hasRole('director'));
+        $this->assertFalse($promoted->hasRole('teacher'));
     }
 
     public function test_one_time_credentials_are_shown_at_most_once(): void
