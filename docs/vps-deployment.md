@@ -436,14 +436,12 @@ Now that HTTPS is live, confirm `.env` has `SESSION_SECURE_COOKIE=true` and
 
 ## Step 9 — Migrate and seed the database
 
-⚠ **Do not run bare `php artisan db:seed`.** The project's `DatabaseSeeder`
-calls demo seeders (`DemoDataSeeder`, `DemoFinanceSeeder`,
-`DemoRoleUsersSeeder`, `DemoStockSeeder`, `DemoRecouvrementSeeder`,
-`DemoDashboardSeeder`) that insert fake students, fake finance movements and
-extra demo logins. Those are local-development fixtures — they must never touch
-production data.
-
-Run the migrations, then only the **production** seeders, in this order:
+The demo seeders that used to make a bare `db:seed` dangerous
+(`DemoDataSeeder`, `DemoFinanceSeeder`, `DemoRoleUsersSeeder`,
+`DemoStockSeeder`, `DemoRecouvrementSeeder`, `DemoDashboardSeeder`,
+`DemoLongueDureeSeeder` and `BookStockSeeder`) have been **deleted from the
+project**. `DatabaseSeeder` now contains production data only, so it is safe
+to run whole:
 
 ```bash
 cd /var/www/crm-gls
@@ -451,15 +449,21 @@ cd /var/www/crm-gls
 # Schema
 sudo -u www-data php8.4 artisan migrate --force
 
-# Production reference data only — no demo fixtures
+# Production reference data + real GLS staff — everything is idempotent
+sudo -u www-data php8.4 artisan db:seed --force
+```
+
+If you prefer to run them one at a time, the order is:
+
+```bash
 sudo -u www-data php8.4 artisan db:seed --force --class=RolesAndPermissionsSeeder
 sudo -u www-data php8.4 artisan db:seed --force --class=ReferentialDataSeeder
 sudo -u www-data php8.4 artisan db:seed --force --class=TypeDepenseSeeder
 sudo -u www-data php8.4 artisan db:seed --force --class=StockTypeSeeder
-sudo -u www-data php8.4 artisan db:seed --force --class=BookStockSeeder
 sudo -u www-data php8.4 artisan db:seed --force --class=FraisSeeder
 sudo -u www-data php8.4 artisan db:seed --force --class=BanqueSeeder
 sudo -u www-data php8.4 artisan db:seed --force --class=MotifAnnulationSeeder
+sudo -u www-data php8.4 artisan db:seed --force --class=GlsStaffSeeder
 ```
 
 What each one gives you:
@@ -469,13 +473,22 @@ What each one gives you:
 | `RolesAndPermissionsSeeder` | 61 permissions + the role matrix (**required** — the app cannot authorize anything without it) |
 | `ReferentialDataSeeder` | Academic years 2024/2025 + 2025/2026 (default), the 7 GLS branches, 2 rooms each |
 | `TypeDepenseSeeder` | Locked `is_system` expense types |
-| `StockTypeSeeder` / `BookStockSeeder` | Stock categories and the book catalog |
+| `StockTypeSeeder` | Stock categories (the book catalog is **not** seeded — open real quantities via the Import screen) |
 | `FraisSeeder` | Starter fee catalog (Paramètres → Frais) |
 | `BanqueSeeder` | Bank list for cheque/transfer payments |
 | `MotifAnnulationSeeder` | Cancellation reasons |
+| `GlsStaffSeeder` | The real `@glszentrum.com` staff: employees, their center assignments, logins and roles |
 
-`AdminUserSeeder` is deliberately **excluded** — it creates `admin@gls.test` with
-the password `password`, which must never exist on a public server.
+⚠ **`GlsStaffSeeder` prints a one-time password per NEW account, once.**
+Capture that output when you run it, hand the credentials over, then discard
+it — everyone is forced to change their password at first sign-in. Re-running
+never resets an existing password.
+
+`AdminUserSeeder` runs as part of `db:seed`, but refuses to create an
+administrator outside `local`/`testing` unless `ADMIN_PASSWORD` is set — so it
+can never publish the well-known `admin@gls.test` / `password` pair on a public
+server. Set `ADMIN_EMAIL`/`ADMIN_USERNAME`/`ADMIN_PASSWORD` in `.env` first, or
+skip it and use the command below.
 
 ### Create your real super-admin
 

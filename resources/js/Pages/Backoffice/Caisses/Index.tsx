@@ -590,7 +590,7 @@ export default function CaissesIndex({
                                     </tr>
                                 ))}
                             </DataTable>
-                            <Pagination paginator={transfers} showJumpToPage />
+                            <Pagination paginator={transfers} />
                         </>
                     )}
                 </Card>

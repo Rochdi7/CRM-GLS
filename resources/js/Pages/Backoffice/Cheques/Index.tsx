@@ -526,7 +526,7 @@ export default function ChequesIndex({
                                 </tr>
                             ))}
                         </DataTable>
-                        <Pagination paginator={cheques} showJumpToPage />
+                        <Pagination paginator={cheques} />
                     </>
                 )}
             </Card>

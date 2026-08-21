@@ -460,7 +460,7 @@ export default function SeanceShow({
                             </tr>
                         ))}
                     </RelatedRecordsTable>
-                    <Pagination paginator={seances} showJumpToPage />
+                    <Pagination paginator={seances} />
                 </Card>
             )}
 

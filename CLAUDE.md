@@ -525,34 +525,39 @@ the database layer. Non-negotiable invariants already enforced in code:
   `C:\php84\php.exe artisan lang:update` after adding packages).
   AR / EN / DE remain prepared in `lang/*.json` for the future locale switcher.
 
-### Seeders — essential vs. demo (production rule)
+### Seeders — production only (no demo data exists)
 
 `php artisan db:seed` (and therefore any deploy script) runs **only essential
-reference data**, all of it idempotent and safe to re-run on a live database:
-`RolesAndPermissionsSeeder`, `ReferentialDataSeeder` (7 GLS centers, rooms,
-academic years), `AdminUserSeeder`, then the locked catalogs —
-`TypeDepenseSeeder`, `StockTypeSeeder`, `FraisSeeder`, `BanqueSeeder`,
-`MotifAnnulationSeeder`. **It creates no student, group, inscription, till,
-stock or money record.**
+reference data plus the real GLS staff**, all of it idempotent and safe to
+re-run on a live database: `RolesAndPermissionsSeeder`,
+`ReferentialDataSeeder` (7 GLS centers, rooms, academic years),
+`AdminUserSeeder`, the locked catalogs — `TypeDepenseSeeder`,
+`StockTypeSeeder`, `FraisSeeder`, `BanqueSeeder`, `MotifAnnulationSeeder` —
+and `GlsStaffSeeder`. **It creates no student, group, inscription, stock or
+money record.**
 
-All fake data lives behind an explicit opt-in:
+⚠ **There is no demo/fake-data seeder any more, and none may be added.** The
+whole `Demo*` family (`DemoSeeder`, `DemoData`, `DemoFinance`,
+`DemoRoleUsers`, `DemoStock`, `DemoDashboard`, `DemoRecouvrement`,
+`DemoLongueDuree`) and `BookStockSeeder` were **deleted**: this seeder set is
+production-only, so `db:seed` is safe to run on the live database without
+picking through which classes are fake. The old `ALLOW_DEMO_SEED` env guard
+and the `ETU-DEMO*` / `ETU-DASH*` / `ETU-RETARD*` / `EMP-ROLE*` reference
+conventions are gone with them.
 
-```powershell
-C:\php84\php.exe artisan db:seed --class=DemoSeeder   # local only
-```
+Never add a seeder that invents business records — not to `DatabaseSeeder`,
+not as an opt-in class. Real students, real stock quantities and real money
+movements come from the Import screen or from the app itself, never from a
+seeder.
 
-`DemoSeeder` refuses to run outside `local`/`testing` unless `ALLOW_DEMO_SEED=true`.
-It wraps `DemoRoleUsers`, `DemoData`, `DemoFinance`, `BookStock`, `DemoStock`,
-`DemoRecouvrement` and `DemoDashboard`.
-
-⚠ `BookStockSeeder` is **demo, not essential**: the 8 book titles are real, but
-it opens every article at an invented 40 units — stock fiction on a production
-database. Seed real quantities by import instead.
-
-Never add a seeder that invents business records to `DatabaseSeeder`. Demo rows
-are recognizable by their reference prefixes (`ETU-DEMO*`, `ETU-DASH*`,
-`ETU-RETARD*`, `EMP-ROLE*`) — keep that convention, it is what makes them
-identifiable later.
+**`GlsStaffSeeder`** holds the real `@glszentrum.com` staff (names, catégorie,
+téléphone, sexe and center assignments transcribed from
+`GLS_Employes_Tous_Centres`). It is keyed on the e-mail address, so re-running
+updates instead of duplicating, and it never overwrites an existing password,
+an existing `sexe`, or a role granted by hand on the Autorisations screen.
+References follow the same `EMP-001` format as
+`ReferenceGenerator::make('EMP', 'employees')` — seeded employees must be
+indistinguishable from ones created through the UI.
 
 ## 13. Commands
 

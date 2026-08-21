@@ -478,7 +478,7 @@ export default function StudentsIndex({
                                 </tr>
                             ))}
                         </DataTable>
-                        <Pagination paginator={students} showJumpToPage />
+                        <Pagination paginator={students} />
                     </>
                 )}
             </Card>

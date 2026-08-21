@@ -784,7 +784,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                 ))}
                             </DataTable>
                         )}
-                        <Pagination paginator={encaissements} showJumpToPage />
+                        <Pagination paginator={encaissements} />
                     </>
                 )}
             </Card>

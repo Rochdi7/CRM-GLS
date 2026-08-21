@@ -3,6 +3,7 @@ import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import StatsGrid from '@/Components/Dashboard/StatsGrid';
 import AnnualFraisChart from '@/Components/Dashboard/AnnualFraisChart';
 import SeancesCalendar from '@/Components/Dashboard/SeancesCalendar';
+import { t } from '@/Lib/i18n';
 import type { DashboardPageProps, SharedProps } from '@/Types';
 
 /**
@@ -61,10 +62,10 @@ export default function DashboardIndex({ stats, annualFrais, annualFraisYear, an
                                 <div className="mb-3 mb-xl-0">
                                     <div className="d-flex align-items-center flex-wrap mb-2">
                                         <h1 className="text-white me-2">
-                                            Bienvenue{auth.user ? `, ${auth.user.name}` : ''} sur GLS CRM
+                                            {t('Welcome :name to GLS CRM', { name: auth.user?.name ?? '' }).replace(/\s+/g, ' ').trim()}
                                         </h1>
                                     </div>
-                                    <p className="text-white">Passez une bonne journée de travail</p>
+                                    <p className="text-white">{t('Have a good day at work')}</p>
                                 </div>
                             </div>
                         </div>

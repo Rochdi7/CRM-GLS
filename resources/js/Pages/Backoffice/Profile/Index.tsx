@@ -4,17 +4,8 @@ import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import FormField from '@/Components/Forms/FormField';
 import PasswordField from '@/Components/Forms/PasswordField';
-import SelectField from '@/Components/Forms/SelectField';
+import PhoneField from '@/Components/Forms/PhoneField';
 import SubmitButton from '@/Components/Forms/SubmitButton';
-import { COUNTRIES } from '@/Data/countries';
-
-// Client-side catalog (mirrors App\Support\Phone\Countries — see
-// Data/countries.ts) keyed by ISO for the dial-code lookup + select options;
-// replaces the 8 KB `countries` prop the server used to send on every load.
-const countries: Record<string, { nom: string; dial: string }> = Object.fromEntries(
-    COUNTRIES.map((c) => [c.iso, { nom: c.nom, dial: c.dial }]),
-);
-
 interface EmployeeSummary {
     reference: string;
     categorie: string;
@@ -150,8 +141,6 @@ export default function ProfileIndex({ user, employee, phonePays, telephone, wha
             onSuccess: () => passwordForm.reset(),
         });
     }
-
-    const dial = countries[profileForm.data.phone_pays]?.dial ?? '';
 
     return (
         <BackofficeLayout
@@ -298,58 +287,31 @@ export default function ProfileIndex({ user, employee, phonePays, telephone, wha
                                 </div>
                                 {employee && (
                                     <>
+                                        {/* Shared PhoneField (flag + dial code + phone icon) —
+                                            the country picked on either field drives both, the
+                                            same one-selector-per-form behavior the Employees
+                                            form has. */}
                                         <div className="col-md-6">
-                                            <div className="mb-3">
-                                                <label className="form-label" htmlFor="p-pays">
-                                                    Pays
-                                                </label>
-                                                <SelectField
-                                                    id="p-pays"
-                                                    options={Object.entries(countries).map(([iso, country]) => ({
-                                                        value: iso,
-                                                        label: `${country.nom} ${country.dial}`,
-                                                    }))}
-                                                    value={profileForm.data.phone_pays}
-                                                    onChange={(event) => profileForm.setData('phone_pays', event.target.value)}
-                                                    error={profileForm.errors.phone_pays}
-                                                />
-                                            </div>
+                                            <PhoneField
+                                                id="p-tel"
+                                                label="Téléphone"
+                                                countryIso={profileForm.data.phone_pays}
+                                                national={profileForm.data.telephone}
+                                                onCountryChange={(iso) => profileForm.setData('phone_pays', iso)}
+                                                onNationalChange={(value) => profileForm.setData('telephone', value)}
+                                                error={profileForm.errors.telephone ?? profileForm.errors.phone_pays}
+                                            />
                                         </div>
                                         <div className="col-md-6">
-                                            <div className="mb-3">
-                                                <label className="form-label" htmlFor="p-tel">
-                                                    Téléphone
-                                                </label>
-                                                <div className="input-group">
-                                                    <span className="input-group-text">{dial}</span>
-                                                    <input
-                                                        type="tel"
-                                                        id="p-tel"
-                                                        className={`form-control${profileForm.errors.telephone ? ' is-invalid' : ''}`}
-                                                        value={profileForm.data.telephone}
-                                                        onChange={(event) => profileForm.setData('telephone', event.target.value)}
-                                                        placeholder="ex : 661954125"
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="col-md-6">
-                                            <div className="mb-3">
-                                                <label className="form-label" htmlFor="p-wa">
-                                                    WhatsApp
-                                                </label>
-                                                <div className="input-group">
-                                                    <span className="input-group-text">{dial}</span>
-                                                    <input
-                                                        type="tel"
-                                                        id="p-wa"
-                                                        className={`form-control${profileForm.errors.whatsapp ? ' is-invalid' : ''}`}
-                                                        value={profileForm.data.whatsapp}
-                                                        onChange={(event) => profileForm.setData('whatsapp', event.target.value)}
-                                                        placeholder="ex : 661954125"
-                                                    />
-                                                </div>
-                                            </div>
+                                            <PhoneField
+                                                id="p-wa"
+                                                label="WhatsApp"
+                                                countryIso={profileForm.data.phone_pays}
+                                                national={profileForm.data.whatsapp}
+                                                onCountryChange={(iso) => profileForm.setData('phone_pays', iso)}
+                                                onNationalChange={(value) => profileForm.setData('whatsapp', value)}
+                                                error={profileForm.errors.whatsapp}
+                                            />
                                         </div>
                                     </>
                                 )}

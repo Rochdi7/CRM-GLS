@@ -491,7 +491,7 @@ export default function StockIndex({
                             </tr>
                         ))}
                     </RelatedRecordsTable>
-                    <Pagination paginator={articles} showJumpToPage />
+                    <Pagination paginator={articles} />
                 </Card>
             )}
 
@@ -581,7 +581,7 @@ export default function StockIndex({
                             </tr>
                         ))}
                     </RelatedRecordsTable>
-                    <Pagination paginator={mouvements} showJumpToPage />
+                    <Pagination paginator={mouvements} />
                 </Card>
             )}
 
@@ -659,7 +659,7 @@ export default function StockIndex({
                             </tr>
                         ))}
                     </RelatedRecordsTable>
-                    <Pagination paginator={stockTypesList} showJumpToPage />
+                    <Pagination paginator={stockTypesList} />
                 </Card>
             )}
 

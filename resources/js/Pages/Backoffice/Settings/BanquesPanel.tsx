@@ -149,7 +149,7 @@ export default function BanquesPanel({ banques, permissions }: BanquesPanelProps
                     </tr>
                 ))}
             </RelatedRecordsTable>
-            <Pagination paginator={banques} showJumpToPage />
+            <Pagination paginator={banques} />
 
             <Modal show={showModal} title={editingId ? 'Modifier la banque' : 'Ajouter une banque'} onClose={closeModal} processing={form.processing}>
                 <form onSubmit={handleSubmit}>

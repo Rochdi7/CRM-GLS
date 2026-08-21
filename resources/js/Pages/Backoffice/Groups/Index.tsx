@@ -658,7 +658,7 @@ export default function GroupsIndex({
                                 </tr>
                             ))}
                         </DataTable>
-                        <Pagination paginator={groups} showJumpToPage />
+                        <Pagination paginator={groups} />
                     </>
                 )}
             </Card>

@@ -240,7 +240,7 @@ export default function ComptesPanel({
                             </tr>
                         ))}
                     </DataTable>
-                    <Pagination paginator={comptes} showJumpToPage />
+                    <Pagination paginator={comptes} />
                 </>
             )}
 

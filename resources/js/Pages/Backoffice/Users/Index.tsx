@@ -201,7 +201,7 @@ export default function UsersIndex({ users, filters, perPageOptions, centerLocke
                                 </tr>
                             ))}
                         </DataTable>
-                        <Pagination paginator={users} showJumpToPage />
+                        <Pagination paginator={users} />
                     </>
                 )}
             </Card>

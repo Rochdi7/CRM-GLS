@@ -11,14 +11,17 @@ use Illuminate\Database\Seeder;
  * Production seeder — ESSENTIAL reference data only.
  *
  * Everything called here is idempotent and safe to re-run on a live database:
- * roles/permissions, the GLS centers + rooms + academic years, and the locked
- * catalogs (expense types, stock types, frais, banks, cancellation reasons).
- * No student, group, inscription or money record is ever created here.
+ * roles/permissions, the GLS centers + rooms + academic years, the locked
+ * catalogs (expense types, stock types, frais, banks, cancellation reasons)
+ * and the real GLS staff. No student, group, inscription or money record is
+ * ever created here.
  *
- * ⚠ Demo/fake data is NOT seeded by default any more. It lives in
- * DemoSeeder and must be asked for explicitly (local dev only):
- *
- *     php artisan db:seed --class=DemoSeeder
+ * ⚠ There is NO demo/fake data seeder any more. The whole Demo* family
+ * (DemoSeeder, DemoData, DemoFinance, DemoRoleUsers, DemoStock,
+ * DemoDashboard, DemoRecouvrement, DemoLongueDuree) and BookStockSeeder
+ * were deleted on purpose: this seeder set is production-only. Never add a
+ * seeder that invents business records — real quantities and real students
+ * come from the Import screen.
  *
  * AdminUserSeeder still runs: a database with no super-admin is unusable
  * (every permission-protected route answers 403). It is guarded to local

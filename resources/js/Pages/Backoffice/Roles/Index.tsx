@@ -130,7 +130,7 @@ export default function RolesIndex({ roles, search }: RolesIndexPageProps) {
                                 </tr>
                             ))}
                         </DataTable>
-                        <Pagination paginator={roles} showJumpToPage />
+                        <Pagination paginator={roles} />
                     </>
                 )}
             </Card>

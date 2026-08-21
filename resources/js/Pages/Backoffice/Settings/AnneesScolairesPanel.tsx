@@ -176,7 +176,7 @@ export default function AnneesScolairesPanel({ anneesScolaires, permissions }: A
                     </tr>
                 ))}
             </RelatedRecordsTable>
-            <Pagination paginator={anneesScolaires} showJumpToPage />
+            <Pagination paginator={anneesScolaires} />
 
             <Modal
                 show={showModal}

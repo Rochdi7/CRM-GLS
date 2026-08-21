@@ -417,7 +417,7 @@ export default function SeancesIndex({
                         </tr>
                     ))}
                 </RelatedRecordsTable>
-                <Pagination paginator={seances} showJumpToPage />
+                <Pagination paginator={seances} />
             </Card>
 
             <Modal

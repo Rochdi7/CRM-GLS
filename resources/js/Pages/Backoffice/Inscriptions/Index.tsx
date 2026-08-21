@@ -862,7 +862,6 @@ export default function InscriptionsIndex({
                                     <th>Date d'inscription</th>
                                     <th>Date de début</th>
                                     <th>Date de fin</th>
-                                    <th>Total</th>
                                     <th>Statut</th>
                                     <th className="text-end">Action</th>
                                 </tr>
@@ -878,7 +877,6 @@ export default function InscriptionsIndex({
                                     <td>{inscription.date ?? '—'}</td>
                                     <td>{inscription.dateDebut ?? '—'}</td>
                                     <td>{inscription.dateFin ?? '—'}</td>
-                                    <td>{inscription.montantTotal !== null ? `${Number(inscription.montantTotal).toFixed(2)} MAD` : '—'}</td>
                                     <td>
                                         <StatusBadge label={inscription.statut} variant={statutVariant(inscription.statut)} dot />
                                     </td>
@@ -919,7 +917,7 @@ export default function InscriptionsIndex({
                                 </tr>
                             ))}
                         </DataTable>
-                        <Pagination paginator={inscriptions} showJumpToPage />
+                        <Pagination paginator={inscriptions} />
                     </>
                 )}
             </Card>

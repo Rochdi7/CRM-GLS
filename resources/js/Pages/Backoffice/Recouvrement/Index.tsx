@@ -253,7 +253,7 @@ export default function RecouvrementIndex({
                                 </tr>
                             ))}
                         </DataTable>
-                        <Pagination paginator={retards} showJumpToPage />
+                        <Pagination paginator={retards} />
                     </>
                 )}
             </Card>

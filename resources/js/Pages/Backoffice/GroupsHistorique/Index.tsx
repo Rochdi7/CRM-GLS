@@ -71,7 +71,7 @@ export default function GroupsHistoriqueIndex({ historiques, centerLocked }: Gro
                         </tr>
                     ))}
                 </RelatedRecordsTable>
-                <Pagination paginator={historiques} showJumpToPage />
+                <Pagination paginator={historiques} />
             </Card>
         </BackofficeLayout>
     );

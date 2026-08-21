@@ -6,6 +6,7 @@ namespace Database\Seeders;
 
 use App\Models\Employee;
 use App\Models\Etablissement;
+use App\Models\Role;
 use App\Models\User;
 use App\Services\CaisseProvisioner;
 use Illuminate\Database\Seeder;
@@ -17,10 +18,10 @@ use Spatie\Permission\PermissionRegistrar;
  * REAL GLS staff — the @glszentrum.com mailboxes, matched against the
  * « GLS_Employes_Tous_Centres » roster (one sheet per center).
  *
- * This is NOT demo data: these are real people with real e-mail addresses,
- * so unlike DemoSeeder it is safe (and intended) to run on production. It is
- * fully idempotent — keyed on the e-mail address, so re-running updates the
- * existing rows instead of duplicating them.
+ * This is NOT demo data: these are real people with real e-mail addresses, so
+ * it is safe (and intended) to run on production — it ships as part of
+ * DatabaseSeeder. Fully idempotent: keyed on the e-mail address, so re-running
+ * updates the existing rows instead of duplicating them.
  *
  *     C:\php84\php.exe artisan db:seed --class=GlsStaffSeeder
  *
@@ -37,17 +38,22 @@ use Spatie\Permission\PermissionRegistrar;
  *    change on first sign-in.
  *  - provisions the till (CaisseProvisioner), same as the Employees screen.
  *
+ * Two accounts are seeded as `super-admin` (see SUPER_ADMINS): the CEO
+ * rafik@glszentrum.com and rochdi.karouali@glszentrum.com. ⚠ rafik@ and
+ * amine.rafik@ are TWO BROTHERS, not one person with two mailboxes — two
+ * employee records, two tills, and only rafik@ is the super-admin CEO.
+ *
  * ⚠ Passwords: a NEW user gets a random one-time password, printed ONCE to
  * the console when the seeder runs. An EXISTING user's password is never
  * touched, so re-seeding cannot lock anyone out. Copy the printed list, hand
  * the credentials over, and do not keep it.
  *
- * Five mailboxes have no counterpart on the roster spreadsheet
- * (achraf.elyounani, oumnya.salim, rafik, yassine.ait-lachguer,
- * zineb.hmimas). They are seeded anyway with the name derived from the
- * address, catégorie « Autre » and the head office (GLS Marrakech) as their
- * center — flagged with a `note` so they are easy to correct once the roster
- * is updated.
+ * Four mailboxes have no counterpart on the roster spreadsheet
+ * (achraf.elyounani, oumnya.salim, yassine.ait-lachguer, zineb.hmimas).
+ * They are seeded anyway with the name derived from the address, catégorie
+ * « Autre », the head office (GLS Marrakech) as their center and NO role —
+ * flagged with a `note` so they are easy to correct once the roster is
+ * updated.
  */
 final class GlsStaffSeeder extends Seeder
 {
@@ -68,23 +74,46 @@ final class GlsStaffSeeder extends Seeder
         Employee::CATEGORIE_RESPONSABLE_MARKETING => 'marketing-manager',
     ];
 
+    /**
+     * Comptes qui reçoivent le rôle `super-admin` — accès total, contourne
+     * toutes les permissions via Gate::before (CLAUDE.md §16).
+     *
+     * ⚠ N'ajoutez une adresse ici qu'en connaissance de cause : un
+     * super-admin voit et modifie TOUT, tous centres confondus. Le seul
+     * garde-fou qui subsiste pour lui est la validation des transferts de
+     * caisse, explicitement exclue du bypass (CLAUDE.md §11).
+     *
+     * @var list<string>
+     */
+    private const SUPER_ADMINS = [
+        // Amine Rafik — CEO / fondateur (boîte courte historique).
+        'rafik@glszentrum.com',
+        // Rochdi Karouali — Directeur des opérations.
+        'rochdi.karouali@glszentrum.com',
+    ];
+
     /** @var list<string> e-mails without a roster entry (note + « Autre »). */
     private const HORS_FICHIER = [
         'achraf.elyounani@glszentrum.com',
         'oumnya.salim@glszentrum.com',
         'yassine.ait-lachguer@glszentrum.com',
         'zineb.hmimas@glszentrum.com',
-        'rafik@glszentrum.com',
     ];
 
     /**
      * The roster, as read from the spreadsheet.
      *
-     * email => [prénom, nom, catégorie, téléphone|null, [centres…]]
+     * email => [prénom, nom, sexe, catégorie, téléphone|null, [centres…]]
+     *
+     * `sexe` is not on the spreadsheet — it is derived from the first name
+     * and matters visually: Employee::photoUrl() falls back to
+     * defaultgirl.webp / defaultman.webp based on it, so leaving it null
+     * shows every woman with a man's avatar. Correct any mistake on the
+     * Employees screen; a re-seed will not overwrite it (see run()).
      *
      * The centre list is ORDERED: the first entry becomes the primary center.
      *
-     * @return array<string, array{0:string,1:string,2:string,3:?string,4:list<string>}>
+     * @return array<string, array{0:string,1:string,2:string,3:string,4:?string,5:list<string>}>
      */
     private function roster(): array
     {
@@ -94,63 +123,71 @@ final class GlsStaffSeeder extends Seeder
         $AAD = Employee::CATEGORIE_ASSISTANTE_ADMINISTRATIVE;
         $AUT = Employee::CATEGORIE_AUTRE;
 
+        $H = 'Homme';
+        $F = 'Femme';
+
         return [
             // ---- GLS Marrakech (siège) ----------------------------------
-            'amine.rafik@glszentrum.com' => ['Amine', 'Rafik', $DIR, '+212 661 95 93 41', ['GLS Marrakech']],
-            'latifa.abouelfath@glszentrum.com' => ['Latifa', 'Abou Elfath', $DIR, '+212 669 72 87 05', ['GLS Marrakech']],
-            'rochdi.karouali@glszentrum.com' => ['Rochdi', 'Karouali', $OPS, '+212 689 98 10 22', ['GLS Marrakech']],
-            'ichrak.fakroune@glszentrum.com' => ['Ichrak', 'Fakroune', $AAD, '+212 655 61 53 65', ['GLS Marrakech']],
-            'mustapha.benlmekki@glszentrum.com' => ['Mustapha', 'Ben Lmekki', $AAD, '+212 707 04 65 81', ['GLS Marrakech']],
+            // CEO — super-admin (voir SUPER_ADMINS). « rafik@ » et
+            // « amine.rafik@ » sont DEUX FRÈRES, donc deux comptes et deux
+            // fiches employé distinctes : ne pas les fusionner.
+            // Rattaché au siège : le super-admin voit de toute façon tous les
+            // centres via Gate::before, mais son centre principal (et donc sa
+            // caisse) doit rester exact.
+            'rafik@glszentrum.com' => ['Amine', 'Rafik', $H, $DIR, '+212 661 95 93 41', ['GLS Marrakech']],
+            // Le frère — même nom de famille, compte et caisse séparés.
+            'amine.rafik@glszentrum.com' => ['Amine', 'Rafik', $H, $DIR, '+212 661 95 93 41', ['GLS Marrakech']],
+            'latifa.abouelfath@glszentrum.com' => ['Latifa', 'Abou Elfath', $F, $DIR, '+212 669 72 87 05', ['GLS Marrakech']],
+            'rochdi.karouali@glszentrum.com' => ['Rochdi', 'Karouali', $H, $OPS, '+212 689 98 10 22', ['GLS Marrakech']],
+            'ichrak.fakroune@glszentrum.com' => ['Ichrak', 'Fakroune', $F, $AAD, '+212 655 61 53 65', ['GLS Marrakech']],
+            'mustapha.benlmekki@glszentrum.com' => ['Mustapha', 'Ben Lmekki', $H, $AAD, '+212 707 04 65 81', ['GLS Marrakech']],
 
             // Directeur à Marrakech, Responsable administrative à Salé —
             // Marrakech en premier ⇒ centre principal (sa caisse y est).
-            'abderrahimelmoulabbi@glszentrum.com' => ['Abderrahim', 'Elmoulabbi', $DIR, '+212 603 86 52 51', ['GLS Marrakech', 'GLS Salé']],
+            'abderrahimelmoulabbi@glszentrum.com' => ['Abderrahim', 'Elmoulabbi', $H, $DIR, '+212 603 86 52 51', ['GLS Marrakech', 'GLS Salé']],
 
             // ---- GLS Rabat ----------------------------------------------
-            'elmehdi.bakhach@glszentrum.com' => ['El Mehdi', 'Bakhach', $DIR, '+212 677 65 77 02', ['GLS Rabat']],
+            'elmehdi.bakhach@glszentrum.com' => ['El Mehdi', 'Bakhach', $H, $DIR, '+212 677 65 77 02', ['GLS Rabat']],
             // « Directeur pédagogique » sur la feuille Rabat : la seule
             // constante pédagogique du modèle est au féminin (Directrice
             // pédagogique), d'où Directeur ici — à revoir si une constante
             // masculine est ajoutée à Employee::CATEGORIES.
-            'yassine.elbadaoui@glszentrum.com' => ['Yassine', 'El Badaoui', $DIR, '+212 673 64 07 89', ['GLS Rabat']],
-            'hafsa.elkhatabi@glszentrum.com' => ['Hafssa', 'Elkhattabi', $RAD, '+212 669 82 92 01', ['GLS Rabat']],
-            'khadija.manssouri@glszentrum.com' => ['Khadija', 'Manssouri', $AAD, '+212 772 12 95 99', ['GLS Rabat']],
+            'yassine.elbadaoui@glszentrum.com' => ['Yassine', 'El Badaoui', $H, $DIR, '+212 673 64 07 89', ['GLS Rabat']],
+            'hafsa.elkhatabi@glszentrum.com' => ['Hafssa', 'Elkhattabi', $F, $RAD, '+212 669 82 92 01', ['GLS Rabat']],
+            'khadija.manssouri@glszentrum.com' => ['Khadija', 'Manssouri', $F, $AAD, '+212 772 12 95 99', ['GLS Rabat']],
 
             // ---- GLS Casablanca -----------------------------------------
-            'maria.jelloul@glszentrum.com' => ['Maria Nezha', 'Jalloul', $DIR, null, ['GLS Casablanca']],
-            'ikram.boussila@glszentrum.com' => ['Ikram', 'Boussila', $AAD, null, ['GLS Casablanca']],
+            'maria.jelloul@glszentrum.com' => ['Maria Nezha', 'Jalloul', $F, $DIR, null, ['GLS Casablanca']],
+            'ikram.boussila@glszentrum.com' => ['Ikram', 'Boussila', $F, $AAD, null, ['GLS Casablanca']],
 
             // ---- GLS Kénitra --------------------------------------------
             // Directeur sur la feuille Kénitra ET sur celle de Casablanca —
             // Kénitra en premier ⇒ centre principal.
-            'yassine.ouledlaghzal@glszentrum.com' => ['Yassine', 'Ouled Laghzal', $DIR, null, ['GLS Kénitra', 'GLS Casablanca']],
-            'khaoula.elghanoui@glszentrum.com' => ['Khaoula', 'El Ghanoui', $AAD, null, ['GLS Kénitra']],
+            'yassine.ouledlaghzal@glszentrum.com' => ['Yassine', 'Ouled Laghzal', $H, $DIR, null, ['GLS Kénitra', 'GLS Casablanca']],
+            'khaoula.elghanoui@glszentrum.com' => ['Khaoula', 'El Ghanoui', $F, $AAD, null, ['GLS Kénitra']],
 
             // ---- GLS Agadir ---------------------------------------------
-            'mouna.zakri@glszentrum.com' => ['Mouna', 'Zakri', $DIR, '+212 777 61 78 58', ['GLS Agadir']],
-            'saad.soutafi@glszentrum.com' => ['Saad', 'Soutafi', $AAD, '+212 661 73 92 61', ['GLS Agadir']],
+            'mouna.zakri@glszentrum.com' => ['Mouna', 'Zakri', $F, $DIR, '+212 777 61 78 58', ['GLS Agadir']],
+            'saad.soutafi@glszentrum.com' => ['Saad', 'Soutafi', $H, $AAD, '+212 661 73 92 61', ['GLS Agadir']],
 
             // ---- GLS Salé -----------------------------------------------
             // Sur les feuilles Salé ET Online — Salé en premier (site physique).
-            'soufiane.elmatmour@glszentrum.com' => ['Soufiane', 'El Matmour', $AAD, '+212 767 87 15 92', ['GLS Salé', 'GLS Online']],
+            'soufiane.elmatmour@glszentrum.com' => ['Soufiane', 'El Matmour', $H, $AAD, '+212 767 87 15 92', ['GLS Salé', 'GLS Online']],
 
             // ---- GLS Online ---------------------------------------------
-            'ahmed.khadimerrahman@glszentrum.com' => ['Ahmed', 'Khadimerrahman', $AAD, null, ['GLS Online']],
-            'hiba.messaoudi@glszentrum.com' => ['Hiba', 'Messaoudi', $AAD, null, ['GLS Online']],
-            'kaoutar.achibane@glszentrum.com' => ['Kaoutar', 'Achibane', $AAD, null, ['GLS Online']],
-            'oumayma.sayedi@glszentrum.com' => ['Oumayma', 'Sayedi', $AAD, null, ['GLS Online']],
+            'ahmed.khadimerrahman@glszentrum.com' => ['Ahmed', 'Khadimerrahman', $H, $AAD, null, ['GLS Online']],
+            'hiba.messaoudi@glszentrum.com' => ['Hiba', 'Messaoudi', $F, $AAD, null, ['GLS Online']],
+            'kaoutar.achibane@glszentrum.com' => ['Kaoutar', 'Achibane', $F, $AAD, null, ['GLS Online']],
+            'oumayma.sayedi@glszentrum.com' => ['Oumayma', 'Sayedi', $F, $AAD, null, ['GLS Online']],
             // Sur les feuilles Online ET Rabat.
-            'fatine.barnicha@glszentrum.com' => ['Fatine', 'Barnicha', $AAD, null, ['GLS Online', 'GLS Rabat']],
+            'fatine.barnicha@glszentrum.com' => ['Fatine', 'Barnicha', $F, $AAD, null, ['GLS Online', 'GLS Rabat']],
 
             // ---- Boîtes sans correspondance sur le fichier --------------
             // Nom déduit de l'adresse, catégorie « Autre », siège par défaut.
-            'achraf.elyounani@glszentrum.com' => ['Achraf', 'Elyounani', $AUT, null, ['GLS Marrakech']],
-            'oumnya.salim@glszentrum.com' => ['Oumnya', 'Salim', $AUT, null, ['GLS Marrakech']],
-            'yassine.ait-lachguer@glszentrum.com' => ['Yassine', 'Ait-Lachguer', $AUT, null, ['GLS Marrakech']],
-            'zineb.hmimas@glszentrum.com' => ['Zineb', 'Hmimas', $AUT, null, ['GLS Marrakech']],
-            // Adresse courte, très probablement un alias d'Amine Rafik —
-            // seedée séparément pour ne pas écraser son compte nominatif.
-            'rafik@glszentrum.com' => ['Rafik', 'GLS', $AUT, null, ['GLS Marrakech']],
+            'achraf.elyounani@glszentrum.com' => ['Achraf', 'Elyounani', $H, $AUT, null, ['GLS Marrakech']],
+            'oumnya.salim@glszentrum.com' => ['Oumnya', 'Salim', $F, $AUT, null, ['GLS Marrakech']],
+            'yassine.ait-lachguer@glszentrum.com' => ['Yassine', 'Ait-Lachguer', $H, $AUT, null, ['GLS Marrakech']],
+            'zineb.hmimas@glszentrum.com' => ['Zineb', 'Hmimas', $F, $AUT, null, ['GLS Marrakech']],
         ];
     }
 
@@ -169,7 +206,7 @@ final class GlsStaffSeeder extends Seeder
         $nouveaux = [];
         $existants = 0;
 
-        foreach ($this->roster() as $email => [$prenom, $nom, $categorie, $telephone, $nomsCentres]) {
+        foreach ($this->roster() as $email => [$prenom, $nom, $sexe, $categorie, $telephone, $nomsCentres]) {
             $ids = [];
 
             foreach ($nomsCentres as $nomCentre) {
@@ -208,12 +245,24 @@ final class GlsStaffSeeder extends Seeder
 
             $user->save();
 
-            $role = self::ROLE_PAR_CATEGORIE[$categorie] ?? null;
+            if (in_array($email, self::SUPER_ADMINS, true)) {
+                // Le super-admin est décidé ici, pas déduit de la catégorie :
+                // on l'attribue même si le compte porte déjà un autre rôle.
+                // assignRole() est idempotent et n'enlève rien d'autre.
+                $role = Role::findOrCreate(Role::SUPER_ADMIN, 'web');
 
-            // Ne jamais retirer un rôle attribué à la main (ex. super-admin) :
-            // on n'assigne que si l'utilisateur n'a encore aucun rôle.
-            if ($role !== null && $user->roles()->doesntExist()) {
-                $user->assignRole($role);
+                if (! $user->hasRole($role)) {
+                    $user->assignRole($role);
+                }
+            } else {
+                $role = self::ROLE_PAR_CATEGORIE[$categorie] ?? null;
+
+                // Ne jamais retirer un rôle attribué à la main (une promotion
+                // décidée sur l'écran Autorisations doit survivre au re-seed) :
+                // on n'assigne le rôle par défaut que si le compte n'en a aucun.
+                if ($role !== null && $user->roles()->doesntExist()) {
+                    $user->assignRole($role);
+                }
             }
 
             // user_id explicite ⇒ EmployeeObserver ne génère PAS un second
@@ -222,6 +271,10 @@ final class GlsStaffSeeder extends Seeder
             $employee->fill([
                 'nom' => $nom,
                 'prenom' => $prenom,
+                // Déduit du prénom (absent du fichier) : ne l'écrase que s'il
+                // est encore vide, pour qu'une correction faite à la main sur
+                // l'écran Employés survive au re-seed.
+                'sexe' => $employee->sexe ?: $sexe,
                 'categorie' => $categorie,
                 'statut' => Employee::STATUT_ACTIF,
                 'telephone' => $telephone,
@@ -278,9 +331,14 @@ final class GlsStaffSeeder extends Seeder
     }
 
     /**
-     * ReferenceGenerator derives its counter from max(id), which collides when
-     * several employees are created in the same run — walk forward from the
-     * highest EMP- number already stored instead.
+     * Même format que ReferenceGenerator::make('EMP', 'employees') — EMP-001,
+     * EMP-002… — pour que les fiches seedées soient indistinguables de celles
+     * créées depuis l'écran Employés.
+     *
+     * On n'appelle pas ReferenceGenerator directement : son compteur part de
+     * max(id), qui ne bouge pas entre deux créations dans la même boucle et
+     * produirait des collisions. On avance donc à partir du plus grand numéro
+     * EMP- déjà stocké.
      */
     private function prochaineReference(): string
     {
@@ -297,7 +355,7 @@ final class GlsStaffSeeder extends Seeder
         }
 
         do {
-            $reference = sprintf('EMP-%06d', $prochain++);
+            $reference = sprintf('EMP-%03d', $prochain++);
         } while (Employee::query()->where('reference', $reference)->exists());
 
         return $reference;

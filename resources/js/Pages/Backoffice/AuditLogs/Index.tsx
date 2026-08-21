@@ -255,7 +255,7 @@ export default function AuditLogsIndex({
                 )}
 
                 <div className="px-3">
-                    <Pagination paginator={entries} showJumpToPage />
+                    <Pagination paginator={entries} />
                 </div>
             </Card>
         </BackofficeLayout>

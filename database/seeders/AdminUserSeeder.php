@@ -72,9 +72,13 @@ final class AdminUserSeeder extends Seeder
         $employee = Employee::query()->updateOrCreate(
             ['user_id' => $user->id],
             [
-                'reference' => 'EMP-000001',
+                // Même format que ReferenceGenerator::make('EMP', 'employees')
+                // et que GlsStaffSeeder — EMP-001, pas EMP-000001.
+                'reference' => 'EMP-001',
                 'nom' => 'Admin',
                 'prenom' => 'GLS',
+                // Sans sexe, photoUrl() n'a pas d'avatar par défaut cohérent.
+                'sexe' => 'Homme',
                 'categorie' => Employee::CATEGORIE_DIRECTEUR,
                 'statut' => Employee::STATUT_ACTIF,
                 'email' => $email,

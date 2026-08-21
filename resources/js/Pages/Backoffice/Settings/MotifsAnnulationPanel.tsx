@@ -163,7 +163,7 @@ export default function MotifsAnnulationPanel({ motifsAnnulation, permissions }:
                     </tr>
                 ))}
             </RelatedRecordsTable>
-            <Pagination paginator={motifsAnnulation} showJumpToPage />
+            <Pagination paginator={motifsAnnulation} />
 
             <Modal show={showModal} title={editingId ? 'Modifier la raison' : 'Ajouter une raison'} onClose={closeModal} processing={form.processing}>
                 <form onSubmit={handleSubmit}>

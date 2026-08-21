@@ -684,7 +684,7 @@ export default function DepensesIndex({
                                     </tr>
                                 ))}
                             </DataTable>
-                            <Pagination paginator={depenses} showJumpToPage />
+                            <Pagination paginator={depenses} />
                         </>
                     )}
                 </Card>
@@ -799,7 +799,7 @@ export default function DepensesIndex({
                                     </tr>
                                 ))}
                             </DataTable>
-                            <Pagination paginator={paiementsProf} showJumpToPage />
+                            <Pagination paginator={paiementsProf} />
                         </>
                     )}
                 </Card>
@@ -862,7 +862,7 @@ export default function DepensesIndex({
                                     </tr>
                                 ))}
                             </DataTable>
-                            <Pagination paginator={remboursements} showJumpToPage />
+                            <Pagination paginator={remboursements} />
                         </>
                     )}
                 </Card>
@@ -1023,7 +1023,7 @@ export default function DepensesIndex({
                                     </tr>
                                 ))}
                             </DataTable>
-                            <Pagination paginator={depenses} showJumpToPage />
+                            <Pagination paginator={depenses} />
                         </>
                     )}
                 </Card>

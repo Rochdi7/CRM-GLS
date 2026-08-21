@@ -457,7 +457,7 @@ export default function EmployeesIndex({
                                 </tr>
                             ))}
                         </DataTable>
-                        <Pagination paginator={employees} showJumpToPage />
+                        <Pagination paginator={employees} />
                     </>
                 )}
             </Card>
