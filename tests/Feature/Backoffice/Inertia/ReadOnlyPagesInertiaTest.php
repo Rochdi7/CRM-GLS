@@ -17,6 +17,7 @@ use App\Models\Role;
 use App\Models\Student;
 use App\Models\TypeDepense;
 use App\Models\User;
+use App\Support\Authorization\PermissionRegistry;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
@@ -224,9 +225,52 @@ final class ReadOnlyPagesInertiaTest extends TestCase
         $this->get(route('backoffice.encaissements.show', $encaissement))->assertForbidden();
     }
 
-    public function test_encaissement_show_has_no_delete_route(): void
+    /**
+     * Money records stay append-only for everyone except a super-admin
+     * (CLAUDE.md §11). A `backoffice.encaissements.destroy` route DOES exist —
+     * it is the deliberate, ledger-aware `SupprimerEncaissement` path — but it
+     * is gated by `payments.delete`, which no role preset may hold
+     * (PermissionRegistry::superAdminOnly()). So a user holding every OTHER
+     * payment permission is still refused.
+     *
+     * This asserts the gate rather than the route's absence: the guarantee is
+     * "nobody but a super-admin deletes a payment", not "no such code path".
+     */
+    public function test_encaissement_delete_is_refused_without_the_dedicated_permission(): void
     {
-        $this->assertFalse(Route::has('backoffice.encaissements.destroy'));
+        $this->assertContains(
+            'payments.delete',
+            PermissionRegistry::superAdminOnly(),
+            'payments.delete must stay super-admin-only',
+        );
+
+        foreach (PermissionRegistry::matrix() as $role => $permissions) {
+            $this->assertNotContains('payments.delete', $permissions, "Role [$role] must not delete payments");
+        }
+
+        $caisse = $this->caisseIn($this->casa);
+        $student = Student::factory()->create(['etablissement_id' => $this->casa->id]);
+        $group = Group::factory()->create(['etablissement_id' => $this->casa->id, 'annee_scolaire_id' => $this->annee->id]);
+        $inscription = Inscription::create([
+            'reference' => 'INS-ENCDEL', 'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->casa->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => 'Active', 'date_inscription' => '2025-09-15',
+        ]);
+        $fee = $inscription->fees()->create(['nom' => 'Frais', 'montant' => 100, 'statut' => 'Non payé', 'date_echeance' => '2025-10-01']);
+        $agent = Employee::factory()->create(['etablissement_id' => $this->casa->id]);
+        $encaissement = Encaissement::create([
+            'reference' => 'ENC-NODEL', 'student_id' => $student->id, 'inscription_fee_id' => $fee->id, 'montant' => 100,
+            'methode' => Encaissement::METHODE_ESPECES, 'date_paiement' => '2025-09-20',
+            'caisse_id' => $caisse->id, 'agent_id' => $agent->id,
+        ]);
+
+        // Everything a payment operator can hold — except payments.delete.
+        $this->centerUser($this->casa, 'payments.view', 'payments.create', 'payments.update');
+
+        $this->delete(route('backoffice.encaissements.destroy', $encaissement))->assertForbidden();
+
+        $this->assertDatabaseHas('encaissements', ['id' => $encaissement->id]);
+        $this->assertSame(1000.0, (float) $caisse->fresh()->solde, 'Till balance must be untouched');
     }
 
     // --- Depense -------------------------------------------------------

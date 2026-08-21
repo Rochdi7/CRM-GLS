@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Backoffice\Authorization;
 
+use App\Models\Employee;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\Authorization\PermissionRegistry;
@@ -55,11 +56,10 @@ final class RolesAndPermissionsSeederTest extends TestCase
     public function test_roles_receive_the_expected_permission_sets(): void
     {
         $director = Role::findByName('director');
-        $this->assertTrue($director->hasPermissionTo('students.delete'));
         $this->assertTrue($director->hasPermissionTo('cash-transfers.validate'));
         $this->assertTrue($director->hasPermissionTo('centers.access-all'));
+        $this->assertTrue($director->hasPermissionTo('groups.archive'));
         $this->assertFalse($director->hasPermissionTo('roles.create'));
-        $this->assertFalse($director->hasPermissionTo('roles.delete'));
 
         $teacher = Role::findByName('teacher');
         $this->assertEqualsCanonicalizing(
@@ -75,6 +75,130 @@ final class RolesAndPermissionsSeederTest extends TestCase
         $this->assertFalse($assistant->hasPermissionTo('centers.access-all'));
         $this->assertFalse($assistant->hasPermissionTo('cash-transfers.validate'));
         $this->assertFalse($assistant->hasPermissionTo('roles.view'));
+    }
+
+    /**
+     * The operational scope the front-desk roles were created for:
+     * inscriptions, groupes, étudiants, encaissements and the caisse — in
+     * their own center only, and identical across the three roles that share
+     * the `$operations` preset.
+     */
+    public function test_front_office_roles_share_the_full_operational_scope(): void
+    {
+        $expected = [
+            'students.view', 'students.create', 'students.update',
+            'registrations.view', 'registrations.create', 'registrations.update',
+            'registrations.manage-fees', 'registrations.change-group',
+            'groups.view', 'groups.create', 'groups.update', 'groups.archive',
+            'cash-registers.view',
+            'payments.view', 'payments.create', 'payments.update',
+            'expenses.view', 'expenses.create',
+            'cheques.view', 'cheques.create',
+            'cash-transfers.view', 'cash-transfers.create',
+            'collections.view',
+        ];
+
+        foreach (['consultant', 'administrative-assistant'] as $name) {
+            $role = Role::findByName($name);
+
+            foreach ($expected as $permission) {
+                $this->assertTrue(
+                    $role->hasPermissionTo($permission),
+                    "[$name] should hold [$permission]",
+                );
+            }
+
+            // Center-scoped: they never see other centers…
+            $this->assertFalse($role->hasPermissionTo('centers.access-all'), $name);
+            // …and never arbitrate their own money.
+            $this->assertFalse($role->hasPermissionTo('cash-transfers.validate'), $name);
+            $this->assertFalse($role->hasPermissionTo('expenses.approve'), $name);
+        }
+
+        $this->assertEqualsCanonicalizing(
+            Role::findByName('consultant')->permissions()->pluck('name')->all(),
+            Role::findByName('administrative-assistant')->permissions()->pluck('name')->all(),
+        );
+    }
+
+    /**
+     * The rule: only super-admin deletes. Enforced by
+     * PermissionRegistry::superAdminOnly(), which every preset is filtered
+     * through — so a future `*.delete` permission is locked down the moment
+     * it is registered, without touching a single role.
+     */
+    public function test_no_role_may_delete_anything(): void
+    {
+        $deletes = array_values(array_filter(
+            PermissionRegistry::names(),
+            static fn (string $name): bool => str_ends_with($name, '.delete'),
+        ));
+
+        $this->assertNotEmpty($deletes);
+
+        foreach (Role::with('permissions')->get() as $role) {
+            $held = $role->permissions->pluck('name')->all();
+
+            $this->assertEmpty(
+                array_intersect($held, $deletes),
+                "Role [{$role->name}] must not hold a delete permission",
+            );
+        }
+
+        // …yet a super-admin still deletes, via Gate::before.
+        $user = User::factory()->create();
+        $user->assignRole(Role::SUPER_ADMIN);
+        $this->assertTrue($user->can('students.delete'));
+        $this->assertTrue($user->can('employees.delete'));
+    }
+
+    /**
+     * A director holds the broadest preset in the app, and still cannot
+     * reach any of the abilities reserved for the Gate::before bypass.
+     */
+    public function test_super_admin_only_abilities_reach_no_role(): void
+    {
+        foreach (Role::with('permissions')->get() as $role) {
+            $held = $role->permissions->pluck('name')->all();
+
+            $this->assertEmpty(
+                array_intersect($held, PermissionRegistry::superAdminOnly()),
+                "Role [{$role->name}] must not hold a super-admin-only permission",
+            );
+        }
+
+        $director = Role::findByName('director');
+        $this->assertFalse($director->hasPermissionTo('expenses.approve'));
+        $this->assertFalse($director->hasPermissionTo('system-settings.update'));
+        $this->assertFalse($director->hasPermissionTo('cash-accounts.view'));
+        $this->assertFalse($director->hasPermissionTo('banks.view'));
+    }
+
+    /**
+     * Every job title the Employees form offers has a matching role, so a
+     * newly hired employee can always be granted one. « Autre » is the
+     * deliberate exception (no defined post ⇒ no access).
+     */
+    public function test_every_employee_category_has_a_matching_role(): void
+    {
+        $map = (new \ReflectionClass(\Database\Seeders\GlsStaffSeeder::class))
+            ->getConstant('ROLE_PAR_CATEGORIE');
+
+        // « Autre » is the deliberate exception: no defined post ⇒ no role.
+        $this->assertSame(
+            [Employee::CATEGORIE_AUTRE],
+            array_values(array_diff(Employee::CATEGORIES, array_keys($map))),
+        );
+
+        // …and every catégorie maps to a role that actually exists.
+        foreach ($map as $categorie => $role) {
+            $this->assertArrayHasKey(
+                $role,
+                PermissionRegistry::roles(),
+                "Catégorie [$categorie] maps to unknown role [$role]",
+            );
+            $this->assertNotNull(Role::findByName($role));
+        }
     }
 
     public function test_a_user_can_receive_a_role_and_its_permissions(): void

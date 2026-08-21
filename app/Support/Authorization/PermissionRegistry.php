@@ -98,7 +98,7 @@ final class PermissionRegistry
                 'students.delete' => 'Supprimer un étudiant',
             ],
             'Import de données' => [
-                'import.view' => "Consulter les imports de données",
+                'import.view' => 'Consulter les imports de données',
                 'import.create' => "Importer des données depuis l'ancien CRM",
             ],
             'Inscriptions' => [
@@ -236,8 +236,17 @@ final class PermissionRegistry
 
     /**
      * Role catalogue: [machine name => French label].
-     * Employee `categorie` is a related but SEPARATE concept — never used in
-     * authorization checks, and no automatic category→role mapping exists.
+     *
+     * One role per `Employee::CATEGORIES` job title, so every employee the
+     * Employees form can create already has a matching role to grant on the
+     * Autorisations screen. `Autre` deliberately has NO role: an employee
+     * with no defined post gets no access until someone grants one by hand.
+     *
+     * Employee `categorie` remains a SEPARATE concept — never used in an
+     * authorization check. The names simply line up so granting is obvious;
+     * the mapping used when seeding staff lives in
+     * `Database\Seeders\GlsStaffSeeder::ROLE_PAR_CATEGORIE`, and nothing in
+     * the app derives permissions from `categorie` at runtime.
      *
      * @return array<string, string>
      */
@@ -247,101 +256,291 @@ final class PermissionRegistry
             'super-admin' => 'Super administrateur',
             'director' => 'Directeur',
             'operations-director' => 'Directeur des opérations',
+            'financial-director' => 'Directeur financier',
+            'quality-director' => 'Directeur Qualité et Amélioration continue',
+            'pedagogical-director' => 'Directrice pédagogique',
+            'accountant' => 'Comptable',
+            'consultant' => 'Consultant',
+            'hr-manager' => 'Responsable RH',
+            'marketing-manager' => 'Responsable marketing',
+            'administrative-manager' => 'Responsable administrative',
             'administrative-assistant' => 'Assistante administrative',
             'teacher' => 'Enseignant',
-            'marketing-manager' => 'Responsable marketing',
         ];
     }
 
     /**
+     * Permissions NO role preset may hold — reachable only through the
+     * `super-admin` Gate::before bypass, or granted one at a time by hand on
+     * the Autorisations screen when a real case needs it.
+     *
+     * Two families:
+     *
+     * 1. **Every destructive `*.delete`** — deleting a student, an
+     *    inscription, an employee, une salle, un frais, un article de
+     *    stock… is a super-admin act. A director who mis-typed a record
+     *    edits it; only a super-admin erases it. `groups.archive` is NOT
+     *    here: archiving a group is the sanctioned "close it" path that
+     *    writes a `groups_historique` snapshot and never deletes
+     *    (CLAUDE.md 11), so it stays with the roles that run groups.
+     * 2. **Pre-existing super-admin-only abilities** kept from the previous
+     *    matrix: system switches, banks, cancellation reasons, the global
+     *    cash-accounts view and `expenses.approve`. (`payments.delete` needs
+     *    no entry of its own — family 1 already covers it.)
+     *
+     * `matrix()` filters every preset through this list, so a new `*.delete`
+     * added to `grouped()` later is locked down automatically — it can never
+     * leak into a role by being forgotten here.
+     *
+     * @return list<string>
+     */
+    public static function superAdminOnly(): array
+    {
+        $deletes = array_values(array_filter(
+            self::names(),
+            static fn (string $name): bool => str_ends_with($name, '.delete'),
+        ));
+
+        return array_values(array_unique(array_merge($deletes, [
+            'system-settings.view', 'system-settings.update',
+            'banks.view', 'banks.create', 'banks.update',
+            'cancellation-reasons.view', 'cancellation-reasons.create', 'cancellation-reasons.update',
+            'cash-accounts.view', 'cash-accounts.create', 'cash-accounts.update',
+            'expenses.approve',
+        ])));
+    }
+
+    /**
      * Default role → permission matrix (docs/roles-and-permissions.md).
+     *
      * `super-admin` is intentionally EMPTY: it bypasses everything via
      * Gate::before and must not depend on synced rows.
+     *
+     * Every other preset is filtered through `superAdminOnly()`, so listing
+     * a `*.delete` in `presets()` has no effect — by design. Presets are
+     * written as the full job description and let the filter do the locking:
+     * the day a delete is deliberately delegated, it is one line removed
+     * from `superAdminOnly()`, not a re-audit of thirteen roles.
      *
      * @return array<string, list<string>>
      */
     public static function matrix(): array
     {
+        $forbidden = array_flip(self::superAdminOnly());
+
+        $presets = self::presets();
+
+        foreach ($presets as $role => $permissions) {
+            if ($role === 'super-admin') {
+                continue;
+            }
+
+            $presets[$role] = array_values(array_filter(
+                array_unique($permissions),
+                static fn (string $p): bool => ! isset($forbidden[$p]) && self::exists($p),
+            ));
+        }
+
+        return $presets;
+    }
+
+    /**
+     * Raw, unfiltered role presets — the intent per job title, before
+     * `matrix()` strips the super-admin-only abilities.
+     *
+     * @return array<string, list<string>>
+     */
+    private static function presets(): array
+    {
+        // Full operational access to the school's day-to-day business:
+        // students, inscriptions, groups, séances and the whole cash desk,
+        // scoped to the employee's own centers (no centers.access-all).
+        // Shared verbatim by every role that runs a center front desk
+        // (consultant, assistante administrative, responsable
+        // administrative) so their access can never silently drift apart.
+        $operations = [
+            'dashboard.view',
+            'centers.view',
+            'academic-years.view',
+            'rooms.view',
+            'fees.view',
+            'students.view', 'students.create', 'students.update',
+            'registrations.view', 'registrations.create', 'registrations.update',
+            'registrations.manage-fees', 'registrations.change-group',
+            'groups.view', 'groups.create', 'groups.update', 'groups.archive',
+            'attendance.view', 'attendance.create', 'attendance.update', 'attendance.mark',
+            'cash-registers.view',
+            'payments.view', 'payments.create', 'payments.update',
+            'collections.view',
+            'expense-types.view',
+            'expenses.view', 'expenses.create', 'expenses.update',
+            'refunds.view', 'refunds.create', 'refunds.update',
+            'cheques.view', 'cheques.create', 'cheques.update',
+            'cash-transfers.view', 'cash-transfers.create', 'cash-transfers.update',
+            'stock.view', 'stock.move',
+            'stock-types.view',
+        ];
+
+        // Read-only across every finance screen — the accounting/oversight
+        // baseline the finance roles build on.
+        $financeReadOnly = [
+            'dashboard.view',
+            'centers.view',
+            'academic-years.view',
+            'fees.view',
+            'students.view',
+            'registrations.view',
+            'groups.view',
+            'cash-registers.view',
+            'payments.view',
+            'collections.view',
+            'expense-types.view',
+            'expenses.view',
+            'refunds.view',
+            'cheques.view',
+            'cash-transfers.view',
+            'stock.view',
+            'stock-types.view',
+        ];
+
         return [
             'super-admin' => [],
 
+            // Runs a center end to end, plus the catalogs and the staff file.
+            // Validates cash transfers into their own till (the recipient
+            // rule still applies — CLAUDE.md 11) and reads the audit journal.
             'director' => [
-                'dashboard.view',
-                'centers.view', 'centers.access-all',
-                'academic-years.view', 'academic-years.create', 'academic-years.update',
-                'rooms.view', 'rooms.create', 'rooms.update', 'rooms.delete',
-                'fees.view', 'fees.create', 'fees.update', 'fees.delete',
-                'employees.view', 'employees.create', 'employees.update', 'employees.delete',
+                ...$operations,
+                'centers.access-all',
+                'academic-years.create', 'academic-years.update',
+                'rooms.create', 'rooms.update',
+                'fees.create', 'fees.update',
+                'employees.view', 'employees.create', 'employees.update',
                 'users.view', 'users.assign-roles',
                 'roles.view',
                 'permissions.view',
-                'students.view', 'students.create', 'students.update', 'students.delete',
-                'registrations.view', 'registrations.create', 'registrations.update',
-                'registrations.delete', 'registrations.manage-fees', 'registrations.change-group',
-                'groups.view', 'groups.create', 'groups.update', 'groups.archive',
-                'attendance.view', 'attendance.create', 'attendance.update', 'attendance.delete', 'attendance.mark',
-                'cash-registers.view', 'cash-registers.create', 'cash-registers.update', 'cash-registers.delete',
-                'payments.view', 'payments.create', 'payments.update',
-                'collections.view',
-                'expense-types.view', 'expense-types.create', 'expense-types.update', 'expense-types.delete',
-                'expenses.view', 'expenses.create', 'expenses.update',
-                'refunds.view', 'refunds.create', 'refunds.update',
-                'cheques.view', 'cheques.create', 'cheques.update',
-                'cash-transfers.view', 'cash-transfers.create', 'cash-transfers.update', 'cash-transfers.validate',
-                'stock.view', 'stock.create', 'stock.update', 'stock.delete', 'stock.move',
-                'stock-types.view', 'stock-types.create', 'stock-types.update', 'stock-types.delete',
+                'cash-registers.create', 'cash-registers.update',
+                'expense-types.create', 'expense-types.update',
+                'cash-transfers.validate',
+                'stock.create', 'stock.update',
+                'stock-types.create', 'stock-types.update',
                 'audit-logs.view',
                 'import.view', 'import.create',
             ],
 
+            // Cross-center operations: everything academic and logistic,
+            // plus the same front-desk money scope as the centers it runs.
             'operations-director' => [
-                'dashboard.view',
-                'centers.view', 'centers.access-all',
-                'academic-years.view',
-                'rooms.view', 'rooms.create', 'rooms.update', 'rooms.delete',
-                'fees.view', 'fees.create', 'fees.update', 'fees.delete',
+                ...$operations,
+                'centers.access-all',
+                'rooms.create', 'rooms.update',
+                'fees.create', 'fees.update',
                 'employees.view', 'employees.update',
-                'students.view', 'students.create', 'students.update', 'students.delete',
-                'registrations.view', 'registrations.create', 'registrations.update',
-                'registrations.delete', 'registrations.manage-fees', 'registrations.change-group',
-                'groups.view', 'groups.create', 'groups.update', 'groups.archive',
-                'attendance.view', 'attendance.create', 'attendance.update', 'attendance.mark',
-                'cash-registers.view',
-                'payments.view',
-                'collections.view',
-                'expense-types.view',
-                'expenses.view',
-                'refunds.view',
-                'cheques.view',
-                'cash-transfers.view',
-                'stock.view', 'stock.create', 'stock.update', 'stock.delete', 'stock.move',
-                'stock-types.view', 'stock-types.create', 'stock-types.update', 'stock-types.delete',
+                'users.view',
+                'stock.create', 'stock.update',
+                'stock-types.create', 'stock-types.update',
+                'audit-logs.view',
                 'import.view', 'import.create',
             ],
 
-            // Center-scoped day-to-day operator: records payments/expenses and
-            // requests transfers, but validation stays at director level and
-            // she never sees other centers (no centers.access-all).
-            'administrative-assistant' => [
-                'dashboard.view',
-                'centers.view',
-                'academic-years.view',
+            // Owns the money across every center: records and corrects every
+            // finance document and validates transfers into their own till.
+            // Approving dépenses stays super-admin-only.
+            'financial-director' => [
+                ...$financeReadOnly,
+                'centers.access-all',
                 'rooms.view',
-                'students.view', 'students.create', 'students.update', 'students.delete',
-                'registrations.view', 'registrations.create', 'registrations.update', 'registrations.delete',
+                'employees.view',
+                'payments.create', 'payments.update',
+                'cash-registers.create', 'cash-registers.update',
+                'expenses.create', 'expenses.update',
+                'expense-types.create', 'expense-types.update',
+                'refunds.create', 'refunds.update',
+                'cheques.create', 'cheques.update',
+                'cash-transfers.create', 'cash-transfers.update', 'cash-transfers.validate',
+                'audit-logs.view',
+            ],
+
+            // Same money scope as the financial director, minus the transfer
+            // validation and the caisse catalog — books the entries, does
+            // not arbitrate them.
+            'accountant' => [
+                ...$financeReadOnly,
+                'centers.access-all',
+                'payments.create', 'payments.update',
+                'expenses.create', 'expenses.update',
+                'refunds.create', 'refunds.update',
+                'cheques.create', 'cheques.update',
+                'cash-transfers.create', 'cash-transfers.update',
+                'audit-logs.view',
+            ],
+
+            // Oversight across all centers: sees everything, including the
+            // audit journal, and changes nothing.
+            'quality-director' => [
+                ...$financeReadOnly,
+                'centers.access-all',
+                'rooms.view',
+                'employees.view',
+                'attendance.view',
+                'users.view',
+                'roles.view',
+                'permissions.view',
+                'audit-logs.view',
+            ],
+
+            // Academic authority: groups, séances, teachers and the fee
+            // catalog that prices them. No money movement.
+            'pedagogical-director' => [
+                'dashboard.view',
+                'centers.view', 'centers.access-all',
+                'academic-years.view',
+                'rooms.view', 'rooms.create', 'rooms.update',
+                'fees.view', 'fees.create', 'fees.update',
+                'employees.view',
+                'students.view', 'students.create', 'students.update',
+                'registrations.view', 'registrations.create', 'registrations.update',
                 'registrations.manage-fees', 'registrations.change-group',
-                'groups.view', 'groups.create', 'groups.update',
-                'attendance.view', 'attendance.create', 'attendance.mark',
-                'cash-registers.view',
-                'payments.view', 'payments.create', 'payments.update',
-                'collections.view',
-                'expense-types.view',
-                'expenses.view', 'expenses.create',
-                'refunds.view', 'refunds.create',
-                'cheques.view', 'cheques.create',
-                'cash-transfers.view', 'cash-transfers.create',
-                'stock.view', 'stock.move',
-                'stock-types.view',
+                'groups.view', 'groups.create', 'groups.update', 'groups.archive',
+                'attendance.view', 'attendance.create', 'attendance.update', 'attendance.mark',
+                'stock.view', 'stock.move', 'stock-types.view',
+            ],
+
+            // Front desk / sales: the full operational scope — inscriptions,
+            // groupes, étudiants, encaissements, caisse — in their OWN
+            // center only, with no delete anywhere.
+            'consultant' => $operations,
+
+            // Same operational scope as the consultant.
+            'administrative-assistant' => $operations,
+
+            // The assistante's scope plus the staff file and the audit
+            // journal for their center.
+            'administrative-manager' => [
+                ...$operations,
+                'employees.view', 'employees.create', 'employees.update',
+                'users.view',
+                'audit-logs.view',
+            ],
+
+            // Staff file across every center — no student, academic or money
+            // data at all.
+            'hr-manager' => [
+                'dashboard.view',
+                'centers.view', 'centers.access-all',
+                'employees.view', 'employees.create', 'employees.update',
+                'users.view',
+                'audit-logs.view',
+            ],
+
+            // Prospects/marketing-reports permissions will be added with
+            // those modules; until then, read-only funnel-relevant data.
+            'marketing-manager' => [
+                'dashboard.view',
+                'centers.view', 'centers.access-all',
+                'students.view',
+                'registrations.view',
+                'groups.view',
             ],
 
             // Academic scope only — no financial data.
@@ -350,15 +549,6 @@ final class PermissionRegistry
                 'groups.view',
                 'students.view',
                 'attendance.view', 'attendance.create', 'attendance.mark',
-            ],
-
-            // Prospects/marketing-reports permissions will be added with those
-            // modules; until then, read-only funnel-relevant data.
-            'marketing-manager' => [
-                'dashboard.view',
-                'centers.view',
-                'students.view',
-                'registrations.view',
             ],
         ];
     }

@@ -651,9 +651,27 @@ keeps the primary column stable when an edit merely adds a center. Enforcing
   `hasRole()` usages allowed: the `Gate::before` super-admin bypass and the
   super-admin invariants in `UserAuthorizationService`.
 - **Single source of truth**: `App\Support\Authorization\PermissionRegistry`
-  (61 `module.action` permissions, French labels, role matrix). New module ⇒
+  (102 `module.action` permissions, French labels, role matrix). New module ⇒
   add permissions THERE, re-run `db:seed --class=RolesAndPermissionsSeeder`
   (idempotent), protect routes, add allowed+denied tests.
+- **One role per job title**: the 13 roles in `PermissionRegistry::roles()`
+  mirror `Employee::CATEGORIES` one-for-one (except `Autre`, deliberately
+  unmapped ⇒ no access). The names line up so granting is obvious, but
+  `categorie` is NEVER consulted in an authorization check and changing an
+  employee's job title does not change their access. The catégorie→role map
+  in `GlsStaffSeeder::ROLE_PAR_CATEGORIE` is seeding-time only; keep it in
+  sync when a category or role is added.
+- **⚠ Only super-admin deletes.** `PermissionRegistry::superAdminOnly()`
+  lists what no role preset may hold, and `matrix()` FILTERS every preset
+  through it — so writing a `*.delete` into a preset has no effect, and a
+  new `*.delete` added to `grouped()` later is locked down automatically.
+  Never "fix" a 403 on a delete by editing a preset: either the caller
+  should be a super-admin, or the permission is deliberately delegated by
+  hand to one user on the Autorisations screen. Same filter also reserves
+  `expenses.approve`, `system-settings.*`, `banks.*`,
+  `cancellation-reasons.*` and `cash-accounts.*`. `groups.archive` is NOT a
+  delete (it snapshots to `groups_historique`) and stays with operational
+  roles. See `docs/roles-and-permissions.md` §5.
 - **Center scoping is part of authorization**: policies extend
   `App\Policies\Concerns\ResourcePolicy` and combine permission +
   `CenterAccessService` (`centers.access-all` ⇒ all centers; else

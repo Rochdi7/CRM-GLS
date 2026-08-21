@@ -25,22 +25,39 @@ Companion docs: `authorization-audit.md` (state before implementation),
 
 ## 3. Roles
 
-| Machine name | Label (UI) |
-|---|---|
-| `super-admin` | Super administrateur |
-| `director` | Directeur |
-| `operations-director` | Directeur des opérations |
-| `administrative-assistant` | Assistante administrative |
-| `teacher` | Enseignant |
-| `marketing-manager` | Responsable marketing |
+There is **one role per job title** offered by the Employees form
+(`Employee::CATEGORIES`), so a newly hired employee always has a matching role
+to grant on the Autorisations screen.
 
-Employee `categorie` is a related but separate concept — **no automatic
-category→role mapping**; roles are assigned explicitly per user.
+| Machine name | Label (UI) | Matching `categorie` |
+|---|---|---|
+| `super-admin` | Super administrateur | — (granted by hand) |
+| `director` | Directeur | Directeur |
+| `operations-director` | Directeur des opérations | Directeur des opérations |
+| `financial-director` | Directeur financier | Directeur financier |
+| `quality-director` | Directeur Qualité et Amélioration continue | idem |
+| `pedagogical-director` | Directrice pédagogique | Directrice pédagogique |
+| `accountant` | Comptable | Comptable |
+| `consultant` | Consultant | Consultant |
+| `hr-manager` | Responsable RH | Responsable RH |
+| `marketing-manager` | Responsable marketing | Responsable Marketing |
+| `administrative-manager` | Responsable administrative | Responsable administrative |
+| `administrative-assistant` | Assistante administrative | Assistante administrative |
+| `teacher` | Enseignant | Enseignant |
+
+⚠ Employee `categorie` remains a **separate concept**: it is never used in an
+authorization check, and changing an employee's job title does **not** change
+their access. The names line up only so granting is obvious. The catégorie→role
+map in `GlsStaffSeeder::ROLE_PAR_CATEGORIE` is a **seeding convenience**, used
+once when creating a staff account; afterwards roles are assigned explicitly
+per user on the Autorisations screen. `Autre` is deliberately unmapped — an
+employee with no defined post gets no role, and therefore no access, until one
+is granted by hand.
 
 ## 4. Permissions
 
 Single source of truth: **`App\Support\Authorization\PermissionRegistry`**
-(61 permissions, `module.action` naming, French labels, grouped by module).
+(102 permissions, `module.action` naming, French labels, grouped by module).
 Modules covered: dashboard, centers, academic-years, rooms, employees, users,
 roles, permissions, students, registrations (+manage-fees), groups (+archive),
 cash-registers, payments, expense-types, expenses, refunds, cash-transfers
@@ -50,23 +67,87 @@ permissions will be added with their modules.
 ### Adding a new permission
 
 1. Add it to `PermissionRegistry::grouped()` (with French label).
-2. Add it to the relevant roles in `PermissionRegistry::matrix()`.
+2. Add it to the relevant roles in `PermissionRegistry::presets()`.
 3. `C:\php84\php.exe artisan db:seed --class=RolesAndPermissionsSeeder`
-4. Protect the route/controller/Livewire component with it.
+4. Protect the route/controller with it.
 
-## 5. Default matrix (summary)
+⚠ A new `*.delete` permission is **automatically** locked to super-admin by
+`superAdminOnly()` (see §5) — listing it in a preset has no effect. That is
+deliberate: a forgotten delete can never leak into a role.
 
-- **super-admin** — everything via `Gate::before` (zero synced rows, by design).
-- **director** — all operational modules incl. `centers.access-all`,
-  `cash-transfers.validate`, `users.assign-roles`, `roles.view`, `audit-logs.view`;
-  **not**: `roles.create/update/delete`, `users.assign-permissions`, `centers.create/update/delete`.
-- **operations-director** — full academic/people management, `centers.access-all`;
-  finance **view-only**.
-- **administrative-assistant** — center-scoped day-to-day: students/registrations
-  create+update, `payments.create`, `expenses.create`, `refunds.create`,
-  `cash-transfers.create` (validation stays director-level); **no** `centers.access-all`.
-- **teacher** — `dashboard.view`, `groups.view`, `students.view`. No finance.
-- **marketing-manager** — dashboard, centers/students/registrations view.
+## 5. Deleting is super-admin-only
+
+`PermissionRegistry::superAdminOnly()` lists the abilities **no role preset may
+hold**; `matrix()` filters every preset through it, so the rule is enforced by
+construction rather than by remembering to omit lines.
+
+It covers two families:
+
+1. **Every `*.delete` permission**, computed from `grouped()` — students,
+   inscriptions, employés, salles, frais, stock, rôles, centres… Deleting is a
+   super-admin act; other roles edit instead. `groups.archive` is **not** a
+   delete: it is the sanctioned "Fin de formation" path that writes a
+   `groups_historique` snapshot (CLAUDE.md §11), so it stays with the roles
+   that run groups. Money records already have no delete route at all.
+2. **The pre-existing super-admin-only abilities**: `system-settings.*`,
+   `banks.*`, `cancellation-reasons.*`, `cash-accounts.*` (the global
+   non-center-scoped view) and `expenses.approve`.
+
+A super-admin can still grant any single one of these to one user by hand on
+the Autorisations screen when a real case needs it — the filter constrains the
+role **presets**, not what a super-admin may deliberately delegate.
+
+### `payments.delete` — the one delete with a real code path
+
+Money records are append-only, so most have no destroy route at all. The
+exception is `backoffice.encaissements.destroy`, which exists deliberately and
+is gated by `permission:payments.delete`. Behind it,
+`Domain\Payments\Actions\SupprimerEncaissement` is the exact ledger-aware
+inverse of `EnregistrerEncaissement`: it re-reads the row `lockForUpdate()`,
+reverses the till through `CaisseLedger` (so the movement stays visible in the
+audit journal), recomputes the fee statut, and refuses rows entangled with an
+applied avance or a tracked chèque.
+
+Since no preset may hold `payments.delete`, this path is reachable only by a
+super-admin, or by a user a super-admin explicitly granted it to. Normal
+corrections still use a compensating entry (remboursement), never a delete.
+
+⚠ `ReadOnlyPagesInertiaTest` asserts this by exercising the **gate** — a user
+with `payments.view/create/update` gets a 403 and the till is untouched — not
+by asserting the route's absence. An earlier version of that test checked
+`Route::has(...)` and broke the day the route landed; don't reintroduce that
+form.
+
+## 5b. Default matrix (summary)
+
+Presets live in `PermissionRegistry::presets()`; two shared building blocks
+keep the roles from drifting apart:
+
+- **`$operations`** — the full center-scoped day-to-day scope: étudiants,
+  inscriptions (+frais, +changement de groupe), groupes (+archive), séances
+  et appel, caisse, encaissements, dépenses, remboursements, chèques,
+  demandes de transfert, mouvements de stock. **No** `centers.access-all`.
+- **`$financeReadOnly`** — read access to every finance screen, the baseline
+  the accounting/oversight roles build on.
+
+| Role | Scope |
+|---|---|
+| `super-admin` | Everything via `Gate::before` (zero synced rows, by design) — and the only role that deletes. |
+| `director` | `$operations` + `centers.access-all`, catalogs (années, salles, frais, types), employés, `users.assign-roles`, `roles.view`, `cash-transfers.validate`, import, audit. |
+| `operations-director` | `$operations` + `centers.access-all`, salles/frais, employés (view+update), stock catalog, import, audit. |
+| `financial-director` | `$financeReadOnly` + all money create/update, caisses, `cash-transfers.validate`, `centers.access-all`, audit. |
+| `accountant` | Same money scope minus `cash-transfers.validate` and the caisse catalog — books entries, does not arbitrate them. |
+| `quality-director` | Read-only across every module, all centers, incl. `audit-logs.view`. Changes nothing. |
+| `pedagogical-director` | Academic authority: groupes, séances, salles, frais, étudiants, inscriptions. No money. |
+| `consultant` | `$operations` exactly — own center only. |
+| `administrative-assistant` | `$operations` exactly — identical to `consultant` (asserted by a test). |
+| `administrative-manager` | `$operations` + employés, `users.view`, audit. |
+| `hr-manager` | Staff file across all centers only — no student, academic or money data. |
+| `marketing-manager` | Dashboard + centres/étudiants/inscriptions/groupes, view-only. |
+| `teacher` | `dashboard.view`, `groups.view`, `students.view`, séances + appel. No finance. |
+
+Every non-super-admin role above holds **zero** delete permissions and cannot
+approve a dépense or validate a transfer unless the row says so.
 
 Exact lists: `PermissionRegistry::matrix()` (tested in `RolesAndPermissionsSeederTest`).
 

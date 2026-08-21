@@ -61,14 +61,28 @@ final class GlsStaffSeeder extends Seeder
 
     /**
      * catégorie → role machine name (PermissionRegistry::roles()).
-     * Anything not listed here gets no role and therefore no access until
-     * one is granted on the Autorisations screen — deliberately restrictive.
+     *
+     * Every job title the Employees form offers now has its own role, so the
+     * only catégorie left unmapped is « Autre »: an employee with no defined
+     * post gets NO role, and therefore no access, until one is granted on
+     * the Autorisations screen — deliberately restrictive.
+     *
+     * This mapping is a SEEDING convenience only. Nothing in the app derives
+     * permissions from `categorie` at runtime (CLAUDE.md §16 — check
+     * permissions, never roles, and never a job title): changing an
+     * employee's catégorie on the Employees screen does not change their
+     * access, which is exactly why the Autorisations screen exists.
      */
     private const ROLE_PAR_CATEGORIE = [
         Employee::CATEGORIE_DIRECTEUR => 'director',
         Employee::CATEGORIE_DIRECTEUR_OPERATIONS => 'operations-director',
-        Employee::CATEGORIE_DIRECTRICE_PEDAGOGIQUE => 'director',
-        Employee::CATEGORIE_RESPONSABLE_ADMINISTRATIVE => 'administrative-assistant',
+        Employee::CATEGORIE_DIRECTEUR_FINANCIER => 'financial-director',
+        Employee::CATEGORIE_DIRECTEUR_QUALITE => 'quality-director',
+        Employee::CATEGORIE_DIRECTRICE_PEDAGOGIQUE => 'pedagogical-director',
+        Employee::CATEGORIE_COMPTABLE => 'accountant',
+        Employee::CATEGORIE_CONSULTANT => 'consultant',
+        Employee::CATEGORIE_RESPONSABLE_RH => 'hr-manager',
+        Employee::CATEGORIE_RESPONSABLE_ADMINISTRATIVE => 'administrative-manager',
         Employee::CATEGORIE_ASSISTANTE_ADMINISTRATIVE => 'administrative-assistant',
         Employee::CATEGORIE_ENSEIGNANT => 'teacher',
         Employee::CATEGORIE_RESPONSABLE_MARKETING => 'marketing-manager',
