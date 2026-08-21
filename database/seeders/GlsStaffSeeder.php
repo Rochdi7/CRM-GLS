@@ -52,13 +52,12 @@ use Spatie\Permission\PermissionRegistrar;
  * (achraf.elyounani, oumnya.salim, yassine.ait-lachguer, zineb.hmimas).
  * They are seeded anyway with the name derived from the address, catégorie
  * « Autre », the head office (GLS Marrakech) as their center and NO role —
- * flagged with a `note` so they are easy to correct once the roster is
- * updated.
+ * so they cannot do anything until someone sets their real post and grants
+ * a role on the Autorisations screen. `note` stays a free-text field for
+ * humans: the seeder never writes to it.
  */
 final class GlsStaffSeeder extends Seeder
 {
-    private const NOTE_HORS_FICHIER = 'Absent du fichier GLS_Employes_Tous_Centres — à confirmer.';
-
     /**
      * catégorie → role machine name (PermissionRegistry::roles()).
      *
@@ -104,14 +103,6 @@ final class GlsStaffSeeder extends Seeder
         'rafik@glszentrum.com',
         // Rochdi Karouali — Directeur des opérations.
         'rochdi.karouali@glszentrum.com',
-    ];
-
-    /** @var list<string> e-mails without a roster entry (note + « Autre »). */
-    private const HORS_FICHIER = [
-        'achraf.elyounani@glszentrum.com',
-        'oumnya.salim@glszentrum.com',
-        'yassine.ait-lachguer@glszentrum.com',
-        'zineb.hmimas@glszentrum.com',
     ];
 
     /**
@@ -294,9 +285,8 @@ final class GlsStaffSeeder extends Seeder
                 'telephone' => $telephone,
                 'email' => $email,
                 'etablissement_id' => $ids[0],
-                'note' => in_array($email, self::HORS_FICHIER, true)
-                    ? self::NOTE_HORS_FICHIER
-                    : $employee->note,
+                // `note` est laissée au champ libre de l'écran Employés : le
+                // seeder n'y écrit jamais rien.
             ]);
 
             if ((string) $employee->reference === '') {
@@ -319,7 +309,23 @@ final class GlsStaffSeeder extends Seeder
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
+        $this->effacerAncienneNote();
+
         $this->rapporter($nouveaux, $existants);
+    }
+
+    /**
+     * Une version précédente de ce seeder écrivait « Absent du fichier
+     * GLS_Employes_Tous_Centres — à confirmer. » dans la note des employés
+     * hors roster. La note est désormais un champ purement humain, donc on
+     * efface cet ancien texte — et uniquement lui : une note saisie à la main
+     * n'est jamais touchée.
+     */
+    private function effacerAncienneNote(): void
+    {
+        Employee::query()
+            ->where('note', 'like', 'Absent du fichier GLS_Employes_Tous_Centres%')
+            ->update(['note' => null]);
     }
 
     /**

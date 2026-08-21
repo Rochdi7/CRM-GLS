@@ -282,6 +282,123 @@ final class EmployeesInertiaCrudTest extends TestCase
             );
     }
 
+    /**
+     * The "Centres affectés" multi-select must really assign SEVERAL centers
+     * (CLAUDE.md §16 — an employee may work in several, and must have at
+     * least one). Guards the whole chain at once: the request accepts a list,
+     * resolveCenterIds() keeps every id instead of collapsing to one, and
+     * Employee::syncEtablissements() writes them all to the pivot while
+     * making the FIRST one the primary `etablissement_id` (where the till
+     * lives).
+     */
+    public function test_an_employee_can_be_assigned_to_several_centers_on_create(): void
+    {
+        $this->actingAs($this->userWith('employees.view', 'employees.create', 'centers.access-all'));
+
+        $marrakech = Etablissement::factory()->create(['nom_centre' => 'GLS Marrakech']);
+        $rabat = Etablissement::factory()->create(['nom_centre' => 'GLS Rabat']);
+        $agadir = Etablissement::factory()->create(['nom_centre' => 'GLS Agadir']);
+
+        $this->post(route('backoffice.employees.store'), [
+            'nom' => 'Elmoulabbi',
+            'prenom' => 'Abderrahim',
+            'sexe' => 'Homme',
+            'categorie' => Employee::CATEGORIE_DIRECTEUR,
+            'statut' => Employee::STATUT_ACTIF,
+            'etablissement_ids' => [$marrakech->id, $rabat->id, $agadir->id],
+        ])->assertRedirect(route('backoffice.employees.index'));
+
+        $employee = Employee::where('nom', 'Elmoulabbi')->firstOrFail();
+
+        $this->assertEqualsCanonicalizing(
+            [$marrakech->id, $rabat->id, $agadir->id],
+            $employee->etablissements()->pluck('etablissements.id')->all(),
+            'The three submitted centers must all land on the pivot.',
+        );
+
+        // First submitted id becomes the primary center.
+        $this->assertSame($marrakech->id, $employee->etablissement_id);
+    }
+
+    /**
+     * Editing must be able to BOTH widen and narrow the assignment — the bug
+     * that matters in production is an edit silently dropping the extra
+     * centers back to one.
+     */
+    public function test_editing_an_employee_can_add_and_remove_centers(): void
+    {
+        $this->actingAs($this->userWith('employees.view', 'employees.update', 'centers.access-all'));
+
+        $online = Etablissement::factory()->create(['nom_centre' => 'GLS Online']);
+        $sale = Etablissement::factory()->create(['nom_centre' => 'GLS Salé']);
+        $casa = Etablissement::factory()->create(['nom_centre' => 'GLS Casablanca']);
+
+        $employee = Employee::factory()->create([
+            'user_id' => User::factory()->create()->id,
+            'etablissement_id' => $online->id,
+        ]);
+        $employee->syncEtablissements([$online->id]);
+
+        $payload = fn (array $ids): array => [
+            'nom' => $employee->nom,
+            'prenom' => $employee->prenom,
+            'sexe' => $employee->sexe,
+            'categorie' => $employee->categorie,
+            'statut' => $employee->statut,
+            'etablissement_ids' => $ids,
+        ];
+
+        // Widen: one center → three.
+        $this->put(route('backoffice.employees.update', $employee), $payload([$online->id, $sale->id, $casa->id]))
+            ->assertRedirect(route('backoffice.employees.index'));
+
+        $this->assertEqualsCanonicalizing(
+            [$online->id, $sale->id, $casa->id],
+            $employee->fresh()->etablissements()->pluck('etablissements.id')->all(),
+        );
+
+        // Narrow again: three → two, and the dropped one really goes away.
+        $this->put(route('backoffice.employees.update', $employee), $payload([$sale->id, $casa->id]))
+            ->assertRedirect(route('backoffice.employees.index'));
+
+        $employee->refresh();
+
+        $this->assertEqualsCanonicalizing(
+            [$sale->id, $casa->id],
+            $employee->etablissements()->pluck('etablissements.id')->all(),
+        );
+
+        // The primary column followed the assignment instead of pointing at
+        // a center the employee no longer holds.
+        $this->assertContains($employee->etablissement_id, [$sale->id, $casa->id]);
+    }
+
+    /**
+     * The modal pre-selects the checkboxes from `etablissementIds`, so the
+     * list page must expose every assigned center — not just the primary one,
+     * which would make an edit silently drop the others on save.
+     */
+    public function test_the_index_exposes_every_assigned_center_to_the_modal(): void
+    {
+        $this->actingAs($this->userWith('employees.view', 'centers.access-all'));
+
+        $a = Etablissement::factory()->create();
+        $b = Etablissement::factory()->create();
+
+        $employee = Employee::factory()->create([
+            'user_id' => User::factory()->create()->id,
+            'etablissement_id' => $a->id,
+        ]);
+        $employee->syncEtablissements([$a->id, $b->id]);
+
+        $this->get(route('backoffice.employees.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/Employees/Index', false)
+                ->where('employees.data.0.etablissementIds', fn ($ids) => count((array) $ids) === 2)
+            );
+    }
+
     public function test_an_employee_can_be_updated(): void
     {
         $this->actingAs($this->userWith('employees.view', 'employees.update'));
