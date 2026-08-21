@@ -32,7 +32,7 @@ final class GetSeanceDetails
             ->get()
             ->filter(fn (Inscription $inscription): bool => $inscription->student !== null)
             ->unique('student_id')
-            ->sortBy(fn (Inscription $i): string => mb_strtolower("{$i->student->nom} {$i->student->prenom}"))
+            ->sortBy(fn (Inscription $i): string => mb_strtolower("{$i->student->prenom} {$i->student->nom}"))
             ->values()
             ->map(fn (Inscription $inscription): array => [
                 'id' => $inscription->student->id,

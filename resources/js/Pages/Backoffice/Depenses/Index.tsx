@@ -10,6 +10,8 @@ import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
+import ConfirmDialog from '@/Components/Modals/ConfirmDialog';
+import StatusBadge from '@/Components/Details/StatusBadge';
 import SelectField from '@/Components/Forms/SelectField';
 import DateField from '@/Components/Forms/DateField';
 import FormField from '@/Components/Forms/FormField';
@@ -19,7 +21,7 @@ import FormActions from '@/Components/Forms/FormActions';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import type { DepenseRow, DepensesPageProps, EncaissementFormOption, RemboursementRow, SelectOption, SharedProps } from '@/Types';
 
-type Tab = 'depenses' | 'paiements-prof' | 'remboursements';
+type Tab = 'depenses' | 'paiements-prof' | 'remboursements' | 'validation';
 
 interface DepenseFormState {
     type_depense_id: number | '';
@@ -46,6 +48,58 @@ interface RemboursementFormState {
 
 /** Local list — the controller sends no perPageOptions prop (default perPage is 15, unclamped server-side). */
 const PER_PAGE_OPTIONS = [15, 25, 50, 100];
+
+/**
+ * « Date d'opération » cell — when the row was really keyed in, and when it
+ * was last edited if that ever happened.
+ *
+ * Deliberately distinct from the « Date » column, which shows `dateDepense`:
+ * the business date a user types and can backdate at will. The two differing
+ * is exactly the signal an auditor looks for, which is why this column exists
+ * and why it is super-admin only.
+ *
+ * The props are optional because the server does not send them at all to a
+ * non-super-admin (DepenseController::scrubOperationDates) — this renders a
+ * dash rather than guessing.
+ */
+function OperationDateCell({ createdAt, updatedAt, wasEdited }: {
+    createdAt?: string | null;
+    updatedAt?: string | null;
+    wasEdited?: boolean;
+}) {
+    if (!createdAt) {
+        return <>—</>;
+    }
+
+    return (
+        <>
+            <span className="d-block">{createdAt}</span>
+            {wasEdited && updatedAt && (
+                <span className="d-block text-warning fs-12 text-normal-case">
+                    <i className="ti ti-pencil me-1" aria-hidden="true" />
+                    modifiée {updatedAt}
+                </span>
+            )}
+        </>
+    );
+}
+
+/** One labelled read-only field of « Les détails de dépense ». */
+function DetailLine({ label, value }: { label: string; value?: string | null }) {
+    return (
+        <div>
+            <span className="text-muted d-block fs-13">{label}</span>
+            <span className="fw-medium text-normal-case">{value || '—'}</span>
+        </div>
+    );
+}
+
+/** Approval workflow statuses -> PreSkool badge variants. */
+const DEPENSE_STATUT_BADGE: Record<string, 'success' | 'warning' | 'danger'> = {
+    'En attente': 'warning',
+    'Approuvée': 'success',
+    'Refusée': 'danger',
+};
 
 function emptyDepenseForm(): DepenseFormState {
     return {
@@ -98,6 +152,12 @@ export default function DepensesIndex({
     justificatifMaxKb,
     remboursements,
     students,
+    approvalEnabled,
+    canApprove,
+    canAudit,
+    depenseStatuts,
+    montantEnAttente,
+    enAttenteCount,
     filters,
 }: DepensesPageProps) {
     const isLoading = useInertiaLoading();
@@ -110,13 +170,21 @@ export default function DepensesIndex({
         ? 'remboursements'
         : requestedTab === 'paiements-prof' && canViewDepenses
             ? 'paiements-prof'
-            : canViewDepenses
-                ? 'depenses'
-                : 'remboursements';
+            // Super-admin only — a forced ?tab=validation falls through to the
+            // normal default for anyone else, matching the server (which
+            // sends them no audit data at all).
+            : requestedTab === 'validation' && canAudit
+                ? 'validation'
+                : canViewDepenses
+                    ? 'depenses'
+                    : 'remboursements';
     const [tab, setTab] = useState<Tab>(initialTab);
 
     const [showDepenseModal, setShowDepenseModal] = useState(false);
     const [editingDepense, setEditingDepense] = useState<DepenseRow | null>(null);
+    // « Les détails de dépense » — the eye on the Validation tab. Everything
+    // shown is already on the row, so opening it costs no extra request.
+    const [detailsRow, setDetailsRow] = useState<DepenseRow | null>(null);
     const [showRemboursementModal, setShowRemboursementModal] = useState(false);
     const [editingRemboursement, setEditingRemboursement] = useState<RemboursementRow | null>(null);
     const [studentPayments, setStudentPayments] = useState<EncaissementFormOption[]>([]);
@@ -140,6 +208,50 @@ export default function DepensesIndex({
             preserveScroll: true,
             replace: true,
         });
+    }
+
+    // --- Approval flow (Paramètres → Système « Validation des dépenses ») ---
+    // A pending dépense has debited NOTHING: approving is what moves the
+    // money, refusing never moves any. Server refusals (already decided,
+    // permission, no employee record…) surface inside the dialog.
+    const [decision, setDecision] = useState<{ type: 'approve' | 'refuse'; row: DepenseRow } | null>(null);
+    const [decisionError, setDecisionError] = useState<string | undefined>(undefined);
+    const [decisionProcessing, setDecisionProcessing] = useState(false);
+    const [motifRefus, setMotifRefus] = useState('');
+
+    function openDecision(type: 'approve' | 'refuse', row: DepenseRow) {
+        setDecision({ type, row });
+        setDecisionError(undefined);
+        setMotifRefus('');
+    }
+
+    function closeDecision() {
+        setDecision(null);
+        setDecisionError(undefined);
+        setDecisionProcessing(false);
+        setMotifRefus('');
+    }
+
+    function runDecision() {
+        if (!decision) return;
+
+        const { type, row } = decision;
+        setDecisionProcessing(true);
+        setDecisionError(undefined);
+
+        router.put(
+            `/backoffice/depenses/${row.id}/${type === 'approve' ? 'approve' : 'refuse'}`,
+            type === 'refuse' ? { motif_refus: motifRefus } : {},
+            {
+                preserveScroll: true,
+                onSuccess: () => closeDecision(),
+                onError: (errors) => {
+                    setDecisionProcessing(false);
+                    setDecisionError(Object.values(errors)[0] ?? "L'opération a échoué.");
+                },
+                onFinish: () => setDecisionProcessing(false),
+            },
+        );
     }
 
     function switchTab(next: Tab) {
@@ -369,6 +481,25 @@ export default function DepensesIndex({
                         </button>
                     </li>
                 )}
+                {/* Super-admin only: `expenses.approve` is in no role preset
+                    (PermissionRegistry::matrix()), so canAudit is the
+                    Gate::before bypass in practice. */}
+                {canAudit && (
+                    <li className="nav-item" role="presentation">
+                        <button
+                            type="button"
+                            className={`nav-link d-inline-flex align-items-center${tab === 'validation' ? ' active' : ''}`}
+                            aria-current={tab === 'validation' ? 'page' : undefined}
+                            onClick={() => switchTab('validation')}
+                        >
+                            <i className="ti ti-checkup-list me-2" aria-hidden="true" />
+                            Validation des dépenses
+                            {enAttenteCount > 0 && (
+                                <span className="badge bg-warning ms-2">{enAttenteCount}</span>
+                            )}
+                        </button>
+                    </li>
+                )}
                 {canViewTypes && (
                     <li className="nav-item" role="presentation">
                         <Link href="/backoffice/types-depenses" className="nav-link d-inline-flex align-items-center">
@@ -408,6 +539,22 @@ export default function DepensesIndex({
                                     onChange={(event) => reload({ typeFilter: event.target.value })}
                                 />
                             </div>
+                            {/* Only meaningful while the approval workflow is
+                                on: with it off every depense is approved. */}
+                            {approvalEnabled && (
+                                <div style={{ width: 200 }}>
+                                    <label className="form-label" htmlFor="dep-f-statut">
+                                        Statut
+                                    </label>
+                                    <SelectField
+                                        id="dep-f-statut"
+                                        options={depenseStatuts.map((st) => ({ value: st, label: st }))}
+                                        placeholder="Tous les statuts"
+                                        value={filters.statutFilter}
+                                        onChange={(event) => reload({ statutFilter: event.target.value })}
+                                    />
+                                </div>
+                            )}
                             <div style={{ width: 170 }}>
                                 <label className="form-label" htmlFor="dep-f-du">
                                     Du
@@ -439,7 +586,18 @@ export default function DepensesIndex({
                     />
 
                     {montantTotal !== null && (
-                        <p className="fw-medium px-3 mb-3">Montant total : {Number(montantTotal).toFixed(2)} MAD</p>
+                        <p className="fw-medium px-3 mb-3">
+                            Montant total : {Number(montantTotal).toFixed(2)} MAD
+                            {/* Approved money only. Pending expenses have not
+                                left any till, so they are shown apart rather
+                                than folded into the spend total. */}
+                            {approvalEnabled && enAttenteCount > 0 && (
+                                <span className="text-warning ms-3">
+                                    <i className="ti ti-clock-hour-4 me-1" />
+                                    En attente : {Number(montantEnAttente ?? 0).toFixed(2)} MAD ({enAttenteCount})
+                                </span>
+                            )}
+                        </p>
                     )}
 
                     {depenses.data.length === 0 ? (
@@ -454,7 +612,9 @@ export default function DepensesIndex({
                                         <th>Type</th>
                                         <th>Caisse</th>
                                         <th className="text-end">Montant</th>
+                                        {approvalEnabled && <th>Statut</th>}
                                         <th>Date</th>
+                                        {canAudit && <th>Date d'opération</th>}
                                         <th>Justificatifs</th>
                                         <th className="text-end">Action</th>
                                     </tr>
@@ -468,7 +628,28 @@ export default function DepensesIndex({
                                         <td>{row.typeDepense ?? '—'}</td>
                                         <td>{row.caisse ?? '—'}</td>
                                         <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} MAD</td>
+                                        {approvalEnabled && (
+                                            <td>
+                                                <StatusBadge
+                                                    label={row.statut}
+                                                    variant={DEPENSE_STATUT_BADGE[row.statut] ?? 'warning'}
+                                                    dot
+                                                />
+                                                {row.isRefusee && row.motifRefus && (
+                                                    <div className="text-muted fs-12 text-normal-case">{row.motifRefus}</div>
+                                                )}
+                                            </td>
+                                        )}
                                         <td>{row.dateDepense ?? '—'}</td>
+                                        {canAudit && (
+                                            <td className="text-normal-case">
+                                                <OperationDateCell
+                                                    createdAt={row.createdAt}
+                                                    updatedAt={row.updatedAt}
+                                                    wasEdited={row.wasEdited}
+                                                />
+                                            </td>
+                                        )}
                                         <td>
                                             {row.receiptsCount > 0 ? (
                                                 <span>
@@ -481,9 +662,23 @@ export default function DepensesIndex({
                                         </td>
                                         <td>
                                             <RowActions view={row.showUrl}>
-                                                <RowActionItem icon="ti-edit" onClick={() => openEditDepense(row)}>
-                                                    Modifier
-                                                </RowActionItem>
+                                                {/* A refused depense is closed history:
+                                                    the policy refuses the edit too. */}
+                                                {!row.isRefusee && (
+                                                    <RowActionItem icon="ti-edit" onClick={() => openEditDepense(row)}>
+                                                        Modifier
+                                                    </RowActionItem>
+                                                )}
+                                                {row.isEnAttente && canApprove && (
+                                                    <RowActionItem icon="ti-check" onClick={() => openDecision('approve', row)}>
+                                                        Approuver
+                                                    </RowActionItem>
+                                                )}
+                                                {row.isEnAttente && canApprove && (
+                                                    <RowActionItem icon="ti-x" onClick={() => openDecision('refuse', row)}>
+                                                        Refuser
+                                                    </RowActionItem>
+                                                )}
                                             </RowActions>
                                         </td>
                                     </tr>
@@ -561,6 +756,7 @@ export default function DepensesIndex({
                                         <th>Caisse</th>
                                         <th className="text-end">Montant</th>
                                         <th>Date</th>
+                                        {canAudit && <th>Date d'opération</th>}
                                         <th>Justificatifs</th>
                                         <th className="text-end">Action</th>
                                     </tr>
@@ -574,6 +770,15 @@ export default function DepensesIndex({
                                         <td>{row.caisse ?? '—'}</td>
                                         <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} MAD</td>
                                         <td>{row.dateDepense ?? '—'}</td>
+                                        {canAudit && (
+                                            <td className="text-normal-case">
+                                                <OperationDateCell
+                                                    createdAt={row.createdAt}
+                                                    updatedAt={row.updatedAt}
+                                                    wasEdited={row.wasEdited}
+                                                />
+                                            </td>
+                                        )}
                                         <td>
                                             {row.receiptsCount > 0 ? (
                                                 <span>
@@ -662,6 +867,238 @@ export default function DepensesIndex({
                     )}
                 </Card>
             )}
+
+            {/* « Validation des dépenses » — super-admin only (canAudit).
+                Lists every expense with its approval status and the operation
+                trail; the eye opens the full details. The approve/refuse
+                actions are the SAME endpoints as the Dépenses tab — this tab
+                only gathers them in one place for whoever validates. */}
+            {tab === 'validation' && canAudit && depenses && (
+                <Card title="Validation des dépenses" bodyClassName="p-0 py-3">
+                    <div className="px-3 pt-2">
+                        <TableToolbar>
+                            <div style={{ width: 220 }}>
+                                <label className="form-label" htmlFor="val-f-type">
+                                    Type
+                                </label>
+                                <SelectField
+                                    id="val-f-type"
+                                    options={filterTypeOptions}
+                                    placeholder="Tous les types"
+                                    value={filters.typeFilter}
+                                    onChange={(event) => reload({ typeFilter: event.target.value })}
+                                />
+                            </div>
+                            <div style={{ width: 200 }}>
+                                <label className="form-label" htmlFor="val-f-statut">
+                                    Statut
+                                </label>
+                                <SelectField
+                                    id="val-f-statut"
+                                    options={depenseStatuts.map((st) => ({ value: st, label: st }))}
+                                    placeholder="Tous les statuts"
+                                    value={filters.statutFilter}
+                                    onChange={(event) => reload({ statutFilter: event.target.value })}
+                                />
+                            </div>
+                            <div style={{ width: 170 }}>
+                                <label className="form-label" htmlFor="val-f-du">
+                                    Du
+                                </label>
+                                <DateField
+                                    id="val-f-du"
+                                    value={filters.dateFrom}
+                                    onChange={(event) => reload({ dateFrom: event.target.value })}
+                                />
+                            </div>
+                            <div style={{ width: 170 }}>
+                                <label className="form-label" htmlFor="val-f-au">
+                                    Au
+                                </label>
+                                <DateField
+                                    id="val-f-au"
+                                    value={filters.dateTo}
+                                    onChange={(event) => reload({ dateTo: event.target.value })}
+                                />
+                            </div>
+                        </TableToolbar>
+                    </div>
+
+                    <TableLengthRow
+                        perPage={filters.perPage}
+                        perPageOptions={PER_PAGE_OPTIONS}
+                        onPerPageChange={(perPage) => reload({ perPage })}
+                        search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} />}
+                    />
+
+                    {montantTotal !== null && (
+                        <p className="fw-medium px-3 mb-3">
+                            Montant total : {Number(montantTotal).toFixed(2)} MAD
+                            {enAttenteCount > 0 && (
+                                <span className="text-warning ms-3">
+                                    <i className="ti ti-clock-hour-4 me-1" />
+                                    En attente : {Number(montantEnAttente ?? 0).toFixed(2)} MAD ({enAttenteCount})
+                                </span>
+                            )}
+                        </p>
+                    )}
+
+                    {depenses.data.length === 0 ? (
+                        <EmptyState title="Aucune dépense" icon="ti ti-checkup-list" />
+                    ) : (
+                        <>
+                            <DataTable
+                                loading={isLoading}
+                                head={
+                                    <tr>
+                                        <th>Référence</th>
+                                        <th>Type</th>
+                                        <th>Statut</th>
+                                        <th>Date</th>
+                                        <th>Date d'opération</th>
+                                        <th className="text-end">Montant total</th>
+                                        <th>Groupe</th>
+                                        <th>Mots-clés</th>
+                                        <th>Agent</th>
+                                        <th className="text-end">Action</th>
+                                    </tr>
+                                }
+                            >
+                                {depenses.data.map((row) => (
+                                    <tr key={row.id}>
+                                        <td>
+                                            <code>{row.reference}</code>
+                                        </td>
+                                        <td>{row.typeDepense ?? '—'}</td>
+                                        <td>
+                                            <StatusBadge
+                                                label={row.statut}
+                                                variant={DEPENSE_STATUT_BADGE[row.statut] ?? 'warning'}
+                                                dot
+                                            />
+                                            {row.isRefusee && row.motifRefus && (
+                                                <div className="text-muted fs-12 text-normal-case">{row.motifRefus}</div>
+                                            )}
+                                        </td>
+                                        <td>{row.dateDepense ?? '—'}</td>
+                                        <td className="text-normal-case">
+                                            <OperationDateCell
+                                                createdAt={row.createdAt}
+                                                updatedAt={row.updatedAt}
+                                                wasEdited={row.wasEdited}
+                                            />
+                                        </td>
+                                        <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} MAD</td>
+                                        <td>{row.groupNom ?? '—'}</td>
+                                        <td className="text-normal-case">
+                                            {row.motsCles
+                                                ? row.motsCles.split(',').map((mot) => mot.trim()).filter(Boolean).map((mot) => (
+                                                    <span key={mot} className="badge bg-secondary me-1">{mot}</span>
+                                                ))
+                                                : '—'}
+                                        </td>
+                                        <td>{row.agent ?? '—'}</td>
+                                        <td className="text-end">
+                                            <RowActions>
+                                                <RowActionItem icon="ti-eye" onClick={() => setDetailsRow(row)}>
+                                                    Détails
+                                                </RowActionItem>
+                                                {!row.isRefusee && (
+                                                    <RowActionItem icon="ti-edit" onClick={() => openEditDepense(row)}>
+                                                        Modifier
+                                                    </RowActionItem>
+                                                )}
+                                                {row.isEnAttente && canApprove && (
+                                                    <RowActionItem icon="ti-check" onClick={() => openDecision('approve', row)}>
+                                                        Approuver
+                                                    </RowActionItem>
+                                                )}
+                                                {row.isEnAttente && canApprove && (
+                                                    <RowActionItem icon="ti-x" onClick={() => openDecision('refuse', row)}>
+                                                        Refuser
+                                                    </RowActionItem>
+                                                )}
+                                            </RowActions>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </DataTable>
+                            <Pagination paginator={depenses} showJumpToPage />
+                        </>
+                    )}
+                </Card>
+            )}
+
+            {/* « Les détails de dépense » — read-only, opened by the eye on
+                the Validation tab. Every field comes from the row already in
+                hand, so there is no extra round-trip. */}
+            <Modal
+                show={detailsRow !== null}
+                title="Les détails de dépense"
+                onClose={() => setDetailsRow(null)}
+                processing={false}
+                size="lg"
+                footer={
+                    <button type="button" className="btn btn-primary" onClick={() => setDetailsRow(null)}>
+                        Retour
+                    </button>
+                }
+            >
+                {detailsRow && (
+                    <div className="row g-3">
+                        <div className="col-md-6"><DetailLine label="Référence" value={detailsRow.reference} /></div>
+                        <div className="col-md-6"><DetailLine label="Type" value={detailsRow.typeDepense} /></div>
+                        <div className="col-md-6"><DetailLine label="Groupe" value={detailsRow.groupNom} /></div>
+                        <div className="col-md-6"><DetailLine label="Méthode de paiement" value={detailsRow.methodePaiement} /></div>
+                        <div className="col-md-6">
+                            <DetailLine label="Montant total" value={`${Number(detailsRow.montant).toFixed(2)} MAD`} />
+                        </div>
+                        <div className="col-md-6"><DetailLine label="Référence de facture" value={detailsRow.referenceFacture} /></div>
+                        <div className="col-md-6"><DetailLine label="Date" value={detailsRow.dateDepense} /></div>
+                        <div className="col-md-6"><DetailLine label="Ajouté par" value={detailsRow.agent} /></div>
+
+                        {/* The operation trail — the reason this modal is
+                            super-admin only. `dateDepense` above is the date
+                            the user typed; these are when it really happened. */}
+                        <div className="col-md-6">
+                            <DetailLine label="Date d'opération (création)" value={detailsRow.createdAt} />
+                        </div>
+                        <div className="col-md-6">
+                            <DetailLine
+                                label="Date d'opération (modification)"
+                                value={detailsRow.wasEdited ? detailsRow.updatedAt : 'Jamais modifiée'}
+                            />
+                        </div>
+
+                        <div className="col-md-6"><DetailLine label="Statut" value={detailsRow.statut} /></div>
+                        <div className="col-md-6">
+                            <DetailLine
+                                label={detailsRow.isRefusee ? 'Refusée par' : 'Approuvée par'}
+                                value={detailsRow.approvedBy}
+                            />
+                        </div>
+                        {detailsRow.approvedAt && (
+                            <div className="col-md-6">
+                                <DetailLine label="Décision le" value={detailsRow.approvedAt} />
+                            </div>
+                        )}
+                        {detailsRow.isRefusee && detailsRow.motifRefus && (
+                            <div className="col-12"><DetailLine label="Motif du refus" value={detailsRow.motifRefus} /></div>
+                        )}
+
+                        <div className="col-12"><DetailLine label="Description" value={detailsRow.description} /></div>
+                        <div className="col-12"><DetailLine label="Note" value={detailsRow.note} /></div>
+                        <div className="col-12">
+                            <span className="text-muted d-block fs-13">Mots-clés</span>
+                            {detailsRow.motsCles
+                                ? detailsRow.motsCles.split(',').map((mot) => mot.trim()).filter(Boolean).map((mot) => (
+                                    <span key={mot} className="badge bg-secondary me-1 text-normal-case">{mot}</span>
+                                ))
+                                : <span className="fw-medium">—</span>}
+                        </div>
+                    </div>
+                )}
+            </Modal>
 
             {/* Dépense modal */}
             <Modal
@@ -936,6 +1373,44 @@ export default function DepensesIndex({
                     />
                 </form>
             </Modal>
+
+            {/* Approve / refuse a pending depense. Approving is the moment
+                the till is actually debited; refusing moves no money and
+                keeps the row for the audit trail. Server refusals (already
+                decided, permission, no employee record) are shown inline. */}
+            <ConfirmDialog
+                show={decision !== null}
+                title={decision?.type === 'approve' ? 'Approuver la depense' : 'Refuser la depense'}
+                message={
+                    decision?.type === 'approve'
+                        ? 'La caisse sera debitee immediatement de ce montant.'
+                        : 'Aucun montant ne sera debite. La depense restera visible comme refusee.'
+                }
+                recordLabel={
+                    decision
+                        ? Number(decision.row.montant).toFixed(2)
+                          + ' MAD - '
+                          + (decision.row.typeDepense ?? decision.row.reference)
+                        : ''
+                }
+                error={decisionError}
+                processing={decisionProcessing}
+                onConfirm={runDecision}
+                onCancel={closeDecision}
+                icon={decision?.type === 'approve' ? 'ti-circle-check' : 'ti-circle-x'}
+                variant={decision?.type === 'approve' ? 'primary' : 'danger'}
+                confirmLabel={decision?.type === 'approve' ? 'Approuver' : 'Refuser'}
+                processingLabel={decision?.type === 'approve' ? 'Approbation...' : 'Refus...'}
+            >
+                {decision?.type === 'refuse' && (
+                    <TextareaField
+                        id="dep-motif-refus"
+                        label="Motif du refus (optionnel)"
+                        value={motifRefus}
+                        onChange={(e) => setMotifRefus(e.target.value)}
+                    />
+                )}
+            </ConfirmDialog>
         </BackofficeLayout>
     );
 }

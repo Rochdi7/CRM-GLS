@@ -14,6 +14,11 @@ return new class extends Migration
         Schema::create('students', function (Blueprint $table): void {
             $table->id();
             $table->string('reference', 20)->unique();
+            // Legacy import provenance (Services\Import): the reference the row
+            // carried in the spreadsheet it came from, unique per centre so two
+            // branches may legitimately reuse the same historical number.
+            $table->string('legacy_ref', 50)->nullable();
+            $table->string('legacy_source', 30)->nullable();
             $table->string('nom', 100);
             $table->string('prenom', 100);
             $table->string('sexe', 10)->nullable();
@@ -41,6 +46,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index('etablissement_id', 'students_etablissement_id_idx');
+            $table->unique(['etablissement_id', 'legacy_ref'], 'students_etab_legacy_ref_unique');
         });
     }
 

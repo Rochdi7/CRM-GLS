@@ -31,6 +31,11 @@ final class UpdateFraisRequest extends FormRequest
             // nullable would push a null into a NOT NULL column.
             'montant_defaut' => ['sometimes', 'numeric', 'min:0', 'max:9999999.99'],
             'statut' => ['required', Rule::in(Frais::STATUTS)],
+            // Per-center pricing lines. Optional: a fee attached to no
+            // center simply falls back to montant_defaut everywhere.
+            'centres' => ['sometimes', 'array'],
+            'centres.*.etablissement_id' => ['required', 'integer', 'exists:etablissements,id'],
+            'centres.*.montant' => ['required', 'numeric', 'min:0', 'max:9999999.99'],
         ];
     }
 }

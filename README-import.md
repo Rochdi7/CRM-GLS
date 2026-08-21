@@ -1,7 +1,8 @@
 # Import de données — ancien CRM
 
 Module d'import Excel (`.xlsx`) permettant de migrer les données de
-l'ancien CRM vers GLS CRM : Étudiants, Inscriptions, Encaissements.
+l'ancien CRM vers GLS CRM : Étudiants, Inscriptions, Encaissements,
+Présences & séances.
 
 Interface : `/backoffice/import` (permission `import.view` pour consulter,
 `import.create` pour importer). Chaque module est un flux en plusieurs
@@ -17,6 +18,9 @@ analyser → prévisualiser → insérer → résultat.
 3. **Encaissements** (`/backoffice/import/encaissements`) — nécessite que
    l'inscription active correspondante existe déjà pour le Centre + Année
    scolaire sélectionnés.
+4. **Présences & séances** (`/backoffice/import/presences`) — nécessite que
+   les élèves et les groupes référencés existent déjà (résolution par nom
+   complet normalisé pour l'élève, association manuelle pour le groupe).
 
 Respecter cet ordre à chaque fois. Un import d'Encaissements avant les
 Inscriptions correspondantes se solde par des lignes ERREUR
@@ -58,6 +62,41 @@ Chaque lot d'import (`import_batches`) exige la sélection explicite d'un
 - **Chaque étudiant a une ligne distincte par Centre.** Un même nom dans
   deux centres différents n'est jamais fusionné.
 
+## Présences & séances — le seul module qui écrit deux tables
+
+Le « Registre des présences » n'a pas de colonne « séance » : chaque ligne
+est un appel (`Élève | Groupe | Matière | Date | Horaire | Statut |
+Enseignant`). Les séances sont donc **déduites** du fichier :
+
+- un `Seance` par triplet distinct **(groupe, date, heure de début)** ;
+- un `Presence` par ligne, sur cette séance.
+
+Règles non négociables de ce module :
+
+- **Une séance déjà enregistrée est réutilisée, jamais dupliquée ni
+  réécrite.** Qu'elle ait été créée à la main ou générée depuis un créneau,
+  ni son `statut`, ni ses horaires, ni son enseignant ne sont modifiés par
+  l'import — c'est l'enregistrement de l'application, et l'écraser depuis un
+  fichier ancien détruirait des corrections manuelles. Seul l'appel manquant
+  est complété.
+- **Une séance créée par l'import est marquée « Effectuée ».** Un registre
+  ne liste que des séances qui ont réellement eu lieu ; les laisser
+  « Prévue » afficherait des centaines de séances passées comme à venir.
+- **Deux horaires le même jour = deux séances.** Un `heure_debut` vide est
+  une identité à part entière, jamais un joker : le confondre avec n'importe
+  quelle heure fusionnerait deux sessions réellement distinctes.
+- **L'identité d'une ligne est (groupe, date, horaire, élève)** — la même clé
+  que l'index `UNIQUE (seance_id, student_id)` de `presences`. Le fichier ne
+  porte aucune référence propre : `legacy_ref` reste donc `null` sur ce
+  module.
+- **La colonne « Enseignant » est indicative.** Un nom introuvable ou
+  ambigu ne bloque jamais la ligne : la séance retombe simplement sur
+  l'enseignant du groupe. L'import ne crée jamais d'employé.
+- **Un statut absent (le `-` du fichier) est une ERREUR visible**, jamais un
+  « Présent » par défaut.
+- L'import ne crée jamais d'élève ni d'inscription : un élève introuvable
+  dans le centre est un **CONFLIT** à corriger, pas une création silencieuse.
+
 ## Réimporter le même fichier
 
 Réimporter un fichier déjà traité (même Centre + Année) doit toujours
@@ -92,12 +131,14 @@ Pour annuler un lot après coup :
 ## Détails techniques (pour développement futur)
 
 - `app/Services/Import/SheetReader.php` — détection d'en-tête (scan des 20
-  premières lignes, recherche `N°`/`N° d'ordre` + `Réf`/`Réf.`) et coupure
-  de pied de page (première ligne dont la colonne A n'est pas un entier
-  positif).
+  premières lignes, recherche `N°`/`N° d'ordre` + `Réf`/`Réf.`/`Élève` — le
+  registre des présences n'a aucune colonne `Réf`, c'est `Élève` qui ancre
+  son en-tête) et coupure de pied de page (première ligne dont la colonne A
+  n'est pas un entier positif).
 - `app/Services/Import/Support/CellNormalizer.php` — fonctions pures
-  (dates, montants, téléphones, dédoublement des noms payeurs).
-- `app/Services/Import/{Student,Inscription,Encaissement}Importer.php` —
+  (dates, plages horaires « 10:00 - 12:30 », montants, téléphones,
+  dédoublement des noms payeurs).
+- `app/Services/Import/{Student,Inscription,Encaissement,Presence}Importer.php` —
   un `analyze()` (lecture seule, calcule le statut par ligne) et un
   `commit()` (écrit uniquement les lignes sélectionnées et éligibles) par
   entité, implémentant `App\Services\Import\Contracts\Importer`.

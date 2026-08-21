@@ -14,12 +14,27 @@ const MODULE_LABELS: Record<ImportBatch['module'], string> = {
     students: 'Étudiants',
     inscriptions: 'Inscriptions',
     encaissements: 'Encaissements',
+    presences: 'Présences & séances',
+};
+
+/**
+ * Présences is deliberately described as its own step rather than "les
+ * présences depuis l'ancien CRM": it is the only module that also creates
+ * the séances, and it must run last (the roll call needs the élèves and the
+ * groupes to exist first).
+ */
+const MODULE_HINTS: Record<ImportBatch['module'], string> = {
+    students: "Importer les étudiants depuis un export de l'ancien CRM.",
+    inscriptions: "Importer les inscriptions depuis un export de l'ancien CRM.",
+    encaissements: "Importer les encaissements depuis un export de l'ancien CRM.",
+    presences: "Importer le registre des présences : crée les séances manquantes et l'appel (présent / absent).",
 };
 
 const RESULT_ROUTES: Record<ImportBatch['module'], string> = {
     students: '/backoffice/import/students',
     inscriptions: '/backoffice/import/inscriptions',
     encaissements: '/backoffice/import/encaissements',
+    presences: '/backoffice/import/presences',
 };
 
 function statusLabel(status: ImportBatch['status']): string {
@@ -45,12 +60,10 @@ export default function ImportIndex({ recentBatches, centerLocked }: ImportIndex
             ]}
         >
             <div className="row mb-4">
-                {(['students', 'inscriptions', 'encaissements'] as const).map((module) => (
-                    <div className="col-md-4" key={module}>
+                {(['students', 'inscriptions', 'encaissements', 'presences'] as const).map((module) => (
+                    <div className="col-md-3" key={module}>
                         <Card title={MODULE_LABELS[module]}>
-                            <p className="text-muted">
-                                Importer les {MODULE_LABELS[module].toLowerCase()} depuis un export de l'ancien CRM.
-                            </p>
+                            <p className="text-muted">{MODULE_HINTS[module]}</p>
                             <Link href={`${RESULT_ROUTES[module]}`} className="btn btn-primary">
                                 Importer
                             </Link>

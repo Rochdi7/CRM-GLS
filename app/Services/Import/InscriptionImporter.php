@@ -118,14 +118,45 @@ final class InscriptionImporter implements Importer
      */
     private ?array $validMappedGroupIds = null;
 
-    /** @var array<string, true>|null every legacy_ref already imported before this batch started, scoped to the batch's centre */
+    /**
+     * Every legacy_ref already imported before this batch started (scoped to
+     * the batch's centre), mapped to the composite identity ("studentId|
+     * groupId|date") of the inscription(s) that carry it.
+     *
+     * It is a MAP, not a set, because the old CRM does not guarantee its
+     * refs are unique: the same "333SL126" is reused for genuinely different
+     * inscriptions (different student / group / date). Treating the ref
+     * alone as an identity silently dropped those rows as "doublons". A ref
+     * only proves a duplicate when the rest of the row matches too.
+     *
+     * @var array<string, array<string, true>>|null
+     */
     private ?array $existingLegacyRefs = null;
 
     /** @var array<string, true>|null fallback composite dedupe key ("studentId|groupId|dateInscription") of every existing inscription */
     private ?array $existingCompositeKeys = null;
 
-    /** legacy_refs seen so far WITHIN this file. */
+    /**
+     * legacy_refs seen so far WITHIN this file, each mapped to the composite
+     * identities already accepted under that ref — same reasoning as
+     * $existingLegacyRefs: a repeated ref is a duplicate only when it repeats
+     * the same student+groupe+date.
+     *
+     * @var array<string, array<string, true>>
+     */
     private array $legacyRefsSeenThisFile = [];
+
+    /**
+     * How many DISTINCT inscriptions this file has already accepted under a
+     * given legacy_ref. The second and later ones are stored as "REF#2",
+     * "REF#3"… because `inscriptions` carries a UNIQUE
+     * (etablissement_id, legacy_ref) index: writing the bare ref twice would
+     * fail at commit time. The suffix keeps the original ref readable and
+     * traceable while making the stored value unique.
+     *
+     * @var array<string, int>
+     */
+    private array $legacyRefUsage = [];
 
     /** composite keys seen so far WITHIN this file. */
     private array $compositeKeysSeenThisFile = [];
@@ -153,6 +184,7 @@ final class InscriptionImporter implements Importer
         );
 
         $this->legacyRefsSeenThisFile = [];
+        $this->legacyRefUsage = [];
         $this->compositeKeysSeenThisFile = [];
         $this->pendingRows = [];
         $this->studentsByNormalizedName = $this->preloadStudents($context->etablissementId);
@@ -314,9 +346,39 @@ final class InscriptionImporter implements Importer
         }
     }
 
-    /** Live re-check of the analyze()-time dedupe, run just before writing. */
+    /**
+     * Live re-check of the analyze()-time dedupe, run just before writing.
+     *
+     * Identity is student + groupe + date, NEVER the legacy réf. on its own:
+     * the old CRM reuses one réf. across unrelated inscriptions, so matching
+     * on it alone silently refused to import legitimate rows (see
+     * duplicateReason()). The réf. is only used to keep the exact stored
+     * value — including any "#n" suffix — free of collisions.
+     */
     private function alreadyImported(ImportRow $row, ImportBatch $batch): bool
     {
+        $data = $row->raw;
+        $resolution = $row->resolution ?? [];
+
+        $studentId = $resolution['student_id'] ?? $data['student_id'] ?? null;
+        $groupId = $resolution['group_id'] ?? $data['group_id'] ?? null;
+        $dateInscription = $data['date_inscription'] ?? null;
+
+        if ($studentId !== null && $groupId !== null && $dateInscription !== null) {
+            $sameInscription = Inscription::query()
+                ->where('student_id', $studentId)
+                ->where('group_id', $groupId)
+                ->where('date_inscription', $dateInscription)
+                ->exists();
+
+            if ($sameInscription) {
+                return true;
+            }
+        }
+
+        // Nothing identical exists, but the exact réf. this row claimed may
+        // have been taken since analyze() ran (a concurrent or re-committed
+        // batch). Skipping is safer than crashing on the unique index.
         if ($row->legacy_ref !== null && $row->legacy_ref !== '') {
             return Inscription::query()
                 ->where('etablissement_id', $batch->etablissement_id)
@@ -324,18 +386,7 @@ final class InscriptionImporter implements Importer
                 ->exists();
         }
 
-        $data = $row->raw;
-        $resolution = $row->resolution ?? [];
-
-        if (($resolution['student_id'] ?? null) === null || ($resolution['group_id'] ?? null) === null) {
-            return false;
-        }
-
-        return Inscription::query()
-            ->where('student_id', $resolution['student_id'])
-            ->where('group_id', $resolution['group_id'])
-            ->where('date_inscription', $data['date_inscription'])
-            ->exists();
+        return false;
     }
 
 
@@ -358,10 +409,18 @@ final class InscriptionImporter implements Importer
             // reste (montant - payé) is above zero.
             $dateDebut = $group->date_debut_formation?->toDateString();
 
+            // Priced at what the group's own center charges — the same
+            // monthly fee is 1400 in Rabat and 1200 in Agadir — falling
+            // back to the catalog default when that center has no line.
+            $catalogue = Frais::query()
+                ->where('statut', Frais::STATUT_ACTIF)
+                ->with('etablissements:id')
+                ->get(['id', 'nom', 'montant_defaut']);
+
             $sync = [];
-            foreach (Frais::query()->where('statut', Frais::STATUT_ACTIF)->get(['id', 'nom', 'montant_defaut']) as $frais) {
+            foreach ($catalogue as $frais) {
                 $sync[$frais->id] = [
-                    'montant' => (float) $frais->montant_defaut,
+                    'montant' => $frais->montantPourCentre($group->etablissement_id),
                     'date_echeance' => FraisEcheanceResolver::defaultFor($frais->nom, $dateDebut),
                     'classification' => null,
                 ];
@@ -422,10 +481,23 @@ final class InscriptionImporter implements Importer
             return;
         }
 
+        $identityKey = ($studentId !== null && $groupId !== null && $dateInscription !== null)
+            ? $this->compositeKey($studentId, $groupId, $dateInscription)
+            : null;
+
+        // The ref actually stored: the sheet's own value the first time it is
+        // used, "REF#2"/"#3"… when the old CRM recycled it for a different
+        // inscription (see claimLegacyRef / duplicateReason).
+        $storedLegacyRef = null;
+
         if ($legacyRef !== '') {
-            $this->legacyRefsSeenThisFile[$legacyRef] = true;
-        } elseif ($studentId !== null && $groupId !== null && $dateInscription !== null) {
-            $this->compositeKeysSeenThisFile[$this->compositeKey($studentId, $groupId, $dateInscription)] = true;
+            $storedLegacyRef = $this->claimLegacyRef($legacyRef);
+
+            if ($identityKey !== null) {
+                $this->legacyRefsSeenThisFile[$legacyRef][$identityKey] = true;
+            }
+        } elseif ($identityKey !== null) {
+            $this->compositeKeysSeenThisFile[$identityKey] = true;
         }
 
         $conflitReasons = [...$studentResolution['conflicts'], ...$groupResolution['conflicts']];
@@ -435,7 +507,7 @@ final class InscriptionImporter implements Importer
                 'raw' => $raw,
                 'status' => ImportRow::STATUT_CONFLIT,
                 'errors' => $conflitReasons,
-                'legacy_ref' => $legacyRef ?: null,
+                'legacy_ref' => $storedLegacyRef,
                 'resolution' => [
                     'student_candidates' => $studentResolution['candidates'],
                     'group_candidates' => $groupResolution['candidates'],
@@ -458,7 +530,7 @@ final class InscriptionImporter implements Importer
             'raw' => $raw,
             'status' => $errors === [] ? ImportRow::STATUT_NOUVEAU : ImportRow::STATUT_ERREUR,
             'errors' => $errors === [] ? null : $errors,
-            'legacy_ref' => $legacyRef ?: null,
+            'legacy_ref' => $storedLegacyRef,
             'resolution' => ['student_id' => $studentId, 'group_id' => $groupId],
         ]);
     }
@@ -551,16 +623,66 @@ final class InscriptionImporter implements Importer
             ->all();
     }
 
-    /** @return array<string, true> */
+    /**
+     * ref => the composite identities already stored under it. The suffix
+     * added for a reused ref ("333SL126#2") is stripped, so a re-analyzed
+     * file compares against the ORIGINAL ref exactly as the sheet spells it.
+     *
+     * @return array<string, array<string, true>>
+     */
     private function preloadExistingLegacyRefs(int $etablissementId): array
     {
-        return Inscription::query()
+        $index = [];
+
+        Inscription::query()
             ->where('etablissement_id', $etablissementId)
             ->whereNotNull('legacy_ref')
-            ->pluck('legacy_ref')
-            ->flip()
-            ->map(fn () => true)
-            ->all();
+            ->get(['legacy_ref', 'student_id', 'group_id', 'date_inscription'])
+            ->each(function (Inscription $inscription) use (&$index): void {
+                $ref = self::baseLegacyRef((string) $inscription->legacy_ref);
+                $index[$ref][$this->compositeKey(
+                    $inscription->student_id,
+                    $inscription->group_id,
+                    $inscription->date_inscription->toDateString()
+                )] = true;
+            });
+
+        return $index;
+    }
+
+    /**
+     * Strips the "#2"/"#3"… disambiguation suffix this importer appends when
+     * the old CRM reuses one ref for several different inscriptions.
+     */
+    private static function baseLegacyRef(string $legacyRef): string
+    {
+        $hash = mb_strrpos($legacyRef, '#');
+
+        if ($hash === false) {
+            return $legacyRef;
+        }
+
+        $suffix = mb_substr($legacyRef, $hash + 1);
+
+        return ctype_digit($suffix) && $suffix !== '' ? mb_substr($legacyRef, 0, $hash) : $legacyRef;
+    }
+
+    /**
+     * The value actually written to inscriptions.legacy_ref for a row whose
+     * ref is being reused by a DIFFERENT inscription: the bare ref the first
+     * time, then "REF#2", "REF#3"… Required by the UNIQUE
+     * (etablissement_id, legacy_ref) index; baseLegacyRef() undoes it when
+     * comparing, so re-analyzing the same file still recognises its own rows.
+     */
+    private function claimLegacyRef(string $legacyRef): string
+    {
+        $alreadyStored = count($this->existingLegacyRefs[$legacyRef] ?? []);
+        $seenThisFile = $this->legacyRefUsage[$legacyRef] ?? 0;
+
+        $occurrence = $alreadyStored + $seenThisFile + 1;
+        $this->legacyRefUsage[$legacyRef] = $seenThisFile + 1;
+
+        return $occurrence === 1 ? $legacyRef : "{$legacyRef}#{$occurrence}";
     }
 
     /** @return array<string, true> */
@@ -712,8 +834,30 @@ final class InscriptionImporter implements Importer
      */
     private function duplicateReason(string $legacyRef, ?int $studentId, ?int $groupId, ?string $dateInscription, string $etudiant = ''): ?array
     {
+        $key = ($studentId !== null && $groupId !== null && $dateInscription !== null)
+            ? $this->compositeKey($studentId, $groupId, $dateInscription)
+            : null;
+
         if ($legacyRef !== '') {
-            if (isset($this->existingLegacyRefs[$legacyRef])) {
+            // The old CRM does NOT keep its réf. unique: the very same
+            // "333SL126" is written on rows belonging to different students,
+            // groups or dates. So the réf. alone can never decide that a row
+            // is a duplicate — only that it MIGHT be. What settles it is the
+            // rest of the row: same étudiant + même groupe + même date =>
+            // genuinely the same inscription; anything else => a distinct
+            // inscription that merely inherited a recycled réf. and must be
+            // imported (claimLegacyRef() gives it a "#n" suffix so the
+            // unique index accepts it).
+            //
+            // A row we cannot identify (student/groupe/date unresolved) is
+            // NOT declared a duplicate either — it goes on to the conflict /
+            // error path, where the operator can see and fix it, instead of
+            // vanishing into the "Ignorées" counter.
+            if ($key === null) {
+                return null;
+            }
+
+            if (isset($this->existingLegacyRefs[$legacyRef][$key])) {
                 return [
                     'field' => 'legacy_ref',
                     'code' => 'already_in_database',
@@ -725,12 +869,12 @@ final class InscriptionImporter implements Importer
                 ];
             }
 
-            if (isset($this->legacyRefsSeenThisFile[$legacyRef])) {
+            if (isset($this->legacyRefsSeenThisFile[$legacyRef][$key])) {
                 return [
                     'field' => 'legacy_ref',
                     'code' => 'duplicate_in_file',
                     'message' => sprintf(
-                        'Doublon dans le fichier : %sla réf. %s apparaît sur une ligne précédente.',
+                        'Doublon dans le fichier : %sla réf. %s apparaît sur une ligne précédente avec le même groupe et la même date.',
                         $etudiant !== '' ? $etudiant.' — ' : '',
                         $legacyRef
                     ),
@@ -740,11 +884,9 @@ final class InscriptionImporter implements Importer
             return null;
         }
 
-        if ($studentId === null || $groupId === null || $dateInscription === null) {
+        if ($key === null) {
             return null;
         }
-
-        $key = $this->compositeKey($studentId, $groupId, $dateInscription);
 
         if (isset($this->existingCompositeKeys[$key])) {
             return [

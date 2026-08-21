@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice;
 
 use App\Http\Controllers\Controller;
+use App\Domain\Settings\Queries\GetAccessibleCenterOptions;
 use App\Http\Requests\Backoffice\Frais\StoreFraisRequest;
 use App\Http\Requests\Backoffice\Frais\UpdateFraisRequest;
 use App\Models\Frais;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Frais (fee catalog) CRUD — new in Phase 6 (docs/phase-6-simple-crud-
@@ -22,8 +25,9 @@ use Illuminate\Http\RedirectResponse;
  */
 final class FraisController extends Controller
 {
-    public function __construct()
-    {
+    public function __construct(
+        private readonly GetAccessibleCenterOptions $accessibleCenters,
+    ) {
         $this->authorizeResource(Frais::class, 'frai');
     }
 
@@ -39,7 +43,14 @@ final class FraisController extends Controller
 
     public function store(StoreFraisRequest $request): RedirectResponse
     {
-        Frais::create($request->validated());
+        DB::transaction(function () use ($request): void {
+            $data = $request->validated();
+            $centres = $data['centres'] ?? [];
+            unset($data['centres']);
+
+            $frais = Frais::create($data);
+            $frais->etablissements()->sync($this->syncPayload($request, $centres, $frais));
+        });
 
         return redirect()->route('backoffice.settings', ['tab' => 'frais'])
             ->with('success', __('Frais créé.'));
@@ -52,7 +63,14 @@ final class FraisController extends Controller
 
     public function update(UpdateFraisRequest $request, Frais $frai): RedirectResponse
     {
-        $frai->update($request->validated());
+        DB::transaction(function () use ($request, $frai): void {
+            $data = $request->validated();
+            $centres = $data['centres'] ?? [];
+            unset($data['centres']);
+
+            $frai->update($data);
+            $frai->etablissements()->sync($this->syncPayload($request, $centres, $frai));
+        });
 
         return redirect()->route('backoffice.settings', ['tab' => 'frais'])
             ->with('success', __('Frais mis à jour.'));
@@ -71,9 +89,53 @@ final class FraisController extends Controller
             return back()->withErrors(['delete' => __('This fee is assigned to groups and cannot be deleted.')]);
         }
 
+        // The pivot cascades on delete, but drop it explicitly so the
+        // removal is one intentional statement rather than a side effect.
+        $frai->etablissements()->detach();
         $frai->delete();
 
         return redirect()->route('backoffice.settings', ['tab' => 'frais'])
             ->with('success', __('Frais supprimé.'));
+    }
+
+    /**
+     * Turn the submitted center lines into a sync payload keyed by
+     * etablissement_id, so each attached center carries its own amount.
+     *
+     * Two guards, both about not trusting the client:
+     *  - a center the acting user may not act on is dropped from the
+     *    payload, mirroring the picker they were served (the Form Request
+     *    only checks the id exists, not that it is theirs);
+     *  - prices for centers OUTSIDE that user's scope are carried over
+     *    unchanged, so a center-limited admin editing a national fee
+     *    cannot silently unprice the branches they never saw.
+     *
+     * @param  array<int, array{etablissement_id: int|string, montant: mixed}>  $centres
+     * @return array<int, array{montant: float}>
+     */
+    private function syncPayload(Request $request, array $centres, Frais $frais): array
+    {
+        $allowed = $this->accessibleCenters->allowedIds($request->user());
+
+        // Start from what other-scope centers already pay — sync() replaces
+        // the whole set, so anything missing here would be detached.
+        $payload = [];
+        foreach ($frais->etablissements()->get() as $etablissement) {
+            if (! in_array($etablissement->id, $allowed, true)) {
+                $payload[$etablissement->id] = ['montant' => (float) $etablissement->pivot->montant];
+            }
+        }
+
+        foreach ($centres as $ligne) {
+            $id = (int) ($ligne['etablissement_id'] ?? 0);
+
+            if ($id === 0 || ! in_array($id, $allowed, true)) {
+                continue;
+            }
+
+            $payload[$id] = ['montant' => (float) ($ligne['montant'] ?? 0)];
+        }
+
+        return $payload;
     }
 }

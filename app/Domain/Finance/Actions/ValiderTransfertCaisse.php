@@ -14,7 +14,13 @@ use Illuminate\Validation\ValidationException;
 /**
  * VALIDATE step of the two-step till transfer (structure doc §7) — the core
  * fraud-prevention mechanism:
- *  - only a DIFFERENT employee than the requester may validate,
+ *  - only the RECIPIENT (the employee who owns the destination till) may
+ *    accept or refuse: the person whose caisse is about to be credited is the
+ *    one who confirms they really received the money. A third party holding
+ *    `cash-transfers.validate` must NOT be able to move money between two
+ *    other people's tills — that is the hole this rule closes.
+ *  - which implies the requester can never validate their own transfer (they
+ *    are on the source side, not the destination),
  *  - balances move HERE, in one transaction, never at request time,
  *  - *_apres snapshots freeze both balances immediately after the move.
  */
@@ -33,6 +39,20 @@ final class ValiderTransfertCaisse
         if ($transfer->requested_by === $validatedBy->id) {
             throw ValidationException::withMessages([
                 'validated_by' => __('Le demandeur ne peut pas valider son propre transfert.'),
+            ]);
+        }
+
+        // Recipient-only: the validator must own the DESTINATION till.
+        // Checked against the employee's own caisses rather than
+        // caisses.responsable_employee_id alone so an employee holding
+        // several tills is still recognised as the recipient of any of them.
+        $ownsDestination = $validatedBy->caisses()
+            ->whereKey($transfer->caisse_destination_id)
+            ->exists();
+
+        if (! $ownsDestination) {
+            throw ValidationException::withMessages([
+                'validated_by' => __('Seul le destinataire du transfert peut le valider.'),
             ]);
         }
 

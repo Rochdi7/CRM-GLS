@@ -419,6 +419,17 @@ export interface DepenseDetails {
     note: string | null;
     canViewList: boolean;
     receipts: SafeMediaFile[];
+    statut: string;
+    methodePaiement: string | null;
+    referenceFacture: string | null;
+    groupe: string | null;
+    approvedBy: string | null;
+    approvedAt: string | null;
+    motifRefus: string | null;
+    /** Operation trail — super-admin only; see DepenseRow for the rule. */
+    createdAt?: string | null;
+    updatedAt?: string | null;
+    wasEdited?: boolean;
 }
 
 export interface CaisseTransferDetails {
@@ -604,7 +615,7 @@ export interface CrudPermissions {
 
 // --- Phase 6: simple CRUD modules ------------------------------------------
 
-export type SettingsTab = 'etablissements' | 'annees-scolaires' | 'salles' | 'frais' | 'banques' | 'motifs-annulation';
+export type SettingsTab = 'etablissements' | 'annees-scolaires' | 'salles' | 'frais' | 'banques' | 'motifs-annulation' | 'systeme';
 
 export interface EtablissementRow {
     id: number;
@@ -659,19 +670,35 @@ export interface SalleForm {
     statut: string;
 }
 
+/** One center's own price for a fee (frais_etablissement pivot). */
+export interface FraisCentreLigne {
+    etablissementId: number;
+    nomCentre: string;
+    montant: string;
+}
+
 export interface FraisRow {
     id: number;
     nom: string;
-    /** Catalog default every group starts from; a group may override it. */
+    /** Fallback used by any center with no price line of its own. */
     montantDefaut: string;
     statut: string;
     groupsCount: number;
+    /** Centers charging this fee, each with that center's amount. */
+    centres: FraisCentreLigne[];
+}
+
+/** A center price line as submitted by the form. */
+export interface FraisCentreForm {
+    etablissement_id: number;
+    montant: string;
 }
 
 export interface FraisForm {
     nom: string;
     montant_defaut: string;
     statut: string;
+    centres: FraisCentreForm[];
 }
 
 export interface BanqueRow {
@@ -730,12 +757,15 @@ export interface SettingsPageProps {
     etablissements?: PaginatedData<EtablissementRow>;
     anneesScolaires?: PaginatedData<AnneeScolaireRow>;
     salles?: PaginatedData<SalleRow>;
+    /** Shared by the Salles and Frais tabs — centers the user may act on. */
     centerOptions?: SelectOption[];
     /** Salles tab: false only on "Tous les centres" — gates the redundant Centre column. */
     centerLocked?: boolean;
     frais?: PaginatedData<FraisRow>;
     banques?: PaginatedData<BanqueRow>;
     motifsAnnulation?: PaginatedData<MotifAnnulationRow>;
+    /** Système tab: application-wide switches (AppSettings). */
+    systeme?: { expenseApproval: boolean };
     [key: string]: unknown;
 }
 
@@ -1243,6 +1273,12 @@ export interface CaisseTransferRow {
     validatedBy: string | null;
     note: string | null;
     isPending: boolean;
+    /**
+     * Recipient-only validation: true only when the viewer owns the
+     * DESTINATION till and did not request the transfer. UI convenience -
+     * CaisseTransferPolicy@validate is the real gate.
+     */
+    canValidate: boolean;
     showUrl: string;
 }
 
@@ -1250,9 +1286,51 @@ export interface CaisseTransferFormOption extends FinanceOption {
     solde: MoneyDisplay;
 }
 
+/**
+ * One row of the « Comptes de caisse » tab — mirrors GetComptesCaisse exactly.
+ * Rows come in two natures, told apart by `derived`.
+ */
+export interface CompteCaisseRow {
+    /** null on derived rows: they are an aggregate of movements, not a record. */
+    id: number | null;
+    nom: string;
+    /** "Caissière" / "Externe" (stored) or "TPE" / "Chèque" / "Virement" (derived from the payment method). */
+    type: string;
+    centre: string | null;
+    responsable: string | null;
+    encaissements: string;
+    depenses: string;
+    /** Stored `caisses.solde` on real accounts; encaissements − dépenses on derived rows. */
+    solde: string;
+    statut: string;
+    /** created_at as dd/mm/yyyy — null on derived rows, which were never "added". */
+    dateAjout: string | null;
+    /**
+     * True for the TPE/Chèque/Virement rows aggregated live from the payment
+     * method. Those carry no id and get no row actions — there is nothing to
+     * open, edit or delete.
+     */
+    derived: boolean;
+    showUrl: string | null;
+}
+
+/**
+ * Add/edit form of a cash account — deliberately just Type + Nom (+ Centre).
+ * No opening balance: a solde is never typed by hand, it only moves through
+ * CaisseLedger. `type` is create-only and frozen afterwards. Mirrors
+ * StoreCaisseRequest/UpdateCaisseRequest.
+ */
+export interface CompteCaisseForm {
+    nom: string;
+    type: string;
+    etablissement_id: number | '';
+}
+
 export interface CaissesPageProps {
     canViewCaisses: boolean;
     canViewTransfers: boolean;
+    /** « Comptes de caisse » tab — super-admin only (`cash-accounts.view` is in no role). */
+    canViewComptes: boolean;
     journalMine: CaisseJournalData | null;
     transfers: PaginatedData<CaisseTransferRow> | null;
     transferStatutCounts: Record<string, number>;
@@ -1262,6 +1340,14 @@ export interface CaissesPageProps {
     /** The acting employee's OWN till — the transfer modal's fixed, read-only source (null when the account has no employee/till). */
     myCaisse: CaisseTransferFormOption | null;
     transferFilters: { search: string; statutFilter: string; typeFilter: string };
+    comptes: PaginatedData<CompteCaisseRow> | null;
+    /** Creatable kinds — "Externe" only; see GetComptesCaisse::CREATABLE_TYPES. */
+    compteTypes: string[];
+    /** Every kind the tab can show, for the filter dropdown. */
+    compteTypeFilters: string[];
+    compteEtablissements: { id: number; nom: string }[];
+    comptePermissions: CrudPermissions;
+    compteFilters: { compteSearch: string; compteTypeFilter: string };
     [key: string]: unknown;
 }
 
@@ -1452,6 +1538,7 @@ export interface DepenseRow {
     caisse: string | null;
     caisseId: number | null;
     groupId: number | null;
+    groupNom: string | null;
     montant: MoneyDisplay;
     methodePaiement: string | null;
     dateDepense: string | null;
@@ -1461,6 +1548,25 @@ export interface DepenseRow {
     note: string | null;
     agent: string | null;
     receiptsCount: number;
+    /** Approval workflow — "En attente" | "Approuvée" | "Refusée". */
+    statut: string;
+    /** Pending: no money has left the till yet. */
+    isEnAttente: boolean;
+    isRefusee: boolean;
+    approvedBy: string | null;
+    approvedAt: string | null;
+    motifRefus: string | null;
+    /**
+     * Operation trail — when the row was actually keyed in / last edited, as
+     * opposed to `dateDepense` (the business date the user types, freely
+     * backdatable). Sent ONLY to users holding `expenses.approve`
+     * (super-admin); undefined for everyone else because DepenseController
+     * strips the fields server-side rather than hiding them in the UI.
+     */
+    createdAt?: string | null;
+    updatedAt?: string | null;
+    /** True when the row was really edited after creation (>1s apart). */
+    wasEdited?: boolean;
     showUrl: string;
 }
 
@@ -1470,6 +1576,7 @@ export interface DepensesFilters {
     caisseFilter: string;
     dateFrom: string;
     dateTo: string;
+    statutFilter: string;
     perPage: number;
 }
 
@@ -1505,7 +1612,11 @@ export interface DepensesPageProps {
     /** The acting employee's own till balance — null if they have no employee record. */
     soldeActuel: MoneyDisplay | null;
     depenses: PaginatedData<DepenseRow> | null;
+    /** Approved only — money that actually left the tills. */
     montantTotal: MoneyDisplay | null;
+    /** Pending only — money on hold, awaiting a decision. */
+    montantEnAttente: MoneyDisplay | null;
+    enAttenteCount: number;
     /** Only the "Paiement prof" system type — its own tab, excluded from `depenses`. */
     paiementsProf: PaginatedData<DepenseRow> | null;
     paiementsProfTotal: MoneyDisplay | null;
@@ -1518,6 +1629,18 @@ export interface DepensesPageProps {
     justificatifMaxKb: number;
     remboursements: PaginatedData<RemboursementRow> | null;
     students: FinanceOption[];
+    /** Paramètres → Système « Validation des dépenses » — drives the whole approval UI. */
+    approvalEnabled: boolean;
+    /** UI convenience only (`expenses.approve`); the policy is the real gate. */
+    canApprove: boolean;
+    /**
+     * Same permission, different job: gates the « Date d'operation » column
+     * and the « Validation des depenses » tab. When false the controller has
+     * already stripped createdAt/updatedAt from every row, so there is
+     * nothing to hide client-side.
+     */
+    canAudit: boolean;
+    depenseStatuts: string[];
     filters: DepensesFilters;
     [key: string]: unknown;
 }

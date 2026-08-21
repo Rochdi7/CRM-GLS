@@ -48,4 +48,38 @@ class Frais extends Model
             ->withPivot('montant', 'date_echeance', 'classification')
             ->withTimestamps();
     }
+
+    /**
+     * Centers this fee is charged in, each with its OWN amount — the same
+     * fee costs 1400 in Rabat/Casablanca, 1300 in Kénitra/Marrakech/Salé
+     * and 1200 in Agadir, so the price lives on the pivot, not the fee.
+     */
+    public function etablissements(): BelongsToMany
+    {
+        return $this->belongsToMany(Etablissement::class, 'frais_etablissement')
+            ->withPivot('montant')
+            ->withTimestamps();
+    }
+
+    /**
+     * What this fee costs in a given center.
+     *
+     * Falls back to the catalog default when the center has no line of its
+     * own (or when no center is known at all, e.g. a group without an
+     * établissement), so every caller always gets a usable amount.
+     */
+    public function montantPourCentre(?int $etablissementId): float
+    {
+        if ($etablissementId === null) {
+            return (float) $this->montant_defaut;
+        }
+
+        $ligne = $this->relationLoaded('etablissements')
+            ? $this->etablissements->firstWhere('id', $etablissementId)
+            : $this->etablissements()->find($etablissementId);
+
+        return $ligne === null
+            ? (float) $this->montant_defaut
+            : (float) $ligne->pivot->montant;
+    }
 }

@@ -210,4 +210,97 @@ final class CreneauxInertiaCrudTest extends TestCase
         $this->assertDatabaseHas('seances', ['id' => $doneSeance->id, 'statut' => Seance::STATUT_EFFECTUEE]);
         $this->assertSame(0, Seance::where('statut', Seance::STATUT_PREVUE)->count());
     }
+
+    /**
+     * A group's date_fin_formation caps generation: no séance may be dated
+     * after the group has finished, even though the academic year runs on.
+     */
+    public function test_generation_stops_at_the_group_end_of_formation(): void
+    {
+        $this->group->update([
+            'date_debut_formation' => Carbon::today()->toDateString(),
+            'date_fin_formation' => Carbon::today()->addDays(20)->toDateString(),
+        ]);
+
+        $this->actingAs($this->userWith('attendance.view', 'attendance.create'))
+            ->post(route('backoffice.creneaux.store'), [
+                'group_id' => $this->group->id,
+                'jours_semaine' => [Carbon::today()->isoWeekday()],
+                'heure_debut' => '10:00',
+                'heure_fin' => '12:00',
+            ])->assertRedirect();
+
+        $this->assertGreaterThan(0, Seance::count(), 'Séances inside the period must still be generated.');
+        $this->assertSame(
+            0,
+            Seance::whereDate('date_seance', '>', $this->group->date_fin_formation->toDateString())->count(),
+            'No séance may be dated after the group end of formation.'
+        );
+    }
+
+    /**
+     * A group whose formation is already over generates nothing, and the user
+     * is told to extend the end date rather than getting a silent success.
+     */
+    public function test_no_seance_is_generated_when_end_of_formation_has_passed(): void
+    {
+        $this->group->update([
+            'date_debut_formation' => Carbon::today()->subDays(60)->toDateString(),
+            'date_fin_formation' => Carbon::today()->subDay()->toDateString(),
+        ]);
+
+        $this->actingAs($this->userWith('attendance.view', 'attendance.create'))
+            ->post(route('backoffice.creneaux.store'), [
+                'group_id' => $this->group->id,
+                'jours_semaine' => [Carbon::today()->isoWeekday()],
+                'heure_debut' => '10:00',
+                'heure_fin' => '12:00',
+            ])->assertRedirect()->assertSessionHas('warning');
+
+        $this->assertSame(0, Seance::count());
+        // The créneau itself is still saved — only generation is withheld.
+        $this->assertSame(1, Creneau::count());
+    }
+
+    /**
+     * Shortening a group's date_fin_formation removes the untouched future
+     * séances that now fall outside the period.
+     */
+    public function test_shortening_the_group_period_purges_out_of_period_seances(): void
+    {
+        $this->group->update([
+            'date_debut_formation' => Carbon::today()->toDateString(),
+            'date_fin_formation' => Carbon::today()->addDays(60)->toDateString(),
+        ]);
+
+        $user = $this->userWith('attendance.view', 'attendance.create', 'attendance.update');
+
+        $this->actingAs($user)->post(route('backoffice.creneaux.store'), [
+            'group_id' => $this->group->id,
+            'jours_semaine' => [Carbon::today()->isoWeekday()],
+            'heure_debut' => '10:00',
+            'heure_fin' => '12:00',
+        ])->assertRedirect();
+
+        $avant = Seance::count();
+        $this->assertGreaterThan(1, $avant);
+
+        $nouvelleFin = Carbon::today()->addDays(14);
+        $this->group->update(['date_fin_formation' => $nouvelleFin->toDateString()]);
+
+        $creneau = Creneau::firstOrFail();
+        $this->actingAs($user)->put(route('backoffice.creneaux.update', $creneau), [
+            'group_id' => $this->group->id,
+            'jour_semaine' => $creneau->jour_semaine,
+            'heure_debut' => '10:00',
+            'heure_fin' => '12:00',
+        ])->assertRedirect();
+
+        $this->assertSame(
+            0,
+            Seance::whereDate('date_seance', '>', $nouvelleFin->toDateString())->count(),
+            'Séances beyond the shortened period must be removed.'
+        );
+        $this->assertLessThan($avant, Seance::count());
+    }
 }

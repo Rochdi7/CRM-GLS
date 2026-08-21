@@ -20,6 +20,11 @@ return new class extends Migration
         Schema::create('encaissements', function (Blueprint $table): void {
             $table->id();
             $table->string('reference', 20)->unique();
+            // Legacy import provenance. Unlike students/inscriptions this table
+            // has no etablissement_id (the centre is reached via student /
+            // inscription), so legacy_ref is scoped GLOBALLY instead.
+            $table->string('legacy_ref', 50)->nullable();
+            $table->string('legacy_source', 30)->nullable();
             $table->foreignId('student_id')->constrained('students')->restrictOnDelete();
             // Nullable: an "avance" is money received but not yet allocated to
             // any fee (gls-crm-schema.md §11's documented trade-off), applied
@@ -47,6 +52,7 @@ return new class extends Migration
             $table->index('agent_id', 'encaissements_agent_id_idx');
             $table->index('applied_from_encaissement_id', 'encaissements_applied_from_idx');
             $table->index('cheque_id', 'encaissements_cheque_id_idx');
+            $table->unique('legacy_ref', 'encaissements_legacy_ref_unique');
         });
     }
 

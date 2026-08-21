@@ -18,6 +18,9 @@ final class CaisseFactory extends Factory
     {
         return [
             'nom' => 'Caisse '.fake()->unique()->numerify('###'),
+            // Default to an employee's own till — what CaisseProvisioner
+            // creates for real. Standing accounts pass ->create(['type' => …]).
+            'type' => Caisse::TYPE_CAISSIERE,
             'solde' => 0,
             'statut' => Caisse::STATUT_ACTIVE,
         ];

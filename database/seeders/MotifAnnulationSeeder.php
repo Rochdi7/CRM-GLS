@@ -24,7 +24,6 @@ final class MotifAnnulationSeeder extends Seeder
             'Non-paiement',
             "Transfert d'établissement",
             'Problème du temps',
-            'Ar',
         ];
 
         foreach ($motifs as $nom) {

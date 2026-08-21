@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Audit;
 
 use App\Models\AnneeScolaire;
+use App\Models\AppSetting;
 use App\Models\Banque;
 use App\Models\Caisse;
 use App\Models\CaisseTransfer;
@@ -109,6 +110,7 @@ final class AuditLogRegistry
             Banque::class => ['banque', 'Banque'],
             TypeDepense::class => ['type_depense', 'Type de dépense'],
             MotifAnnulation::class => ['motif_annulation', "Motif d'annulation"],
+            AppSetting::class => ['app_setting', 'Paramètre système'],
 
             // ── Import ─────────────────────────────────────────────────
             ImportBatch::class => ['import_batch', 'Import de données'],
@@ -126,6 +128,8 @@ final class AuditLogRegistry
         return [
             'authentication' => 'Connexion / déconnexion',
             'authorization' => 'Rôles et permissions',
+            // Written by SystemSettingController, not by the Auditable trait.
+            'system-settings' => 'Paramètres système',
         ];
     }
 

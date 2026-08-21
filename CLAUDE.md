@@ -297,8 +297,51 @@ the database layer. Non-negotiable invariants already enforced in code:
   replaced. The ledger records solde avant → montant → solde après plus the
   source record, and transfers must journal BOTH legs. See
   `docs/audit-journal.md` §5b.
-- **Till transfers are two-step**: request (balances untouched) → validation by
-  a **different** employee (balances move). Self-validation is refused.
+- **Till transfers are two-step and RECIPIENT-validated**: request (balances
+  untouched) → acceptance by the **employee who owns the DESTINATION till**
+  (balances move). The person whose caisse is about to be credited is the only
+  one who confirms they received the money; holding `cash-transfers.validate`
+  is not enough on its own, and self-validation is refused (the requester is on
+  the source side). ⚠ **Super-admins do NOT bypass this** — `Gate::before` in
+  `AppServiceProvider` explicitly excludes `CaisseTransfer@validate`
+  (`NO_SUPER_ADMIN_BYPASS`, keyed by model because `SeancePolicy` also has a
+  `validate` method). A super-admin approving a transfer into someone else's
+  till would defeat the whole two-person control. Enforced in three places that
+  must stay in sync: `CaisseTransferPolicy@validate`,
+  `Domain\Finance\Actions\ValiderTransfertCaisse` (authoritative, also
+  covers non-HTTP callers), and the `canValidate` flag
+  `GetCaisseTransfersList` computes per row for the UI.
+- **Dépenses are a REQUEST flow when approval is on** (default). Paramètres →
+  Système « Validation des dépenses » (`AppSettings::EXPENSE_APPROVAL`,
+  `system-settings.update`) switches it:
+  - **ON** — `EnregistrerDepense` creates the dépense `En attente` and debits
+    **nothing**; the money is on hold in the till. `ApprouverDepense`
+    (`expenses.approve`) is the single moment `caisses.solde` moves for that
+    expense; `RefuserDepense` moves nothing and keeps the row (audit trail —
+    a refused dépense is never deleted, like every other money record).
+  - **OFF** — legacy behavior: created `Approuvée`, till debited immediately.
+  Turning the switch OFF never releases already-pending dépenses: they never
+  debited anything, so they keep waiting for a decision. Both decisions re-read
+  the row `lockForUpdate()` and refuse an already-decided expense, so a
+  double-click can't double-spend. The Dépenses list reports **approved** money
+  as `montantTotal` and pending money separately as `montantEnAttente` — never
+  fold the two together.
+- **Application-wide switches live in `app_settings`** (key/value), always read
+  and written through `App\Support\Settings\AppSettings` — never queried
+  directly, so the forever-cache stays coherent and every change is audited
+  (`AppSetting` uses `Auditable`). Two storage forms per key:
+  - **`valeur`** (text) — the scalar a switch reads as. `bool()`/`setBool()`
+    with a fallback in `AppSettings::DEFAULTS`, so an unstored key behaves like
+    a fresh install. This is what `EXPENSE_APPROVAL` uses.
+  - **`options`** (jsonb) — the structured bag for settings needing more than
+    one scalar (a list, a per-center override map, a threshold set).
+    `options()`/`option('key', 'dot.path')`/`setOptions()`/`mergeOptions()`,
+    with fallbacks in `AppSettings::OPTION_DEFAULTS`. Nothing reads it yet — it
+    exists so a future setting is a constant + accessor, never another
+    migration on a production table (§17). The two columns are independent: a
+    key may carry both a scalar switch and structured config.
+  A new switch is therefore **one constant + one accessor on `AppSettings`**
+  (plus a `DEFAULTS`/`OPTION_DEFAULTS` entry) — never a new column.
 - **Money records (encaissements/depenses/remboursements/transfers) are never
   deleted** — no destroy routes; corrections use compensating entries.
   `montant`/`caisse_id` are not editable after creation.
@@ -482,6 +525,35 @@ the database layer. Non-negotiable invariants already enforced in code:
   `C:\php84\php.exe artisan lang:update` after adding packages).
   AR / EN / DE remain prepared in `lang/*.json` for the future locale switcher.
 
+### Seeders — essential vs. demo (production rule)
+
+`php artisan db:seed` (and therefore any deploy script) runs **only essential
+reference data**, all of it idempotent and safe to re-run on a live database:
+`RolesAndPermissionsSeeder`, `ReferentialDataSeeder` (7 GLS centers, rooms,
+academic years), `AdminUserSeeder`, then the locked catalogs —
+`TypeDepenseSeeder`, `StockTypeSeeder`, `FraisSeeder`, `BanqueSeeder`,
+`MotifAnnulationSeeder`. **It creates no student, group, inscription, till,
+stock or money record.**
+
+All fake data lives behind an explicit opt-in:
+
+```powershell
+C:\php84\php.exe artisan db:seed --class=DemoSeeder   # local only
+```
+
+`DemoSeeder` refuses to run outside `local`/`testing` unless `ALLOW_DEMO_SEED=true`.
+It wraps `DemoRoleUsers`, `DemoData`, `DemoFinance`, `BookStock`, `DemoStock`,
+`DemoRecouvrement` and `DemoDashboard`.
+
+⚠ `BookStockSeeder` is **demo, not essential**: the 8 book titles are real, but
+it opens every article at an invented 40 units — stock fiction on a production
+database. Seed real quantities by import instead.
+
+Never add a seeder that invents business records to `DatabaseSeeder`. Demo rows
+are recognizable by their reference prefixes (`ETU-DEMO*`, `ETU-DASH*`,
+`ETU-RETARD*`, `EMP-ROLE*`) — keep that convention, it is what makes them
+identifiable later.
+
 ## 13. Commands
 
 Always from the project root, always with PHP 8.4:
@@ -533,8 +605,11 @@ Two independent auth surfaces — do not merge them.
   (`users.is_active = false`) can never sign in — enforced in `LoginRequest`.
 - View: `backoffice/auth/login.blade.php` on `<x-backoffice.layout.guest>`,
   adapted from `theme-reference/crm-gls/authentication/login.blade.php`.
-- Local dev credentials (AdminUserSeeder): `admin@gls.test` / `password` —
-  **local only, replace before any deployment**.
+- Credentials (AdminUserSeeder) come from `ADMIN_EMAIL`/`ADMIN_USERNAME`/
+  `ADMIN_PASSWORD`. Locally they default to `admin@gls.test` / `password`;
+  on any other environment **`ADMIN_PASSWORD` must be set or the seeder
+  refuses to run**, so a deploy can never publish a well-known password. A
+  non-local admin is created with `must_change_password = true`.
 - Tests: `tests/Feature/Backoffice/AuthTest.php` — keep green.
 
 **Password reset is implemented** (backoffice-scoped, `users` broker): routes

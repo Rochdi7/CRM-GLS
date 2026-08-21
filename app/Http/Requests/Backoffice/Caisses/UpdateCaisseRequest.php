@@ -11,7 +11,12 @@ use Illuminate\Validation\Rule;
 /**
  * ⚠ `solde` is deliberately NOT accepted here — a till balance must never be
  * edited by hand (fraud traceability, schema §10). It only moves through
- * encaissements / depenses / remboursements / validated caisse_transfers.
+ * encaissements / depenses / remboursements / validated caisse_transfers, and
+ * always via CaisseLedger so the movement lands in the audit journal.
+ *
+ * ⚠ `type` is NOT accepted either: an account's kind is frozen at creation.
+ * Flipping an employee's "Caissière" till to "Banque" (or the reverse) would
+ * rewrite the meaning of every movement already attached to it.
  */
 final class UpdateCaisseRequest extends FormRequest
 {

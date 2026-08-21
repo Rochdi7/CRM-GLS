@@ -67,7 +67,7 @@ class Activity extends SpatieActivity
     {
         if (app()->runningInConsole() && ! app()->runningUnitTests()) {
             $this->method ??= 'CLI';
-            $this->url ??= 'artisan:'.implode(' ', array_slice((array) ($_SERVER['argv'] ?? []), 1));
+            $this->url ??= $this->consoleOrigin();
         } else {
             $this->ip_address ??= Request::ip();
             $this->user_agent ??= mb_substr((string) Request::userAgent(), 0, 512) ?: null;
@@ -77,6 +77,57 @@ class Activity extends SpatieActivity
         }
 
         $this->causer_label ??= $this->resolveCauserLabel();
+
+        // Final belt-and-braces truncation. Everything above already trims,
+        // but a caller may have set these itself (the ??= above leaves such a
+        // value untouched), and an over-long string here would throw while
+        // INSERTING an audit row — losing the very record that proves what
+        // happened. Truncating a URL is always preferable to losing the entry.
+        $this->url = $this->clamp($this->url, 1024);
+        $this->user_agent = $this->clamp($this->user_agent, 512);
+        $this->route_name = $this->clamp($this->route_name, 255);
+        $this->causer_label = $this->clamp($this->causer_label, 255);
+        $this->ip_address = $this->clamp($this->ip_address, 45);
+        $this->method = $this->clamp($this->method, 10);
+    }
+
+    /** Trim a value to the column width, preserving null. */
+    private function clamp(?string $value, int $length): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        return mb_strlen($value) > $length ? mb_substr($value, 0, $length) : $value;
+    }
+
+    /**
+     * What ran, when the entry came from the console.
+     *
+     * Only the command NAME is recorded — never its arguments. Joining the
+     * whole of `$_SERVER['argv']` put the entire payload of
+     * `tinker --execute=<script>` into this column, which is three problems at
+     * once: a wall of PHP where a reader expects an origin, a leak of internal
+     * code and absolute file paths into a page people read, and a value that
+     * can exceed the column's 1024 chars and make the audit write itself fail.
+     *
+     * An option's VALUE can hold anything (a script, a password, a token), so
+     * arguments are dropped wholesale rather than filtered: knowing which
+     * command ran is what an investigation needs, and it is the part that is
+     * always safe to keep.
+     */
+    private function consoleOrigin(): string
+    {
+        $argv = (array) ($_SERVER['argv'] ?? []);
+
+        // argv[0] is the artisan script itself; argv[1] is the command name.
+        $command = $argv[1] ?? null;
+
+        if (! is_string($command) || $command === '' || str_starts_with($command, '-')) {
+            return 'artisan';
+        }
+
+        return mb_substr('artisan:'.$command, 0, 255);
     }
 
     /**

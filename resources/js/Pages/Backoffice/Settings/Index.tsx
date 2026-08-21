@@ -7,6 +7,7 @@ import SallesPanel from '@/Pages/Backoffice/Settings/SallesPanel';
 import FraisPanel from '@/Pages/Backoffice/Settings/FraisPanel';
 import BanquesPanel from '@/Pages/Backoffice/Settings/BanquesPanel';
 import MotifsAnnulationPanel from '@/Pages/Backoffice/Settings/MotifsAnnulationPanel';
+import SystemePanel from '@/Pages/Backoffice/Settings/SystemePanel';
 import type { SettingsPageProps, SettingsTab } from '@/Types';
 
 const TAB_LABELS: Record<SettingsTab, { label: string; icon: string }> = {
@@ -16,6 +17,7 @@ const TAB_LABELS: Record<SettingsTab, { label: string; icon: string }> = {
     frais: { label: 'Frais', icon: 'ti ti-receipt' },
     banques: { label: 'Banques', icon: 'ti ti-building-bank' },
     'motifs-annulation': { label: 'Raisons d’annulation ou archivage', icon: 'ti ti-refresh' },
+    systeme: { label: 'Système', icon: 'ti ti-settings-cog' },
 };
 
 /**
@@ -38,6 +40,7 @@ export default function SettingsIndex({
     frais,
     banques,
     motifsAnnulation,
+    systeme,
 }: SettingsPageProps) {
     function switchTab(tab: SettingsTab) {
         if (tab === activeTab) {
@@ -88,10 +91,15 @@ export default function SettingsIndex({
                             centerLocked={centerLocked ?? false}
                         />
                     )}
-                    {activeTab === 'frais' && frais && <FraisPanel frais={frais} permissions={permissions.frais} />}
+                    {activeTab === 'frais' && frais && (
+                        <FraisPanel frais={frais} centerOptions={centerOptions ?? []} permissions={permissions.frais} />
+                    )}
                     {activeTab === 'banques' && banques && <BanquesPanel banques={banques} permissions={permissions.banques} />}
                     {activeTab === 'motifs-annulation' && motifsAnnulation && (
                         <MotifsAnnulationPanel motifsAnnulation={motifsAnnulation} permissions={permissions['motifs-annulation']} />
+                    )}
+                    {activeTab === 'systeme' && systeme && (
+                        <SystemePanel systeme={systeme} permissions={permissions.systeme} />
                     )}
                 </div>
             </Card>

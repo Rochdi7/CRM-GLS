@@ -362,6 +362,91 @@ final class SettingsTest extends TestCase
         $this->assertSame('1450.50', (string) $frais->fresh()->montant_defaut);
     }
 
+    public function test_a_fee_is_priced_per_center(): void
+    {
+        // The same monthly fee costs 1400 in Rabat and 1200 in Agadir, so
+        // one catalog entry is attached to both centers with each center's
+        // own amount — never duplicated once per branch, which would fork
+        // every group_frais link across seven rows.
+        $this->admin();
+
+        $rabat = Etablissement::factory()->create(['nom_centre' => 'GLS Rabat']);
+        $agadir = Etablissement::factory()->create(['nom_centre' => 'GLS Agadir']);
+
+        $this->post(route('backoffice.frais.store'), [
+            'nom' => 'Frais de Septembre',
+            'montant_defaut' => '1300.00',
+            'statut' => Frais::STATUT_ACTIF,
+            'centres' => [
+                ['etablissement_id' => $rabat->id, 'montant' => '1400.00'],
+                ['etablissement_id' => $agadir->id, 'montant' => '1200.00'],
+            ],
+        ])->assertRedirect();
+
+        $frais = Frais::firstOrFail();
+
+        $this->assertDatabaseHas('frais_etablissement', [
+            'frais_id' => $frais->id, 'etablissement_id' => $rabat->id, 'montant' => '1400.00',
+        ]);
+        $this->assertDatabaseHas('frais_etablissement', [
+            'frais_id' => $frais->id, 'etablissement_id' => $agadir->id, 'montant' => '1200.00',
+        ]);
+
+        $this->assertSame(1400.0, $frais->montantPourCentre($rabat->id));
+        $this->assertSame(1200.0, $frais->montantPourCentre($agadir->id));
+    }
+
+    public function test_a_center_without_its_own_price_falls_back_to_the_catalog_default(): void
+    {
+        // Attaching a fee to every branch is optional: a center with no
+        // price line still gets a usable amount instead of 0.00, which
+        // would read as "free" and hide the fee from the payment modal.
+        $this->admin();
+
+        $sansTarif = Etablissement::factory()->create(['nom_centre' => 'GLS Online']);
+
+        $frais = Frais::create([
+            'nom' => 'Frais de Juillet',
+            'montant_defaut' => '1300.00',
+            'statut' => Frais::STATUT_ACTIF,
+        ]);
+
+        $this->assertSame(1300.0, $frais->montantPourCentre($sansTarif->id));
+        // No center at all (e.g. a group with no établissement) too.
+        $this->assertSame(1300.0, $frais->montantPourCentre(null));
+    }
+
+    public function test_updating_a_fee_replaces_its_center_prices(): void
+    {
+        $this->admin();
+
+        $rabat = Etablissement::factory()->create(['nom_centre' => 'GLS Rabat']);
+        $agadir = Etablissement::factory()->create(['nom_centre' => 'GLS Agadir']);
+
+        $frais = Frais::create([
+            'nom' => 'Frais de Mai', 'montant_defaut' => '1300.00', 'statut' => Frais::STATUT_ACTIF,
+        ]);
+        $frais->etablissements()->attach([
+            $rabat->id => ['montant' => 1400],
+            $agadir->id => ['montant' => 1200],
+        ]);
+
+        // Re-price Rabat and drop Agadir entirely.
+        $this->put(route('backoffice.frais.update', $frais), [
+            'nom' => 'Frais de Mai',
+            'montant_defaut' => '1300.00',
+            'statut' => Frais::STATUT_ACTIF,
+            'centres' => [['etablissement_id' => $rabat->id, 'montant' => '1500.00']],
+        ])->assertRedirect();
+
+        $this->assertDatabaseHas('frais_etablissement', [
+            'frais_id' => $frais->id, 'etablissement_id' => $rabat->id, 'montant' => '1500.00',
+        ]);
+        $this->assertDatabaseMissing('frais_etablissement', [
+            'frais_id' => $frais->id, 'etablissement_id' => $agadir->id,
+        ]);
+    }
+
     public function test_omitting_the_default_amount_falls_back_to_zero_rather_than_failing(): void
     {
         // A *default* amount must itself default — requiring it would break

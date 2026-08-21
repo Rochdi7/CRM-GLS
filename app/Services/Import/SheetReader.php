@@ -22,7 +22,16 @@ final class SheetReader
 
     private const array HEADER_FIRST_CELL_TOKENS = ['N°', "N° d'ordre"];
 
-    private const array HEADER_REF_TOKENS = ['Réf', 'Réf.'];
+    /**
+     * A second, distinctive column that confirms the "N°" row really is the
+     * header rather than a numbered data or metadata line. Most legacy
+     * exports carry a "Réf" column; the "Registre des présences" export has
+     * none at all (N° | Élève | Groupe | Matière | Date | Horaire | Statut |
+     * Enseignant), so "Élève" anchors that one. Detection only needs ONE of
+     * these present — the caller's $expectedColumns is what actually pins
+     * down the sheet's shape.
+     */
+    private const array HEADER_REF_TOKENS = ['Réf', 'Réf.', 'Élève'];
 
     /** Pathological-file guard — real exports are a few dozen/hundred rows. */
     private const int FOOTER_CUTOFF_ROW_CAP = 5000;

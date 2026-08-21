@@ -104,6 +104,160 @@ final class InscriptionImportTest extends TestCase
         ]);
     }
 
+    /**
+     * Builds a one-off inscriptions xlsx — the shipped sample has no
+     * recycled réf., and the recycled-réf. bug can only be reproduced with
+     * one.
+     *
+     * Written with ZipArchive rather than OpenSpout's writer: that writer
+     * stages its archive in the Windows temp folder and dies there with
+     * "Renaming temporary file failed". A minimal inline-strings workbook is
+     * all SheetReader needs.
+     *
+     * @param  array<int, array<int, string>>  $rows  [réf, étudiant, groupe, statut, date] — the "N°" column is added here
+     */
+    private function buildUpload(array $rows): UploadedFile
+    {
+        $dir = storage_path('framework/testing/import');
+
+        if (! is_dir($dir)) {
+            mkdir($dir, 0777, true);
+        }
+
+        $path = $dir.DIRECTORY_SEPARATOR.uniqid('ins', true).'.xlsx';
+
+        $sheetRows = '';
+        // The leading "N°" column is what SheetReader keys the header row
+        // off — a sheet without it is not recognised as an export at all.
+        $header = ['N°', 'Réf', 'Étudiant', 'Groupe', 'Statut', "Date d'inscription"];
+        $numbered = [];
+        foreach ($rows as $offset => $row) {
+            $numbered[] = [(string) ($offset + 1), ...array_values($row)];
+        }
+
+        foreach ([$header, ...$numbered] as $index => $row) {
+            $cells = '';
+            foreach (array_values($row) as $column => $value) {
+                $ref = chr(ord('A') + $column).($index + 1);
+                $cells .= sprintf(
+                    '<c r="%s" t="inlineStr"><is><t xml:space="preserve">%s</t></is></c>',
+                    $ref,
+                    htmlspecialchars((string) $value, ENT_XML1 | ENT_QUOTES, 'UTF-8')
+                );
+            }
+            $sheetRows .= sprintf('<row r="%d">%s</row>', $index + 1, $cells);
+        }
+
+        $zip = new \ZipArchive;
+        $zip->open($path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+        $zip->addFromString('[Content_Types].xml',
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            .'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            .'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            .'<Default Extension="xml" ContentType="application/xml"/>'
+            .'<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+            .'<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+            .'</Types>');
+        $zip->addFromString('_rels/.rels',
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            .'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            .'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+            .'</Relationships>');
+        $zip->addFromString('xl/workbook.xml',
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            .'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+            .' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            .'<sheets><sheet name="Feuille1" sheetId="1" r:id="rId1"/></sheets></workbook>');
+        $zip->addFromString('xl/_rels/workbook.xml.rels',
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            .'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            .'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+            .'</Relationships>');
+        $zip->addFromString('xl/worksheets/sheet1.xml',
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            .'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            .'<sheetData>'.$sheetRows.'</sheetData></worksheet>');
+        $zip->close();
+
+        return new UploadedFile($path, 'liste-inscriptions.xlsx', null, null, true);
+    }
+
+    /**
+     * The old CRM reuses one réf. for genuinely different inscriptions.
+     * Those rows are NOT duplicates — dedupe must fall back to
+     * étudiant + groupe + date, and the second one is stored under a
+     * suffixed legacy_ref so the unique index accepts it.
+     */
+    public function test_a_recycled_reference_on_a_different_student_is_imported_not_skipped(): void
+    {
+        $this->makeStudent('CHAYMA', 'AAZRI');
+        $this->makeStudent('HASNA', 'BARGAZ');
+        $group = Group::factory()->create([
+            'nom' => 'Herr Driss 13h',
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+        $group->frais()->sync([Frais::first()->id => ['montant' => 300, 'date_echeance' => '2026-09-01']]);
+
+        $user = $this->userWith('import.view', 'import.create');
+
+        $this->actingAs($user)->post(route('backoffice.import.inscriptions.analyze'), [
+            'file' => $this->buildUpload([
+                ['337SL126', 'CHAYMA AAZRI', 'Herr Driss 13h', 'Active', '05/01/2026'],
+                ['337SL126', 'HASNA BARGAZ', 'Herr Driss 13h', 'Active', '06/01/2026'],
+            ]),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'groupe_mapping' => [
+                ['label' => 'Herr Driss 13h', 'action' => 'map', 'group_id' => $group->id],
+            ],
+        ])->assertSessionHasNoErrors()->assertRedirect();
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $rows = $batch->rows()->orderBy('source_row_number')->get();
+
+        $this->assertCount(2, $rows);
+        $this->assertSame(ImportRow::STATUT_NOUVEAU, $rows[0]->status);
+        $this->assertSame(ImportRow::STATUT_NOUVEAU, $rows[1]->status, 'A recycled réf. on a different student must not be treated as a doublon.');
+        $this->assertSame('337SL126', $rows[0]->legacy_ref);
+        $this->assertSame('337SL126#2', $rows[1]->legacy_ref, 'The reused réf. must be disambiguated for the unique index.');
+
+        $this->commitAllSelected($user, $batch, $rows->pluck('id')->all());
+
+        $this->assertSame(2, Inscription::query()->count());
+    }
+
+    /** The same row twice — same réf. AND same étudiant/groupe/date — IS a doublon. */
+    public function test_an_identical_row_repeated_under_the_same_reference_is_still_skipped(): void
+    {
+        $this->makeStudent('CHAYMA', 'AAZRI');
+        $group = Group::factory()->create([
+            'nom' => 'Herr Driss 13h',
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+        $group->frais()->sync([Frais::first()->id => ['montant' => 300, 'date_echeance' => '2026-09-01']]);
+
+        $user = $this->userWith('import.view', 'import.create');
+
+        $this->actingAs($user)->post(route('backoffice.import.inscriptions.analyze'), [
+            'file' => $this->buildUpload([
+                ['337SL126', 'CHAYMA AAZRI', 'Herr Driss 13h', 'Active', '05/01/2026'],
+                ['337SL126', 'CHAYMA AAZRI', 'Herr Driss 13h', 'Active', '05/01/2026'],
+            ]),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'groupe_mapping' => [
+                ['label' => 'Herr Driss 13h', 'action' => 'map', 'group_id' => $group->id],
+            ],
+        ])->assertSessionHasNoErrors();
+
+        $rows = ImportBatch::query()->firstOrFail()->rows()->orderBy('source_row_number')->get();
+
+        $this->assertSame(ImportRow::STATUT_NOUVEAU, $rows[0]->status);
+        $this->assertSame(ImportRow::STATUT_DOUBLON, $rows[1]->status);
+    }
+
     public function test_peek_groupes_lists_distinct_labels_and_existing_groups_scoped_to_centre_annee(): void
     {
         $user = $this->userWith('import.view', 'import.create');

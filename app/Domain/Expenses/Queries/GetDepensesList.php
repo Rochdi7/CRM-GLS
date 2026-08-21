@@ -41,7 +41,7 @@ final class GetDepensesList
     ) {}
 
     /**
-     * @return array{data: LengthAwarePaginator, montantTotal: string}
+     * @return array{data: LengthAwarePaginator, montantTotal: string, montantEnAttente: string, enAttenteCount: int}
      */
     public function __invoke(
         User $user,
@@ -52,6 +52,7 @@ final class GetDepensesList
         string $dateTo = '',
         int $perPage = self::DEFAULT_PER_PAGE,
         string $scope = self::SCOPE_HORS_PAIEMENT_PROF,
+        string $statutFilter = '',
     ): array {
         $paiementProfId = $this->paiementProfTypeId();
 
@@ -72,6 +73,7 @@ final class GetDepensesList
                 fn ($q) => $scope === self::SCOPE_PAIEMENT_PROF ? $q->whereRaw('1 = 0') : $q,
             )
             ->when($caisseFilter !== '', fn ($q) => $q->where('caisse_id', (int) $caisseFilter))
+            ->when($statutFilter !== '', fn ($q) => $q->where('statut', $statutFilter))
             ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_depense', '>=', $dateFrom))
             ->when($dateTo !== '', fn ($q) => $q->whereDate('date_depense', '<=', $dateTo))
             ->when($search !== '', function ($q) use ($search): void {
@@ -83,10 +85,20 @@ final class GetDepensesList
                 });
             });
 
-        $montantTotal = (clone $base)->sum('montant');
+        // Two separate totals, because they mean different things:
+        // - montantTotal      = money that actually LEFT the tills (approved
+        //   only). A pending or refused expense has debited nothing, so
+        //   counting it here would overstate the spend.
+        // - montantEnAttente  = money awaiting a decision (on hold).
+        $montantTotal = (clone $base)->where('statut', Depense::STATUT_APPROUVEE)->sum('montant');
+        $enAttenteBase = (clone $base)->where('statut', Depense::STATUT_EN_ATTENTE);
+        $montantEnAttente = (clone $enAttenteBase)->sum('montant');
+        $enAttenteCount = (clone $enAttenteBase)->count();
 
         $depenses = $base
-            ->with(['typeDepense', 'caisse', 'agent'])
+            // `group` is eager-loaded for the Validation tab's Groupe column
+            // — without it every row would fire its own query.
+            ->with(['typeDepense', 'caisse', 'agent', 'approvedBy', 'group'])
             ->withCount('media')
             ->latest()
             // Each tab paginates independently, so the Paiements prof tab
@@ -102,6 +114,7 @@ final class GetDepensesList
             'caisse' => $d->caisse?->nom,
             'caisseId' => $d->caisse_id,
             'groupId' => $d->group_id,
+            'groupNom' => $d->group?->nom,
             'montant' => number_format((float) $d->montant, 2, '.', ''),
             'methodePaiement' => $d->methode_paiement,
             'dateDepense' => $d->date_depense?->toDateString(),
@@ -111,12 +124,38 @@ final class GetDepensesList
             'note' => $d->note,
             'agent' => $d->agent?->nomComplet(),
             'receiptsCount' => $d->media_count,
+            'statut' => $d->statut,
+            'isEnAttente' => $d->isEnAttente(),
+            'isRefusee' => $d->isRefusee(),
+            'approvedBy' => $d->approvedBy?->nomComplet(),
+            'approvedAt' => $d->approved_at?->toDateTimeString(),
+            'motifRefus' => $d->motif_refus,
+            // Operation trail — WHEN the row was actually keyed in and last
+            // touched, as opposed to `dateDepense` which is the business date
+            // the user types and can backdate freely. Shown to super-admins
+            // only (DepenseController passes `canViewOperationDates`); the
+            // two differing is exactly what an auditor looks for.
+            'createdAt' => $d->created_at?->format('d/m/Y H:i'),
+            'updatedAt' => $d->updated_at?->format('d/m/Y H:i'),
+            // Cheap client-side flag so the column can show "modifiée le …"
+            // only when it really was edited after creation. Second-level
+            // compare: created_at/updated_at are written microseconds apart
+            // on insert, so === on the formatted minute would be fragile.
+            // ⚠ abs(): Carbon 3's diffInSeconds() is SIGNED, so the raw
+            // value flips with argument order and a plain `> 1` silently
+            // never fires. The 1s floor ignores the microseconds between
+            // created_at and updated_at on insert.
+            'wasEdited' => $d->created_at !== null
+                && $d->updated_at !== null
+                && abs($d->updated_at->diffInSeconds($d->created_at)) > 1,
             'showUrl' => route('backoffice.depenses.show', $d),
         ]);
 
         return [
             'data' => $depenses,
             'montantTotal' => number_format((float) $montantTotal, 2, '.', ''),
+            'montantEnAttente' => number_format((float) $montantEnAttente, 2, '.', ''),
+            'enAttenteCount' => $enAttenteCount,
         ];
     }
 

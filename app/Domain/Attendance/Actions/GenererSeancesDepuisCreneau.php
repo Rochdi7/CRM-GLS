@@ -12,7 +12,10 @@ use Illuminate\Support\Facades\DB;
 /**
  * Generates/syncs the dated "Prévue" séances a créneau (weekly recurring
  * slot) stands for — from today (or the group's own start date, whichever
- * is later) through the end of the group's academic year. Only séances
+ * is later) through the group's date_fin_formation, or the end of its
+ * academic year when the group declares no end date. A group whose
+ * date_fin_formation is already past generates nothing at all: its
+ * date_fin_formation must be extended first. Only séances
  * still "Prévue" AND still linked to this créneau are touched on
  * update/delete: once attendance has been taken (Effectuée) or a séance was
  * detached/edited by hand, it is left alone (gls-crm CLAUDE.md-style
@@ -20,8 +23,18 @@ use Illuminate\Support\Facades\DB;
  */
 final class GenererSeancesDepuisCreneau
 {
+    /**
+     * True when the last generer() call produced nothing because the group's
+     * date_fin_formation is already past — the caller surfaces this so the
+     * user is told to extend the group's end date rather than being left
+     * wondering why an emploi du temps stayed empty.
+     */
+    public bool $bloqueParFinFormation = false;
+
     public function generer(Creneau $creneau): void
     {
+        $this->bloqueParFinFormation = false;
+
         $creneau->loadMissing('group');
         $group = $creneau->group;
 
@@ -51,9 +64,29 @@ final class GenererSeancesDepuisCreneau
 
         $fin = Carbon::parse($anneeFin);
 
+        // The group's own end of formation caps generation: a group that
+        // finished in March must not keep producing séances until the end of
+        // the academic year. If date_fin_formation has already passed, this
+        // leaves $fin behind $debut and NOTHING is generated — extending the
+        // group's date_fin_formation is what re-opens generation, which is
+        // deliberate: the schedule follows the group's declared period rather
+        // than silently outliving it.
+        if ($group->date_fin_formation !== null && $group->date_fin_formation->lt($fin)) {
+            $fin = $group->date_fin_formation->copy();
+        }
+
+        // A créneau closed mid-period (teacher changeover) stops there too.
         if ($debut->gt($fin)) {
+            $this->bloqueParFinFormation = $group->date_fin_formation !== null
+                && $group->date_fin_formation->lt(Carbon::today());
+
             return;
         }
+
+        // Séances previously generated beyond the group's (possibly shortened)
+        // end of formation are removed — same "Prévue + still linked + future"
+        // guard as everywhere else, so attendance already taken survives.
+        $this->purgerHorsPeriode($creneau, $fin);
 
         DB::transaction(function () use ($creneau, $group, $debut, $fin): void {
             // Existing future "Prévue" séances from THIS créneau are the
@@ -112,6 +145,19 @@ final class GenererSeancesDepuisCreneau
             ]);
 
         $this->generer($creneau);
+    }
+
+    /**
+     * Drops untouched future séances that fall after the group's end of
+     * formation — e.g. after an admin shortens date_fin_formation.
+     */
+    private function purgerHorsPeriode(Creneau $creneau, Carbon $fin): void
+    {
+        $creneau->seances()
+            ->where('statut', Seance::STATUT_PREVUE)
+            ->where('date_seance', '>=', Carbon::today()->toDateString())
+            ->where('date_seance', '>', $fin->toDateString())
+            ->delete();
     }
 
     /**

@@ -25,6 +25,7 @@ use App\Http\Controllers\Backoffice\GroupHistoriqueController;
 use App\Http\Controllers\Backoffice\Import\EncaissementImportController;
 use App\Http\Controllers\Backoffice\Import\ImportBatchController;
 use App\Http\Controllers\Backoffice\Import\InscriptionImportController;
+use App\Http\Controllers\Backoffice\Import\PresenceImportController;
 use App\Http\Controllers\Backoffice\Import\StudentImportController;
 use App\Http\Controllers\Backoffice\InscriptionController;
 use App\Http\Controllers\Backoffice\MotifAnnulationController;
@@ -35,6 +36,7 @@ use App\Http\Controllers\Backoffice\RemboursementController;
 use App\Http\Controllers\Backoffice\Roles\RoleController;
 use App\Http\Controllers\Backoffice\SeanceController;
 use App\Http\Controllers\Backoffice\SettingController;
+use App\Http\Controllers\Backoffice\SystemSettingController;
 use App\Http\Controllers\Backoffice\SalleController;
 use App\Http\Controllers\Backoffice\StockController;
 use App\Http\Controllers\Backoffice\StockTypeController;
@@ -122,6 +124,10 @@ Route::prefix('backoffice')
             // Access = ANY of centers.view / academic-years.view / rooms.view;
             // each tab + its mutations are gated by that resource's permissions.
             Route::get('settings', SettingController::class)->name('settings');
+            // Paramètres → Système: application-wide switches (expense
+            // approval…). Authorized inside the controller.
+            Route::put('settings/system', [SystemSettingController::class, 'update'])
+                ->middleware('permission:system-settings.update')->name('settings.system.update');
 
             // Legacy resource routes for the referential data are kept as
             // permission-protected endpoints (still policy-backed); the Settings
@@ -358,15 +364,34 @@ Route::prefix('backoffice')
             // for rollback (docs/legacy-frontend-removal-plan.md §0g).
             //
             // Gestion de la caisse — ONE Inertia page (Paramètres pattern):
-            // Ma caisse + journal des transactions + transferts + comptes de
-            // caisse as client-side React tabs, same as the former Livewire
-            // tabs. Access = ANY of the two view permissions (checked in
+            // Ma caisse + validation de transfert + comptes de caisse as
+            // tabs (?tab=…), same as the former Livewire tabs. Access = ANY
+            // of the three view permissions (checked in
             // CaisseController@index); each tab's data/actions are still
             // gated by their own permission server-side.
             Route::get('caisses', [CaisseController::class, 'index'])->name('caisses.index');
             Route::get('caisses/{caisse}', [CaisseController::class, 'show'])->name('caisses.show');
             Route::get('caisses/journal/{scope}', [CaisseController::class, 'journal'])
                 ->where('scope', 'mine|all')->name('caisses.journal');
+
+            // « Comptes de caisse » mutations — super-admin only in practice:
+            // `cash-accounts.*` is deliberately absent from every role in
+            // PermissionRegistry::matrix(), so only the Gate::before bypass
+            // passes this middleware. Deliberately NOT a Route::resource:
+            // there is no create/edit page (modal) and no index of its own
+            // (the tab lives on caisses.index).
+            //
+            // ⚠ This is the ONLY hand-write path for a caisse, and only for
+            // the standing Banque/Externe/Chéque/Dépenses accounts — an
+            // employee's own till stays owned by CaisseProvisioner. `solde`
+            // is writable at creation only (opening balance) and `type` never
+            // after it; see the two Form Requests.
+            Route::post('caisses', [CaisseController::class, 'store'])
+                ->middleware('permission:cash-accounts.create')->name('caisses.store');
+            Route::put('caisses/{caisse}', [CaisseController::class, 'update'])
+                ->middleware('permission:cash-accounts.update')->name('caisses.update');
+            Route::delete('caisses/{caisse}', [CaisseController::class, 'destroy'])
+                ->middleware('permission:cash-accounts.delete')->name('caisses.destroy');
 
             // Payments — Inertia list + modal add/edit (the cascading
             // multi-row payment form). Controller serves both the list and
@@ -445,6 +470,14 @@ Route::prefix('backoffice')
                 ->middleware('permission:expenses.create')->name('depenses.store');
             Route::put('depenses/{depense}', [DepenseController::class, 'update'])
                 ->middleware('permission:expenses.update')->name('depenses.update');
+            // Approval flow (Paramètres → Système « Validation des dépenses »).
+            // Approving is what debits the till — a pending dépense has moved
+            // no money at all. Refusing keeps the row (audit trail), never
+            // deletes it. Both are gated by expenses.approve + DepensePolicy.
+            Route::put('depenses/{depense}/approve', [DepenseController::class, 'approve'])
+                ->middleware('permission:expenses.approve')->name('depenses.approve');
+            Route::put('depenses/{depense}/refuse', [DepenseController::class, 'refuse'])
+                ->middleware('permission:expenses.approve')->name('depenses.refuse');
             Route::delete('depenses/{depense}/justificatifs/{media}', [DepenseController::class, 'removeJustificatif'])
                 ->middleware('permission:expenses.update')->name('depenses.justificatifs.destroy');
             Route::get('depenses/{depense}', [DepenseController::class, 'show'])
@@ -574,6 +607,21 @@ Route::prefix('backoffice')
                 ->middleware('permission:import.create')->name('import.encaissements.retry-failed');
             Route::get('import/encaissements/{batch}/result', [EncaissementImportController::class, 'result'])
                 ->middleware('permission:import.view')->name('import.encaissements.result');
+
+            Route::get('import/presences', [PresenceImportController::class, 'create'])
+                ->middleware('permission:import.view')->name('import.presences.create');
+            Route::post('import/presences/peek-groupes', [PresenceImportController::class, 'peekGroupes'])
+                ->middleware('permission:import.create')->name('import.presences.peek-groupes');
+            Route::post('import/presences/analyze', [PresenceImportController::class, 'analyze'])
+                ->middleware('permission:import.create')->name('import.presences.analyze');
+            Route::get('import/presences/{batch}/preview', [PresenceImportController::class, 'preview'])
+                ->middleware('permission:import.view')->name('import.presences.preview');
+            Route::post('import/presences/{batch}/commit', [PresenceImportController::class, 'commit'])
+                ->middleware('permission:import.create')->name('import.presences.commit');
+            Route::post('import/presences/{batch}/retry-failed', [PresenceImportController::class, 'retryFailed'])
+                ->middleware('permission:import.create')->name('import.presences.retry-failed');
+            Route::get('import/presences/{batch}/result', [PresenceImportController::class, 'result'])
+                ->middleware('permission:import.view')->name('import.presences.result');
 
             // Journal d'audit — read-only forensic trail (CLAUDE.md §11).
             // ⚠ NEVER add a store/update/destroy route here: audit entries

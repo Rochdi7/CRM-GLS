@@ -20,6 +20,7 @@ use App\Models\MotifAnnulation;
 use App\Models\Salle;
 use App\Models\User;
 use App\Services\Context\CurrentContext;
+use App\Support\Settings\AppSettings;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -47,6 +48,9 @@ final class SettingController extends Controller
         'frais' => 'fees.view',
         'banques' => 'banks.view',
         'motifs-annulation' => 'cancellation-reasons.view',
+        // Application-wide switches (dépense approval...). No role preset
+        // holds system-settings.view, so in practice super-admins only.
+        'systeme' => 'system-settings.view',
     ];
 
     public function __invoke(
@@ -95,9 +99,20 @@ final class SettingController extends Controller
                 // is on a single center (CLAUDE.md §5 centre-filter rule).
                 'centerLocked' => ! $context->isAllCenters(),
             ],
-            'frais' => $props['frais'] = $getFraisList(),
+            // The catalog is national: a fee is attached to the centers
+            // that charge it, each with its own amount. The picker offers
+            // only centers the acting user may act on (same restriction as
+            // Salles); prices for other centers are preserved untouched on
+            // save, never silently dropped.
+            'frais' => $props += [
+                'frais' => $getFraisList(),
+                'centerOptions' => $getAccessibleCenterOptions($user)->values()->all(),
+            ],
             'banques' => $props['banques'] = $getBanquesList(),
             'motifs-annulation' => $props['motifsAnnulation'] = $getMotifsAnnulationList(),
+            'systeme' => $props['systeme'] = [
+                'expenseApproval' => AppSettings::expenseApprovalEnabled(),
+            ],
             default => null,
         };
 
@@ -116,12 +131,14 @@ final class SettingController extends Controller
             'frais' => [Frais::class, 'fees'],
             'banques' => [Banque::class, 'banks'],
             'motifs-annulation' => [MotifAnnulation::class, 'cancellation-reasons'],
+            // Système has no CRUD model behind it - only an update switch.
+            'systeme' => [null, 'system-settings'],
         };
 
         return [
-            'create' => $user->can('create', $model),
+            'create' => $model !== null && $user->can('create', $model),
             'update' => $user->can("{$prefix}.update"),
-            'delete' => $user->can("{$prefix}.delete"),
+            'delete' => $model !== null && $user->can("{$prefix}.delete"),
         ];
     }
 }

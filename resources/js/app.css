@@ -1092,3 +1092,119 @@ html[data-theme='dark'] .gls-seancecal-day.is-today {
     color: var(--bs-secondary-color, #6c757d);
     letter-spacing: 0.02em;
 }
+
+/* ---------------------------------------------------------------------------
+ * Density layer (UI/UX pass — desktop spacing)
+ *
+ * PreSkool is designed for spacious marketing-style admin screens; a CRM used
+ * all day needs more rows on screen. Reference: the previous wimschool CRM fit
+ * ~8 inscription rows above the fold where this fit 5. The base font stays at
+ * the theme's 14px — the "zoomed in" feel came from SPACING, not type size.
+ *
+ * Loaded after style.css (Vite bundle), so equal-specificity rules win without
+ * !important. Purely presentational: no markup, no theme files touched, and
+ * reverting is deleting this block.
+ * ------------------------------------------------------------------------- */
+
+/* Table rows: 12px/20px -> 8px/12px gives back ~12px per row (~3 extra rows
+ * visible). 13px matches the density of the reference CRM's tables. */
+.table th,
+.table td {
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+.table thead tr th {
+    font-size: 13px;
+}
+
+/* Page + card chrome: 24px of padding on every edge is a lot of dead space
+ * once the sidebar has already taken its width. */
+.page-wrapper .content {
+    padding: 16px;
+}
+
+.card-body {
+    padding: 16px;
+}
+
+.page-header {
+    margin-bottom: 16px;
+}
+
+/* Filter controls: labels sat 8px above their inputs and the inputs were
+ * 38px tall, so a single filter row cost ~70px. This brings it to ~52px. */
+.gls-filter-bar .form-label,
+.card .form-label {
+    margin-bottom: 4px;
+    font-size: 12px;
+}
+
+.form-control,
+.form-select,
+.select2-selection.select2-selection--single {
+    height: 34px;
+    font-size: 13px;
+}
+
+/* The Select2-styled control centres its text with line-height, so it has to
+ * track the height above or the label sits low in the box. */
+.select2-selection--single .select2-selection__rendered {
+    line-height: 32px;
+}
+
+.select2-selection--single .select2-selection__arrow {
+    height: 32px;
+}
+
+/* Long French names ("GROUP 16H SEPTEMBRE", "WASSIM AMHAOUCH") forced a
+ * horizontal scrollbar because the theme sets `white-space: nowrap` on every
+ * cell. Identifier-ish columns (reference, dates, money, actions) must stay on
+ * one line, so wrapping is opted into per cell via .text-wrap-cell rather than
+ * unset globally. */
+.table td.text-wrap-cell,
+.table th.text-wrap-cell {
+    white-space: normal;
+    min-width: 140px;
+}
+
+/* Mobile keeps the theme's own tighter padding — this pass targets desktop,
+ * where the wasted space actually was. */
+@media (max-width: 991.98px) {
+    .page-wrapper .content {
+        padding: 12px;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+ * Filter bar + length row rhythm
+ *
+ * On the Inscriptions list these two blocks plus the card header consumed
+ * ~470px before the first data row. The reference CRM fits its filters AND
+ * three rows in that space. Nothing is removed — the same controls just stop
+ * being spaced like a settings form.
+ * ------------------------------------------------------------------------- */
+.gls-filter-bar {
+    gap: 12px !important;
+    margin-bottom: 12px !important;
+}
+
+/* "Lignes par page [10] entrées" — a full-height form-select on its own line
+ * cost ~60px for one number. */
+.gls-length-row .form-select-sm {
+    height: 30px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    font-size: 12px;
+}
+
+/* Card header above the filters: the theme gives it 20px+ of vertical padding
+ * on top of the content padding already applied. */
+.card-header {
+    padding: 12px 16px;
+}
+
+/* Pagination under the table — same reasoning, it sits below the fold cost. */
+.pagination {
+    margin-bottom: 0;
+}

@@ -7,6 +7,11 @@ import type { DepenseDetails } from '@/Types';
 
 interface DepenseShowProps {
     depense: DepenseDetails;
+    /**
+     * `expenses.approve` (super-admin only in practice). Gates the operation
+     * trail; when false the server already omitted those fields entirely.
+     */
+    canAudit: boolean;
 }
 
 /**
@@ -15,7 +20,7 @@ interface DepenseShowProps {
  * (an expense is never deleted). Receipt URLs come only from the
  * already-authorized Spatie Media URL, never a filesystem path.
  */
-export default function DepenseShow({ depense }: DepenseShowProps) {
+export default function DepenseShow({ depense, canAudit }: DepenseShowProps) {
     return (
         <BackofficeLayout
             title={depense.reference}
@@ -52,6 +57,19 @@ export default function DepenseShow({ depense }: DepenseShowProps) {
                             <DetailRow label="Centre" value={depense.centre} />
                             <DetailRow label="Enregistré par" value={depense.agent} />
                             <DetailRow label="Enregistré le" value={depense.recordedAt} />
+                            {/* Operation trail — super-admin only. The server
+                                sends createdAt/updatedAt to nobody else
+                                (DepenseController::show), so this simply does
+                                not render for them. */}
+                            {canAudit && (
+                                <>
+                                    <DetailRow label="Date d'opération (création)" value={depense.createdAt} />
+                                    <DetailRow
+                                        label="Date d'opération (modification)"
+                                        value={depense.wasEdited ? depense.updatedAt : 'Jamais modifiée'}
+                                    />
+                                </>
+                            )}
                         </div>
                     </Card>
                 </div>

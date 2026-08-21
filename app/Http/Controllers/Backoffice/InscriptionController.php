@@ -485,7 +485,7 @@ final class InscriptionController extends Controller
         $statut = $request->string('statut')->toString();
 
         if (! in_array($statut, [Inscription::STATUT_ACTIVE, Inscription::STATUT_ANNULEE], true)) {
-            abort(422, 'Invalid status.');
+            abort(422, __('Invalid status.'));
         }
 
         $isReactivation = $statut === Inscription::STATUT_ACTIVE;

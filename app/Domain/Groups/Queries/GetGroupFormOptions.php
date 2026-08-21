@@ -52,24 +52,33 @@ final class GetGroupFormOptions
     /**
      * Active catalog fees — every one becomes a fraisLignes row on the form.
      *
-     * Each row also carries the catalog's own default amount and the month
+     * Each row also carries the amount THIS CENTER charges and the month
      * its name implies, so the create form can pre-fill both instead of
      * showing 0 / blank and making the user retype the standard values.
      * The pre-fill is a starting point only: the fields stay editable, and
      * whatever ends up in them is what gets saved.
      *
+     * The amount comes from the fee's price line for the active center
+     * (frais_etablissement) — the same "Frais de Septembre" is 1400 in
+     * Rabat and 1200 in Agadir — falling back to the catalog default when
+     * the center has no line, or when the context is on "Tous les centres"
+     * and no single branch price applies.
+     *
      * @return Collection<int, array{id: int, nom: string, montantDefaut: string, moisEcheance: ?int}>
      */
     public function fraisCatalog(): Collection
     {
+        $etablissementId = $this->context->etablissementId();
+
         return Frais::query()
             ->where('statut', Frais::STATUT_ACTIF)
+            ->with('etablissements:id')
             ->orderBy('nom')
             ->get()
             ->map(fn (Frais $f): array => [
                 'id' => $f->id,
                 'nom' => $f->nom,
-                'montantDefaut' => (string) $f->montant_defaut,
+                'montantDefaut' => number_format($f->montantPourCentre($etablissementId), 2, '.', ''),
                 'moisEcheance' => FraisEcheanceResolver::moisFromNom($f->nom),
             ]);
     }

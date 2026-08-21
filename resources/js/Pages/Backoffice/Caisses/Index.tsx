@@ -17,9 +17,10 @@ import TextareaField from '@/Components/Forms/TextareaField';
 import FormActions from '@/Components/Forms/FormActions';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
+import ComptesPanel from '@/Pages/Backoffice/Caisses/ComptesPanel';
 import type { CaissesPageProps, CaisseJournalData, CaisseTransferRow, SelectOption, SharedProps } from '@/Types';
 
-type Tab = 'ma-caisse' | 'transferts';
+type Tab = 'ma-caisse' | 'transferts' | 'comptes';
 
 /**
  * No caisse_source_id: the source is ALWAYS the acting employee's own till,
@@ -252,32 +253,43 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
 }
 
 /**
- * "Gestion de la caisse" — Ma caisse + Validation de transfert (the
- * former Journal des transactions and Comptes de caisse tabs were dropped
- * per product decision; their data/routes still exist server-side for
- * anyone linking in directly, just no longer surfaced as tabs here).
+ * "Gestion de la caisse" — Ma caisse + Validation de transfert + Comptes de
+ * caisse. Each tab is a real Inertia visit (?tab=…) so only the active tab's
+ * dataset is fetched; tab visibility mirrors the server's own permission
+ * checks in CaisseController@index (the server re-derives them, this is UI
+ * convenience only).
  */
 export default function CaissesIndex({
     canViewCaisses,
     canViewTransfers,
+    canViewComptes,
     journalMine,
     transfers,
     transferCaisses,
     transferStatuts,
-    currentEmployeeId,
     myCaisse,
     transferFilters: initialTransferFilters,
+    comptes,
+    compteTypes,
+    compteTypeFilters,
+    compteEtablissements,
+    comptePermissions,
+    compteFilters: initialCompteFilters,
 }: CaissesPageProps) {
     const isLoading = useInertiaLoading();
     const availableTabs: Tab[] = [
         ...(canViewCaisses ? (['ma-caisse'] as Tab[]) : []),
         ...(canViewTransfers ? (['transferts'] as Tab[]) : []),
+        ...(canViewComptes ? (['comptes'] as Tab[]) : []),
     ];
     const requested = new URLSearchParams(window.location.search).get('tab') as Tab | null;
     const [tab, setTab] = useState<Tab>(requested && availableTabs.includes(requested) ? requested : availableTabs[0]);
 
     const [transferFilters, setTransferFilters] = useState(
         initialTransferFilters ?? { search: '', statutFilter: '', typeFilter: '' },
+    );
+    const [compteFilters, setCompteFilters] = useState(
+        initialCompteFilters ?? { compteSearch: '', compteTypeFilter: '' },
     );
 
     // Client-side permission checks — UI convenience only (hide affordances
@@ -336,6 +348,16 @@ export default function CaissesIndex({
         const merged = { ...transferFilters, ...next };
         setTransferFilters(merged);
         router.get('/backoffice/caisses', { tab: 'transferts', ...merged, page: undefined }, {
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+        });
+    }
+
+    function reloadComptes(next: Partial<typeof compteFilters>) {
+        const merged = { ...compteFilters, ...next };
+        setCompteFilters(merged);
+        router.get('/backoffice/caisses', { tab: 'comptes', ...merged, page: undefined }, {
             preserveState: true,
             preserveScroll: true,
             replace: true,
@@ -454,6 +476,14 @@ export default function CaissesIndex({
                         </button>
                     </li>
                 )}
+                {canViewComptes && (
+                    <li className="nav-item">
+                        <button type="button" className={`nav-link${tab === 'comptes' ? ' active' : ''}`} onClick={() => switchTab('comptes')}>
+                            <i className="ti ti-currency-dollar me-1" />
+                            Comptes de caisse
+                        </button>
+                    </li>
+                )}
             </ul>
 
             {tab === 'ma-caisse' && canViewCaisses && journalMine && <JournalPanel scope="mine" data={journalMine} />}
@@ -530,9 +560,9 @@ export default function CaissesIndex({
                                         <td>
                                             {/* Mutating actions are permission-gated client-side
                                                 (hidden, not just refused): Modifier/Annuler need
-                                                cash-transfers.update, Valider needs
-                                                cash-transfers.validate — and never on one's own
-                                                request (self-validation is refused server-side). */}
+                                                cash-transfers.update; Valider additionally needs
+                                                the viewer to BE the recipient (row.canValidate),
+                                                which already excludes the requester. */}
                                             <RowActions view={row.showUrl}>
                                                 {row.isPending && canUpdateTransfers && (
                                                     <RowActionItem icon="ti-edit" onClick={() => openEditTransfer(row)}>
@@ -544,9 +574,15 @@ export default function CaissesIndex({
                                                         Annuler
                                                     </RowActionItem>
                                                 )}
-                                                {row.isPending && canValidateTransfers && row.requestedById !== currentEmployeeId && (
+                                                {/* Valider is RECIPIENT-ONLY: row.canValidate is
+                                                    true only for the employee whose own till is
+                                                    the destination (and never the requester), so
+                                                    a third-party validator - super-admin included
+                                                    - cannot move money between other people's
+                                                    tills. Matches CaisseTransferPolicy@validate. */}
+                                                {row.canValidate && canValidateTransfers && (
                                                     <RowActionItem icon="ti-check" onClick={() => openConfirmAction('validate', row)}>
-                                                        Valider
+                                                        Accepter la réception
                                                     </RowActionItem>
                                                 )}
                                             </RowActions>
@@ -560,16 +596,28 @@ export default function CaissesIndex({
                 </Card>
             )}
 
+            {tab === 'comptes' && canViewComptes && comptes && (
+                <ComptesPanel
+                    comptes={comptes}
+                    compteTypes={compteTypes}
+                    compteTypeFilters={compteTypeFilters}
+                    compteEtablissements={compteEtablissements}
+                    permissions={comptePermissions}
+                    filters={compteFilters}
+                    onFilter={reloadComptes}
+                />
+            )}
+
             {/* Validate/cancel confirmation popup — server refusals
                 (self-validation, permission, already validated…) are shown
                 inside it via `error`, replacing the old window.confirm +
                 inline page alert. */}
             <ConfirmDialog
                 show={confirmAction !== null}
-                title={confirmAction?.type === 'validate' ? 'Valider le transfert' : 'Annuler le transfert'}
+                title={confirmAction?.type === 'validate' ? 'Accepter la réception' : 'Annuler le transfert'}
                 message={
                     confirmAction?.type === 'validate'
-                        ? 'Les soldes des deux caisses vont bouger immédiatement.'
+                        ? 'Vous confirmez avoir reçu ce montant. Les soldes des deux caisses vont bouger immédiatement.'
                         : 'Le transfert sera marqué comme annulé — aucun solde ne bouge.'
                 }
                 recordLabel={
@@ -583,7 +631,7 @@ export default function CaissesIndex({
                 onCancel={closeConfirmAction}
                 icon={confirmAction?.type === 'validate' ? 'ti-circle-check' : 'ti-circle-x'}
                 variant={confirmAction?.type === 'validate' ? 'primary' : 'danger'}
-                confirmLabel={confirmAction?.type === 'validate' ? 'Valider' : "Oui, annuler"}
+                confirmLabel={confirmAction?.type === 'validate' ? 'Accepter' : "Oui, annuler"}
                 processingLabel={confirmAction?.type === 'validate' ? 'Validation…' : 'Annulation…'}
             />
 

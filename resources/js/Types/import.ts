@@ -22,7 +22,7 @@ export interface ImportRow {
 
 export interface ImportBatch {
     id: number;
-    module: 'students' | 'inscriptions' | 'encaissements';
+    module: 'students' | 'inscriptions' | 'encaissements' | 'presences';
     original_filename: string;
     etablissement_id: number;
     annee_scolaire_id: number;

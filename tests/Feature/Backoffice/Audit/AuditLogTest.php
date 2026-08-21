@@ -413,6 +413,82 @@ final class AuditLogTest extends TestCase
         $this->assertSame('01/09/2026', $change['new']);
     }
 
+    // ── Console origin ──────────────────────────────────────────────────
+
+    public function test_a_console_origin_records_only_the_command_name(): void
+    {
+        // Regression: the origin was built by joining ALL of $_SERVER['argv'],
+        // so `tinker --execute=<script>` dumped the whole PHP payload into the
+        // url column — unreadable on the page, leaking internal code and file
+        // paths, and long enough to risk overflowing the column while writing
+        // the audit row itself.
+        //
+        // fillForensicContext() takes its HTTP branch under PHPUnit
+        // (runningUnitTests() is true), so the console builder is exercised
+        // directly here.
+        $originalArgv = $_SERVER['argv'] ?? null;
+
+        $_SERVER['argv'] = [
+            'artisan',
+            'tinker',
+            '--execute=$x = App\Models\Caisse::first(); '.str_repeat('// padding ', 200),
+        ];
+
+        try {
+            $origin = (function (): string {
+                return $this->consoleOrigin();
+            })->call(new Activity());
+
+            $this->assertSame('artisan:tinker', $origin);
+            $this->assertStringNotContainsString('--execute', $origin);
+            $this->assertStringNotContainsString('Caisse', $origin);
+        } finally {
+            if ($originalArgv === null) {
+                unset($_SERVER['argv']);
+            } else {
+                $_SERVER['argv'] = $originalArgv;
+            }
+        }
+    }
+
+    public function test_a_console_origin_without_a_command_is_still_safe(): void
+    {
+        $originalArgv = $_SERVER['argv'] ?? null;
+        $_SERVER['argv'] = ['artisan'];
+
+        try {
+            $origin = (function (): string {
+                return $this->consoleOrigin();
+            })->call(new Activity());
+
+            $this->assertSame('artisan', $origin);
+        } finally {
+            if ($originalArgv === null) {
+                unset($_SERVER['argv']);
+            } else {
+                $_SERVER['argv'] = $originalArgv;
+            }
+        }
+    }
+
+    public function test_forensic_values_are_clamped_to_their_column_widths(): void
+    {
+        // An over-long value would throw while INSERTING the audit row, losing
+        // the very record that proves what happened.
+        $activity = new Activity();
+        $activity->url = str_repeat('a', 5000);
+        $activity->user_agent = str_repeat('b', 2000);
+        $activity->route_name = str_repeat('c', 900);
+        $activity->causer_label = str_repeat('d', 900);
+
+        $activity->fillForensicContext();
+
+        $this->assertSame(1024, mb_strlen((string) $activity->url));
+        $this->assertSame(512, mb_strlen((string) $activity->user_agent));
+        $this->assertSame(255, mb_strlen((string) $activity->route_name));
+        $this->assertSame(255, mb_strlen((string) $activity->causer_label));
+    }
+
     // ── Filtering ───────────────────────────────────────────────────────
 
     public function test_the_money_only_scope_returns_finance_entries_only(): void

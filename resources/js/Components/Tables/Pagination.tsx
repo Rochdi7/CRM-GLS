@@ -22,10 +22,17 @@ function safeLabel(label: string): string {
     return LABEL_MAP[label] ?? label.replace(/&laquo;|&raquo;/g, '').trim();
 }
 
+/** Thousands separated by a narrow no-break space, French-style: 3 933. */
+function formatTotal(total: number): string {
+    return new Intl.NumberFormat('fr-FR').format(total);
+}
+
 /**
  * Markup matches components/backoffice/ui/pagination.blade.php +
  * vendor/pagination/backoffice-links.blade.php exactly (Bootstrap 5
- * `.pagination`, "Showing X to Y of Z results" summary). Navigates via
+ * `.pagination`). The footer reports the row count of the WHOLE filtered
+ * result set ("3 933 total"), not just the current page, and stays visible
+ * on a single-page list — the pager itself hides there. Navigates via
  * Inertia router.get (not raw <a href>) so filters already in the URL are
  * preserved and the page never fully reloads.
  */
@@ -35,10 +42,6 @@ export default function Pagination<T>({ paginator, preserveScroll = true, showJu
     useEffect(() => {
         setJumpValue(String(paginator.current_page));
     }, [paginator.current_page]);
-
-    if (paginator.last_page <= 1) {
-        return null;
-    }
 
     function visit(url: string | null) {
         if (!url) {
@@ -70,11 +73,14 @@ export default function Pagination<T>({ paginator, preserveScroll = true, showJu
         visit(url.pathname + url.search);
     }
 
+    const singlePage = paginator.last_page <= 1;
+
     return (
         <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 p-3">
             <p className="text-muted mb-0">
-                Affichage de {paginator.from ?? 0} à {paginator.to ?? 0} sur {paginator.total} résultats
+                {formatTotal(paginator.total)} {t('total')}
             </p>
+            {!singlePage && (
             <nav aria-label={t('Pagination')}>
                 <ul className="pagination mb-0">
                     {paginator.links.map((link, index) => {
@@ -115,7 +121,8 @@ export default function Pagination<T>({ paginator, preserveScroll = true, showJu
                     })}
                 </ul>
             </nav>
-            {showJumpToPage && paginator.last_page > 5 && (
+            )}
+            {!singlePage && showJumpToPage && paginator.last_page > 5 && (
                 <form className="d-flex align-items-center gap-2" onSubmit={jumpToPage}>
                     <label className="text-muted mb-0" htmlFor="pagination-jump-to-page">
                         {t('Go to page')}

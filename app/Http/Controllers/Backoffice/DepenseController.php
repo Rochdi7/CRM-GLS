@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Domain\Expenses\Actions\ApprouverDepense;
 use App\Domain\Expenses\Actions\EnregistrerDepense;
+use App\Domain\Expenses\Actions\RefuserDepense;
 use App\Domain\Expenses\Queries\GetDepenseDetails;
 use App\Domain\Expenses\Queries\GetDepensesList;
 use App\Domain\Finance\Queries\GetRemboursementsList;
@@ -12,6 +14,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Depenses\StoreDepenseRequest;
 use App\Http\Requests\Backoffice\Depenses\UpdateDepenseRequest;
 use App\Models\Depense;
+use App\Support\Settings\AppSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -44,22 +47,31 @@ final class DepenseController extends Controller
         $user = $request->user();
         abort_unless($user->canAny(['expenses.view', 'refunds.view']), 403);
 
+        // The operation trail (créée le / modifiée le) and the « Validation
+        // des dépenses » tab are for auditing who keyed what and when — they
+        // are super-admin only, keyed on `expenses.approve`, which is
+        // deliberately in NO role preset in PermissionRegistry::matrix().
+        // ⚠ This is UI shaping only: the timestamps below are simply not sent
+        // to anyone else, so there is nothing for a crafted request to reveal.
+        $canAudit = $user->can('expenses.approve');
+
         $search = (string) $request->string('search');
         $typeFilter = (string) $request->string('typeFilter');
         $caisseFilter = (string) $request->string('caisseFilter');
         $dateFrom = (string) $request->string('dateFrom');
         $dateTo = (string) $request->string('dateTo');
+        $statutFilter = (string) $request->string('statutFilter');
         $perPage = (int) $request->integer('perPage', GetDepensesList::DEFAULT_PER_PAGE);
 
         $depensesList = $user->can('expenses.view')
-            ? $getDepensesList($user, $search, $typeFilter, $caisseFilter, $dateFrom, $dateTo, $perPage, GetDepensesList::SCOPE_HORS_PAIEMENT_PROF)
+            ? $getDepensesList($user, $search, $typeFilter, $caisseFilter, $dateFrom, $dateTo, $perPage, GetDepensesList::SCOPE_HORS_PAIEMENT_PROF, $statutFilter)
             : null;
 
         // "Paiement prof" dépenses live in their own tab — same records,
         // same money rules, just listed apart to keep the Dépenses table
         // readable (they are excluded from $depensesList above).
         $paiementsProfList = $user->can('expenses.view')
-            ? $getDepensesList($user, $search, $typeFilter, $caisseFilter, $dateFrom, $dateTo, $perPage, GetDepensesList::SCOPE_PAIEMENT_PROF)
+            ? $getDepensesList($user, $search, $typeFilter, $caisseFilter, $dateFrom, $dateTo, $perPage, GetDepensesList::SCOPE_PAIEMENT_PROF, $statutFilter)
             : null;
 
         // The acting employee's own till balance — shown read-only in the
@@ -74,10 +86,20 @@ final class DepenseController extends Controller
             'canViewDepenses' => $user->can('expenses.view'),
             'canViewRemboursements' => $user->can('refunds.view'),
             'soldeActuel' => $soldeActuel,
-            'depenses' => $depensesList['data'] ?? null,
+            'depenses' => $this->scrubOperationDates($depensesList['data'] ?? null, $canAudit),
             'montantTotal' => $depensesList['montantTotal'] ?? null,
-            'paiementsProf' => $paiementsProfList['data'] ?? null,
+            'montantEnAttente' => $depensesList['montantEnAttente'] ?? null,
+            'enAttenteCount' => $depensesList['enAttenteCount'] ?? 0,
+            'paiementsProf' => $this->scrubOperationDates($paiementsProfList['data'] ?? null, $canAudit),
             'paiementsProfTotal' => $paiementsProfList['montantTotal'] ?? null,
+            // Drives the UI: when approval is OFF the statut column, the
+            // filter and the approve/refuse actions are all pointless.
+            'approvalEnabled' => AppSettings::expenseApprovalEnabled(),
+            'canApprove' => $canAudit,
+            // Drives BOTH the « Date d'opération » column and the
+            // « Validation des dépenses » tab — see $canAudit above.
+            'canAudit' => $canAudit,
+            'depenseStatuts' => Depense::STATUTS,
             'typesDepenses' => $user->can('expenses.view') ? $getDepensesList->typeDepenseOptions() : [],
             // The Dépenses tab's Type filter must not offer "Paiement prof"
             // (that type now has its own tab and is excluded there); the
@@ -95,6 +117,7 @@ final class DepenseController extends Controller
                 'caisseFilter' => $caisseFilter,
                 'dateFrom' => $dateFrom,
                 'dateTo' => $dateTo,
+                'statutFilter' => $statutFilter,
                 'perPage' => $perPage,
             ],
         ]);
@@ -129,17 +152,98 @@ final class DepenseController extends Controller
 
         $this->storeJustificatifs($request, $depense);
 
+        // When approval is ON the money has NOT left the till yet — say so,
+        // otherwise staff assume the expense is already settled.
         return redirect()->route('backoffice.depenses.index')
-            ->with('success', __('Expense recorded.'));
+            ->with('success', $depense->isEnAttente()
+                ? __('Expense submitted — awaiting approval.')
+                : __('Expense recorded.'));
     }
 
-    public function show(Depense $depense, GetDepenseDetails $getDepenseDetails): Response
+    /**
+     * Approve a pending expense — THIS is where the till is debited
+     * (Domain\Expenses\Actions\ApprouverDepense).
+     */
+    public function approve(Request $request, Depense $depense, ApprouverDepense $action): RedirectResponse
+    {
+        $this->authorize('approve', $depense);
+
+        $action->handle($depense, $this->actingEmployee($request));
+
+        return redirect()->route('backoffice.depenses.index')
+            ->with('success', __('Expense approved — the till has been debited.'));
+    }
+
+    /** Refuse a pending expense — no money ever moves; the row is kept. */
+    public function refuse(Request $request, Depense $depense, RefuserDepense $action): RedirectResponse
+    {
+        $this->authorize('approve', $depense);
+
+        $validated = $request->validate([
+            'motif_refus' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $action->handle($depense, $this->actingEmployee($request), $validated['motif_refus'] ?? null);
+
+        return redirect()->route('backoffice.depenses.index')
+            ->with('success', __('Expense refused — no money was moved.'));
+    }
+
+    /**
+     * The Employee record behind the acting user — every approval decision is
+     * attributed to a person, so a user with no employee row cannot decide.
+     */
+    private function actingEmployee(Request $request): \App\Models\Employee
+    {
+        $employee = $request->user()->employee;
+
+        if ($employee === null) {
+            throw ValidationException::withMessages([
+                'statut' => __('Your account is not linked to any employee record.'),
+            ]);
+        }
+
+        return $employee;
+    }
+
+    public function show(Request $request, Depense $depense, GetDepenseDetails $getDepenseDetails): Response
     {
         $this->authorize('view', $depense);
 
+        $details = $getDepenseDetails($depense);
+        $canAudit = $request->user()->can('expenses.approve');
+
+        if (! $canAudit) {
+            // Same rule as index(): the operation trail never leaves the
+            // server for a non-super-admin.
+            unset($details['createdAt'], $details['updatedAt'], $details['wasEdited']);
+        }
+
         return Inertia::render('Backoffice/Depenses/Show', [
-            'depense' => $getDepenseDetails($depense),
+            'depense' => $details,
+            'canAudit' => $canAudit,
         ]);
+    }
+
+    /**
+     * Drop the operation timestamps from a paginated list unless the viewer
+     * may audit. Done server-side on purpose: a client-side `{canAudit && …}`
+     * would still ship every "keyed in at" to the browser, which is precisely
+     * what this trail is meant to keep to super-admins.
+     *
+     * @param  \Illuminate\Pagination\LengthAwarePaginator|null  $paginator
+     */
+    private function scrubOperationDates($paginator, bool $canAudit)
+    {
+        if ($paginator === null || $canAudit) {
+            return $paginator;
+        }
+
+        return $paginator->through(function (array $row): array {
+            unset($row['createdAt'], $row['updatedAt'], $row['wasEdited']);
+
+            return $row;
+        });
     }
 
     public function update(UpdateDepenseRequest $request, Depense $depense): RedirectResponse

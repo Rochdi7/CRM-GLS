@@ -52,9 +52,9 @@ final class CaissesInertiaCrudTest extends TestCase
 
         // Only the ACTIVE tab's heavy dataset is computed per request (every
         // tab switch is a real ?tab=… visit). Default tab for a
-        // cash-registers viewer is "ma-caisse" → journalMine only. Journal
-        // des transactions / Comptes de caisse are no longer tabs — the
-        // page now has exactly two: ma-caisse and transferts.
+        // cash-registers viewer is "ma-caisse" → journalMine only. Comptes de
+        // caisse is a third tab, but super-admin only (`cash-accounts.*` is
+        // in no role) — see ComptesCaisseTest for its own coverage.
         $this->actingAs($this->userWith('cash-registers.view'))
             ->get(route('backoffice.caisses.index'))
             ->assertOk()

@@ -21,7 +21,7 @@ final class GetDepenseDetails
      */
     public function __invoke(Depense $depense): array
     {
-        $depense->loadMissing(['typeDepense', 'caisse.etablissement', 'agent']);
+        $depense->loadMissing(['typeDepense', 'caisse.etablissement', 'agent', 'group', 'approvedBy']);
 
         $motsCles = $depense->mots_cles
             ? array_values(array_filter(array_map('trim', explode(',', $depense->mots_cles))))
@@ -37,6 +37,23 @@ final class GetDepenseDetails
             'centre' => $depense->caisse?->etablissement?->nom_centre,
             'agent' => $depense->agent?->nomComplet(),
             'recordedAt' => $depense->created_at?->format('d/m/Y H:i'),
+            // Operation trail — see GetDepensesList for why these are kept
+            // apart from `dateDepense` (the freely backdatable business
+            // date). Super-admin only, gated by the caller.
+            'createdAt' => $depense->created_at?->format('d/m/Y H:i'),
+            'updatedAt' => $depense->updated_at?->format('d/m/Y H:i'),
+            // abs() for the same reason as GetDepensesList — Carbon 3's
+            // diffInSeconds() is signed.
+            'wasEdited' => $depense->created_at !== null
+                && $depense->updated_at !== null
+                && abs($depense->updated_at->diffInSeconds($depense->created_at)) > 1,
+            'statut' => $depense->statut,
+            'methodePaiement' => $depense->methode_paiement,
+            'referenceFacture' => $depense->reference_facture,
+            'groupe' => $depense->group?->nom,
+            'approvedBy' => $depense->approvedBy?->nomComplet(),
+            'approvedAt' => $depense->approved_at?->format('d/m/Y H:i'),
+            'motifRefus' => $depense->motif_refus,
             'description' => $depense->description,
             'motsCles' => $motsCles,
             'note' => $depense->note,

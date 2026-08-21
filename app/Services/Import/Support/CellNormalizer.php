@@ -153,4 +153,57 @@ final class CellNormalizer
 
         return implode(' ', array_slice($tokens, 0, (int) ceil(count($tokens) / 2)));
     }
+
+    /**
+     * "10:00 - 12:30" -> ['10:00:00', '12:30:00'] (the "Horaire" column of
+     * the Registre des présences export). An empty or "-" cell yields
+     * [null, null] — a séance with no recorded times is still a valid
+     * séance (heure_debut/heure_fin are nullable), so this never throws on
+     * a missing value. It DOES throw on a cell that carries something
+     * unreadable, so the row becomes a visible ERREUR instead of a séance
+     * with silently wrong hours.
+     *
+     * @return array{0: ?string, 1: ?string} [heure_debut, heure_fin] as "HH:MM:SS"
+     */
+    public static function parseTimeRange(mixed $raw): array
+    {
+        $value = self::text($raw);
+
+        if ($value === '' || $value === '-') {
+            return [null, null];
+        }
+
+        // Accept the plain hyphen the export uses, plus the en/em dashes a
+        // hand-edited cell may carry.
+        $parts = preg_split('/\s*[-\x{2013}\x{2014}]\s*/u', $value) ?: [];
+        $parts = array_values(array_filter(
+            array_map(static fn (string $p): string => self::text($p), $parts),
+            static fn (string $p): bool => $p !== ''
+        ));
+
+        if ($parts === []) {
+            return [null, null];
+        }
+
+        $times = array_map(static fn (string $p): string => self::parseTimeOfDay($p), $parts);
+
+        return [$times[0] ?? null, $times[1] ?? null];
+    }
+
+    /** "10:00" / "9h30" / "10" -> "10:00:00". Throws on anything unreadable. */
+    private static function parseTimeOfDay(string $value): string
+    {
+        if (! preg_match('/^(\d{1,2})\s*(?:[:hH.]\s*(\d{1,2}))?$/u', $value, $m)) {
+            throw new ImportCellParseException(sprintf('Horaire non reconnu : "%s".', $value));
+        }
+
+        $hours = (int) $m[1];
+        $minutes = (int) ($m[2] ?? 0);
+
+        if ($hours > 23 || $minutes > 59) {
+            throw new ImportCellParseException(sprintf('Horaire non reconnu : "%s".', $value));
+        }
+
+        return sprintf('%02d:%02d:00', $hours, $minutes);
+    }
 }

@@ -6,6 +6,7 @@ namespace Tests\Feature\Backoffice\Finance;
 
 use App\Models\Caisse;
 use App\Models\Depense;
+use App\Support\Settings\AppSettings;
 use App\Models\Employee;
 use App\Models\Etablissement;
 use App\Models\TypeDepense;
@@ -48,6 +49,121 @@ final class DepensesInertiaCrudTest extends TestCase
         Employee::factory()->create(['user_id' => $user->id, 'etablissement_id' => $this->centre->id]);
 
         return $user->fresh();
+    }
+
+    /** Creates a pending dépense through the real endpoint and returns it. */
+    private function pendingDepense(User $user, Caisse $caisse, string $montant = '120'): Depense
+    {
+        AppSettings::setBool(AppSettings::EXPENSE_APPROVAL, true);
+
+        $this->actingAs($user)->post(route('backoffice.depenses.store'), [
+            'type_depense_id' => $this->type->id,
+            'montant' => $montant,
+            'methode_paiement' => 'Espèces',
+            'date_depense' => '2025-09-15',
+            'description' => 'Demande de dépense',
+        ]);
+
+        return Depense::where('description', 'Demande de dépense')->firstOrFail();
+    }
+
+    public function test_approving_a_pending_depense_debits_the_till(): void
+    {
+        $requester = $this->userWith('expenses.view', 'expenses.create');
+        $caisse = $requester->employee->caisses()->first();
+        $caisse->update(['solde' => 5000]);
+        $depense = $this->pendingDepense($requester, $caisse);
+
+        // Money is still untouched at this point.
+        $this->assertSame('5000.00', (string) $caisse->fresh()->solde);
+
+        $approver = $this->userWith('expenses.view', 'expenses.approve');
+        $this->actingAs($approver)
+            ->put(route('backoffice.depenses.approve', $depense))
+            ->assertRedirect(route('backoffice.depenses.index'));
+
+        $fresh = $depense->fresh();
+        $this->assertSame(Depense::STATUT_APPROUVEE, $fresh->statut);
+        $this->assertSame($approver->employee->id, $fresh->approved_by);
+        $this->assertNotNull($fresh->approved_at);
+        // The debit happens HERE, not at creation.
+        $this->assertSame('4880.00', (string) $caisse->fresh()->solde);
+    }
+
+    public function test_refusing_a_pending_depense_moves_no_money_and_keeps_the_row(): void
+    {
+        $requester = $this->userWith('expenses.view', 'expenses.create');
+        $caisse = $requester->employee->caisses()->first();
+        $caisse->update(['solde' => 5000]);
+        $depense = $this->pendingDepense($requester, $caisse);
+
+        $approver = $this->userWith('expenses.view', 'expenses.approve');
+        $this->actingAs($approver)
+            ->put(route('backoffice.depenses.refuse', $depense), ['motif_refus' => 'Budget épuisé'])
+            ->assertRedirect(route('backoffice.depenses.index'));
+
+        $fresh = $depense->fresh();
+        $this->assertNotNull($fresh, 'A refused expense must be kept for the audit trail.');
+        $this->assertSame(Depense::STATUT_REFUSEE, $fresh->statut);
+        $this->assertSame('Budget épuisé', $fresh->motif_refus);
+        $this->assertSame('5000.00', (string) $caisse->fresh()->solde);
+    }
+
+    public function test_a_depense_cannot_be_decided_twice(): void
+    {
+        // Guards against double-spend: approving an already-approved expense
+        // must not debit the till a second time.
+        $requester = $this->userWith('expenses.view', 'expenses.create');
+        $caisse = $requester->employee->caisses()->first();
+        $caisse->update(['solde' => 5000]);
+        $depense = $this->pendingDepense($requester, $caisse);
+
+        $approver = $this->userWith('expenses.view', 'expenses.approve');
+        $this->actingAs($approver)->put(route('backoffice.depenses.approve', $depense))->assertRedirect();
+        $this->assertSame('4880.00', (string) $caisse->fresh()->solde);
+
+        $this->actingAs($approver)
+            ->put(route('backoffice.depenses.approve', $depense))
+            ->assertForbidden();
+
+        $this->assertSame('4880.00', (string) $caisse->fresh()->solde);
+    }
+
+    public function test_approving_requires_the_approve_permission(): void
+    {
+        $requester = $this->userWith('expenses.view', 'expenses.create', 'expenses.update');
+        $caisse = $requester->employee->caisses()->first();
+        $caisse->update(['solde' => 5000]);
+        $depense = $this->pendingDepense($requester, $caisse);
+
+        // The requester may create and edit, but must not approve their own
+        // spending request.
+        $this->actingAs($requester)
+            ->put(route('backoffice.depenses.approve', $depense))
+            ->assertForbidden();
+
+        $this->assertSame(Depense::STATUT_EN_ATTENTE, $depense->fresh()->statut);
+        $this->assertSame('5000.00', (string) $caisse->fresh()->solde);
+    }
+
+    public function test_pending_expenses_are_excluded_from_the_spend_total(): void
+    {
+        // The list total must report money that actually LEFT the tills;
+        // pending requests are reported apart.
+        $requester = $this->userWith('expenses.view', 'expenses.create');
+        $caisse = $requester->employee->caisses()->first();
+        $caisse->update(['solde' => 5000]);
+        $this->pendingDepense($requester, $caisse, '120');
+
+        $this->actingAs($requester)
+            ->get(route('backoffice.depenses.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/Depenses/Index', false)
+                ->where('montantTotal', '0.00')
+                ->where('montantEnAttente', '120.00')
+                ->where('enAttenteCount', 1)
+            );
     }
 
     public function test_index_requires_expenses_or_refunds_view(): void
@@ -101,8 +217,13 @@ final class DepensesInertiaCrudTest extends TestCase
             );
     }
 
-    public function test_a_depense_can_be_created_and_decrements_the_caisse(): void
+    public function test_a_depense_created_under_approval_holds_the_money(): void
     {
+        // Approval ON (the default): the expense is a REQUEST. It must be
+        // recorded "En attente" and the till must not move by a single
+        // centime until someone decides.
+        AppSettings::setBool(AppSettings::EXPENSE_APPROVAL, true);
+
         $user = $this->userWith('expenses.view', 'expenses.create');
         $this->actingAs($user);
         $caisse = $user->employee->caisses()->first();
@@ -120,6 +241,34 @@ final class DepensesInertiaCrudTest extends TestCase
         $depense = Depense::where('description', 'Fournitures de bureau')->first();
         $this->assertNotNull($depense);
         $this->assertStringStartsWith('DEP-', $depense->reference);
+        $this->assertSame(Depense::STATUT_EN_ATTENTE, $depense->statut);
+        $this->assertSame('5000.00', (string) $caisse->fresh()->solde);
+    }
+
+    public function test_a_depense_can_be_created_and_decrements_the_caisse(): void
+    {
+        // Approval OFF: legacy behavior — recording the expense debits the
+        // till immediately, in the same transaction.
+        AppSettings::setBool(AppSettings::EXPENSE_APPROVAL, false);
+
+        $user = $this->userWith('expenses.view', 'expenses.create');
+        $this->actingAs($user);
+        $caisse = $user->employee->caisses()->first();
+        $caisse->update(['solde' => 5000]);
+
+        $this->post(route('backoffice.depenses.store'), [
+            'type_depense_id' => $this->type->id,
+            'caisse_id' => $caisse->id,
+            'montant' => '120',
+            'methode_paiement' => 'Espèces',
+            'date_depense' => '2025-09-15',
+            'description' => 'Fournitures de bureau',
+        ])->assertRedirect(route('backoffice.depenses.index'));
+
+        $depense = Depense::where('description', 'Fournitures de bureau')->first();
+        $this->assertNotNull($depense);
+        $this->assertStringStartsWith('DEP-', $depense->reference);
+        $this->assertSame(Depense::STATUT_APPROUVEE, $depense->statut);
         $this->assertSame('4880.00', (string) $caisse->fresh()->solde);
     }
 
@@ -132,6 +281,11 @@ final class DepensesInertiaCrudTest extends TestCase
      */
     public function test_a_depense_can_be_created_with_no_caisse_id_in_the_payload(): void
     {
+        // Pinned to approval OFF: this test is about the derived caisse_id,
+        // and asserting the debit is the clearest proof the right till was
+        // picked.
+        AppSettings::setBool(AppSettings::EXPENSE_APPROVAL, false);
+
         $user = $this->userWith('expenses.view', 'expenses.create');
         $this->actingAs($user);
         $caisse = $user->employee->caisses()->first();

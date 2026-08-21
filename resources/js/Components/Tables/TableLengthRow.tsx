@@ -22,11 +22,11 @@ export default function TableLengthRow({ perPage, perPageOptions, onPerPageChang
 
     return (
         <div
-            className={`d-flex align-items-center ${hasPerPage ? 'justify-content-between' : 'justify-content-end'} flex-wrap gap-2 px-3 pb-3`}
+            className={`d-flex align-items-center ${hasPerPage ? 'justify-content-between' : 'justify-content-end'} flex-wrap gap-2 px-3 pb-2 gls-length-row`}
         >
             {hasPerPage && (
                 <div className="d-flex align-items-center">
-                    <label className="text-muted mb-0" htmlFor="table-per-page">
+                    <label className="text-muted mb-0 small" htmlFor="table-per-page">
                         {t('Row Per Page')}
                     </label>
                     <select
@@ -42,7 +42,7 @@ export default function TableLengthRow({ perPage, perPageOptions, onPerPageChang
                             </option>
                         ))}
                     </select>
-                    <span className="text-muted">{t('Entries')}</span>
+                    <span className="text-muted small">{t('Entries')}</span>
                 </div>
             )}
             {search && <div style={{ width: 260 }}>{search}</div>}

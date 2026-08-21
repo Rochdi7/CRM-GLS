@@ -20,6 +20,14 @@ return new class extends Migration
             $table->foreignId('group_id')->constrained('groups')->cascadeOnDelete();
             // 1 = Lundi … 7 = Dimanche (ISO-8601 weekday, matches Carbon::dayOfWeekIso).
             $table->unsignedTinyInteger('jour_semaine');
+            // Validity period of the slot. When a group's teacher changes the
+            // outgoing teacher's emploi du temps must STOP rather than silently
+            // transfer: each creneau is closed with date_fin = the changeover
+            // date and its future "Prevue" seances are removed, keeping each
+            // teacher's seances cleanly separated for per-teacher payroll.
+            // date_debut NULL = "since always"; date_fin NULL = still running.
+            $table->date('date_debut')->nullable();
+            $table->date('date_fin')->nullable();
             $table->time('heure_debut');
             $table->time('heure_fin');
             $table->foreignId('enseignant_id')->nullable()->constrained('employees')->nullOnDelete();

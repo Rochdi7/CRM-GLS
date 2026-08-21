@@ -157,12 +157,25 @@ Every movement now goes through **`CaisseLedger`**, which writes a
 
 ⚠ **Never call `increment('solde')` / `decrement('solde')` or a raw update on
 that column again.** A movement that skips `CaisseLedger` is a movement nobody
-can audit. The five actions routed through it are `EnregistrerEncaissement`,
-`SupprimerEncaissement`, `EnregistrerDepense`, `EnregistrerRemboursement` and
-`ValiderTransfertCaisse`.
+can audit. The six actions routed through it are `EnregistrerEncaissement`,
+`SupprimerEncaissement`, `EnregistrerDepense`, `ApprouverDepense`,
+`EnregistrerRemboursement` and `ValiderTransfertCaisse`.
+
+⚠ **A dépense may debit the till in one of two places, never both.** With
+Paramètres → Système « Validation des dépenses » **ON** (the default),
+`EnregistrerDepense` records the expense `En attente` and moves **no money** —
+`ApprouverDepense` is what debits, at the moment of the decision. With the
+switch OFF, `EnregistrerDepense` debits immediately as before. So an expense
+whose journal shows a `depense` creation but no matching `solde_movement` is
+**not** a missing-movement anomaly: check its `statut` first. A refused expense
+correctly has no movement at all, ever.
 
 **Transfers journal BOTH legs** — the debit on the source and the credit on the
 destination. A transfer logged on one side only would read as money vanishing.
+Both legs carry `valide_par`, which under the recipient-only rule is always the
+employee who owns the destination till (never the requester, never a
+third-party validator, and never a super-admin acting for someone else — see
+CLAUDE.md §11).
 
 **Coherence check.** The page recomputes `solde_apres - solde_avant` and
 compares it with the recorded `montant`. When they disagree the entry is
@@ -178,6 +191,32 @@ flagged « Incohérent » in red — that mismatch is itself the finding.
 4. Any line marked « Incohérent » is a balance that does not add up.
 5. Each movement names the actor, the IP and the source record (ENC-…, DEP-…),
    so a suspicious line leads straight to the payment and the person.
+
+### Console origins
+
+An entry written from the CLI records **only the command name** —
+`artisan:db:seed`, `artisan:tinker` — never its arguments
+(`Activity::consoleOrigin()`).
+
+This was a bug worth naming: the origin used to be built by joining the whole
+of `$_SERVER['argv']`, so `artisan tinker --execute=<script>` wrote the entire
+PHP payload into `url`. That rendered as a wall of code under « Requête »,
+leaked internal code and absolute file paths into a page non-technical people
+read, and reached 730 of the column's 1024 characters — a slightly longer
+script would have thrown *while inserting the audit row*, losing the record
+itself.
+
+Arguments are dropped wholesale rather than filtered, because an option's value
+can hold anything (a script, a password, a token). The command name is the part
+that is always safe and is what an investigation actually needs.
+`fillForensicContext()` also clamps every forensic column to its width, so no
+input can ever break an audit write.
+
+Existing rows were repaired by
+`database/migrations/2026_08_20_190000_sanitize_console_urls_in_activity_log.php`
+— a deliberate, documented, one-off exception to the append-only rule that
+touches ONLY the `url` column (see the migration's docblock for why, and why it
+is not a precedent).
 
 ## 6. Adding a new module
 

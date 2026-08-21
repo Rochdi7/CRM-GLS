@@ -125,14 +125,30 @@ final class DemoFinanceSeeder extends Seeder
             'note' => 'Remboursement de démonstration',
         ], $agent);
 
-        // --- Till transfers: one validated (by a DIFFERENT employee), one pending
+        // --- Till transfers: one validated, one pending.
+        // Transfers are RECIPIENT-validated (CLAUDE.md §11): the employee who
+        // OWNS THE DESTINATION till is the only one who may confirm they
+        // received the money — "some other employee" is not enough, and the
+        // requester (source side) can never self-validate. So the destination
+        // is chosen as a till that HAS a responsable, distinct from the
+        // requester, rather than just any other row.
         $demander = app(DemanderTransfertCaisse::class);
         $valider = app(ValiderTransfertCaisse::class);
 
         $source = Caisse::query()->where('solde', '>', 500)->first() ?? $agents->first()->caisses->first();
-        $destination = Caisse::query()->whereKeyNot($source->id)->first();
         $requester = $source->responsable ?? $agents->first();
-        $validator = $agents->first(fn (Employee $e) => $e->id !== $requester->id);
+
+        $destination = Caisse::query()
+            ->whereKeyNot($source->id)
+            ->whereNotNull('responsable_employee_id')
+            ->where('responsable_employee_id', '!=', $requester->id)
+            ->first();
+
+        if ($destination === null) {
+            return;
+        }
+
+        $validator = $destination->responsable;
 
         $transfert = $demander->handle([
             'caisse_source_id' => $source->id,

@@ -70,12 +70,23 @@ final class CreneauController extends Controller
         $jours = $data['jours_semaine'];
         unset($data['jours_semaine']);
 
-        DB::transaction(function () use ($data, $jours, $generer): void {
+        $bloque = false;
+
+        DB::transaction(function () use ($data, $jours, $generer, &$bloque): void {
             foreach ($jours as $jour) {
                 $creneau = Creneau::create([...$data, 'jour_semaine' => $jour]);
                 $generer->generer($creneau);
+                $bloque = $bloque || $generer->bloqueParFinFormation;
             }
         });
+
+        // The slot is saved either way — but with the group's formation already
+        // over, no séance can be dated inside it, so say so instead of
+        // reporting a silent success.
+        if ($bloque) {
+            return redirect()->route('backoffice.emploi-du-temps.index')
+                ->with('warning', __("Schedule slot created, but no session was generated: the group's end of training date has passed. Extend the group's end date to generate sessions."));
+        }
 
         return redirect()->route('backoffice.emploi-du-temps.index')
             ->with('success', __('Schedule slot created.'));
@@ -87,6 +98,11 @@ final class CreneauController extends Controller
 
         $creneau->update($request->validated());
         $generer->resynchroniser($creneau);
+
+        if ($generer->bloqueParFinFormation) {
+            return redirect()->route('backoffice.emploi-du-temps.index')
+                ->with('warning', __("Schedule slot updated, but no session was generated: the group's end of training date has passed. Extend the group's end date to generate sessions."));
+        }
 
         return redirect()->route('backoffice.emploi-du-temps.index')
             ->with('success', __('Schedule slot updated.'));

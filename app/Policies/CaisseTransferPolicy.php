@@ -22,12 +22,35 @@ final class CaisseTransferPolicy extends ResourcePolicy
     }
 
     /**
-     * Approval step — moves real money. The "requester ≠ validator" rule is
-     * enforced in Domain\Finance\Actions\ValiderTransfertCaisse (two-person
-     * fraud control); this policy handles the permission + center gate.
+     * Approval step — moves real money.
+     *
+     * RECIPIENT-ONLY: the acting user must own the DESTINATION till. Holding
+     * `cash-transfers.validate` is not enough on its own — otherwise any
+     * validator could push money between two colleagues' tills without either
+     * of them agreeing. The "requester ≠ validator" rule and the same
+     * ownership check are re-enforced in
+     * Domain\Finance\Actions\ValiderTransfertCaisse (defense in depth: the
+     * Domain action is authoritative even if called outside HTTP).
+     *
+     * ⚠ Deliberately NOT open to super-admins via Gate::before — see
+     * AuthServiceProvider's before() hook, which excludes this ability. A
+     * super-admin approving a transfer into someone else's till would defeat
+     * the whole control.
      */
     public function validate(User $user, CaisseTransfer $transfer): bool
     {
-        return $user->can('cash-transfers.validate') && $this->withinCenter($user, $transfer);
+        if (! $user->can('cash-transfers.validate') || ! $this->withinCenter($user, $transfer)) {
+            return false;
+        }
+
+        $employee = $user->employee;
+
+        if ($employee === null || $employee->id === $transfer->requested_by) {
+            return false;
+        }
+
+        return $employee->caisses()
+            ->whereKey($transfer->caisse_destination_id)
+            ->exists();
     }
 }

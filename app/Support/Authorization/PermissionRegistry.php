@@ -128,6 +128,18 @@ final class PermissionRegistry
                 'cash-registers.update' => 'Modifier une caisse',
                 'cash-registers.delete' => 'Supprimer une caisse',
             ],
+            // Deliberately absent from every role in matrix() below — the
+            // « Comptes de caisse » tab of Gestion de la caisse is a global,
+            // NON center-scoped view of every account the money sits in, so
+            // only the Gate::before super-admin bypass reaches it. Distinct
+            // from `cash-registers.*`, which stays the center-scoped
+            // "consult a till" permission every finance role keeps.
+            'Comptes de caisse' => [
+                'cash-accounts.view' => 'Consulter les comptes de caisse',
+                'cash-accounts.create' => 'Créer un compte de caisse',
+                'cash-accounts.update' => 'Modifier un compte de caisse',
+                'cash-accounts.delete' => 'Supprimer un compte de caisse',
+            ],
             'Encaissements' => [
                 'payments.view' => 'Consulter les encaissements',
                 'payments.create' => 'Enregistrer un encaissement',
@@ -140,6 +152,12 @@ final class PermissionRegistry
             'Recouvrement' => [
                 'collections.view' => 'Consulter la gestion des recouvrements',
             ],
+            // Deliberately absent from every role in matrix() below — only
+            // the Gate::before super-admin bypass may flip system switches.
+            'Système' => [
+                'system-settings.view' => 'Consulter les paramètres système',
+                'system-settings.update' => 'Modifier les paramètres système',
+            ],
             'Types de dépenses' => [
                 'expense-types.view' => 'Consulter les types de dépenses',
                 'expense-types.create' => 'Créer un type de dépense',
@@ -150,6 +168,11 @@ final class PermissionRegistry
                 'expenses.view' => 'Consulter les dépenses',
                 'expenses.create' => 'Enregistrer une dépense',
                 'expenses.update' => 'Modifier une dépense',
+                // Approving is what actually debits the till when
+                // « Validation des dépenses » is ON (Paramètres → Système).
+                // Deliberately in NO role preset below — like payments.delete,
+                // a super-admin grants it by hand.
+                'expenses.approve' => 'Approuver ou refuser une dépense',
             ],
             'Remboursements' => [
                 'refunds.view' => 'Consulter les remboursements',

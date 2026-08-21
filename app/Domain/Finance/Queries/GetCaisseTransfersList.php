@@ -75,7 +75,9 @@ final class GetCaisseTransfersList
             ->paginate($perPage)
             ->withQueryString();
 
-        $transfers->through(function (CaisseTransfer $t) use ($myCaisseIds): array {
+        $myEmployeeId = $user->employee?->id;
+
+        $transfers->through(function (CaisseTransfer $t) use ($myCaisseIds, $myEmployeeId): array {
             $isReception = in_array($t->caisse_destination_id, $myCaisseIds, true)
                 && ! in_array($t->caisse_source_id, $myCaisseIds, true);
 
@@ -95,6 +97,14 @@ final class GetCaisseTransfersList
                 'validatedBy' => $t->validatedBy?->nomComplet(),
                 'note' => $t->note,
                 'isPending' => $t->statut === CaisseTransfer::STATUT_EN_ATTENTE,
+            // RECIPIENT-ONLY validation: the row is actionable only for the
+            // employee whose OWN till is the destination (and never for the
+            // requester). Computed here from the same facts the policy and
+            // ValiderTransfertCaisse use, so the button and the server can
+            // never disagree. UI convenience only - the policy still gates.
+            'canValidate' => $t->statut === CaisseTransfer::STATUT_EN_ATTENTE
+                && in_array($t->caisse_destination_id, $myCaisseIds, true)
+                && $t->requested_by !== $myEmployeeId,
                 'showUrl' => route('backoffice.caisse-transfers.show', $t),
             ];
         });

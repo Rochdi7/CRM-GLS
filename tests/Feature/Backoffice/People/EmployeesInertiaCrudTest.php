@@ -84,7 +84,7 @@ final class EmployeesInertiaCrudTest extends TestCase
             'nom' => 'Bennani',
             'prenom' => 'Salma',
             'sexe' => 'Femme',
-            'categorie' => Employee::CATEGORIE_COMMERCIAL,
+            'categorie' => Employee::CATEGORIE_CONSULTANT,
             'statut' => Employee::STATUT_ACTIF,
             'etablissement_ids' => $this->someCenterIds(),
         ]);
@@ -95,7 +95,7 @@ final class EmployeesInertiaCrudTest extends TestCase
 
         $employee = Employee::where('nom', 'Bennani')->first();
         $this->assertNotNull($employee);
-        $this->assertSame(Employee::CATEGORIE_COMMERCIAL, $employee->categorie);
+        $this->assertSame(Employee::CATEGORIE_CONSULTANT, $employee->categorie);
         $this->assertNotNull($employee->user_id);
     }
 
@@ -107,7 +107,7 @@ final class EmployeesInertiaCrudTest extends TestCase
             'nom' => 'Alaoui',
             'prenom' => 'Yassine',
             'sexe' => 'Homme',
-            'categorie' => Employee::CATEGORIE_COMMERCIAL,
+            'categorie' => Employee::CATEGORIE_CONSULTANT,
             'statut' => Employee::STATUT_ACTIF,
             'etablissement_ids' => $this->someCenterIds(),
         ])->assertRedirect(route('backoffice.employees.index'));

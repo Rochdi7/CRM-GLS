@@ -870,5 +870,8 @@
     "was": "était",
     "Inconsistent": "Incohérent",
     "MAD": "DH",
-    "Inconsistency: the balance difference does not match the recorded amount.": "Incohérence : l'écart de solde ne correspond pas au montant enregistré."
+    "Inconsistency: the balance difference does not match the recorded amount.": "Incohérence : l'écart de solde ne correspond pas au montant enregistré.",
+    "total": "total",
+    "Schedule slot created, but no session was generated: the group's end of training date has passed. Extend the group's end date to generate sessions.": "Créneau créé, mais aucune séance n'a été générée : la date de fin de formation du groupe est dépassée. Prolongez la date de fin du groupe pour générer les séances.",
+    "Schedule slot updated, but no session was generated: the group's end of training date has passed. Extend the group's end date to generate sessions.": "Créneau modifié, mais aucune séance n'a été générée : la date de fin de formation du groupe est dépassée. Prolongez la date de fin du groupe pour générer les séances."
 }

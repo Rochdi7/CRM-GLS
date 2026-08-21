@@ -50,6 +50,22 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
         return Caisse::factory()->create(['etablissement_id' => $this->centre->id, 'solde' => $solde]);
     }
 
+    /**
+     * A user who may validate AND owns $destination — validation is
+     * RECIPIENT-ONLY, so a validator who does not own the destination till
+     * is refused no matter which permissions they hold.
+     */
+    private function recipientOf(Caisse $destination, string ...$extraPermissions): User
+    {
+        $user = $this->userWith('cash-transfers.view', 'cash-transfers.validate', ...$extraPermissions);
+        $destination->update(['responsable_employee_id' => $user->employee->id]);
+        // Employee::caisses() is the ownership source of truth the policy and
+        // ValiderTransfertCaisse both read.
+        $destination->fresh();
+
+        return $user->fresh();
+    }
+
     public function test_caisses_index_exposes_transfers_when_permitted(): void
     {
         $this->actingAs($this->userWith('cash-transfers.view'))
@@ -182,7 +198,7 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
         ]);
         $transfer = CaisseTransfer::first();
 
-        $validator = $this->userWith('cash-transfers.view', 'cash-transfers.validate');
+        $validator = $this->recipientOf($destination);
         $this->actingAs($validator);
 
         $this->put(route('backoffice.caisse-transfers.validate', $transfer))
@@ -199,6 +215,9 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
 
     public function test_self_validation_is_refused_and_leaves_balances_unchanged(): void
     {
+        // The requester is on the SOURCE side, so under the recipient-only
+        // rule the policy already denies them (403) — a stricter refusal than
+        // the old soft form error, and it never reaches the Domain action.
         $user = $this->userWith('cash-transfers.view', 'cash-transfers.create', 'cash-transfers.validate');
         $this->actingAs($user);
         $source = $user->employee->caisses()->first();
@@ -212,11 +231,41 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
         $transfer = CaisseTransfer::first();
 
         $this->put(route('backoffice.caisse-transfers.validate', $transfer))
-            ->assertSessionHasErrors('validate');
+            ->assertForbidden();
 
         $fresh = $transfer->fresh();
         $this->assertSame(CaisseTransfer::STATUT_EN_ATTENTE, $fresh->statut);
         $this->assertNull($fresh->validated_by);
+        $this->assertSame('1000.00', (string) $source->fresh()->solde);
+        $this->assertSame('500.00', (string) $destination->fresh()->solde);
+    }
+
+    public function test_owning_both_ends_still_cannot_self_validate(): void
+    {
+        // Edge case the recipient rule alone would not cover: an employee who
+        // owns BOTH tills is the recipient, so the ownership check passes —
+        // the "requester never validates their own transfer" rule is what
+        // must stop them (enforced in the policy AND the Domain action).
+        $user = $this->userWith('cash-transfers.view', 'cash-transfers.create', 'cash-transfers.validate');
+        $this->actingAs($user);
+        $source = $user->employee->caisses()->first();
+        $source->update(['solde' => 1000]);
+
+        $destination = $this->caisse(500);
+        $destination->update(['responsable_employee_id' => $user->employee->id]);
+
+        // The source is server-derived as the requester's FIRST till, so this
+        // transfer runs between two tills the same employee owns.
+        $this->post(route('backoffice.caisse-transfers.store'), [
+            'caisse_destination_id' => $destination->id,
+            'montant' => '300',
+        ]);
+        $transfer = CaisseTransfer::first();
+
+        $this->put(route('backoffice.caisse-transfers.validate', $transfer))
+            ->assertForbidden();
+
+        $this->assertSame(CaisseTransfer::STATUT_EN_ATTENTE, $transfer->fresh()->statut);
         $this->assertSame('1000.00', (string) $source->fresh()->solde);
         $this->assertSame('500.00', (string) $destination->fresh()->solde);
     }
@@ -248,7 +297,7 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
         ]);
         $transfer = CaisseTransfer::first();
 
-        $validator = $this->userWith('cash-transfers.view', 'cash-transfers.validate');
+        $validator = $this->recipientOf($destination);
         $this->actingAs($validator);
         $this->put(route('backoffice.caisse-transfers.validate', $transfer))->assertRedirect();
 
@@ -296,7 +345,7 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
         ]);
         $transfer = CaisseTransfer::first();
 
-        $validator = $this->userWith('cash-transfers.view', 'cash-transfers.validate');
+        $validator = $this->recipientOf($destination);
         $this->actingAs($validator);
         $this->put(route('backoffice.caisse-transfers.validate', $transfer));
 
@@ -342,6 +391,83 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
         ])->assertSessionHasErrors('caisse_source_id');
 
         $this->assertSame(0, CaisseTransfer::count());
+    }
+
+    public function test_a_third_party_validator_who_is_not_the_recipient_is_refused(): void
+    {
+        // The core of the recipient-only rule: holding cash-transfers.validate
+        // is NOT enough. Someone who owns neither end of the transfer must not
+        // be able to push money between two other people's tills.
+        $requester = $this->userWith('cash-transfers.view', 'cash-transfers.create');
+        $this->actingAs($requester);
+        $source = $requester->employee->caisses()->first();
+        $source->update(['solde' => 1000]);
+        $destination = $this->caisse(500);
+        $this->post(route('backoffice.caisse-transfers.store'), [
+            'caisse_destination_id' => $destination->id, 'montant' => '300',
+        ]);
+        $transfer = CaisseTransfer::first();
+
+        // A validator with the permission but who owns no end of the transfer.
+        $this->actingAs($this->userWith('cash-transfers.view', 'cash-transfers.validate'))
+            ->put(route('backoffice.caisse-transfers.validate', $transfer))
+            ->assertForbidden();
+
+        $this->assertSame(CaisseTransfer::STATUT_EN_ATTENTE, $transfer->fresh()->statut);
+        $this->assertSame('1000.00', (string) $source->fresh()->solde);
+        $this->assertSame('500.00', (string) $destination->fresh()->solde);
+    }
+
+    public function test_a_super_admin_cannot_validate_someone_elses_transfer(): void
+    {
+        // Gate::before deliberately does NOT bypass CaisseTransfer@validate:
+        // a super-admin approving a transfer into another employee's till
+        // would defeat the two-person control entirely.
+        $requester = $this->userWith('cash-transfers.view', 'cash-transfers.create');
+        $this->actingAs($requester);
+        $source = $requester->employee->caisses()->first();
+        $source->update(['solde' => 1000]);
+        $destination = $this->caisse(500);
+        $this->post(route('backoffice.caisse-transfers.store'), [
+            'caisse_destination_id' => $destination->id, 'montant' => '300',
+        ]);
+        $transfer = CaisseTransfer::first();
+
+        $superAdmin = User::factory()->create();
+        $superAdmin->assignRole(\App\Models\Role::SUPER_ADMIN);
+        Employee::factory()->create(['user_id' => $superAdmin->id, 'etablissement_id' => $this->centre->id]);
+
+        $this->actingAs($superAdmin->fresh())
+            ->put(route('backoffice.caisse-transfers.validate', $transfer))
+            ->assertForbidden();
+
+        $this->assertSame(CaisseTransfer::STATUT_EN_ATTENTE, $transfer->fresh()->statut);
+        $this->assertSame('1000.00', (string) $source->fresh()->solde);
+        $this->assertSame('500.00', (string) $destination->fresh()->solde);
+    }
+
+    public function test_the_recipient_can_validate_and_both_balances_move(): void
+    {
+        $requester = $this->userWith('cash-transfers.view', 'cash-transfers.create');
+        $this->actingAs($requester);
+        $source = $requester->employee->caisses()->first();
+        $source->update(['solde' => 1000]);
+        $destination = $this->caisse(500);
+        $this->post(route('backoffice.caisse-transfers.store'), [
+            'caisse_destination_id' => $destination->id, 'montant' => '300',
+        ]);
+        $transfer = CaisseTransfer::first();
+
+        $recipient = $this->recipientOf($destination);
+        $this->actingAs($recipient)
+            ->put(route('backoffice.caisse-transfers.validate', $transfer))
+            ->assertRedirect();
+
+        $fresh = $transfer->fresh();
+        $this->assertSame(CaisseTransfer::STATUT_VALIDE, $fresh->statut);
+        $this->assertSame($recipient->employee->id, $fresh->validated_by);
+        $this->assertSame('700.00', (string) $source->fresh()->solde);
+        $this->assertSame('800.00', (string) $destination->fresh()->solde);
     }
 
     public function test_no_destroy_route_exists(): void

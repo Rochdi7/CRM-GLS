@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import Modal from '@/Components/Modals/Modal';
 import { t } from '@/Lib/i18n';
 
@@ -19,6 +20,12 @@ interface ConfirmDialogProps {
     confirmLabel?: string;
     /** Confirm button label while processing. Defaults to the delete wording. */
     processingLabel?: string;
+    /**
+     * Optional extra input rendered between the message and the buttons —
+     * for confirmations that need one field (e.g. a refusal motive). Keep it
+     * to a single control: this is a confirm dialog, not a form modal.
+     */
+    children?: ReactNode;
 }
 
 /**
@@ -46,6 +53,7 @@ export default function ConfirmDialog({
     variant = 'danger',
     confirmLabel,
     processingLabel,
+    children,
 }: ConfirmDialogProps) {
     return (
         <Modal show={show} title={title} onClose={onCancel} processing={processing} hideHeader>
@@ -56,6 +64,7 @@ export default function ConfirmDialog({
                 <h4>{title}</h4>
                 <p className="mb-1">{message}</p>
                 <p className="fw-medium">{recordLabel}</p>
+                {children && <div className="text-start mt-3">{children}</div>}
                 {error && (
                     <div className="alert alert-danger text-start" role="alert">
                         {error}

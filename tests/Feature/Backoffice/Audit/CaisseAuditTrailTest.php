@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Tests\Feature\Backoffice\Audit;
 
 use App\Domain\Audit\Queries\GetActivityLogList;
+use App\Domain\Expenses\Actions\ApprouverDepense;
 use App\Domain\Expenses\Actions\EnregistrerDepense;
+use App\Support\Settings\AppSettings;
 use App\Domain\Finance\Actions\DemanderTransfertCaisse;
 use App\Domain\Finance\Actions\EnregistrerRemboursement;
 use App\Domain\Finance\Actions\ValiderTransfertCaisse;
@@ -183,6 +185,10 @@ final class CaisseAuditTrailTest extends TestCase
 
     public function test_an_expense_journals_the_cash_it_took_out(): void
     {
+        // Approval OFF: the expense debits on creation, and that movement is
+        // the one the journal must carry.
+        AppSettings::setBool(AppSettings::EXPENSE_APPROVAL, false);
+
         $agent = $this->employee();
         $caisse = $this->caisse(2000);
         // TypeDepense has no factory (its rows are seeded), so create directly.
@@ -205,6 +211,47 @@ final class CaisseAuditTrailTest extends TestCase
 
         $money = $this->lastMovement();
 
+        $this->assertFalse($money['isCredit']);
+        $this->assertSame('2 000,00', $money['soldeAvant']);
+        $this->assertSame('1 700,00', $money['soldeApres']);
+    }
+
+    public function test_a_pending_expense_journals_no_movement_until_approved(): void
+    {
+        // Approval ON: requesting must journal NO solde_movement at all - the
+        // money is still in the till. The movement appears only on approval,
+        // and it must be the one carrying the full arithmetic.
+        AppSettings::setBool(AppSettings::EXPENSE_APPROVAL, true);
+
+        $agent = $this->employee();
+        $caisse = $this->caisse(2000);
+        $type = TypeDepense::create([
+            'nom' => 'Fournitures de bureau',
+            'is_system' => false,
+            'statut' => TypeDepense::STATUT_ACTIF,
+        ]);
+
+        $depense = app(EnregistrerDepense::class)->handle([
+            'type_depense_id' => $type->id,
+            'caisse_id' => $caisse->id,
+            'montant' => '300.00',
+            'methode_paiement' => 'Espèces',
+            'date_depense' => now()->toDateString(),
+            'description' => 'Fournitures',
+        ], $agent);
+
+        $this->assertSame('2000.00', (string) $caisse->fresh()->solde);
+        $this->assertSame(
+            0,
+            Activity::query()->where('event', 'solde_movement')->count(),
+            'A pending expense must not journal any cash movement.',
+        );
+
+        app(ApprouverDepense::class)->handle($depense, $this->employee());
+
+        $this->assertSame('1700.00', (string) $caisse->fresh()->solde);
+
+        $money = $this->lastMovement();
         $this->assertFalse($money['isCredit']);
         $this->assertSame('2 000,00', $money['soldeAvant']);
         $this->assertSame('1 700,00', $money['soldeApres']);
@@ -240,6 +287,9 @@ final class CaisseAuditTrailTest extends TestCase
         $validator = $this->employee();
         $source = $this->caisse(5000);
         $destination = $this->caisse(1000);
+        // Validation is RECIPIENT-ONLY: only the employee who owns the
+        // destination till may accept (CLAUDE.md §11).
+        $destination->update(['responsable_employee_id' => $validator->id]);
 
         $transfer = app(DemanderTransfertCaisse::class)->handle([
             'caisse_source_id' => $source->id,

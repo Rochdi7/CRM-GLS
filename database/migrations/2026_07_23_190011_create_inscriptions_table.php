@@ -14,6 +14,9 @@ return new class extends Migration
         Schema::create('inscriptions', function (Blueprint $table): void {
             $table->id();
             $table->string('reference', 20)->unique();
+            // Legacy import provenance — unique per centre (see students).
+            $table->string('legacy_ref', 50)->nullable();
+            $table->string('legacy_source', 30)->nullable();
             $table->foreignId('student_id')->constrained('students')->restrictOnDelete();
             $table->foreignId('group_id')->constrained('groups')->restrictOnDelete();
             $table->foreignId('etablissement_id')->nullable()->constrained('etablissements')->nullOnDelete();
@@ -32,6 +35,7 @@ return new class extends Migration
             $table->index('group_id', 'inscriptions_group_id_idx');
             $table->index('etablissement_id', 'inscriptions_etablissement_id_idx');
             $table->index('created_by', 'inscriptions_created_by_idx');
+            $table->unique(['etablissement_id', 'legacy_ref'], 'inscriptions_etab_legacy_ref_unique');
         });
     }
 

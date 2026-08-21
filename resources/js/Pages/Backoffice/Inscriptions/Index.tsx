@@ -857,8 +857,8 @@ export default function InscriptionsIndex({
                             head={
                                 <tr>
                                     <th>Référence</th>
-                                    <th>Étudiant</th>
-                                    <th>Groupe</th>
+                                    <th className="text-wrap-cell">Étudiant</th>
+                                    <th className="text-wrap-cell">Groupe</th>
                                     <th>Date d'inscription</th>
                                     <th>Date de début</th>
                                     <th>Date de fin</th>
@@ -873,8 +873,8 @@ export default function InscriptionsIndex({
                                     <td>
                                         <code>{inscription.reference}</code>
                                     </td>
-                                    <td className="fw-medium">{inscription.student ?? '—'}</td>
-                                    <td>{inscription.groupe ?? '—'}</td>
+                                    <td className="fw-medium text-wrap-cell">{inscription.student ?? '—'}</td>
+                                    <td className="text-wrap-cell">{inscription.groupe ?? '—'}</td>
                                     <td>{inscription.date ?? '—'}</td>
                                     <td>{inscription.dateDebut ?? '—'}</td>
                                     <td>{inscription.dateFin ?? '—'}</td>

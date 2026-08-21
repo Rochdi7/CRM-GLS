@@ -6,6 +6,7 @@ namespace App\Services\Import;
 
 use App\Models\Encaissement;
 use App\Models\Inscription;
+use App\Models\Presence;
 use App\Models\Student;
 
 /**
@@ -125,6 +126,48 @@ final class ImportValidator
                 'Méthode "%s" ne correspond à aucune valeur autorisée (%s).',
                 (string) $methode,
                 implode(', ', Encaissement::METHODES)
+            ));
+        }
+
+        return $errors;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array<int, array{field: string, code: string, message: string}>
+     */
+    public function validatePresence(array $row): array
+    {
+        $errors = [];
+
+        if (empty($row['student_id'])) {
+            $errors[] = $this->error('student_id', 'required', "L'élève n'a pas été résolu.");
+        }
+
+        if (empty($row['group_id'])) {
+            $errors[] = $this->error('group_id', 'required', "Le groupe n'a pas été résolu.");
+        }
+
+        if (($row['date_seance'] ?? null) === null) {
+            $errors[] = $this->error('date_seance', 'required', 'La date de la séance est obligatoire.');
+        }
+
+        $statut = $row['statut'] ?? null;
+
+        // The export writes a literal "-" when the roll call was never
+        // filled in for that line. That is a missing value, not an unknown
+        // one, so it gets its own message rather than the enum complaint.
+        if ($statut === null || $statut === '' || $statut === '-') {
+            $errors[] = $this->error('statut', 'required', 'Aucun statut de présence sur cette ligne.');
+
+            return $errors;
+        }
+
+        if (! in_array($statut, Presence::STATUTS, true)) {
+            $errors[] = $this->error('statut', 'invalid_enum', sprintf(
+                'Statut "%s" ne correspond à aucune valeur autorisée (%s).',
+                (string) $statut,
+                implode(', ', Presence::STATUTS)
             ));
         }
 

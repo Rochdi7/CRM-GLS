@@ -25,10 +25,18 @@ class ImportBatch extends Model
 
     public const MODULE_ENCAISSEMENTS = 'encaissements';
 
+    /**
+     * "Registre des présences" export -> séances + their per-student roll
+     * call. Unlike the other three modules this one writes TWO tables:
+     * one Seance per (groupe, date, horaire) and one Presence per row.
+     */
+    public const MODULE_PRESENCES = 'presences';
+
     public const MODULES = [
         self::MODULE_STUDENTS,
         self::MODULE_INSCRIPTIONS,
         self::MODULE_ENCAISSEMENTS,
+        self::MODULE_PRESENCES,
     ];
 
     public const STATUT_ANALYZED = 'analyzed';

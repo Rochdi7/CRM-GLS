@@ -7,27 +7,32 @@ namespace App\Http\Controllers\Backoffice;
 use App\Domain\Finance\Queries\GetCaisseDetails;
 use App\Domain\Finance\Queries\GetCaisseJournal;
 use App\Domain\Finance\Queries\GetCaisseTransfersList;
+use App\Domain\Finance\Queries\GetComptesCaisse;
+use App\Http\Requests\Backoffice\Caisses\StoreCaisseRequest;
+use App\Http\Requests\Backoffice\Caisses\UpdateCaisseRequest;
 use App\Http\Controllers\Controller;
 use App\Models\Caisse;
 use App\Models\CaisseTransfer;
+use App\Models\Etablissement;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * "Gestion de la caisse" — ONE Inertia page hosting Ma caisse + Validation
- * de transfert as client-side React tabs (Journal des transactions and
- * Comptes de caisse were dropped as visible tabs — GetCaissesList/
- * Caisse::STATUTS/the etablissement-scoped "all" journal are no longer
- * read here; GetCaisseJournal's 'all' scope and GetCaissesList stay used
- * elsewhere, e.g. CaisseController::show()). Access = ANY of the two view
- * permissions; each tab's own data/actions are still gated server-side by
- * their own permission.
+ * "Gestion de la caisse" — ONE Inertia page hosting Ma caisse, Validation
+ * de transfert and Comptes de caisse as tabs (each tab switch is a real
+ * Inertia visit, so only the active tab's dataset is computed). Access = ANY
+ * of the three view permissions; each tab's own data/actions are still gated
+ * server-side by their own permission.
  *
- * create/store/edit/update/destroy remain intentionally unrouted — a caisse
- * is auto-created by CaisseProvisioner (EmployeeObserver) and never
- * created/edited/deleted by hand anywhere in the live app.
+ * ⚠ « Comptes de caisse » is super-admin only: `cash-accounts.*` is absent
+ * from every role in PermissionRegistry::matrix(), so only the Gate::before
+ * bypass reaches it. "Externe" is the ONLY type creatable there — employee
+ * tills stay owned by CaisseProvisioner (EmployeeObserver), and TPE / Chèque
+ * / Virement are payment methods aggregated live by GetComptesCaisse, not
+ * rows to create (see that class and StoreCaisseRequest).
  */
 final class CaisseController extends Controller
 {
@@ -35,27 +40,32 @@ final class CaisseController extends Controller
         Request $request,
         GetCaisseJournal $getCaisseJournal,
         GetCaisseTransfersList $getCaisseTransfersList,
+        GetComptesCaisse $getComptesCaisse,
     ): Response {
         $user = $request->user();
         $canViewCaisses = $user->can('cash-registers.view');
         $canViewTransfers = $user->can('cash-transfers.view');
-        abort_unless($canViewCaisses || $canViewTransfers, 403);
+        $canViewComptes = $user->can('cash-accounts.view');
+        abort_unless($canViewCaisses || $canViewTransfers || $canViewComptes, 403);
 
         // Every tab switch is a real Inertia visit (?tab=…, the React page's
         // switchTab), so only the ACTIVE tab's heavy dataset is computed per
         // request.
-        $tab = (string) $request->query('tab', $canViewCaisses ? 'ma-caisse' : 'transferts');
         $validTabs = [
             ...($canViewCaisses ? ['ma-caisse'] : []),
             ...($canViewTransfers ? ['transferts'] : []),
+            ...($canViewComptes ? ['comptes'] : []),
         ];
+        $tab = (string) $request->query('tab', $validTabs[0] ?? 'ma-caisse');
         if (! in_array($tab, $validTabs, true)) {
-            $tab = $canViewCaisses ? 'ma-caisse' : 'transferts';
+            $tab = $validTabs[0] ?? 'ma-caisse';
         }
 
         $search = (string) $request->string('search');
         $statutFilter = (string) $request->string('statutFilter');
         $typeFilter = (string) $request->string('typeFilter');
+        $compteSearch = (string) $request->string('compteSearch');
+        $compteTypeFilter = (string) $request->string('compteTypeFilter');
 
         // The transfer modal's fixed source: the acting employee's OWN till
         // (even super-admins transfer from their own till — the source is
@@ -70,6 +80,7 @@ final class CaisseController extends Controller
             ] : null,
             'canViewCaisses' => $canViewCaisses,
             'canViewTransfers' => $canViewTransfers,
+            'canViewComptes' => $canViewComptes,
             'journalMine' => $canViewCaisses && $tab === 'ma-caisse'
                 ? $getCaisseJournal($user, 'mine', '', '', '', 1)
                 : null,
@@ -88,6 +99,30 @@ final class CaisseController extends Controller
                 'search' => $search,
                 'statutFilter' => $statutFilter,
                 'typeFilter' => $typeFilter,
+            ],
+            'comptes' => $canViewComptes && $tab === 'comptes'
+                ? $getComptesCaisse($compteSearch, $compteTypeFilter, GetComptesCaisse::DEFAULT_PER_PAGE, (int) $request->integer('page', 1))
+                : null,
+            // The form offers "Externe" only — everything else is either
+            // provisioned with its employee or derived from a payment method
+            // (StoreCaisseRequest refuses the rest server-side too).
+            'compteTypes' => GetComptesCaisse::CREATABLE_TYPES,
+            // The FILTER offers every kind the tab can show: employee tills,
+            // the derived TPE/Chèque/Virement rows, and Externe accounts.
+            'compteTypeFilters' => GetComptesCaisse::allTypes(),
+            'compteEtablissements' => $canViewComptes
+                ? Etablissement::query()->orderBy('nom_centre')->get()
+                    ->map(fn (Etablissement $e): array => ['id' => $e->id, 'nom' => $e->nom_centre])
+                    ->all()
+                : [],
+            'comptePermissions' => [
+                'create' => $user->can('cash-accounts.create'),
+                'update' => $user->can('cash-accounts.update'),
+                'delete' => $user->can('cash-accounts.delete'),
+            ],
+            'compteFilters' => [
+                'compteSearch' => $compteSearch,
+                'compteTypeFilter' => $compteTypeFilter,
             ],
         ]);
     }
@@ -111,6 +146,72 @@ final class CaisseController extends Controller
         );
 
         return response()->json($journal);
+    }
+
+    /**
+     * Create an "Externe" account (a safe, an outside holder…) — the only
+     * type this screen creates.
+     *
+     * It opens at 0,00 DH and Active: a balance is never typed by hand
+     * anywhere in the app, it only moves through CaisseLedger.
+     */
+    public function store(StoreCaisseRequest $request): RedirectResponse
+    {
+        abort_unless($request->user()->can('cash-accounts.create'), 403);
+
+        Caisse::create([
+            ...$request->validated(),
+            'solde' => 0,
+            'statut' => Caisse::STATUT_ACTIVE,
+        ]);
+
+        return redirect()->route('backoffice.caisses.index', ['tab' => 'comptes'])
+            ->with('success', __('Cash account created.'));
+    }
+
+    /**
+     * Neither `solde` nor `type` is editable — see UpdateCaisseRequest.
+     */
+    public function update(UpdateCaisseRequest $request, Caisse $caisse): RedirectResponse
+    {
+        abort_unless($request->user()->can('cash-accounts.update'), 403);
+
+        $caisse->update($request->validated());
+
+        return redirect()->route('backoffice.caisses.index', ['tab' => 'comptes'])
+            ->with('success', __('Cash account updated.'));
+    }
+
+    /**
+     * An account is removable only while it is still empty. Money records are
+     * never deleted (CLAUDE.md §11), so an account that carries any movement
+     * — or a non-zero balance — must stay too; deactivate it instead. The
+     * refusal is a `delete` field error, not a flash, so the React
+     * confirm-dialog keeps it inline (same contract as BanqueController).
+     */
+    public function destroy(Request $request, Caisse $caisse, GetComptesCaisse $getComptesCaisse): RedirectResponse
+    {
+        abort_unless($request->user()->can('cash-accounts.delete'), 403);
+
+        // Only an Externe account is ever removable: an employee's till is
+        // owned by CaisseProvisioner, and the derived TPE/Chèque/Virement
+        // rows have no id to reach this route with in the first place.
+        if ($caisse->type !== Caisse::TYPE_EXTERNE) {
+            return back()->withErrors(['delete' => __("An employee's own till cannot be deleted.")]);
+        }
+
+        if ($getComptesCaisse->hasMovements($caisse)) {
+            return back()->withErrors(['delete' => __('This cash account carries movements and cannot be deleted. Deactivate it instead.')]);
+        }
+
+        if ((float) $caisse->solde !== 0.0) {
+            return back()->withErrors(['delete' => __('This cash account still holds a balance and cannot be deleted.')]);
+        }
+
+        $caisse->delete();
+
+        return redirect()->route('backoffice.caisses.index', ['tab' => 'comptes'])
+            ->with('success', __('Cash account deleted.'));
     }
 
     public function show(Caisse $caisse, GetCaisseDetails $getCaisseDetails): Response

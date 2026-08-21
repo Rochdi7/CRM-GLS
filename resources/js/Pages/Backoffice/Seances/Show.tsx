@@ -615,7 +615,7 @@ export default function SeanceShow({
                                                         </span>
                                                     )}
                                                     <span className="fw-medium text-uppercase">
-                                                        {student.nom} {student.prenom}
+                                                        {student.prenom} {student.nom}
                                                     </span>
                                                 </div>
                                             </td>
@@ -626,7 +626,7 @@ export default function SeanceShow({
                                                             className="form-check-input"
                                                             type="checkbox"
                                                             role="switch"
-                                                            aria-label={`${statut} — ${student.nom} ${student.prenom}`}
+                                                            aria-label={`${statut} — ${student.prenom} ${student.nom}`}
                                                             checked={line?.statut === statut}
                                                             disabled={!canMark}
                                                             onChange={(event) =>

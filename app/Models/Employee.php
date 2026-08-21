@@ -38,7 +38,7 @@ class Employee extends Model implements HasMedia
 
     public const CATEGORIE_DIRECTEUR = 'Directeur';
 
-    public const CATEGORIE_COMMERCIAL = 'Commercial';
+    public const CATEGORIE_CONSULTANT = 'Consultant';
 
     public const CATEGORIE_ENSEIGNANT = 'Enseignant';
 
@@ -48,6 +48,12 @@ class Employee extends Model implements HasMedia
 
     public const CATEGORIE_ASSISTANTE_ADMINISTRATIVE = 'Assistante administrative';
 
+    public const CATEGORIE_RESPONSABLE_ADMINISTRATIVE = 'Responsable administrative';
+
+    public const CATEGORIE_RESPONSABLE_RH = 'Responsable RH';
+
+    public const CATEGORIE_DIRECTEUR_FINANCIER = 'Directeur financier';
+
     public const CATEGORIE_DIRECTEUR_OPERATIONS = 'Directeur des opérations';
 
     public const CATEGORIE_DIRECTRICE_PEDAGOGIQUE = 'Directrice pédagogique';
@@ -56,17 +62,34 @@ class Employee extends Model implements HasMedia
 
     public const CATEGORIE_AUTRE = 'Autre';
 
-    /** Order mirrors the screenshots (pic 1 & 2). */
+    /**
+     * Job titles offered by the Employees form.
+     *
+     * "Commercial" was dropped (no employee held it) and Consultant,
+     * Responsable administrative, Responsable RH and Directeur financier
+     * added. "Assistante administrative" stays alongside "Responsable
+     * administrative" — they are two distinct posts, not a rename.
+     *
+     * This is a plain VARCHAR validated against these constants, by design
+     * (CLAUDE.md §11) — do not "fix" it with a lookup table. Removing a
+     * value here only removes it from the FORM: existing rows keep whatever
+     * string they were saved with, so retire a value that employees still
+     * hold with a migration that moves them, never by editing this list
+     * alone.
+     */
     public const CATEGORIES = [
         self::CATEGORIE_DIRECTEUR,
-        self::CATEGORIE_COMMERCIAL,
+        self::CATEGORIE_DIRECTEUR_OPERATIONS,
+        self::CATEGORIE_DIRECTEUR_FINANCIER,
+        self::CATEGORIE_DIRECTEUR_QUALITE,
+        self::CATEGORIE_DIRECTRICE_PEDAGOGIQUE,
         self::CATEGORIE_ENSEIGNANT,
         self::CATEGORIE_COMPTABLE,
+        self::CATEGORIE_CONSULTANT,
+        self::CATEGORIE_RESPONSABLE_RH,
         self::CATEGORIE_RESPONSABLE_MARKETING,
+        self::CATEGORIE_RESPONSABLE_ADMINISTRATIVE,
         self::CATEGORIE_ASSISTANTE_ADMINISTRATIVE,
-        self::CATEGORIE_DIRECTEUR_OPERATIONS,
-        self::CATEGORIE_DIRECTRICE_PEDAGOGIQUE,
-        self::CATEGORIE_DIRECTEUR_QUALITE,
         self::CATEGORIE_AUTRE,
     ];
 

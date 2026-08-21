@@ -114,7 +114,13 @@ final class GroupController extends Controller
         $this->authorize('create', Group::class);
 
         $data = $request->validated();
-        $fraisLignes = $this->normalizedFraisLignes($request, $data['date_debut_formation'] ?? null);
+        // A new group inherits the active center (see the transaction
+        // below), so that is the center whose fee prices apply.
+        $fraisLignes = $this->normalizedFraisLignes(
+            $request,
+            $data['date_debut_formation'] ?? null,
+            app(CurrentContext::class)->etablissementId(),
+        );
 
         DB::transaction(function () use ($request, $data, $fraisLignes, &$group): void {
             // Center + academic year are inherited from the active working
@@ -156,6 +162,7 @@ final class GroupController extends Controller
         $fraisLignes = $this->normalizedFraisLignes(
             $request,
             $data['date_debut_formation'] ?? $group->date_debut_formation?->toDateString(),
+            $group->etablissement_id,
         );
 
         $changement = null;
@@ -406,19 +413,24 @@ final class GroupController extends Controller
      * effect as the Livewire version which only ever renders active-catalog
      * keys in the first place).
      *
-     * A blank amount/échéance falls back to the catalog's own default
-     * (frais.montant_defaut) and to the month-derived due date — see
+     * A blank amount/échéance falls back to what THIS GROUP'S CENTER
+     * charges for the fee (frais_etablissement.montant, else
+     * frais.montant_defaut) and to the month-derived due date — see
      * FraisEcheanceResolver — so a group only has to type the values that
-     * actually differ from the standard.
+     * actually differ from its branch's standard.
      *
      * @return array<int, array{montant: float, date_echeance: ?string, classification: ?string}>
      */
-    private function normalizedFraisLignes(Request $request, ?string $dateDebutFormation = null): array
-    {
-        // Whole catalog rows, not just ids: each one carries the default
-        // amount a fee is worth unless this group says otherwise.
+    private function normalizedFraisLignes(
+        Request $request,
+        ?string $dateDebutFormation = null,
+        ?int $etablissementId = null,
+    ): array {
+        // Whole catalog rows, not just ids: each one carries the amount a
+        // fee is worth in this center unless this group says otherwise.
         $catalogue = Frais::query()
             ->where('statut', Frais::STATUT_ACTIF)
+            ->with('etablissements:id')
             ->get(['id', 'nom', 'montant_defaut']);
 
         $submitted = (array) $request->input('fraisLignes', []);
@@ -431,7 +443,7 @@ final class GroupController extends Controller
             // user typed on purpose is still respected, since '0' !== ''.
             $montant = ($ligne['montant'] ?? '') !== ''
                 ? (float) $ligne['montant']
-                : (float) $frais->montant_defaut;
+                : $frais->montantPourCentre($etablissementId);
 
             $echeance = ($ligne['date_echeance'] ?? '') !== ''
                 ? $ligne['date_echeance']

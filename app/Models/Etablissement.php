@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
@@ -57,5 +58,16 @@ class Etablissement extends Model
     public function caisses(): HasMany
     {
         return $this->hasMany(Caisse::class);
+    }
+
+    /**
+     * Catalog fees charged in this center, each carrying this center's own
+     * amount on the pivot (see Frais::etablissements()).
+     */
+    public function frais(): BelongsToMany
+    {
+        return $this->belongsToMany(Frais::class, 'frais_etablissement')
+            ->withPivot('montant')
+            ->withTimestamps();
     }
 }

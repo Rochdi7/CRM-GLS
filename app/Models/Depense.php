@@ -24,10 +24,26 @@ class Depense extends Model implements HasMedia
     /** Same fixed list as Encaissement::METHODES (validated, no lookup table). */
     public const METHODES = Encaissement::METHODES;
 
+    /**
+     * Approval workflow (Paramètres → Système « Validation des dépenses »).
+     * "En attente" holds the money: the till is NOT debited until a
+     * super-admin approves. Refusing never moves money at all.
+     */
+    public const STATUT_EN_ATTENTE = 'En attente';
+    public const STATUT_APPROUVEE = 'Approuvée';
+    public const STATUT_REFUSEE = 'Refusée';
+
+    public const STATUTS = [
+        self::STATUT_EN_ATTENTE,
+        self::STATUT_APPROUVEE,
+        self::STATUT_REFUSEE,
+    ];
+
     protected $fillable = [
         'reference', 'type_depense_id', 'caisse_id', 'group_id', 'montant',
         'methode_paiement', 'date_depense', 'reference_facture',
         'description', 'mots_cles', 'note', 'agent_id',
+        'statut', 'approved_by', 'approved_at', 'motif_refus',
     ];
 
     protected function casts(): array
@@ -35,7 +51,34 @@ class Depense extends Model implements HasMedia
         return [
             'montant' => 'decimal:2',
             'date_depense' => 'date',
+            'approved_at' => 'datetime',
         ];
+    }
+
+    /** Awaiting a super-admin decision — no money has moved yet. */
+    public function isEnAttente(): bool
+    {
+        return $this->statut === self::STATUT_EN_ATTENTE;
+    }
+
+    /** Approved: the till was debited when the decision was taken. */
+    public function isApprouvee(): bool
+    {
+        return $this->statut === self::STATUT_APPROUVEE;
+    }
+
+    public function isRefusee(): bool
+    {
+        return $this->statut === self::STATUT_REFUSEE;
+    }
+
+    /**
+     * A refused/approved expense is settled — only a pending one may still be
+     * edited or decided upon.
+     */
+    public function isDecided(): bool
+    {
+        return ! $this->isEnAttente();
     }
 
     /**
@@ -68,5 +111,11 @@ class Depense extends Model implements HasMedia
     public function agent(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'agent_id');
+    }
+
+    /** The super-admin who approved or refused this expense. */
+    public function approvedBy(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'approved_by');
     }
 }

@@ -19,6 +19,13 @@ return new class extends Migration
         Schema::create('frais', function (Blueprint $table): void {
             $table->id();
             $table->string('nom', 150);
+            // DEFAULT amount only. Resolution order when a group needs a price:
+            // frais_etablissement.montant (this centre) -> montant_defaut -> 0,
+            // and group_frais.montant stays the final authority for what a
+            // given group actually charges. A catalog entry left at 0.00 is
+            // invisible to the payment modal, whose unpaid-fees query keeps
+            // only fees where reste = montant - paye > 0.
+            $table->decimal('montant_defaut', 10, 2)->default(0);
             $table->string('statut', 20)->default('Actif');
             $table->timestamps();
         });
