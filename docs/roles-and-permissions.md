@@ -47,12 +47,26 @@ to grant on the Autorisations screen.
 
 ⚠ Employee `categorie` remains a **separate concept**: it is never used in an
 authorization check, and changing an employee's job title does **not** change
-their access. The names line up only so granting is obvious. The catégorie→role
-map in `GlsStaffSeeder::ROLE_PAR_CATEGORIE` is a **seeding convenience**, used
-once when creating a staff account; afterwards roles are assigned explicitly
-per user on the Autorisations screen. `Autre` is deliberately unmapped — an
-employee with no defined post gets no role, and therefore no access, until one
-is granted by hand.
+their access. The names line up only so granting is obvious.
+
+The catégorie→default-role map lives in ONE place:
+**`PermissionRegistry::defaultRoleFor()`**, shared by both consumers:
+
+- **`EmployeeObserver`** — when creating an employee auto-creates its login
+  (user_id was null), the new user gets the default role for the job title
+  immediately. Without it the account authenticates but every
+  `permission:`-guarded page answers 403 — a dead end that looks like a
+  broken deployment (this bit production on 21/08/2026). When `user_id` is
+  passed explicitly the caller owns the account and its roles; the observer
+  assigns nothing.
+- **`GlsStaffSeeder`** — same default at seed time, and never overwrites a
+  role already on the account (a promotion made on Autorisations survives a
+  re-seed).
+
+It is a **creation-time default only**: editing the catégorie later changes
+nothing, and the Autorisations screen remains the way to change access.
+`Autre` maps to no role — an employee with no defined post gets no access
+until one is granted by hand.
 
 ## 4. Permissions
 

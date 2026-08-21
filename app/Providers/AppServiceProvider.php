@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Observers\EmployeeObserver;
 use App\Services\Context\CurrentContext;
 use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -48,6 +49,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Hard-refuses `migrate:fresh`, `migrate:refresh`, `migrate:reset`
+        // and `db:wipe` in production — no interactive prompt to click
+        // through. On 21/08/2026 a `migrate:fresh --seed` on the VPS dropped
+        // all 41 production tables past the "APPLICATION IN PRODUCTION"
+        // confirmation; the data survived only because of the 02:30 pg_dump.
+        // Production migrations are `php artisan migrate --force` ONLY
+        // (CLAUDE.md §17).
+        DB::prohibitDestructiveCommands($this->app->isProduction());
+
         // Auto-generates login credentials when an Employee is created
         // (gls-crm-laravel-structure.md §5).
         Employee::observe(EmployeeObserver::class);

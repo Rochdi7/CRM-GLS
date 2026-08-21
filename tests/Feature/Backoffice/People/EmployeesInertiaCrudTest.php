@@ -99,6 +99,78 @@ final class EmployeesInertiaCrudTest extends TestCase
         $this->assertNotNull($employee->user_id);
     }
 
+    /**
+     * EmployeeObserver assigns the default role for the job title
+     * (PermissionRegistry::defaultRoleFor()) at creation — without it the
+     * new login authenticates but every permission-guarded page answers
+     * 403, a dead end that looks like a broken deployment.
+     */
+    public function test_a_created_employee_gets_the_default_role_for_its_category(): void
+    {
+        $this->actingAs($this->userWith('employees.view', 'employees.create'));
+
+        $this->post(route('backoffice.employees.store'), [
+            'nom' => 'Roleuse',
+            'prenom' => 'Dounia',
+            'sexe' => 'Femme',
+            'categorie' => Employee::CATEGORIE_CONSULTANT,
+            'statut' => Employee::STATUT_ACTIF,
+            'etablissement_ids' => $this->someCenterIds(),
+        ])->assertRedirect(route('backoffice.employees.index'));
+
+        $user = Employee::where('nom', 'Roleuse')->firstOrFail()->user;
+
+        $this->assertTrue($user->hasRole('consultant'));
+        // …and the role actually opens the door the 403 regression closed.
+        $this->assertTrue($user->can('dashboard.view'));
+        $this->assertTrue($user->can('registrations.create'));
+        $this->assertFalse($user->can('students.delete'));
+    }
+
+    /**
+     * « Autre » deliberately maps to NO role: an employee with no defined
+     * post gets no access until someone grants a role on Autorisations.
+     */
+    public function test_an_autre_employee_gets_no_role(): void
+    {
+        $this->actingAs($this->userWith('employees.view', 'employees.create'));
+
+        $this->post(route('backoffice.employees.store'), [
+            'nom' => 'Sansposte',
+            'prenom' => 'Nadir',
+            'sexe' => 'Homme',
+            'categorie' => Employee::CATEGORIE_AUTRE,
+            'statut' => Employee::STATUT_ACTIF,
+            'etablissement_ids' => $this->someCenterIds(),
+        ])->assertRedirect(route('backoffice.employees.index'));
+
+        $user = Employee::where('nom', 'Sansposte')->firstOrFail()->user;
+
+        $this->assertSame(0, $user->roles()->count());
+        $this->assertFalse($user->can('dashboard.view'));
+    }
+
+    /**
+     * The default role is creation-time only: when the employee is created
+     * with an explicit pre-existing user (user_id passed, observer skips
+     * credential generation), a role that user already holds is never
+     * overwritten or supplemented.
+     */
+    public function test_an_existing_user_with_a_role_is_left_untouched(): void
+    {
+        $existing = User::factory()->create();
+        $existing->assignRole('teacher');
+
+        Employee::factory()->create([
+            'user_id' => $existing->id,
+            'categorie' => Employee::CATEGORIE_CONSULTANT,
+        ]);
+
+        $existing->refresh();
+        $this->assertTrue($existing->hasRole('teacher'));
+        $this->assertFalse($existing->hasRole('consultant'));
+    }
+
     public function test_one_time_credentials_are_shown_at_most_once(): void
     {
         $this->actingAs($this->userWith('employees.view', 'employees.create'));

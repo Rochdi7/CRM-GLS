@@ -179,19 +179,20 @@ final class RolesAndPermissionsSeederTest extends TestCase
      * newly hired employee can always be granted one. « Autre » is the
      * deliberate exception (no defined post ⇒ no access).
      */
-    public function test_every_employee_category_has_a_matching_role(): void
+    public function test_every_employee_category_has_a_matching_default_role(): void
     {
-        $map = (new \ReflectionClass(\Database\Seeders\GlsStaffSeeder::class))
-            ->getConstant('ROLE_PAR_CATEGORIE');
+        foreach (Employee::CATEGORIES as $categorie) {
+            $role = PermissionRegistry::defaultRoleFor($categorie);
 
-        // « Autre » is the deliberate exception: no defined post ⇒ no role.
-        $this->assertSame(
-            [Employee::CATEGORIE_AUTRE],
-            array_values(array_diff(Employee::CATEGORIES, array_keys($map))),
-        );
+            if ($categorie === Employee::CATEGORIE_AUTRE) {
+                // « Autre » is the deliberate exception: no defined post ⇒ no
+                // role, no access, until one is granted by hand.
+                $this->assertNull($role);
 
-        // …and every catégorie maps to a role that actually exists.
-        foreach ($map as $categorie => $role) {
+                continue;
+            }
+
+            $this->assertNotNull($role, "Catégorie [$categorie] has no default role");
             $this->assertArrayHasKey(
                 $role,
                 PermissionRegistry::roles(),
@@ -199,6 +200,8 @@ final class RolesAndPermissionsSeederTest extends TestCase
             );
             $this->assertNotNull(Role::findByName($role));
         }
+
+        $this->assertNull(PermissionRegistry::defaultRoleFor('Nonexistent job title'));
     }
 
     public function test_a_user_can_receive_a_role_and_its_permissions(): void

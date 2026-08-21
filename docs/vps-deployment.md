@@ -665,6 +665,14 @@ cd /var/www/crm-gls
 
 php8.4 artisan down --render="errors::503" || true
 
+# Safety net: dump the database BEFORE anything touches it, with an
+# hour-minute stamp so it never overwrites the nightly 02:30 dump.
+# Added after 21/08/2026, when a migrate:fresh on production dropped all
+# tables and the nightly dump was the only thing that saved the data.
+mkdir -p /var/backups/crm-gls
+sudo -u postgres pg_dump -Fc gls_crm \
+  > "/var/backups/crm-gls/gls_crm-predeploy-$(date +%F-%H%M).dump"
+
 git pull origin main
 composer install --no-dev --optimize-autoloader --no-interaction
 npm ci
@@ -728,6 +736,18 @@ crontab -e
 
 This keeps 14 days of database dumps **and** uploaded media. Copy them off the
 VPS periodically — a backup on the same disk is not a backup.
+
+Three layers now stand between production data and a destructive command:
+
+1. **Nightly dump** (02:30 cron above) — the recovery floor.
+2. **Pre-deploy dump** — `deploy.sh` snapshots the database before every
+   deploy, timestamped to the minute so same-day dumps never overwrite
+   each other.
+3. **Hard block in the app** — `AppServiceProvider` calls
+   `DB::prohibitDestructiveCommands()` when `APP_ENV=production`, so
+   `migrate:fresh`, `migrate:refresh`, `migrate:reset` and `db:wipe` are
+   refused outright, with no interactive prompt to click through. Production
+   migrations are `php artisan migrate --force` only (CLAUDE.md §17).
 
 Restore procedure:
 

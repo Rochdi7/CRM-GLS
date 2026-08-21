@@ -270,6 +270,37 @@ final class PermissionRegistry
     }
 
     /**
+     * Default role for an employee job title (`Employee::CATEGORIES` value),
+     * or null for « Autre » / unknown — no defined post, no access until a
+     * role is granted by hand on the Autorisations screen.
+     *
+     * Single source of truth for the catégorie → role DEFAULT, used by
+     * `EmployeeObserver` (UI/import creations) and `GlsStaffSeeder` alike.
+     * It is a DEFAULT at creation time only: nothing re-derives permissions
+     * from `categorie` afterwards, and a role changed on the Autorisations
+     * screen is never overwritten (both callers assign only when the user
+     * holds no role at all).
+     */
+    public static function defaultRoleFor(string $categorie): ?string
+    {
+        return match ($categorie) {
+            \App\Models\Employee::CATEGORIE_DIRECTEUR => 'director',
+            \App\Models\Employee::CATEGORIE_DIRECTEUR_OPERATIONS => 'operations-director',
+            \App\Models\Employee::CATEGORIE_DIRECTEUR_FINANCIER => 'financial-director',
+            \App\Models\Employee::CATEGORIE_DIRECTEUR_QUALITE => 'quality-director',
+            \App\Models\Employee::CATEGORIE_DIRECTRICE_PEDAGOGIQUE => 'pedagogical-director',
+            \App\Models\Employee::CATEGORIE_COMPTABLE => 'accountant',
+            \App\Models\Employee::CATEGORIE_CONSULTANT => 'consultant',
+            \App\Models\Employee::CATEGORIE_RESPONSABLE_RH => 'hr-manager',
+            \App\Models\Employee::CATEGORIE_RESPONSABLE_ADMINISTRATIVE => 'administrative-manager',
+            \App\Models\Employee::CATEGORIE_ASSISTANTE_ADMINISTRATIVE => 'administrative-assistant',
+            \App\Models\Employee::CATEGORIE_ENSEIGNANT => 'teacher',
+            \App\Models\Employee::CATEGORIE_RESPONSABLE_MARKETING => 'marketing-manager',
+            default => null,
+        };
+    }
+
+    /**
      * Permissions NO role preset may hold — reachable only through the
      * `super-admin` Gate::before bypass, or granted one at a time by hand on
      * the Autorisations screen when a real case needs it.

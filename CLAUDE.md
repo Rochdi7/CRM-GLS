@@ -349,8 +349,14 @@ the database layer. Non-negotiable invariants already enforced in code:
   `Domain\Shared\Support\ReferenceGenerator` (EMP-/ETU-/INS-/ENC-/DEP-/RMB-/TRF-…),
   never typed by users.
 - **Creating an Employee auto-creates its login** (username + one-time password
-  flashed to session) via `EmployeeObserver` → `EmployeeCredentialService`.
-  Pass `user_id` explicitly to skip. No public registration ever.
+  flashed to session) via `EmployeeObserver` → `EmployeeCredentialService`,
+  **and assigns the default role for its catégorie**
+  (`PermissionRegistry::defaultRoleFor()` — the single catégorie→role map,
+  shared with `GlsStaffSeeder`) so the account is never role-less/403-locked.
+  Creation-time default only: `Autre` ⇒ no role, an existing role is never
+  overwritten, and editing the catégorie later changes nothing (`categorie`
+  never drives access at runtime, §16). Pass `user_id` explicitly to skip
+  both. No public registration ever.
 - **`niveau` / `categorie` / all `statut` fields are plain VARCHARs** validated
   against model constants (`Student::NIVEAUX`, `Employee::CATEGORIES`,
   `Group::STATUTS`…) — deliberate; do not "fix" with lookup tables (see the
@@ -785,7 +791,14 @@ JSONB data — don't add them speculatively.
   `json()`→`jsonb()` edits made to already-applied local migrations).
 - After a migration has run in **production**: never edit it — create a new
   migration instead.
-- Never use `migrate:fresh` in production.
+- Never use `migrate:fresh` in production — **now enforced in code**:
+  `AppServiceProvider` calls `DB::prohibitDestructiveCommands()` when
+  `APP_ENV=production`, so `migrate:fresh`/`migrate:refresh`/`migrate:reset`/
+  `db:wipe` are refused outright (even with `--force`). Added after the
+  21/08/2026 incident where a `migrate:fresh --seed` on the VPS dropped all
+  production tables past the interactive confirmation; recovery came from
+  the nightly pg_dump. `deploy.sh` also snapshots the DB before every deploy
+  (see docs/vps-deployment.md § Backups). Never remove this guard.
 - Production uses `php artisan migrate --force`.
 
 ### Query rules
