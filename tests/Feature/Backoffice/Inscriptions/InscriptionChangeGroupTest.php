@@ -72,12 +72,12 @@ final class InscriptionChangeGroupTest extends TestCase
         return $group;
     }
 
-    private function activeInscription(Group $group): Inscription
+    private function activeInscription(Group $group, string $reference = 'INS-CG1'): Inscription
     {
         $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
 
         return Inscription::create([
-            'reference' => 'INS-CG1', 'student_id' => $student->id, 'group_id' => $group->id,
+            'reference' => $reference, 'student_id' => $student->id, 'group_id' => $group->id,
             'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
             'statut' => Inscription::STATUT_ACTIVE, 'date_inscription' => '2025-09-15',
         ]);
@@ -213,6 +213,78 @@ final class InscriptionChangeGroupTest extends TestCase
         ])->assertRedirect(route('backoffice.inscriptions.index'));
 
         $this->assertNotNull(InscriptionFee::find($paidFee->id));
+    }
+
+    public function test_transferred_paid_fee_moves_with_its_payment_and_replaces_the_new_groups_same_fee(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.change-group'));
+        $oldGroup = $this->makeGroup();
+        $newGroup = $this->groupWithFee(500);
+        $frais = $newGroup->frais()->first();
+        $inscription = $this->activeInscription($oldGroup);
+
+        $paidFee = InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'frais_id' => $frais->id, 'nom' => 'Frais de rentrée',
+            'montant_initial' => 300, 'montant' => 300,
+            'date_echeance' => '2025-12-01', 'statut' => InscriptionFee::STATUT_PAYE,
+        ]);
+        $unpaidFee = InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => 'Frais impayé',
+            'montant_initial' => 200, 'montant' => 200,
+            'date_echeance' => '2025-12-01', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+        $caisse = Caisse::factory()->create(['etablissement_id' => $this->centre->id]);
+        $agent = Employee::factory()->create(['etablissement_id' => $this->centre->id]);
+        $encaissement = Encaissement::create([
+            'reference' => 'ENC-CG2', 'student_id' => $inscription->student_id,
+            'inscription_fee_id' => $paidFee->id, 'caisse_id' => $caisse->id, 'agent_id' => $agent->id,
+            'montant' => 300, 'methode' => 'Espèces', 'date_paiement' => '2025-12-01',
+        ]);
+
+        $this->post(route('backoffice.inscriptions.change-group', $inscription), [
+            'new_group_id' => $newGroup->id,
+            'date_fin' => '2026-01-10',
+            'date_debut' => '2026-01-11',
+            'transfer_fee_ids' => [$paidFee->id, $unpaidFee->id],
+        ])->assertRedirect(route('backoffice.inscriptions.index'));
+
+        $newInscription = Inscription::where('group_id', $newGroup->id)->firstOrFail();
+
+        // The paid line (and its payment) now belongs to the new inscription.
+        $this->assertSame($newInscription->id, $paidFee->fresh()->inscription_id);
+        $this->assertSame($paidFee->id, $encaissement->fresh()->inscription_fee_id);
+        // The new group's own "Frais de rentrée" was not billed a second time.
+        $this->assertSame(1, $newInscription->fees()->count());
+        $this->assertSame('300.00', (string) $newInscription->fresh()->montant_total);
+        // An unpaid line has nothing to transfer — it stays on the old one.
+        $this->assertSame($inscription->id, $unpaidFee->fresh()->inscription_id);
+        $this->assertSame('200.00', (string) $inscription->fresh()->montant_total);
+        // The archived snapshot excludes the money that followed the student.
+        $this->assertSame('0.00', (string) InscriptionHistorique::where('inscription_id', $inscription->id)->first()->montant_paye);
+    }
+
+    public function test_transfer_ignores_fees_of_another_inscription(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.change-group'));
+        $oldGroup = $this->makeGroup();
+        $newGroup = $this->makeGroup();
+        $inscription = $this->activeInscription($oldGroup);
+        $other = $this->activeInscription($this->makeGroup(), 'INS-CG-OTHER');
+
+        $foreignFee = InscriptionFee::create([
+            'inscription_id' => $other->id, 'nom' => 'Frais étranger',
+            'montant_initial' => 300, 'montant' => 300,
+            'date_echeance' => '2025-12-01', 'statut' => InscriptionFee::STATUT_PAYE,
+        ]);
+
+        $this->post(route('backoffice.inscriptions.change-group', $inscription), [
+            'new_group_id' => $newGroup->id,
+            'date_fin' => '2026-01-10',
+            'date_debut' => '2026-01-11',
+            'transfer_fee_ids' => [$foreignFee->id],
+        ])->assertRedirect(route('backoffice.inscriptions.index'));
+
+        $this->assertSame($other->id, $foreignFee->fresh()->inscription_id);
     }
 
     public function test_user_without_change_group_permission_is_forbidden(): void

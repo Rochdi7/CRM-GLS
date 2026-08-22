@@ -195,13 +195,21 @@ export default function InscriptionsIndex({
         date_debut: string;
         unpaid_fees_scope: '' | 'overdue_only' | 'all';
         note: string;
+        transfer_fee_ids: number[];
     }>({
         new_group_id: '',
         date_fin: new Date().toISOString().slice(0, 10),
         date_debut: new Date().toISOString().slice(0, 10),
         unpaid_fees_scope: '',
         note: '',
+        transfer_fee_ids: [],
     });
+    // "Transférer des frais" — the current inscription's paid / partially
+    // paid lines the user may carry over (with their payments) to the new
+    // inscription instead of leaving them in the archived one.
+    const [showTransferFees, setShowTransferFees] = useState(false);
+    const [transferableFees, setTransferableFees] = useState<InscriptionFeeLine[]>([]);
+    const [loadingTransferableFees, setLoadingTransferableFees] = useState(false);
     // Separate form for the edit modal's fee table — its own endpoint
     // (PUT .../fees), independent processing/errors from the base-fields form.
     const feesForm = useForm<{ fee_lines: InscriptionFeeLine[] }>({ fee_lines: [] });
@@ -771,12 +779,39 @@ export default function InscriptionsIndex({
             date_debut: new Date().toISOString().slice(0, 10),
             unpaid_fees_scope: '',
             note: '',
+            transfer_fee_ids: [],
         });
+        setShowTransferFees(false);
+        setTransferableFees([]);
+        setLoadingTransferableFees(true);
+        fetch(`/backoffice/inscriptions/${inscription.id}/fees`, { headers: { Accept: 'application/json' } })
+            .then((response) => response.json())
+            .then((data: { fees: InscriptionFeeLine[] }) =>
+                setTransferableFees(data.fees.filter((fee) => (parseFloat(fee.paye ?? '0') || 0) > 0)),
+            )
+            .catch(() => setTransferableFees([]))
+            .finally(() => setLoadingTransferableFees(false));
     }
 
     function closeChangeGroup() {
         setChangeGroupTarget(null);
         changeGroupForm.clearErrors();
+    }
+
+    function toggleTransferFee(id: number) {
+        const current = changeGroupForm.data.transfer_fee_ids;
+        changeGroupForm.setData(
+            'transfer_fee_ids',
+            current.includes(id) ? current.filter((feeId) => feeId !== id) : [...current, id],
+        );
+    }
+
+    function toggleShowTransferFees() {
+        const next = !showTransferFees;
+        setShowTransferFees(next);
+        if (!next) {
+            changeGroupForm.setData('transfer_fee_ids', []);
+        }
     }
 
     function submitChangeGroup(event: FormEvent) {
@@ -1966,6 +2001,54 @@ export default function InscriptionsIndex({
                                                 Ne rien supprimer
                                             </label>
                                         </div>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="col-12 mt-3">
+                                <div className="form-check">
+                                    <input
+                                        type="checkbox"
+                                        className="form-check-input"
+                                        id="cg-transfer-fees"
+                                        checked={showTransferFees}
+                                        onChange={toggleShowTransferFees}
+                                    />
+                                    <label className="form-check-label" htmlFor="cg-transfer-fees">
+                                        Transférer des frais payés vers la nouvelle inscription
+                                    </label>
+                                </div>
+                                {showTransferFees && (
+                                    <div className="mt-2 ms-4">
+                                        {loadingTransferableFees ? (
+                                            <p className="text-muted fs-13 mb-0">Chargement…</p>
+                                        ) : transferableFees.length === 0 ? (
+                                            <p className="text-muted fs-13 mb-0">Aucun frais payé sur cette inscription.</p>
+                                        ) : (
+                                            <>
+                                                <p className="text-muted fs-13 mb-2">
+                                                    Les frais cochés (et leurs paiements) seront déplacés vers la nouvelle inscription
+                                                    et retirés de l'ancienne. Le frais équivalent du nouveau groupe ne sera pas facturé
+                                                    une seconde fois.
+                                                </p>
+                                                {transferableFees.map((fee) => (
+                                                    <div className="form-check" key={fee.id}>
+                                                        <input
+                                                            type="checkbox"
+                                                            className="form-check-input"
+                                                            id={`cg-transfer-fee-${fee.id}`}
+                                                            checked={changeGroupForm.data.transfer_fee_ids.includes(fee.id as number)}
+                                                            onChange={() => toggleTransferFee(fee.id as number)}
+                                                        />
+                                                        <label className="form-check-label" htmlFor={`cg-transfer-fee-${fee.id}`}>
+                                                            {fee.nom} — payé {parseFloat(fee.paye ?? '0').toFixed(2)} DH
+                                                            {fee.statut !== 'Payé' && (
+                                                                <span className="badge badge-soft-warning ms-2">{fee.statut}</span>
+                                                            )}
+                                                        </label>
+                                                    </div>
+                                                ))}
+                                            </>
+                                        )}
                                     </div>
                                 )}
                             </div>

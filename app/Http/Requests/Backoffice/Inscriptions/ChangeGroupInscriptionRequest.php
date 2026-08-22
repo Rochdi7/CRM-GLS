@@ -26,6 +26,8 @@ final class ChangeGroupInscriptionRequest extends FormRequest
             'date_debut' => ['required', 'date', 'after_or_equal:date_fin'],
             'unpaid_fees_scope' => ['nullable', Rule::in(ChangerGroupeInscription::SCOPES)],
             'note' => ['nullable', 'string'],
+            'transfer_fee_ids' => ['nullable', 'array'],
+            'transfer_fee_ids.*' => ['integer', 'exists:inscription_fees,id'],
         ];
     }
 }

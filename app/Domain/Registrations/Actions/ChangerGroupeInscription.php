@@ -48,6 +48,7 @@ final class ChangerGroupeInscription
         ?string $unpaidFeesScope,
         ?string $note,
         ?Employee $archivedBy,
+        array $transferFeeIds = [],
     ): Inscription {
         if ($inscription->statut !== Inscription::STATUT_ACTIVE) {
             throw ValidationException::withMessages([
@@ -55,14 +56,20 @@ final class ChangerGroupeInscription
             ]);
         }
 
-        return DB::transaction(function () use ($inscription, $newGroup, $dateFin, $dateDebut, $unpaidFeesScope, $note, $archivedBy): Inscription {
+        return DB::transaction(function () use ($inscription, $newGroup, $dateFin, $dateDebut, $unpaidFeesScope, $note, $archivedBy, $transferFeeIds): Inscription {
+            $transferred = $this->feesToTransfer($inscription, $transferFeeIds);
+
+            // The historique snapshot records what was paid DURING the old
+            // enrollment; money that follows the student to the new group
+            // is not part of it.
             $montantPaye = (float) InscriptionFee::query()
                 ->where('inscription_id', $inscription->id)
+                ->whereNotIn('id', $transferred->pluck('id'))
                 ->get()
                 ->sum(fn (InscriptionFee $fee): float => $fee->montantPaye());
 
             if ($unpaidFeesScope !== null) {
-                $this->removeUnpaidFees($inscription, $unpaidFeesScope, $dateFin);
+                $this->removeUnpaidFees($inscription, $unpaidFeesScope, $dateFin, $transferred->pluck('id')->all());
             }
 
             $inscription->update([
@@ -80,17 +87,60 @@ final class ChangerGroupeInscription
                 'archived_by' => $archivedBy?->id,
             ]);
 
-            $newInscription = $this->createNewInscription($inscription, $newGroup, $dateDebut);
+            $newInscription = $this->createNewInscription($inscription, $newGroup, $dateDebut, $transferred);
 
             $inscription->historique->update(['new_inscription_id' => $newInscription->id]);
+
+            // Moving the fee row keeps every Encaissement attached to it
+            // (they reference the fee, not the inscription), so the money
+            // follows the student without any payment being rewritten.
+            if ($transferred->isNotEmpty()) {
+                InscriptionFee::query()
+                    ->whereIn('id', $transferred->pluck('id'))
+                    ->update(['inscription_id' => $newInscription->id]);
+
+                $newInscription->update([
+                    'montant_total' => $newInscription->fees()->whereNull('masque_le')->sum('montant') ?: null,
+                ]);
+                $inscription->update([
+                    'montant_total' => $inscription->fees()->whereNull('masque_le')->sum('montant') ?: null,
+                ]);
+            }
 
             return $newInscription;
         });
     }
 
-    private function removeUnpaidFees(Inscription $inscription, string $scope, string $dateFin): void
+    /**
+     * Fees the user ticked to carry over — only rows of THIS inscription that
+     * actually received money (fully or partially paid); an unpaid line has
+     * nothing to transfer and is handled by the unpaid-fees scope instead.
+     *
+     * @param  array<int, int|string>  $ids
+     * @return \Illuminate\Support\Collection<int, InscriptionFee>
+     */
+    private function feesToTransfer(Inscription $inscription, array $ids): \Illuminate\Support\Collection
     {
-        $query = $inscription->fees()->where('statut', '!=', InscriptionFee::STATUT_PAYE);
+        if ($ids === []) {
+            return collect();
+        }
+
+        return $inscription->fees()
+            ->whereIn('id', $ids)
+            ->whereNull('masque_le')
+            ->get()
+            ->filter(fn (InscriptionFee $fee): bool => $fee->montantPaye() > 0)
+            ->values();
+    }
+
+    /**
+     * @param  array<int, int>  $keepIds
+     */
+    private function removeUnpaidFees(Inscription $inscription, string $scope, string $dateFin, array $keepIds = []): void
+    {
+        $query = $inscription->fees()
+            ->where('statut', '!=', InscriptionFee::STATUT_PAYE)
+            ->whereNotIn('id', $keepIds);
 
         if ($scope === self::SCOPE_OVERDUE_ONLY) {
             $query->whereDate('date_echeance', '>', $dateFin);
@@ -104,9 +154,19 @@ final class ChangerGroupeInscription
         });
     }
 
-    private function createNewInscription(Inscription $old, Group $newGroup, string $dateDebut): Inscription
+    /**
+     * @param  \Illuminate\Support\Collection<int, InscriptionFee>  $transferred
+     */
+    private function createNewInscription(Inscription $old, Group $newGroup, string $dateDebut, \Illuminate\Support\Collection $transferred): Inscription
     {
-        $lines = $this->getGroupInscriptionFees->__invoke($newGroup)->map(fn (array $fee): array => [
+        // A transferred fee replaces the new group's own line for the same
+        // catalog entry — a paid "Frais d'inscription" must not be charged
+        // a second time.
+        $transferredFraisIds = $transferred->pluck('frais_id')->filter()->all();
+
+        $lines = $this->getGroupInscriptionFees->__invoke($newGroup)
+            ->reject(fn (array $fee): bool => in_array($fee['fraisId'], $transferredFraisIds, true))
+            ->map(fn (array $fee): array => [
             'frais_id' => $fee['fraisId'],
             'nom' => $fee['nom'],
             'montant_initial' => (float) $fee['montantInitial'],

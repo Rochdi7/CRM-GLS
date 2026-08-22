@@ -432,6 +432,7 @@ final class InscriptionController extends Controller
             $data['unpaid_fees_scope'] ?? null,
             $data['note'] ?? null,
             $request->user()->employee,
+            array_map('intval', $data['transfer_fee_ids'] ?? []),
         );
 
         return redirect()->route('backoffice.inscriptions.index')
