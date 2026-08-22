@@ -1130,6 +1130,11 @@ export interface InscriptionFormOption {
 }
 
 /** One "Frais disponible" line loaded from the selected group (GetGroupInscriptionFees). */
+/** Catalog fee for the edit modal's "Ajouter un frais" select; montantDefaut is the fallback amount when the group assigns no own amount. */
+export interface InscriptionFraisOption extends InscriptionFormOption {
+    montantDefaut: MoneyDisplay;
+}
+
 export interface InscriptionGroupFee {
     fraisId: number;
     nom: string;
@@ -1199,7 +1204,7 @@ export interface InscriptionsPageProps {
     students: InscriptionFormOption[];
     groups: InscriptionFormOption[];
     /** Active fee catalog — feeds the edit modal's "Ajouter un frais" picker. */
-    frais: InscriptionFormOption[];
+    frais: InscriptionFraisOption[];
     /** UI convenience only — hides the edit-modal fee controls; real enforcement is registrations.manage-fees on the server (InscriptionController::updateFees). */
     canManageFees: boolean;
     /** UI convenience only — hides the "Changement de groupe" row action; real enforcement is registrations.change-group on the server (InscriptionController::changeGroup). */

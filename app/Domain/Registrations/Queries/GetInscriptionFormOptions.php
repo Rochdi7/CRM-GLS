@@ -71,6 +71,12 @@ final class GetInscriptionFormOptions
             ->where('statut', Frais::STATUT_ACTIF)
             ->orderBy('nom')
             ->get()
-            ->map(fn (Frais $f): array => ['id' => $f->id, 'label' => $f->nom]);
+            ->map(fn (Frais $f): array => [
+                'id' => $f->id,
+                'label' => $f->nom,
+                // Catalog fallback when the inscription's group does not
+                // assign this fee — a re-added line must never start at 0.
+                'montantDefaut' => number_format($f->montantPourCentre($this->context->etablissementId()), 2, '.', ''),
+            ]);
     }
 }

@@ -24,6 +24,7 @@ import StatusBadge from '@/Components/Details/StatusBadge';
 import type {
     HiddenInscriptionFee,
     InscriptionFeeLine,
+    InscriptionGroupFee,
     InscriptionGroupFeesResponse,
     InscriptionRow,
     InscriptionsPageProps,
@@ -157,6 +158,10 @@ export default function InscriptionsIndex({
     const [activeTab, setActiveTab] = useState<'affectation' | 'contact' | 'parent' | 'autre'>('affectation');
     const [loadingGroupFees, setLoadingGroupFees] = useState(false);
     const [loadingEditingFees, setLoadingEditingFees] = useState(false);
+    // The inscription's group fee assignments (per-group montant + échéance),
+    // so a fee re-added in the edit modal starts from the same amount the
+    // create form would have proposed — never from an empty 0 DH line.
+    const [editingGroupFees, setEditingGroupFees] = useState<InscriptionGroupFee[]>([]);
     // Books ("Livre" stock) available at the selected group's center — create form.
     const [availableLivres, setAvailableLivres] = useState<Array<{ id: number; nom: string; quantite: number }>>([]);
     // Edit modal's own book state: what's already assigned + what's pickable at this inscription's center.
@@ -276,6 +281,14 @@ export default function InscriptionsIndex({
                 setHiddenFees(data.hiddenFees);
             })
             .finally(() => setLoadingEditingFees(false));
+
+        setEditingGroupFees([]);
+        if (inscription.groupId) {
+            fetch(`/backoffice/groups/${inscription.groupId}/inscription-fees`, { headers: { Accept: 'application/json' } })
+                .then((response) => response.json())
+                .then((data: InscriptionGroupFeesResponse) => setEditingGroupFees(data.fees))
+                .catch(() => setEditingGroupFees([]));
+        }
 
         setEditingLivreIds([]);
         setEditingAvailableLivres([]);
@@ -511,16 +524,18 @@ export default function InscriptionsIndex({
             return;
         }
 
+        const groupFee = editingGroupFees.find((fee) => fee.fraisId === catalogFee.id);
+
         const next = [
             ...feesForm.data.fee_lines,
             {
                 fraisId: catalogFee.id,
                 nom: catalogFee.label,
-                montantInitial: '',
+                montantInitial: groupFee?.montantInitial ?? catalogFee.montantDefaut,
                 remisePct: '',
                 remiseMontant: '',
                 note: '',
-                dateEcheance: '',
+                dateEcheance: groupFee?.dateEcheance ?? '',
             },
         ];
 
