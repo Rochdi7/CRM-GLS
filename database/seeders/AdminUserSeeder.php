@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Models\Employee;
 use App\Models\Etablissement;
 use App\Models\Role;
@@ -69,12 +70,17 @@ final class AdminUserSeeder extends Seeder
 
         // user_id is set explicitly, so EmployeeObserver does NOT generate
         // a second login for this employee.
-        $employee = Employee::query()->updateOrCreate(
-            ['user_id' => $user->id],
+        $employee = Employee::query()->firstOrNew(['user_id' => $user->id]);
+
+        // Only on first creation: on a live database EMP-001 may already
+        // belong to a real staff member, and an existing reference must never
+        // be rewritten (it is printed on documents).
+        if (! $employee->exists) {
+            $employee->reference = ReferenceGenerator::make('EMP', 'employees');
+        }
+
+        $employee->fill(
             [
-                // Même format que ReferenceGenerator::make('EMP', 'employees')
-                // et que GlsStaffSeeder — EMP-001, pas EMP-000001.
-                'reference' => 'EMP-001',
                 'nom' => 'Admin',
                 'prenom' => 'GLS',
                 // Sans sexe, photoUrl() n'a pas d'avatar par défaut cohérent.
@@ -83,7 +89,7 @@ final class AdminUserSeeder extends Seeder
                 'statut' => Employee::STATUT_ACTIF,
                 'email' => $email,
             ],
-        );
+        )->save();
 
         // An employee must belong to at least one center (CLAUDE.md §16). The
         // dev admin gets every center, so the context switcher and the
