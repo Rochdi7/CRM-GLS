@@ -159,7 +159,7 @@ Shared components (reuse these — do not re-invent per page):
   Remboursements, Stock, etc.) as soon as it gets one. **The same rule covers
   the Centre *column*, not just the filter** — wrap both the `<th>` and its
   matching `<td>` in `{!centerLocked && …}` (done for Employees, Students,
-  Users, GroupsHistorique, Import, Settings/SallesPanel), and remember to make
+  Users, GroupsHistorique, Import, Settings/SallesPanel, Stock), and remember to make
   any hard-coded `colSpan` on the empty-state row conditional too. Detail/Show
   pages are exempt: there the centre is an attribute of the single record being
   viewed, not a redundant repeat of the active context (see `Groups/Show.tsx`).
@@ -569,14 +569,23 @@ reference data plus the real GLS staff**, all of it idempotent and safe to
 re-run on a live database: `RolesAndPermissionsSeeder`,
 `ReferentialDataSeeder` (7 GLS centers, rooms, academic years),
 `AdminUserSeeder`, the locked catalogs — `TypeDepenseSeeder`,
-`StockTypeSeeder`, `FraisSeeder`, `BanqueSeeder`, `MotifAnnulationSeeder` —
-and `GlsStaffSeeder`. **It creates no student, group, inscription, stock or
-money record.**
+`StockTypeSeeder`, `BookStockSeeder`, `FraisSeeder`, `BanqueSeeder`,
+`MotifAnnulationSeeder` — and `GlsStaffSeeder`. **It creates no student,
+group, inscription, stock quantity or money record.**
+
+**`BookStockSeeder` is catalog data, not demo data**: it creates the 8 GLS
+book titles (`BookStockSeeder::TITLES`) as ONE `stock_articles` row PER
+center (stock is always per center — `etablissement_id` is never NULL for a
+book), at `quantite` = 0 and with NO movement. Real quantities enter through
+an « Entrée » movement in Gestion du stock. It is idempotent per
+(title, center): re-running only adds titles to centers created since, never
+touches an existing quantity. Never give it a starting quantity again (the
+deleted version seeded 40 units per row — that is demo data).
 
 ⚠ **There is no demo/fake-data seeder any more, and none may be added.** The
 whole `Demo*` family (`DemoSeeder`, `DemoData`, `DemoFinance`,
 `DemoRoleUsers`, `DemoStock`, `DemoDashboard`, `DemoRecouvrement`,
-`DemoLongueDuree`) and `BookStockSeeder` were **deleted**: this seeder set is
+`DemoLongueDuree`) was **deleted**: this seeder set is
 production-only, so `db:seed` is safe to run on the live database without
 picking through which classes are fake. The old `ALLOW_DEMO_SEED` env guard
 and the `ETU-DEMO*` / `ETU-DASH*` / `ETU-RETARD*` / `EMP-ROLE*` reference

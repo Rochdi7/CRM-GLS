@@ -54,6 +54,23 @@ final class AnneeScolaireController extends Controller
     }
 
     /**
+     * Make this year the application default (used as the initial active
+     * year of the context switcher). Same single-transaction swap as
+     * persist(): the previous default is cleared in the same statement.
+     */
+    public function setDefault(AnneeScolaire $annees_scolaire): RedirectResponse
+    {
+        $this->authorize('update', $annees_scolaire);
+
+        if (! $annees_scolaire->par_defaut) {
+            $this->persist(['par_defaut' => true], $annees_scolaire);
+        }
+
+        return redirect()->route('backoffice.settings', ['tab' => 'annees-scolaires'])
+            ->with('success', __(':name is now the default academic year.', ['name' => $annees_scolaire->nom]));
+    }
+
+    /**
      * Guarded like the Livewire tab: an academic year still referenced by
      * groups/inscriptions cannot be removed. `delete` field error (not a
      * flash) so the React confirm-dialog stays open and shows it inline.

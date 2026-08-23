@@ -18,10 +18,11 @@ use Illuminate\Database\Seeder;
  *
  * ⚠ There is NO demo/fake data seeder any more. The whole Demo* family
  * (DemoSeeder, DemoData, DemoFinance, DemoRoleUsers, DemoStock,
- * DemoDashboard, DemoRecouvrement, DemoLongueDuree) and BookStockSeeder
- * were deleted on purpose: this seeder set is production-only. Never add a
- * seeder that invents business records — real quantities and real students
- * come from the Import screen.
+ * DemoDashboard, DemoRecouvrement, DemoLongueDuree) was deleted on purpose:
+ * this seeder set is production-only. Never add a seeder that invents
+ * business records — real quantities and real students come from the Import
+ * screen. BookStockSeeder is catalog data, not demo data: it creates the 8
+ * GLS book titles per center at quantity 0 and never a movement.
  *
  * AdminUserSeeder still runs: a database with no super-admin is unusable
  * (every permission-protected route answers 403). It is guarded to local
@@ -44,10 +45,16 @@ class DatabaseSeeder extends Seeder
             AdminUserSeeder::class,
             TypeDepenseSeeder::class,
             StockTypeSeeder::class,
+            // AFTER StockTypeSeeder (needs « Livre ») and ReferentialDataSeeder
+            // (one row per center).
+            BookStockSeeder::class,
             FraisSeeder::class,
             BanqueSeeder::class,
             MotifAnnulationSeeder::class,
             GlsStaffSeeder::class,
+            // Les enseignants : pas d'e-mail sur le fichier, donc pas de
+            // compte de connexion — fiches employé seules (voir sa docblock).
+            GlsEnseignantsSeeder::class,
         ]);
     }
 }

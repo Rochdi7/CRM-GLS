@@ -556,6 +556,7 @@ export interface StockArticleRow {
     quantite: number;
     seuilAlerte: number | null;
     enAlerte: boolean;
+    etablissementId: number | null;
     etablissement: string | null;
     statut: string;
     note: string | null;
@@ -565,6 +566,7 @@ export interface StockArticleRow {
 export interface StockArticleForm {
     nom: string;
     stock_type_id: number | '';
+    etablissement_id: number | '';
     seuil_alerte: string;
     statut: string;
     note: string;

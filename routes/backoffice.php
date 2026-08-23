@@ -133,6 +133,10 @@ Route::prefix('backoffice')
             // permission-protected endpoints (still policy-backed); the Settings
             // page is the primary UI for them.
             Route::resource('etablissements', EtablissementController::class);
+            // One-click « Définir par défaut » from the Settings tab (policy
+            // `update` on the year; only one year is par_defaut at a time).
+            Route::patch('annees-scolaires/{annees_scolaire}/default', [AnneeScolaireController::class, 'setDefault'])
+                ->name('annees-scolaires.set-default');
             Route::resource('annees-scolaires', AnneeScolaireController::class)->except(['show']);
             Route::resource('salles', SalleController::class)->except(['show']);
             // Frais (fee catalog) — new in Phase 6 (docs/phase-6-simple-crud-

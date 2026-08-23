@@ -1,4 +1,4 @@
-import { useForm } from '@inertiajs/react';
+import { router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import Modal from '@/Components/Modals/Modal';
 import ConfirmDialog from '@/Components/Modals/ConfirmDialog';
@@ -83,6 +83,10 @@ export default function AnneesScolairesPanel({ anneesScolaires, permissions }: A
         }
     }
 
+    function setDefault(row: AnneeScolaireRow) {
+        router.patch(`/backoffice/annees-scolaires/${row.id}/default`, {}, { preserveScroll: true });
+    }
+
     function confirmDelete() {
         if (!deleteTarget) {
             return;
@@ -142,7 +146,10 @@ export default function AnneesScolairesPanel({ anneesScolaires, permissions }: A
                         <td>{row.dateFin}</td>
                         <td>
                             {row.parDefaut ? (
-                                <span className="badge badge-soft-success">Par défaut</span>
+                                <span className="badge badge-soft-success">
+                                    <i className="ti ti-star-filled me-1" />
+                                    Par défaut
+                                </span>
                             ) : (
                                 <span className="text-muted">—</span>
                             )}
@@ -157,6 +164,11 @@ export default function AnneesScolairesPanel({ anneesScolaires, permissions }: A
                                 {permissions.update && (
                                     <RowActionItem icon="ti-edit" onClick={() => openEdit(row)}>
                                         Modifier
+                                    </RowActionItem>
+                                )}
+                                {permissions.update && !row.parDefaut && (
+                                    <RowActionItem icon="ti-star" onClick={() => setDefault(row)}>
+                                        Définir par défaut
                                     </RowActionItem>
                                 )}
                                 {permissions.delete && (

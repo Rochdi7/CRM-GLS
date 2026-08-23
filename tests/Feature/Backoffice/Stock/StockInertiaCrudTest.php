@@ -86,6 +86,7 @@ final class StockInertiaCrudTest extends TestCase
         $this->post(route('backoffice.stock-articles.store'), [
             'nom' => 'Marqueurs effaçables',
             'stock_type_id' => $this->fournituresType->id,
+            'etablissement_id' => $this->centre->id,
             'seuil_alerte' => 10,
             'statut' => StockArticle::STATUT_ACTIF,
         ])->assertRedirect(route('backoffice.stock.index'));
@@ -94,6 +95,76 @@ final class StockInertiaCrudTest extends TestCase
         $this->assertMatchesRegularExpression('/^ART-\d{3,}$/', $article->reference);
         $this->assertSame(0, $article->quantite);
         $this->assertSame(10, $article->seuil_alerte);
+        $this->assertSame($this->centre->id, $article->etablissement_id);
+    }
+
+    public function test_under_all_centers_the_article_form_must_name_a_center(): void
+    {
+        $this->actingAs($this->userWith('stock.view', 'stock.create'));
+
+        $this->from(route('backoffice.stock.index'))->post(route('backoffice.stock-articles.store'), [
+            'nom' => 'Marqueurs effaçables',
+            'stock_type_id' => $this->fournituresType->id,
+            'statut' => StockArticle::STATUT_ACTIF,
+        ])->assertSessionHasErrors('etablissement_id');
+
+        $this->assertSame(0, StockArticle::count());
+    }
+
+    public function test_an_active_center_context_wins_over_the_form_center(): void
+    {
+        $otherCentre = Etablissement::factory()->create();
+
+        $this->actingAs($this->userWith('stock.view', 'stock.create'))
+            ->withSession(['context.etablissement_id' => $this->centre->id]);
+
+        $this->post(route('backoffice.stock-articles.store'), [
+            'nom' => 'Marqueurs effaçables',
+            'stock_type_id' => $this->fournituresType->id,
+            'etablissement_id' => $otherCentre->id, // ignored: the top-bar center is authoritative
+            'statut' => StockArticle::STATUT_ACTIF,
+        ])->assertRedirect(route('backoffice.stock.index'));
+
+        $this->assertSame($this->centre->id, StockArticle::firstOrFail()->etablissement_id);
+    }
+
+    public function test_the_index_exposes_centers_and_the_center_locked_flag(): void
+    {
+        $this->actingAs($this->userWith('stock.view'))
+            ->get(route('backoffice.stock.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('centerLocked', false)
+                ->has('etablissements', 1)
+            );
+
+        $this->actingAs($this->userWith('stock.view'))
+            ->withSession(['context.etablissement_id' => $this->centre->id])
+            ->get(route('backoffice.stock.index'))
+            ->assertInertia(fn (Assert $page) => $page->where('centerLocked', true));
+    }
+
+    public function test_the_center_of_an_article_with_movements_cannot_be_changed(): void
+    {
+        $otherCentre = Etablissement::factory()->create();
+        $article = $this->makeArticle(['etablissement_id' => $this->centre->id, 'quantite' => 3]);
+        StockMouvement::create([
+            'stock_article_id' => $article->id,
+            'type' => StockMouvement::TYPE_ENTREE,
+            'quantite' => 3,
+            'quantite_avant' => 0,
+            'quantite_apres' => 3,
+        ]);
+
+        $this->actingAs($this->userWith('stock.view', 'stock.update'));
+
+        $this->put(route('backoffice.stock-articles.update', $article), [
+            'nom' => $article->nom,
+            'stock_type_id' => $this->livreType->id,
+            'etablissement_id' => $otherCentre->id,
+            'statut' => StockArticle::STATUT_ACTIF,
+        ])->assertRedirect();
+
+        $this->assertSame($this->centre->id, $article->fresh()->etablissement_id);
     }
 
     public function test_store_requires_stock_create(): void
@@ -115,6 +186,7 @@ final class StockInertiaCrudTest extends TestCase
         $this->put(route('backoffice.stock-articles.update', $article), [
             'nom' => 'Manuel A1 (2e édition)',
             'stock_type_id' => $this->livreType->id,
+            'etablissement_id' => $this->centre->id,
             'quantite' => 999, // must be ignored — quantities move via movements only
             'statut' => StockArticle::STATUT_INACTIF,
         ])->assertRedirect();

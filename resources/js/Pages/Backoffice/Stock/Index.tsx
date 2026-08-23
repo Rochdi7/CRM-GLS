@@ -41,6 +41,7 @@ interface StockIndexProps {
     filters: {
         search: string;
         stockTypeFilter: string;
+        etablissementFilter: string;
         statutFilter: string;
         alerteFilter: string;
         articleFilter: string;
@@ -57,6 +58,9 @@ interface StockIndexProps {
     mouvementTypes: string[];
     permissions: { create: boolean; update: boolean; delete: boolean; move: boolean };
     typePermissions: CrudPermissions;
+    etablissements: { id: number; nom_centre: string }[];
+    /** True when the top-bar context is on one center — the Centre filter/column/select are then redundant (CLAUDE.md §5). */
+    centerLocked: boolean;
 }
 
 const STOCK_TYPE_STATUT_OPTIONS: SelectOption[] = [
@@ -67,6 +71,7 @@ const STOCK_TYPE_STATUT_OPTIONS: SelectOption[] = [
 const EMPTY_ARTICLE_FORM: StockArticleForm = {
     nom: '',
     stock_type_id: '',
+    etablissement_id: '',
     seuil_alerte: '',
     statut: 'Actif',
     note: '',
@@ -109,9 +114,12 @@ export default function StockIndex({
     mouvementTypes,
     permissions,
     typePermissions,
+    etablissements,
+    centerLocked,
 }: StockIndexProps) {
     const [showArticleModal, setShowArticleModal] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
+    const [editingHasMouvements, setEditingHasMouvements] = useState(false);
     const [showMouvementModal, setShowMouvementModal] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<StockArticleRow | null>(null);
     const [deleteError, setDeleteError] = useState<string>();
@@ -155,6 +163,7 @@ export default function StockIndex({
         articleForm.reset();
         articleForm.clearErrors();
         setEditingId(null);
+        setEditingHasMouvements(false);
         setShowArticleModal(true);
     }
 
@@ -162,12 +171,14 @@ export default function StockIndex({
         articleForm.setData({
             nom: row.nom,
             stock_type_id: row.stockTypeId,
+            etablissement_id: row.etablissementId ?? '',
             seuil_alerte: row.seuilAlerte !== null ? String(row.seuilAlerte) : '',
             statut: row.statut,
             note: row.note ?? '',
         });
         articleForm.clearErrors();
         setEditingId(row.id);
+        setEditingHasMouvements(row.mouvementsCount > 0);
         setShowArticleModal(true);
     }
 
@@ -381,6 +392,20 @@ export default function StockIndex({
                                     onChange={(event) => reload({ stockTypeFilter: event.target.value })}
                                 />
                             </div>
+                            {!centerLocked && (
+                                <div style={{ width: 200 }}>
+                                    <label className="form-label" htmlFor="stk-f-centre">
+                                        Centre
+                                    </label>
+                                    <SelectField
+                                        id="stk-f-centre"
+                                        options={etablissements.map((e) => ({ value: e.id, label: e.nom_centre }))}
+                                        placeholder="Tous les centres"
+                                        value={filters.etablissementFilter}
+                                        onChange={(event) => reload({ etablissementFilter: event.target.value })}
+                                    />
+                                </div>
+                            )}
                             <div style={{ width: 180 }}>
                                 <label className="form-label" htmlFor="stk-f-statut">
                                     Statut
@@ -430,6 +455,7 @@ export default function StockIndex({
                                 <th>Référence</th>
                                 <th>Article</th>
                                 <th>Catégorie</th>
+                                {!centerLocked && <th>Centre</th>}
                                 <th>Quantité</th>
                                 <th>Seuil</th>
                                 <th>Statut</th>
@@ -442,6 +468,7 @@ export default function StockIndex({
                                 <td className="text-muted">{row.reference}</td>
                                 <td className="fw-medium">{row.nom}</td>
                                 <td>{row.stockType ?? '—'}</td>
+                                {!centerLocked && <td>{row.etablissement ?? '—'}</td>}
                                 <td>
                                     <span className={`badge badge-soft-${row.enAlerte ? 'danger' : 'success'}`}>
                                         {row.quantite}
@@ -695,6 +722,31 @@ export default function StockIndex({
                                 error={articleForm.errors.stock_type_id}
                             />
                         </div>
+                        {!centerLocked && (
+                            <div className="col-md-6">
+                                <SelectField
+                                    id="stock-centre"
+                                    label="Centre"
+                                    required
+                                    options={etablissements.map((e) => ({ value: e.id, label: e.nom_centre }))}
+                                    placeholder="Sélectionner un centre"
+                                    value={articleForm.data.etablissement_id}
+                                    onChange={(event) =>
+                                        articleForm.setData(
+                                            'etablissement_id',
+                                            event.target.value === '' ? '' : Number(event.target.value),
+                                        )
+                                    }
+                                    error={articleForm.errors.etablissement_id}
+                                    disabled={editingHasMouvements}
+                                />
+                                <small className="form-text text-muted">
+                                    {editingHasMouvements
+                                        ? 'Le centre ne peut plus changer : cet article a déjà des mouvements de stock.'
+                                        : 'Chaque centre gère son propre stock de cet article.'}
+                                </small>
+                            </div>
+                        )}
                         <div className="col-md-6">
                             <FormField
                                 id="stock-seuil"

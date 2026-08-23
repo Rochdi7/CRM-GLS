@@ -184,6 +184,40 @@ final class SettingsTest extends TestCase
         $this->assertSame(1, AnneeScolaire::where('par_defaut', true)->count());
     }
 
+    public function test_default_year_can_be_switched_from_the_list_action(): void
+    {
+        $this->userWith('academic-years.view', 'academic-years.update');
+
+        $old = AnneeScolaire::create([
+            'nom' => '2024/2025', 'date_debut' => '2024-09-01', 'date_fin' => '2025-08-31',
+            'par_defaut' => true, 'inscription_ouverte' => true,
+        ]);
+        $new = AnneeScolaire::create([
+            'nom' => '2025/2026', 'date_debut' => '2025-09-01', 'date_fin' => '2026-08-31',
+            'par_defaut' => false, 'inscription_ouverte' => true,
+        ]);
+
+        $this->patch(route('backoffice.annees-scolaires.set-default', $new))
+            ->assertRedirect(route('backoffice.settings', ['tab' => 'annees-scolaires']));
+
+        $this->assertTrue($new->fresh()->par_defaut);
+        $this->assertFalse($old->fresh()->par_defaut);
+        $this->assertSame(1, AnneeScolaire::where('par_defaut', true)->count());
+    }
+
+    public function test_user_without_update_permission_cannot_switch_the_default_year(): void
+    {
+        $this->userWith('academic-years.view');
+
+        $year = AnneeScolaire::create([
+            'nom' => '2025/2026', 'date_debut' => '2025-09-01', 'date_fin' => '2026-08-31',
+            'par_defaut' => false, 'inscription_ouverte' => true,
+        ]);
+
+        $this->patch(route('backoffice.annees-scolaires.set-default', $year))->assertForbidden();
+        $this->assertFalse($year->fresh()->par_defaut);
+    }
+
     public function test_academic_year_end_date_must_be_after_start(): void
     {
         $this->userWith('academic-years.view', 'academic-years.create');

@@ -688,11 +688,13 @@
     "Start date": "Date de début",
     "Status": "Statut",
     "Stock": "Stock",
+    "Please select the center this stock belongs to.": "Veuillez sélectionner le centre auquel appartient ce stock.",
     "Stock item created.": "Article de stock créé.",
     "Stock item deleted.": "Article de stock supprimé.",
     "Stock item updated.": "Article de stock mis à jour.",
     "Stock management": "Gestion du stock",
     "Stock movement recorded.": "Mouvement de stock enregistré.",
+    "You do not have access to this center.": "Vous n'avez pas accès à ce centre.",
     "Stop": "Arrêter",
     "Student": "Étudiant",
     "Student / Third party": "Étudiant / Tiers",
@@ -890,5 +892,6 @@
     "A payment made with a tracked cheque keeps the cheque method.": "Un paiement effectué par chèque suivi conserve la méthode Chèque.",
     "This cheque has already been used to pay: its owner and identity can no longer change.": "Ce chèque a déjà servi à un paiement : son propriétaire et son identité ne peuvent plus être modifiés.",
     "This payment does not belong to the selected student.": "Ce paiement n'appartient pas à l'étudiant sélectionné.",
-    "Only the requester or the recipient can cancel a transfer.": "Seul le demandeur ou le destinataire peut annuler un transfert."
+    "Only the requester or the recipient can cancel a transfer.": "Seul le demandeur ou le destinataire peut annuler un transfert.",
+    ":name is now the default academic year.": ":name est désormais l'année scolaire par défaut."
 }

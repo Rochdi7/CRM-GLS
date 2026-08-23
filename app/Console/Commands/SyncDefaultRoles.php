@@ -48,11 +48,23 @@ final class SyncDefaultRoles extends Command
             ->each(function (Employee $employee) use ($dryRun, &$assigned, &$skipped): void {
                 $user = $employee->user;
 
-                if ($user === null || $user->roles->isNotEmpty()) {
-                    return; // already has a role — Autorisations decisions win.
+                if ($user === null) {
+                    return;
                 }
 
                 $roleName = PermissionRegistry::defaultRoleFor((string) $employee->categorie);
+
+                // « Responsable de système » ALWAYS holds super-admin (same
+                // rule as EmployeeObserver) — every other catégorie only
+                // fills a vacuum: an existing role is an Autorisations
+                // decision that wins.
+                if ($roleName === Role::SUPER_ADMIN && $user->hasRole(Role::SUPER_ADMIN)) {
+                    return;
+                }
+
+                if ($roleName !== Role::SUPER_ADMIN && $user->roles->isNotEmpty()) {
+                    return;
+                }
 
                 if ($roleName === null) {
                     // « Autre » / unknown post: nothing to derive — needs a

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Backoffice\Authorization;
 
 use App\Models\Employee;
+use App\Models\Role;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -54,6 +55,27 @@ final class SyncDefaultRolesCommandTest extends TestCase
         $promoted->refresh();
         $this->assertTrue($promoted->hasRole('director'));
         $this->assertFalse($promoted->hasRole('teacher'));
+    }
+
+    public function test_responsable_de_systeme_always_gets_super_admin_even_with_another_role(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('accountant');
+        Employee::factory()->create([
+            'user_id' => $user->id,
+            'categorie' => Employee::CATEGORIE_RESPONSABLE_SYSTEME,
+        ]);
+
+        $this->artisan('auth:sync-default-roles')->assertSuccessful();
+
+        $user->refresh();
+        $this->assertTrue($user->hasRole(Role::SUPER_ADMIN));
+        $this->assertTrue($user->hasRole('accountant'));
+
+        // Idempotent: a second run does nothing.
+        $this->artisan('auth:sync-default-roles')
+            ->expectsOutputToContain('nothing to do')
+            ->assertSuccessful();
     }
 
     public function test_dry_run_writes_nothing_and_the_command_is_idempotent(): void

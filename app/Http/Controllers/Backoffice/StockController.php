@@ -13,6 +13,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Stock\StoreStockArticleRequest;
 use App\Http\Requests\Backoffice\Stock\StoreStockMouvementRequest;
 use App\Http\Requests\Backoffice\Stock\UpdateStockArticleRequest;
+use App\Models\Etablissement;
 use App\Models\StockArticle;
 use App\Models\StockMouvement;
 use App\Models\StockType;
@@ -48,6 +49,7 @@ final class StockController extends Controller
         $articleFilters = [
             'search' => (string) $request->string('search'),
             'stockTypeFilter' => (string) $request->string('stockTypeFilter'),
+            'etablissementFilter' => (string) $request->string('etablissementFilter'),
             'statutFilter' => (string) $request->string('statutFilter'),
             'alerteFilter' => (string) $request->string('alerteFilter'),
         ];
@@ -104,6 +106,13 @@ final class StockController extends Controller
                 ->get(['id', 'nom']),
             'statuts' => StockArticle::STATUTS,
             'mouvementTypes' => StockMouvement::TYPES,
+            // Stock is per center: under « Tous les centres » the article form
+            // and the list expose the center (centerLocked rule, CLAUDE.md §5).
+            'etablissements' => Etablissement::query()
+                ->tap(fn ($q) => $centerAccess->scopeAccessibleCenters($q, $user, 'id'))
+                ->orderBy('nom_centre')
+                ->get(['id', 'nom_centre']),
+            'centerLocked' => ! $context->isAllCenters(),
             'permissions' => [
                 'create' => $user->can('create', StockArticle::class),
                 'update' => $user->can('stock.update'),
@@ -118,8 +127,11 @@ final class StockController extends Controller
         ]);
     }
 
-    public function storeArticle(StoreStockArticleRequest $request, CurrentContext $context): RedirectResponse
-    {
+    public function storeArticle(
+        StoreStockArticleRequest $request,
+        CurrentContext $context,
+        CenterAccessService $centerAccess,
+    ): RedirectResponse {
         $this->authorize('create', StockArticle::class);
 
         $data = $request->validated();
@@ -130,7 +142,7 @@ final class StockController extends Controller
             'stock_type_id' => $data['stock_type_id'],
             'quantite' => 0,
             'seuil_alerte' => $data['seuil_alerte'] ?? null,
-            'etablissement_id' => $context->etablissementId(),
+            'etablissement_id' => $this->resolveCenter($request, $context, $centerAccess, $data),
             'statut' => $data['statut'],
             'note' => $data['note'] ?? null,
         ]);
@@ -139,23 +151,72 @@ final class StockController extends Controller
             ->with('success', __('Stock item created.'));
     }
 
-    public function updateArticle(UpdateStockArticleRequest $request, StockArticle $article): RedirectResponse
-    {
+    public function updateArticle(
+        UpdateStockArticleRequest $request,
+        StockArticle $article,
+        CurrentContext $context,
+        CenterAccessService $centerAccess,
+    ): RedirectResponse {
         $this->authorize('update', $article);
 
         $data = $request->validated();
 
         // quantite is untouched here on purpose — movements only.
-        $article->update([
+        $attributes = [
             'nom' => $data['nom'],
             'stock_type_id' => $data['stock_type_id'],
             'seuil_alerte' => $data['seuil_alerte'] ?? null,
             'statut' => $data['statut'],
             'note' => $data['note'] ?? null,
-        ]);
+        ];
+
+        // The center can only be corrected while the row has no movement
+        // history: once quantities moved, re-homing the row would silently
+        // move that stock to another center without any movement line.
+        if ($context->isAllCenters() && ! $article->mouvements()->exists()) {
+            $attributes['etablissement_id'] = $this->resolveCenter($request, $context, $centerAccess, $data);
+        }
+
+        $article->update($attributes);
 
         return redirect()->back()
             ->with('success', __('Stock item updated.'));
+    }
+
+    /**
+     * Stock is always per center. With a center selected in the top bar that
+     * center wins (the form never shows a select); under « Tous les centres »
+     * the form's choice is required and must be a center the user can access.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function resolveCenter(
+        Request $request,
+        CurrentContext $context,
+        CenterAccessService $centerAccess,
+        array $data,
+    ): int {
+        $contextId = $context->etablissementId();
+
+        if ($contextId !== null) {
+            return $contextId;
+        }
+
+        $chosen = isset($data['etablissement_id']) ? (int) $data['etablissement_id'] : null;
+
+        if ($chosen === null) {
+            throw ValidationException::withMessages([
+                'etablissement_id' => __('Please select the center this stock belongs to.'),
+            ]);
+        }
+
+        if (! $centerAccess->canAccessCenter($request->user(), $chosen)) {
+            throw ValidationException::withMessages([
+                'etablissement_id' => __('You do not have access to this center.'),
+            ]);
+        }
+
+        return $chosen;
     }
 
     public function destroyArticle(Request $request, StockArticle $article): RedirectResponse
