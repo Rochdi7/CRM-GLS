@@ -56,8 +56,12 @@ final class EncaissementImportController extends Controller
 
         $labels = $sheetReader->distinctColumnValues($request->file('file')->getRealPath(), 'Opérateur');
 
+        // availableForCenter(), not a bare etablissement_id filter: an
+        // employee may work in several centers, and the direction accounts
+        // (super-admin / centers.access-all) sign payments in every center
+        // while being attached to a single primary one.
         $employees = Employee::query()
-            ->where('etablissement_id', $data['etablissement_id'])
+            ->availableForCenter((int) $data['etablissement_id'])
             ->orderBy('nom')
             ->get(['id', 'nom', 'prenom']);
 

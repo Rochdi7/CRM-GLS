@@ -11,7 +11,7 @@ use Illuminate\Database\Seeder;
 
 /**
  * Seeds GLS reference data (idempotent — safe to re-run):
- *  - academic years 2025/2026 (default) and 2026/2027
+ *  - academic years 2025/2026 and 2026/2027 (default)
  *  - the 6 GLS branches (Marrakech is head office)
  *  - 7 rooms per branch (3 teacher-named + 4 German city names)
  *
@@ -55,7 +55,7 @@ final class ReferentialDataSeeder extends Seeder
             [
                 'date_debut' => '2025-09-01',
                 'date_fin' => '2026-08-31',
-                'par_defaut' => true,
+                'par_defaut' => false,
                 'inscription_ouverte' => true,
             ],
         );
@@ -65,13 +65,13 @@ final class ReferentialDataSeeder extends Seeder
             [
                 'date_debut' => '2026-09-01',
                 'date_fin' => '2027-08-31',
-                'par_defaut' => false,
+                'par_defaut' => true,
                 'inscription_ouverte' => true,
             ],
         );
 
         // Guarantee exactly one default year.
-        AnneeScolaire::query()->where('nom', '!=', '2025/2026')->update(['par_defaut' => false]);
+        AnneeScolaire::query()->where('nom', '!=', '2026/2027')->update(['par_defaut' => false]);
 
         // Retire the legacy 2024/2025 year — but only when nothing references it
         // (this seeder re-runs on the live database; a year carrying groups,

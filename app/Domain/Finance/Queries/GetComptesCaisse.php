@@ -7,6 +7,7 @@ namespace App\Domain\Finance\Queries;
 use App\Models\Caisse;
 use App\Models\Depense;
 use App\Models\Encaissement;
+use App\Support\Access\HiddenAccount;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Collection;
@@ -126,6 +127,9 @@ final class GetComptesCaisse
 
         return Caisse::query()
             ->with(['etablissement', 'responsable'])
+            // Same rule as GetCaissesList: the maintainer's auto-provisioned
+            // till is hidden along with the account (HiddenAccount).
+            ->tap(fn ($q) => HiddenAccount::hideCaisses($q))
             ->withSum('encaissements as encaissements_total', 'montant')
             ->withSum('depenses as depenses_total', 'montant')
             ->when($typeFilter !== '', fn ($q) => $q->where('type', $typeFilter))

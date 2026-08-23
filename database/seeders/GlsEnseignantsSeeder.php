@@ -260,7 +260,11 @@ final class GlsEnseignantsSeeder extends Seeder
         static $prochain = null;
 
         if ($prochain === null) {
+            // withoutGlobalScopes() : la référence est unique sur TOUTE la
+            // table, y compris la ligne masquée du compte technique
+            // (HiddenAccountScope) — sinon sa référence serait réattribuable.
             $max = Employee::query()
+                ->withoutGlobalScopes()
                 ->where('reference', 'like', 'EMP-%')
                 ->pluck('reference')
                 ->map(fn ($reference) => (int) preg_replace('/\D/', '', (string) $reference))
@@ -271,7 +275,12 @@ final class GlsEnseignantsSeeder extends Seeder
 
         do {
             $reference = sprintf('EMP-%03d', $prochain++);
-        } while (Employee::query()->where('reference', $reference)->exists());
+        } while (
+            Employee::query()
+                ->withoutGlobalScopes()
+                ->where('reference', $reference)
+                ->exists()
+        );
 
         return $reference;
     }

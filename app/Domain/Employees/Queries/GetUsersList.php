@@ -6,6 +6,7 @@ namespace App\Domain\Employees\Queries;
 
 use App\Models\User;
 use App\Services\Context\CurrentContext;
+use App\Support\Access\HiddenAccount;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 /**
@@ -41,6 +42,14 @@ final class GetUsersList
 
         $users = User::query()
             ->with(['roles', 'employee.etablissement'])
+            // The maintainer login is invisible in the UI (HiddenAccount).
+            // It has to be filtered HERE rather than by a global scope on
+            // User: EloquentUserProvider builds its credential lookup with
+            // newQuery(), so a global scope would apply while authenticating
+            // and lock the maintainer out of his own account. Note it would
+            // otherwise survive the center filter below too — accounts with
+            // no employee profile are deliberately visible in every center.
+            ->tap(fn ($query) => HiddenAccount::hideUsers($query))
             // Follow the active center via the employee profile; accounts
             // without an employee (pure admin logins) stay visible everywhere.
             ->when($this->context->etablissementId(), function ($query, int $centreId): void {

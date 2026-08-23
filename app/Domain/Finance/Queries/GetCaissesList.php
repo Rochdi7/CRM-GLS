@@ -8,6 +8,7 @@ use App\Models\Caisse;
 use App\Models\Etablissement;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
+use App\Support\Access\HiddenAccount;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 
@@ -39,6 +40,12 @@ final class GetCaissesList
     ): LengthAwarePaginator {
         $caisses = Caisse::query()
             ->with(['etablissement', 'responsable'])
+            // EmployeeObserver provisions a till for EVERY employee, the
+            // maintainer's hidden record included. That till never holds a
+            // dirham, so it is filtered out of the finance screens with the
+            // account it belongs to — the row itself is never deleted (money
+            // accounts are permanent, CLAUDE.md §11).
+            ->tap(fn ($q) => HiddenAccount::hideCaisses($q))
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q, $activeCenterId))
             ->when($etablissementFilter !== '', fn ($q) => $q->where('etablissement_id', (int) $etablissementFilter))

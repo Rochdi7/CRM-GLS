@@ -40,7 +40,12 @@ final class SyncDefaultRoles extends Command
         $assigned = [];
         $skipped = [];
 
+        // withoutGlobalScopes() : réparation en masse après une restauration
+        // ou un import — elle doit couvrir TOUTE la table, compte technique
+        // masqué compris (HiddenAccountScope), sinon un compte sans rôle
+        // resterait bloqué en 403 sans qu'aucune commande ne le rattrape.
         Employee::query()
+            ->withoutGlobalScopes()
             ->with(['user.roles'])
             ->whereNotNull('user_id')
             ->orderBy('id')

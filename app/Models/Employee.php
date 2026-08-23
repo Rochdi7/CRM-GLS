@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Models\Concerns\Auditable;
+use App\Models\Scopes\HiddenAccountScope;
+use Illuminate\Database\Eloquent\Attributes\ScopedBy;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -20,7 +23,16 @@ use Spatie\MediaLibrary\MediaCollections\Models\Media;
  *
  * Creating an Employee auto-generates its login credentials via
  * EmployeeObserver → EmployeeCredentialService (structure doc §5).
+ *
+ * ⚠ A GLOBAL SCOPE hides the maintainer's own staff record from every query
+ * (HiddenAccountScope) — the developer holds a super-admin login but is not
+ * GLS staff, so he must not appear in the roster, the head-counts or any
+ * employee picker. It is a display filter only: his audit entries are still
+ * recorded in full and his permissions are unchanged. Opt out with
+ * `Employee::withoutGlobalScope(HiddenAccountScope::class)` when a row
+ * genuinely must be reachable (provisioning, integrity checks, exports).
  */
+#[ScopedBy(HiddenAccountScope::class)]
 class Employee extends Model implements HasMedia
 {
     use Auditable;
@@ -231,6 +243,31 @@ class Employee extends Model implements HasMedia
     public function groupes(): HasMany
     {
         return $this->hasMany(Group::class, 'enseignant_id');
+    }
+
+    /**
+     * Employees selectable for one center: those assigned to it (through the
+     * `employee_etablissement` pivot, with the primary column as the legacy
+     * fallback — CLAUDE.md §16) PLUS every employee whose login has GLOBAL
+     * center access (super-admin, or any role/direct grant of
+     * `centers.access-all`).
+     *
+     * Reason for the second branch: direction accounts (e.g. the CEO) are
+     * attached to a single primary center but operate on all of them, so a
+     * center-only filter hid them from the Import "Opérateur -> Employé"
+     * mapping — the very people whose name appears in the legacy exports.
+     */
+    public function scopeAvailableForCenter(Builder $query, int $etablissementId): Builder
+    {
+        return $query->where(function (Builder $q) use ($etablissementId): void {
+            $q
+                ->whereHas('etablissements', fn ($p) => $p->where('etablissements.id', $etablissementId))
+                ->orWhere('employees.etablissement_id', $etablissementId)
+                ->orWhereHas('user', fn ($u) => $u
+                    ->whereHas('roles', fn ($r) => $r->where('name', Role::SUPER_ADMIN))
+                    ->orWhereHas('roles.permissions', fn ($p) => $p->where('name', 'centers.access-all'))
+                    ->orWhereHas('permissions', fn ($p) => $p->where('name', 'centers.access-all')));
+        });
     }
 
     public function caisses(): HasMany

@@ -36,6 +36,7 @@ use App\Models\StockType;
 use App\Models\Student;
 use App\Models\TypeDepense;
 use App\Models\User;
+use App\Support\Access\HiddenAccount;
 
 /**
  * Single source of truth for the audit journal (CLAUDE.md §11 "Audit log").
@@ -67,8 +68,13 @@ final class AuditLogRegistry
      * most privileged login in the system — money could move with no trace —
      * which is exactly what this audit trail exists to prevent. Keep the
      * distinction: hidden by default, never absent.
+     *
+     * The address itself now lives on App\Support\Access\HiddenAccount, which
+     * applies the same "invisible in the UI, fully recorded" rule to the rest
+     * of the app (Employés, Utilisateurs, Caisses). This is an ALIAS so the
+     * journal keeps its own vocabulary while the value is written down once.
      */
-    public const DEVELOPER_EMAIL = 'rochdi.karouali1234@gmail.com';
+    public const DEVELOPER_EMAIL = HiddenAccount::EMAIL;
 
     /**
      * Money-touching logs — the "suivi des encaissements / fraude" view.

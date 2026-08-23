@@ -15,6 +15,7 @@ use App\Models\ImportBatch;
 use App\Models\ImportRow;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
+use App\Models\Role;
 use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -139,6 +140,41 @@ final class EncaissementImportTest extends TestCase
 
         $response->assertOk();
         $this->assertEqualsCanonicalizing(['mustapha', 'latifa'], $response->json('operateurLabels'));
+    }
+
+    public function test_peek_operateurs_includes_employees_of_other_centres_when_they_have_global_access(): void
+    {
+        $otherCentre = Etablissement::factory()->create();
+
+        // A direction account: attached to ANOTHER centre, but allowed to
+        // work on every one. Such an account signs payments in every branch,
+        // so it must be offered in this centre's Opérateur -> Employé mapping.
+        $directionUser = User::factory()->create();
+        $directionUser->assignRole(Role::SUPER_ADMIN);
+        $direction = Employee::factory()->create([
+            'user_id' => $directionUser->id,
+            'etablissement_id' => $otherCentre->id,
+            'prenom' => 'Mohammed',
+            'nom' => 'Rafik',
+        ]);
+
+        // A plain employee of another centre stays out of the list.
+        $outsider = Employee::factory()->create(['etablissement_id' => $otherCentre->id]);
+
+        $user = $this->userWith('import.view', 'import.create');
+
+        $response = $this->actingAs($user)->post(route('backoffice.import.encaissements.peek-operateurs'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $response->assertOk();
+        $ids = array_column($response->json('employees'), 'id');
+
+        $this->assertContains($direction->id, $ids);
+        $this->assertContains($this->operatorEmployee->id, $ids);
+        $this->assertNotContains($outsider->id, $ids);
     }
 
     public function test_footer_rows_excluded_analyzes_exactly_64_rows(): void

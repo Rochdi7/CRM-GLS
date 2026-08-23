@@ -80,7 +80,10 @@ final class GlsStaffSeeder extends Seeder
         // Mohammed Rafik — CEO / fondateur (boîte courte historique). C'est
         // aussi le compte créé par AdminUserSeeder (même adresse).
         'rafik@glszentrum.com',
-        // Rochdi Karouali — Directeur des opérations.
+        // Rochdi Karouali — Responsable de système. Compte VISIBLE dans
+        // l'interface : le compte technique du développeur est un compte
+        // SÉPARÉ (App\Support\Access\HiddenAccount), provisionné par
+        // MaintainerUserSeeder et masqué de toutes les listes.
         'rochdi.karouali@glszentrum.com',
     ];
 
@@ -102,9 +105,9 @@ final class GlsStaffSeeder extends Seeder
     private function roster(): array
     {
         $DIR = Employee::CATEGORIE_DIRECTEUR;
-        $OPS = Employee::CATEGORIE_DIRECTEUR_OPERATIONS;
         $RAD = Employee::CATEGORIE_RESPONSABLE_ADMINISTRATIVE;
         $AAD = Employee::CATEGORIE_ASSISTANTE_ADMINISTRATIVE;
+        $SYS = Employee::CATEGORIE_RESPONSABLE_SYSTEME;
         $AUT = Employee::CATEGORIE_AUTRE;
 
         $H = 'Homme';
@@ -122,7 +125,13 @@ final class GlsStaffSeeder extends Seeder
             // Le frère, Amine — même nom de famille, compte et caisse séparés.
             'amine.rafik@glszentrum.com' => ['Amine', 'Rafik', $H, $DIR, '+212 661 95 93 41', ['GLS Marrakech']],
             'latifa.abouelfath@glszentrum.com' => ['Latifa', 'Abou Elfath', $F, $DIR, '+212 669 72 87 05', ['GLS Marrakech']],
-            'rochdi.karouali@glszentrum.com' => ['Rochdi', 'Karouali', $H, $OPS, '+212 689 98 10 22', ['GLS Marrakech']],
+            // Responsable de système — la SEULE catégorie dont le rôle par
+            // défaut est `super-admin` (PermissionRegistry::defaultRoleFor()),
+            // donc cohérente avec sa présence dans SUPER_ADMINS ci-dessus.
+            // Compte VISIBLE : à ne pas confondre avec le compte technique du
+            // développeur (App\Support\Access\HiddenAccount), qui porte une
+            // autre adresse et n'apparaît nulle part dans l'interface.
+            'rochdi.karouali@glszentrum.com' => ['Rochdi', 'Karouali', $H, $SYS, '+212 689 98 10 22', ['GLS Marrakech']],
             'ichrak.fakroune@glszentrum.com' => ['Ichrak', 'Fakroune', $F, $AAD, '+212 655 61 53 65', ['GLS Marrakech']],
             'mustapha.benlmekki@glszentrum.com' => ['Mustapha', 'Ben Lmekki', $H, $AAD, '+212 707 04 65 81', ['GLS Marrakech']],
 
@@ -344,7 +353,12 @@ final class GlsStaffSeeder extends Seeder
         static $prochain = null;
 
         if ($prochain === null) {
+            // withoutGlobalScopes() : la référence doit être unique sur TOUTE
+            // la table. Le compte technique masqué (HiddenAccountScope) est
+            // invisible dans l'interface mais occupe bien une ligne — l'ignorer
+            // ici rendrait sa référence réattribuable à un vrai employé.
             $max = Employee::query()
+                ->withoutGlobalScopes()
                 ->where('reference', 'like', 'EMP-%')
                 ->pluck('reference')
                 ->map(fn ($reference) => (int) preg_replace('/\D/', '', (string) $reference))
@@ -355,7 +369,12 @@ final class GlsStaffSeeder extends Seeder
 
         do {
             $reference = sprintf('EMP-%03d', $prochain++);
-        } while (Employee::query()->where('reference', $reference)->exists());
+        } while (
+            Employee::query()
+                ->withoutGlobalScopes()
+                ->where('reference', $reference)
+                ->exists()
+        );
 
         return $reference;
     }

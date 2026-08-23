@@ -52,6 +52,12 @@ class DatabaseSeeder extends Seeder
             BanqueSeeder::class,
             MotifAnnulationSeeder::class,
             GlsStaffSeeder::class,
+            // Le compte technique du développeur : super-admin, masqué de
+            // toute l'interface (App\Support\Access\HiddenAccount) mais
+            // journalisé comme n'importe quel autre compte. APRÈS
+            // GlsStaffSeeder, dont il ne fait délibérément pas partie : ce
+            // n'est pas un employé de GLS.
+            MaintainerUserSeeder::class,
             // Les enseignants : pas d'e-mail sur le fichier, donc pas de
             // compte de connexion — fiches employé seules (voir sa docblock).
             GlsEnseignantsSeeder::class,
