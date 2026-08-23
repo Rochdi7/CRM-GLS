@@ -72,7 +72,8 @@ final class EmployeeObserver
      *    role at all.
      * Guards, in every path:
      *  - a user holding ANY role is left untouched — a decision made on
-     *    the Autorisations screen always wins;
+     *    the Autorisations screen always wins — EXCEPT for
+     *    « Responsable de système », which always adds super-admin;
      *  - « Autre » maps to no role — deliberately: no defined post ⇒ no
      *    access until someone decides;
      *  - the role row may not exist on a bare database (seeder not run):
@@ -82,13 +83,20 @@ final class EmployeeObserver
     {
         $user = $employee->fresh()->user;
 
-        if ($user === null || $user->roles()->exists()) {
+        if ($user === null) {
             return;
         }
 
         $roleName = PermissionRegistry::defaultRoleFor((string) $employee->categorie);
 
         if ($roleName === null) {
+            return;
+        }
+
+        // « Responsable de système » ALWAYS holds super-admin — the one
+        // catégorie that grants rather than merely fills a vacuum. Picking
+        // it is itself restricted to super-admins (Employees Form Requests).
+        if ($roleName !== Role::SUPER_ADMIN && $user->roles()->exists()) {
             return;
         }
 

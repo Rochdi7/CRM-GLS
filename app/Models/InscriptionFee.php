@@ -37,6 +37,24 @@ class InscriptionFee extends Model
         'date_echeance', 'note', 'statut', 'masque_le',
     ];
 
+    /**
+     * Mirror of the column default, so a freshly created row and the model in
+     * memory agree.
+     *
+     * The database defaults `statut` to 'Non payé', but a create() that omits
+     * the key left the PHP model holding NULL while the row held 'Non payé'.
+     * A later status change then recorded « avant : (vide) » in the audit
+     * journal — the trail claimed the fee came from nothing when it actually
+     * came from « Non payé », which is a false statement of history, not just
+     * a display quirk. Declaring the default here fixes every creation path at
+     * once rather than each caller remembering to pass it.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'statut' => self::STATUT_NON_PAYE,
+    ];
+
     protected function casts(): array
     {
         return [

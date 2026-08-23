@@ -94,14 +94,25 @@ class Encaissement extends Model
         return $this->inscription_fee_id === null;
     }
 
+    /**
+     * Money of this avance that is no longer available: applied to fees
+     * PLUS refunded to the student. Without the refund term an avance that
+     * was paid back in cash would still show its full "restant" and could
+     * be applied to a fee a second time — the student would get the money
+     * twice.
+     */
     public function montantUtilise(): float
     {
-        return (float) $this->applications()->sum('montant');
+        return round(
+            (float) $this->applications()->sum('montant') + (float) $this->remboursements()->sum('montant'),
+            2,
+        );
     }
 
+    /** Rounded to the cent so the exact last cents can always be applied. */
     public function montantRestant(): float
     {
-        return max(0.0, (float) $this->montant - $this->montantUtilise());
+        return round(max(0.0, (float) $this->montant - $this->montantUtilise()), 2);
     }
 
     public function caisse(): BelongsTo

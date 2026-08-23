@@ -44,9 +44,14 @@ final class GetActivityLogList
         string $ip = '',
         bool $financeOnly = false,
         string $caisseId = '',
+        bool $includeDeveloper = false,
         int $perPage = self::DEFAULT_PER_PAGE,
     ): array {
         $query = Activity::query()
+            // The maintainer's own activity is recorded like everyone else's,
+            // but hidden here by default so routine maintenance does not bury
+            // the entries that describe real school activity.
+            ->when(! $includeDeveloper, fn (Builder $q) => $this->excludeDeveloper($q))
             ->when($financeOnly, fn (Builder $q) => $q->finance())
             ->when($logName !== '', fn (Builder $q) => $q->where('log_name', $logName))
             ->when($event !== '', fn (Builder $q) => $q->where('event', $event))
@@ -102,8 +107,12 @@ final class GetActivityLogList
      *
      * @return array<string, mixed>
      */
-    private function present(Activity $a, AuditValueResolver $resolver): array
+    private function present(Activity $a, AuditValueResolver $resolver, bool $withAttribution = false): array
     {
+        // Who wrote the value each field is moving AWAY from. Costs one extra
+        // query per entry, so only the detail page asks for it.
+        $previousAuthors = $withAttribution ? $this->previousAuthors($a) : [];
+
         $changes = $a->attribute_changes?->toArray() ?? [];
         $old = $changes['old'] ?? [];
         $new = $changes['attributes'] ?? [];
@@ -133,8 +142,16 @@ final class GetActivityLogList
                 'label' => AuditValueResolver::label($field),
                 'old' => $this->stringify($before),
                 'oldLabel' => $resolver->resolve($field, $before),
+                // Who put the OLD value there — found by walking back through
+                // this record's history, so a wrong value can be traced to the
+                // agent who actually entered it, not just to whoever fixed it.
+                'oldAuthor' => $previousAuthors[$field]['author'] ?? null,
+                'oldAuthorAt' => $previousAuthors[$field]['at'] ?? null,
+                'oldEntryId' => $previousAuthors[$field]['entryId'] ?? null,
                 'new' => $this->stringify($after),
                 'newLabel' => $resolver->resolve($field, $after),
+                // Who is writing the NEW value: always this entry's actor.
+                'newAuthor' => $a->causer_label,
             ];
         }
 
@@ -287,7 +304,7 @@ final class GetActivityLogList
      *
      * @return array<string, mixed>|null
      */
-    public function find(int $id): ?array
+    public function find(int $id, bool $includeDeveloper = false): ?array
     {
         $entry = Activity::query()->with(['causer', 'subject'])->find($id);
 
@@ -295,10 +312,90 @@ final class GetActivityLogList
             return null;
         }
 
+        // Hidden in the list means hidden by direct URL too, otherwise the
+        // filter is cosmetic — guessing an id would walk straight past it.
+        if (! $includeDeveloper
+            && $entry->causer_id !== null
+            && $entry->causer_id === $this->developerUserId()) {
+            return null;
+        }
+
         $resolver = new AuditValueResolver();
         $resolver->warm($this->foreignKeyPairs(collect([$entry])));
 
-        return $this->present($entry, $resolver);
+        // Detail page: worth the extra lookup to attribute each old value.
+        return $this->present($entry, $resolver, withAttribution: true);
+    }
+
+    /**
+     * For each field changed by this entry, who last wrote the value it is
+     * moving away from.
+     *
+     * The journal already answers "who made THIS change". The harder and more
+     * useful question when tracing a mistake is "who put the wrong value there
+     * in the first place" — the person correcting it is rarely the person who
+     * caused it. Answering that means walking back through the same record's
+     * history to the most recent earlier entry that touched the same field.
+     *
+     * One query per entry, ordered newest-first and stopped as soon as every
+     * field has an answer, so a long-lived record does not scan its whole
+     * history. Used only by the detail page (see present()'s $withAttribution).
+     *
+     * A field with no earlier entry keeps a null author: that means the value
+     * predates the journal (or arrived with the record's creation), and
+     * inventing an author for it would be worse than saying nothing.
+     *
+     * @return array<string, array{author: ?string, at: ?string, entryId: int}>
+     */
+    private function previousAuthors(Activity $a): array
+    {
+        if ($a->subject_type === null || $a->subject_id === null) {
+            return [];
+        }
+
+        $fields = array_keys(($a->attribute_changes?->toArray()['attributes'] ?? [])
+            + ($a->attribute_changes?->toArray()['old'] ?? []));
+
+        if ($fields === []) {
+            return [];
+        }
+
+        $found = [];
+
+        $earlier = Activity::query()
+            ->where('subject_type', $a->subject_type)
+            ->where('subject_id', $a->subject_id)
+            ->where('id', '<', $a->id)
+            ->orderByDesc('id')
+            // Bounded: the answer is almost always a handful of entries back,
+            // and an unbounded walk would be a silent performance trap on a
+            // record edited hundreds of times.
+            ->limit(50)
+            ->get(['id', 'causer_label', 'created_at', 'attribute_changes', 'event']);
+
+        foreach ($earlier as $previous) {
+            $wrote = array_keys($previous->attribute_changes?->toArray()['attributes'] ?? []);
+
+            foreach ($wrote as $field) {
+                $field = (string) $field;
+
+                if (! in_array($field, $fields, true) || array_key_exists($field, $found)) {
+                    continue;
+                }
+
+                $found[$field] = [
+                    'author' => $previous->causer_label,
+                    'at' => $previous->created_at?->format('d/m/Y H:i:s'),
+                    'entryId' => $previous->id,
+                ];
+            }
+
+            if (count($found) === count($fields)) {
+                break;
+            }
+        }
+
+        return $found;
     }
 
     /**
@@ -397,7 +494,7 @@ final class GetActivityLogList
      *
      * @return Collection<int, array{id:int, nom:string}>
      */
-    public function causerOptions(): Collection
+    public function causerOptions(bool $includeDeveloper = false): Collection
     {
         return User::query()
             ->whereIn('id', Activity::query()
@@ -405,12 +502,57 @@ final class GetActivityLogList
                 ->whereNotNull('causer_id')
                 ->distinct()
                 ->pluck('causer_id'))
+            // Keep the dropdown consistent with the list: offering an actor
+            // whose entries are hidden would just yield an empty result.
+            ->when(! $includeDeveloper, fn ($q) => $q->where('email', '!=', AuditLogRegistry::DEVELOPER_EMAIL))
             ->orderBy('name')
             ->get()
             ->map(fn (User $u): array => [
                 'id' => $u->id,
                 'nom' => $u->name.($u->username ? " ({$u->username})" : ''),
             ]);
+    }
+
+    /**
+     * Hide the developer account's entries from a listing.
+     *
+     * Deliberately scoped to the READ path: the rows exist and stay complete,
+     * so a deliberate look (the « Inclure le compte technique » toggle, or a
+     * direct query) still shows everything. Excluding them at WRITE time would
+     * create a real blind spot on a privileged account, which is the opposite
+     * of what this journal is for.
+     *
+     * @param  Builder<Activity>  $query
+     */
+    private function excludeDeveloper(Builder $query): void
+    {
+        $developerId = $this->developerUserId();
+
+        if ($developerId === null) {
+            return;
+        }
+
+        // `orWhereNull` matters: system/console entries have no causer at all
+        // and must never be filtered out by a causer-based rule.
+        $query->where(fn (Builder $q) => $q
+            ->whereNull('causer_id')
+            ->orWhere('causer_id', '!=', $developerId));
+    }
+
+    /** The developer account's id, or null when that login does not exist. */
+    private function developerUserId(): ?int
+    {
+        $id = User::query()
+            ->where('email', AuditLogRegistry::DEVELOPER_EMAIL)
+            ->value('id');
+
+        return $id === null ? null : (int) $id;
+    }
+
+    /** True when the developer login exists, so the UI can offer the toggle. */
+    public function developerAccountExists(): bool
+    {
+        return $this->developerUserId() !== null;
     }
 
     /**

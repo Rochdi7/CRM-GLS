@@ -1702,9 +1702,17 @@ export interface AuditChange {
     old: string | null;
     /** Name behind `old` when the column is a foreign key, else null. */
     oldLabel: string | null;
+    /** Who wrote the OLD value (detail page only); null when it predates the journal. */
+    oldAuthor: string | null;
+    /** When that earlier change happened, 'd/m/Y H:i:s'. */
+    oldAuthorAt: string | null;
+    /** Journal entry that wrote the OLD value, so it can be opened directly. */
+    oldEntryId: number | null;
     new: string | null;
     /** Name behind `new` when the column is a foreign key, else null. */
     newLabel: string | null;
+    /** Who wrote the NEW value — this entry's own actor. */
+    newAuthor: string | null;
 }
 
 export interface AuditLogRow {
@@ -1765,6 +1773,8 @@ export interface AuditLogFilters {
     ip: string;
     financeOnly: boolean;
     caisseId: string;
+    /** Show the maintainer account's entries (hidden by default, never unrecorded). */
+    includeDeveloper: boolean;
     perPage: number;
 }
 
@@ -1775,6 +1785,8 @@ export interface AuditLogPageProps {
     causers: { id: number; nom: string }[];
     subjectTypes: { value: string; label: string }[];
     caisses: { value: string; label: string }[];
+    /** False when no maintainer login exists — the toggle is then pointless. */
+    hasDeveloperAccount: boolean;
     filters: AuditLogFilters;
     [key: string]: unknown;
 }

@@ -40,9 +40,10 @@ use Spatie\Permission\PermissionRegistrar;
  *  - provisions the till (CaisseProvisioner), same as the Employees screen.
  *
  * Two accounts are seeded as `super-admin` (see SUPER_ADMINS): the CEO
- * rafik@glszentrum.com and rochdi.karouali@glszentrum.com. ⚠ rafik@ and
- * amine.rafik@ are TWO BROTHERS, not one person with two mailboxes — two
- * employee records, two tills, and only rafik@ is the super-admin CEO.
+ * Mohammed Rafik (rafik@glszentrum.com) and rochdi.karouali@glszentrum.com.
+ * ⚠ rafik@ (Mohammed) and amine.rafik@ (Amine) are TWO BROTHERS, not one
+ * person with two mailboxes — two employee records, two tills, and only
+ * rafik@ is the super-admin CEO.
  *
  * ⚠ Passwords: a NEW user gets a random one-time password, printed ONCE to
  * the console when the seeder runs. An EXISTING user's password is never
@@ -76,7 +77,8 @@ final class GlsStaffSeeder extends Seeder
      * @var list<string>
      */
     private const SUPER_ADMINS = [
-        // Amine Rafik — CEO / fondateur (boîte courte historique).
+        // Mohammed Rafik — CEO / fondateur (boîte courte historique). C'est
+        // aussi le compte créé par AdminUserSeeder (même adresse).
         'rafik@glszentrum.com',
         // Rochdi Karouali — Directeur des opérations.
         'rochdi.karouali@glszentrum.com',
@@ -116,8 +118,8 @@ final class GlsStaffSeeder extends Seeder
             // Rattaché au siège : le super-admin voit de toute façon tous les
             // centres via Gate::before, mais son centre principal (et donc sa
             // caisse) doit rester exact.
-            'rafik@glszentrum.com' => ['Amine', 'Rafik', $H, $DIR, '+212 661 95 93 41', ['GLS Marrakech']],
-            // Le frère — même nom de famille, compte et caisse séparés.
+            'rafik@glszentrum.com' => ['Mohammed', 'Rafik', $H, $DIR, '+212 661 95 93 41', ['GLS Marrakech']],
+            // Le frère, Amine — même nom de famille, compte et caisse séparés.
             'amine.rafik@glszentrum.com' => ['Amine', 'Rafik', $H, $DIR, '+212 661 95 93 41', ['GLS Marrakech']],
             'latifa.abouelfath@glszentrum.com' => ['Latifa', 'Abou Elfath', $F, $DIR, '+212 669 72 87 05', ['GLS Marrakech']],
             'rochdi.karouali@glszentrum.com' => ['Rochdi', 'Karouali', $H, $OPS, '+212 689 98 10 22', ['GLS Marrakech']],

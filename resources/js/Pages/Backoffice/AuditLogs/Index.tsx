@@ -49,6 +49,7 @@ export default function AuditLogsIndex({
     causers,
     subjectTypes,
     caisses,
+    hasDeveloperAccount,
     filters,
 }: AuditLogPageProps) {
     const loading = useInertiaLoading();
@@ -73,6 +74,7 @@ export default function AuditLogsIndex({
         filters.dateTo !== '' ||
         filters.ip !== '' ||
         filters.caisseId !== '' ||
+        filters.includeDeveloper ||
         filters.financeOnly;
 
     return (
@@ -109,6 +111,7 @@ export default function AuditLogsIndex({
                                             dateTo: '',
                                             ip: '',
                                             caisseId: '',
+                                            includeDeveloper: false,
                                             financeOnly: false,
                                         })
                                     }
@@ -226,6 +229,27 @@ export default function AuditLogsIndex({
                                 {t('Money only')}
                             </button>
                         </div>
+
+                        {/* The maintainer's entries are recorded like anyone
+                            else's — this only brings them back into view. */}
+                        {hasDeveloperAccount && (
+                            <div>
+                                <label className="form-label d-block">{t('Technical account')}</label>
+                                <button
+                                    type="button"
+                                    className={`btn ${filters.includeDeveloper ? 'btn-secondary' : 'btn-outline-secondary'}`}
+                                    onClick={() => reload({ includeDeveloper: !filters.includeDeveloper })}
+                                    aria-pressed={filters.includeDeveloper}
+                                    title={t('The technical account is always recorded; this only shows it.')}
+                                >
+                                    <i
+                                        className={`ti ${filters.includeDeveloper ? 'ti-eye' : 'ti-eye-off'} me-1`}
+                                        aria-hidden="true"
+                                    />
+                                    {t('Include technical account')}
+                                </button>
+                            </div>
+                        )}
                     </TableToolbar>
                 </div>
 

@@ -41,20 +41,24 @@ final class AuditLogController extends Controller
         $ip = (string) $request->string('ip');
         $financeOnly = $request->boolean('financeOnly');
         $caisseId = (string) $request->string('caisseId');
+        $includeDeveloper = $request->boolean('includeDeveloper');
         $perPage = (int) $request->integer('perPage', GetActivityLogList::DEFAULT_PER_PAGE);
 
         $list = $getActivityLogList(
             $search, $logName, $event, $causerId, $subjectType,
-            $dateFrom, $dateTo, $ip, $financeOnly, $caisseId, $perPage,
+            $dateFrom, $dateTo, $ip, $financeOnly, $caisseId, $includeDeveloper, $perPage,
         );
 
         return Inertia::render('Backoffice/AuditLogs/Index', [
             'entries' => $list['data'],
             'logNames' => $getActivityLogList->logNameOptions(),
             'events' => $getActivityLogList->eventOptions(),
-            'causers' => $getActivityLogList->causerOptions(),
+            'causers' => $getActivityLogList->causerOptions($includeDeveloper),
             'subjectTypes' => AuditLogRegistry::subjectTypeOptions(),
             'caisses' => $getActivityLogList->caisseOptions(),
+            // Only offer the toggle when that login actually exists, so the
+            // filter bar stays clean on installations without it.
+            'hasDeveloperAccount' => $getActivityLogList->developerAccountExists(),
             'filters' => [
                 'search' => $search,
                 'logName' => $logName,
@@ -66,6 +70,7 @@ final class AuditLogController extends Controller
                 'ip' => $ip,
                 'financeOnly' => $financeOnly,
                 'caisseId' => $caisseId,
+                'includeDeveloper' => $includeDeveloper,
                 'perPage' => $perPage,
             ],
         ]);
@@ -83,7 +88,7 @@ final class AuditLogController extends Controller
     {
         abort_unless($request->user()->can('audit-logs.view'), 403);
 
-        $entry = $getActivityLogList->find($activity);
+        $entry = $getActivityLogList->find($activity, $request->boolean('includeDeveloper'));
 
         abort_if($entry === null, 404);
 

@@ -54,6 +54,23 @@ use App\Models\User;
 final class AuditLogRegistry
 {
     /**
+     * The developer/maintainer account.
+     *
+     * Its activity is still RECORDED in full — nothing about the trail's
+     * completeness changes — but the journal PAGE hides it by default, so
+     * maintenance work does not drown the entries that describe real school
+     * activity. Anyone reading the journal can bring it back with the
+     * « Inclure le compte technique » toggle.
+     *
+     * ⚠ This is a display filter, never a recording bypass. An account whose
+     * actions were not written at all would be a permanent blind spot on the
+     * most privileged login in the system — money could move with no trace —
+     * which is exactly what this audit trail exists to prevent. Keep the
+     * distinction: hidden by default, never absent.
+     */
+    public const DEVELOPER_EMAIL = 'rochdi.karouali1234@gmail.com';
+
+    /**
      * Money-touching logs — the "suivi des encaissements / fraude" view.
      *
      * @var list<string>

@@ -27,8 +27,14 @@ final class AdminUserSeeder extends Seeder
      * (the role must exist) and AFTER ReferentialDataSeeder (so the employee
      * can be attached to the centers) — see DatabaseSeeder for the order.
      *
+     * The account is the CEO, Mohammed Rafik (rafik@glszentrum.com) — the
+     * same address GlsStaffSeeder lists as super-admin, so both seeders
+     * converge on ONE user/employee (both key on the e-mail / user_id).
+     * ⚠ His brother Amine Rafik (amine.rafik@glszentrum.com) is a separate
+     * person with his own account, seeded by GlsStaffSeeder — never merge.
+     *
      * ⚠ Credentials come from the environment in production. Locally they
-     * default to admin@gls.test / password; on any other environment
+     * default to rafik@glszentrum.com / password; on any other environment
      * ADMIN_PASSWORD must be set explicitly or this seeder refuses to run,
      * so a deploy can never silently publish a well-known password.
      * The account is forced to change its password on first sign-in unless
@@ -37,7 +43,7 @@ final class AdminUserSeeder extends Seeder
     public function run(): void
     {
         $isLocal = app()->environment('local', 'testing');
-        $email = (string) env('ADMIN_EMAIL', 'admin@gls.test');
+        $email = (string) env('ADMIN_EMAIL', 'rafik@glszentrum.com');
         $password = env('ADMIN_PASSWORD');
 
         if ($password === null || $password === '') {
@@ -56,8 +62,8 @@ final class AdminUserSeeder extends Seeder
         $user = User::query()->updateOrCreate(
             ['email' => $email],
             [
-                'name' => 'GLS Admin',
-                'username' => (string) env('ADMIN_USERNAME', 'admin'),
+                'name' => 'Mohammed Rafik',
+                'username' => (string) env('ADMIN_USERNAME', 'rafik'),
                 'password' => Hash::make((string) $password),
                 // A provisioned production admin must rotate its password;
                 // the local dev default stays frictionless.
@@ -81,8 +87,8 @@ final class AdminUserSeeder extends Seeder
 
         $employee->fill(
             [
-                'nom' => 'Admin',
-                'prenom' => 'GLS',
+                'nom' => 'Rafik',
+                'prenom' => 'Mohammed',
                 // Sans sexe, photoUrl() n'a pas d'avatar par défaut cohérent.
                 'sexe' => 'Homme',
                 'categorie' => Employee::CATEGORIE_DIRECTEUR,

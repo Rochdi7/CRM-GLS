@@ -6,6 +6,7 @@ namespace Tests\Feature\Backoffice\People;
 
 use App\Models\Employee;
 use App\Models\Etablissement;
+use App\Models\Role;
 use App\Models\Group;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -169,6 +170,78 @@ final class EmployeesInertiaCrudTest extends TestCase
         $existing->refresh();
         $this->assertTrue($existing->hasRole('teacher'));
         $this->assertFalse($existing->hasRole('consultant'));
+    }
+
+    /**
+     * « Responsable de système » is the one catégorie that maps to
+     * super-admin — and therefore only a super-admin may hand it out, so an
+     * ordinary employees.create holder can never mint a super-admin.
+     */
+    public function test_only_a_super_admin_can_create_a_responsable_de_systeme(): void
+    {
+        $payload = [
+            'nom' => 'Systeme',
+            'prenom' => 'Sami',
+            'sexe' => 'Homme',
+            'categorie' => Employee::CATEGORIE_RESPONSABLE_SYSTEME,
+            'statut' => Employee::STATUT_ACTIF,
+            'etablissement_ids' => $this->someCenterIds(),
+        ];
+
+        $this->actingAs($this->userWith('employees.view', 'employees.create'))
+            ->from(route('backoffice.employees.index'))
+            ->post(route('backoffice.employees.store'), $payload)
+            ->assertSessionHasErrors('categorie');
+        $this->assertNull(Employee::where('nom', 'Systeme')->first());
+
+        $superAdmin = User::factory()->create();
+        $superAdmin->assignRole(Role::SUPER_ADMIN);
+
+        $this->actingAs($superAdmin)
+            ->post(route('backoffice.employees.store'), $payload)
+            ->assertRedirect(route('backoffice.employees.index'));
+
+        $user = Employee::where('nom', 'Systeme')->firstOrFail()->user;
+        $this->assertTrue($user->hasRole(Role::SUPER_ADMIN));
+        $this->assertTrue($user->can('students.delete'));
+    }
+
+    /**
+     * Unlike every other catégorie, « Responsable de système » ALWAYS adds
+     * super-admin — even when the login already holds another role — and a
+     * non-super-admin cannot promote an existing employee into it.
+     */
+    public function test_responsable_de_systeme_always_grants_super_admin(): void
+    {
+        $existing = User::factory()->create();
+        $existing->assignRole('teacher');
+
+        $employee = Employee::factory()->create([
+            'user_id' => $existing->id,
+            'categorie' => Employee::CATEGORIE_ENSEIGNANT,
+        ]);
+        $this->assertFalse($existing->fresh()->hasRole(Role::SUPER_ADMIN));
+
+        $update = [
+            'nom' => $employee->nom,
+            'prenom' => $employee->prenom,
+            'sexe' => $employee->sexe,
+            'categorie' => Employee::CATEGORIE_RESPONSABLE_SYSTEME,
+            'statut' => Employee::STATUT_ACTIF,
+            'etablissement_ids' => [$employee->etablissement_id],
+        ];
+
+        $this->actingAs($this->userWith('employees.view', 'employees.update'))
+            ->from(route('backoffice.employees.index'))
+            ->put(route('backoffice.employees.update', $employee), $update)
+            ->assertSessionHasErrors('categorie');
+        $this->assertFalse($existing->fresh()->hasRole(Role::SUPER_ADMIN));
+
+        $employee->update(['categorie' => Employee::CATEGORIE_RESPONSABLE_SYSTEME]);
+
+        $existing->refresh();
+        $this->assertTrue($existing->hasRole(Role::SUPER_ADMIN));
+        $this->assertTrue($existing->hasRole('teacher'));
     }
 
     /**

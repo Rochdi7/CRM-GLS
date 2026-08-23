@@ -13,6 +13,7 @@ use App\Http\Requests\Backoffice\Cheques\StoreChequeRequest;
 use App\Http\Requests\Backoffice\Cheques\UpdateChequeRequest;
 use App\Models\Cheque;
 use App\Models\Student;
+use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -134,7 +135,23 @@ final class ChequeController extends Controller
             ]);
         }
 
-        $cheque->update($this->normalizedPayload($data));
+        $payload = $this->normalizedPayload($data);
+
+        // Once the cheque has funded payments its identity is frozen: those
+        // Encaissement rows (student_id, numero_cheque, banque) were copied
+        // from it, and re-owning it would offer its remaining balance to a
+        // different student while the first one's payments still point at it.
+        if ($utilise > 0) {
+            foreach (['source', 'student_id', 'proprietaire_nom', 'numero_cheque', 'banque'] as $frozen) {
+                if (array_key_exists($frozen, $payload) && (string) $payload[$frozen] !== (string) $cheque->{$frozen}) {
+                    throw ValidationException::withMessages([
+                        $frozen => __('This cheque has already been used to pay: its owner and identity can no longer change.'),
+                    ]);
+                }
+            }
+        }
+
+        $cheque->update($payload);
 
         return redirect()->route('backoffice.cheques.index')
             ->with('success', __('Cheque updated.'));
@@ -237,6 +254,7 @@ final class ChequeController extends Controller
     public function studentCheques(Request $request, Student $student): JsonResponse
     {
         $this->authorize('viewAny', Cheque::class);
+        $this->assertCenterAccess($request, $student->etablissement_id);
 
         $cheques = Cheque::query()
             ->where('student_id', $student->id)
@@ -281,5 +299,18 @@ final class ChequeController extends Controller
             'date_echeance' => ($data['date_echeance'] ?? '') !== '' ? $data['date_echeance'] : null,
             'note' => ($data['note'] ?? '') !== '' ? $data['note'] : null,
         ];
+    }
+
+    /**
+     * Center scope for lookups and writes that hang off another module's
+     * record: the cashier needs no `registrations.view`/`students.view`
+     * permission to take money, only access to the record's center
+     * (CenterAccessService — same rule the policies use).
+     */
+    private function assertCenterAccess(Request $request, ?int $etablissementId): void
+    {
+        if (! app(CenterAccessService::class)->canAccessCenter($request->user(), $etablissementId)) {
+            abort(403);
+        }
     }
 }

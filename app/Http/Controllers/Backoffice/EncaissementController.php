@@ -25,6 +25,8 @@ use App\Models\Cheque;
 use App\Models\Encaissement;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
+use App\Models\Student;
+use App\Services\Authorization\CenterAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -65,7 +67,7 @@ final class EncaissementController extends Controller
         $numeroChequeFilter = (string) $request->string('numeroChequeFilter');
         $banqueFilter = (string) $request->string('banqueFilter');
         $perPage = (int) $request->integer('perPage', GetEncaissementsList::DEFAULT_PER_PAGE);
-        // Page view tabs: Paiements (all) / Avances / Chèques.
+        // Page view tabs: Paiements (fee-allocated rows) / Avances / Chèques.
         $view = (string) $request->string('view');
         if (! in_array($view, ['', 'avance', 'cheque'], true)) {
             $view = '';
@@ -122,13 +124,17 @@ final class EncaissementController extends Controller
     public function studentInscriptions(Request $request, int $student, GetEncaissementsList $getEncaissementsList): JsonResponse
     {
         $this->authorize('create', Encaissement::class);
+        // Center scope: a cashier only lists registrations of students
+        // within the centers they can access.
+        $this->assertCenterAccess($request, Student::query()->findOrFail($student)->etablissement_id);
 
         return response()->json(['inscriptions' => $getEncaissementsList->studentInscriptions($student)]);
     }
 
-    public function inscriptionFees(Inscription $inscription, GetInscriptionUnpaidFees $getInscriptionUnpaidFees): JsonResponse
+    public function inscriptionFees(Request $request, Inscription $inscription, GetInscriptionUnpaidFees $getInscriptionUnpaidFees): JsonResponse
     {
         $this->authorize('create', Encaissement::class);
+        $this->assertCenterAccess($request, $inscription->etablissement_id);
 
         return response()->json(['fees' => $getInscriptionUnpaidFees($inscription)]);
     }
@@ -137,9 +143,10 @@ final class EncaissementController extends Controller
      * Every fee-attached payment of one inscription — the "Convertir en
      * avance" modal's checklist source.
      */
-    public function inscriptionPayments(Inscription $inscription, GetInscriptionPayments $getInscriptionPayments): JsonResponse
+    public function inscriptionPayments(Request $request, Inscription $inscription, GetInscriptionPayments $getInscriptionPayments): JsonResponse
     {
         $this->authorize('create', Encaissement::class);
+        $this->assertCenterAccess($request, $inscription->etablissement_id);
 
         return response()->json(['payments' => $getInscriptionPayments($inscription)]);
     }
@@ -164,6 +171,20 @@ final class EncaissementController extends Controller
         $data = $request->validated();
         $inscriptionId = (int) $data['inscription_id'];
 
+        // The registration must be the selected student's own (a tampered
+        // inscription_id would record student A paying student B's fees —
+        // wrong on both students' pages and receipts) and within the
+        // cashier's centers.
+        $inscription = Inscription::query()->findOrFail($inscriptionId);
+
+        if ($inscription->student_id !== (int) $data['student_id']) {
+            throw ValidationException::withMessages([
+                'inscription_id' => __('This registration does not belong to the selected student.'),
+            ]);
+        }
+
+        $this->assertCenterAccess($request, $inscription->etablissement_id);
+
         $touchedLines = collect($data['payment_lines'])->filter(fn ($l) => ($l['montant'] ?? '') !== '');
 
         // Every Chèque-method row must reference a tracked chèque (Chèques
@@ -176,35 +197,65 @@ final class EncaissementController extends Controller
             ->pluck('cheque_id')
             ->unique();
 
-        $cheques = Cheque::query()->findOrFail($chequeIds->all())->keyBy('id');
+        // Per-line amounts targeting the SAME fee are summed, so two rows
+        // for one fee can't each pass the per-row cap independently.
+        $parFee = $touchedLines
+            ->groupBy(fn ($l) => (int) $l['fee_id'])
+            ->map(fn ($lines) => round((float) $lines->sum(fn ($l) => (float) $l['montant']), 2));
 
-        foreach ($chequeIds as $chequeId) {
-            $cheque = $cheques[$chequeId];
+        DB::transaction(function () use ($touchedLines, $data, $inscriptionId, $agent, $caisse, $action, $chequeIds, $parFee): void {
+            // Cheques are re-read under a row lock INSIDE the transaction and
+            // their remaining balance re-checked here: a double submit (or two
+            // cashiers) would otherwise both see the full balance and spend
+            // the same cheque twice.
+            $cheques = Cheque::query()->whereKey($chequeIds->all())->lockForUpdate()->get()->keyBy('id');
 
-            if ($cheque->student_id !== (int) $data['student_id']) {
-                throw ValidationException::withMessages([
-                    'payment_lines' => __('This cheque does not belong to the selected student.'),
-                ]);
+            foreach ($chequeIds as $chequeId) {
+                $cheque = $cheques[$chequeId] ?? null;
+
+                if ($cheque === null) {
+                    throw ValidationException::withMessages([
+                        'payment_lines' => __('Select a recorded cheque to pay with.'),
+                    ]);
+                }
+
+                if ($cheque->student_id !== (int) $data['student_id']) {
+                    throw ValidationException::withMessages([
+                        'payment_lines' => __('This cheque does not belong to the selected student.'),
+                    ]);
+                }
+
+                if ($cheque->statut === Cheque::STATUT_REJETE) {
+                    throw ValidationException::withMessages([
+                        'payment_lines' => __('A rejected cheque cannot be used to pay.'),
+                    ]);
+                }
+
+                $chequeTotal = round((float) $touchedLines
+                    ->filter(fn ($l) => $l['methode'] === Encaissement::METHODE_CHEQUE && (int) $l['cheque_id'] === $chequeId)
+                    ->sum(fn ($l) => (float) $l['montant']), 2);
+
+                if ($chequeTotal > $cheque->montantRestant()) {
+                    throw ValidationException::withMessages([
+                        'payment_lines' => __("The amount cannot exceed the cheque's remaining balance."),
+                    ]);
+                }
             }
 
-            if ($cheque->statut === Cheque::STATUT_REJETE) {
-                throw ValidationException::withMessages([
-                    'payment_lines' => __('A rejected cheque cannot be used to pay.'),
-                ]);
+            // Same for the fees: the Form Request's max:reste was computed
+            // when the rules were built; re-check under lock so a concurrent
+            // payment on the same fee can't push it past its montant.
+            foreach ($parFee as $feeId => $total) {
+                $lockedFee = InscriptionFee::query()->whereKey($feeId)->lockForUpdate()->firstOrFail();
+                $reste = round(max(0.0, (float) $lockedFee->montant - $lockedFee->montantPaye()), 2);
+
+                if ($total > $reste) {
+                    throw ValidationException::withMessages([
+                        'payment_lines' => __('The amount cannot exceed the remaining balance of this fee.'),
+                    ]);
+                }
             }
 
-            $chequeTotal = (float) $touchedLines
-                ->filter(fn ($l) => $l['methode'] === Encaissement::METHODE_CHEQUE && (int) $l['cheque_id'] === $chequeId)
-                ->sum(fn ($l) => (float) $l['montant']);
-
-            if ($chequeTotal > $cheque->montantRestant()) {
-                throw ValidationException::withMessages([
-                    'payment_lines' => __("The amount cannot exceed the cheque's remaining balance."),
-                ]);
-            }
-        }
-
-        DB::transaction(function () use ($touchedLines, $data, $inscriptionId, $agent, $caisse, $action, $cheques): void {
             foreach ($touchedLines as $line) {
                 $fee = InscriptionFee::findOrFail($line['fee_id']);
 
@@ -294,6 +345,7 @@ final class EncaissementController extends Controller
 
         $data = $request->validated();
         $inscription = Inscription::findOrFail((int) $data['inscription_id']);
+        $this->assertCenterAccess($request, $inscription->etablissement_id);
 
         $action->handle($inscription, array_map('intval', $data['encaissement_ids']));
 
@@ -382,6 +434,8 @@ final class EncaissementController extends Controller
 
     public function show(Encaissement $encaissement, GetEncaissementDetails $getEncaissementDetails): Response
     {
+        $this->authorize('view', $encaissement);
+
         return Inertia::render('Backoffice/Encaissements/Show', [
             'encaissement' => $getEncaissementDetails($encaissement),
         ]);
@@ -403,11 +457,48 @@ final class EncaissementController extends Controller
 
     public function update(UpdateEncaissementRequest $request, Encaissement $encaissement): RedirectResponse
     {
+        $this->authorize('update', $encaissement);
+
+        $data = $request->validated();
+
+        // A payment funded by a tracked chèque (Chèques module) keeps its
+        // method and cheque identity: changing méthode to Espèces would hide
+        // it from the Chèques views while the cheque still counts it as
+        // used, and retyping numéro/banque would contradict the Cheque row.
+        if ($encaissement->cheque_id !== null) {
+            if (($data['methode'] ?? $encaissement->methode) !== Encaissement::METHODE_CHEQUE) {
+                throw ValidationException::withMessages([
+                    'methode' => __('A payment made with a tracked cheque keeps the cheque method.'),
+                ]);
+            }
+
+            unset($data['methode'], $data['numero_cheque'], $data['banque'], $data['date_echeance_cheque']);
+        } elseif (($data['methode'] ?? null) !== Encaissement::METHODE_CHEQUE) {
+            // Leaving the Chèque method clears the cheque columns instead of
+            // keeping stale numéro/banque on a cash row.
+            $data['numero_cheque'] = null;
+            $data['banque'] = null;
+            $data['date_echeance_cheque'] = null;
+        }
+
         // montant / caisse_id are not editable (see UpdateEncaissementRequest);
         // this edit is audit-logged by LogsActivity.
-        $encaissement->update($request->validated());
+        $encaissement->update($data);
 
         return redirect()->route('backoffice.encaissements.index')
             ->with('success', __('Payment updated.'));
+    }
+
+    /**
+     * Center scope for lookups and writes that hang off another module's
+     * record: the cashier needs no `registrations.view`/`students.view`
+     * permission to take money, only access to the record's center
+     * (CenterAccessService — same rule the policies use).
+     */
+    private function assertCenterAccess(Request $request, ?int $etablissementId): void
+    {
+        if (! app(CenterAccessService::class)->canAccessCenter($request->user(), $etablissementId)) {
+            abort(403);
+        }
     }
 }

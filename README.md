@@ -124,7 +124,7 @@ npm run dev                       # Vite watch (our JS/SCSS only)
 
 | Login | Role | Sees |
 |---|---|---|
-| `admin@gls.test` | Super-admin | everything, bypasses all gates |
+| `rafik@glszentrum.com` (Mohammed Rafik) | Super-admin | everything, bypasses all gates |
 | `directeur@gls.test` | Directeur | all centers, validates transfers |
 | `operations@gls.test` | Dir. des opérations | all centers, finance read-only |
 | `assistante@gls.test` | Assistante admin. | **one center**, records money, can't validate |

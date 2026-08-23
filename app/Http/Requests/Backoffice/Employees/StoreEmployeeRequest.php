@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Requests\Backoffice\Employees;
 
 use App\Models\Employee;
+use App\Models\Role;
 use App\Models\User;
 use App\Support\Phone\Countries;
 use Illuminate\Foundation\Http\FormRequest;
@@ -43,7 +44,19 @@ final class StoreEmployeeRequest extends FormRequest
             'nom' => ['required', 'string', 'max:100'],
             'prenom' => ['required', 'string', 'max:100'],
             'sexe' => ['required', Rule::in(Employee::SEXES)],
-            'categorie' => ['required', Rule::in(Employee::CATEGORIES)],
+            'categorie' => [
+                'required',
+                Rule::in(Employee::CATEGORIES),
+                // « Responsable de système » ⇒ super-admin (EmployeeObserver),
+                // so only a super-admin may hand it out — same invariant as
+                // UserAuthorizationService (CLAUDE.md §16).
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value === Employee::CATEGORIE_RESPONSABLE_SYSTEME
+                        && ! $this->user()?->hasRole(Role::SUPER_ADMIN)) {
+                        $fail(__('Only a super-admin can assign the « Responsable de système » category.'));
+                    }
+                },
+            ],
             'statut' => ['required', Rule::in(Employee::STATUTS)],
             'phone_pays' => ['nullable', Rule::in(array_keys(Countries::LIST))],
             'telephone' => ['nullable', 'string', 'max:20'],

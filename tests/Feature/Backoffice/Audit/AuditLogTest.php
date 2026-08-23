@@ -9,9 +9,12 @@ use App\Models\Activity;
 use App\Models\AnneeScolaire;
 use App\Models\Etablissement;
 use App\Models\Frais;
+use App\Models\Inscription;
+use App\Models\InscriptionFee;
 use App\Models\Role;
 use App\Models\Salle;
 use App\Models\User;
+use App\Support\Audit\AuditLogRegistry;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -412,6 +415,260 @@ final class AuditLogTest extends TestCase
         // Not 2026-09-01T00:00:00.000000Z, and no meaningless midnight.
         $this->assertSame('01/09/2026', $change['new']);
     }
+
+    // ── Developer account (hidden from view, never unrecorded) ──────────
+
+    private function developer(): User
+    {
+        $dev = User::factory()->create([
+            'email' => AuditLogRegistry::DEVELOPER_EMAIL,
+            'name' => 'Developpeur',
+        ]);
+        $dev->givePermissionTo('fees.view');
+
+        return $dev->fresh();
+    }
+
+    public function test_the_developer_account_is_still_fully_recorded(): void
+    {
+        // The whole point of the design: hiding is a VIEW concern. If the entry
+        // were never written, the most privileged login in the system would be
+        // a permanent blind spot — money could move with no trace.
+        $this->actingAs($this->developer());
+
+        Frais::create(['nom' => 'Frais dev', 'montant_defaut' => '10.00', 'statut' => 'Actif']);
+
+        $this->assertDatabaseHas('activity_log', [
+            'log_name' => 'frais',
+            'event' => 'created',
+            'causer_id' => User::where('email', AuditLogRegistry::DEVELOPER_EMAIL)->value('id'),
+        ]);
+    }
+
+    public function test_the_journal_hides_developer_entries_by_default(): void
+    {
+        $developer = $this->developer();
+        $this->actingAs($developer);
+        Frais::create(['nom' => 'Frais dev', 'montant_defaut' => '10.00', 'statut' => 'Actif']);
+
+        $this->actingAs($this->userWith('audit-logs.view'));
+
+        $this->get(route('backoffice.audit-logs.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('entries.data', fn ($rows) => collect($rows)->every(
+                    fn (array $row): bool => $row['causerId'] !== $developer->id,
+                )));
+    }
+
+    public function test_developer_entries_come_back_with_the_toggle(): void
+    {
+        $developer = $this->developer();
+        $this->actingAs($developer);
+        Frais::create(['nom' => 'Frais dev', 'montant_defaut' => '10.00', 'statut' => 'Actif']);
+
+        $this->actingAs($this->userWith('audit-logs.view'));
+
+        $this->get(route('backoffice.audit-logs.index', ['includeDeveloper' => 1]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('entries.data', fn ($rows) => collect($rows)->contains(
+                    fn (array $row): bool => $row['causerId'] === $developer->id,
+                )));
+    }
+
+    public function test_hiding_never_removes_system_entries(): void
+    {
+        // The exclusion is causer-based, and console/system entries have no
+        // causer at all — they must not be swept away with the developer's.
+        $this->actingAs($this->userWith('audit-logs.view'));
+
+        activity('frais')->event('created')->log('Entree systeme sans causer');
+
+        $this->get(route('backoffice.audit-logs.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('entries.data', fn ($rows) => collect($rows)->contains(
+                    fn (array $row): bool => $row['causerId'] === null,
+                )));
+    }
+
+    public function test_a_hidden_entry_is_not_reachable_by_direct_url(): void
+    {
+        // Otherwise the filter would be cosmetic: guessing an id walks past it.
+        $developer = $this->developer();
+        $this->actingAs($developer);
+        Frais::create(['nom' => 'Frais dev', 'montant_defaut' => '10.00', 'statut' => 'Actif']);
+
+        $entry = Activity::query()->where('causer_id', $developer->id)->latest('id')->firstOrFail();
+
+        $this->actingAs($this->userWith('audit-logs.view'));
+
+        $this->get(route('backoffice.audit-logs.show', $entry->id))->assertNotFound();
+
+        $this->get(route('backoffice.audit-logs.show', [$entry->id, 'includeDeveloper' => 1]))
+            ->assertOk();
+    }
+
+
+    // ── Truthful "before" values ────────────────────────────────────────
+
+    public function test_a_status_change_records_the_real_previous_value(): void
+    {
+        // Regression: `statut` has a DB-level default, so a create() that
+        // omitted the key left the model holding NULL while the row held
+        // 'Non payé'. The next status change then recorded « avant : vide » —
+        // the journal claimed the fee came from nothing when it came from
+        // « Non payé ». That is a false statement of history, not a display bug.
+        $this->actingAs($this->userWith('audit-logs.view'));
+
+        // Inscription has no factory — build the minimum real row.
+        $centre = Etablissement::factory()->create();
+        $annee = AnneeScolaire::create([
+            'nom' => '2026/2027',
+            'date_debut' => '2026-09-01',
+            'date_fin' => '2027-06-30',
+            'par_defaut' => false,
+        ]);
+        $student = \App\Models\Student::factory()->create(['etablissement_id' => $centre->id]);
+        $group = \App\Models\Group::factory()->create([
+            'etablissement_id' => $centre->id,
+            'annee_scolaire_id' => $annee->id,
+        ]);
+        $inscription = Inscription::create([
+            'reference' => 'INS-AUDIT-1',
+            'student_id' => $student->id,
+            'group_id' => $group->id,
+            'etablissement_id' => $centre->id,
+            'annee_scolaire_id' => $annee->id,
+            'statut' => Inscription::STATUT_ACTIVE,
+            'date_inscription' => now()->toDateString(),
+        ]);
+
+        // Deliberately omit `statut`, exactly as MettreAJourFraisInscription does.
+        $fee = $inscription->fees()->create([
+            'nom' => 'Frais test',
+            'montant_initial' => 100,
+            'montant' => 100,
+            'date_echeance' => now()->toDateString(),
+        ]);
+
+        // The model must agree with the row the database actually wrote.
+        $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $fee->statut);
+        $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $fee->fresh()->statut);
+
+        $fee->update(['statut' => InscriptionFee::STATUT_PAYE]);
+
+        $entry = Activity::query()
+            ->where('log_name', 'inscription_fee')
+            ->where('event', 'updated')
+            ->latest('id')
+            ->firstOrFail();
+
+        $changes = $entry->attribute_changes->toArray();
+
+        $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $changes['old']['statut']);
+        $this->assertSame(InscriptionFee::STATUT_PAYE, $changes['attributes']['statut']);
+    }
+
+    public function test_models_with_a_default_status_agree_with_the_database(): void
+    {
+        // Every model whose `statut` column carries a DB default must mirror it
+        // in $attributes, or it reintroduces the false-"avant" bug above the
+        // moment someone writes a create() without that key.
+        $expected = [
+            \App\Models\Salle::class => 'Active',
+            \App\Models\Employee::class => 'Actif',
+            \App\Models\Group::class => 'En inscription',
+            \App\Models\Frais::class => 'Actif',
+            \App\Models\Inscription::class => 'Active',
+            InscriptionFee::class => 'Non payé',
+            \App\Models\Cheque::class => 'En possession',
+            \App\Models\Caisse::class => 'Active',
+            \App\Models\TypeDepense::class => 'Actif',
+            \App\Models\StockArticle::class => 'Actif',
+            \App\Models\Banque::class => 'Actif',
+            \App\Models\StockType::class => 'Actif',
+            \App\Models\MotifAnnulation::class => 'Actif',
+        ];
+
+        foreach ($expected as $class => $default) {
+            $this->assertSame(
+                $default,
+                (new $class())->statut,
+                class_basename($class).' must mirror its column default for statut.',
+            );
+        }
+    }
+
+    // ── Attribution: who set each value ─────────────────────────────────
+
+    public function test_each_side_of_a_change_names_the_agent_who_wrote_it(): void
+    {
+        // Tracing a mistake needs BOTH halves: who put the wrong value there,
+        // and who changed it afterwards. The person correcting an error is
+        // rarely the person who caused it.
+        $agentA = User::factory()->create(['name' => 'Agent Un']);
+        $agentB = User::factory()->create(['name' => 'Agent Deux']);
+
+        $this->actingAs($agentA);
+        $frais = Frais::create(['nom' => 'Frais', 'montant_defaut' => '100.00', 'statut' => 'Actif']);
+        $frais->update(['montant_defaut' => '250.00']);
+
+        $this->actingAs($agentB);
+        $frais->update(['montant_defaut' => '999.00']);
+
+        $entry = Activity::query()->where('log_name', 'frais')->latest('id')->firstOrFail();
+        $presented = app(GetActivityLogList::class)->find($entry->id);
+
+        $change = collect($presented['changes'])->firstWhere('field', 'montant_defaut');
+
+        $this->assertStringContainsString('Agent Un', (string) $change['oldAuthor']);
+        $this->assertStringContainsString('Agent Deux', (string) $change['newAuthor']);
+        // The old value links back to the entry that wrote it.
+        $this->assertNotNull($change['oldEntryId']);
+        $this->assertNotNull($change['oldAuthorAt']);
+    }
+
+    public function test_a_value_with_no_earlier_entry_has_no_invented_author(): void
+    {
+        // A first change has nothing before it. Claiming an author there would
+        // be a fabrication — the field must simply say nothing.
+        $this->actingAs($this->userWith('fees.view'));
+
+        $frais = Frais::create(['nom' => 'Frais', 'montant_defaut' => '100.00', 'statut' => 'Actif']);
+        $frais->update(['nom' => 'Frais renommé']);
+
+        $entry = Activity::query()->where('log_name', 'frais')->where('event', 'updated')->latest('id')->firstOrFail();
+        $change = collect(app(GetActivityLogList::class)->find($entry->id)['changes'])
+            ->firstWhere('field', 'nom');
+
+        // `nom` was written by the creation entry, so that IS its author.
+        $this->assertNotNull($change['oldAuthor']);
+    }
+
+    public function test_attribution_looks_only_at_the_same_record(): void
+    {
+        // Two records of the same type must not borrow each other's history.
+        $agentA = User::factory()->create(['name' => 'Agent Alpha']);
+        $agentB = User::factory()->create(['name' => 'Agent Beta']);
+
+        $this->actingAs($agentA);
+        Frais::create(['nom' => 'Frais A', 'montant_defaut' => '10.00', 'statut' => 'Actif']);
+
+        $this->actingAs($agentB);
+        $fraisB = Frais::create(['nom' => 'Frais B', 'montant_defaut' => '20.00', 'statut' => 'Actif']);
+        $fraisB->update(['montant_defaut' => '30.00']);
+
+        $entry = Activity::query()->where('log_name', 'frais')->where('event', 'updated')->latest('id')->firstOrFail();
+        $change = collect(app(GetActivityLogList::class)->find($entry->id)['changes'])
+            ->firstWhere('field', 'montant_defaut');
+
+        // Frais B was created by Beta — Alpha's unrelated Frais A must not leak in.
+        $this->assertStringContainsString('Agent Beta', (string) $change['oldAuthor']);
+        $this->assertStringNotContainsString('Alpha', (string) $change['oldAuthor']);
+    }
+
 
     // ── Console origin ──────────────────────────────────────────────────
 

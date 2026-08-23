@@ -322,8 +322,13 @@ final class ReadOnlyPagesInertiaTest extends TestCase
             'date_transfert' => now(), 'statut' => CaisseTransfer::STATUT_EN_ATTENTE,
             'requested_by' => $requester->id,
         ]);
+        // A transfer has two ends: the DESTINATION center (Rabat) must see
+        // it — its recipient is the one who validates it — while a center
+        // on neither end stays denied.
         $this->centerUser($this->rabat, 'cash-transfers.view');
+        $this->get(route('backoffice.caisse-transfers.show', $transfer))->assertOk();
 
+        $this->centerUser(Etablissement::factory()->create(), 'cash-transfers.view');
         $this->get(route('backoffice.caisse-transfers.show', $transfer))->assertForbidden();
     }
 

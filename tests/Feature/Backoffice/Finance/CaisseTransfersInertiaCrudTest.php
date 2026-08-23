@@ -493,4 +493,67 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
 
         $this->put(route('backoffice.caisse-transfers.validate', $transfer))->assertForbidden();
     }
+
+    /**
+     * A second « Valider » on an already validated transfer (double-click,
+     * two tabs) must move nothing — the status is re-checked under a row
+     * lock inside the transaction, not on the stale in-memory model.
+     */
+    public function test_validating_twice_moves_the_money_only_once(): void
+    {
+        $requester = $this->userWith('cash-transfers.view', 'cash-transfers.create');
+        $this->actingAs($requester);
+        $source = $requester->employee->caisses()->first();
+        $source->update(['solde' => 1000]);
+        $destination = $this->caisse(500);
+
+        $this->post(route('backoffice.caisse-transfers.store'), [
+            'caisse_destination_id' => $destination->id,
+            'montant' => '300',
+        ]);
+        $transfer = CaisseTransfer::first();
+
+        $validator = $this->recipientOf($destination);
+        $this->actingAs($validator);
+
+        $this->put(route('backoffice.caisse-transfers.validate', $transfer))->assertRedirect();
+
+        // Domain action called again on the stale model — exactly what a
+        // concurrent second request sees.
+        try {
+            app(\App\Domain\Finance\Actions\ValiderTransfertCaisse::class)->handle($transfer, $validator->employee);
+            $this->fail('A validated transfer was validated again.');
+        } catch (\Illuminate\Validation\ValidationException) {
+        }
+
+        $this->assertSame('700.00', (string) $source->fresh()->solde);
+        $this->assertSame('800.00', (string) $destination->fresh()->solde);
+    }
+
+    public function test_a_third_party_cannot_cancel_someone_elses_pending_transfer(): void
+    {
+        $requester = $this->userWith('cash-transfers.view', 'cash-transfers.create', 'cash-transfers.update');
+        $this->actingAs($requester);
+        $requester->employee->caisses()->first()->update(['solde' => 1000]);
+        $destination = $this->caisse(500);
+
+        $this->post(route('backoffice.caisse-transfers.store'), [
+            'caisse_destination_id' => $destination->id,
+            'montant' => '300',
+        ]);
+        $transfer = CaisseTransfer::first();
+
+        $this->actingAs($this->userWith('cash-transfers.view', 'cash-transfers.update'))
+            ->from(route('backoffice.caisses.index'))
+            ->put(route('backoffice.caisse-transfers.update', $transfer), ['statut' => CaisseTransfer::STATUT_ANNULE])
+            ->assertSessionHasErrors('statut');
+        $this->assertSame(CaisseTransfer::STATUT_EN_ATTENTE, $transfer->fresh()->statut);
+
+        // The requester can.
+        $this->actingAs($requester->fresh())
+            ->put(route('backoffice.caisse-transfers.update', $transfer), ['statut' => CaisseTransfer::STATUT_ANNULE])
+            ->assertSessionDoesntHaveErrors()
+            ->assertRedirect();
+        $this->assertSame(CaisseTransfer::STATUT_ANNULE, $transfer->fresh()->statut);
+    }
 }

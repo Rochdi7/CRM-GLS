@@ -17,26 +17,60 @@ use Illuminate\Validation\ValidationException;
  * are append-only (CLAUDE.md §11). caisses.solde is untouched here — the
  * money already arrived into the till when the avance was originally
  * recorded; only its allocation changes.
+ *
+ * Every guard runs INSIDE the transaction on rows re-read under
+ * lockForUpdate(): the avance's remaining balance and the fee's remaining
+ * due are both "read then insert" checks, so two concurrent applies (a
+ * double-click, two tabs) would otherwise each see the full balance and
+ * together spend it twice.
  */
 final class AppliquerAvance
 {
     public function handle(Encaissement $avance, InscriptionFee $fee, float $montant): Encaissement
     {
-        if (! $avance->isAvance()) {
-            throw ValidationException::withMessages([
-                'avance' => __('This payment is not an unallocated advance.'),
-            ]);
-        }
+        return DB::transaction(function () use ($avance, $fee, $montant): Encaissement {
+            $avance = Encaissement::query()->whereKey($avance->getKey())->lockForUpdate()->firstOrFail();
+            $fee = InscriptionFee::query()->with('inscription')->whereKey($fee->getKey())->lockForUpdate()->firstOrFail();
 
-        $restant = $avance->montantRestant();
+            if (! $avance->isAvance()) {
+                throw ValidationException::withMessages([
+                    'avance' => __('This payment is not an unallocated advance.'),
+                ]);
+            }
 
-        if ($montant <= 0 || $montant > $restant) {
-            throw ValidationException::withMessages([
-                'montant' => __('The amount cannot exceed the advance\'s remaining balance.'),
-            ]);
-        }
+            // The fee must belong to the SAME student as the avance: a
+            // tampered fee_id would otherwise settle another student's fee
+            // with this student's money, leaving a row whose student_id and
+            // fee disagree.
+            if ($fee->inscription === null || $fee->inscription->student_id !== $avance->student_id) {
+                throw ValidationException::withMessages([
+                    'fee_id' => __('This fee does not belong to the student of this advance.'),
+                ]);
+            }
 
-        return DB::transaction(function () use ($avance, $fee, $montant, $restant): Encaissement {
+            if ($fee->estMasque()) {
+                throw ValidationException::withMessages([
+                    'fee_id' => __('This fee is no longer active.'),
+                ]);
+            }
+
+            $restant = $avance->montantRestant();
+            $montant = round($montant, 2);
+
+            if ($montant <= 0 || $montant > $restant) {
+                throw ValidationException::withMessages([
+                    'montant' => __('The amount cannot exceed the advance\'s remaining balance.'),
+                ]);
+            }
+
+            $resteFee = round(max(0.0, (float) $fee->montant - $fee->montantPaye()), 2);
+
+            if ($montant > $resteFee) {
+                throw ValidationException::withMessages([
+                    'montant' => __('The amount cannot exceed the remaining balance of this fee.'),
+                ]);
+            }
+
             $application = Encaissement::create([
                 'reference' => ReferenceGenerator::make('ENC', 'encaissements'),
                 'student_id' => $avance->student_id,

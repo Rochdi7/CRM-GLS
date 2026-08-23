@@ -303,9 +303,13 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame('0.00', (string) $avanceRows[0]['montantUtilise']);
         $this->assertSame('400.00', (string) $avanceRows[0]['montantRestant']);
 
+        // Default "Paiements" tab lists only fee-allocated rows: the avance is
+        // the parent of the apply rows that later credit each fee, so showing
+        // it here would display the same money twice. It has its own tab.
         $allRows = $this->get(route('backoffice.encaissements.index'))
             ->viewData('page')['props']['encaissements']['data'];
-        $this->assertCount(2, $allRows);
+        $this->assertCount(1, $allRows);
+        $this->assertSame('Chèque', $allRows[0]['methode']);
     }
 
     public function test_an_avance_can_be_applied_to_a_fee_without_touching_caisse_solde_again(): void
@@ -817,5 +821,224 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->post(route('backoffice.encaissements.recu.email', $encaissement), [
             'email' => 'not-an-email',
         ])->assertSessionHasErrors('email');
+    }
+
+    // --- money-integrity guards (audit 22/08/2026) ------------------------
+
+    private function avanceFor(Student $student, User $user, float $montant): Encaissement
+    {
+        $this->actingAs($user)->post(route('backoffice.avances.store'), [
+            'student_id' => $student->id,
+            'montant' => (string) $montant,
+            'methode' => 'Espèces',
+            'date_paiement' => '2025-09-21',
+        ])->assertSessionDoesntHaveErrors();
+
+        return Encaissement::whereNull('inscription_fee_id')->where('student_id', $student->id)->latest('id')->firstOrFail();
+    }
+
+    public function test_an_avance_cannot_be_applied_to_another_students_fee(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update');
+        [$studentA] = $this->enrolledStudentWithFee(1000);
+        [, , $feeOfB] = $this->enrolledStudentWithFee(1000);
+        $avance = $this->avanceFor($studentA, $user, 600);
+
+        $this->from(route('backoffice.encaissements.index'))
+            ->post(route('backoffice.avances.apply', $avance), ['fee_id' => $feeOfB->id, 'montant' => '600'])
+            ->assertSessionHasErrors('fee_id');
+
+        $this->assertSame(1, Encaissement::count());
+        $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $feeOfB->fresh()->statut);
+    }
+
+    public function test_an_avance_cannot_overpay_a_fee(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update');
+        [$student, , $fee] = $this->enrolledStudentWithFee(500);
+        $avance = $this->avanceFor($student, $user, 1000);
+
+        $this->from(route('backoffice.encaissements.index'))
+            ->post(route('backoffice.avances.apply', $avance), ['fee_id' => $fee->id, 'montant' => '600'])
+            ->assertSessionHasErrors('montant');
+        $this->assertSame('1000.00', number_format($avance->fresh()->montantRestant(), 2, '.', ''));
+
+        // The exact remaining due is accepted.
+        $this->post(route('backoffice.avances.apply', $avance), ['fee_id' => $fee->id, 'montant' => '500'])
+            ->assertSessionDoesntHaveErrors();
+        $this->assertSame(InscriptionFee::STATUT_PAYE, $fee->fresh()->statut);
+        $this->assertSame('500.00', number_format($avance->fresh()->montantRestant(), 2, '.', ''));
+
+        // A fully paid fee accepts nothing more.
+        $this->from(route('backoffice.encaissements.index'))
+            ->post(route('backoffice.avances.apply', $avance), ['fee_id' => $fee->id, 'montant' => '1'])
+            ->assertSessionHasErrors('montant');
+    }
+
+    public function test_a_refunded_avance_can_no_longer_be_applied_and_a_refund_is_capped_to_its_remaining(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update', 'refunds.create');
+        [$student, , $fee] = $this->enrolledStudentWithFee(1000);
+        $avance = $this->avanceFor($student, $user, 600);
+        $caisse = $user->employee->caisses()->first();
+
+        // Refund more than the avance holds → refused.
+        $this->from(route('backoffice.depenses.index'))
+            ->post(route('backoffice.remboursements.store'), [
+                'beneficiaire_id' => $student->id,
+                'encaissement_id' => $avance->id,
+                'montant' => '700',
+                'date_remboursement' => '2025-09-22',
+            ])->assertSessionHasErrors('montant');
+
+        // Refund the whole avance → the student's credit is consumed.
+        $this->post(route('backoffice.remboursements.store'), [
+            'beneficiaire_id' => $student->id,
+            'encaissement_id' => $avance->id,
+            'montant' => '600',
+            'date_remboursement' => '2025-09-22',
+        ])->assertSessionDoesntHaveErrors();
+
+        $this->assertSame('0.00', (string) $caisse->fresh()->solde);
+        $this->assertSame('0.00', number_format($avance->fresh()->montantRestant(), 2, '.', ''));
+
+        // The same money cannot be applied to a fee afterwards.
+        $this->from(route('backoffice.encaissements.index'))
+            ->post(route('backoffice.avances.apply', $avance), ['fee_id' => $fee->id, 'montant' => '600'])
+            ->assertSessionHasErrors('montant');
+        $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $fee->fresh()->statut);
+    }
+
+    public function test_a_refund_must_target_a_payment_of_the_same_student(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'refunds.create');
+        [$studentA] = $this->enrolledStudentWithFee(1000);
+        [$studentB] = $this->enrolledStudentWithFee(1000);
+        $avanceOfA = $this->avanceFor($studentA, $user, 300);
+
+        $this->from(route('backoffice.depenses.index'))
+            ->post(route('backoffice.remboursements.store'), [
+                'beneficiaire_id' => $studentB->id,
+                'encaissement_id' => $avanceOfA->id,
+                'montant' => '100',
+                'date_remboursement' => '2025-09-22',
+            ])->assertSessionHasErrors('encaissement_id');
+    }
+
+    public function test_a_refunded_payment_cannot_be_deleted(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.delete', 'refunds.create');
+        [$student] = $this->enrolledStudentWithFee(1000);
+        $avance = $this->avanceFor($student, $user, 500);
+        $caisse = $user->employee->caisses()->first();
+
+        $this->post(route('backoffice.remboursements.store'), [
+            'beneficiaire_id' => $student->id,
+            'encaissement_id' => $avance->id,
+            'montant' => '200',
+            'date_remboursement' => '2025-09-22',
+        ])->assertSessionDoesntHaveErrors();
+        $this->assertSame('300.00', (string) $caisse->fresh()->solde);
+
+        $this->from(route('backoffice.encaissements.index'))
+            ->delete(route('backoffice.encaissements.destroy', $avance))
+            ->assertSessionHasErrors('encaissement');
+
+        $this->assertDatabaseHas('encaissements', ['id' => $avance->id]);
+        $this->assertSame('300.00', (string) $caisse->fresh()->solde);
+    }
+
+    public function test_a_payment_cannot_be_recorded_on_another_students_registration(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        $this->actingAs($user);
+        [$studentA] = $this->enrolledStudentWithFee(1000);
+        [, $inscriptionB, $feeB] = $this->enrolledStudentWithFee(1000);
+
+        $this->from(route('backoffice.encaissements.index'))
+            ->post(route('backoffice.encaissements.store'), [
+                'student_id' => $studentA->id,
+                'inscription_id' => $inscriptionB->id,
+                'date_paiement' => '2025-09-20',
+                'payment_lines' => [
+                    ['fee_id' => $feeB->id, 'montant' => '100', 'methode' => 'Espèces', 'date_paiement' => '2025-09-20'],
+                ],
+            ])->assertSessionHasErrors('inscription_id');
+
+        $this->assertSame(0, Encaissement::count());
+    }
+
+    public function test_two_rows_for_the_same_fee_cannot_together_exceed_its_remaining(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        $this->actingAs($user);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
+
+        $this->from(route('backoffice.encaissements.index'))
+            ->post(route('backoffice.encaissements.store'), [
+                'student_id' => $student->id,
+                'inscription_id' => $inscription->id,
+                'date_paiement' => '2025-09-20',
+                'payment_lines' => [
+                    ['fee_id' => $fee->id, 'montant' => '800', 'methode' => 'Espèces', 'date_paiement' => '2025-09-20'],
+                    ['fee_id' => $fee->id, 'montant' => '800', 'methode' => 'Espèces', 'date_paiement' => '2025-09-20'],
+                ],
+            ])->assertSessionHasErrors('payment_lines');
+
+        $this->assertSame(0, Encaissement::count());
+        $this->assertSame('0.00', (string) $user->employee->caisses()->first()->fresh()->solde);
+    }
+
+    public function test_a_cheque_funded_payment_keeps_its_cheque_method_on_edit(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update', 'cheques.view', 'cheques.create');
+        $this->actingAs($user);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(500);
+
+        $cheque = \App\Models\Cheque::create([
+            'reference' => 'CHQ-EDIT', 'source' => \App\Models\Cheque::SOURCE_ETUDIANT, 'student_id' => $student->id,
+            'numero_cheque' => 'CHQ-EDIT-1', 'montant' => 500, 'banque' => 'BMCE',
+            'date_reception' => '2025-09-01', 'date_echeance' => '2025-10-01',
+            'type' => \App\Models\Cheque::TYPE_A_DEPOSER, 'statut' => \App\Models\Cheque::STATUT_EN_POSSESSION,
+            'etablissement_id' => $this->centre->id, 'agent_id' => $user->employee->id,
+        ]);
+
+        $this->post(route('backoffice.encaissements.store'), [
+            'student_id' => $student->id,
+            'inscription_id' => $inscription->id,
+            'date_paiement' => '2025-09-20',
+            'payment_lines' => [
+                ['fee_id' => $fee->id, 'montant' => '500', 'methode' => 'Chèque', 'date_paiement' => '2025-09-20', 'cheque_id' => $cheque->id],
+            ],
+        ])->assertSessionDoesntHaveErrors();
+        $encaissement = Encaissement::firstOrFail();
+
+        $this->from(route('backoffice.encaissements.index'))
+            ->put(route('backoffice.encaissements.update', $encaissement), [
+                'methode' => 'Espèces', 'date_paiement' => '2025-09-21',
+            ])->assertSessionHasErrors('methode');
+
+        // Retyped cheque identity is ignored; note/date still editable.
+        $this->put(route('backoffice.encaissements.update', $encaissement), [
+            'methode' => 'Chèque', 'numero_cheque' => 'OTHER', 'banque' => 'CIH',
+            'date_echeance_cheque' => '2025-12-01', 'date_paiement' => '2025-09-21', 'note' => 'ok',
+        ])->assertSessionDoesntHaveErrors();
+
+        $fresh = $encaissement->fresh();
+        $this->assertSame('CHQ-EDIT-1', $fresh->numero_cheque);
+        $this->assertSame('BMCE', $fresh->banque);
+        $this->assertSame('ok', $fresh->note);
+        $this->assertSame('2025-09-21', $fresh->date_paiement->toDateString());
+    }
+
+    public function test_show_requires_payments_view(): void
+    {
+        $owner = $this->userWith('payments.view', 'payments.create');
+        [$student] = $this->enrolledStudentWithFee(1000);
+        $avance = $this->avanceFor($student, $owner, 100);
+
+        $this->actingAs($this->userWith('dashboard.view'))
+            ->get(route('backoffice.encaissements.show', $avance))
+            ->assertForbidden();
     }
 }

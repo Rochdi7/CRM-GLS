@@ -63,6 +63,22 @@ class Cheque extends Model
         'retourne_le', 'retourne_par_id',
     ];
 
+    /**
+     * Mirror of the column default, so a freshly created row and the model in
+     * memory agree.
+     *
+     * Without this, a create() that omits `statut` leaves the model holding
+     * NULL while the database row holds the default. The next status change
+     * then records « avant : (vide) » in the audit journal — a false statement
+     * of history, since the record did have a status. See InscriptionFee,
+     * where this actually produced wrong entries.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'statut' => self::STATUT_EN_POSSESSION,
+    ];
+
     protected function casts(): array
     {
         return [
@@ -111,12 +127,13 @@ class Cheque extends Model
 
     public function montantUtilise(): float
     {
-        return (float) $this->encaissements()->sum('montant');
+        return round((float) $this->encaissements()->sum('montant'), 2);
     }
 
+    /** Rounded to the cent so paying the exact remaining balance is never refused. */
     public function montantRestant(): float
     {
-        return max(0.0, (float) $this->montant - $this->montantUtilise());
+        return round(max(0.0, (float) $this->montant - $this->montantUtilise()), 2);
     }
 
     public function estRetourne(): bool

@@ -72,8 +72,20 @@ final class GetCaisseJournal
 
         $ids = $this->caisseIds($user, $scope);
 
-        $totalEncaissements = (float) Encaissement::query()->whereIn('caisse_id', $ids)->sum('montant');
-        $totalDepenses = (float) Depense::query()->whereIn('caisse_id', $ids)->sum('montant');
+        // Only rows that actually MOVED the till are counted — the journal
+        // must reconcile with `solde`:
+        //  - an "apply" row (applied_from_encaissement_id) reallocates an
+        //    avance already counted once (AppliquerAvance never credits);
+        //  - a pending/refused dépense never debited anything (approval flow);
+        //  - a pending/cancelled transfer never moved money (validation does).
+        $totalEncaissements = (float) Encaissement::query()
+            ->whereIn('caisse_id', $ids)
+            ->whereNull('applied_from_encaissement_id')
+            ->sum('montant');
+        $totalDepenses = (float) Depense::query()
+            ->whereIn('caisse_id', $ids)
+            ->where('statut', Depense::STATUT_APPROUVEE)
+            ->sum('montant');
         // Refunds decrement the till exactly like a dépense
         // (EnregistrerRemboursement), but they are their own outflow and must
         // not be folded into the "Dépenses" KPI — without this total the page
@@ -136,6 +148,7 @@ final class GetCaisseJournal
             $rows = $rows->concat(
                 Encaissement::query()->with(['student', 'agent'])
                     ->whereIn('caisse_id', $ids)
+                    ->whereNull('applied_from_encaissement_id')
                     ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_paiement', '>=', $dateFrom))
                     ->when($dateTo !== '', fn ($q) => $q->whereDate('date_paiement', '<=', $dateTo))
                     ->get()
@@ -158,6 +171,7 @@ final class GetCaisseJournal
             $rows = $rows->concat(
                 Depense::query()->with(['typeDepense', 'agent'])
                     ->whereIn('caisse_id', $ids)
+                    ->where('statut', Depense::STATUT_APPROUVEE)
                     ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_depense', '>=', $dateFrom))
                     ->when($dateTo !== '', fn ($q) => $q->whereDate('date_depense', '<=', $dateTo))
                     ->get()
@@ -204,6 +218,7 @@ final class GetCaisseJournal
             $rows = $rows->concat(
                 CaisseTransfer::query()->with(['caisseSource', 'caisseDestination', 'requestedBy'])
                     ->where(fn ($q) => $q->whereIn('caisse_source_id', $ids)->orWhereIn('caisse_destination_id', $ids))
+                    ->where('statut', CaisseTransfer::STATUT_VALIDE)
                     ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_transfert', '>=', $dateFrom))
                     ->when($dateTo !== '', fn ($q) => $q->whereDate('date_transfert', '<=', $dateTo))
                     ->get()

@@ -61,6 +61,13 @@ final class GetEncaissementsList
             // ConvertirEncaissementsEnAvance / ChangerGroupeInscription.
             ->when($view === 'cheque', fn ($q) => $q->where('methode', Encaissement::METHODE_CHEQUE))
             ->when($view === 'avance', fn ($q) => $q->whereNull('inscription_fee_id'))
+            // Default "Paiements" tab: only rows allocated to a fee. An avance
+            // is the PARENT of the "apply" rows that later credit each fee
+            // (applied_from_encaissement_id) — listing it alongside them would
+            // show the same money twice (1300 avance + 300 + 1000 applied).
+            // Avances live under their own tab; the Chèques tab keeps them
+            // because it tracks every cheque's échéance, allocated or not.
+            ->when($view === '', fn ($q) => $q->whereNotNull('inscription_fee_id'))
             ->when($caisseFilter !== '', fn ($q) => $q->where('caisse_id', (int) $caisseFilter))
             ->when($methodeFilter !== '', fn ($q) => $q->where('methode', $methodeFilter))
             ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_paiement', '>=', $dateFrom))

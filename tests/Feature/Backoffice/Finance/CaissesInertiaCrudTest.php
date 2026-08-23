@@ -220,4 +220,43 @@ final class CaissesInertiaCrudTest extends TestCase
             'date_echeance' => '2025-10-01', 'statut' => 'Non payé',
         ]);
     }
+
+    /**
+     * The journal must reconcile with `solde`: an avance "apply" row never
+     * moved the till (AppliquerAvance), a pending/cancelled transfer never
+     * moved money, so neither may be listed or summed as a movement.
+     */
+    public function test_journal_counts_only_rows_that_moved_the_till(): void
+    {
+        $user = $this->userWith('cash-registers.view');
+        $employee = Employee::factory()->create(['user_id' => $user->id, 'etablissement_id' => $this->centre->id]);
+        $this->actingAs($user);
+        $caisse = $employee->caisses()->first();
+        $student = \App\Models\Student::factory()->create(['etablissement_id' => $this->centre->id]);
+
+        $avance = Encaissement::create([
+            'reference' => 'ENC-AVANCE', 'student_id' => $student->id, 'inscription_fee_id' => null,
+            'caisse_id' => $caisse->id, 'agent_id' => $employee->id,
+            'montant' => 2000, 'methode' => 'Espèces', 'date_paiement' => '2025-09-15',
+        ]);
+        Encaissement::create([
+            'reference' => 'ENC-APPLY', 'student_id' => $student->id, 'inscription_fee_id' => $this->makeFee()->id,
+            'caisse_id' => $caisse->id, 'agent_id' => $employee->id, 'applied_from_encaissement_id' => $avance->id,
+            'montant' => 2000, 'methode' => 'Espèces', 'date_paiement' => '2025-09-16',
+        ]);
+        $other = Employee::factory()->create(['etablissement_id' => $this->centre->id])->caisses()->first();
+        \App\Models\CaisseTransfer::create([
+            'reference' => 'TRF-PENDING', 'caisse_source_id' => $caisse->id, 'caisse_destination_id' => $other->id,
+            'montant' => 500, 'date_transfert' => '2025-09-17', 'statut' => \App\Models\CaisseTransfer::STATUT_EN_ATTENTE,
+            'requested_by' => $employee->id, 'solde_source_avant' => 0, 'solde_dest_avant' => 0,
+        ]);
+
+        $response = $this->get(route('backoffice.caisses.journal', ['scope' => 'mine']))->json();
+
+        $references = collect($response['rows'])->pluck('reference');
+        $this->assertTrue($references->contains('ENC-AVANCE'));
+        $this->assertFalse($references->contains('ENC-APPLY'));
+        $this->assertFalse($references->contains('TRF-PENDING'));
+        $this->assertSame('2000.00', $response['totalEncaissements']);
+    }
 }

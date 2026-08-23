@@ -11,7 +11,7 @@ use Illuminate\Database\Seeder;
 
 /**
  * Seeds GLS reference data (idempotent — safe to re-run):
- *  - academic years 2024/2025 and 2025/2026 (2025/2026 = default)
+ *  - academic years 2025/2026 (default) and 2026/2027
  *  - the 6 GLS branches (Marrakech is head office)
  *  - 7 rooms per branch (3 teacher-named + 4 German city names)
  *
@@ -51,16 +51,6 @@ final class ReferentialDataSeeder extends Seeder
     private function seedAnneesScolaires(): void
     {
         AnneeScolaire::query()->updateOrCreate(
-            ['nom' => '2024/2025'],
-            [
-                'date_debut' => '2024-09-01',
-                'date_fin' => '2025-08-31',
-                'par_defaut' => false,
-                'inscription_ouverte' => false,
-            ],
-        );
-
-        AnneeScolaire::query()->updateOrCreate(
             ['nom' => '2025/2026'],
             [
                 'date_debut' => '2025-09-01',
@@ -70,8 +60,28 @@ final class ReferentialDataSeeder extends Seeder
             ],
         );
 
+        AnneeScolaire::query()->updateOrCreate(
+            ['nom' => '2026/2027'],
+            [
+                'date_debut' => '2026-09-01',
+                'date_fin' => '2027-08-31',
+                'par_defaut' => false,
+                'inscription_ouverte' => true,
+            ],
+        );
+
         // Guarantee exactly one default year.
         AnneeScolaire::query()->where('nom', '!=', '2025/2026')->update(['par_defaut' => false]);
+
+        // Retire the legacy 2024/2025 year — but only when nothing references it
+        // (this seeder re-runs on the live database; a year carrying groups,
+        // inscriptions or séances must never be dropped from a seeder).
+        AnneeScolaire::query()
+            ->where('nom', '2024/2025')
+            ->whereDoesntHave('groups')
+            ->whereDoesntHave('inscriptions')
+            ->get()
+            ->each(fn (AnneeScolaire $annee) => $annee->delete());
     }
 
     private function seedEtablissementsEtSalles(): void

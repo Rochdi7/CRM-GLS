@@ -409,7 +409,7 @@ Route::prefix('backoffice')
             Route::delete('encaissements/{encaissement}', [EncaissementController::class, 'destroy'])
                 ->middleware('permission:payments.delete')->name('encaissements.destroy');
             Route::get('encaissements/{encaissement}', [EncaissementController::class, 'show'])
-                ->name('encaissements.show');
+                ->middleware('permission:payments.view')->name('encaissements.show');
             Route::get('students/{student}/inscriptions-for-payment', [EncaissementController::class, 'studentInscriptions'])
                 ->name('students.inscriptions-for-payment');
             Route::get('inscriptions/{inscription}/unpaid-fees', [EncaissementController::class, 'inscriptionFees'])

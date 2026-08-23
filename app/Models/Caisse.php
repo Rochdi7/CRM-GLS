@@ -56,6 +56,22 @@ class Caisse extends Model
         'nom', 'type', 'etablissement_id', 'responsable_employee_id', 'solde', 'statut',
     ];
 
+    /**
+     * Mirror of the column default, so a freshly created row and the model in
+     * memory agree.
+     *
+     * Without this, a create() that omits `statut` leaves the model holding
+     * NULL while the database row holds the default. The next status change
+     * then records « avant : (vide) » in the audit journal — a false statement
+     * of history, since the record did have a status. See InscriptionFee,
+     * where this actually produced wrong entries.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'statut' => self::STATUT_ACTIVE,
+    ];
+
     protected function casts(): array
     {
         return [

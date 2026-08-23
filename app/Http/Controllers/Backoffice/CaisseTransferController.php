@@ -13,6 +13,7 @@ use App\Http\Requests\Backoffice\CaisseTransfers\UpdateCaisseTransferRequest;
 use App\Models\CaisseTransfer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -84,24 +85,46 @@ final class CaisseTransferController extends Controller
     {
         $this->authorize('update', $caisse_transfer);
 
-        // A validated (or cancelled) transfer is frozen — matches
-        // CaisseTransfersIndex::save()'s soft error, not a hard 403.
-        if ($caisse_transfer->statut !== CaisseTransfer::STATUT_EN_ATTENTE) {
-            throw ValidationException::withMessages([
-                'note' => __('Only a pending transfer can be edited.'),
-            ]);
-        }
-
         $data = $request->validated();
 
-        // Only note (and an explicit cancellation via statut=Annulé) are
-        // ever written here — tills/amount are structurally absent from
-        // UpdateCaisseTransferRequest's rules, matching the Livewire form's
-        // own read-only tills/amount in edit mode.
-        $caisse_transfer->update([
-            'note' => $data['note'] ?? null,
-            ...(isset($data['statut']) ? ['statut' => $data['statut']] : []),
-        ]);
+        // Cancelling is the requester's decision (or the recipient declining
+        // it): a third party holding cash-transfers.update must not be able
+        // to void someone else's pending request.
+        if (($data['statut'] ?? null) === CaisseTransfer::STATUT_ANNULE) {
+            $employee = $request->user()->employee;
+            $isParty = $employee !== null && (
+                $caisse_transfer->requested_by === $employee->id
+                || $employee->caisses()->whereKey($caisse_transfer->caisse_destination_id)->exists()
+            );
+
+            if (! $isParty) {
+                throw ValidationException::withMessages([
+                    'statut' => __('Only the requester or the recipient can cancel a transfer.'),
+                ]);
+            }
+        }
+
+        DB::transaction(function () use ($caisse_transfer, $data): void {
+            // Re-read under lock so a cancel can't interleave with a
+            // validation (ValiderTransfertCaisse locks the same row).
+            $locked = CaisseTransfer::query()->whereKey($caisse_transfer->getKey())->lockForUpdate()->firstOrFail();
+
+            // A validated (or cancelled) transfer is frozen — matches
+            // CaisseTransfersIndex::save()'s soft error, not a hard 403.
+            if ($locked->statut !== CaisseTransfer::STATUT_EN_ATTENTE) {
+                throw ValidationException::withMessages([
+                    'note' => __('Only a pending transfer can be edited.'),
+                ]);
+            }
+
+            // Only note (and an explicit cancellation via statut=Annulé) are
+            // ever written here — tills/amount are structurally absent from
+            // UpdateCaisseTransferRequest's rules.
+            $locked->update([
+                'note' => $data['note'] ?? null,
+                ...(isset($data['statut']) ? ['statut' => $data['statut']] : []),
+            ]);
+        });
 
         return redirect()->route('backoffice.caisses.index', ['tab' => 'transferts'])
             ->with('success', __('Transfer updated.'));

@@ -60,6 +60,15 @@ class Employee extends Model implements HasMedia
 
     public const CATEGORIE_DIRECTEUR_QUALITE = 'Directeur Qualité et Amélioration continue';
 
+    /**
+     * The ONE job title whose default role is `super-admin`
+     * (PermissionRegistry::defaultRoleFor()). EmployeeObserver grants it
+     * unconditionally, and only a super-admin may pick it on the Employees
+     * form (Store/UpdateEmployeeRequest) — otherwise any `employees.create`
+     * holder could mint a super-admin, defeating CLAUDE.md §16.
+     */
+    public const CATEGORIE_RESPONSABLE_SYSTEME = 'Responsable de système';
+
     public const CATEGORIE_AUTRE = 'Autre';
 
     /**
@@ -90,6 +99,7 @@ class Employee extends Model implements HasMedia
         self::CATEGORIE_RESPONSABLE_MARKETING,
         self::CATEGORIE_RESPONSABLE_ADMINISTRATIVE,
         self::CATEGORIE_ASSISTANTE_ADMINISTRATIVE,
+        self::CATEGORIE_RESPONSABLE_SYSTEME,
         self::CATEGORIE_AUTRE,
     ];
 
@@ -109,6 +119,22 @@ class Employee extends Model implements HasMedia
         'telephone', 'whatsapp', 'email', 'adresse', 'note',
         'date_naissance', 'date_embauche', 'salaire',
         'etablissement_id', 'user_id',
+    ];
+
+    /**
+     * Mirror of the column default, so a freshly created row and the model in
+     * memory agree.
+     *
+     * Without this, a create() that omits `statut` leaves the model holding
+     * NULL while the database row holds the default. The next status change
+     * then records « avant : (vide) » in the audit journal — a false statement
+     * of history, since the record did have a status. See InscriptionFee,
+     * where this actually produced wrong entries.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'statut' => self::STATUT_ACTIF,
     ];
 
     protected function casts(): array

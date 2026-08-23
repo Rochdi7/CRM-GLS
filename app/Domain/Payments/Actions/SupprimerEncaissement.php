@@ -27,7 +27,8 @@ use Illuminate\Validation\ValidationException;
  * Refused when the row is entangled with other records, because unwinding
  * those cannot be done correctly here:
  *  - an avance that has already been applied to fees,
- *  - a payment made with a tracked chèque (Cheques module owns that lifecycle).
+ *  - a payment made with a tracked chèque (Cheques module owns that lifecycle),
+ *  - a payment that has already been (partly) refunded.
  */
 final class SupprimerEncaissement
 {
@@ -73,6 +74,16 @@ final class SupprimerEncaissement
         if ($encaissement->isAvance() && $encaissement->montantUtilise() > 0) {
             throw ValidationException::withMessages([
                 'encaissement' => __('This advance has already been applied to fees. Remove those allocations first.'),
+            ]);
+        }
+
+        // A refunded payment already moved money OUT of the till once
+        // (EnregistrerRemboursement). Deleting it would debit the same
+        // amount again AND orphan the remboursement (FK nullOnDelete), so
+        // the trail could no longer explain the outflow.
+        if ($encaissement->remboursements()->exists()) {
+            throw ValidationException::withMessages([
+                'encaissement' => __('A refunded payment cannot be deleted.'),
             ]);
         }
 

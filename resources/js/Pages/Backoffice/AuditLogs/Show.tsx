@@ -48,22 +48,49 @@ function eventVariant(event: string | null) {
  * the record actually holds `11`. Showing only the name would hide what was
  * written; showing only the id is what made the journal unreadable.
  */
-function ValueCell({ raw, label, tone }: { raw: string | null; label: string | null; tone: 'old' | 'new' }) {
-    if (raw === null || raw === '') {
-        return <span className="text-muted fst-italic">{t('empty')}</span>;
-    }
+interface ValueCellProps {
+    raw: string | null;
+    label: string | null;
+    tone: 'old' | 'new';
+    /** Who wrote this value; omitted when unknown. */
+    author?: string | null;
+    /** When they wrote it (old side only). */
+    authorAt?: string | null;
+    /** Journal entry that wrote it, so the reader can jump to that change. */
+    entryId?: number | null;
+}
 
+function ValueCell({ raw, label, tone, author, authorAt, entryId }: ValueCellProps) {
     const color = tone === 'old' ? 'text-danger' : 'text-success';
 
-    if (label === null) {
-        return <span className={color}>{raw}</span>;
-    }
+    // Even an empty "avant" carries attribution: knowing the field WAS empty
+    // and who left it that way is part of tracing a mistake.
+    const value =
+        raw === null || raw === '' ? (
+            <span className="text-muted fst-italic">{t('empty')}</span>
+        ) : label === null ? (
+            <span className={color}>{raw}</span>
+        ) : (
+            <span className={color}>
+                {label}
+                <span className="d-block fs-12 text-muted text-normal-case">#{raw}</span>
+            </span>
+        );
 
     return (
-        <span className={color}>
-            {label}
-            <span className="d-block fs-12 text-muted text-normal-case">#{raw}</span>
-        </span>
+        <>
+            {value}
+            <span className="d-block fs-12 text-muted mt-1">
+                <i className="ti ti-user me-1" aria-hidden="true" />
+                {author ?? t('unknown (predates the journal)')}
+                {authorAt && <span className="text-normal-case"> · {authorAt}</span>}
+                {entryId && (
+                    <Link href={`/backoffice/audit-logs/${entryId}`} className="ms-1 text-normal-case">
+                        #{entryId}
+                    </Link>
+                )}
+            </span>
+        </>
     );
 }
 
@@ -200,8 +227,8 @@ export default function AuditLogShow({ entry }: AuditLogShowPageProps) {
                         head={
                             <tr>
                                 <th>{t('Field')}</th>
-                                <th>{t('Before')}</th>
-                                <th>{t('After')}</th>
+                                <th>{t('Before (and who set it)')}</th>
+                                <th>{t('After (and who set it)')}</th>
                             </tr>
                         }
                     >
@@ -209,10 +236,22 @@ export default function AuditLogShow({ entry }: AuditLogShowPageProps) {
                             <tr key={change.field}>
                                 <td className="fw-medium">{change.label}</td>
                                 <td>
-                                    <ValueCell raw={change.old} label={change.oldLabel} tone="old" />
+                                    <ValueCell
+                                        raw={change.old}
+                                        label={change.oldLabel}
+                                        tone="old"
+                                        author={change.oldAuthor}
+                                        authorAt={change.oldAuthorAt}
+                                        entryId={change.oldEntryId}
+                                    />
                                 </td>
                                 <td>
-                                    <ValueCell raw={change.new} label={change.newLabel} tone="new" />
+                                    <ValueCell
+                                        raw={change.new}
+                                        label={change.newLabel}
+                                        tone="new"
+                                        author={change.newAuthor}
+                                    />
                                 </td>
                             </tr>
                         ))}

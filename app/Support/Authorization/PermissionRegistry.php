@@ -296,6 +296,10 @@ final class PermissionRegistry
             \App\Models\Employee::CATEGORIE_ASSISTANTE_ADMINISTRATIVE => 'administrative-assistant',
             \App\Models\Employee::CATEGORIE_ENSEIGNANT => 'teacher',
             \App\Models\Employee::CATEGORIE_RESPONSABLE_MARKETING => 'marketing-manager',
+            // The only catégorie that maps to super-admin: the person who
+            // administers the system itself. Not a preset in roles() —
+            // Role::SUPER_ADMIN bypasses every permission via Gate::before.
+            \App\Models\Employee::CATEGORIE_RESPONSABLE_SYSTEME => \App\Models\Role::SUPER_ADMIN,
             default => null,
         };
     }

@@ -471,7 +471,7 @@ What each one gives you:
 | Seeder | Contents |
 |---|---|
 | `RolesAndPermissionsSeeder` | 61 permissions + the role matrix (**required** — the app cannot authorize anything without it) |
-| `ReferentialDataSeeder` | Academic years 2024/2025 + 2025/2026 (default), the 7 GLS branches, 2 rooms each |
+| `ReferentialDataSeeder` | Academic years 2025/2026 (default) + 2026/2027, the 7 GLS branches, 2 rooms each |
 | `TypeDepenseSeeder` | Locked `is_system` expense types |
 | `StockTypeSeeder` | Stock categories (the book catalog is **not** seeded — open real quantities via the Import screen) |
 | `FraisSeeder` | Starter fee catalog (Paramètres → Frais) |

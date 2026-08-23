@@ -345,6 +345,23 @@ the database layer. Non-negotiable invariants already enforced in code:
 - **Money records (encaissements/depenses/remboursements/transfers) are never
   deleted** — no destroy routes; corrections use compensating entries.
   `montant`/`caisse_id` are not editable after creation.
+- **Every "read a balance, then write" money check runs INSIDE the
+  transaction on a `lockForUpdate()` row** (audit 22/08/2026): the avance
+  remaining (`AppliquerAvance`), the fee remaining and the cheque remaining
+  (`EncaissementController@store`), the transfer status
+  (`ValiderTransfertCaisse`, transfer cancel), the refunded avance
+  (`EnregistrerRemboursement`). A guard evaluated before `DB::transaction`
+  on the in-memory model is a double-click double-spend — never move one
+  back out. Related invariants now enforced: an avance is applied only to a
+  fee of ITS student, never beyond the fee's remaining due; refunds count as
+  "used" on an avance (`Encaissement::montantUtilise()`); a refunded
+  payment cannot be deleted (the till would be debited twice); a
+  cheque-funded row keeps its cheque method/identity on edit, and a cheque
+  that funded payments keeps its owner; the Caisse journal lists only rows
+  that moved the till (no avance "apply" rows, only approved dépenses, only
+  validated transfers). Lookup endpoints that hang off another module's
+  record (student inscriptions/cheques/payments) are center-scoped with
+  `CenterAccessService`, not with that module's `*.view` permission.
 - **`reference` codes are system-generated** via
   `Domain\Shared\Support\ReferenceGenerator` (EMP-/ETU-/INS-/ENC-/DEP-/RMB-/TRF-…),
   never typed by users.
@@ -385,6 +402,17 @@ the database layer. Non-negotiable invariants already enforced in code:
     `FOREIGN_KEYS`/`FIELD_LABELS` map. Never resolve names INTO the stored
     row — the entry must stay the literal values written, or a later rename
     silently rewrites history.
+  - **A model with a DB-default column must mirror it in `protected
+    $attributes`** (all 13 `statut` models do). Otherwise a `create()` that
+    omits the key leaves the model NULL while the row holds the default, and
+    the next change is journalled as « avant : vide » — the trail then states
+    a false previous value, which is worse than a missing one.
+  - **The maintainer login (`AuditLogRegistry::DEVELOPER_EMAIL`) is HIDDEN
+    from the journal page, never excluded from recording.** Its entries are
+    written like everyone else's; only the read path filters them, with an
+    « Inclure le compte technique » toggle to show them again. Never turn
+    this into a write-time skip: an unrecorded privileged account is a
+    permanent blind spot where money can move untraced.
   - **The journal is append-only.** `App\Models\Activity` throws on update
     and delete (model level, below every Gate — so it holds even for a
     super-admin), and `backoffice.audit-logs.index` is the ONLY route:
@@ -487,7 +515,7 @@ the database layer. Non-negotiable invariants already enforced in code:
   while one assigned to several may switch among *those* centers and pick
   "Tous les centres", which then means "all of mine". The header no
   longer has the language or notification dropdowns. Seed data:
-  `ReferentialDataSeeder` (years 2024/2025 + 2025/2026-default, 7 GLS
+  `ReferentialDataSeeder` (years 2025/2026-default + 2026/2027, 7 GLS
   branches, 2 rooms each). Tests: `tests/Feature/Backoffice/Context/`,
   `tests/Feature/Backoffice/Inertia/ContextUpdateTest.php`.
 - **Referential data (établissements, années scolaires, salles) is managed via
@@ -620,7 +648,9 @@ Two independent auth surfaces — do not merge them.
 - View: `backoffice/auth/login.blade.php` on `<x-backoffice.layout.guest>`,
   adapted from `theme-reference/crm-gls/authentication/login.blade.php`.
 - Credentials (AdminUserSeeder) come from `ADMIN_EMAIL`/`ADMIN_USERNAME`/
-  `ADMIN_PASSWORD`. Locally they default to `admin@gls.test` / `password`;
+  `ADMIN_PASSWORD`. Locally they default to `rafik@glszentrum.com` / `password`
+  (the CEO, Mohammed Rafik — the same account `GlsStaffSeeder` lists as
+  super-admin; his brother Amine, `amine.rafik@`, is a separate account);
   on any other environment **`ADMIN_PASSWORD` must be set or the seeder
   refuses to run**, so a deploy can never publish a well-known password. A
   non-local admin is created with `must_change_password = true`.
@@ -657,8 +687,21 @@ keeps the primary column stable when an edit merely adds a center. Enforcing
   an Inertia prop (e.g. `CrudPermissions`, `auth.permissions`) is UI
   convenience only — it hides/disables affordances, never a real gate.
 - **Check permissions, never role names** (`can('students.view')`). The only
-  `hasRole()` usages allowed: the `Gate::before` super-admin bypass and the
-  super-admin invariants in `UserAuthorizationService`.
+  `hasRole()` usages allowed: the `Gate::before` super-admin bypass, the
+  super-admin invariants in `UserAuthorizationService`, and the
+  « Responsable de système » guard in the Employees Form Requests (below).
+- **« Responsable de système » is the ONE catégorie that maps to
+  `super-admin`** (`Employee::CATEGORIE_RESPONSABLE_SYSTEME`,
+  `PermissionRegistry::defaultRoleFor()`). Unlike every other catégorie,
+  `EmployeeObserver` grants it ALWAYS (on creation and on a catégorie
+  change), even when the login already holds another role. Because that
+  makes the catégorie a super-admin grant, only a super-admin may select it
+  on the Employees form (`Store/UpdateEmployeeRequest` validate
+  `categorie` with `hasRole(Role::SUPER_ADMIN)`) — never relax this, or any
+  `employees.create` holder could mint a super-admin. No other catégorie
+  may ever map to `super-admin`
+  (`RolesAndPermissionsSeederTest::test_every_employee_category_has_a_matching_default_role`
+  enforces it).
 - **Single source of truth**: `App\Support\Authorization\PermissionRegistry`
   (102 `module.action` permissions, French labels, role matrix). New module ⇒
   add permissions THERE, re-run `db:seed --class=RolesAndPermissionsSeeder`

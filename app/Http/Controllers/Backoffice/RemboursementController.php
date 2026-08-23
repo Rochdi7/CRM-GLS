@@ -10,8 +10,11 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Remboursements\StoreRemboursementRequest;
 use App\Http\Requests\Backoffice\Remboursements\UpdateRemboursementRequest;
 use App\Models\Remboursement;
+use App\Models\Student;
+use App\Services\Authorization\CenterAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -33,9 +36,10 @@ final class RemboursementController extends Controller
      * are we refunding?" cascade (GetStudentPaymentsForRefund). Gated the
      * same as creating a refund.
      */
-    public function studentPayments(int $student, GetStudentPaymentsForRefund $getStudentPaymentsForRefund): JsonResponse
+    public function studentPayments(Request $request, int $student, GetStudentPaymentsForRefund $getStudentPaymentsForRefund): JsonResponse
     {
         $this->authorize('create', Remboursement::class);
+        $this->assertCenterAccess($request, Student::query()->findOrFail($student)->etablissement_id);
 
         return response()->json(['payments' => $getStudentPaymentsForRefund($student)]);
     }
@@ -79,5 +83,18 @@ final class RemboursementController extends Controller
 
         return redirect()->route('backoffice.depenses.index', ['tab' => 'remboursements'])
             ->with('success', __('Refund updated.'));
+    }
+
+    /**
+     * Center scope for lookups and writes that hang off another module's
+     * record: the cashier needs no `registrations.view`/`students.view`
+     * permission to take money, only access to the record's center
+     * (CenterAccessService — same rule the policies use).
+     */
+    private function assertCenterAccess(Request $request, ?int $etablissementId): void
+    {
+        if (! app(CenterAccessService::class)->canAccessCenter($request->user(), $etablissementId)) {
+            abort(403);
+        }
     }
 }

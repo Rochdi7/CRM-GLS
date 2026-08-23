@@ -192,6 +192,83 @@ flagged « Incohérent » in red — that mismatch is itself the finding.
 5. Each movement names the actor, the IP and the source record (ENC-…, DEP-…),
    so a suspicious line leads straight to the payment and the person.
 
+### Truthful « avant » values — model defaults must mirror column defaults
+
+A column with a database-level default (`statut`, and every `statut`-like
+column in this schema) is a trap for the journal. `create()` without that key
+leaves the **PHP model holding NULL** while the **row holds the default**; the
+next status change is then recorded as « avant : (vide) ».
+
+That is not a display quirk — the journal *states* the record came from
+nothing when it came from « Non payé ». A false before-value in an audit trail
+is worse than a missing one.
+
+Every affected model therefore declares `protected $attributes` mirroring its
+column default (13 of them: Salle, Employee, Group, Frais, Inscription,
+InscriptionFee, Cheque, Caisse, TypeDepense, StockArticle, Banque, StockType,
+MotifAnnulation).
+
+⚠ **When adding a column with a DB default to an audited model, mirror it in
+`$attributes`.** `test_models_with_a_default_status_agree_with_the_database`
+pins the existing set; extend it when a new default appears.
+
+### Attribution — who set the value on BOTH sides
+
+On the detail page every changed field names an author under each side:
+
+```
+Montant par défaut   AVANT 250,00  — Agent Un · 21/08/2026 14:02:11 · #412
+                     APRÈS 999,00  — Agent Deux
+```
+
+The **APRÈS** author is this entry's own actor. The **AVANT** author is found by
+walking back through the same record's history to the most recent earlier entry
+that touched that same field (`GetActivityLogList::previousAuthors()`), and
+links to that entry so the earlier change can be opened directly.
+
+Why it exists: the journal already answered "who made THIS change". The harder
+question when tracing a mistake is "who put the wrong value there in the first
+place" — the person correcting an error is rarely the person who caused it.
+
+Three rules that keep it honest:
+
+- **No invented authors.** A field with no earlier entry shows
+  « auteur inconnu (antérieur au journal) » rather than guessing.
+- **Same record only.** The lookup is scoped to `subject_type` + `subject_id`,
+  so two records of the same type never borrow each other's history.
+- **Bounded.** The walk stops after 50 earlier entries, or as soon as every
+  field has an answer — an unbounded scan would be a silent performance trap
+  on a record edited hundreds of times.
+
+Attribution runs on the **detail page only** (`find()` passes
+`withAttribution: true`); the list page skips it, since one extra query per row
+would be paid on every page load for information nobody is reading yet.
+
+### The developer account — hidden, never unrecorded
+
+`AuditLogRegistry::DEVELOPER_EMAIL` names the maintainer's login. Its entries
+are **hidden from the journal page by default**, so routine maintenance does
+not bury the entries that describe real school activity. The
+« Inclure le compte technique » toggle brings them back.
+
+⚠ **This is a display filter, not a recording bypass — keep it that way.**
+The entries are written in full, exactly like everyone else's. An account whose
+actions were never recorded would be a permanent blind spot on the most
+privileged login in the system: money could move through any till with no
+trace, which is precisely what this journal exists to prevent. The distinction
+is pinned by `test_the_developer_account_is_still_fully_recorded`.
+
+Two details that make the filter honest rather than cosmetic:
+
+- **The detail page applies it too** (`find()`), so a hidden entry is not
+  reachable by guessing its id.
+- **The exclusion is causer-based and skips NULL causers**, so system and
+  console entries — which have no causer at all — are never swept away with
+  the developer's.
+
+If the maintainer login does not exist in a given database, the toggle is not
+rendered at all (`hasDeveloperAccount`).
+
 ### Console origins
 
 An entry written from the CLI records **only the command name** —

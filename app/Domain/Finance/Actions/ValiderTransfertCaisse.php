@@ -30,12 +30,6 @@ final class ValiderTransfertCaisse
 
     public function handle(CaisseTransfer $transfer, Employee $validatedBy): CaisseTransfer
     {
-        if ($transfer->statut !== CaisseTransfer::STATUT_EN_ATTENTE) {
-            throw ValidationException::withMessages([
-                'statut' => __('Ce transfert a déjà été traité.'),
-            ]);
-        }
-
         if ($transfer->requested_by === $validatedBy->id) {
             throw ValidationException::withMessages([
                 'validated_by' => __('Le demandeur ne peut pas valider son propre transfert.'),
@@ -57,6 +51,18 @@ final class ValiderTransfertCaisse
         }
 
         return DB::transaction(function () use ($transfer, $validatedBy): CaisseTransfer {
+            // The transfer row itself is re-read under lock and its status
+            // re-checked HERE, not before the transaction: a double-click on
+            // « Valider » (or a validate racing a cancel) would otherwise pass
+            // the in-memory check twice and move the money twice.
+            $transfer = CaisseTransfer::query()->whereKey($transfer->getKey())->lockForUpdate()->firstOrFail();
+
+            if ($transfer->statut !== CaisseTransfer::STATUT_EN_ATTENTE) {
+                throw ValidationException::withMessages([
+                    'statut' => __('Ce transfert a déjà été traité.'),
+                ]);
+            }
+
             $source = Caisse::query()->lockForUpdate()->findOrFail($transfer->caisse_source_id);
             $destination = Caisse::query()->lockForUpdate()->findOrFail($transfer->caisse_destination_id);
 

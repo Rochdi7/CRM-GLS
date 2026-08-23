@@ -95,9 +95,13 @@ final class ChangerGroupeInscription
             // (they reference the fee, not the inscription), so the money
             // follows the student without any payment being rewritten.
             if ($transferred->isNotEmpty()) {
+                // Per-model update (not a query-builder mass update) so the
+                // move is journalled by Auditable — a silent re-parenting of
+                // a paid fee is exactly what an audit must be able to see.
                 InscriptionFee::query()
                     ->whereIn('id', $transferred->pluck('id'))
-                    ->update(['inscription_id' => $newInscription->id]);
+                    ->get()
+                    ->each(fn (InscriptionFee $fee) => $fee->update(['inscription_id' => $newInscription->id]));
 
                 $newInscription->update([
                     'montant_total' => $newInscription->fees()->whereNull('masque_le')->sum('montant') ?: null,
@@ -149,7 +153,13 @@ final class ChangerGroupeInscription
         $query->get()->each(function (InscriptionFee $fee): void {
             // Unlink rather than delete any payment recorded against this
             // fee — it becomes an unallocated avance instead of vanishing.
-            Encaissement::query()->where('inscription_fee_id', $fee->id)->update(['inscription_fee_id' => null]);
+            // One model update per row so the detachment is journalled
+            // (a query-builder update fires no Auditable event).
+            Encaissement::query()
+                ->where('inscription_fee_id', $fee->id)
+                ->lockForUpdate()
+                ->get()
+                ->each(fn (Encaissement $e) => $e->update(['inscription_fee_id' => null]));
             $fee->delete();
         });
     }

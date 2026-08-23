@@ -193,6 +193,15 @@ final class RolesAndPermissionsSeederTest extends TestCase
             }
 
             $this->assertNotNull($role, "Catégorie [$categorie] has no default role");
+
+            if ($categorie === Employee::CATEGORIE_RESPONSABLE_SYSTEME) {
+                // The ONLY catégorie mapped to super-admin (not a preset).
+                $this->assertSame(Role::SUPER_ADMIN, $role);
+
+                continue;
+            }
+
+            $this->assertNotSame(Role::SUPER_ADMIN, $role, "Only Responsable de système may map to super-admin");
             $this->assertArrayHasKey(
                 $role,
                 PermissionRegistry::roles(),
