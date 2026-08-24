@@ -10,6 +10,7 @@ use App\Models\Etablissement;
 use App\Models\Frais;
 use App\Models\ImportBatch;
 use App\Models\ImportRow;
+use App\Models\Inscription;
 use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -222,6 +223,47 @@ final class CombinedImportTest extends TestCase
         $this->assertSame('Changement', $rows[1]->raw['statut']);
         $this->assertSame(ImportRow::STATUT_DOUBLON, $rows[2]->status);
         $this->assertSame('statut_filtre', $rows[2]->errors[0]['code']);
+    }
+
+    public function test_with_a_payments_file_inscriptions_are_committed_and_inactive_ones_accept_payments(): void
+    {
+        // The "Aucune inscription active … cochez Accepter les inscriptions
+        // annulées" wall of conflicts: in the combined flow the statuts being
+        // imported (here Annulée) switch the fallback on automatically.
+        $operateur = Employee::factory()->create(['etablissement_id' => $this->centre->id]);
+        $user = $this->userWith('import.view', 'import.create');
+
+        $response = $this->actingAs($user)->post(route('backoffice.import.combine.analyze'), [
+            'students_file' => $this->studentsUpload(),
+            'inscriptions_files' => [
+                'Annulée' => $this->inscriptionsUpload([
+                    ['A001', 'HASNA TIMOUN', 'Herr Driss 13h', 'Annulé', '05/01/2026'],
+                ]),
+            ],
+            'encaissements_file' => $this->buildXlsx(
+                ['Réf.', 'Élève / Payeur', 'Type', 'Montant', 'Méthode', 'Frais', 'Date', 'Opérateur'],
+                // The legacy export doubles the payer name (see CellNormalizer::collapseDoubledName).
+                [['P001', 'HASNA TIMOUN HASNA TIMOUN', 'Réglement', '300', 'Espèces', 'Frais catalogue test', '10/01/2026', 'mustapha']],
+            ),
+            'operateur_mapping' => [['label' => 'mustapha', 'employee_id' => $operateur->id]],
+            'etablissement_id' => $this->centre->id,
+            'statuts' => ['Annulée'],
+            'groupe_mapping' => [
+                ['label' => 'Herr Driss 13h', 'action' => 'create', 'nom' => 'Herr Driss 13h', 'niveau' => 'A1.1'],
+            ],
+        ]);
+
+        $response->assertSessionHasNoErrors();
+
+        // Inscriptions were committed automatically (not just analyzed).
+        $this->assertSame(1, Inscription::query()->where('statut', Inscription::STATUT_ANNULEE)->count());
+
+        // And the payment row resolved against that Annulée inscription.
+        $encaissementBatch = ImportBatch::query()->where('module', ImportBatch::MODULE_ENCAISSEMENTS)->sole();
+        $response->assertRedirect(route('backoffice.import.encaissements.preview', $encaissementBatch));
+
+        $row = $encaissementBatch->rows()->sole();
+        $this->assertSame(ImportRow::STATUT_NOUVEAU, $row->status, json_encode($row->errors));
     }
 
     public function test_it_requires_the_inscriptions_files(): void

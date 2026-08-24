@@ -46,6 +46,17 @@ final class AnalyzeCombinedImportRequest extends FormRequest
                 Inscription::STATUT_ANNULEE,
                 Inscription::STATUT_CHANGEMENT,
             ])],
+            // Optional third file: the payments. When present, the
+            // inscriptions are committed automatically and the payments are
+            // analyzed against them in the same run — with inactive
+            // (Annulée / Changement) inscriptions accepted whenever those
+            // statuts are part of this import, so the "cochez Accepter les
+            // inscriptions annulées" conflict can no longer happen by
+            // forgetting a checkbox.
+            'encaissements_file' => ['nullable', 'file', 'mimes:xlsx', 'max:10240'],
+            'operateur_mapping' => ['required_with:encaissements_file', 'array'],
+            'operateur_mapping.*.label' => ['required', 'string'],
+            'operateur_mapping.*.employee_id' => ['required', 'integer', 'exists:employees,id'],
             'groupe_mapping' => ['present', 'array'],
             'groupe_mapping.*.label' => ['required', 'string'],
             'groupe_mapping.*.action' => ['required', Rule::in(['map', 'create'])],

@@ -183,6 +183,40 @@ export default function InscriptionsIndex({
     const [deleteError, setDeleteError] = useState<string | undefined>(undefined);
     const [deleteProcessing, setDeleteProcessing] = useState(false);
     const [changeGroupTarget, setChangeGroupTarget] = useState<InscriptionRow | null>(null);
+    // « Suivi des paiements » (row menu): read-only view of the inscription's
+    // fee lines with paid/remaining per line. Loads from the same
+    // inscriptions.fees JSON endpoint the edit modal uses.
+    const [suiviTarget, setSuiviTarget] = useState<InscriptionRow | null>(null);
+    const [suiviFees, setSuiviFees] = useState<InscriptionFeeLine[] | null>(null);
+    const [suiviEnCoursOnly, setSuiviEnCoursOnly] = useState(false);
+
+    function openSuivi(inscription: InscriptionRow): void {
+        setSuiviTarget(inscription);
+        setSuiviFees(null);
+        setSuiviEnCoursOnly(false);
+        fetch(`/backoffice/inscriptions/${inscription.id}/fees`, { headers: { Accept: 'application/json' } })
+            .then((response) => response.json())
+            .then((data: { fees: InscriptionFeeLine[] }) => setSuiviFees(data.fees))
+            .catch(() => setSuiviFees([]));
+    }
+
+    function lineFinal(line: InscriptionFeeLine): number {
+        const initial = parseFloat(line.montantInitial || '0');
+        const pct = line.remisePct !== '' ? parseFloat(line.remisePct) : null;
+        const dh = line.remiseMontant !== '' ? parseFloat(line.remiseMontant) : null;
+
+        return computeLineMontant(initial, pct, dh);
+    }
+
+    function formatFr(date: string): string {
+        const [y, m, d] = date.split('-');
+
+        return y && m && d ? `${d}/${m}/${y}` : date;
+    }
+
+    function fmtDh(value: number): string {
+        return Number.isInteger(value) ? String(value) : value.toFixed(2);
+    }
     const [showFeesDetails, setShowFeesDetails] = useState(false);
     const [statutTarget, setStatutTarget] = useState<{ inscription: InscriptionRow; statut: 'Annulée' | 'Active' } | null>(null);
     const [statutError, setStatutError] = useState<string | undefined>(undefined);
@@ -934,6 +968,10 @@ export default function InscriptionsIndex({
                                         <RowActions view={inscription.showUrl}>
                                             <RowActionItem icon="ti-edit" onClick={() => openEdit(inscription)}>
                                                 Modifier
+                                            </RowActionItem>
+
+                                            <RowActionItem icon="ti-credit-card" onClick={() => openSuivi(inscription)}>
+                                                Suivi des paiements
                                             </RowActionItem>
 
                                             <RowActionDivider />
@@ -1863,6 +1901,112 @@ export default function InscriptionsIndex({
                         <FormActions onCancel={closeModal} processing={form.processing} />
                     </div>
                 </form>
+            </Modal>
+
+            <Modal
+                show={suiviTarget !== null}
+                title={`Suivi des paiements : ${suiviTarget?.reference ?? ''}`}
+                size="xl"
+                onClose={() => setSuiviTarget(null)}
+            >
+                {(() => {
+                    const all = suiviFees ?? [];
+                    const visible = suiviEnCoursOnly
+                        ? all.filter((line) => lineFinal(line) - (parseFloat(line.paye ?? '0') || 0) > 0)
+                        : all;
+                    const total = visible.reduce((sum, line) => sum + lineFinal(line), 0);
+                    const paye = visible.reduce((sum, line) => sum + (parseFloat(line.paye ?? '0') || 0), 0);
+                    const reste = Math.max(0, total - paye);
+
+                    return (
+                        <>
+                            <div className="form-check mb-3">
+                                <input
+                                    type="checkbox"
+                                    className="form-check-input"
+                                    id="suivi-en-cours"
+                                    checked={suiviEnCoursOnly}
+                                    onChange={(event) => setSuiviEnCoursOnly(event.target.checked)}
+                                />
+                                <label className="form-check-label fw-semibold" htmlFor="suivi-en-cours">
+                                    Paiements en cours
+                                </label>
+                            </div>
+
+                            {suiviFees === null ? (
+                                <div className="text-center py-4">
+                                    <div className="spinner-border spinner-border-sm text-primary" role="status" />
+                                </div>
+                            ) : visible.length === 0 ? (
+                                <div className="alert alert-info d-flex align-items-center" role="alert">
+                                    <i className="ti ti-alert-circle me-2 fs-18" />
+                                    Aucun élément n'a été trouvé.
+                                </div>
+                            ) : (
+                                <>
+                                    <div className="row g-3 mb-3">
+                                        <div className="col-md-4">
+                                            <label className="form-label fw-semibold">Montant total</label>
+                                            <input type="text" className="form-control" value={fmtDh(total)} readOnly />
+                                        </div>
+                                        <div className="col-md-4">
+                                            <label className="form-label fw-semibold">Montant total de paiement</label>
+                                            <input type="text" className="form-control" value={fmtDh(paye)} readOnly />
+                                        </div>
+                                        <div className="col-md-4">
+                                            <label className="form-label fw-semibold">Reste à payer Total</label>
+                                            <input type="text" className="form-control" value={fmtDh(reste)} readOnly />
+                                        </div>
+                                    </div>
+
+                                    <div className="table-responsive">
+                                        <table className="table table-hover mb-0">
+                                            <thead className="thead-light">
+                                                <tr>
+                                                    <th>Frais</th>
+                                                    <th>Date d'échéance</th>
+                                                    <th className="text-end">Montant total</th>
+                                                    <th className="text-end">Montant de paiement</th>
+                                                    <th className="text-end">Reste à payer</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {visible.map((line, index) => {
+                                                    const final = lineFinal(line);
+                                                    const linePaye = parseFloat(line.paye ?? '0') || 0;
+                                                    const lineReste = Math.max(0, final - linePaye);
+
+                                                    return (
+                                                        <tr key={line.id ?? index}>
+                                                            <td className="text-wrap-cell">{line.nom}</td>
+                                                            <td>{line.dateEcheance ? formatFr(line.dateEcheance) : '—'}</td>
+                                                            <td className="text-end">{fmtDh(final)} DH</td>
+                                                            <td className="text-end">{fmtDh(linePaye)} DH</td>
+                                                            <td className="text-end">
+                                                                {lineReste <= 0 ? (
+                                                                    <StatusBadge label="Payé" variant="success" />
+                                                                ) : (
+                                                                    <span className="fw-semibold text-danger">{fmtDh(lineReste)} DH</span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <p className="text-muted mt-2 mb-0">{visible.length} total</p>
+                                </>
+                            )}
+
+                            <div className="d-flex justify-content-end mt-4">
+                                <button type="button" className="btn btn-outline-secondary" onClick={() => setSuiviTarget(null)}>
+                                    Fermer
+                                </button>
+                            </div>
+                        </>
+                    );
+                })()}
             </Modal>
 
             <ConfirmDialog

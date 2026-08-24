@@ -15,7 +15,9 @@ use App\Models\ImportBatch;
 use App\Models\ImportRow;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
+use App\Models\Inscription;
 use App\Services\Import\DTO\ImportContext;
+use App\Services\Import\EncaissementImporter;
 use App\Services\Import\InscriptionImporter;
 use App\Services\Import\StudentImporter;
 use Illuminate\Http\RedirectResponse;
@@ -60,6 +62,7 @@ final class CombinedImportController extends Controller
         AnalyzeCombinedImportRequest $request,
         StudentImporter $studentImporter,
         InscriptionImporter $inscriptionImporter,
+        EncaissementImporter $encaissementImporter,
         CenterAccessService $centerAccess,
     ): RedirectResponse {
         $this->authorize('create', ImportBatch::class);
@@ -79,7 +82,7 @@ final class CombinedImportController extends Controller
         );
 
         $studentBatch = $studentImporter->analyze($request->file('students_file'), $studentContext, $admin);
-        $studentTotals = $this->commitAllStudents($studentImporter, $studentBatch, $admin);
+        $studentTotals = $this->commitAll($studentImporter, $studentBatch, $admin, 'students_file');
 
         // ---- 2. Inscriptions: mapping, then analyze against the fresh students
         $groupeMapping = $this->resolveGroupeMapping(
@@ -102,25 +105,65 @@ final class CombinedImportController extends Controller
             $admin,
         );
 
+        $studentsMessage = __('Students imported: :inserted added, :skipped skipped, :pending in conflict (batch #:batch).', [
+            'inserted' => $studentTotals['inserted'],
+            'skipped' => $studentTotals['skipped'],
+            'pending' => $studentTotals['pending'],
+            'batch' => $studentBatch->id,
+        ]);
+
+        if (! $request->hasFile('encaissements_file')) {
+            return redirect()
+                ->route('backoffice.import.inscriptions.preview', $batch)
+                ->with('success', $studentsMessage.' '.__('Now review the registrations below.'));
+        }
+
+        // ---- 3. Payments: commit the inscriptions, then analyze against them
+        $inscriptionTotals = $this->commitAll($inscriptionImporter, $batch, $admin, 'inscriptions_files');
+
+        $operateurMapping = [];
+        foreach ($data['operateur_mapping'] ?? [] as $entry) {
+            $operateurMapping[$entry['label']] = (int) $entry['employee_id'];
+        }
+
+        // The statuts being imported decide the fallback: history runs
+        // (Annulée / Changement) attach money to those inscriptions, so a
+        // forgotten checkbox can no longer turn every row into a conflict.
+        $statuts = array_values($data['statuts'] ?? []);
+        $includeInactive = $statuts === []
+            || in_array(Inscription::STATUT_ANNULEE, $statuts, true)
+            || in_array(Inscription::STATUT_CHANGEMENT, $statuts, true);
+
+        $encaissementBatch = $encaissementImporter->analyze(
+            $request->file('encaissements_file'),
+            new ImportContext(
+                etablissementId: $etablissementId,
+                anneeScolaireId: $anneeScolaireId,
+                operateurMapping: $operateurMapping,
+                includeInactiveInscriptions: $includeInactive,
+            ),
+            $admin,
+        );
+
         return redirect()
-            ->route('backoffice.import.inscriptions.preview', $batch)
-            ->with('success', __('Students imported: :inserted added, :skipped skipped, :pending in conflict (batch #:batch). Now review the registrations below.', [
-                'inserted' => $studentTotals['inserted'],
-                'skipped' => $studentTotals['skipped'],
-                'pending' => $studentTotals['pending'],
-                'batch' => $studentBatch->id,
+            ->route('backoffice.import.encaissements.preview', $encaissementBatch)
+            ->with('success', $studentsMessage.' '.__('Registrations imported: :inserted added, :skipped skipped, :pending in conflict (batch #:batch). Now review the payments below.', [
+                'inserted' => $inscriptionTotals['inserted'],
+                'skipped' => $inscriptionTotals['skipped'],
+                'pending' => $inscriptionTotals['pending'],
+                'batch' => $batch->id,
             ]));
     }
 
     /**
      * Server-side equivalent of the Preview page's commit loop: pushes every
-     * selectable student row through StudentImporter::commit() until none
-     * remains. Rows left in conflict/error stay on the student batch (visible
-     * in « Imports récents ») — they are counted, never lost.
+     * selectable row of the batch through the importer's commit() until none
+     * remains. Rows left in conflict/error stay on the batch (visible in
+     * « Imports récents ») — they are counted, never lost.
      *
      * @return array{inserted: int, skipped: int, pending: int}
      */
-    private function commitAllStudents(StudentImporter $importer, ImportBatch $batch, $admin): array
+    private function commitAll(StudentImporter|InscriptionImporter $importer, ImportBatch $batch, $admin, string $errorField): array
     {
         $rowIds = $batch->rows()->whereIn('status', ImportRow::SELECTABLE_STATUTS)->pluck('id')->all();
 
@@ -136,7 +179,7 @@ final class CombinedImportController extends Controller
 
                 if (++$guard > 200) {
                     throw ValidationException::withMessages([
-                        'students_file' => __('The student import stopped making progress — check the batch in Recent imports.'),
+                        $errorField => __('The import stopped making progress — check the batch in Recent imports.'),
                     ]);
                 }
             } while ($result->remaining > 0);

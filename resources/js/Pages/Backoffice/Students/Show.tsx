@@ -107,42 +107,62 @@ export default function StudentShow({ student }: StudentShowProps) {
                 </div>
 
                 <div className="col-xl-8">
-                    <Card
-                        title="Inscriptions"
-                        tools={<span className="badge badge-soft-secondary">{student.inscriptions.length}</span>}
-                    >
-                        <RelatedRecordsTable
-                            isEmpty={student.inscriptions.length === 0}
-                            emptyTitle="Aucune inscription"
-                            emptyIcon="ti ti-clipboard-list"
-                            head={
-                                <tr>
-                                    <th>Référence</th>
-                                    <th>Groupe</th>
-                                    <th>Date</th>
-                                    <th>Total</th>
-                                    <th>Statut</th>
-                                </tr>
-                            }
+                    {student.inscriptionsParAnnee.length === 0 && (
+                        <Card title="Inscriptions" tools={<span className="badge badge-soft-secondary">0</span>}>
+                            <RelatedRecordsTable
+                                isEmpty
+                                emptyTitle="Aucune inscription"
+                                emptyIcon="ti ti-clipboard-list"
+                                head={<tr />}
+                            >
+                                {null}
+                            </RelatedRecordsTable>
+                        </Card>
+                    )}
+
+                    {student.inscriptionsParAnnee.map((groupe) => (
+                        <Card
+                            key={groupe.annee ?? 'sans-annee'}
+                            title={`Inscriptions — ${groupe.annee ?? 'Sans année scolaire'}`}
+                            tools={<span className="badge badge-soft-secondary">{groupe.inscriptions.length}</span>}
                         >
-                            {student.inscriptions.map((insc) => (
-                                <tr key={insc.reference}>
-                                    <td>
-                                        <code>{insc.reference}</code>
-                                    </td>
-                                    <td>{insc.groupe ?? '—'}</td>
-                                    <td>{insc.date ?? '—'}</td>
-                                    <td>{insc.total ? `${Number(insc.total).toFixed(2)} MAD` : '—'}</td>
-                                    <td>
-                                        <StatusBadge label={insc.statut} />
-                                    </td>
-                                </tr>
-                            ))}
-                        </RelatedRecordsTable>
-                    </Card>
+                            <RelatedRecordsTable
+                                isEmpty={groupe.inscriptions.length === 0}
+                                emptyTitle="Aucune inscription"
+                                emptyIcon="ti ti-clipboard-list"
+                                head={
+                                    <tr>
+                                        <th>Référence</th>
+                                        <th>Groupe</th>
+                                        <th>Date</th>
+                                        <th>Total</th>
+                                        <th>Statut</th>
+                                    </tr>
+                                }
+                            >
+                                {groupe.inscriptions.map((insc) => (
+                                    <tr key={insc.reference}>
+                                        <td>
+                                            <code>{insc.reference}</code>
+                                        </td>
+                                        <td>{insc.groupe ?? '—'}</td>
+                                        <td>{insc.date ?? '—'}</td>
+                                        <td>{insc.total ? `${Number(insc.total).toFixed(2)} MAD` : '—'}</td>
+                                        <td>
+                                            <StatusBadge label={insc.statut} />
+                                        </td>
+                                    </tr>
+                                ))}
+                            </RelatedRecordsTable>
+                        </Card>
+                    ))}
 
                     <Card
-                        title="Paiements"
+                        title={
+                            student.paiementsScope
+                                ? `Paiements — inscription ${student.paiementsScope.toLowerCase()}`
+                                : 'Paiements'
+                        }
                         tools={
                             <span className="badge badge-soft-success">
                                 {Number(student.paiementsTotal).toFixed(2)} MAD

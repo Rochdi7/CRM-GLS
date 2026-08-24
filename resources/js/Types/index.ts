@@ -207,6 +207,13 @@ export interface StudentInscriptionRow {
     date: string | null;
     total: MoneyDisplay | null;
     statut: string;
+    anneeScolaire: string | null;
+}
+
+/** Inscriptions grouped per année scolaire, newest year first. */
+export interface StudentInscriptionsParAnnee {
+    annee: string | null;
+    inscriptions: StudentInscriptionRow[];
 }
 
 export interface StudentPaymentRow {
@@ -241,6 +248,9 @@ export interface StudentDetails {
         telephone: string | null;
     } | null;
     inscriptions: StudentInscriptionRow[];
+    inscriptionsParAnnee: StudentInscriptionsParAnnee[];
+    /** Which inscription statut the Paiements list is scoped to (Active > Annulée > Changement), null = no inscription. */
+    paiementsScope: string | null;
     paiementsTotal: MoneyDisplay;
     paiements: StudentPaymentRow[];
 }

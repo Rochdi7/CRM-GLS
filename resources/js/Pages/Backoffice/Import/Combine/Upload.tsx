@@ -27,13 +27,27 @@ interface GroupeMappingEntry {
     niveau: string;
 }
 
+interface OperateurMappingEntry {
+    label: string;
+    employee_id: string;
+}
+
+interface EmployeeOption {
+    id: number;
+    nom: string;
+    prenom: string;
+}
+
 interface UploadFormState {
     students_file: File | null;
     /** One inscriptions export per checked statut — the old CRM ships them as separate files. */
     inscriptions_files: Record<string, File | null>;
+    /** Optional: the payments export. When set, inscriptions are committed automatically and payments analyzed against them. */
+    encaissements_file: File | null;
     etablissement_id: string;
     statuts: string[];
     groupe_mapping: GroupeMappingEntry[];
+    operateur_mapping: OperateurMappingEntry[];
 }
 
 /** Post-translation statut values (the file's "Archivée" imports as "Changement"). */
@@ -126,15 +140,18 @@ export default function CombinedImportUpload({ etablissements, centerLocked }: C
     const [step, setStep] = useState<'scope' | 'mapping'>('scope');
     const [existingGroups, setExistingGroups] = useState<ExistingGroup[]>([]);
     const [niveaux, setNiveaux] = useState<string[]>([]);
+    const [employees, setEmployees] = useState<EmployeeOption[]>([]);
     const [peeking, setPeeking] = useState(false);
     const [peekError, setPeekError] = useState<string | null>(null);
 
     const form = useForm<UploadFormState>({
         students_file: null,
         inscriptions_files: {},
+        encaissements_file: null,
         etablissement_id: '',
         statuts: STATUT_OPTIONS.map((s) => s.value),
         groupe_mapping: [],
+        operateur_mapping: [],
     });
 
     function toggleStatut(value: string) {
@@ -203,9 +220,37 @@ export default function CombinedImportUpload({ etablissements, centerLocked }: C
                 niveauxList = json.niveaux;
             }
 
+            // Optional payments file: peek its distinct "Opérateur" labels the
+            // same way (standalone encaissements peek endpoint).
+            let operateurMapping: OperateurMappingEntry[] = [];
+            if (form.data.encaissements_file) {
+                const formData = new FormData();
+                formData.append('file', form.data.encaissements_file);
+                if (form.data.etablissement_id !== '') formData.append('etablissement_id', form.data.etablissement_id);
+
+                const response = await fetch('/backoffice/import/encaissements/peek-operateurs', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': csrf, Accept: 'application/json' },
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    setPeekError("Impossible de lire le fichier d'encaissements.");
+                    return;
+                }
+
+                const json = (await response.json()) as { operateurLabels: string[]; employees: EmployeeOption[] };
+                setEmployees(json.employees);
+                operateurMapping = json.operateurLabels.map((label) => ({ label, employee_id: '' }));
+            }
+
             setExistingGroups(groups);
             setNiveaux(niveauxList);
-            form.setData('groupe_mapping', buildMapping([...labels], groups, niveauxList));
+            form.setData({
+                ...form.data,
+                groupe_mapping: buildMapping([...labels], groups, niveauxList),
+                operateur_mapping: operateurMapping,
+            });
             setStep('mapping');
         } finally {
             setPeeking(false);
@@ -216,6 +261,13 @@ export default function CombinedImportUpload({ etablissements, centerLocked }: C
         form.setData(
             'groupe_mapping',
             form.data.groupe_mapping.map((entry, i) => (i === index ? { ...entry, ...patch } : entry))
+        );
+    }
+
+    function updateOperateur(index: number, employeeId: string) {
+        form.setData(
+            'operateur_mapping',
+            form.data.operateur_mapping.map((entry, i) => (i === index ? { ...entry, employee_id: employeeId } : entry))
         );
     }
 
@@ -234,9 +286,10 @@ export default function CombinedImportUpload({ etablissements, centerLocked }: C
         (centerLocked || form.data.etablissement_id !== '') &&
         checkedOptions.length > 0 &&
         checkedOptions.every((o) => form.data.inscriptions_files[o.value] instanceof File);
-    const canAnalyze = form.data.groupe_mapping.every((e) =>
-        e.action === 'map' ? e.group_id !== '' : e.nom !== '' && e.niveau !== ''
-    );
+    const canAnalyze =
+        form.data.groupe_mapping.every((e) => (e.action === 'map' ? e.group_id !== '' : e.nom !== '' && e.niveau !== '')) &&
+        form.data.operateur_mapping.every((e) => e.employee_id !== '');
+    const withPayments = form.data.encaissements_file !== null;
 
     return (
         <BackofficeLayout
@@ -337,6 +390,27 @@ export default function CombinedImportUpload({ etablissements, centerLocked }: C
                             <div className="alert alert-danger">{form.errors.inscriptions_files}</div>
                         )}
 
+                        <div className="mb-3">
+                            <label className="form-label" htmlFor="encaissements-file">
+                                Fichier Encaissements (.xlsx) <span className="text-muted">— optionnel</span>
+                            </label>
+                            <input
+                                id="encaissements-file"
+                                type="file"
+                                accept=".xlsx"
+                                className={`form-control${form.errors.encaissements_file ? ' is-invalid' : ''}`}
+                                onChange={(e) => form.setData('encaissements_file', e.target.files?.[0] ?? null)}
+                            />
+                            {form.errors.encaissements_file && (
+                                <div className="invalid-feedback">{form.errors.encaissements_file}</div>
+                            )}
+                            <small className="text-muted d-block mt-1">
+                                Avec ce fichier, les inscriptions sont insérées automatiquement puis les paiements sont
+                                rattachés aux inscriptions de cet import. Pour Annulée / Changement, les inscriptions
+                                inactives sont acceptées d&apos;office — plus besoin de cocher une case.
+                            </small>
+                        </div>
+
                         {peekError && <div className="alert alert-danger">{peekError}</div>}
 
                         <button type="submit" className="btn btn-primary" disabled={!canPeek || peeking}>
@@ -434,11 +508,50 @@ export default function CombinedImportUpload({ etablissements, centerLocked }: C
                             </tbody>
                         </table>
 
+                        {withPayments && (
+                            <>
+                                <h6 className="mt-4 mb-2">Associer les opérateurs (encaissements)</h6>
+                                <table className="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Opérateur (fichier)</th>
+                                            <th>Employé</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {form.data.operateur_mapping.map((entry, index) => (
+                                            <tr key={entry.label}>
+                                                <td>{entry.label}</td>
+                                                <td>
+                                                    <select
+                                                        className="form-select"
+                                                        value={entry.employee_id}
+                                                        onChange={(e) => updateOperateur(index, e.target.value)}
+                                                    >
+                                                        <option value="">Choisir…</option>
+                                                        {employees.map((emp) => (
+                                                            <option key={emp.id} value={emp.id}>
+                                                                {emp.prenom} {emp.nom}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </>
+                        )}
+
                         <button type="button" className="btn btn-outline-secondary me-2" onClick={() => setStep('scope')}>
                             Retour
                         </button>
                         <button type="submit" className="btn btn-primary" disabled={!canAnalyze || form.processing}>
-                            {form.processing ? 'Import des étudiants et analyse…' : 'Importer étudiants + analyser inscriptions'}
+                            {form.processing
+                                ? 'Import en cours…'
+                                : withPayments
+                                  ? 'Importer étudiants + inscriptions, analyser paiements'
+                                  : 'Importer étudiants + analyser inscriptions'}
                         </button>
                     </form>
                 </Card>
