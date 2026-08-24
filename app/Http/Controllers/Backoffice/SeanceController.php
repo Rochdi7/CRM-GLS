@@ -8,6 +8,7 @@ use App\Domain\Attendance\Actions\EnregistrerPresences;
 use App\Domain\Attendance\Queries\GetSeanceDetails;
 use App\Domain\Attendance\Queries\GetSeanceFormOptions;
 use App\Domain\Attendance\Queries\GetSeancesList;
+use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Attendance\AnnulerSeanceRequest;
 use App\Http\Requests\Backoffice\Attendance\SavePresencesRequest;
@@ -31,6 +32,8 @@ use Inertia\Response;
  */
 final class SeanceController extends Controller
 {
+    use AssertsContextScope;
+
     public function index(
         Request $request,
         GetSeancesList $getSeancesList,
@@ -238,7 +241,12 @@ final class SeanceController extends Controller
         $group = Group::findOrFail((int) $data['group_id']);
 
         // The group defines where (center) and when (academic year) the
-        // séance belongs; its teacher is the default when none is picked.
+        // séance belongs — so it must itself be reachable and inside the
+        // active context, or a forged group_id writes the séance into a
+        // foreign centre/year (AssertsContextScope).
+        $this->assertGroupInContext($request, $group);
+
+        // Its teacher is the default when none is picked.
         Seance::create([
             'group_id' => $group->id,
             'date_seance' => $data['date_seance'],

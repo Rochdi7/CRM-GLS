@@ -174,6 +174,10 @@ final class GetDepensesList
         return Group::query()
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
+            // Same year scoping as every other group dropdown (e.g.
+            // GetRetardsList::groupOptions) — without it the "Paiement prof"
+            // form offers groups from every past year.
+            ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
             ->orderBy('nom')
             ->get()
             ->map(fn (Group $g): array => ['id' => $g->id, 'nom' => $g->nom]);

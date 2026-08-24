@@ -10,10 +10,12 @@ use App\Domain\Expenses\Actions\RefuserDepense;
 use App\Domain\Expenses\Queries\GetDepenseDetails;
 use App\Domain\Expenses\Queries\GetDepensesList;
 use App\Domain\Finance\Queries\GetRemboursementsList;
+use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Depenses\StoreDepenseRequest;
 use App\Http\Requests\Backoffice\Depenses\UpdateDepenseRequest;
 use App\Models\Depense;
+use App\Models\Group;
 use App\Support\Settings\AppSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -34,6 +36,8 @@ use Inertia\Response;
  */
 final class DepenseController extends Controller
 {
+    use AssertsContextScope;
+
     /** Mirrors Depense::registerMediaCollections()'s mime allowlist. */
     private const JUSTIFICATIF_MIMES = ['jpeg', 'jpg', 'png', 'webp', 'pdf'];
 
@@ -133,6 +137,13 @@ final class DepenseController extends Controller
             throw ValidationException::withMessages([
                 'type_depense_id' => __('Your account is not linked to any employee record.'),
             ]);
+        }
+
+        // A "Paiement prof" attribution must point at a group the user can
+        // reach inside the active context — otherwise per-group expense
+        // reporting silently crosses centres (AssertsContextScope).
+        if (($request->validated('group_id') ?? null) !== null) {
+            $this->assertGroupInContext($request, Group::findOrFail((int) $request->validated('group_id')));
         }
 
         // The till is ALWAYS the acting employee's own caisse — never chosen
@@ -249,6 +260,10 @@ final class DepenseController extends Controller
     public function update(UpdateDepenseRequest $request, Depense $depense): RedirectResponse
     {
         $this->authorize('update', $depense);
+
+        if (($request->validated('group_id') ?? null) !== null) {
+            $this->assertGroupInContext($request, Group::findOrFail((int) $request->validated('group_id')));
+        }
 
         $payload = collect($request->validated())->except(['justificatifs'])->all();
 

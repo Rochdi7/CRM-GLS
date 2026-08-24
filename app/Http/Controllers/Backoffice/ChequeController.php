@@ -108,11 +108,30 @@ final class ChequeController extends Controller
 
         $data = $request->validated();
 
+        // A cheque attached to a student must belong to a centre the agent
+        // can reach — same rule as studentCheques()/the payment lookups.
+        $student = isset($data['student_id']) && $data['student_id'] !== null
+            ? Student::findOrFail((int) $data['student_id'])
+            : null;
+
+        if ($student !== null) {
+            $this->assertCenterAccess($request, $student->etablissement_id);
+        }
+
+        // Never store a NULL centre: under « Tous les centres » a NULL-centre
+        // cheque would be visible/editable from every centre (canAccessCenter
+        // treats NULL as global). A student cheque lives in the STUDENT's
+        // centre (that's where its payments land); otherwise the active
+        // context, then the agent's own centre.
+        $etablissementId = $student?->etablissement_id
+            ?? app(CurrentContext::class)->etablissementId()
+            ?? $agent->etablissement_id;
+
         Cheque::create([
             ...$this->normalizedPayload($data),
             'reference' => ReferenceGenerator::make('CHQ', 'cheques'),
             'statut' => Cheque::STATUT_EN_POSSESSION,
-            'etablissement_id' => app(CurrentContext::class)->etablissementId(),
+            'etablissement_id' => $etablissementId,
             'agent_id' => $agent->id,
         ]);
 

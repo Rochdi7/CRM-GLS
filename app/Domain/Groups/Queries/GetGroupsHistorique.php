@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\Domain\Groups\Queries;
 
 use App\Models\GroupHistorique;
+use App\Models\User;
+use App\Services\Authorization\CenterAccessService;
+use App\Services\Context\CurrentContext;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 /**
@@ -12,13 +15,26 @@ use Illuminate\Pagination\LengthAwarePaginator;
  * GroupHistoriqueController::index() (same query, same eager loads, same
  * ordering, same page size). Read-only: rows only ever come from
  * Group::archiverCommeTermine(), never from this class.
+ *
+ * Scoped like every other list (§11, audit 24/08/2026): centre access +
+ * active context centre + active context year. It previously listed every
+ * centre's archives to everyone — while the UI hid the Centre column under
+ * a locked context, so foreign rows showed with no visual clue.
  */
 final class GetGroupsHistorique
 {
-    public function __invoke(int $perPage = 15): LengthAwarePaginator
+    public function __construct(
+        private readonly CenterAccessService $centerAccess,
+        private readonly CurrentContext $context,
+    ) {}
+
+    public function __invoke(User $user, int $perPage = 15): LengthAwarePaginator
     {
         $historiques = GroupHistorique::query()
             ->with(['group', 'enseignant', 'etablissement', 'anneeScolaire', 'archivedBy'])
+            ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+            ->tap(fn ($q) => $this->scopeToActiveCenter($q))
+            ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
             ->orderByDesc('archived_at')
             ->paginate($perPage);
 
@@ -38,5 +54,16 @@ final class GetGroupsHistorique
         ]);
 
         return $historiques;
+    }
+
+    private function scopeToActiveCenter($query): void
+    {
+        $id = $this->context->etablissementId();
+
+        if ($id === null) {
+            return;
+        }
+
+        $query->where(fn ($q) => $q->whereNull('etablissement_id')->orWhere('etablissement_id', $id));
     }
 }

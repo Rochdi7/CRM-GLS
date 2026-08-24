@@ -22,11 +22,11 @@ use Illuminate\Validation\Rule;
  * is set by EmployeeObserver (auto-credentials) — neither is accepted here.
  * `etablissement_ids` (an employee may work in SEVERAL centers) is
  * validated as a non-empty list of existing center ids — an employee is
- * never left unaffected. The controller — not this request — decides
- * whether the client-submitted list is actually honored (only when the
- * top-bar context is "All centers"; otherwise the controller forces
- * CurrentContext::etablissementId() server-side, matching
- * EmployeesIndex::create()'s own auto-scoping).
+ * never left unassigned. The controller — not this request — narrows the
+ * client-submitted list to the acting user's own accessible centers
+ * (EmployeeController::resolveCenterIds — intersection with
+ * CenterAccessService::accessibleCenterIds; global users keep the full
+ * list), so the pivot can never be widened beyond the caller's reach.
  */
 final class StoreEmployeeRequest extends FormRequest
 {

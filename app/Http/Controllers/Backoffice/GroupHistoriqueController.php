@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Backoffice;
 use App\Domain\Groups\Queries\GetGroupsHistorique;
 use App\Http\Controllers\Controller;
 use App\Services\Context\CurrentContext;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -16,12 +17,12 @@ use Inertia\Response;
  */
 final class GroupHistoriqueController extends Controller
 {
-    public function index(GetGroupsHistorique $getGroupsHistorique, CurrentContext $context): Response
+    public function index(Request $request, GetGroupsHistorique $getGroupsHistorique, CurrentContext $context): Response
     {
         $this->authorize('groups.view');
 
         return Inertia::render('Backoffice/GroupsHistorique/Index', [
-            'historiques' => $getGroupsHistorique(),
+            'historiques' => $getGroupsHistorique($request->user()),
             // Hides the redundant Centre column once the context switcher is
             // on a single center (CLAUDE.md §5 centre-filter rule).
             'centerLocked' => ! $context->isAllCenters(),

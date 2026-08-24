@@ -14,9 +14,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Caisse;
 use App\Models\CaisseTransfer;
 use App\Models\Etablissement;
+use App\Services\Authorization\CenterAccessService;
+use App\Services\Context\CurrentContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -161,6 +164,7 @@ final class CaisseController extends Controller
 
         Caisse::create([
             ...$request->validated(),
+            'etablissement_id' => $this->resolveCaisseCentre($request, null),
             'solde' => 0,
             'statut' => Caisse::STATUT_ACTIVE,
         ]);
@@ -172,14 +176,53 @@ final class CaisseController extends Controller
     /**
      * Neither `solde` nor `type` is editable — see UpdateCaisseRequest.
      */
-    public function update(UpdateCaisseRequest $request, Caisse $caisse): RedirectResponse
+    public function update(UpdateCaisseRequest $request, Caisse $caisse, GetComptesCaisse $getComptesCaisse): RedirectResponse
     {
         abort_unless($request->user()->can('cash-accounts.update'), 403);
 
-        $caisse->update($request->validated());
+        $newCentre = $this->resolveCaisseCentre($request, $caisse->etablissement_id);
+
+        // Re-homing a till that already carries movements would retroactively
+        // re-scope every report joining caisse.etablissement_id (dashboard
+        // dépenses, annual summaries) — same reasoning as the destroy guard.
+        if ((int) $caisse->etablissement_id !== (int) $newCentre
+            && $getComptesCaisse->hasMovements($caisse)) {
+            throw ValidationException::withMessages([
+                'etablissement_id' => __('This cash account carries movements — its centre can no longer be changed.'),
+            ]);
+        }
+
+        $caisse->update([
+            ...$request->validated(),
+            'etablissement_id' => $newCentre,
+        ]);
 
         return redirect()->route('backoffice.caisses.index', ['tab' => 'comptes'])
             ->with('success', __('Cash account updated.'));
+    }
+
+    /**
+     * §11 context rule for cash accounts: a posted centre is honored only
+     * when it passes the caller's centre access; with none posted, the
+     * active context centre fills in (create) or the row keeps its own
+     * (update). Client input alone never decides where money lives.
+     */
+    private function resolveCaisseCentre(Request $request, ?int $current): ?int
+    {
+        $posted = $request->input('etablissement_id');
+
+        if ($posted !== null && $posted !== '') {
+            $posted = (int) $posted;
+
+            abort_unless(
+                app(CenterAccessService::class)->canAccessCenter($request->user(), $posted),
+                403,
+            );
+
+            return $posted;
+        }
+
+        return $current ?? app(CurrentContext::class)->etablissementId();
     }
 
     /**

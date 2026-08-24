@@ -122,6 +122,15 @@ final class GetChequesList
     {
         return Student::query()
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+            // Active-context centre, same narrowing the cheque list itself
+            // applies above — without it a single-centre context still offered
+            // every centre's parents in the "Source: Parents" picker.
+            ->tap(function ($q): void {
+                $id = $this->context->etablissementId();
+                if ($id !== null) {
+                    $q->where(fn ($sub) => $sub->whereNull('etablissement_id')->orWhere('etablissement_id', $id));
+                }
+            })
             ->whereNotNull('parent_nom')
             ->where('parent_nom', '!=', '')
             ->orderBy('parent_nom')

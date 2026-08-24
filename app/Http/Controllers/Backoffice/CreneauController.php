@@ -7,13 +7,17 @@ namespace App\Http\Controllers\Backoffice;
 use App\Domain\Attendance\Actions\GenererSeancesDepuisCreneau;
 use App\Domain\Attendance\Queries\GetCreneauFormOptions;
 use App\Domain\Attendance\Queries\GetCreneauxGrille;
+use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Attendance\StoreCreneauRequest;
 use App\Http\Requests\Backoffice\Attendance\UpdateCreneauRequest;
 use App\Models\Creneau;
+use App\Models\Group;
+use App\Models\Salle;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -27,6 +31,8 @@ use Inertia\Response;
  */
 final class CreneauController extends Controller
 {
+    use AssertsContextScope;
+
     public function index(
         Request $request,
         GetCreneauxGrille $getCreneauxGrille,
@@ -67,6 +73,14 @@ final class CreneauController extends Controller
         $this->authorize('create', Creneau::class);
 
         $data = $request->validated();
+
+        // The créneau's group defines the centre + année every generated
+        // séance inherits — one forged group_id would mass-write a whole
+        // year of séances into a foreign centre (AssertsContextScope).
+        $group = Group::findOrFail((int) $data['group_id']);
+        $this->assertGroupInContext($request, $group);
+        $this->assertSalleDuCentre($data['salle_id'] ?? null, $group);
+
         $jours = $data['jours_semaine'];
         unset($data['jours_semaine']);
 
@@ -96,7 +110,10 @@ final class CreneauController extends Controller
     {
         $this->authorize('update', $creneau);
 
-        $creneau->update($request->validated());
+        $data = $request->validated();
+        $this->assertSalleDuCentre($data['salle_id'] ?? null, $creneau->group);
+
+        $creneau->update($data);
         $generer->resynchroniser($creneau);
 
         if ($generer->bloqueParFinFormation) {
@@ -106,6 +123,27 @@ final class CreneauController extends Controller
 
         return redirect()->route('backoffice.emploi-du-temps.index')
             ->with('success', __('Schedule slot updated.'));
+    }
+
+    /**
+     * A booked room must belong to the group's own centre — the form's room
+     * options are already centre-scoped (GetCreneauFormOptions::salles), so
+     * only a forged/stale id reaches this, but without it another centre's
+     * room could be silently double-booked.
+     */
+    private function assertSalleDuCentre(mixed $salleId, Group $group): void
+    {
+        if ($salleId === null || $salleId === '') {
+            return;
+        }
+
+        $salle = Salle::findOrFail((int) $salleId);
+
+        if ((int) $salle->etablissement_id !== (int) $group->etablissement_id) {
+            throw ValidationException::withMessages([
+                'salle_id' => __("This room belongs to another centre than the group's."),
+            ]);
+        }
     }
 
     public function destroy(Creneau $creneau, GenererSeancesDepuisCreneau $generer): RedirectResponse
