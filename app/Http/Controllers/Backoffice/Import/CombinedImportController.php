@@ -96,7 +96,11 @@ final class CombinedImportController extends Controller
             statutsRetenus: array_values($data['statuts'] ?? []),
         );
 
-        $batch = $inscriptionImporter->analyze($request->file('inscriptions_file'), $context, $admin);
+        $batch = $inscriptionImporter->analyzeMany(
+            array_values($request->file('inscriptions_files')),
+            $context,
+            $admin,
+        );
 
         return redirect()
             ->route('backoffice.import.inscriptions.preview', $batch)

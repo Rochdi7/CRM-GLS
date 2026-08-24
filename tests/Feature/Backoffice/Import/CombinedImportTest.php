@@ -136,11 +136,12 @@ final class CombinedImportTest extends TestCase
         );
     }
 
-    private function inscriptionsUpload(): UploadedFile
+    /** @param array<int, array<int, string>> $rows [réf, étudiant, groupe, statut, date] */
+    private function inscriptionsUpload(?array $rows = null): UploadedFile
     {
         return $this->buildXlsx(
             ['Réf', 'Étudiant', 'Groupe', 'Statut', "Date d'inscription"],
-            [
+            $rows ?? [
                 ['I001', 'HASNA TIMOUN', 'Herr Driss 13h', 'Active', '05/01/2026'],
                 ['I002', 'AYA IBNOU EDDINE', 'Herr Driss 13h', 'Active', '06/01/2026'],
             ],
@@ -155,7 +156,7 @@ final class CombinedImportTest extends TestCase
 
         $response = $this->actingAs($user)->post(route('backoffice.import.combine.analyze'), [
             'students_file' => $this->studentsUpload(),
-            'inscriptions_file' => $this->inscriptionsUpload(),
+            'inscriptions_files' => ['Active' => $this->inscriptionsUpload()],
             'etablissement_id' => $this->centre->id,
             'statuts' => [],
             'groupe_mapping' => [
@@ -182,7 +183,48 @@ final class CombinedImportTest extends TestCase
         $this->assertSame(0, $inscriptionBatch->rows()->where('status', ImportRow::STATUT_CONFLIT)->count());
     }
 
-    public function test_it_requires_both_files(): void
+    public function test_one_inscriptions_file_per_statut_is_analyzed_into_a_single_batch(): void
+    {
+        // The old CRM exports Annulée and Archivée as SEPARATE lists — both
+        // are posted (one per checked statut) and land in ONE batch, with
+        // the legacy statuts translated and only the checked ones kept.
+        $user = $this->userWith('import.view', 'import.create');
+
+        $response = $this->actingAs($user)->post(route('backoffice.import.combine.analyze'), [
+            'students_file' => $this->studentsUpload(),
+            'inscriptions_files' => [
+                'Annulée' => $this->inscriptionsUpload([
+                    ['A001', 'HASNA TIMOUN', 'Herr Driss 13h', 'Annulé', '05/01/2026'],
+                ]),
+                'Changement' => $this->inscriptionsUpload([
+                    ['R001', 'AYA IBNOU EDDINE', 'Herr Driss 13h', 'Archive', '06/01/2026'],
+                    // An Active row hiding in the "archived" export is ignored.
+                    ['R002', 'HASNA TIMOUN', 'Herr Driss 13h', 'Active', '07/01/2026'],
+                ]),
+            ],
+            'etablissement_id' => $this->centre->id,
+            'statuts' => ['Annulée', 'Changement'],
+            'groupe_mapping' => [
+                ['label' => 'Herr Driss 13h', 'action' => 'create', 'nom' => 'Herr Driss 13h', 'niveau' => 'A1.1'],
+            ],
+        ]);
+
+        $response->assertSessionHasNoErrors();
+
+        $batch = ImportBatch::query()->where('module', ImportBatch::MODULE_INSCRIPTIONS)->sole();
+        $this->assertStringContainsString(' + ', $batch->original_filename);
+        $this->assertSame(3, $batch->total_rows);
+
+        $rows = $batch->rows()->orderBy('source_row_number')->get();
+        $this->assertSame(ImportRow::STATUT_NOUVEAU, $rows[0]->status);
+        $this->assertSame('Annulée', $rows[0]->raw['statut']);
+        $this->assertSame(ImportRow::STATUT_NOUVEAU, $rows[1]->status);
+        $this->assertSame('Changement', $rows[1]->raw['statut']);
+        $this->assertSame(ImportRow::STATUT_DOUBLON, $rows[2]->status);
+        $this->assertSame('statut_filtre', $rows[2]->errors[0]['code']);
+    }
+
+    public function test_it_requires_the_inscriptions_files(): void
     {
         $user = $this->userWith('import.view', 'import.create');
 
@@ -192,7 +234,7 @@ final class CombinedImportTest extends TestCase
             'groupe_mapping' => [],
         ]);
 
-        $response->assertSessionHasErrors(['inscriptions_file']);
+        $response->assertSessionHasErrors(['inscriptions_files']);
         $this->assertSame(0, ImportBatch::query()->count());
         $this->assertSame(0, Student::query()->count());
     }

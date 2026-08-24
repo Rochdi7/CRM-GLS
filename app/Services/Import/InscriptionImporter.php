@@ -177,12 +177,22 @@ final class InscriptionImporter implements Importer
 
     public function analyze(UploadedFile $file, ImportContext $context, Employee $importingAdmin): ImportBatch
     {
-        $filePath = $file->getRealPath();
-        ['headerRowNumber' => $headerRow, 'headerMap' => $headerMap] = $this->sheetReader->detectHeader(
-            $filePath,
-            self::EXPECTED_COLUMNS
-        );
+        return $this->analyzeMany([$file], $context, $importingAdmin);
+    }
 
+    /**
+     * Analyzes SEVERAL export files into ONE batch — the old CRM exports one
+     * file per statut (Annulée and Archivée come as separate lists), so the
+     * combined import takes them together. All the in-file dedupe state
+     * (legacy refs, composite keys) deliberately spans the whole set: an
+     * inscription present in two of the files is a doublon, exactly as if
+     * both rows sat in one sheet. Row numbers restart per file, so the batch
+     * keeps a per-file offset to keep source_row_number unique and ordered.
+     *
+     * @param  list<UploadedFile>  $files
+     */
+    public function analyzeMany(array $files, ImportContext $context, Employee $importingAdmin): ImportBatch
+    {
         $this->legacyRefsSeenThisFile = [];
         $this->legacyRefUsage = [];
         $this->compositeKeysSeenThisFile = [];
@@ -192,10 +202,13 @@ final class InscriptionImporter implements Importer
         $this->existingLegacyRefs = $this->preloadExistingLegacyRefs($context->etablissementId);
         $this->existingCompositeKeys = $this->preloadExistingCompositeKeys();
 
-        return DB::transaction(function () use ($filePath, $headerRow, $headerMap, $file, $context, $importingAdmin): ImportBatch {
+        return DB::transaction(function () use ($files, $context, $importingAdmin): ImportBatch {
             $batch = ImportBatch::create([
                 'module' => $this->module(),
-                'original_filename' => $file->getClientOriginalName(),
+                'original_filename' => implode(' + ', array_map(
+                    fn (UploadedFile $f): string => $f->getClientOriginalName(),
+                    $files,
+                )),
                 'etablissement_id' => $context->etablissementId,
                 'annee_scolaire_id' => $context->anneeScolaireId,
                 'context' => [
@@ -208,10 +221,24 @@ final class InscriptionImporter implements Importer
             ]);
 
             $total = 0;
+            $rowNumberOffset = 0;
 
-            foreach ($this->sheetReader->readDataRows($filePath, $headerRow, $headerMap) as $rowNumber => $rawRow) {
-                $total++;
-                $this->analyzeRow($batch, $rowNumber, $rawRow, $context);
+            foreach ($files as $file) {
+                $filePath = $file->getRealPath();
+                ['headerRowNumber' => $headerRow, 'headerMap' => $headerMap] = $this->sheetReader->detectHeader(
+                    $filePath,
+                    self::EXPECTED_COLUMNS
+                );
+
+                $maxRowNumber = $rowNumberOffset;
+
+                foreach ($this->sheetReader->readDataRows($filePath, $headerRow, $headerMap) as $rowNumber => $rawRow) {
+                    $total++;
+                    $maxRowNumber = max($maxRowNumber, $rowNumberOffset + $rowNumber);
+                    $this->analyzeRow($batch, $rowNumberOffset + $rowNumber, $rawRow, $context);
+                }
+
+                $rowNumberOffset = $maxRowNumber;
             }
 
             $this->flushPendingRows();

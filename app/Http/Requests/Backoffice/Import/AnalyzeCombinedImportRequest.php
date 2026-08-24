@@ -31,7 +31,12 @@ final class AnalyzeCombinedImportRequest extends FormRequest
     {
         return [
             'students_file' => ['required', 'file', 'mimes:xlsx', 'max:10240'],
-            'inscriptions_file' => ['required', 'file', 'mimes:xlsx', 'max:10240'],
+            // One inscriptions export per checked statut — the old CRM ships
+            // Annulée and Archivée as SEPARATE files. All files are analyzed
+            // into ONE batch; the statut filter still applies to every row,
+            // so a file dropped in the "wrong" slot cannot smuggle rows in.
+            'inscriptions_files' => ['required', 'array', 'min:1'],
+            'inscriptions_files.*' => ['required', 'file', 'mimes:xlsx', 'max:10240'],
             // Honored only in « Tous les centres » mode — otherwise the
             // active context decides (ResolvesImportScope), never the client.
             'etablissement_id' => ['nullable', 'integer', 'exists:etablissements,id'],

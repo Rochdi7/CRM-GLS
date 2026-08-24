@@ -64,7 +64,7 @@ function groupKey(name: string): string {
  * the centre genuinely has duplicates with that name, and guessing which one
  * the enrolments belong to would silently attach students to the wrong group.
  */
-function buildMapping(labels: string[], groups: ExistingGroup[]): GroupeMappingEntry[] {
+function buildMapping(labels: string[], groups: ExistingGroup[], niveaux: string[] = []): GroupeMappingEntry[] {
     const byKey = new Map<string, ExistingGroup[]>();
 
     groups.forEach((group) => {
@@ -78,14 +78,36 @@ function buildMapping(labels: string[], groups: ExistingGroup[]): GroupeMappingE
         const unique =
             sameYear.length === 1 ? sameYear[0] : sameYear.length === 0 && matches.length === 1 ? matches[0] : null;
 
+        // No existing group to attach to → default to "Créer le groupe" with
+        // the niveau guessed from the label, so the common case (a brand-new
+        // group per file label) needs no clicks. A unique match still maps.
         return {
             label,
-            action: 'map',
+            action: unique ? 'map' : 'create',
             group_id: unique ? String(unique.id) : '',
             nom: label,
-            niveau: '',
+            niveau: unique ? '' : guessNiveau(label, niveaux),
         };
     });
+}
+
+/**
+ * Pre-fill the niveau of a group to create from its label: an exact CEFR
+ * code in the label wins ("Groupe A1.2 soir" → A1.2), otherwise a bare
+ * level ("A1", "B2") picks the first sub-level of that band (A1 → A1.1).
+ */
+function guessNiveau(label: string, niveaux: string[]): string {
+    const upper = label.toUpperCase();
+    const exact = [...niveaux].sort((a, b) => b.length - a.length).find((n) => upper.includes(n.toUpperCase()));
+    if (exact) {
+        return exact;
+    }
+    const band = upper.match(/([ABC][12])/)?.[1];
+    if (band) {
+        return niveaux.find((n) => n.toUpperCase().startsWith(band)) ?? '';
+    }
+
+    return '';
 }
 
 /** Option label: the year tag marks a group that will be re-affected to the selected année if mapped. */
@@ -159,7 +181,7 @@ export default function InscriptionImportUpload({ etablissements, centerLocked }
 
             setExistingGroups(json.existingGroups);
             setNiveaux(json.niveaux);
-            form.setData('groupe_mapping', buildMapping(json.groupeLabels, json.existingGroups));
+            form.setData('groupe_mapping', buildMapping(json.groupeLabels, json.existingGroups, json.niveaux));
             setStep('mapping');
         } finally {
             setPeeking(false);

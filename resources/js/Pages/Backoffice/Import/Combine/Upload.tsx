@@ -29,7 +29,8 @@ interface GroupeMappingEntry {
 
 interface UploadFormState {
     students_file: File | null;
-    inscriptions_file: File | null;
+    /** One inscriptions export per checked statut — the old CRM ships them as separate files. */
+    inscriptions_files: Record<string, File | null>;
     etablissement_id: string;
     statuts: string[];
     groupe_mapping: GroupeMappingEntry[];
@@ -37,9 +38,13 @@ interface UploadFormState {
 
 /** Post-translation statut values (the file's "Archivée" imports as "Changement"). */
 const STATUT_OPTIONS = [
-    { value: 'Active', label: 'Active' },
-    { value: 'Annulée', label: 'Annulée' },
-    { value: 'Changement', label: 'Changement (« Archivée » dans l’ancien CRM)' },
+    { value: 'Active', label: 'Active', fileLabel: 'Fichier Inscriptions — Actives (.xlsx)' },
+    { value: 'Annulée', label: 'Annulée', fileLabel: 'Fichier Inscriptions — Annulées (.xlsx)' },
+    {
+        value: 'Changement',
+        label: 'Changement (« Archivée » dans l’ancien CRM)',
+        fileLabel: 'Fichier Inscriptions — Archivées (.xlsx)',
+    },
 ] as const;
 
 /** Case/accent/space-insensitive key so "Herr  Driss 13h" matches "Herr Driss 13h". */
@@ -53,7 +58,7 @@ function groupKey(name: string): string {
 }
 
 /** Same auto-matching as the standalone Inscriptions import (same-year group wins, lone other-year match is re-affected server-side). */
-function buildMapping(labels: string[], groups: ExistingGroup[]): GroupeMappingEntry[] {
+function buildMapping(labels: string[], groups: ExistingGroup[], niveaux: string[] = []): GroupeMappingEntry[] {
     const byKey = new Map<string, ExistingGroup[]>();
 
     groups.forEach((group) => {
@@ -67,14 +72,36 @@ function buildMapping(labels: string[], groups: ExistingGroup[]): GroupeMappingE
         const unique =
             sameYear.length === 1 ? sameYear[0] : sameYear.length === 0 && matches.length === 1 ? matches[0] : null;
 
+        // No existing group to attach to → default to "Créer le groupe" with
+        // the niveau guessed from the label, so the common case (a brand-new
+        // group per file label) needs no clicks. A unique match still maps.
         return {
             label,
-            action: 'map',
+            action: unique ? 'map' : 'create',
             group_id: unique ? String(unique.id) : '',
             nom: label,
-            niveau: '',
+            niveau: unique ? '' : guessNiveau(label, niveaux),
         };
     });
+}
+
+/**
+ * Pre-fill the niveau of a group to create from its label: an exact CEFR
+ * code in the label wins ("Groupe A1.2 soir" → A1.2), otherwise a bare
+ * level ("A1", "B2") picks the first sub-level of that band (A1 → A1.1).
+ */
+function guessNiveau(label: string, niveaux: string[]): string {
+    const upper = label.toUpperCase();
+    const exact = [...niveaux].sort((a, b) => b.length - a.length).find((n) => upper.includes(n.toUpperCase()));
+    if (exact) {
+        return exact;
+    }
+    const band = upper.match(/([ABC][12])/)?.[1];
+    if (band) {
+        return niveaux.find((n) => n.toUpperCase().startsWith(band)) ?? '';
+    }
+
+    return '';
 }
 
 /** Option label: the year tag marks a group that will be re-affected to the selected année if mapped. */
@@ -102,54 +129,81 @@ export default function CombinedImportUpload({ etablissements, centerLocked }: C
 
     const form = useForm<UploadFormState>({
         students_file: null,
-        inscriptions_file: null,
+        inscriptions_files: {},
         etablissement_id: '',
         statuts: STATUT_OPTIONS.map((s) => s.value),
         groupe_mapping: [],
     });
 
     function toggleStatut(value: string) {
-        form.setData(
-            'statuts',
-            form.data.statuts.includes(value)
-                ? form.data.statuts.filter((s) => s !== value)
-                : [...form.data.statuts, value]
-        );
+        const removing = form.data.statuts.includes(value);
+
+        form.setData({
+            ...form.data,
+            statuts: removing ? form.data.statuts.filter((s) => s !== value) : [...form.data.statuts, value],
+            // Unchecking a statut also drops its file, so nothing hidden is posted.
+            inscriptions_files: removing
+                ? Object.fromEntries(Object.entries(form.data.inscriptions_files).filter(([k]) => k !== value))
+                : form.data.inscriptions_files,
+        });
     }
 
-    // Peek reads the INSCRIPTIONS file's distinct "Groupe" labels through the
-    // standalone inscriptions peek endpoint (plain fetch, not an Inertia visit).
+    function setInscriptionsFile(statut: string, file: File | null) {
+        form.setData('inscriptions_files', { ...form.data.inscriptions_files, [statut]: file });
+    }
+
+    /** The files actually selected for the checked statuts, in option order. */
+    function selectedFiles(): File[] {
+        return STATUT_OPTIONS.filter((o) => form.data.statuts.includes(o.value))
+            .map((o) => form.data.inscriptions_files[o.value])
+            .filter((f): f is File => f instanceof File);
+    }
+
+    // Peek reads each INSCRIPTIONS file's distinct "Groupe" labels through the
+    // standalone inscriptions peek endpoint (plain fetch, not an Inertia
+    // visit), one call per file, and merges the labels — the existing-groups
+    // list is the same for every call.
     async function handlePeekSubmit(event: FormEvent) {
         event.preventDefault();
         setPeekError(null);
         setPeeking(true);
 
-        const formData = new FormData();
-        if (form.data.inscriptions_file) formData.append('file', form.data.inscriptions_file);
-        if (form.data.etablissement_id !== '') formData.append('etablissement_id', form.data.etablissement_id);
-
         try {
             const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
-            const response = await fetch('/backoffice/import/inscriptions/peek-groupes', {
-                method: 'POST',
-                headers: { 'X-CSRF-TOKEN': csrf, Accept: 'application/json' },
-                body: formData,
-            });
+            const labels = new Set<string>();
+            let groups: ExistingGroup[] = [];
+            let niveauxList: string[] = [];
 
-            if (!response.ok) {
-                setPeekError("Impossible de lire le fichier d'inscriptions.");
-                return;
+            for (const file of selectedFiles()) {
+                const formData = new FormData();
+                formData.append('file', file);
+                if (form.data.etablissement_id !== '') formData.append('etablissement_id', form.data.etablissement_id);
+
+                const response = await fetch('/backoffice/import/inscriptions/peek-groupes', {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': csrf, Accept: 'application/json' },
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    setPeekError(`Impossible de lire le fichier d'inscriptions « ${file.name} ».`);
+                    return;
+                }
+
+                const json = (await response.json()) as {
+                    groupeLabels: string[];
+                    existingGroups: ExistingGroup[];
+                    niveaux: string[];
+                };
+
+                json.groupeLabels.forEach((label) => labels.add(label));
+                groups = json.existingGroups;
+                niveauxList = json.niveaux;
             }
 
-            const json = (await response.json()) as {
-                groupeLabels: string[];
-                existingGroups: ExistingGroup[];
-                niveaux: string[];
-            };
-
-            setExistingGroups(json.existingGroups);
-            setNiveaux(json.niveaux);
-            form.setData('groupe_mapping', buildMapping(json.groupeLabels, json.existingGroups));
+            setExistingGroups(groups);
+            setNiveaux(niveauxList);
+            form.setData('groupe_mapping', buildMapping([...labels], groups, niveauxList));
             setStep('mapping');
         } finally {
             setPeeking(false);
@@ -172,11 +226,12 @@ export default function CombinedImportUpload({ etablissements, centerLocked }: C
         existingGroups.map((g) => groupKey(g.nom)).filter((key, index, all) => all.indexOf(key) !== index)
     );
 
+    const checkedOptions = STATUT_OPTIONS.filter((o) => form.data.statuts.includes(o.value));
     const canPeek =
         form.data.students_file !== null &&
-        form.data.inscriptions_file !== null &&
         (centerLocked || form.data.etablissement_id !== '') &&
-        form.data.statuts.length > 0;
+        checkedOptions.length > 0 &&
+        checkedOptions.every((o) => form.data.inscriptions_files[o.value] instanceof File);
     const canAnalyze = form.data.groupe_mapping.every((e) =>
         e.action === 'map' ? e.group_id !== '' : e.nom !== '' && e.niveau !== ''
     );
@@ -206,43 +261,21 @@ export default function CombinedImportUpload({ etablissements, centerLocked }: C
                             onChange={(value) => form.setData('etablissement_id', value)}
                         />
 
-                        <div className="row">
-                            <div className="col-md-6">
-                                <div className="mb-3">
-                                    <label className="form-label" htmlFor="students-file">
-                                        Fichier Étudiants (.xlsx)
-                                        <span className="text-danger ms-1">*</span>
-                                    </label>
-                                    <input
-                                        id="students-file"
-                                        type="file"
-                                        accept=".xlsx"
-                                        className={`form-control${form.errors.students_file ? ' is-invalid' : ''}`}
-                                        onChange={(e) => form.setData('students_file', e.target.files?.[0] ?? null)}
-                                    />
-                                    {form.errors.students_file && (
-                                        <div className="invalid-feedback">{form.errors.students_file}</div>
-                                    )}
-                                </div>
-                            </div>
-                            <div className="col-md-6">
-                                <div className="mb-3">
-                                    <label className="form-label" htmlFor="inscriptions-file">
-                                        Fichier Inscriptions (.xlsx)
-                                        <span className="text-danger ms-1">*</span>
-                                    </label>
-                                    <input
-                                        id="inscriptions-file"
-                                        type="file"
-                                        accept=".xlsx"
-                                        className={`form-control${form.errors.inscriptions_file ? ' is-invalid' : ''}`}
-                                        onChange={(e) => form.setData('inscriptions_file', e.target.files?.[0] ?? null)}
-                                    />
-                                    {form.errors.inscriptions_file && (
-                                        <div className="invalid-feedback">{form.errors.inscriptions_file}</div>
-                                    )}
-                                </div>
-                            </div>
+                        <div className="mb-3">
+                            <label className="form-label" htmlFor="students-file">
+                                Fichier Étudiants (.xlsx)
+                                <span className="text-danger ms-1">*</span>
+                            </label>
+                            <input
+                                id="students-file"
+                                type="file"
+                                accept=".xlsx"
+                                className={`form-control${form.errors.students_file ? ' is-invalid' : ''}`}
+                                onChange={(e) => form.setData('students_file', e.target.files?.[0] ?? null)}
+                            />
+                            {form.errors.students_file && (
+                                <div className="invalid-feedback">{form.errors.students_file}</div>
+                            )}
                         </div>
 
                         <div className="mb-3">
@@ -265,12 +298,42 @@ export default function CombinedImportUpload({ etablissements, centerLocked }: C
                                 </div>
                             ))}
                             <small className="text-muted d-block mt-1">
-                                Historique de l&apos;ancienne année : cochez Annulée + Changement avec la barre
-                                supérieure sur l&apos;année passée. Données courantes : cochez Active avec la barre sur
-                                l&apos;année en cours. Les lignes non retenues sont comptées comme ignorées, jamais
-                                perdues.
+                                L&apos;ancien CRM exporte une liste par statut : un fichier est demandé pour chaque
+                                statut coché, et tous sont analysés ensemble dans un seul lot. Historique de
+                                l&apos;ancienne année : cochez Annulée + Changement avec la barre supérieure sur
+                                l&apos;année passée. Données courantes : cochez Active avec la barre sur l&apos;année en
+                                cours. Les lignes d&apos;un autre statut sont comptées comme ignorées, jamais perdues.
                             </small>
                         </div>
+
+                        <div className="row">
+                            {checkedOptions.map((option) => (
+                                <div className="col-md-4" key={option.value}>
+                                    <div className="mb-3">
+                                        <label className="form-label" htmlFor={`inscriptions-file-${option.value}`}>
+                                            {option.fileLabel}
+                                            <span className="text-danger ms-1">*</span>
+                                        </label>
+                                        <input
+                                            id={`inscriptions-file-${option.value}`}
+                                            type="file"
+                                            accept=".xlsx"
+                                            className={`form-control${
+                                                form.errors[`inscriptions_files.${option.value}` as keyof typeof form.errors]
+                                                    ? ' is-invalid'
+                                                    : ''
+                                            }`}
+                                            onChange={(e) =>
+                                                setInscriptionsFile(option.value, e.target.files?.[0] ?? null)
+                                            }
+                                        />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        {form.errors.inscriptions_files && (
+                            <div className="alert alert-danger">{form.errors.inscriptions_files}</div>
+                        )}
 
                         {peekError && <div className="alert alert-danger">{peekError}</div>}
 
