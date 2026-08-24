@@ -52,7 +52,7 @@ function groupKey(name: string): string {
  * the centre genuinely has duplicates with that name, and guessing which one
  * the enrolments belong to would silently attach students to the wrong group.
  */
-function buildMapping(labels: string[], groups: ExistingGroup[]): GroupeMappingEntry[] {
+function buildMapping(labels: string[], groups: ExistingGroup[], niveaux: string[] = []): GroupeMappingEntry[] {
     const byKey = new Map<string, ExistingGroup[]>();
 
     groups.forEach((group) => {
@@ -68,14 +68,36 @@ function buildMapping(labels: string[], groups: ExistingGroup[]): GroupeMappingE
         const unique =
             sameYear.length === 1 ? sameYear[0] : sameYear.length === 0 && matches.length === 1 ? matches[0] : null;
 
+        // No existing group → default to "Créer le groupe" with a pre-filled
+        // niveau, so a bulk import needs no clicks (same as the other imports).
         return {
             label,
-            action: 'map',
+            action: unique ? 'map' : 'create',
             group_id: unique ? String(unique.id) : '',
             nom: label,
-            niveau: '',
+            niveau: unique ? '' : guessNiveau(label, niveaux),
         };
     });
+}
+
+/**
+ * Pre-fill the niveau of a group to create from its label: an exact CEFR
+ * code in the label wins ("Groupe A1.2 soir" → A1.2), a bare band ("B2")
+ * picks its first sub-level, and with no level at all the first niveau is
+ * used so the field never blocks the import — corrected on the group later.
+ */
+function guessNiveau(label: string, niveaux: string[]): string {
+    const upper = label.toUpperCase();
+    const exact = [...niveaux].sort((a, b) => b.length - a.length).find((n) => upper.includes(n.toUpperCase()));
+    if (exact) {
+        return exact;
+    }
+    const band = upper.match(/([ABC][12])/)?.[1];
+    if (band) {
+        return niveaux.find((n) => n.toUpperCase().startsWith(band)) ?? niveaux[0] ?? '';
+    }
+
+    return niveaux[0] ?? '';
 }
 
 /** Option label: the year tag marks a group that will be re-affected to the selected année if mapped. */
@@ -143,7 +165,7 @@ export default function PresenceImportUpload({ etablissements, centerLocked }: P
 
             setExistingGroups(json.existingGroups);
             setNiveaux(json.niveaux);
-            form.setData('groupe_mapping', buildMapping(json.groupeLabels, json.existingGroups));
+            form.setData('groupe_mapping', buildMapping(json.groupeLabels, json.existingGroups, json.niveaux));
             setStep('mapping');
         } finally {
             setPeeking(false);

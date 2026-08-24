@@ -101,7 +101,9 @@ function guessNiveau(label: string, niveaux: string[]): string {
         return niveaux.find((n) => n.toUpperCase().startsWith(band)) ?? '';
     }
 
-    return '';
+    // No level in the label: default to the first niveau so a bulk import
+    // never blocks on this field — the operator corrects it on the group later.
+    return niveaux[0] ?? '';
 }
 
 /** Option label: the year tag marks a group that will be re-affected to the selected année if mapped. */
