@@ -5,7 +5,7 @@ import Card from '@/Components/Shared/Card';
 import ImportScopeFields from '@/Components/Import/ImportScopeFields';
 import type { ImportEtablissementOption } from '@/Types/import';
 
-interface InscriptionImportUploadProps {
+interface CombinedImportUploadProps {
     etablissements: ImportEtablissementOption[];
     centerLocked: boolean;
 }
@@ -28,7 +28,8 @@ interface GroupeMappingEntry {
 }
 
 interface UploadFormState {
-    file: File | null;
+    students_file: File | null;
+    inscriptions_file: File | null;
     etablissement_id: string;
     statuts: string[];
     groupe_mapping: GroupeMappingEntry[];
@@ -51,19 +52,7 @@ function groupKey(name: string): string {
         .toLowerCase();
 }
 
-/**
- * Pre-selects the existing group whose name matches the file's label, so an
- * already-imported group never has to be picked by hand (and is never
- * accidentally re-created as a duplicate). A group of the SELECTED année
- * wins over a same-named group from another année; an other-year match is
- * still auto-selected when it's the only one — mapping it makes the server
- * re-affect the group (with its inscriptions/séances) to the selected year,
- * which is exactly how wrong-year imported data gets pulled back.
- *
- * A label matching SEVERAL candidate groups is deliberately left unselected:
- * the centre genuinely has duplicates with that name, and guessing which one
- * the enrolments belong to would silently attach students to the wrong group.
- */
+/** Same auto-matching as the standalone Inscriptions import (same-year group wins, lone other-year match is re-affected server-side). */
 function buildMapping(labels: string[], groups: ExistingGroup[]): GroupeMappingEntry[] {
     const byKey = new Map<string, ExistingGroup[]>();
 
@@ -96,14 +85,15 @@ function groupOptionLabel(group: ExistingGroup, ambiguous: boolean): string {
 }
 
 /**
- * Two steps: (1) confirm the active context's Centre + Année (from the
- * top-bar switcher — see ImportScopeFields) + pick the file, peek the
- * file's distinct "Groupe" labels scoped to that centre/année; (2) map
- * every label to an existing group or "créer le groupe" before Analyze is
- * allowed — the import plan's mandatory scoping +
- * no-cross-centre-group-mapping rule.
+ * Combined Étudiants + Inscriptions import: BOTH legacy files in one flow.
+ * Step 1: scope (from the top-bar context) + the two files + statut filter;
+ * the group-mapping peek runs on the inscriptions file via the standalone
+ * endpoint. Step 2: map the groups, then Analyze — the server imports the
+ * students first (auto-commit of every clean row), analyzes the
+ * inscriptions against them, and lands on the standard inscriptions
+ * preview.
  */
-export default function InscriptionImportUpload({ etablissements, centerLocked }: InscriptionImportUploadProps) {
+export default function CombinedImportUpload({ etablissements, centerLocked }: CombinedImportUploadProps) {
     const [step, setStep] = useState<'scope' | 'mapping'>('scope');
     const [existingGroups, setExistingGroups] = useState<ExistingGroup[]>([]);
     const [niveaux, setNiveaux] = useState<string[]>([]);
@@ -111,7 +101,8 @@ export default function InscriptionImportUpload({ etablissements, centerLocked }
     const [peekError, setPeekError] = useState<string | null>(null);
 
     const form = useForm<UploadFormState>({
-        file: null,
+        students_file: null,
+        inscriptions_file: null,
         etablissement_id: '',
         statuts: STATUT_OPTIONS.map((s) => s.value),
         groupe_mapping: [],
@@ -126,16 +117,15 @@ export default function InscriptionImportUpload({ etablissements, centerLocked }
         );
     }
 
-    // This is a synchronous "peek" call whose response is read directly
-    // (existing groups + distinct labels), not an Inertia page visit — a
-    // plain fetch is simpler here than router.post, which expects a redirect.
+    // Peek reads the INSCRIPTIONS file's distinct "Groupe" labels through the
+    // standalone inscriptions peek endpoint (plain fetch, not an Inertia visit).
     async function handlePeekSubmit(event: FormEvent) {
         event.preventDefault();
         setPeekError(null);
         setPeeking(true);
 
         const formData = new FormData();
-        if (form.data.file) formData.append('file', form.data.file);
+        if (form.data.inscriptions_file) formData.append('file', form.data.inscriptions_file);
         if (form.data.etablissement_id !== '') formData.append('etablissement_id', form.data.etablissement_id);
 
         try {
@@ -147,7 +137,7 @@ export default function InscriptionImportUpload({ etablissements, centerLocked }
             });
 
             if (!response.ok) {
-                setPeekError('Impossible de lire le fichier.');
+                setPeekError("Impossible de lire le fichier d'inscriptions.");
                 return;
             }
 
@@ -175,34 +165,38 @@ export default function InscriptionImportUpload({ etablissements, centerLocked }
 
     function submitAnalyze(event: FormEvent) {
         event.preventDefault();
-        form.post('/backoffice/import/inscriptions/analyze', { forceFormData: true });
+        form.post('/backoffice/import/combine/analyze', { forceFormData: true });
     }
 
-    // Group names are not unique in practice (two "Herr Driss 13h" exist), so
-    // ambiguous ones are labelled with their id and never auto-selected.
     const duplicateNames = new Set(
-        existingGroups
-            .map((g) => groupKey(g.nom))
-            .filter((key, index, all) => all.indexOf(key) !== index)
+        existingGroups.map((g) => groupKey(g.nom)).filter((key, index, all) => all.indexOf(key) !== index)
     );
 
     const canPeek =
-        form.data.file !== null && (centerLocked || form.data.etablissement_id !== '') && form.data.statuts.length > 0;
+        form.data.students_file !== null &&
+        form.data.inscriptions_file !== null &&
+        (centerLocked || form.data.etablissement_id !== '') &&
+        form.data.statuts.length > 0;
     const canAnalyze = form.data.groupe_mapping.every((e) =>
         e.action === 'map' ? e.group_id !== '' : e.nom !== '' && e.niveau !== ''
     );
 
     return (
         <BackofficeLayout
-            title="Import Inscriptions"
+            title="Import Étudiants + Inscriptions"
             breadcrumbs={[
                 { label: 'Tableau de bord', href: '/backoffice/dashboard' },
                 { label: 'Import de données', href: '/backoffice/import' },
-                { label: 'Inscriptions' },
+                { label: 'Étudiants + Inscriptions' },
             ]}
         >
             {step === 'scope' && (
-                <Card title="Importer des inscriptions depuis l'ancien CRM">
+                <Card title="Importer étudiants et inscriptions en une seule fois">
+                    <div className="alert alert-info">
+                        Les <strong>étudiants sont importés d&apos;abord</strong> (les lignes propres sont insérées
+                        automatiquement), puis les <strong>inscriptions sont résolues contre eux</strong> dans la même
+                        opération — plus de conflits « étudiant introuvable » entre deux imports séparés.
+                    </div>
                     <form onSubmit={handlePeekSubmit}>
                         <ImportScopeFields
                             etablissements={etablissements}
@@ -212,24 +206,48 @@ export default function InscriptionImportUpload({ etablissements, centerLocked }
                             onChange={(value) => form.setData('etablissement_id', value)}
                         />
 
-                        <div className="mb-3">
-                            <label className="form-label" htmlFor="import-file">
-                                Fichier Excel (.xlsx)
-                                <span className="text-danger ms-1">*</span>
-                            </label>
-                            <input
-                                id="import-file"
-                                type="file"
-                                accept=".xlsx"
-                                className={`form-control${form.errors.file ? ' is-invalid' : ''}`}
-                                onChange={(e) => form.setData('file', e.target.files?.[0] ?? null)}
-                            />
-                            {form.errors.file && <div className="invalid-feedback">{form.errors.file}</div>}
+                        <div className="row">
+                            <div className="col-md-6">
+                                <div className="mb-3">
+                                    <label className="form-label" htmlFor="students-file">
+                                        Fichier Étudiants (.xlsx)
+                                        <span className="text-danger ms-1">*</span>
+                                    </label>
+                                    <input
+                                        id="students-file"
+                                        type="file"
+                                        accept=".xlsx"
+                                        className={`form-control${form.errors.students_file ? ' is-invalid' : ''}`}
+                                        onChange={(e) => form.setData('students_file', e.target.files?.[0] ?? null)}
+                                    />
+                                    {form.errors.students_file && (
+                                        <div className="invalid-feedback">{form.errors.students_file}</div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="col-md-6">
+                                <div className="mb-3">
+                                    <label className="form-label" htmlFor="inscriptions-file">
+                                        Fichier Inscriptions (.xlsx)
+                                        <span className="text-danger ms-1">*</span>
+                                    </label>
+                                    <input
+                                        id="inscriptions-file"
+                                        type="file"
+                                        accept=".xlsx"
+                                        className={`form-control${form.errors.inscriptions_file ? ' is-invalid' : ''}`}
+                                        onChange={(e) => form.setData('inscriptions_file', e.target.files?.[0] ?? null)}
+                                    />
+                                    {form.errors.inscriptions_file && (
+                                        <div className="invalid-feedback">{form.errors.inscriptions_file}</div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
 
                         <div className="mb-3">
                             <label className="form-label d-block">
-                                Statuts à importer dans cette année
+                                Statuts d&apos;inscription à importer dans cette année
                                 <span className="text-danger ms-1">*</span>
                             </label>
                             {STATUT_OPTIONS.map((option) => (
@@ -247,9 +265,10 @@ export default function InscriptionImportUpload({ etablissements, centerLocked }
                                 </div>
                             ))}
                             <small className="text-muted d-block mt-1">
-                                Les lignes des statuts non cochés sont ignorées (comptées, jamais perdues) — utile pour
-                                importer l&apos;historique (Annulée + Changement) dans l&apos;ancienne année, puis les
-                                Actives dans l&apos;année en cours, à partir du même fichier.
+                                Historique de l&apos;ancienne année : cochez Annulée + Changement avec la barre
+                                supérieure sur l&apos;année passée. Données courantes : cochez Active avec la barre sur
+                                l&apos;année en cours. Les lignes non retenues sont comptées comme ignorées, jamais
+                                perdues.
                             </small>
                         </div>
 
@@ -354,7 +373,7 @@ export default function InscriptionImportUpload({ etablissements, centerLocked }
                             Retour
                         </button>
                         <button type="submit" className="btn btn-primary" disabled={!canAnalyze || form.processing}>
-                            {form.processing ? 'Analyse en cours…' : 'Analyser'}
+                            {form.processing ? 'Import des étudiants et analyse…' : 'Importer étudiants + analyser inscriptions'}
                         </button>
                     </form>
                 </Card>

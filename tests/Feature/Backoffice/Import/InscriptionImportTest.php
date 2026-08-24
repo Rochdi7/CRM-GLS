@@ -693,6 +693,47 @@ final class InscriptionImportTest extends TestCase
         $this->assertSame(1, Inscription::query()->count());
     }
 
+    public function test_the_statut_filter_only_imports_the_selected_statuts(): void
+    {
+        // One legacy file split across years: here only the terminated
+        // history (Annulée + Changement — the file's "Archivée") is kept;
+        // the Active row is recorded as ignorée, never silently dropped.
+        $this->makeStudent('CHAYMA', 'AAZRI');
+        $this->makeStudent('HASNA', 'TIMOUN');
+        $this->makeStudent('AYA', 'IBNOU EDDINE');
+        $group = Group::factory()->create([
+            'nom' => 'Herr Driss 13h',
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+        $group->frais()->sync([Frais::first()->id => ['montant' => 300, 'date_echeance' => '2026-09-01']]);
+
+        $user = $this->userWith('import.view', 'import.create');
+
+        $this->actingAs($user)->post(route('backoffice.import.inscriptions.analyze'), [
+            'file' => $this->buildUpload([
+                ['101AA1', 'CHAYMA AAZRI', 'Herr Driss 13h', 'Active', '05/01/2026'],
+                ['102BB2', 'HASNA TIMOUN', 'Herr Driss 13h', 'Annulé', '06/01/2026'],
+                ['103CC3', 'AYA IBNOU EDDINE', 'Herr Driss 13h', 'Archivée', '07/01/2026'],
+            ]),
+            'etablissement_id' => $this->centre->id,
+            'statuts' => [Inscription::STATUT_ANNULEE, Inscription::STATUT_CHANGEMENT],
+            'groupe_mapping' => [['label' => 'Herr Driss 13h', 'action' => 'map', 'group_id' => $group->id]],
+        ])->assertSessionHasNoErrors();
+
+        $rows = ImportBatch::query()->firstOrFail()->rows()->orderBy('source_row_number')->get();
+
+        // Active: ignorée with an explicit reason.
+        $this->assertSame(ImportRow::STATUT_DOUBLON, $rows[0]->status);
+        $this->assertSame('statut_filtre', $rows[0]->errors[0]['code']);
+
+        // Annulé -> Annulée and Archivée -> Changement both kept.
+        $this->assertSame(ImportRow::STATUT_NOUVEAU, $rows[1]->status);
+        $this->assertSame(Inscription::STATUT_ANNULEE, $rows[1]->raw['statut']);
+        $this->assertSame(ImportRow::STATUT_NOUVEAU, $rows[2]->status);
+        $this->assertSame(Inscription::STATUT_CHANGEMENT, $rows[2]->raw['statut']);
+    }
+
     public function test_mapping_refuses_a_group_from_another_centre(): void
     {
         $foreignGroup = Group::factory()->create([

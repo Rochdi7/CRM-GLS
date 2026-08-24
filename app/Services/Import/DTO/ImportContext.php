@@ -21,6 +21,13 @@ final readonly class ImportContext
      *         accepted as a fallback, so historical payments from a
      *         cancelled enrolment still land instead of being refused.
      *         Active always wins where both exist.
+     * @param  list<string>  $statutsRetenus  Inscriptions only: which statuts
+     *         this batch imports into the selected year (after the legacy
+     *         translation, so "Archivée" is filtered as "Changement"). Empty
+     *         = all. Lets one legacy file be split across years: the
+     *         terminated history (Annulée + Changement) into the old year,
+     *         the Active rows into the current one. A filtered-out row is
+     *         recorded as ignorée, never silently dropped.
      */
     public function __construct(
         public int $etablissementId,
@@ -28,5 +35,6 @@ final readonly class ImportContext
         public array $groupeMapping = [],
         public array $operateurMapping = [],
         public bool $includeInactiveInscriptions = false,
+        public array $statutsRetenus = [],
     ) {}
 }

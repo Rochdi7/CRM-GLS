@@ -198,7 +198,10 @@ final class InscriptionImporter implements Importer
                 'original_filename' => $file->getClientOriginalName(),
                 'etablissement_id' => $context->etablissementId,
                 'annee_scolaire_id' => $context->anneeScolaireId,
-                'context' => ['groupeMapping' => $context->groupeMapping],
+                'context' => [
+                    'groupeMapping' => $context->groupeMapping,
+                    'statutsRetenus' => $context->statutsRetenus,
+                ],
                 'created_by' => $importingAdmin->id,
                 'status' => ImportBatch::STATUT_ANALYZED,
                 'analyzed_at' => now(),
@@ -439,6 +442,34 @@ final class InscriptionImporter implements Importer
         $groupe = CellNormalizer::text($rawRow['Groupe'] ?? '');
         $statutLabel = CellNormalizer::text($rawRow['Statut'] ?? '');
         $statut = self::translateStatut($statutLabel);
+
+        // Statut filter (ImportContext::$statutsRetenus): a row whose statut
+        // is not selected for this batch is recorded as ignorée — visible in
+        // the counters with its reason, never silently dropped — so ONE
+        // legacy file can be split across years (history vs current) by
+        // running it twice with different filters. Compared AFTER the legacy
+        // translation, so "Archivée" is filtered as "Changement".
+        if ($context->statutsRetenus !== [] && ! in_array($statut, $context->statutsRetenus, true)) {
+            $this->pushPendingRow($batch, $rowNumber, [
+                'raw' => [
+                    'legacy_ref' => $legacyRef,
+                    'etudiant' => $etudiant,
+                    'groupe' => $groupe,
+                    'statut' => $statut,
+                    'statut_label' => $statutLabel,
+                ],
+                'status' => ImportRow::STATUT_DOUBLON,
+                'errors' => [[
+                    'field' => 'statut',
+                    'code' => 'statut_filtre',
+                    'message' => sprintf('Statut « %s » non retenu pour cet import — ligne ignorée.', $statut),
+                ]],
+                'legacy_ref' => $legacyRef !== '' ? $legacyRef : null,
+                'resolution' => null,
+            ]);
+
+            return;
+        }
 
         $parseErrors = [];
         try {

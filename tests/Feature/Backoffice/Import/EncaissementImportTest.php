@@ -527,6 +527,64 @@ final class EncaissementImportTest extends TestCase
         );
     }
 
+    public function test_a_cancelled_inscription_wins_over_a_changed_one(): void
+    {
+        // The old CRM exports Annulée and Archivée (→ Changement) as two
+        // separate files, so an old-year student often holds BOTH. Decision
+        // 24/08/2026: his historical payments belong on the ANNULÉE record —
+        // the Changement copy carries no money — even when the Changement
+        // row is the more recent one (date is only a tie-breaker).
+        $student = Student::factory()->create([
+            'etablissement_id' => $this->centre->id, 'prenom' => 'ABDERRAHMANE', 'nom' => 'BOUGMA',
+        ]);
+        $group = Group::factory()->create([
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $cancelled = Inscription::create([
+            'reference' => 'INS-'.fake()->unique()->numerify('#####'),
+            'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => Inscription::STATUT_ANNULEE, 'date_inscription' => '2026-06-01',
+        ]);
+        $cancelledFee = InscriptionFee::create([
+            'inscription_id' => $cancelled->id, 'nom' => "Frais d'inscription A1/A2/B1",
+            'montant_initial' => 300, 'montant' => 300,
+            'date_echeance' => '2026-09-01', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+
+        $changed = Inscription::create([
+            'reference' => 'INS-'.fake()->unique()->numerify('#####'),
+            'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            // More recent than the Annulée one — must still lose.
+            'statut' => Inscription::STATUT_CHANGEMENT, 'date_inscription' => '2026-07-01',
+        ]);
+        InscriptionFee::create([
+            'inscription_id' => $changed->id, 'nom' => "Frais d'inscription A1/A2/B1",
+            'montant_initial' => 300, 'montant' => 300,
+            'date_echeance' => '2026-09-01', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+
+        $user = $this->userWith('import.view', 'import.create');
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+            'include_inactive_inscriptions' => true,
+        ]);
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $row = $batch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
+        $this->commitAllSelected($user, $batch, [$row->id])->assertOk();
+
+        $this->assertSame(
+            $cancelledFee->id,
+            Encaissement::query()->where('legacy_ref', 'P4255')->firstOrFail()->inscription_fee_id,
+        );
+    }
+
     public function test_an_imported_fee_priced_at_zero_is_backfilled_from_the_payment(): void
     {
         // The legacy inscriptions export has no amount columns, so imported

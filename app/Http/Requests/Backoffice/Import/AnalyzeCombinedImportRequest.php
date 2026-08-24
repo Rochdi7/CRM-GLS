@@ -9,7 +9,15 @@ use App\Models\Inscription;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-final class AnalyzeInscriptionImportRequest extends FormRequest
+/**
+ * Combined « Étudiants + Inscriptions » import: BOTH legacy files in one
+ * flow — students are imported first, inscriptions then resolve against
+ * them in the same run, so "étudiant introuvable" conflicts from running
+ * the two modules separately disappear. Scope (centre + année) still comes
+ * from the active context (ResolvesImportScope), and the same statut filter
+ * as the standalone Inscriptions import applies.
+ */
+final class AnalyzeCombinedImportRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -22,14 +30,11 @@ final class AnalyzeInscriptionImportRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'file' => ['required', 'file', 'mimes:xlsx', 'max:10240'],
+            'students_file' => ['required', 'file', 'mimes:xlsx', 'max:10240'],
+            'inscriptions_file' => ['required', 'file', 'mimes:xlsx', 'max:10240'],
             // Honored only in « Tous les centres » mode — otherwise the
             // active context decides (ResolvesImportScope), never the client.
             'etablissement_id' => ['nullable', 'integer', 'exists:etablissements,id'],
-            // Which statuts this batch imports (post-translation values).
-            // Omitted/empty = all. Lets one legacy file be split across
-            // years: Annulée+Changement into the history year, Active into
-            // the current one.
             'statuts' => ['sometimes', 'array'],
             'statuts.*' => [Rule::in([
                 Inscription::STATUT_ACTIVE,

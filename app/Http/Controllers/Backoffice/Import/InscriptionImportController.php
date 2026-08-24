@@ -84,6 +84,7 @@ final class InscriptionImportController extends Controller
             etablissementId: $etablissementId,
             anneeScolaireId: $anneeScolaireId,
             groupeMapping: $groupeMapping,
+            statutsRetenus: array_values($data['statuts'] ?? []),
         );
 
         $batch = $importer->analyze($request->file('file'), $context, $admin);

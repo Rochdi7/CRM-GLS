@@ -59,6 +59,22 @@ export default function ImportIndex({ recentBatches, centerLocked }: ImportIndex
                 { label: 'Import de données' },
             ]}
         >
+            <div className="row mb-2">
+                <div className="col-md-6">
+                    <Card title="Étudiants + Inscriptions (recommandé)">
+                        <p className="text-muted">
+                            Les deux fichiers en une seule opération : les étudiants sont importés d&apos;abord, puis
+                            les inscriptions sont résolues contre eux — plus de conflits « étudiant introuvable »
+                            entre deux imports séparés. Avec filtre par statut (Active / Annulée / Changement) pour
+                            répartir l&apos;historique et les données courantes entre les années.
+                        </p>
+                        <Link href="/backoffice/import/combine" className="btn btn-primary">
+                            Importer
+                        </Link>
+                    </Card>
+                </div>
+            </div>
+
             <div className="row mb-4">
                 {(['students', 'inscriptions', 'encaissements', 'presences'] as const).map((module) => (
                     <div className="col-md-3" key={module}>

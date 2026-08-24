@@ -780,7 +780,11 @@ final class EncaissementImporter implements Importer
      * ("Changement" — what the old CRM calls "Archivée") inscriptions are
      * accepted as a fallback too: those students really did pay during the
      * year, and refusing their payments drops historical revenue and leaves
-     * the caisse totals short. Active still wins wherever both exist.
+     * the caisse totals short. Priority when a student holds several:
+     * Active > Annulée > Changement (decision 24/08/2026 — the old CRM
+     * exports Annulée and Archivée as separate files, and a student
+     * appearing in both gets his historical payments on the ANNULÉE
+     * record; the Changement copy carries no money).
      *
      * @return array<int, Inscription> student_id => Inscription
      */
@@ -796,9 +800,12 @@ final class EncaissementImporter implements Importer
         }
 
         return $query
-            // Active always wins when the fallback is on and a student has
-            // both — the money belongs to the live enrolment.
-            ->orderByRaw('case when statut = ? then 0 else 1 end', [Inscription::STATUT_ACTIVE])
+            // Statut priority first (Active > Annulée > Changement), most
+            // recent date only as the tie-breaker WITHIN one statut.
+            ->orderByRaw(
+                'case statut when ? then 0 when ? then 1 when ? then 2 else 3 end',
+                [Inscription::STATUT_ACTIVE, Inscription::STATUT_ANNULEE, Inscription::STATUT_CHANGEMENT]
+            )
             ->orderByDesc('date_inscription')
             ->get(['id', 'student_id', 'statut'])
             // keyBy keeps the LAST occurrence, so reverse first to make the

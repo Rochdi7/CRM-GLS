@@ -22,6 +22,7 @@ use App\Http\Controllers\Backoffice\EtablissementController;
 use App\Http\Controllers\Backoffice\FraisController;
 use App\Http\Controllers\Backoffice\GroupController;
 use App\Http\Controllers\Backoffice\GroupHistoriqueController;
+use App\Http\Controllers\Backoffice\Import\CombinedImportController;
 use App\Http\Controllers\Backoffice\Import\EncaissementImportController;
 use App\Http\Controllers\Backoffice\Import\ImportBatchController;
 use App\Http\Controllers\Backoffice\Import\InscriptionImportController;
@@ -581,6 +582,14 @@ Route::prefix('backoffice')
                 ->middleware('permission:import.create')->name('import.students.retry-failed');
             Route::get('import/students/{batch}/result', [StudentImportController::class, 'result'])
                 ->middleware('permission:import.view')->name('import.students.result');
+
+            // Combined Étudiants + Inscriptions (one wizard, both files) —
+            // group-mapping peek reuses import.inscriptions.peek-groupes,
+            // and the flow hands over to the inscriptions preview/commit.
+            Route::get('import/combine', [CombinedImportController::class, 'create'])
+                ->middleware('permission:import.view')->name('import.combine.create');
+            Route::post('import/combine/analyze', [CombinedImportController::class, 'analyze'])
+                ->middleware('permission:import.create')->name('import.combine.analyze');
 
             Route::get('import/inscriptions', [InscriptionImportController::class, 'create'])
                 ->middleware('permission:import.view')->name('import.inscriptions.create');
