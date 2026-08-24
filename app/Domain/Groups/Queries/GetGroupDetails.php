@@ -72,6 +72,9 @@ final class GetGroupDetails
             ])->values()->all(),
             'canArchive' => ! $isFinished && $user->can('groups.archive') && $this->centerAccess->canAccessCenter($user, $group->etablissement_id),
             'archiveUrl' => route('backoffice.groups.archive', $group),
+            'anneeScolaireId' => $group->annee_scolaire_id,
+            'canMoveYear' => $user->can('groups.move-year') && $this->centerAccess->canAccessCenter($user, $group->etablissement_id),
+            'moveYearUrl' => route('backoffice.groups.move-year', $group),
             'fees' => $group->frais->map(fn ($fee): array => [
                 'nom' => $fee->nom,
                 'classification' => $fee->pivot->classification,

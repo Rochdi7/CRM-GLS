@@ -55,7 +55,24 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
 
     // Set by GroupController@changerEnseignant after a changeover — tells the
     // user their emploi du temps was stopped and a new one must be built.
-    const emploiDuTempsArrete = usePage<SharedProps>().props.flash.emploiDuTempsArrete;
+    const { flash, context } = usePage<SharedProps>().props;
+    const emploiDuTempsArrete = flash.emploiDuTempsArrete;
+
+    // Super-admin only: move the whole group (inscriptions, séances,
+    // payments) to another année scolaire — same rows, same counts.
+    const [showMoveYearModal, setShowMoveYearModal] = useState(false);
+    const moveYearForm = useForm({ annee_scolaire_id: '' as number | '' });
+    const anneeOptions: SelectOption[] = (context?.availableAcademicYears ?? [])
+        .filter((a) => a.id !== group.anneeScolaireId)
+        .map((a) => ({ value: a.id, label: a.name }));
+
+    function submitMoveYear(event: FormEvent) {
+        event.preventDefault();
+        moveYearForm.post(group.moveYearUrl, {
+            preserveScroll: true,
+            onSuccess: () => setShowMoveYearModal(false),
+        });
+    }
 
     const enseignantOptions: SelectOption[] = enseignants.map((e) => ({ value: e.id, label: e.nom }));
 
@@ -162,6 +179,20 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                             </li>
                         </ul>
                         <div className="d-flex align-items-center gap-2">
+                            {group.canMoveYear && (
+                                <button
+                                    type="button"
+                                    className="btn btn-outline-primary d-flex align-items-center"
+                                    onClick={() => {
+                                        moveYearForm.clearErrors();
+                                        moveYearForm.setData('annee_scolaire_id', '');
+                                        setShowMoveYearModal(true);
+                                    }}
+                                >
+                                    <i className="ti ti-calendar-repeat me-2" />
+                                    Déplacer vers une autre année
+                                </button>
+                            )}
                             {group.canArchive && (
                                 <form method="POST" action={group.archiveUrl} onSubmit={handleArchiveSubmit}>
                                     <input type="hidden" name="_token" value={getCsrfToken()} />
@@ -452,6 +483,39 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                     )}
                 </div>
             </div>
+
+            <Modal
+                show={showMoveYearModal}
+                title="Déplacer le groupe vers une autre année scolaire"
+                onClose={() => setShowMoveYearModal(false)}
+                processing={moveYearForm.processing}
+            >
+                <form onSubmit={submitMoveYear} onKeyDown={blockImplicitSubmit}>
+                    <div className="alert alert-warning">
+                        Le groupe <strong>{group.nom}</strong> ({group.anneeScolaire ?? '—'}) sera déplacé avec{' '}
+                        <strong>toutes ses inscriptions, séances et paiements</strong> — rien n&apos;est copié ni
+                        supprimé, les mêmes enregistrements changent d&apos;année (mêmes effectifs avant et après). Chaque
+                        modification est tracée dans le journal d&apos;audit.
+                    </div>
+                    <SelectField
+                        id="move-year-annee"
+                        label="Année scolaire de destination"
+                        required
+                        placeholder="Choisir une année…"
+                        options={anneeOptions}
+                        value={moveYearForm.data.annee_scolaire_id}
+                        error={moveYearForm.errors.annee_scolaire_id}
+                        onChange={(e) =>
+                            moveYearForm.setData('annee_scolaire_id', e.target.value ? Number(e.target.value) : '')
+                        }
+                    />
+                    <FormActions
+                        submitLabel="Déplacer le groupe"
+                        processing={moveYearForm.processing}
+                        onCancel={() => setShowMoveYearModal(false)}
+                    />
+                </form>
+            </Modal>
 
             <Modal
                 show={showEnseignantModal}

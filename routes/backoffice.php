@@ -214,6 +214,11 @@ Route::prefix('backoffice')
             Route::put('groups/{group}/affectations/{affectation}', [GroupController::class, 'updateEnseignantAffectation'])
                 ->middleware('permission:groups.update')->name('groups.affectations.update');
             Route::post('groups/{group}/archive', [GroupController::class, 'archive'])->name('groups.archive');
+            // Super-admin only (groups.move-year is in superAdminOnly()):
+            // re-homes the group + inscriptions + séances + payments to
+            // another année scolaire, same counts before and after.
+            Route::post('groups/{group}/move-year', [GroupController::class, 'moveYear'])
+                ->middleware('permission:groups.move-year')->name('groups.move-year');
             // Quick lifecycle actions from the list's row menu — "Annuler"
             // (-> Annulée, terminal, same groups.archive gate as Fin de
             // formation), "Réactiver" (Annulée -> En inscription), "Activer"

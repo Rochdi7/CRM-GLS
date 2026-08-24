@@ -287,6 +287,10 @@ export interface GroupDetails {
     canArchive: boolean;
     isFinished: boolean;
     archiveUrl: string;
+    anneeScolaireId: number | null;
+    /** Super-admin only (groups.move-year): move the group + its inscriptions/séances/payments to another année. */
+    canMoveYear: boolean;
+    moveYearUrl: string;
     etudiantsDistinctsCount: number;
     inscriptionsActivesCount: number;
     inscriptionsChangementCount: number;

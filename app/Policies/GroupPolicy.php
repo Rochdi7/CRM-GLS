@@ -28,4 +28,14 @@ final class GroupPolicy extends ResourcePolicy
     {
         return $user->can('groups.archive') && $this->withinCenter($user, $group);
     }
+
+    /**
+     * `groups.move-year` sits in PermissionRegistry::superAdminOnly(): no
+     * role preset carries it, so in practice only a super-admin (Gate::before)
+     * or a hand-granted account reaches this.
+     */
+    public function moveYear(User $user, Group $group): bool
+    {
+        return $user->can('groups.move-year') && $this->withinCenter($user, $group);
+    }
 }

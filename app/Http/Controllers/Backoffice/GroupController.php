@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Groups\Actions\ChangerEnseignantGroupe;
+use App\Domain\Groups\Actions\ReaffecterGroupeVersAnnee;
 use App\Domain\Groups\Queries\GetGroupDetails;
 use App\Domain\Groups\Queries\GetGroupFormOptions;
 use App\Domain\Groups\Queries\GetGroupsList;
@@ -15,6 +16,7 @@ use App\Http\Requests\Backoffice\Groups\StoreGroupRequest;
 use App\Http\Requests\Backoffice\Groups\UpdateGroupEnseignantRequest;
 use App\Http\Requests\Backoffice\Groups\UpdateGroupRequest;
 use App\Domain\Settings\Support\FraisEcheanceResolver;
+use App\Models\AnneeScolaire;
 use App\Models\Frais;
 use App\Models\Group;
 use App\Models\GroupEnseignant;
@@ -23,6 +25,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -311,6 +314,36 @@ final class GroupController extends Controller
      * Transition to "Fin de formation" — writes the groups_historique
      * snapshot in the same transaction (Group::archiverCommeTermine).
      */
+    /**
+     * Moves the group — with every inscription, séance and (through the
+     * fees) payment hanging off it — to another année scolaire. Nothing is
+     * copied or dropped: the same rows change year, so every count is
+     * identical before and after (ReaffecterGroupeVersAnnee, journaled row
+     * by row). Super-admin only via `groups.move-year`.
+     */
+    public function moveYear(Request $request, Group $group, ReaffecterGroupeVersAnnee $reaffecter): RedirectResponse
+    {
+        $this->authorize('moveYear', $group);
+
+        $data = $request->validate([
+            'annee_scolaire_id' => ['required', 'integer', 'exists:annees_scolaires,id'],
+        ]);
+
+        $annee = AnneeScolaire::query()->findOrFail((int) $data['annee_scolaire_id']);
+
+        if ((int) $group->annee_scolaire_id === $annee->id) {
+            throw ValidationException::withMessages([
+                'annee_scolaire_id' => __('The group is already in this academic year.'),
+            ]);
+        }
+
+        $reaffecter->handle($group, $annee->id);
+
+        return back()->with('success', __('Group moved to :annee with its registrations, sessions and payments.', [
+            'annee' => $annee->nom,
+        ]));
+    }
+
     public function archive(Request $request, Group $group): RedirectResponse
     {
         $this->authorize('archive', $group);

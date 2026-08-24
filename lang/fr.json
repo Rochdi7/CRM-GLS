@@ -753,6 +753,8 @@
     "Now review the registrations below.": "Vérifiez maintenant les inscriptions ci-dessous.",
     "Registrations imported: :inserted added, :skipped skipped, :pending in conflict (batch #:batch). Now review the payments below.": "Inscriptions importées : :inserted ajoutées, :skipped ignorées, :pending en conflit (lot n°:batch). Vérifiez maintenant les paiements ci-dessous.",
     "The import stopped making progress — check the batch in Recent imports.": "L'import n'avance plus — consultez le lot dans « Imports récents ».",
+    "The group is already in this academic year.": "Le groupe est déjà dans cette année scolaire.",
+    "Group moved to :annee with its registrations, sessions and payments.": "Groupe déplacé vers :annee avec ses inscriptions, séances et paiements.",
     "The mapped group belongs to another centre.": "Le groupe associé appartient à un autre centre.",
     "The student import stopped making progress — check the batch in Recent imports.": "L'import des étudiants n'avance plus — consultez le lot dans « Imports récents ».",
     "This cash account carries movements — its centre can no longer be changed.": "Ce compte de caisse porte des mouvements — son centre ne peut plus être modifié.",

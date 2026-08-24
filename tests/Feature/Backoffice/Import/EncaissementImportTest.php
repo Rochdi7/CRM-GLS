@@ -93,6 +93,116 @@ final class EncaissementImportTest extends TestCase
         return $student;
     }
 
+    /**
+     * Minimal inline-strings payments workbook (same ZipArchive approach as
+     * InscriptionImportTest::buildUpload — OpenSpout's writer dies on the
+     * Windows temp folder). The leading "N°" column keys header detection.
+     *
+     * @param  array<int, array<int, string>>  $rows  [réf, payeur, type, montant, méthode, frais, date, opérateur]
+     */
+    private function buildUpload(array $rows): UploadedFile
+    {
+        $dir = storage_path('framework/testing/import');
+
+        if (! is_dir($dir)) {
+            mkdir($dir, 0777, true);
+        }
+
+        $path = $dir.DIRECTORY_SEPARATOR.uniqid('enc', true).'.xlsx';
+        $header = ['N°', 'Réf.', 'Élève / Payeur', 'Type', 'Montant', 'Méthode', 'Frais', 'Date', 'Opérateur'];
+
+        $numbered = [];
+        foreach ($rows as $offset => $row) {
+            $numbered[] = [(string) ($offset + 1), ...array_values($row)];
+        }
+
+        $sheetRows = '';
+        foreach ([$header, ...$numbered] as $index => $row) {
+            $cells = '';
+            foreach (array_values($row) as $column => $value) {
+                $cells .= sprintf(
+                    '<c r="%s" t="inlineStr"><is><t xml:space="preserve">%s</t></is></c>',
+                    chr(ord('A') + $column).($index + 1),
+                    htmlspecialchars((string) $value, ENT_XML1 | ENT_QUOTES, 'UTF-8')
+                );
+            }
+            $sheetRows .= sprintf('<row r="%d">%s</row>', $index + 1, $cells);
+        }
+
+        $zip = new \ZipArchive;
+        $zip->open($path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+        $zip->addFromString('[Content_Types].xml',
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            .'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            .'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            .'<Default Extension="xml" ContentType="application/xml"/>'
+            .'<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+            .'<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+            .'</Types>');
+        $zip->addFromString('_rels/.rels',
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            .'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            .'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+            .'</Relationships>');
+        $zip->addFromString('xl/workbook.xml',
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            .'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
+            .' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            .'<sheets><sheet name="Feuille1" sheetId="1" r:id="rId1"/></sheets></workbook>');
+        $zip->addFromString('xl/_rels/workbook.xml.rels',
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            .'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            .'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+            .'</Relationships>');
+        $zip->addFromString('xl/worksheets/sheet1.xml',
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            .'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            .'<sheetData>'.$sheetRows.'</sheetData></worksheet>');
+        $zip->close();
+
+        return new UploadedFile($path, basename($path), null, null, true);
+    }
+
+    public function test_a_messy_payer_name_resolves_when_exactly_one_student_matches(): void
+    {
+        // Real Marrakech file, 24/08/2026: 58 of 76 conflicts were payer
+        // cells that were not a clean doubled name. Written once, tripled,
+        // halves swapped, or a typo in the copy — one real student matches
+        // ⇒ resolved. A same-name twin or no match ⇒ still a conflict.
+        $this->studentWithActiveFee('AHMED', 'AMIMI', 'Frais test');
+        $this->studentWithActiveFee('AYA', 'ZAHIR', 'Frais test');
+        $this->studentWithActiveFee('JENNATE', 'FIRDAOUS', 'Frais test');
+        $this->studentWithActiveFee('AMMAR', 'OUACHOUCH', 'Frais test');
+        // Twins: two students named SALWA EBBOUATTI — never auto-picked.
+        $this->studentWithActiveFee('SALWA', 'EBBOUATTI', 'Frais test');
+        $this->studentWithActiveFee('SALWA', 'EBBOUATTI', 'Frais test');
+
+        $user = $this->userWith('import.view', 'import.create');
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->buildUpload([
+                ['P1', 'AHMED AMIMI', 'Réglement', '100', 'Espèces', 'Frais test', '10/01/2026', 'mustapha'],
+                ['P2', 'AYA ZAHIR ZAHIR ZAHIR', 'Réglement', '100', 'Espèces', 'Frais test', '10/01/2026', 'mustapha'],
+                ['P3', 'JENNATE FIRDAOUS FIRDAOUS JENNATE', 'Réglement', '100', 'Espèces', 'Frais test', '10/01/2026', 'mustapha'],
+                ['P4', 'AMMAR OUACHOCH AMMAR OUACHOUCH', 'Réglement', '100', 'Espèces', 'Frais test', '10/01/2026', 'mustapha'],
+                ['P5', 'SALWA EBBOUATTI EBBOUATTI', 'Réglement', '100', 'Espèces', 'Frais test', '10/01/2026', 'mustapha'],
+                ['P6', 'PERSONNE INCONNUE INCONNU', 'Réglement', '100', 'Espèces', 'Frais test', '10/01/2026', 'mustapha'],
+            ]),
+            'etablissement_id' => $this->centre->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+        ])->assertSessionHasNoErrors();
+
+        $rows = ImportBatch::query()->firstOrFail()->rows()->orderBy('source_row_number')->get()->keyBy('legacy_ref');
+
+        foreach (['P1', 'P2', 'P3', 'P4'] as $ref) {
+            $this->assertSame(ImportRow::STATUT_NOUVEAU, $rows[$ref]->status, $ref.': '.json_encode($rows[$ref]->errors));
+        }
+        $this->assertSame('aya zahir', $rows['P2']->raw['payeur']);
+
+        $this->assertSame(ImportRow::STATUT_CONFLIT, $rows['P5']->status);
+        $this->assertSame('payer_name_ambiguous', $rows['P5']->errors[0]['code']);
+        $this->assertSame(ImportRow::STATUT_CONFLIT, $rows['P6']->status);
+    }
+
     private function defaultOperateurMapping(): array
     {
         return [

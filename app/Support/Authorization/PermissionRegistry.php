@@ -114,6 +114,7 @@ final class PermissionRegistry
                 'groups.create' => 'Créer un groupe',
                 'groups.update' => 'Modifier un groupe',
                 'groups.archive' => 'Clôturer un groupe (Fin de formation)',
+                'groups.move-year' => 'Déplacer un groupe vers une autre année scolaire (avec ses inscriptions, séances et paiements)',
             ],
             'Présences' => [
                 'attendance.view' => 'Consulter les séances et présences',
@@ -342,6 +343,10 @@ final class PermissionRegistry
             'cancellation-reasons.view', 'cancellation-reasons.create', 'cancellation-reasons.update',
             'cash-accounts.view', 'cash-accounts.create', 'cash-accounts.update',
             'expenses.approve',
+            // Moving a group between années rewrites the year of every
+            // inscription, séance (and therefore payment) hanging off it —
+            // a history-altering act reserved to super-admins (24/08/2026).
+            'groups.move-year',
             // « Centres affectés » is the ONE authority on which centers a
             // user reaches (employee_etablissement pivot, CLAUDE.md §16) —
             // no ROLE may widen it to the whole network. Someone who needs

@@ -512,6 +512,20 @@ final class EncaissementImporter implements Importer
         $payeurName = $collapsed['value'];
         $payerAmbiguous = ! $collapsed['collapsed'];
 
+        // Not a clean doubled name (written once, tripled, halves swapped, a
+        // typo in the copy…): before giving up, look the text up against the
+        // centre's real students — a SINGLE matching student is a fact, not
+        // a guess (see matchPayeurAgainstStudents). Audit 24/08/2026: 58 of
+        // 76 conflicts on a real Marrakech file were exactly this.
+        if ($payerAmbiguous) {
+            $matched = $this->matchPayeurAgainstStudents($payeurRaw);
+
+            if ($matched !== null) {
+                $payeurName = $matched;
+                $payerAmbiguous = false;
+            }
+        }
+
         $conflicts = [];
         $errors = [];
 
@@ -881,6 +895,52 @@ final class EncaissementImporter implements Importer
     /**
      * @return array{student_id: ?int, conflicts: array<int, array{field: string, code: string, message: string}>}
      */
+    /**
+     * Fallback for an "Élève / Payeur" cell that is not a clean doubled
+     * name. Every prefix / suffix split of its tokens — plus the whole text
+     * — is looked up in the centre's student index ("prenom nom",
+     * normalized). Exactly ONE distinct student across all candidates ⇒ that
+     * student's name is returned; none, several, or a same-name twin among
+     * the candidates ⇒ null, and the row stays a conflict for a human.
+     *
+     *   "AHMED AMIMI"                       → whole text matches once
+     *   "AYA ZAHIR ZAHIR ZAHIR"             → prefix "AYA ZAHIR"
+     *   "JENNATE FIRDAOUS FIRDAOUS JENNATE" → prefix "JENNATE FIRDAOUS"
+     *   "AMMAR OUACHOCH AMMAR OUACHOUCH"    → whichever spelling exists
+     */
+    private function matchPayeurAgainstStudents(string $payeurRaw): ?string
+    {
+        $normalized = mb_strtolower(CellNormalizer::text($payeurRaw));
+        $tokens = $normalized === '' ? [] : explode(' ', $normalized);
+        $count = count($tokens);
+
+        if ($count === 0) {
+            return null;
+        }
+
+        $candidates = [$normalized];
+        for ($i = 1; $i < $count; $i++) {
+            $candidates[] = implode(' ', array_slice($tokens, 0, $i));
+            $candidates[] = implode(' ', array_slice($tokens, $i));
+        }
+
+        $matches = [];
+        foreach (array_unique($candidates) as $candidate) {
+            $id = $this->studentsByNormalizedName[$candidate] ?? null;
+
+            if ($id === -1) {
+                // A same-name twin sits among the candidates — never pick.
+                return null;
+            }
+
+            if ($id !== null) {
+                $matches[$id] = $candidate;
+            }
+        }
+
+        return count($matches) === 1 ? reset($matches) : null;
+    }
+
     private function resolveStudent(string $payeurName): array
     {
         if ($payeurName === '') {
