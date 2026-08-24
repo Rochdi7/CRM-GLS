@@ -62,6 +62,16 @@ final class GetCaisseJournal
     ): array {
         $scope = $scope === 'all' ? 'all' : 'mine';
 
+        // Year switcher: the active year is the DEFAULT date window for the
+        // journal ROWS — exactly as if the user had typed those dates, so an
+        // explicit date filter takes over. The header figures
+        // (totalEncaissements/totalDepenses/totalRemboursements/solde) stay
+        // all-time on purpose: they must keep reconciling with the till's
+        // running balance, which spans years.
+        if ($dateFrom === '' && $dateTo === '' && ($range = $this->context->anneeDateRange()) !== null) {
+            [$dateFrom, $dateTo] = $range;
+        }
+
         if ($scope === 'mine') {
             $employee = $user->employee;
 

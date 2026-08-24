@@ -45,6 +45,13 @@ final class GetRemboursementsList
             ->when($caisseFilter !== '', fn ($q) => $q->where('caisse_id', (int) $caisseFilter))
             ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_remboursement', '>=', $dateFrom))
             ->when($dateTo !== '', fn ($q) => $q->whereDate('date_remboursement', '<=', $dateTo))
+            // Year switcher: a remboursement belongs to the year its date
+            // falls in; the active year is only the DEFAULT window — an
+            // explicit date filter takes over.
+            ->when(
+                $dateFrom === '' && $dateTo === '' && $this->context->anneeDateRange() !== null,
+                fn ($q) => $q->whereBetween('date_remboursement', $this->context->anneeDateRange()),
+            )
             ->when($search !== '', function ($q) use ($search): void {
                 $term = "%{$search}%";
                 $q->where(function ($sub) use ($term): void {

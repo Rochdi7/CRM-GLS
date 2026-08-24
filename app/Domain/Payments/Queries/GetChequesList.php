@@ -63,6 +63,16 @@ final class GetChequesList
             ->when($statutFilter !== '', fn ($q) => $q->where('statut', $statutFilter))
             ->when($dateEcheanceFrom !== '', fn ($q) => $q->whereDate('date_echeance', '>=', $dateEcheanceFrom))
             ->when($dateEcheanceTo !== '', fn ($q) => $q->whereDate('date_echeance', '<=', $dateEcheanceTo))
+            // Year switcher: a cheque follows its échéance into the year it
+            // falls in (the page's own date filters are échéance-based); the
+            // active year is only the DEFAULT window — an explicit échéance
+            // filter takes over. A cheque with no échéance stays visible.
+            ->when(
+                $dateEcheanceFrom === '' && $dateEcheanceTo === '' && $this->context->anneeDateRange() !== null,
+                fn ($q) => $q->where(fn ($sub) => $sub
+                    ->whereBetween('date_echeance', $this->context->anneeDateRange())
+                    ->orWhereNull('date_echeance')),
+            )
             ->latest()
             ->paginate($perPage)
             ->withQueryString();

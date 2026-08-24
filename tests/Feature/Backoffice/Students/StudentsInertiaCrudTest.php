@@ -63,6 +63,52 @@ final class StudentsInertiaCrudTest extends TestCase
             );
     }
 
+    /**
+     * Year switcher: the list shows the students enrolled in the active
+     * year, plus students never enrolled anywhere (just created, about to
+     * be enrolled — they must not vanish from the list).
+     */
+    public function test_index_follows_the_selected_academic_year(): void
+    {
+        $year1 = \App\Models\AnneeScolaire::create(['nom' => '2025/2026', 'date_debut' => '2025-09-01', 'date_fin' => '2026-08-31', 'par_defaut' => true, 'inscription_ouverte' => true]);
+        $year2 = \App\Models\AnneeScolaire::create(['nom' => '2026/2027', 'date_debut' => '2026-09-01', 'date_fin' => '2027-08-31', 'par_defaut' => false, 'inscription_ouverte' => true]);
+        $centre = \App\Models\Etablissement::factory()->create();
+
+        $enroll = function (Student $student, \App\Models\AnneeScolaire $annee, string $date) use ($centre): void {
+            $group = \App\Models\Group::factory()->create(['etablissement_id' => $centre->id, 'annee_scolaire_id' => $annee->id]);
+            \App\Models\Inscription::create([
+                'reference' => 'INS-'.fake()->unique()->numerify('#####'),
+                'student_id' => $student->id, 'group_id' => $group->id,
+                'etablissement_id' => $centre->id, 'annee_scolaire_id' => $annee->id,
+                'statut' => \App\Models\Inscription::STATUT_ACTIVE, 'date_inscription' => $date,
+                'montant_total' => 1000,
+            ]);
+        };
+
+        // Global (NULL-center) students so center scoping stays out of the way.
+        $enrolledY1 = Student::factory()->create(['etablissement_id' => null, 'nom' => 'AnneeUn']);
+        $enrolledY2 = Student::factory()->create(['etablissement_id' => null, 'nom' => 'AnneeDeux']);
+        Student::factory()->create(['etablissement_id' => null, 'nom' => 'JamaisInscrit']);
+        $enroll($enrolledY1, $year1, '2025-09-15');
+        $enroll($enrolledY2, $year2, '2026-09-15');
+
+        $this->actingAs($this->userWith('students.view'));
+
+        // Default year 2025/2026: AnneeUn + JamaisInscrit, never AnneeDeux.
+        $this->get(route('backoffice.students.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('students.total', 2));
+        $this->get(route('backoffice.students.index', ['search' => 'AnneeDeux']))
+            ->assertInertia(fn (Assert $page) => $page->where('students.total', 0));
+
+        // Switch to 2026/2027: AnneeDeux + JamaisInscrit, never AnneeUn.
+        app(\App\Services\Context\CurrentContext::class)->setAnneeScolaire($year2->id);
+        $this->get(route('backoffice.students.index'))
+            ->assertInertia(fn (Assert $page) => $page->where('students.total', 2));
+        $this->get(route('backoffice.students.index', ['search' => 'AnneeUn']))
+            ->assertInertia(fn (Assert $page) => $page->where('students.total', 0));
+    }
+
     public function test_a_student_can_be_created_with_a_generated_reference(): void
     {
         $this->actingAs($this->userWith('students.view', 'students.create'));

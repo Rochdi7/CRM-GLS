@@ -193,6 +193,51 @@ final class DashboardInertiaTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->where('stats.groupsTotal', 1));
     }
 
+    /**
+     * A student belongs to the years they hold an inscription in; a student
+     * never enrolled anywhere stays visible in every year (just created,
+     * about to be enrolled).
+     */
+    public function test_students_follow_the_selected_academic_year(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole(Role::SUPER_ADMIN);
+
+        $oldYear = AnneeScolaire::create(['nom' => '2024/2025', 'date_debut' => '2024-09-01', 'date_fin' => '2025-08-31', 'par_defaut' => false, 'inscription_ouverte' => false]);
+        $newYear = AnneeScolaire::query()->where('nom', '2025/2026')->firstOrFail();
+        $centre = Etablissement::factory()->create();
+
+        $enroll = function (AnneeScolaire $annee, string $date) use ($centre): void {
+            $student = Student::factory()->create(['etablissement_id' => $centre->id]);
+            $group = Group::factory()->create(['etablissement_id' => $centre->id, 'annee_scolaire_id' => $annee->id]);
+            \App\Models\Inscription::create([
+                'reference' => 'INS-'.fake()->unique()->numerify('#####'),
+                'student_id' => $student->id, 'group_id' => $group->id,
+                'etablissement_id' => $centre->id, 'annee_scolaire_id' => $annee->id,
+                'statut' => \App\Models\Inscription::STATUT_ACTIVE, 'date_inscription' => $date,
+                'montant_total' => 1000,
+            ]);
+        };
+
+        $enroll($oldYear, '2024-09-15');
+        $enroll($newYear, '2025-09-15');
+        $enroll($newYear, '2025-09-16');
+        // Never enrolled — visible in every year.
+        Student::factory()->create(['etablissement_id' => $centre->id]);
+
+        // Default year (2025/2026): its 2 enrolled students + the fresh one.
+        $this->actingAs($admin)
+            ->get(route('backoffice.dashboard'))
+            ->assertInertia(fn (Assert $page) => $page->where('stats.studentsTotal', 3));
+
+        app(\App\Services\Context\CurrentContext::class)->setAnneeScolaire($oldYear->id);
+
+        // 2024/2025: its 1 enrolled student + the fresh one.
+        $this->actingAs($admin)
+            ->get(route('backoffice.dashboard'))
+            ->assertInertia(fn (Assert $page) => $page->where('stats.studentsTotal', 2));
+    }
+
     public function test_all_centers_selection_aggregates_every_center(): void
     {
         $admin = User::factory()->create();

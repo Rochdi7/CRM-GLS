@@ -76,6 +76,13 @@ final class GetDepensesList
             ->when($statutFilter !== '', fn ($q) => $q->where('statut', $statutFilter))
             ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_depense', '>=', $dateFrom))
             ->when($dateTo !== '', fn ($q) => $q->whereDate('date_depense', '<=', $dateTo))
+            // Year switcher: a dépense belongs to the year its date falls
+            // in. The active year is only the DEFAULT window — an explicit
+            // date filter states the user's intent and takes over.
+            ->when(
+                $dateFrom === '' && $dateTo === '' && $this->context->anneeDateRange() !== null,
+                fn ($q) => $q->whereBetween('date_depense', $this->context->anneeDateRange()),
+            )
             ->when($search !== '', function ($q) use ($search): void {
                 $term = "%{$search}%";
                 $q->where(function ($sub) use ($term): void {

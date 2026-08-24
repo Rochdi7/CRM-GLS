@@ -342,6 +342,14 @@ final class PermissionRegistry
             'cancellation-reasons.view', 'cancellation-reasons.create', 'cancellation-reasons.update',
             'cash-accounts.view', 'cash-accounts.create', 'cash-accounts.update',
             'expenses.approve',
+            // « Centres affectés » is the ONE authority on which centers a
+            // user reaches (employee_etablissement pivot, CLAUDE.md §16) —
+            // no ROLE may widen it to the whole network. Someone who needs
+            // more centers gets them assigned on the employee form; a truly
+            // global non-super-admin account (rare) gets this permission
+            // hand-granted on the Autorisations screen. Super-admins see
+            // everything via Gate::before regardless.
+            'centers.access-all',
         ])));
     }
 
@@ -445,14 +453,13 @@ final class PermissionRegistry
             // Validates cash transfers into their own till (the recipient
             // rule still applies — CLAUDE.md 11) and reads the audit journal.
             //
-            // ⚠ Deliberately NO centers.access-all: a directeur runs THEIR
-            // center(s) — the ones assigned on the employee form — not the
-            // whole network. With the grant, every branch director saw (and
-            // could edit) every other branch's students and money. The
-            // cross-center roles are operations-director / financial-
-            // director / accountant / quality-director; a director needing
-            // wider reach gets more centers assigned, or the permission is
-            // delegated by hand on the Autorisations screen.
+            // ⚠ Deliberately NO centers.access-all — like EVERY role now
+            // (it sits in superAdminOnly()): « Centres affectés » on the
+            // employee form is the ONE authority on which centers a user
+            // reaches. With the grant, every branch director saw (and could
+            // edit) every other branch's students and money. Someone who
+            // needs wider reach gets more centers assigned, or a super-admin
+            // hand-grants the permission on the Autorisations screen.
             'director' => [
                 ...$operations,
                 'academic-years.create', 'academic-years.update',
@@ -475,7 +482,6 @@ final class PermissionRegistry
             // plus the same front-desk money scope as the centers it runs.
             'operations-director' => [
                 ...$operations,
-                'centers.access-all',
                 'rooms.create', 'rooms.update',
                 'fees.create', 'fees.update',
                 'employees.view', 'employees.update',
@@ -491,7 +497,6 @@ final class PermissionRegistry
             // Approving dépenses stays super-admin-only.
             'financial-director' => [
                 ...$financeReadOnly,
-                'centers.access-all',
                 'rooms.view',
                 'employees.view',
                 'payments.create', 'payments.update',
@@ -509,7 +514,6 @@ final class PermissionRegistry
             // not arbitrate them.
             'accountant' => [
                 ...$financeReadOnly,
-                'centers.access-all',
                 'payments.create', 'payments.update',
                 'expenses.create', 'expenses.update',
                 'refunds.create', 'refunds.update',
@@ -522,7 +526,6 @@ final class PermissionRegistry
             // audit journal, and changes nothing.
             'quality-director' => [
                 ...$financeReadOnly,
-                'centers.access-all',
                 'rooms.view',
                 'employees.view',
                 'attendance.view',
@@ -536,7 +539,7 @@ final class PermissionRegistry
             // catalog that prices them. No money movement.
             'pedagogical-director' => [
                 'dashboard.view',
-                'centers.view', 'centers.access-all',
+                'centers.view',
                 'academic-years.view',
                 'rooms.view', 'rooms.create', 'rooms.update',
                 'fees.view', 'fees.create', 'fees.update',
@@ -570,7 +573,7 @@ final class PermissionRegistry
             // data at all.
             'hr-manager' => [
                 'dashboard.view',
-                'centers.view', 'centers.access-all',
+                'centers.view',
                 'employees.view', 'employees.create', 'employees.update',
                 'users.view',
                 'audit-logs.view',
@@ -580,7 +583,7 @@ final class PermissionRegistry
             // those modules; until then, read-only funnel-relevant data.
             'marketing-manager' => [
                 'dashboard.view',
-                'centers.view', 'centers.access-all',
+                'centers.view',
                 'students.view',
                 'registrations.view',
                 'groups.view',

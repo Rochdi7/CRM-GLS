@@ -67,6 +67,47 @@ final class DepensesInertiaCrudTest extends TestCase
         return Depense::where('description', 'Demande de dépense')->firstOrFail();
     }
 
+    /**
+     * Year switcher: with no explicit date filter, the list defaults to the
+     * active year's window; an explicit date filter takes over.
+     */
+    public function test_index_defaults_to_the_active_year_window(): void
+    {
+        \App\Models\AnneeScolaire::create(['nom' => '2025/2026', 'date_debut' => '2025-09-01', 'date_fin' => '2026-08-31', 'par_defaut' => true, 'inscription_ouverte' => true]);
+        $user = $this->userWith('expenses.view');
+        $caisse = Caisse::factory()->create(['etablissement_id' => $this->centre->id]);
+
+        Depense::create([
+            'reference' => 'DEP-IN', 'type_depense_id' => $this->type->id, 'caisse_id' => $caisse->id,
+            'agent_id' => $user->employee->id,
+            'montant' => 100, 'methode_paiement' => 'Espèces', 'date_depense' => '2025-09-15',
+            'statut' => Depense::STATUT_APPROUVEE, 'description' => 'dans l\'année',
+        ]);
+        Depense::create([
+            'reference' => 'DEP-OUT', 'type_depense_id' => $this->type->id, 'caisse_id' => $caisse->id,
+            'agent_id' => $user->employee->id,
+            'montant' => 100, 'methode_paiement' => 'Espèces', 'date_depense' => '2024-01-10',
+            'statut' => Depense::STATUT_APPROUVEE, 'description' => 'hors année',
+        ]);
+
+        // Default window = active year: only DEP-IN.
+        $this->actingAs($user)
+            ->get(route('backoffice.depenses.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('depenses.total', 1)
+                ->where('depenses.data.0.reference', 'DEP-IN')
+            );
+
+        // Explicit date filter overrides the year window: DEP-OUT reachable.
+        $this->actingAs($user)
+            ->get(route('backoffice.depenses.index', ['dateFrom' => '2024-01-01', 'dateTo' => '2024-12-31']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('depenses.total', 1)
+                ->where('depenses.data.0.reference', 'DEP-OUT')
+            );
+    }
+
     public function test_approving_a_pending_depense_debits_the_till(): void
     {
         $requester = $this->userWith('expenses.view', 'expenses.create');

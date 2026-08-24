@@ -29,10 +29,22 @@ final class GetDashboardStats
     public function __invoke(CurrentContext $context): DashboardStatsData
     {
         $anneeId = $context->anneeScolaireId();
+        $anneeRange = $context->anneeDateRange();
         $centreId = $context->etablissementId();
 
-        // Students / Employees are scoped by center only (no academic year FK).
-        $studentsQuery = Student::query()->when($centreId, fn ($q) => $q->where('etablissement_id', $centreId));
+        // Students follow the year switcher through their inscriptions: a
+        // student "belongs" to the years they hold an inscription in. A
+        // student never enrolled anywhere stays visible in every year (they
+        // were just created and are about to be enrolled — hiding them would
+        // make a fresh student vanish from the dashboard).
+        $studentsQuery = Student::query()
+            ->when($centreId, fn ($q) => $q->where('etablissement_id', $centreId))
+            ->when($anneeId, fn ($q) => $q->where(fn ($sub) => $sub
+                ->whereHas('inscriptions', fn ($i) => $i->where('annee_scolaire_id', $anneeId))
+                ->orWhereDoesntHave('inscriptions')));
+
+        // Employees are staff — they exist regardless of academic year, so
+        // they are scoped by center only (no year dimension to scope on).
         $employeesQuery = Employee::query()->when($centreId, fn ($q) => $q->where('etablissement_id', $centreId));
 
         // Groups / registrations are scoped by BOTH year and center.
@@ -54,12 +66,23 @@ final class GetDashboardStats
         $paymentsMonth = Encaissement::query()
             ->whereBetween('date_paiement', [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()])
             ->when($centreId, fn ($q) => $q->whereHas('student', fn ($s) => $s->where('etablissement_id', $centreId)))
+            // Year of a payment = its fee's inscription's year; an avance
+            // (no fee) follows its payment date — the exact rule the
+            // Encaissements list applies, so the card and the list agree.
+            ->when($anneeId, fn ($q) => $q->where(fn ($sub) => $sub
+                ->whereHas('fee.inscription', fn ($i) => $i->where('annee_scolaire_id', $anneeId))
+                ->orWhere(fn ($w) => $w
+                    ->whereNull('inscription_fee_id')
+                    ->when($anneeRange, fn ($x, $r) => $x->whereBetween('date_paiement', $r)))))
             ->sum('montant');
 
         // Dépenses this month — same range + till-based center scoping as
         // the encaissements figure so the two cards are directly comparable.
+        // A dépense has no inscription, so its year is the year its date
+        // falls in (same rule as the Dépenses list's default window).
         $depensesMonthQuery = Depense::query()
             ->whereBetween('date_depense', [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()])
+            ->when($anneeRange, fn ($q, $r) => $q->whereBetween('date_depense', $r))
             ->when($centreId, fn ($q) => $q->whereHas('caisse', fn ($c) => $c->where('etablissement_id', $centreId)));
 
         return new DashboardStatsData(

@@ -62,9 +62,12 @@ final class CenterAccessTest extends TestCase
     public function test_centers_access_all_opens_every_center(): void
     {
         $service = app(CenterAccessService::class);
-        $user = $this->userInCenterA('operations-director'); // holds centers.access-all (director is center-scoped)
+        // No ROLE carries centers.access-all any more (« Centres affectés »
+        // is the authority) — a truly global user gets it hand-granted.
+        $user = $this->userInCenterA('administrative-assistant');
+        $user->givePermissionTo('centers.access-all');
 
-        $this->assertTrue($service->canAccessCenter($user, $this->centerB->id));
+        $this->assertTrue($service->canAccessCenter($user->fresh(), $this->centerB->id));
     }
 
     public function test_scope_accessible_centers_filters_queries(): void
@@ -74,13 +77,14 @@ final class CenterAccessTest extends TestCase
         Student::factory()->create(['etablissement_id' => null]);
 
         $assistant = $this->userInCenterA('administrative-assistant');
-        $director = $this->userInCenterA('operations-director');
+        $globalUser = $this->userInCenterA('administrative-assistant');
+        $globalUser->givePermissionTo('centers.access-all'); // hand-granted — no role carries it
 
         $service = app(CenterAccessService::class);
 
-        // Assistant: own center + global rows. Operations director: everything.
+        // Assistant: own center + global rows. Hand-granted global user: everything.
         $this->assertSame(2, $service->scopeAccessibleCenters(Student::query(), $assistant)->count());
-        $this->assertSame(3, $service->scopeAccessibleCenters(Student::query(), $director)->count());
+        $this->assertSame(3, $service->scopeAccessibleCenters(Student::query(), $globalUser->fresh())->count());
     }
 
     public function test_policies_block_records_from_another_center(): void

@@ -57,11 +57,16 @@ final class RolesAndPermissionsSeederTest extends TestCase
     {
         $director = Role::findByName('director');
         $this->assertTrue($director->hasPermissionTo('cash-transfers.validate'));
-        // Center-scoped on purpose: a directeur sees the centers assigned to
-        // their employee record, never the whole network (the cross-center
-        // roles are operations/financial/quality director + accountant).
-        $this->assertFalse($director->hasPermissionTo('centers.access-all'));
-        $this->assertTrue(Role::findByName('operations-director')->hasPermissionTo('centers.access-all'));
+        // « Centres affectés » is the ONE authority on center reach: NO role
+        // preset may carry centers.access-all (it sits in superAdminOnly()).
+        // Wider reach = more centers assigned on the employee form, or a
+        // super-admin hand-grants the permission to one user.
+        foreach (array_keys(PermissionRegistry::roles()) as $name) {
+            $this->assertFalse(
+                Role::findByName($name)->hasPermissionTo('centers.access-all'),
+                "[$name] must not hold centers.access-all",
+            );
+        }
         $this->assertTrue($director->hasPermissionTo('groups.archive'));
         $this->assertFalse($director->hasPermissionTo('roles.create'));
 

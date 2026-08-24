@@ -518,6 +518,27 @@ the database layer. Non-negotiable invariants already enforced in code:
   `ReferentialDataSeeder` (years 2025/2026-default + 2026/2027, 7 GLS
   branches, 2 rooms each). Tests: `tests/Feature/Backoffice/Context/`,
   `tests/Feature/Backoffice/Inertia/ContextUpdateTest.php`.
+- **⚠ Context scoping is MANDATORY on every screen (current and future).**
+  The top-bar switcher (year + center) must govern EVERYTHING the user sees
+  and creates — a page that ignores it is a bug (23/08/2026 audit). Rules:
+  - **Lists / stats / lookups**: records with an `annee_scolaire_id` chain
+    (groups, inscriptions, séances, créneaux, encaissements via
+    `fee.inscription`) filter on it. Date-carrying money records with no
+    year FK (dépenses, remboursements, chèques, journal de caisse rows) use
+    the active year's `date_debut`–`date_fin` as the **default date
+    window** — `CurrentContext::anneeDateRange()` — which an explicit date
+    filter on the page overrides. Students (list + dashboard) belong to the
+    years they hold an inscription in, plus never-enrolled students
+    (visible in every year: just created, about to be enrolled).
+  - **Creates** inherit `etablissement_id`/`annee_scolaire_id` from the
+    active context or from the parent record (group → inscription → séance),
+    never from client input.
+  - **Deliberate exceptions** (do not "fix"): employees/users (staff has no
+    year), stock (physical inventory), the transfer-validation inbox (a
+    pending transfer must never hide behind a year switch), and the caisse
+    journal's header totals + `solde` (they reconcile with the till's
+    running balance, which spans years — only the journal ROWS follow the
+    year window).
 - **Referential data (établissements, années scolaires, salles) is managed via
   the tabbed Paramètres page** — route `backoffice.settings`
   (`SettingController`), one React panel per tab under
@@ -743,6 +764,16 @@ keeps the primary column stable when an edit merely adds a center. Enforcing
   records are global). Center-scoped list queries must therefore match on the
   pivot too, not only the primary column — see `GetEmployeesList` and
   `GetUsersList` for the pattern.
+- **⚠ « Centres affectés » is the ONE authority on center reach — never a
+  role.** `centers.access-all` sits in `PermissionRegistry::superAdminOnly()`,
+  so NO role preset may carry it (writing it into a preset has no effect —
+  `matrix()` filters it out). A user reaches exactly the centers assigned on
+  their employee form; the top-bar switcher offers exactly those. A
+  cross-center job = more centers assigned on the employee form. A truly
+  global non-super-admin account (rare) gets the permission hand-granted,
+  one user at a time, on the Autorisations screen; super-admins see
+  everything via `Gate::before`. Never "fix" a can't-see-other-centers
+  complaint by editing a role preset — assign the centers instead.
 - **Super-admin safety**: role `super-admin` bypasses everything via
   `Gate::before`; it is protected (no rename/edit/delete), only super-admins
   grant/remove it, the last one can never lose it. First assignment:

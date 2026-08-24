@@ -58,6 +58,14 @@ final class GetStudentsList
                     $q->where(fn ($sub) => $sub->whereNull('etablissement_id')->orWhere('etablissement_id', $this->context->etablissementId()));
                 }
             })
+            // Year switcher: a student belongs to the years they hold an
+            // inscription in. A student with no inscription at all stays
+            // visible in every year — they were just created and are about
+            // to be enrolled; hiding them would break the create → enroll
+            // front-desk flow.
+            ->when($this->context->anneeScolaireId(), fn ($q, $anneeId) => $q->where(fn ($sub) => $sub
+                ->whereHas('inscriptions', fn ($i) => $i->where('annee_scolaire_id', $anneeId))
+                ->orWhereDoesntHave('inscriptions')))
             ->when($search !== '', function ($q) use ($search): void {
                 $q->where(function ($sub) use ($search): void {
                     $sub->where('nom', 'ilike', "%{$search}%")

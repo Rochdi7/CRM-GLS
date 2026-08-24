@@ -81,6 +81,24 @@ final class CurrentContext
         return $this->anneeScolaire()?->id;
     }
 
+    /**
+     * The active year's [date_debut, date_fin] as Y-m-d strings — the
+     * default date window date-carrying lists (dépenses, remboursements,
+     * chèques…) are scoped to when no explicit date filter is set.
+     *
+     * @return array{string, string}|null
+     */
+    public function anneeDateRange(): ?array
+    {
+        $annee = $this->anneeScolaire();
+
+        if ($annee === null) {
+            return null;
+        }
+
+        return [$annee->date_debut->toDateString(), $annee->date_fin->toDateString()];
+    }
+
     public function setAnneeScolaire(int $id): void
     {
         // Only accept a real year id.

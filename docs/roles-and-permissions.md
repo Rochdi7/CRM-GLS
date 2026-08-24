@@ -15,11 +15,15 @@ Companion docs: `authorization-audit.md` (state before implementation),
 - **Authenticatable model:** `App\Models\User` (`HasRoles` trait). Employees log in through `users`.
 - **Guard:** `web` only.
 - **Role model:** `App\Models\Role` (Spatie Role + French `label`, `isProtected()`).
-- **Teams:** not enabled — employees belong to at most ONE center
-  (`employees.etablissement_id`, no pivot). See architecture doc for the revisit trigger.
+- **Teams:** not enabled — center reach is the `employee_etablissement` pivot
+  (« Centres affectés » on the Employees form, ≥ 1 center required), with
+  `employees.etablissement_id` as the PRIMARY center (where the caisse lives).
 - **Center scoping:** `App\Services\Authorization\CenterAccessService` used by policies —
-  `centers.access-all` ⇒ everything; otherwise the employee's center; NULL-center
-  records are global; no employee profile ⇒ global records only.
+  « Centres affectés » is the ONE authority: the user reaches exactly the
+  centers assigned on their employee form. `centers.access-all` (super-admin
+  bypass, or hand-granted to a rare truly-global account — NO role preset
+  carries it, see §5b) ⇒ everything; NULL-center records are global; no
+  employee profile ⇒ global records only.
 - **Super-admin:** `Gate::before` in `AppServiceProvider` (role `super-admin` ⇒ allow all).
   Never write `hasRole('super-admin')` checks in application code.
 
@@ -123,7 +127,9 @@ It covers two families:
    that run groups. Money records already have no delete route at all.
 2. **The pre-existing super-admin-only abilities**: `system-settings.*`,
    `banks.*`, `cancellation-reasons.*`, `cash-accounts.*` (the global
-   non-center-scoped view) and `expenses.approve`.
+   non-center-scoped view), `expenses.approve` — and `centers.access-all`,
+   so that « Centres affectés » on the employee form stays the one authority
+   on center reach (§5b).
 
 A super-admin can still grant any single one of these to one user by hand on
 the Autorisations screen when a real case needs it — the filter constrains the
@@ -162,19 +168,27 @@ keep the roles from drifting apart:
 - **`$financeReadOnly`** — read access to every finance screen, the baseline
   the accounting/oversight roles build on.
 
-| Role | Scope |
+⚠ **`centers.access-all` sits in `superAdminOnly()` — NO role preset may
+carry it.** « Centres affectés » on the employee form (the
+`employee_etablissement` pivot) is the ONE authority on which centers a user
+reaches, whatever their role. A cross-center job = more centers assigned on
+the employee form; a truly global non-super-admin account (rare) gets the
+permission hand-granted, one user at a time, on the Autorisations screen.
+Super-admins see everything via `Gate::before` regardless.
+
+| Role | Scope (always confined to the centers assigned on the employee form) |
 |---|---|
 | `super-admin` | Everything via `Gate::before` (zero synced rows, by design) — and the only role that deletes. |
-| `director` | `$operations` + catalogs (années, salles, frais, types), employés, `users.assign-roles`, `roles.view`, `cash-transfers.validate`, import, audit. **No** `centers.access-all` — scoped to the centers assigned on the employee form. |
-| `operations-director` | `$operations` + `centers.access-all`, salles/frais, employés (view+update), stock catalog, import, audit. |
-| `financial-director` | `$financeReadOnly` + all money create/update, caisses, `cash-transfers.validate`, `centers.access-all`, audit. |
+| `director` | `$operations` + catalogs (années, salles, frais, types), employés, `users.assign-roles`, `roles.view`, `cash-transfers.validate`, import, audit. |
+| `operations-director` | `$operations` + salles/frais, employés (view+update), stock catalog, import, audit. |
+| `financial-director` | `$financeReadOnly` + all money create/update, caisses, `cash-transfers.validate`, audit. |
 | `accountant` | Same money scope minus `cash-transfers.validate` and the caisse catalog — books entries, does not arbitrate them. |
-| `quality-director` | Read-only across every module, all centers, incl. `audit-logs.view`. Changes nothing. |
+| `quality-director` | Read-only across every module, incl. `audit-logs.view`. Changes nothing. |
 | `pedagogical-director` | Academic authority: groupes, séances, salles, frais, étudiants, inscriptions. No money. |
-| `consultant` | `$operations` exactly — own center only. |
+| `consultant` | `$operations` exactly. |
 | `administrative-assistant` | `$operations` exactly — identical to `consultant` (asserted by a test). |
 | `administrative-manager` | `$operations` + employés, `users.view`, audit. |
-| `hr-manager` | Staff file across all centers only — no student, academic or money data. |
+| `hr-manager` | Staff file only — no student, academic or money data. |
 | `marketing-manager` | Dashboard + centres/étudiants/inscriptions/groupes, view-only. |
 | `teacher` | `dashboard.view`, `groups.view`, `students.view`, séances + appel. No finance. |
 
