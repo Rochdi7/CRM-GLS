@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Finance\Queries\GetCaisseDetails;
+use App\Domain\Finance\Queries\GetCaisseGlobale;
 use App\Domain\Finance\Queries\GetCaisseJournal;
 use App\Domain\Finance\Queries\GetCaisseTransfersList;
 use App\Domain\Finance\Queries\GetComptesCaisse;
@@ -33,9 +34,9 @@ use Inertia\Response;
  * ⚠ « Comptes de caisse » is super-admin only: `cash-accounts.*` is absent
  * from every role in PermissionRegistry::matrix(), so only the Gate::before
  * bypass reaches it. "Externe" is the ONLY type creatable there — employee
- * tills stay owned by CaisseProvisioner (EmployeeObserver), and TPE / Chèque
- * / Virement are payment methods aggregated live by GetComptesCaisse, not
- * rows to create (see that class and StoreCaisseRequest).
+ * tills stay owned by CaisseProvisioner (EmployeeObserver), and the TPE /
+ * Chèque / Virement accounts are provisioned per centre
+ * (EtablissementObserver), not rows to create (see StoreCaisseRequest).
  */
 final class CaisseController extends Controller
 {
@@ -44,6 +45,7 @@ final class CaisseController extends Controller
         GetCaisseJournal $getCaisseJournal,
         GetCaisseTransfersList $getCaisseTransfersList,
         GetComptesCaisse $getComptesCaisse,
+        GetCaisseGlobale $getCaisseGlobale,
     ): Response {
         $user = $request->user();
         $canViewCaisses = $user->can('cash-registers.view');
@@ -57,6 +59,7 @@ final class CaisseController extends Controller
         $validTabs = [
             ...($canViewCaisses ? ['ma-caisse'] : []),
             ...($canViewTransfers ? ['transferts'] : []),
+            ...($canViewCaisses ? ['globale'] : []),
             ...($canViewComptes ? ['comptes'] : []),
         ];
         $tab = (string) $request->query('tab', $validTabs[0] ?? 'ma-caisse');
@@ -87,6 +90,12 @@ final class CaisseController extends Controller
             'journalMine' => $canViewCaisses && $tab === 'ma-caisse'
                 ? $getCaisseJournal($user, 'mine', '', '', '', 1)
                 : null,
+            // « Caisse globale » — every account of the active centre by kind
+            // (physical tills, TPE, bank, cheques, external); same permission
+            // as the journal, same centre scope as its 'all' mode.
+            'globale' => $canViewCaisses && $tab === 'globale'
+                ? $getCaisseGlobale($user)
+                : null,
             'transfers' => $canViewTransfers && $tab === 'transferts'
                 ? $getCaisseTransfersList($user, $search, $statutFilter, $typeFilter)
                 : null,
@@ -111,7 +120,7 @@ final class CaisseController extends Controller
             // (StoreCaisseRequest refuses the rest server-side too).
             'compteTypes' => GetComptesCaisse::CREATABLE_TYPES,
             // The FILTER offers every kind the tab can show: employee tills,
-            // the derived TPE/Chèque/Virement rows, and Externe accounts.
+            // the centres' TPE/Chèque/Virement accounts, and Externe accounts.
             'compteTypeFilters' => GetComptesCaisse::allTypes(),
             'compteEtablissements' => $canViewComptes
                 ? Etablissement::query()->orderBy('nom_centre')->get()
@@ -237,10 +246,10 @@ final class CaisseController extends Controller
         abort_unless($request->user()->can('cash-accounts.delete'), 403);
 
         // Only an Externe account is ever removable: an employee's till is
-        // owned by CaisseProvisioner, and the derived TPE/Chèque/Virement
-        // rows have no id to reach this route with in the first place.
+        // owned by CaisseProvisioner, and a centre's TPE/Chèque/Virement
+        // account is provisioned with the centre.
         if ($caisse->type !== Caisse::TYPE_EXTERNE) {
-            return back()->withErrors(['delete' => __("An employee's own till cannot be deleted.")]);
+            return back()->withErrors(['delete' => __('Only an external cash account can be deleted.')]);
         }
 
         if ($getComptesCaisse->hasMovements($caisse)) {

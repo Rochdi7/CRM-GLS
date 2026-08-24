@@ -239,6 +239,71 @@ final class EncaissementsInertiaCrudTest extends TestCase
     }
 
     /**
+     * A centre-less (global) student is visible in every centre, so the
+     * payments just collected for them must be listed under the active
+     * centre too — the page was empty right after recording them
+     * (24/08/2026). The inscription's centre is a second way in.
+     */
+    public function test_index_lists_payments_of_a_centre_less_student_under_the_active_centre(): void
+    {
+        $user = $this->userWith('payments.view');
+        [$student, , $fee] = $this->enrolledStudentWithFee(1000);
+        $student->update(['etablissement_id' => null]);
+
+        Encaissement::create([
+            'reference' => 'ENC-GLOBAL', 'agent_id' => $user->employee->id, 'student_id' => $student->id,
+            'inscription_fee_id' => $fee->id, 'caisse_id' => $user->employee->caisses()->first()->id,
+            'montant' => 300, 'methode' => Encaissement::METHODE_ESPECES, 'date_paiement' => '2025-09-20',
+        ]);
+
+        $this->actingAs($user);
+        app(CurrentContext::class)->setEtablissement($this->centre->id);
+
+        $this->get(route('backoffice.encaissements.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('encaissements.data.0.reference', 'ENC-GLOBAL'));
+    }
+
+    /**
+     * A payment that has been FULLY refunded is money that is no longer
+     * there: it leaves the Paiements tab (24/08/2026). A partial refund keeps
+     * the row and shows the refunded part. Nothing is deleted — the row stays
+     * on the student page, the caisse journal and the audit trail.
+     */
+    public function test_index_hides_fully_refunded_payments_and_flags_partial_ones(): void
+    {
+        $user = $this->userWith('payments.view');
+        [$student, , $fee] = $this->enrolledStudentWithFee(1000);
+        $till = $user->employee->caisses()->first();
+
+        $full = Encaissement::create([
+            'reference' => 'ENC-FULL', 'agent_id' => $user->employee->id, 'student_id' => $student->id,
+            'inscription_fee_id' => $fee->id, 'caisse_id' => $till->id,
+            'montant' => 600, 'methode' => Encaissement::METHODE_ESPECES, 'date_paiement' => '2025-09-20',
+        ]);
+        $partial = Encaissement::create([
+            'reference' => 'ENC-PART', 'agent_id' => $user->employee->id, 'student_id' => $student->id,
+            'inscription_fee_id' => $fee->id, 'caisse_id' => $till->id,
+            'montant' => 400, 'methode' => Encaissement::METHODE_ESPECES, 'date_paiement' => '2025-09-21',
+        ]);
+        foreach ([[$full, 600], [$partial, 150]] as [$enc, $montant]) {
+            \App\Models\Remboursement::create([
+                'reference' => 'RMB-'.$enc->reference, 'beneficiaire_id' => $student->id, 'encaissement_id' => $enc->id,
+                'caisse_id' => $till->id, 'montant' => $montant, 'date_remboursement' => '2025-10-01', 'agent_id' => $user->employee->id,
+            ]);
+        }
+
+        $this->actingAs($user)
+            ->get(route('backoffice.encaissements.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('encaissements.data', 1)
+                ->where('encaissements.data.0.reference', 'ENC-PART')
+                ->where('encaissements.data.0.montantRembourse', '150.00')
+            );
+    }
+
+    /**
      * The top-bar year switcher must scope the list: a payment belongs to
      * the academic year of its fee's inscription, and an avance (no fee) to
      * the year its payment date falls in.
@@ -769,6 +834,12 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame(0, Encaissement::count());
     }
 
+    /**
+     * Since the payment-method accounts refactor (24/08/2026) `methode` is
+     * frozen too: it decided which account was credited. The tampered value
+     * is refused outright (see ComptesMethodeTest for the refusal itself);
+     * here the stored method is echoed back, as the edit modal does.
+     */
     public function test_edit_never_touches_montant_or_caisse_even_when_tampered(): void
     {
         $user = $this->userWith('payments.view', 'payments.create', 'payments.update');
@@ -784,7 +855,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
         ]);
 
         $this->put(route('backoffice.encaissements.update', $encaissement), [
-            'methode' => 'Virement',
+            'methode' => 'Espèces',
             'date_paiement' => '2025-09-21',
             // Tampered — must have zero effect.
             'montant' => '9999',
@@ -792,7 +863,8 @@ final class EncaissementsInertiaCrudTest extends TestCase
         ])->assertSessionDoesntHaveErrors();
 
         $fresh = $encaissement->fresh();
-        $this->assertSame('Virement', $fresh->methode);
+        $this->assertSame('Espèces', $fresh->methode);
+        $this->assertSame('2025-09-21', $fresh->date_paiement->toDateString());
         $this->assertSame('1500.00', (string) $fresh->montant);
         $this->assertSame($caisse->id, $fresh->caisse_id);
     }

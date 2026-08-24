@@ -14,7 +14,7 @@ use App\Models\ImportRow;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
 use App\Models\Student;
-use App\Services\CaisseProvisioner;
+use App\Domain\Finance\Support\CaisseResolver;
 use App\Services\Import\Concerns\TracksBatchProgress;
 use App\Services\Import\Contracts\Importer;
 use App\Services\Import\DTO\ImportContext;
@@ -117,7 +117,7 @@ final class EncaissementImporter implements Importer
     public function __construct(
         private readonly SheetReader $sheetReader,
         private readonly ImportValidator $validator,
-        private readonly CaisseProvisioner $caisseProvisioner,
+        private readonly CaisseResolver $caisseResolver,
     ) {}
 
     public function module(): string
@@ -596,11 +596,12 @@ final class EncaissementImporter implements Importer
         $candidateFees = [];
         $looseFeeMatch = null;
 
-        // The caisse depends only on the mapped opérateur, so it resolves
-        // regardless of how the payer/frais lookups turn out — a row that
-        // conflicts on the student must still keep its valid caisse.
-        if ($agentId !== null) {
-            $caisseId = $this->resolveCaisseFor((int) $agentId);
+        // The account depends only on the mapped opérateur + the method (and
+        // the batch's centre for non-cash rows), so it resolves regardless
+        // of how the payer/frais lookups turn out — a row that conflicts on
+        // the student must still keep its valid caisse.
+        if ($agentId !== null && $methode !== null) {
+            $caisseId = $this->resolveCaisseFor((int) $agentId, $methode, (int) $batch->etablissement_id);
         }
 
         if (! $payerAmbiguous && $errors === [] && $parseErrors === []) {
@@ -747,16 +748,23 @@ final class EncaissementImporter implements Importer
         return array_map('intval', $context->operateurMapping);
     }
 
-    private function resolveCaisseFor(int $employeeId): int
+    /**
+     * Espèces → the opérateur's own till; TPE/Chèque/Virement → the method
+     * account of the CENTRE BEING IMPORTED (the batch is centre-scoped, so
+     * this is known — unlike the operator's primary centre, which may be
+     * another branch). Memoised per (employee, method, centre).
+     */
+    private function resolveCaisseFor(int $employeeId, string $methode, int $etablissementId): int
     {
-        if (isset($this->caisseIdByEmployeeId[$employeeId])) {
-            return $this->caisseIdByEmployeeId[$employeeId];
+        $key = "{$employeeId}|{$methode}|{$etablissementId}";
+
+        if (isset($this->caisseIdByEmployeeId[$key])) {
+            return $this->caisseIdByEmployeeId[$key];
         }
 
-        $employee = Employee::findOrFail($employeeId);
-        $caisse = $employee->caisses()->first() ?? $this->caisseProvisioner->provisionFor($employee);
+        $caisse = $this->caisseResolver->resolveFor(Employee::findOrFail($employeeId), $methode, $etablissementId);
 
-        return $this->caisseIdByEmployeeId[$employeeId] = $caisse->id;
+        return $this->caisseIdByEmployeeId[$key] = $caisse->id;
     }
 
     /**

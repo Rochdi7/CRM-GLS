@@ -66,6 +66,13 @@ final class ValiderTransfertCaisse
             $source = Caisse::query()->lockForUpdate()->findOrFail($transfer->caisse_source_id);
             $destination = Caisse::query()->lockForUpdate()->findOrFail($transfer->caisse_destination_id);
 
+            // Belt and braces with DemanderTransfertCaisse: cash only.
+            if (! $source->isEspeces() || ! $destination->isEspeces()) {
+                throw ValidationException::withMessages([
+                    'caisse_destination_id' => __('A till transfer can only move cash between cash accounts.'),
+                ]);
+            }
+
             // Both legs go through the ledger so the journal shows the money
             // leaving one till AND arriving in the other — a transfer that only
             // logged one side would look like a loss.

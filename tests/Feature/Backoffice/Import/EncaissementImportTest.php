@@ -812,6 +812,93 @@ final class EncaissementImportTest extends TestCase
         $this->assertSame(InscriptionFee::STATUT_PAYE_PARTIELLEMENT, $fee->statut);
     }
 
+    /**
+     * Payment-method accounts (24/08/2026): an imported row lands in the
+     * account of ITS method — Espèces in the mapped opérateur's own till,
+     * TPE / Virement / Chèque in the method account of the centre BEING
+     * IMPORTED (the batch's centre), even when the opérateur is based in
+     * another branch. The physical till never receives non-cash money.
+     */
+    public function test_commit_routes_each_imported_row_to_the_account_of_its_method(): void
+    {
+        $this->studentWithActiveFee('AHMED', 'AMIMI', 'Frais test', 1000);
+        $this->studentWithActiveFee('AYA', 'ZAHIR', 'Frais test', 1000);
+        $this->studentWithActiveFee('JENNATE', 'FIRDAOUS', 'Frais test', 1000);
+        $this->studentWithActiveFee('AMMAR', 'OUACHOUCH', 'Frais test', 1000);
+
+        // Opérateur based in ANOTHER centre, importing for $this->centre.
+        $autreCentre = Etablissement::factory()->create();
+        $operateur = Employee::factory()->create(['etablissement_id' => $autreCentre->id]);
+        $operateur->etablissements()->syncWithoutDetaching([$this->centre->id]);
+
+        $user = $this->userWith('import.view', 'import.create');
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->buildUpload([
+                ['P1', 'AHMED AMIMI', 'Réglement', '100', 'Espèces', 'Frais test', '10/01/2026', 'op'],
+                ['P2', 'AYA ZAHIR', 'Réglement', '200', 'TPE', 'Frais test', '10/01/2026', 'op'],
+                ['P3', 'JENNATE FIRDAOUS', 'Réglement', '300', 'Virement bancaire', 'Frais test', '10/01/2026', 'op'],
+                // Legacy spelling (e-acute), as in the real export.
+                ['P4', 'AMMAR OUACHOUCH', 'Réglement', '400', 'Chéque', 'Frais test', '10/01/2026', 'op'],
+            ]),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => [['label' => 'op', 'employee_id' => $operateur->id]],
+        ])->assertSessionHasNoErrors();
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $rows = $batch->rows()->get();
+        foreach ($rows as $row) {
+            $this->assertSame(ImportRow::STATUT_NOUVEAU, $row->status, $row->legacy_ref.': '.json_encode($row->errors));
+        }
+
+        $this->commitAllSelected($user, $batch, $rows->pluck('id')->all())->assertOk();
+
+        $compte = fn (Etablissement $c, string $type) => Caisse::query()
+            ->where('etablissement_id', $c->id)->where('type', $type)->sole();
+
+        // Cash → the opérateur's own till (wherever it is based).
+        $till = Caisse::query()->where('responsable_employee_id', $operateur->id)->sole();
+        $this->assertSame('100.00', (string) $till->solde);
+
+        // Non-cash → the IMPORTED centre's accounts, never the operator's centre.
+        $this->assertSame('200.00', (string) $compte($this->centre, Encaissement::METHODE_TPE)->solde);
+        $this->assertSame('300.00', (string) $compte($this->centre, Encaissement::METHODE_VIREMENT)->solde);
+        $this->assertSame('400.00', (string) $compte($this->centre, Encaissement::METHODE_CHEQUE)->solde);
+        foreach (Caisse::TYPES_METHODE as $type) {
+            $this->assertSame('0.00', (string) $compte($autreCentre, $type)->solde);
+        }
+
+        // The cheque row is ALSO tracked in the Chèques module: a Cheque
+        // record linked to the payment, in the imported centre, already
+        // Encaissé (the money was received), and the payment shows on the
+        // Chèques tab of Encaissements.
+        $chequePayment = Encaissement::query()->where('legacy_ref', 'P4')->sole();
+        $this->assertSame(Encaissement::METHODE_CHEQUE, $chequePayment->methode);
+        $this->assertNotNull($chequePayment->cheque_id);
+        $chequeRow = \App\Models\Cheque::query()->findOrFail($chequePayment->cheque_id);
+        $this->assertSame('400.00', (string) $chequeRow->montant);
+        $this->assertSame($this->centre->id, (int) $chequeRow->etablissement_id);
+        $this->assertSame(\App\Models\Cheque::STATUT_ENCAISSE, $chequeRow->statut);
+        $this->assertSame($chequePayment->student_id, (int) $chequeRow->student_id);
+        $this->assertSame($compte($this->centre, Encaissement::METHODE_CHEQUE)->id, $chequePayment->caisse_id);
+
+        $viewer = $this->userWith('payments.view');
+        $this->actingAs($viewer);
+        app(\App\Services\Context\CurrentContext::class)->setEtablissement($this->centre->id);
+        $this->get(route('backoffice.encaissements.index', ['view' => 'cheque']))
+            ->assertOk()
+            ->assertInertia(fn (\Inertia\Testing\AssertableInertia $page) => $page
+                ->has('encaissements.data', 1)
+                ->where('encaissements.data.0.reference', $chequePayment->reference));
+
+        // Each row points at the account that was credited.
+        $this->assertSame($till->id, Encaissement::query()->where('legacy_ref', 'P1')->sole()->caisse_id);
+        $this->assertSame(
+            $compte($this->centre, Encaissement::METHODE_TPE)->id,
+            Encaissement::query()->where('legacy_ref', 'P2')->sole()->caisse_id,
+        );
+    }
+
     public function test_committing_the_same_batch_twice_never_double_writes_a_payment(): void
     {
         // analyze() dedupes against a snapshot taken at upload time. Committing

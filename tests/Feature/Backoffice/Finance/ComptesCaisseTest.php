@@ -186,35 +186,30 @@ final class ComptesCaisseTest extends TestCase
     // Derived payment-method rows (TPE / Chèque / Virement)
     // ---------------------------------------------------------------
 
-    public function test_payment_methods_appear_as_derived_rows_without_any_caisse_row(): void
+    public function test_payment_methods_are_real_accounts_provisioned_per_centre(): void
     {
-        $till = Caisse::factory()->create(['type' => Caisse::TYPE_CAISSIERE, 'etablissement_id' => $this->centre->id]);
-        $this->makeEncaissement($till, '400', Encaissement::METHODE_TPE);
-
+        // One TPE / Chèque / Virement row per centre, created with the centre
+        // (EtablissementObserver) — never derived, never double-counted.
         $this->actingAs($this->superAdmin())
             ->get(route('backoffice.caisses.index', ['tab' => 'comptes', 'compteTypeFilter' => Encaissement::METHODE_TPE]))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('comptes.data', 1)
                 ->where('comptes.data.0.type', Encaissement::METHODE_TPE)
-                ->where('comptes.data.0.derived', true)
-                // No record behind it: nothing to open, edit or delete.
-                ->where('comptes.data.0.id', null)
-                ->where('comptes.data.0.encaissements', '400.00')
+                ->where('comptes.data.0.compteMethode', true)
+                ->where('comptes.data.0.centre', $this->centre->nom_centre)
+                ->where('comptes.data.0.solde', '0.00')
             );
 
-        // …and nothing was provisioned in `caisses` to make that row exist.
-        $this->assertDatabaseMissing('caisses', ['type' => Encaissement::METHODE_TPE]);
+        $this->assertDatabaseHas('caisses', ['type' => Encaissement::METHODE_TPE, 'etablissement_id' => $this->centre->id]);
     }
 
-    public function test_a_derived_rows_solde_is_encaissements_minus_depenses(): void
+    public function test_a_method_accounts_solde_is_the_stored_ledger_balance(): void
     {
-        $till = Caisse::factory()->create(['type' => Caisse::TYPE_CAISSIERE, 'etablissement_id' => $this->centre->id]);
-        $this->makeEncaissement($till, '1000', Encaissement::METHODE_VIREMENT);
-        $this->makeEncaissement($till, '500', Encaissement::METHODE_VIREMENT);
-        $this->makeDepense($till, '200', Encaissement::METHODE_VIREMENT);
-        // Another method entirely — must not bleed into the Virement row.
-        $this->makeEncaissement($till, '9999', Encaissement::METHODE_TPE);
+        $compte = Caisse::query()->where('etablissement_id', $this->centre->id)->where('type', Encaissement::METHODE_VIREMENT)->firstOrFail();
+        app(\App\Domain\Finance\Support\CaisseLedger::class)->credit($compte->id, 1300, 'test');
+        $this->makeEncaissement($compte, '1000', Encaissement::METHODE_VIREMENT);
+        $this->makeEncaissement($compte, '500', Encaissement::METHODE_VIREMENT);
 
         $this->actingAs($this->superAdmin())
             ->get(route('backoffice.caisses.index', ['tab' => 'comptes', 'compteTypeFilter' => Encaissement::METHODE_VIREMENT]))
@@ -222,15 +217,15 @@ final class ComptesCaisseTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->has('comptes.data', 1)
                 ->where('comptes.data.0.encaissements', '1500.00')
-                ->where('comptes.data.0.depenses', '200.00')
+                // Stored, not recomputed from the movement totals.
                 ->where('comptes.data.0.solde', '1300.00')
             );
     }
 
-    public function test_especes_never_gets_a_derived_row(): void
+    public function test_especes_never_gets_its_own_account_type(): void
     {
-        // Cash physically lands in an employee's till, which is already the
-        // "Caissière" row — deriving it again would double-count the money.
+        // Cash physically lands in an employee's till, which IS the
+        // "Caissière" row — an "Espèces" account would double-count it.
         $till = Caisse::factory()->create(['type' => Caisse::TYPE_CAISSIERE, 'etablissement_id' => $this->centre->id]);
         $this->makeEncaissement($till, '750', Encaissement::METHODE_ESPECES);
 
@@ -243,7 +238,7 @@ final class ComptesCaisseTest extends TestCase
             });
     }
 
-    public function test_the_three_derived_rows_are_listed_unfiltered(): void
+    public function test_the_three_method_accounts_are_listed_unfiltered(): void
     {
         $this->actingAs($this->superAdmin())
             ->get(route('backoffice.caisses.index', ['tab' => 'comptes']))
@@ -251,9 +246,9 @@ final class ComptesCaisseTest extends TestCase
             ->assertInertia(function (Assert $page): void {
                 $types = collect($page->toArray()['props']['comptes']['data'])->pluck('type');
                 foreach ([Encaissement::METHODE_TPE, Encaissement::METHODE_CHEQUE, Encaissement::METHODE_VIREMENT] as $methode) {
-                    // Present even at zero — the account exists as a concept
-                    // whether or not anyone has paid that way yet.
-                    $this->assertTrue($types->contains($methode), "Missing derived row for [{$methode}].");
+                    // Present even at zero — the account exists as soon as the
+                    // centre does, whether or not anyone has paid that way yet.
+                    $this->assertTrue($types->contains($methode), "Missing account for [{$methode}].");
                 }
             });
     }

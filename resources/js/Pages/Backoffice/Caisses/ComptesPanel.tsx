@@ -45,14 +45,14 @@ const TYPE_BADGE: Record<string, 'primary' | 'info' | 'warning' | 'secondary' | 
 };
 
 /**
- * « Comptes de caisse » — every account money sits in, of two natures:
+ * « Comptes de caisse » — every account money sits in, one flat list,
+ * newest first (the legacy screen's layout):
  *
- *  - STORED rows of `caisses`: employee tills ("Caissière", provisioned with
- *    the employee) and "Externe" accounts, the only kind created here.
- *  - DERIVED rows (`derived: true`): one per payment method — TPE, Chèque,
- *    Virement — aggregated live from the movements carrying that method.
- *    They are a view of the money, not records, so they carry no id and get
- *    no row actions: nothing to edit, nothing to delete.
+ *  - employee tills ("Caissière", provisioned with the employee) and
+ *    "Externe" cash accounts, the only kind created here;
+ *  - the centres' TPE / Chèque / Virement accounts (`compteMethode: true`),
+ *    provisioned with the centre — real rows with a ledger-kept solde, so
+ *    they open like any account but are never edited or deleted here.
  *
  * Super-admin only in practice: `cash-accounts.*` is absent from every role
  * in PermissionRegistry::matrix(). The `permissions` prop is UI convenience
@@ -204,7 +204,7 @@ export default function ComptesPanel({
                         }
                     >
                         {comptes.data.map((row) => (
-                            <tr key={row.derived ? `derived-${row.type}` : `caisse-${row.id}`}>
+                            <tr key={`caisse-${row.id}`}>
                                 <td>{row.nom}</td>
                                 <td>
                                     <StatusBadge label={row.type} variant={TYPE_BADGE[row.type] ?? 'secondary'} />
@@ -214,28 +214,23 @@ export default function ComptesPanel({
                                 <td className="text-end fw-medium">{Number(row.solde).toFixed(2)} DH</td>
                                 <td>{row.dateAjout ?? '—'}</td>
                                 <td>
-                                    {/* Derived rows (TPE/Chèque/Virement) are a
-                                        live view of the movements, not records:
-                                        nothing to open, edit or delete. Only an
-                                        Externe account is ever deletable — the
-                                        server refuses the rest too, this just
-                                        hides the dead affordance. */}
-                                    {row.derived ? (
-                                        <span className="text-muted">—</span>
-                                    ) : (
-                                        <RowActions view={row.showUrl ?? undefined}>
-                                            {permissions.update && (
-                                                <RowActionItem icon="ti-edit" onClick={() => openEdit(row)}>
-                                                    Modifier
-                                                </RowActionItem>
-                                            )}
-                                            {permissions.delete && row.type === 'Externe' && (
-                                                <RowActionItem icon="ti-trash" onClick={() => setDeleteTarget(row)}>
-                                                    Supprimer
-                                                </RowActionItem>
-                                            )}
-                                        </RowActions>
-                                    )}
+                                    {/* A centre's method account is provisioned,
+                                        not managed: open only. Only an Externe
+                                        account is ever deletable — the server
+                                        refuses the rest too, this just hides the
+                                        dead affordance. */}
+                                    <RowActions view={row.showUrl}>
+                                        {permissions.update && !row.compteMethode && (
+                                            <RowActionItem icon="ti-edit" onClick={() => openEdit(row)}>
+                                                Modifier
+                                            </RowActionItem>
+                                        )}
+                                        {permissions.delete && row.type === 'Externe' && (
+                                            <RowActionItem icon="ti-trash" onClick={() => setDeleteTarget(row)}>
+                                                Supprimer
+                                            </RowActionItem>
+                                        )}
+                                    </RowActions>
                                 </td>
                             </tr>
                         ))}

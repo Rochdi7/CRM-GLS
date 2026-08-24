@@ -138,6 +138,10 @@ final class GetCaisseTransfersList
     public function caisseOptions(User $user): Collection
     {
         return Caisse::query()
+            // Cash accounts only — a transfer never targets a centre's
+            // TPE/Chèque/Virement account (DemanderTransfertCaisse refuses
+            // it server-side too).
+            ->whereIn('type', Caisse::TYPES_ESPECES)
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
             ->orderBy('nom')

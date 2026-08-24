@@ -238,15 +238,24 @@ DB_USERNAME=gls_crm_app
 DB_PASSWORD=PASTE_PASSWORD_HERE
 DB_SSLMODE=prefer
 
-SESSION_DRIVER=database
+SESSION_DRIVER=redis
 SESSION_LIFETIME=120
 SESSION_SECURE_COOKIE=true
 SESSION_DOMAIN=crm.gls-sprachzentrum.ma
 
-CACHE_STORE=database
-QUEUE_CONNECTION=database
+CACHE_STORE=redis
+QUEUE_CONNECTION=redis
+REDIS_CLIENT=phpredis
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
 FILESYSTEM_DISK=local
 ```
+
+> Redis (cache + sessions + queue), OPcache, PHP-FPM pool, Nginx gzip and
+> PostgreSQL memory settings are set up in **`docs/vps-performance-tuning.md`**
+> — do that pass right after this guide. Until Redis is installed you may
+> keep `database` for the three drivers above; it works, it is just slower on
+> every request.
 
 ⚠ Three critical settings:
 

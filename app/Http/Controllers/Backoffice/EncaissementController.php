@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Payments\Actions\AppliquerAvance;
 use App\Domain\Payments\Actions\ConvertirEncaissementsEnAvance;
+use App\Domain\Finance\Support\CaisseResolver;
 use App\Domain\Payments\Actions\EnregistrerEncaissement;
 use App\Domain\Payments\Mail\EncaissementRecuMail;
 use App\Domain\Payments\Actions\SupprimerEncaissement;
@@ -88,10 +89,14 @@ final class EncaissementController extends Controller
                 $numeroChequeFilter,
                 $banqueFilter,
             ),
-            'caisses' => $getEncaissementsList->caisseOptions($request->user()),
-            'students' => $getEncaissementsList->studentOptions($request->user()),
+            // Closures: the page reloads on every search/filter/page change
+            // with `only: ['encaissements', 'filters']`, so these option
+            // lists (every student of the centre!) are computed on the first
+            // visit only, never again per keystroke.
+            'caisses' => fn () => $getEncaissementsList->caisseOptions($request->user()),
+            'students' => fn () => $getEncaissementsList->studentOptions($request->user()),
             'methodes' => Encaissement::METHODES,
-            'banques' => $getBanquesList->activeNames(),
+            'banques' => fn () => $getBanquesList->activeNames(),
             'filters' => [
                 'search' => $search,
                 'caisseFilter' => $caisseFilter,
@@ -161,12 +166,11 @@ final class EncaissementController extends Controller
             ]);
         }
 
-        // The till is ALWAYS the acting employee's own caisse — never chosen
-        // client-side, for any role (the modal shows no caisse field). Same
-        // self-heal as the journal's "mine" scope for pre-provisioner
-        // accounts (CaisseProvisioner is idempotent).
-        $caisse = $agent->caisses()->first()
-            ?? app(\App\Services\CaisseProvisioner::class)->provisionFor($agent);
+        // The account is NEVER chosen client-side, for any role (the modal
+        // shows no caisse field): each line's `methode` decides it —
+        // Espèces → the agent's own till, TPE/Chèque/Virement → the active
+        // centre's method account (CaisseResolver).
+        $resolver = app(CaisseResolver::class);
 
         $data = $request->validated();
         $inscriptionId = (int) $data['inscription_id'];
@@ -203,7 +207,7 @@ final class EncaissementController extends Controller
             ->groupBy(fn ($l) => (int) $l['fee_id'])
             ->map(fn ($lines) => round((float) $lines->sum(fn ($l) => (float) $l['montant']), 2));
 
-        DB::transaction(function () use ($touchedLines, $data, $inscriptionId, $agent, $caisse, $action, $chequeIds, $parFee): void {
+        DB::transaction(function () use ($touchedLines, $data, $inscriptionId, $agent, $resolver, $action, $chequeIds, $parFee): void {
             // Cheques are re-read under a row lock INSIDE the transaction and
             // their remaining balance re-checked here: a double submit (or two
             // cashiers) would otherwise both see the full balance and spend
@@ -271,6 +275,7 @@ final class EncaissementController extends Controller
 
                 $isCheque = $line['methode'] === Encaissement::METHODE_CHEQUE;
                 $cheque = $isCheque ? $cheques[(int) $line['cheque_id']] : null;
+                $caisse = $resolver->resolveFor($agent, (string) $line['methode']);
 
                 $action->handle([
                     'student_id' => $data['student_id'],
@@ -309,10 +314,10 @@ final class EncaissementController extends Controller
             ]);
         }
 
-        $caisse = $agent->caisses()->first()
-            ?? app(\App\Services\CaisseProvisioner::class)->provisionFor($agent);
-
         $data = $request->validated();
+
+        // Same rule as store(): the method decides the account.
+        $caisse = app(CaisseResolver::class)->resolveFor($agent, (string) $data['methode']);
 
         $action->handle([
             'student_id' => $data['student_id'],
@@ -461,28 +466,32 @@ final class EncaissementController extends Controller
 
         $data = $request->validated();
 
-        // A payment funded by a tracked chèque (Chèques module) keeps its
-        // method and cheque identity: changing méthode to Espèces would hide
-        // it from the Chèques views while the cheque still counts it as
-        // used, and retyping numéro/banque would contradict the Cheque row.
-        if ($encaissement->cheque_id !== null) {
-            if (($data['methode'] ?? $encaissement->methode) !== Encaissement::METHODE_CHEQUE) {
-                throw ValidationException::withMessages([
-                    'methode' => __('A payment made with a tracked cheque keeps the cheque method.'),
-                ]);
-            }
+        // `methode` is FROZEN with the row, exactly like montant/caisse_id:
+        // it decided which account was credited, so an edit would leave the
+        // money in one account and the label on another. A posted value is
+        // accepted only when it repeats the stored one (UI convenience).
+        if (($data['methode'] ?? $encaissement->methode) !== $encaissement->methode) {
+            throw ValidationException::withMessages([
+                'methode' => __('The payment method of a recorded payment cannot be changed.'),
+            ]);
+        }
 
-            unset($data['methode'], $data['numero_cheque'], $data['banque'], $data['date_echeance_cheque']);
-        } elseif (($data['methode'] ?? null) !== Encaissement::METHODE_CHEQUE) {
-            // Leaving the Chèque method clears the cheque columns instead of
-            // keeping stale numéro/banque on a cash row.
+        unset($data['methode']);
+
+        if ($encaissement->cheque_id !== null) {
+            // A payment funded by a tracked chèque (Chèques module) keeps its
+            // cheque identity: numéro/banque/échéance are read off the Cheque
+            // row, retyping them here would contradict it.
+            unset($data['numero_cheque'], $data['banque'], $data['date_echeance_cheque']);
+        } elseif ($encaissement->methode !== Encaissement::METHODE_CHEQUE) {
+            // Cheque columns only mean something on a Chèque row.
             $data['numero_cheque'] = null;
             $data['banque'] = null;
             $data['date_echeance_cheque'] = null;
         }
 
-        // montant / caisse_id are not editable (see UpdateEncaissementRequest);
-        // this edit is audit-logged by LogsActivity.
+        // montant / caisse_id / methode are not editable (see
+        // UpdateEncaissementRequest); this edit is audit-logged by LogsActivity.
         $encaissement->update($data);
 
         return redirect()->route('backoffice.encaissements.index')

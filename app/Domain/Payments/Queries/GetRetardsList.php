@@ -72,9 +72,13 @@ final class GetRetardsList
 
         $fees = InscriptionFee::query()
             ->with(['inscription.student', 'inscription.group', 'frais'])
+            // Paid total per fee computed by the DB in the same query — the
+            // per-row montantPaye() this replaced fired one SUM per overdue
+            // fee (hundreds of queries on a real centre).
+            ->withSum('encaissements', 'montant')
             ->whereNull('masque_le')
             ->whereNotNull('date_echeance')
-            ->whereDate('date_echeance', '<', $today)
+            ->where('date_echeance', '<', $today)
             ->whereHas('inscription', function (Builder $q) use ($user): void {
                 $q->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
                     ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
@@ -86,8 +90,8 @@ final class GetRetardsList
             ->when($dateTo !== '', fn ($q) => $q->whereDate('date_echeance', '<=', $dateTo))
             ->orderBy('date_echeance')
             ->get()
-            ->map(function (InscriptionFee $fee) use ($today): ?array {
-                $paye = $fee->montantPaye();
+            ->map(function (InscriptionFee $fee): ?array {
+                $paye = (float) ($fee->encaissements_sum_montant ?? 0);
                 $reste = round(max(0, (float) $fee->montant - $paye), 2);
 
                 if ($reste <= 0) {
@@ -141,10 +145,10 @@ final class GetRetardsList
         $today = now()->toDateString();
 
         $rows = InscriptionFee::query()
-            ->with('inscription')
+            ->withSum('encaissements', 'montant')
             ->whereNull('masque_le')
             ->whereNotNull('date_echeance')
-            ->whereDate('date_echeance', '<', $today)
+            ->where('date_echeance', '<', $today)
             ->whereHas('inscription', function (Builder $q) use ($user): void {
                 $q->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
                     ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
@@ -159,7 +163,7 @@ final class GetRetardsList
         $counts = array_fill_keys(self::BUCKETS, 0);
 
         foreach ($rows as $fee) {
-            $paye = $fee->montantPaye();
+            $paye = (float) ($fee->encaissements_sum_montant ?? 0);
             $reste = round(max(0, (float) $fee->montant - $paye), 2);
 
             if ($reste <= 0) {

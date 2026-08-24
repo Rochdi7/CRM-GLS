@@ -32,12 +32,17 @@ final class DashboardController extends Controller
             $calMonth = now()->format('Y-m');
         }
 
+        // Every widget is a closure so Inertia partial reloads
+        // (`only: ['seancesCalendar']` when paging the calendar,
+        // `only: ['annualFrais', …]` when changing the chart year) compute
+        // ONLY the requested widget. A plain value here would still be
+        // evaluated server-side and then dropped from the response.
         return Inertia::render('Backoffice/Dashboard/Index', [
-            'stats' => $getDashboardStats($context)->toArray(),
-            'annualFrais' => $getAnnualFraisSummary($year),
+            'stats' => fn () => $getDashboardStats($context)->toArray(),
+            'annualFrais' => fn () => $getAnnualFraisSummary($year),
             'annualFraisYear' => $year,
-            'annualFraisYears' => $getAnnualFraisSummary->availableYears(),
-            'seancesCalendar' => $getSeancesCalendar($context, $calMonth),
+            'annualFraisYears' => fn () => $getAnnualFraisSummary->availableYears(),
+            'seancesCalendar' => fn () => $getSeancesCalendar($context, $calMonth),
         ]);
     }
 }

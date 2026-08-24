@@ -25,6 +25,12 @@ use Illuminate\Support\Collection;
  * Merges 4 money trails (encaissements, depenses, remboursements,
  * transferts) into one chronological Collection per till scope
  * ('mine'|'all'), same as the Livewire component's own `rows()`/`render()`.
+ *
+ * Since the payment-method accounts refactor (24/08/2026) an employee's
+ * till holds ESPÈCES only, so every header figure of the 'mine' scope is a
+ * cash figure by construction (« Solde espèces »). Non-cash money lives in
+ * the centre's TPE/Chèque/Virement accounts, shown on the « Caisse globale »
+ * tab (GetCaisseGlobale) — never folded into the cash solde.
  */
 final class GetCaisseJournal
 {
@@ -47,7 +53,8 @@ final class GetCaisseJournal
     /**
      * @return array{
      *     caissesInScope: Collection<int, array{id:int, nom:string}>,
-     *     totalEncaissements: string, totalDepenses: string, solde: string,
+     *     totalEncaissements: string, encaissementsParMethode: array<string, string>,
+     *     totalDepenses: string, solde: string,
      *     totauxParType: array<string, string>, total: int, lastPage: int,
      *     page: int, rows: Collection<int, array<string, mixed>>,
      * }
@@ -88,10 +95,22 @@ final class GetCaisseJournal
         //    avance already counted once (AppliquerAvance never credits);
         //  - a pending/refused dépense never debited anything (approval flow);
         //  - a pending/cancelled transfer never moved money (validation does).
-        $totalEncaissements = (float) Encaissement::query()
-            ->whereIn('caisse_id', $ids)
+        // « Encaissements » = everything the till owner(s) COLLECTED, whatever
+        // the method (24/08/2026): a TPE/chèque/virement payment recorded by
+        // the cashier is their work even though it lands in the centre's
+        // method account, not their till. Broken down per method so the
+        // cash part (the only one inside `solde`) stays visible.
+        $agentIds = Caisse::query()->whereIn('id', $ids)->whereNotNull('responsable_employee_id')->pluck('responsable_employee_id');
+        $parMethode = Encaissement::query()
+            ->selectRaw('methode, sum(montant) as total')
             ->whereNull('applied_from_encaissement_id')
-            ->sum('montant');
+            ->where(fn ($q) => $q->whereIn('caisse_id', $ids)->orWhereIn('agent_id', $agentIds))
+            ->groupBy('methode')
+            ->pluck('total', 'methode');
+        $encaissementsParMethode = collect(Encaissement::METHODES)
+            ->mapWithKeys(fn (string $m) => [$m => number_format((float) ($parMethode[$m] ?? 0), 2, '.', '')])
+            ->all();
+        $totalEncaissements = (float) $parMethode->sum();
         $totalDepenses = (float) Depense::query()
             ->whereIn('caisse_id', $ids)
             ->where('statut', Depense::STATUT_APPROUVEE)
@@ -115,6 +134,7 @@ final class GetCaisseJournal
             'caissesInScope' => Caisse::query()->whereIn('id', $ids)->with('responsable')->get()
                 ->map(fn (Caisse $c): array => ['id' => $c->id, 'nom' => $c->nom]),
             'totalEncaissements' => number_format($totalEncaissements, 2, '.', ''),
+            'encaissementsParMethode' => $encaissementsParMethode,
             'totalDepenses' => number_format($totalDepenses, 2, '.', ''),
             'totalRemboursements' => number_format($totalRemboursements, 2, '.', ''),
             'solde' => number_format($solde, 2, '.', ''),

@@ -909,5 +909,10 @@
     "This cheque has already been used to pay: its owner and identity can no longer change.": "Ce chèque a déjà servi à un paiement : son propriétaire et son identité ne peuvent plus être modifiés.",
     "This payment does not belong to the selected student.": "Ce paiement n'appartient pas à l'étudiant sélectionné.",
     "Only the requester or the recipient can cancel a transfer.": "Seul le demandeur ou le destinataire peut annuler un transfert.",
-    ":name is now the default academic year.": ":name est désormais l'année scolaire par défaut."
+    ":name is now the default academic year.": ":name est désormais l'année scolaire par défaut.",
+    "Unknown payment method.": "Méthode de paiement inconnue.",
+    "Select a centre in the top bar before recording a non-cash payment.": "Sélectionnez un centre dans la barre du haut avant d'enregistrer un paiement autre qu'en espèces.",
+    "A till transfer can only move cash between cash accounts.": "Un transfert de caisse ne peut déplacer que des espèces entre des caisses physiques.",
+    "The payment method of a recorded payment cannot be changed.": "La méthode d'un paiement enregistré ne peut plus être modifiée.",
+    "Only an external cash account can be deleted.": "Seul un compte externe peut être supprimé."
 }

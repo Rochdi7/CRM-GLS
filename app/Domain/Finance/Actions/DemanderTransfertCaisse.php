@@ -8,6 +8,7 @@ use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Models\Caisse;
 use App\Models\CaisseTransfer;
 use App\Models\Employee;
+use Illuminate\Validation\ValidationException;
 
 /**
  * REQUEST step of the two-step till transfer (structure doc §7).
@@ -21,6 +22,20 @@ final class DemanderTransfertCaisse
      */
     public function handle(array $data, Employee $requestedBy): CaisseTransfer
     {
+        // A transfer is PHYSICAL cash changing hands: both ends must be cash
+        // accounts (Caissière / Externe). The centre's TPE/Chèque/Virement
+        // accounts have no owner to validate a receipt and hold no banknotes
+        // — money reaches them only through a payment's method.
+        foreach (['caisse_source_id', 'caisse_destination_id'] as $field) {
+            $caisse = Caisse::query()->findOrFail((int) $data[$field]);
+
+            if (! $caisse->isEspeces()) {
+                throw ValidationException::withMessages([
+                    $field => __('A till transfer can only move cash between cash accounts.'),
+                ]);
+            }
+        }
+
         return CaisseTransfer::create([
             ...$data,
             'reference' => ReferenceGenerator::make('TRF', 'caisse_transfers'),

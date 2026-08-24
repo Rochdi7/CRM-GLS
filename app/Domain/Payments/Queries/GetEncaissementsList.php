@@ -51,6 +51,16 @@ final class GetEncaissementsList
             // edit modal's read-only "Reste à payer" figure.
             ->with(['fee' => fn ($q) => $q->withSum('encaissements', 'montant')])
             ->when($view === 'avance', fn ($q) => $q->withSum('applications', 'montant'))
+            // What has been given back on this payment (Remboursement.
+            // encaissement_id). A FULLY refunded payment is money that is no
+            // longer there, so it leaves the Paiements / Chèques tabs
+            // (24/08/2026) — the row itself is never deleted, it stays on the
+            // student page, the caisse journal and the audit trail. A partial
+            // refund keeps the row, with the refunded part shown.
+            ->withSum('remboursements as remboursements_total', 'montant')
+            ->when($view !== 'avance', fn ($q) => $q->whereRaw(
+                'coalesce((select sum(r.montant) from remboursements r where r.encaissement_id = encaissements.id), 0) < encaissements.montant',
+            ))
             // Centre of a payment = centre of the STUDENT it is for, never
             // the centre of the till it landed in. `encaissements` has no
             // etablissement_id precisely because "the centre is reached via
@@ -64,10 +74,16 @@ final class GetEncaissementsList
             // operator produced an empty Agadir Encaissements page while the
             // same rows showed on the student's inscription.
             ->whereHas('student', fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
-            ->when(
-                $this->context->etablissementId(),
-                fn ($q, $centreId) => $q->whereHas('student', fn ($s) => $s->where('etablissement_id', $centreId)),
-            )
+            // Active centre: the student's centre, OR the centre of the
+            // inscription the fee belongs to, OR a centre-less (global)
+            // student — such a student is visible in every centre
+            // (CenterAccessService treats NULL as global), so hiding their
+            // payments behind the switcher left the page empty for money
+            // that was just collected here (24/08/2026).
+            ->when($this->context->etablissementId(), fn ($q, $centreId) => $q->where(function ($w) use ($centreId): void {
+                $w->whereHas('student', fn ($s) => $s->where('etablissement_id', $centreId)->orWhereNull('etablissement_id'))
+                    ->orWhereHas('fee.inscription', fn ($i) => $i->where('etablissement_id', $centreId));
+            }))
             // Year of a payment = the academic year of the inscription its
             // fee belongs to (like the Inscriptions list). An avance has no
             // fee — and therefore no inscription — so it is matched by its
@@ -99,8 +115,12 @@ final class GetEncaissementsList
             ->when($view === '', fn ($q) => $q->whereNotNull('inscription_fee_id'))
             ->when($caisseFilter !== '', fn ($q) => $q->where('caisse_id', (int) $caisseFilter))
             ->when($methodeFilter !== '', fn ($q) => $q->where('methode', $methodeFilter))
-            ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_paiement', '>=', $dateFrom))
-            ->when($dateTo !== '', fn ($q) => $q->whereDate('date_paiement', '<=', $dateTo))
+            // `date_paiement` is a DATE column: a plain comparison keeps the
+            // index usable, whereas whereDate() wraps the column in a cast.
+            // Only well-formed Y-m-d values are applied (no PG type error on
+            // a tampered query string).
+            ->when(self::isIsoDate($dateFrom), fn ($q) => $q->where('date_paiement', '>=', $dateFrom))
+            ->when(self::isIsoDate($dateTo), fn ($q) => $q->where('date_paiement', '<=', $dateTo))
             ->when($referenceFilter !== '', fn ($q) => $q->where('reference', 'ilike', "%{$referenceFilter}%"))
             ->when($studentFilter !== '', fn ($q) => $q->where('student_id', (int) $studentFilter))
             ->when($numeroChequeFilter !== '', fn ($q) => $q->where('numero_cheque', 'ilike', "%{$numeroChequeFilter}%"))
@@ -115,8 +135,8 @@ final class GetEncaissementsList
                             ->orWhere('reference', 'ilike', $term));
                 });
             })
-            ->orderByDesc('date_paiement')
-            ->orderByDesc('created_at')
+            // Latest recorded first — the row just saved is always on top,
+            // whatever payment date was typed.
             ->orderByDesc('id')
             ->paginate($perPage)
             ->withQueryString();
@@ -139,6 +159,7 @@ final class GetEncaissementsList
                 'caisse' => $e->caisse?->nom,
                 'caisseId' => $e->caisse_id,
                 'montant' => number_format((float) $e->montant, 2, '.', ''),
+                'montantRembourse' => number_format((float) ($e->remboursements_total ?? 0), 2, '.', ''),
                 'methode' => $e->methode,
                 'datePaiement' => $e->date_paiement?->toDateString(),
                 'numeroCheque' => $e->numero_cheque,
@@ -178,8 +199,13 @@ final class GetEncaissementsList
                 $q->orWhereHas('encaissements.student', fn ($s) => $this->scopeStudentsToActiveCenter($s));
             })
             ->orderBy('nom')
-            ->get()
+            ->get(['id', 'nom'])
             ->map(fn (Caisse $c): array => ['id' => $c->id, 'nom' => $c->nom]);
+    }
+
+    private static function isIsoDate(string $value): bool
+    {
+        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) === 1 && strtotime($value) !== false;
     }
 
     /**
@@ -191,7 +217,11 @@ final class GetEncaissementsList
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
             ->orderBy('nom')
-            ->get()
+            ->orderBy('prenom')
+            // Only the three columns the option needs — this list is every
+            // student of the centre, so hydrating full rows (photo, phones,
+            // parent fields…) was pure waste.
+            ->get(['id', 'nom', 'prenom'])
             ->map(fn (Student $s): array => ['id' => $s->id, 'nom' => $s->nomComplet()]);
     }
 

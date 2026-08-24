@@ -4,11 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domain\Reports\Actions;
 
-use App\Models\Depense;
-use App\Models\Encaissement;
-use App\Models\InscriptionFee;
 use App\Services\Context\CurrentContext;
-use Illuminate\Support\Carbon;
+use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Facades\DB;
 
 /**
  * "Résumé des frais annuels" dashboard chart — 12 monthly points for the
@@ -28,6 +26,13 @@ use Illuminate\Support\Carbon;
  * GetDashboardStats); NOT scoped by academic year — the chart is a fixed
  * calendar-year view with its own year selector, independent of the top-bar
  * année scolaire switcher.
+ *
+ * Performance (24/08/2026): every series is ONE PostgreSQL GROUP BY month
+ * aggregate — 4 queries total, whatever the data volume. The previous
+ * version hydrated every fee of the year and called
+ * InscriptionFee::montantPaye() per row (one SUM query each), so the
+ * dashboard cost grew linearly with the number of fees (thousands of
+ * queries on a production centre). Never reintroduce per-row PHP loops here.
  */
 final class GetAnnualFraisSummary
 {
@@ -48,52 +53,52 @@ final class GetAnnualFraisSummary
     public function __invoke(int $year): array
     {
         $centreId = $this->context->etablissementId();
+        $range = ["{$year}-01-01", "{$year}-12-31"];
 
-        $chiffreAffaire = array_fill(1, 12, 0.0);
-        $collecte = array_fill(1, 12, 0.0);
-        $depenses = array_fill(1, 12, 0.0);
-        $encaissements = array_fill(1, 12, 0.0);
+        // Chiffre d'affaire — fees due in the year, grouped by due month.
+        $chiffreAffaire = $this->byMonth(
+            DB::table('inscription_fees')
+                ->whereNotNull('date_echeance')
+                ->whereBetween('date_echeance', $range)
+                ->when($centreId, fn (Builder $q) => $this->scopeFeesToCenter($q, 'inscription_fees', $centreId)),
+            'date_echeance',
+        );
 
-        // Chiffre d'affaire + Collecté — one pass over the year's due fees,
-        // each fee's own montantPaye() (never a cached column) same as
-        // GetRetardsList/GetInscriptionUnpaidFees.
-        InscriptionFee::query()
-            ->with('encaissements')
-            ->whereNotNull('date_echeance')
-            ->whereBetween('date_echeance', ["{$year}-01-01", "{$year}-12-31"])
-            ->when($centreId, fn ($q) => $q->whereHas(
-                'inscription',
-                fn ($q) => $q->where(fn ($q) => $q->whereNull('etablissement_id')->orWhere('etablissement_id', $centreId)),
-            ))
-            ->get()
-            ->each(function (InscriptionFee $fee) use (&$chiffreAffaire, &$collecte): void {
-                $month = (int) Carbon::parse($fee->date_echeance)->month;
-                $chiffreAffaire[$month] += (float) $fee->montant;
-                $collecte[$month] += $fee->montantPaye();
-            });
+        // Collecté — payments settling those SAME fees, grouped by the FEE's
+        // due month (not the payment month): the exact per-fee montantPaye()
+        // semantics, computed in one aggregate instead of one query per fee.
+        $collecte = $this->byMonth(
+            DB::table('encaissements')
+                ->join('inscription_fees', 'inscription_fees.id', '=', 'encaissements.inscription_fee_id')
+                ->whereNotNull('inscription_fees.date_echeance')
+                ->whereBetween('inscription_fees.date_echeance', $range)
+                ->when($centreId, fn (Builder $q) => $this->scopeFeesToCenter($q, 'inscription_fees', $centreId)),
+            'inscription_fees.date_echeance',
+            'encaissements.montant',
+        );
 
         // Dépenses — by date_depense, center via the till.
-        Depense::query()
-            ->whereBetween('date_depense', ["{$year}-01-01", "{$year}-12-31"])
-            ->when($centreId, fn ($q) => $q->whereHas('caisse', fn ($c) => $c->where('etablissement_id', $centreId)))
-            ->selectRaw('date_depense, montant')
-            ->get()
-            ->each(function ($row) use (&$depenses): void {
-                $month = (int) Carbon::parse($row->date_depense)->month;
-                $depenses[$month] += (float) $row->montant;
-            });
+        $depenses = $this->byMonth(
+            DB::table('depenses')
+                ->whereBetween('date_depense', $range)
+                ->when($centreId, fn (Builder $q) => $q->whereIn(
+                    'caisse_id',
+                    DB::table('caisses')->select('id')->where('etablissement_id', $centreId),
+                )),
+            'date_depense',
+        );
 
         // Encaissements — ALL payments received that month, by date_paiement,
-        // center via the till (same scoping as GetDashboardStats::paymentsMonth).
-        Encaissement::query()
-            ->whereBetween('date_paiement', ["{$year}-01-01", "{$year}-12-31"])
-            ->when($centreId, fn ($q) => $q->whereHas('caisse', fn ($c) => $c->where('etablissement_id', $centreId)))
-            ->selectRaw('date_paiement, montant')
-            ->get()
-            ->each(function ($row) use (&$encaissements): void {
-                $month = (int) Carbon::parse($row->date_paiement)->month;
-                $encaissements[$month] += (float) $row->montant;
-            });
+        // center via the till (same scoping as the previous implementation).
+        $encaissements = $this->byMonth(
+            DB::table('encaissements')
+                ->whereBetween('date_paiement', $range)
+                ->when($centreId, fn (Builder $q) => $q->whereIn(
+                    'caisse_id',
+                    DB::table('caisses')->select('id')->where('etablissement_id', $centreId),
+                )),
+            'date_paiement',
+        );
 
         $months = [];
         $caOut = [];
@@ -124,28 +129,66 @@ final class GetAnnualFraisSummary
         ];
     }
 
-    /** Years offered in the selector — every year with at least one due fee or expense, always including the current year. */
+    /**
+     * Years offered in the selector — every year with at least one due fee,
+     * always including the current year. One DISTINCT aggregate, never a
+     * full-table hydration.
+     *
+     * @return list<int>
+     */
     public function availableYears(): array
     {
         $centreId = $this->context->etablissementId();
 
-        // Cast to a plain Support\Collection via ->all() first — an Eloquent
-        // Collection's unique()/getDictionary() assume model items and break
-        // once ->map() has replaced them with plain ints.
-        $fromFees = collect(
-            InscriptionFee::query()
-                ->whereNotNull('date_echeance')
-                ->when($centreId, fn ($q) => $q->whereHas(
-                    'inscription',
-                    fn ($q) => $q->where(fn ($q) => $q->whereNull('etablissement_id')->orWhere('etablissement_id', $centreId)),
-                ))
-                ->selectRaw('date_echeance')
-                ->get()
-                ->all(),
-        )->map(fn ($row) => (int) Carbon::parse($row->date_echeance)->year);
+        $fromFees = DB::table('inscription_fees')
+            ->whereNotNull('date_echeance')
+            ->when($centreId, fn (Builder $q) => $this->scopeFeesToCenter($q, 'inscription_fees', $centreId))
+            ->selectRaw('DISTINCT EXTRACT(YEAR FROM date_echeance)::int AS annee')
+            ->pluck('annee')
+            ->map(fn ($y) => (int) $y);
 
-        $years = $fromFees->push((int) now()->year)->unique()->sortDesc()->values()->all();
+        return $fromFees->push((int) now()->year)->unique()->sortDesc()->values()->all();
+    }
 
-        return $years;
+    /**
+     * SUM($amountColumn) grouped by the calendar month of $dateColumn, as a
+     * 1..12 array (months without rows read 0.0).
+     *
+     * @return array<int, float>
+     */
+    private function byMonth(Builder $query, string $dateColumn, string $amountColumn = 'montant'): array
+    {
+        $out = array_fill(1, 12, 0.0);
+
+        $rows = $query
+            ->selectRaw("EXTRACT(MONTH FROM {$dateColumn})::int AS mois, COALESCE(SUM({$amountColumn}), 0) AS total")
+            ->groupByRaw("EXTRACT(MONTH FROM {$dateColumn})")
+            ->get();
+
+        foreach ($rows as $row) {
+            $month = (int) $row->mois;
+
+            if ($month >= 1 && $month <= 12) {
+                $out[$month] = (float) $row->total;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Fees belong to the active centre through their inscription (NULL-centre
+     * inscriptions are global — same rule as before).
+     */
+    private function scopeFeesToCenter(Builder $query, string $feesTable, int $centreId): Builder
+    {
+        return $query->whereExists(function (Builder $sub) use ($feesTable, $centreId): void {
+            $sub->selectRaw('1')
+                ->from('inscriptions')
+                ->whereColumn('inscriptions.id', "{$feesTable}.inscription_id")
+                ->where(fn (Builder $w) => $w
+                    ->whereNull('inscriptions.etablissement_id')
+                    ->orWhere('inscriptions.etablissement_id', $centreId));
+        });
     }
 }

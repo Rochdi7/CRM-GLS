@@ -6,6 +6,12 @@ interface PaginationProps<T> {
     paginator: PaginatedData<T>;
     /** Extra query params to preserve (filters) when clicking a page link. */
     preserveScroll?: boolean;
+    /**
+     * Inertia partial-reload prop list. When a page's heavy props are
+     * closures server-side (option catalogs, stats), passing e.g.
+     * `['rows', 'filters']` makes a page change recompute only those.
+     */
+    only?: string[];
 }
 
 const LABEL_MAP: Record<string, string> = {
@@ -33,7 +39,7 @@ function formatTotal(total: number): string {
  * Inertia router.get (not raw <a href>) so filters already in the URL are
  * preserved and the page never fully reloads.
  */
-export default function Pagination<T>({ paginator, preserveScroll = true }: PaginationProps<T>) {
+export default function Pagination<T>({ paginator, preserveScroll = true, only }: PaginationProps<T>) {
     function visit(url: string | null) {
         if (!url) {
             return;
@@ -46,6 +52,7 @@ export default function Pagination<T>({ paginator, preserveScroll = true }: Pagi
                 preserveScroll,
                 preserveState: true,
                 replace: true,
+                ...(only ? { only } : {}),
             },
         );
     }

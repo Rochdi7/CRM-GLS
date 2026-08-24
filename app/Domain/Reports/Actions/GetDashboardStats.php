@@ -85,24 +85,50 @@ final class GetDashboardStats
             ->when($anneeRange, fn ($q, $r) => $q->whereBetween('date_depense', $r))
             ->when($centreId, fn ($q) => $q->whereHas('caisse', fn ($c) => $c->where('etablissement_id', $centreId)));
 
+        // One aggregate query per table (PostgreSQL `COUNT(*) FILTER (WHERE …)`)
+        // instead of one COUNT round-trip per card — the row set is scanned
+        // once and every conditional total falls out of the same pass.
+        $students = $studentsQuery->selectRaw(
+            'COUNT(*) AS total, COUNT(*) FILTER (WHERE parent_nom IS NOT NULL) AS parents',
+        )->toBase()->first();
+
+        $employees = $employeesQuery->selectRaw(
+            'COUNT(*) AS total, COUNT(*) FILTER (WHERE statut = ?) AS actifs, COUNT(*) FILTER (WHERE categorie = ?) AS enseignants',
+            [Employee::STATUT_ACTIF, Employee::CATEGORIE_ENSEIGNANT],
+        )->toBase()->first();
+
+        $groups = $groupsQuery->selectRaw(
+            'COUNT(*) AS total, COUNT(*) FILTER (WHERE statut = ?) AS en_formation',
+            [Group::STATUT_EN_FORMATION],
+        )->toBase()->first();
+
+        $inscriptions = $inscriptionsQuery->selectRaw(
+            'COUNT(*) AS total, COUNT(*) FILTER (WHERE statut = ?) AS actives, COUNT(*) FILTER (WHERE statut = ?) AS annulees, COUNT(*) FILTER (WHERE statut = ?) AS changement',
+            [Inscription::STATUT_ACTIVE, Inscription::STATUT_ANNULEE, Inscription::STATUT_CHANGEMENT],
+        )->toBase()->first();
+
+        $depenses = $depensesMonthQuery->selectRaw(
+            'COALESCE(SUM(montant), 0) AS total, COUNT(*) AS nb',
+        )->toBase()->first();
+
         return new DashboardStatsData(
-            studentsTotal: (clone $studentsQuery)->count(),
-            employeesTotal: (clone $employeesQuery)->count(),
-            employeesActive: (clone $employeesQuery)->where('statut', Employee::STATUT_ACTIF)->count(),
-            enseignantsTotal: (clone $employeesQuery)->where('categorie', Employee::CATEGORIE_ENSEIGNANT)->count(),
+            studentsTotal: (int) $students->total,
+            employeesTotal: (int) $employees->total,
+            employeesActive: (int) $employees->actifs,
+            enseignantsTotal: (int) $employees->enseignants,
             // No separate "parents" table by design (Student::parent_nom
             // lives inline, gls-crm-schema.md §5) — a "parent" is any
             // student with a guardian actually recorded.
-            parentsTotal: (clone $studentsQuery)->whereNotNull('parent_nom')->count(),
-            groupsTotal: (clone $groupsQuery)->count(),
-            groupsEnFormation: (clone $groupsQuery)->where('statut', Group::STATUT_EN_FORMATION)->count(),
-            inscriptionsTotal: (clone $inscriptionsQuery)->count(),
-            inscriptionsActives: (clone $inscriptionsQuery)->where('statut', Inscription::STATUT_ACTIVE)->count(),
-            inscriptionsAnnulees: (clone $inscriptionsQuery)->where('statut', Inscription::STATUT_ANNULEE)->count(),
-            inscriptionsChangement: (clone $inscriptionsQuery)->where('statut', Inscription::STATUT_CHANGEMENT)->count(),
+            parentsTotal: (int) $students->parents,
+            groupsTotal: (int) $groups->total,
+            groupsEnFormation: (int) $groups->en_formation,
+            inscriptionsTotal: (int) $inscriptions->total,
+            inscriptionsActives: (int) $inscriptions->actives,
+            inscriptionsAnnulees: (int) $inscriptions->annulees,
+            inscriptionsChangement: (int) $inscriptions->changement,
             paymentsMonth: (float) $paymentsMonth,
-            depensesMonth: (float) (clone $depensesMonthQuery)->sum('montant'),
-            depensesMonthCount: (clone $depensesMonthQuery)->count(),
+            depensesMonth: (float) $depenses->total,
+            depensesMonthCount: (int) $depenses->nb,
             anneeLabel: $context->anneeScolaire()?->nom,
             centreLabel: $context->isAllCenters() ? __('All centers') : $context->etablissement()?->nom_centre,
         );

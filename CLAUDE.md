@@ -297,6 +297,38 @@ the database layer. Non-negotiable invariants already enforced in code:
   replaced. The ledger records solde avant → montant → solde après plus the
   source record, and transfers must journal BOTH legs. See
   `docs/audit-journal.md` §5b.
+- **One dirham = one `caisses` row — payment-method accounts per centre**
+  (24/08/2026, `docs/caisse-comptes-methode-architecture.md`). `Caisse::TYPES`
+  = Caissière / Externe (physical CASH) + TPE / Chèque / Virement (ONE account
+  per centre, `etablissement_id` NOT NULL, no responsable — partial unique
+  index + CHECK in PostgreSQL). Provisioned with the centre
+  (`EtablissementObserver` → `CaisseProvisioner::compteMethodeFor()`), never
+  by hand. Which row a record lands in is decided ONLY by
+  `Domain\Finance\Support\CaisseResolver`:
+  - **encaissement**: Espèces → the cashier's own till; TPE/Chèque/Virement →
+    the ACTIVE-CONTEXT centre's account for that method (fallback: the
+    agent's primary centre; the legacy import passes its batch centre). The
+    physical till NEVER moves for a non-cash payment.
+  - **dépense / remboursement**: ALWAYS the acting employee's physical till
+    (`CaisseResolver::tillOf()`), whatever `methode_paiement` says — cash
+    settles them (accounting rule confirmed 24/08/2026). Never route these
+    by method. ONE exception, `CaisseResolver::forRemboursement()`: a refund
+    linked to a payment funded by a chèque now **Rejeté** reverses the
+    centre's Chèque account (that money never reached the till).
+  - **transfers** move cash between cash accounts only
+    (`DemanderTransfertCaisse` / `ValiderTransfertCaisse` refuse a method
+    account; `caisseOptions()` never offers one).
+  `caisse_id` is stored on the row and immutable, so cancellation / approval /
+  avance application reverse or follow the SAME account with no re-derivation.
+  **`encaissements.methode` is frozen after creation** like `montant`/
+  `caisse_id` (`EncaissementController@update` refuses a different value).
+  Nothing is derived on top of stored balances any more (the old
+  `GetComptesCaisse::DERIVED_TYPES` counted a TPE payment twice) — never
+  reintroduce a live-aggregated "account". Historical non-cash rows still in a
+  till are re-homed by `php artisan caisse:recalculer-soldes` (dry-run by
+  default, `--apply`, both legs journaled through `CaisseLedger`; refuses
+  ambiguous rows unless `--ambiguous=caisse|student`). Never run it on
+  production without reading its dry-run output first. Tests: `tests/Feature/Backoffice/Finance/ComptesMethodeTest.php`.
 - **Till transfers are two-step and RECIPIENT-validated**: request (balances
   untouched) → acceptance by the **employee who owns the DESTINATION till**
   (balances move). The person whose caisse is about to be credited is the only
@@ -990,6 +1022,21 @@ collections, and PHP-side sorting/merging — see `PERFORMANCE_AUDIT.md`,
 terminology like "Livewire renders"/"Select2 option lists" in their own
 historical measurements — read them as a record of what was measured then,
 not as current-state facts).
+
+**Read models never call a per-row money accessor in a loop** (24/08/2026
+pass): `InscriptionFee::montantPaye()`, `Encaissement::montantUtilise()`/
+`montantRestant()` and `Cheque::montantRestant()` each run their own `SUM`
+query and exist for the money ACTIONS (one locked row). A list/report that
+needs the paid total uses `withSum('encaissements', 'montant')` or a
+`GROUP BY` aggregate (`GetAnnualFraisSummary`, `GetRetardsList`,
+`GetEncaissementsList`) — the dashboard once ran one query per fee of the
+year. Heavy page props (option catalogs, stats) are closures so partial
+reloads (`only: [...]`) skip them — `DashboardController`,
+`EncaissementController@index`. Guarded by
+`tests/Feature/Backoffice/Inertia/DashboardPerformanceTest.php` and
+`tests/Feature/Backoffice/Finance/ListPerformanceTest.php` (query count must
+not grow with row count). Server-side tuning (Redis cache/sessions, OPcache,
+FPM, gzip, PostgreSQL memory) is `docs/vps-performance-tuning.md`.
 
 The known remaining bottleneck is `CaisseController::journal()`
 (`app/Http/Controllers/Backoffice/CaisseController.php`, the Inertia

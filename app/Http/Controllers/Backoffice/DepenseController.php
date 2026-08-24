@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Expenses\Actions\ApprouverDepense;
 use App\Domain\Expenses\Actions\EnregistrerDepense;
+use App\Domain\Finance\Support\CaisseResolver;
 use App\Domain\Expenses\Actions\RefuserDepense;
 use App\Domain\Expenses\Queries\GetDepenseDetails;
 use App\Domain\Expenses\Queries\GetDepensesList;
@@ -146,11 +147,13 @@ final class DepenseController extends Controller
             $this->assertGroupInContext($request, Group::findOrFail((int) $request->validated('group_id')));
         }
 
-        // The till is ALWAYS the acting employee's own caisse — never chosen
-        // client-side (the modal shows no caisse field). Same self-heal as
-        // EncaissementController::store() for pre-provisioner accounts.
-        $caisse = $employee->caisses()->first()
-            ?? app(\App\Services\CaisseProvisioner::class)->provisionFor($employee);
+        // A dépense is ALWAYS debited from the acting employee's own physical
+        // till — never chosen client-side, and NOT routed by
+        // `methode_paiement` (that field is descriptive only: the till is
+        // what settles an expense, accounting rule confirmed 24/08/2026).
+        // Same self-heal as EncaissementController for pre-provisioner
+        // accounts.
+        $caisse = app(CaisseResolver::class)->tillOf($employee);
 
         $payload = collect($request->validated())
             ->except(['justificatifs'])

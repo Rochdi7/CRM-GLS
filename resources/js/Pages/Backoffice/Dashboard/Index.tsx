@@ -18,10 +18,12 @@ export default function DashboardIndex({ stats, annualFrais, annualFraisYear, an
     const { auth } = usePage<SharedProps>().props;
 
     function changeYear(year: number) {
+        // Partial reload — only the chart is recomputed server-side; the KPI
+        // cards and the calendar are untouched by a year change.
         router.get(
             '/backoffice/dashboard',
             { year, calMonth: seancesCalendar.month },
-            { preserveState: true, preserveScroll: true, replace: true },
+            { preserveState: true, preserveScroll: true, replace: true, only: ['annualFrais', 'annualFraisYear'] },
         );
     }
 

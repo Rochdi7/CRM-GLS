@@ -133,11 +133,17 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
     const applyForm = useForm<ApplyAvanceFormState>({ inscription_id: '', fee_id: '', montant: '' });
     const emailForm = useForm<{ email: string }>({ email: '' });
 
+    // Partial reload: only the paginated rows + the echoed filters are
+    // recomputed; the option lists (caisses/students/banques — closures
+    // server-side) keep their first-visit values.
+    const RELOAD_ONLY = ['encaissements', 'filters'];
+
     function reload(nextFilters: Partial<typeof filters>) {
         router.get('/backoffice/encaissements', { ...filters, ...nextFilters, page: undefined }, {
             preserveState: true,
             preserveScroll: true,
             replace: true,
+            only: RELOAD_ONLY,
         });
     }
 
@@ -730,7 +736,12 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                         )}
                                         <td>{row.feeNom ?? '—'}</td>
                                         <td>{row.caisse ?? '—'}</td>
-                                        <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} MAD</td>
+                                        <td className="text-end fw-medium">
+                                            {Number(row.montant).toFixed(2)} MAD
+                                            {Number(row.montantRembourse) > 0 && (
+                                                <div className="text-danger fs-12">Remboursé : {Number(row.montantRembourse).toFixed(2)} MAD</div>
+                                            )}
+                                        </td>
                                         <td>
                                             <span className="badge badge-soft-info">{row.methode}</span>
                                         </td>
@@ -784,7 +795,7 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                 ))}
                             </DataTable>
                         )}
-                        <Pagination paginator={encaissements} />
+                        <Pagination paginator={encaissements} only={RELOAD_ONLY} />
                     </>
                 )}
             </Card>
@@ -1076,11 +1087,14 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                                 </div>
                             </div>
                             <div className="col-md-6">
+                                {/* Frozen with the row: the method decided which
+                                    account was credited (UpdateEncaissementRequest). */}
                                 <SelectField
                                     id="e-edit-methode"
                                     label="Méthode de paiement"
                                     options={methodeOptions}
                                     required
+                                    disabled
                                     value={editForm.data.methode}
                                     onChange={(e) => editForm.setData('methode', e.target.value)}
                                     error={editForm.errors.methode}

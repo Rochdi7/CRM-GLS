@@ -18,9 +18,10 @@ import FormActions from '@/Components/Forms/FormActions';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import ComptesPanel from '@/Pages/Backoffice/Caisses/ComptesPanel';
+import GlobalePanel from '@/Pages/Backoffice/Caisses/GlobalePanel';
 import type { CaissesPageProps, CaisseJournalData, CaisseTransferRow, SelectOption, SharedProps } from '@/Types';
 
-type Tab = 'ma-caisse' | 'transferts' | 'comptes';
+type Tab = 'ma-caisse' | 'transferts' | 'globale' | 'comptes';
 
 /**
  * No caisse_source_id: the source is ALWAYS the acting employee's own till,
@@ -89,8 +90,15 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
                                 <i className="ti ti-cash-banknote text-success fs-20" />
                             </span>
                             <div>
-                                <p className="mb-0 text-muted">Encaissments</p>
+                                <p className="mb-0 text-muted">Encaissements</p>
                                 <h5 className="mb-0 text-success">{Number(journal.totalEncaissements).toFixed(2)} DH</h5>
+                                {/* All methods; only Espèces is inside « Solde espèces ». */}
+                                <p className="mb-0 text-muted fs-12">
+                                    {Object.entries(journal.encaissementsParMethode)
+                                        .filter(([, v]) => Number(v) > 0)
+                                        .map(([m, v]) => `${m} ${Number(v).toFixed(2)}`)
+                                        .join(' · ') || '—'}
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -128,7 +136,7 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
                                 <i className="ti ti-currency-dollar text-primary fs-20" />
                             </span>
                             <div>
-                                <p className="mb-0 text-muted">Solde</p>
+                                <p className="mb-0 text-muted">Solde espèces</p>
                                 <h5 className="mb-0 text-primary">{Number(journal.solde).toFixed(2)} DH</h5>
                             </div>
                         </div>
@@ -264,6 +272,7 @@ export default function CaissesIndex({
     canViewTransfers,
     canViewComptes,
     journalMine,
+    globale,
     transfers,
     transferCaisses,
     transferStatuts,
@@ -280,6 +289,7 @@ export default function CaissesIndex({
     const availableTabs: Tab[] = [
         ...(canViewCaisses ? (['ma-caisse'] as Tab[]) : []),
         ...(canViewTransfers ? (['transferts'] as Tab[]) : []),
+        ...(canViewCaisses ? (['globale'] as Tab[]) : []),
         ...(canViewComptes ? (['comptes'] as Tab[]) : []),
     ];
     const requested = new URLSearchParams(window.location.search).get('tab') as Tab | null;
@@ -476,6 +486,14 @@ export default function CaissesIndex({
                         </button>
                     </li>
                 )}
+                {canViewCaisses && (
+                    <li className="nav-item">
+                        <button type="button" className={`nav-link${tab === 'globale' ? ' active' : ''}`} onClick={() => switchTab('globale')}>
+                            <i className="ti ti-world me-1" />
+                            Caisse globale
+                        </button>
+                    </li>
+                )}
                 {canViewComptes && (
                     <li className="nav-item">
                         <button type="button" className={`nav-link${tab === 'comptes' ? ' active' : ''}`} onClick={() => switchTab('comptes')}>
@@ -487,6 +505,8 @@ export default function CaissesIndex({
             </ul>
 
             {tab === 'ma-caisse' && canViewCaisses && journalMine && <JournalPanel scope="mine" data={journalMine} />}
+
+            {tab === 'globale' && canViewCaisses && globale && <GlobalePanel data={globale} />}
 
             {tab === 'transferts' && canViewTransfers && transfers && (
                 <Card bodyClassName="p-0 py-3">

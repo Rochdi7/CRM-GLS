@@ -1262,13 +1262,30 @@ export interface CaisseJournalRow {
     url: string | null;
 }
 
-/** GetCaisseJournal's full return shape for one scope ('mine'|'all'). */
+/** « Caisse globale » tab — mirrors GetCaisseGlobale exactly. */
+export interface CaisseGlobaleData {
+    /** One card per kind of account, in display order (Caissière, TPE, Virement, Chèque — Externe hidden for now). */
+    cards: Array<{ type: string; label: string; total: MoneyDisplay; count: number }>;
+    /** The accounts of each kind, keyed by Caisse type. */
+    comptes: Record<string, Array<{ id: number; nom: string; centre: string | null; responsable: string | null; solde: MoneyDisplay; showUrl: string }>>;
+    total: MoneyDisplay;
+}
+
+/**
+ * GetCaisseJournal's full return shape for one scope ('mine'|'all').
+ * Every header figure is a CASH figure: an employee's till holds Espèces
+ * only; non-cash money lives on the « Caisse globale » tab.
+ */
 export interface CaisseJournalData {
     caissesInScope: Array<{ id: number; nom: string }>;
+    /** Everything the till owner(s) collected, ALL methods — only the Espèces part is inside `solde`. */
     totalEncaissements: MoneyDisplay;
+    /** Breakdown of `totalEncaissements` keyed by method (Espèces / TPE / Chèque / Virement). */
+    encaissementsParMethode: Record<string, MoneyDisplay>;
     totalDepenses: MoneyDisplay;
     /** Refunds paid out of the till — a separate outflow from `totalDepenses`, never folded into it. */
     totalRemboursements: MoneyDisplay;
+    /** Solde espèces — the physical till(s) in scope, never cash + TPE + chèque + virement. */
     solde: MoneyDisplay;
     totauxParType: Record<string, MoneyDisplay>;
     total: number;
@@ -1311,30 +1328,25 @@ export interface CaisseTransferFormOption extends FinanceOption {
 
 /**
  * One row of the « Comptes de caisse » tab — mirrors GetComptesCaisse exactly.
- * Rows come in two natures, told apart by `derived`.
+ * Every row is a real `caisses` account with a stored, ledger-maintained solde.
  */
 export interface CompteCaisseRow {
-    /** null on derived rows: they are an aggregate of movements, not a record. */
-    id: number | null;
+    id: number;
     nom: string;
-    /** "Caissière" / "Externe" (stored) or "TPE" / "Chèque" / "Virement" (derived from the payment method). */
+    /** "Caissière" / "Externe" (cash) or "TPE" / "Chèque" / "Virement" (one per centre). */
     type: string;
     centre: string | null;
     responsable: string | null;
     encaissements: string;
     depenses: string;
-    /** Stored `caisses.solde` on real accounts; encaissements − dépenses on derived rows. */
+    /** Stored `caisses.solde`. */
     solde: string;
     statut: string;
-    /** created_at as dd/mm/yyyy — null on derived rows, which were never "added". */
+    /** created_at as dd/mm/yyyy. */
     dateAjout: string | null;
-    /**
-     * True for the TPE/Chèque/Virement rows aggregated live from the payment
-     * method. Those carry no id and get no row actions — there is nothing to
-     * open, edit or delete.
-     */
-    derived: boolean;
-    showUrl: string | null;
+    /** True for a centre's TPE/Chèque/Virement account — provisioned, never edited or deleted. */
+    compteMethode: boolean;
+    showUrl: string;
 }
 
 /**
@@ -1355,6 +1367,8 @@ export interface CaissesPageProps {
     /** « Comptes de caisse » tab — super-admin only (`cash-accounts.view` is in no role). */
     canViewComptes: boolean;
     journalMine: CaisseJournalData | null;
+    /** « Caisse globale » tab (cash-registers.view), computed only when that tab is active. */
+    globale: CaisseGlobaleData | null;
     transfers: PaginatedData<CaisseTransferRow> | null;
     transferStatutCounts: Record<string, number>;
     transferCaisses: CaisseTransferFormOption[];
@@ -1378,6 +1392,8 @@ export interface CaissesPageProps {
 export interface EncaissementRow {
     id: number;
     reference: string;
+    /** Part of this payment already given back (Remboursements linked to it). A fully refunded payment is not listed at all. */
+    montantRembourse: MoneyDisplay;
     student: string | null;
     /** Student matricule (ETU-… reference) — shown as "REF | NOM" in the edit modal. */
     studentRef: string | null;
