@@ -61,7 +61,11 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
     // Super-admin only: move the whole group (inscriptions, séances,
     // payments) to another année scolaire — same rows, same counts.
     const [showMoveYearModal, setShowMoveYearModal] = useState(false);
-    const moveYearForm = useForm({ annee_scolaire_id: '' as number | '' });
+    const moveYearForm = useForm({ annee_scolaire_id: '' as number | '', statut: '' });
+    const statutOptions: SelectOption[] = ['En inscription', 'En formation', 'Fin de formation', 'Annulée'].map((s) => ({
+        value: s,
+        label: s === group.statut ? `${s} (statut actuel)` : s,
+    }));
     const anneeOptions: SelectOption[] = (context?.availableAcademicYears ?? [])
         .filter((a) => a.id !== group.anneeScolaireId)
         .map((a) => ({ value: a.id, label: a.name }));
@@ -185,7 +189,7 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                                     className="btn btn-outline-primary d-flex align-items-center"
                                     onClick={() => {
                                         moveYearForm.clearErrors();
-                                        moveYearForm.setData('annee_scolaire_id', '');
+                                        moveYearForm.setData({ annee_scolaire_id: '', statut: '' });
                                         setShowMoveYearModal(true);
                                     }}
                                 >
@@ -509,6 +513,20 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                             moveYearForm.setData('annee_scolaire_id', e.target.value ? Number(e.target.value) : '')
                         }
                     />
+                    <SelectField
+                        id="move-year-statut"
+                        label="Statut du groupe dans la nouvelle année"
+                        placeholder="Conserver le statut actuel"
+                        options={statutOptions}
+                        value={moveYearForm.data.statut}
+                        error={moveYearForm.errors.statut}
+                        onChange={(e) => moveYearForm.setData('statut', e.target.value)}
+                    />
+                    <small className="text-muted d-block mb-3">
+                        « Fin de formation » et « Annulée » écrivent l&apos;historique du groupe comme les actions
+                        Terminer / Annuler habituelles. Un groupe déjà en « Fin de formation » ne peut plus changer de
+                        statut.
+                    </small>
                     <FormActions
                         submitLabel="Déplacer le groupe"
                         processing={moveYearForm.processing}

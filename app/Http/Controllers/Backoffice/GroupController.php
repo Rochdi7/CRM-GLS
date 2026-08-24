@@ -327,21 +327,65 @@ final class GroupController extends Controller
 
         $data = $request->validate([
             'annee_scolaire_id' => ['required', 'integer', 'exists:annees_scolaires,id'],
+            // Optional: the statut the group should carry in its new year.
+            // Applied through the sanctioned lifecycle transitions ONLY (see
+            // transitionnerStatut) — never a raw statut update (CLAUDE.md §11).
+            'statut' => ['nullable', 'string', \Illuminate\Validation\Rule::in(Group::STATUTS)],
         ]);
 
         $annee = AnneeScolaire::query()->findOrFail((int) $data['annee_scolaire_id']);
+        $statutCible = $data['statut'] ?? null;
 
-        if ((int) $group->annee_scolaire_id === $annee->id) {
+        if ((int) $group->annee_scolaire_id === $annee->id && ($statutCible === null || $statutCible === $group->statut)) {
             throw ValidationException::withMessages([
                 'annee_scolaire_id' => __('The group is already in this academic year.'),
             ]);
         }
 
-        $reaffecter->handle($group, $annee->id);
+        DB::transaction(function () use ($reaffecter, $group, $annee, $statutCible, $request): void {
+            if ((int) $group->annee_scolaire_id !== $annee->id) {
+                $reaffecter->handle($group, $annee->id);
+            }
+
+            if ($statutCible !== null && $statutCible !== $group->statut) {
+                $this->transitionnerStatut($group, $statutCible, $request->user()?->employee);
+            }
+        });
 
         return back()->with('success', __('Group moved to :annee with its registrations, sessions and payments.', [
             'annee' => $annee->nom,
         ]));
+    }
+
+    /**
+     * Reaches the requested statut from the current one using ONLY the
+     * model's own transitions (archiverCommeTermine / annuler write their
+     * groups_historique snapshot; activer / reactiver /
+     * retournerEnInscription are the sanctioned reversals). "Fin de
+     * formation" is final: nothing leaves it.
+     */
+    private function transitionnerStatut(Group $group, string $cible, ?\App\Models\Employee $par): void
+    {
+        if ($group->statut === Group::STATUT_FIN_FORMATION) {
+            throw ValidationException::withMessages([
+                'statut' => __('This group is "Fin de formation" — that status is final and cannot be changed.'),
+            ]);
+        }
+
+        match ($cible) {
+            Group::STATUT_FIN_FORMATION => $group->archiverCommeTermine($par),
+            Group::STATUT_ANNULEE => $group->annuler($par),
+            Group::STATUT_EN_INSCRIPTION => $group->statut === Group::STATUT_ANNULEE
+                ? $group->reactiver()
+                : $group->retournerEnInscription(),
+            Group::STATUT_EN_FORMATION => (function () use ($group): void {
+                if ($group->statut === Group::STATUT_ANNULEE) {
+                    $group->reactiver();
+                }
+                $group->activer();
+            })(),
+            default => throw ValidationException::withMessages(['statut' => __('Unknown status.')]),
+        };
     }
 
     public function archive(Request $request, Group $group): RedirectResponse

@@ -754,6 +754,8 @@
     "Registrations imported: :inserted added, :skipped skipped, :pending in conflict (batch #:batch). Now review the payments below.": "Inscriptions importées : :inserted ajoutées, :skipped ignorées, :pending en conflit (lot n°:batch). Vérifiez maintenant les paiements ci-dessous.",
     "The import stopped making progress — check the batch in Recent imports.": "L'import n'avance plus — consultez le lot dans « Imports récents ».",
     "The group is already in this academic year.": "Le groupe est déjà dans cette année scolaire.",
+    "This group is \"Fin de formation\" — that status is final and cannot be changed.": "Ce groupe est en « Fin de formation » — ce statut est définitif et ne peut plus être modifié.",
+    "Unknown status.": "Statut inconnu.",
     "Group moved to :annee with its registrations, sessions and payments.": "Groupe déplacé vers :annee avec ses inscriptions, séances et paiements.",
     "The mapped group belongs to another centre.": "Le groupe associé appartient à un autre centre.",
     "The student import stopped making progress — check the batch in Recent imports.": "L'import des étudiants n'avance plus — consultez le lot dans « Imports récents ».",

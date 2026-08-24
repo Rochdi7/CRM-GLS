@@ -135,6 +135,43 @@ final class GroupMoveYearTest extends TestCase
         );
     }
 
+    public function test_the_statut_can_change_with_the_move_through_the_sanctioned_transitions(): void
+    {
+        // En inscription → Annulée goes through Group::annuler() (writes the
+        // groups_historique snapshot like the row-menu "Annuler" action).
+        $this->group->update(['statut' => Group::STATUT_EN_INSCRIPTION]);
+
+        $this->actingAs($this->superAdmin())
+            ->post(route('backoffice.groups.move-year', $this->group), [
+                'annee_scolaire_id' => $this->vers->id,
+                'statut' => Group::STATUT_ANNULEE,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $group = $this->group->fresh();
+        $this->assertSame($this->vers->id, $group->annee_scolaire_id);
+        $this->assertSame(Group::STATUT_ANNULEE, $group->statut);
+        $this->assertSame(1, \App\Models\GroupHistorique::query()->where('group_id', $group->id)->count());
+    }
+
+    public function test_a_finished_group_never_leaves_fin_de_formation(): void
+    {
+        $this->group->archiverCommeTermine();
+
+        $this->actingAs($this->superAdmin())
+            ->from(route('backoffice.groups.show', $this->group))
+            ->post(route('backoffice.groups.move-year', $this->group), [
+                'annee_scolaire_id' => $this->vers->id,
+                'statut' => Group::STATUT_EN_FORMATION,
+            ])
+            ->assertSessionHasErrors(['statut']);
+
+        $group = $this->group->fresh();
+        $this->assertSame(Group::STATUT_FIN_FORMATION, $group->statut);
+        // The transaction rolled the year move back too — all or nothing.
+        $this->assertSame($this->de->id, $group->annee_scolaire_id);
+    }
+
     public function test_it_refuses_the_same_year(): void
     {
         $this->actingAs($this->superAdmin())
