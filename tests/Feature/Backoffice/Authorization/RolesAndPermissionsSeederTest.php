@@ -57,7 +57,11 @@ final class RolesAndPermissionsSeederTest extends TestCase
     {
         $director = Role::findByName('director');
         $this->assertTrue($director->hasPermissionTo('cash-transfers.validate'));
-        $this->assertTrue($director->hasPermissionTo('centers.access-all'));
+        // Center-scoped on purpose: a directeur sees the centers assigned to
+        // their employee record, never the whole network (the cross-center
+        // roles are operations/financial/quality director + accountant).
+        $this->assertFalse($director->hasPermissionTo('centers.access-all'));
+        $this->assertTrue(Role::findByName('operations-director')->hasPermissionTo('centers.access-all'));
         $this->assertTrue($director->hasPermissionTo('groups.archive'));
         $this->assertFalse($director->hasPermissionTo('roles.create'));
 

@@ -62,7 +62,7 @@ final class CenterAccessTest extends TestCase
     public function test_centers_access_all_opens_every_center(): void
     {
         $service = app(CenterAccessService::class);
-        $user = $this->userInCenterA('director'); // director has centers.access-all
+        $user = $this->userInCenterA('operations-director'); // holds centers.access-all (director is center-scoped)
 
         $this->assertTrue($service->canAccessCenter($user, $this->centerB->id));
     }
@@ -74,11 +74,11 @@ final class CenterAccessTest extends TestCase
         Student::factory()->create(['etablissement_id' => null]);
 
         $assistant = $this->userInCenterA('administrative-assistant');
-        $director = $this->userInCenterA('director');
+        $director = $this->userInCenterA('operations-director');
 
         $service = app(CenterAccessService::class);
 
-        // Assistant: own center + global rows. Director: everything.
+        // Assistant: own center + global rows. Operations director: everything.
         $this->assertSame(2, $service->scopeAccessibleCenters(Student::query(), $assistant)->count());
         $this->assertSame(3, $service->scopeAccessibleCenters(Student::query(), $director)->count());
     }

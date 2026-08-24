@@ -45,15 +45,29 @@ final class GetEncaissementsList
         string $numeroChequeFilter = '',
         string $banqueFilter = '',
     ): LengthAwarePaginator {
-        $accessibleCaisseIds = $this->caisseOptions($user)->pluck('id')->all();
-
         $encaissements = Encaissement::query()
             ->with(['student', 'fee.inscription', 'caisse', 'agent'])
             // Per-fee paid total, computed by the DB (no N+1): feeds the
             // edit modal's read-only "Reste à payer" figure.
             ->with(['fee' => fn ($q) => $q->withSum('encaissements', 'montant')])
             ->when($view === 'avance', fn ($q) => $q->withSum('applications', 'montant'))
-            ->whereIn('caisse_id', $accessibleCaisseIds)
+            // Centre of a payment = centre of the STUDENT it is for, never
+            // the centre of the till it landed in. `encaissements` has no
+            // etablissement_id precisely because "the centre is reached via
+            // student / inscription" (create_encaissements_table migration).
+            //
+            // Scoping by the till instead made every payment collected by an
+            // operator whose till lives in another centre invisible: the
+            // legacy import books each row into the mapped opérateur's own
+            // till (CaisseProvisioner puts it in that employee's PRIMARY
+            // centre), so an Agadir import done by a Marrakech-based
+            // operator produced an empty Agadir Encaissements page while the
+            // same rows showed on the student's inscription.
+            ->whereHas('student', fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+            ->when(
+                $this->context->etablissementId(),
+                fn ($q, $centreId) => $q->whereHas('student', fn ($s) => $s->where('etablissement_id', $centreId)),
+            )
             // Page view tabs (wimschool-style, read-only filters): "cheque" =
             // cheque payments; "avance" = unallocated advances — payments
             // with NO fee attached (Encaissement::isAvance()): fresh avances
@@ -139,7 +153,15 @@ final class GetEncaissementsList
     {
         return Caisse::query()
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
-            ->tap(fn ($q) => $this->scopeToActiveCenter($q))
+            ->where(function ($q): void {
+                $this->scopeToActiveCenter($q);
+
+                // The list is scoped by the student's centre, so it can show
+                // rows sitting in a till of another centre. Offering those
+                // tills here keeps the filter able to reach every displayed
+                // row instead of silently emptying the page.
+                $q->orWhereHas('encaissements.student', fn ($s) => $this->scopeStudentsToActiveCenter($s));
+            })
             ->orderBy('nom')
             ->get()
             ->map(fn (Caisse $c): array => ['id' => $c->id, 'nom' => $c->nom]);
@@ -175,6 +197,18 @@ final class GetEncaissementsList
                 'id' => $i->id,
                 'label' => $i->reference.' — '.($i->group?->nom ?? '—'),
             ]);
+    }
+
+    /** Active-centre scope on a `students` query (students always carry a centre). */
+    private function scopeStudentsToActiveCenter($query): void
+    {
+        $id = $this->context->etablissementId();
+
+        if ($id === null) {
+            return;
+        }
+
+        $query->where('etablissement_id', $id);
     }
 
     private function scopeToActiveCenter($query): void

@@ -44,13 +44,16 @@ final class GetDashboardStats
             ->when($anneeId, fn ($q) => $q->where('annee_scolaire_id', $anneeId))
             ->when($centreId, fn ($q) => $q->where('etablissement_id', $centreId));
 
-        // Payments this month, scoped by center via the till. A plain range
-        // comparison (not whereMonth/whereYear, which wrap the column in a
-        // SQL function) keeps the encaissements(caisse_id, date_paiement)
-        // index usable.
+        // Payments this month, scoped by center via the STUDENT — the same
+        // definition as the Encaissements list and EncaissementPolicy. Scoping
+        // through the till hid every payment collected by an operator whose
+        // till lives in another centre (legacy import), so the card read 0 DH
+        // for centres whose money was booked into a visiting operator's till.
+        // A plain range comparison (not whereMonth/whereYear, which wrap the
+        // column in a SQL function) keeps the date index usable.
         $paymentsMonth = Encaissement::query()
             ->whereBetween('date_paiement', [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()])
-            ->when($centreId, fn ($q) => $q->whereHas('caisse', fn ($c) => $c->where('etablissement_id', $centreId)))
+            ->when($centreId, fn ($q) => $q->whereHas('student', fn ($s) => $s->where('etablissement_id', $centreId)))
             ->sum('montant');
 
         // Dépenses this month — same range + till-based center scoping as

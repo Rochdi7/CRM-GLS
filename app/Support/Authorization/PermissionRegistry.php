@@ -444,9 +444,17 @@ final class PermissionRegistry
             // Runs a center end to end, plus the catalogs and the staff file.
             // Validates cash transfers into their own till (the recipient
             // rule still applies — CLAUDE.md 11) and reads the audit journal.
+            //
+            // ⚠ Deliberately NO centers.access-all: a directeur runs THEIR
+            // center(s) — the ones assigned on the employee form — not the
+            // whole network. With the grant, every branch director saw (and
+            // could edit) every other branch's students and money. The
+            // cross-center roles are operations-director / financial-
+            // director / accountant / quality-director; a director needing
+            // wider reach gets more centers assigned, or the permission is
+            // delegated by hand on the Autorisations screen.
             'director' => [
                 ...$operations,
-                'centers.access-all',
                 'academic-years.create', 'academic-years.update',
                 'rooms.create', 'rooms.update',
                 'fees.create', 'fees.update',

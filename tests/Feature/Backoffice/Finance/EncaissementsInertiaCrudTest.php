@@ -14,6 +14,7 @@ use App\Models\Inscription;
 use App\Models\InscriptionFee;
 use App\Models\Student;
 use App\Models\User;
+use App\Services\Context\CurrentContext;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -191,6 +192,49 @@ final class EncaissementsInertiaCrudTest extends TestCase
                 ->has('encaissements')
                 ->has('caisses')
                 ->has('students')
+            );
+    }
+
+    /**
+     * Legacy-import scenario: the money was booked into the till of an
+     * operator whose PRIMARY centre is another branch (CaisseProvisioner puts
+     * a till in the employee's primary centre). The payment's centre is its
+     * STUDENT's centre, so with the context switcher on the student's centre
+     * the row must appear — scoping the list by the till's centre is exactly
+     * the bug that emptied the Agadir Encaissements page.
+     */
+    public function test_index_lists_payment_held_in_another_centres_till_when_context_is_on_the_students_centre(): void
+    {
+        $user = $this->userWith('payments.view');
+        $agent = $user->employee;
+        [$student, , $fee] = $this->enrolledStudentWithFee(1000);
+
+        $otherCentre = Etablissement::factory()->create();
+        $foreignCaisse = Caisse::factory()->create(['etablissement_id' => $otherCentre->id]);
+
+        Encaissement::create([
+            'reference' => 'ENC-XTILL', 'agent_id' => $agent->id, 'student_id' => $student->id,
+            'inscription_fee_id' => $fee->id, 'caisse_id' => $foreignCaisse->id,
+            'montant' => 300, 'methode' => Encaissement::METHODE_ESPECES, 'date_paiement' => '2025-09-20',
+        ]);
+
+        // Context on the STUDENT's centre — the row must be there.
+        app(CurrentContext::class)->setEtablissement($this->centre->id);
+        $this->actingAs($user)
+            ->get(route('backoffice.encaissements.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('encaissements.data.0.reference', 'ENC-XTILL')
+            );
+
+        // Context on the TILL's centre — the payment belongs to the other
+        // centre's student, so it must NOT leak here.
+        app(CurrentContext::class)->setEtablissement($otherCentre->id);
+        $this->actingAs($user)
+            ->get(route('backoffice.encaissements.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('encaissements.data', [])
             );
     }
 

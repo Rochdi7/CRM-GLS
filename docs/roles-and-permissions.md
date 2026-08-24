@@ -165,7 +165,7 @@ keep the roles from drifting apart:
 | Role | Scope |
 |---|---|
 | `super-admin` | Everything via `Gate::before` (zero synced rows, by design) — and the only role that deletes. |
-| `director` | `$operations` + `centers.access-all`, catalogs (années, salles, frais, types), employés, `users.assign-roles`, `roles.view`, `cash-transfers.validate`, import, audit. |
+| `director` | `$operations` + catalogs (années, salles, frais, types), employés, `users.assign-roles`, `roles.view`, `cash-transfers.validate`, import, audit. **No** `centers.access-all` — scoped to the centers assigned on the employee form. |
 | `operations-director` | `$operations` + `centers.access-all`, salles/frais, employés (view+update), stock catalog, import, audit. |
 | `financial-director` | `$financeReadOnly` + all money create/update, caisses, `cash-transfers.validate`, `centers.access-all`, audit. |
 | `accountant` | Same money scope minus `cash-transfers.validate` and the caisse catalog — books entries, does not arbitrate them. |
