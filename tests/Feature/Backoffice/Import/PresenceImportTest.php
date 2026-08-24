@@ -408,7 +408,7 @@ final class PresenceImportTest extends TestCase
         $this->assertSame(ImportRow::STATUT_ECHEC_COMMIT, $row->fresh()->status);
     }
 
-    /** A group mapped to another centre's group is refused — the batch's scope is immutable. */
+    /** A group mapped to another CENTRE's group is refused up-front — the batch's centre is immutable. */
     public function test_a_group_outside_the_batch_scope_is_refused(): void
     {
         $this->makeStudent('HAMZA', 'AITHAMMANI');
@@ -419,20 +419,22 @@ final class PresenceImportTest extends TestCase
         ]);
         $user = $this->userWith('import.view', 'import.create');
 
-        $this->actingAs($user)->post(route('backoffice.import.presences.analyze'), [
+        $response = $this->actingAs($user)->post(route('backoffice.import.presences.analyze'), [
             'file' => $this->buildUpload([
                 ['HAMZA AITHAMMANI', 'Herr Driss 10H', 'allemand', '22/07/2026', '10:00 - 12:30', 'Présent', ''],
             ]),
             'etablissement_id' => $this->centre->id,
             'annee_scolaire_id' => $this->annee->id,
             'groupe_mapping' => [['label' => 'Herr Driss 10H', 'action' => 'map', 'group_id' => $foreignGroup->id]],
-        ])->assertSessionHasNoErrors();
+        ]);
 
-        $row = ImportBatch::query()->firstOrFail()->rows()->firstOrFail();
-
-        $this->assertSame(ImportRow::STATUT_CONFLIT, $row->status);
-        $this->assertSame('group_out_of_scope', $row->errors[0]['code']);
+        // Refused before any batch exists (the mapping step validates the
+        // centre now that other-YEAR groups are legitimately mappable).
+        $response->assertSessionHasErrors(['groupe_mapping']);
+        $this->assertSame(0, ImportBatch::query()->count());
         $this->assertSame(0, Seance::query()->count());
+        // And the foreign group was not re-affected to the batch's year.
+        $this->assertSame($this->annee->id, $foreignGroup->fresh()->annee_scolaire_id);
     }
 
     /**

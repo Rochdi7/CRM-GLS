@@ -749,6 +749,7 @@
     "This cheque does not belong to the selected student.": "Ce chèque n'appartient pas à l'étudiant sélectionné.",
     "This cheque has already been marked as returned.": "Ce chèque a déjà été marqué comme restitué.",
     "This employee has activity history and cannot be deleted. Deactivate instead.": "Cet employé a un historique d’activité et ne peut pas être supprimé. Désactivez-le plutôt.",
+    "The mapped group belongs to another centre.": "Le groupe associé appartient à un autre centre.",
     "This cash account carries movements — its centre can no longer be changed.": "Ce compte de caisse porte des mouvements — son centre ne peut plus être modifié.",
     "This expense has no supporting document.": "Cette dépense n'a aucune pièce justificative.",
     "This expense type is used by expenses and cannot be deleted.": "Ce type de dépense est utilisé par des dépenses et ne peut pas être supprimé.",

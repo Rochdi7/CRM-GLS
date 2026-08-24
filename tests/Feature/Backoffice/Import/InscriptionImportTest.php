@@ -258,7 +258,7 @@ final class InscriptionImportTest extends TestCase
         $this->assertSame(ImportRow::STATUT_DOUBLON, $rows[1]->status);
     }
 
-    public function test_peek_groupes_lists_distinct_labels_and_existing_groups_scoped_to_centre_annee(): void
+    public function test_peek_groupes_lists_the_centres_groups_from_every_year_labeled(): void
     {
         $user = $this->userWith('import.view', 'import.create');
         $group = Group::factory()->create([
@@ -266,17 +266,23 @@ final class InscriptionImportTest extends TestCase
             'etablissement_id' => $this->centre->id,
             'annee_scolaire_id' => $this->annee->id,
         ]);
-        // A same-named group in a different année must never be offered.
-        Group::factory()->create([
+        // A same-named group from another année IS offered, flagged with its
+        // year — mapping it re-affects it to the selected année (the fix for
+        // data split across two years). Another CENTRE's group never appears.
+        $otherYearGroup = Group::factory()->create([
             'nom' => 'GROUP 19H SEPTEMBRE',
             'etablissement_id' => $this->centre->id,
             'annee_scolaire_id' => $this->otherAnnee->id,
+        ]);
+        Group::factory()->create([
+            'nom' => 'GROUP 19H SEPTEMBRE',
+            'etablissement_id' => $this->otherCentre->id,
+            'annee_scolaire_id' => $this->annee->id,
         ]);
 
         $response = $this->actingAs($user)->post(route('backoffice.import.inscriptions.peek-groupes'), [
             'file' => $this->sampleUpload(),
             'etablissement_id' => $this->centre->id,
-            'annee_scolaire_id' => $this->annee->id,
         ]);
 
         $response->assertOk();
@@ -284,8 +290,12 @@ final class InscriptionImportTest extends TestCase
 
         $this->assertContains('Herr Driss 13h', $json['groupeLabels']);
         $this->assertContains('GROUP 19H SEPTEMBRE', $json['groupeLabels']);
-        $this->assertCount(1, $json['existingGroups']);
-        $this->assertSame($group->id, $json['existingGroups'][0]['id']);
+        $this->assertCount(2, $json['existingGroups']);
+
+        $byId = collect($json['existingGroups'])->keyBy('id');
+        $this->assertFalse($byId[$group->id]['horsAnnee']);
+        $this->assertTrue($byId[$otherYearGroup->id]['horsAnnee']);
+        $this->assertSame('2026/2027', $byId[$otherYearGroup->id]['anneeNom']);
     }
 
     public function test_analyze_maps_group_and_resolves_students_by_normalized_full_name(): void
@@ -636,6 +646,75 @@ final class InscriptionImportTest extends TestCase
         $batch = ImportBatch::query()->firstOrFail();
         $this->assertSame($this->centre->id, $batch->etablissement_id);
         $this->assertSame($this->annee->id, $batch->annee_scolaire_id);
+    }
+
+    public function test_mapping_a_group_from_another_year_reaffects_it_to_the_selected_year(): void
+    {
+        // The "half in one year, half in the other" split (24/08/2026): data
+        // previously imported under the WRONG année. Re-importing under the
+        // right one and mapping the file's label onto that existing group
+        // must MOVE the group + its inscriptions to the selected year and
+        // recognize the rows as already imported — never duplicate them.
+        $student = $this->makeStudent('HASNA', 'TIMOUN');
+        $group = Group::factory()->create([
+            'nom' => 'Herr Driss 13h',
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->otherAnnee->id,
+        ]);
+        $existing = Inscription::create([
+            'reference' => 'INS-EXIST-1',
+            'legacy_ref' => '111AB1',
+            'student_id' => $student->id,
+            'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->otherAnnee->id,
+            'statut' => Inscription::STATUT_ACTIVE,
+            'date_inscription' => '2026-01-15',
+        ]);
+
+        $user = $this->userWith('import.view', 'import.create');
+
+        $this->actingAs($user)->post(route('backoffice.import.inscriptions.analyze'), [
+            'file' => $this->buildUpload([
+                ['111AB1', 'HASNA TIMOUN', 'Herr Driss 13h', 'Active', '15/01/2026'],
+            ]),
+            'etablissement_id' => $this->centre->id,
+            'groupe_mapping' => [['label' => 'Herr Driss 13h', 'action' => 'map', 'group_id' => $group->id]],
+        ]);
+
+        // The mapped group and its existing inscription now live in the
+        // ACTIVE année — nothing left behind under the old one.
+        $this->assertSame($this->annee->id, $group->fresh()->annee_scolaire_id);
+        $this->assertSame($this->annee->id, $existing->fresh()->annee_scolaire_id);
+
+        // And the file's row is a recognized duplicate, not a re-insert.
+        $batch = ImportBatch::query()->firstOrFail();
+        $this->assertSame(ImportRow::STATUT_DOUBLON, $batch->rows()->firstOrFail()->status);
+        $this->assertSame(1, Inscription::query()->count());
+    }
+
+    public function test_mapping_refuses_a_group_from_another_centre(): void
+    {
+        $foreignGroup = Group::factory()->create([
+            'nom' => 'Groupe étranger',
+            'etablissement_id' => $this->otherCentre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $user = $this->userWith('import.view', 'import.create');
+
+        $response = $this->actingAs($user)->post(route('backoffice.import.inscriptions.analyze'), [
+            'file' => $this->buildUpload([
+                ['222CD2', 'HASNA TIMOUN', 'Groupe étranger', 'Active', '15/01/2026'],
+            ]),
+            'etablissement_id' => $this->centre->id,
+            'groupe_mapping' => [['label' => 'Groupe étranger', 'action' => 'map', 'group_id' => $foreignGroup->id]],
+        ]);
+
+        $response->assertSessionHasErrors(['groupe_mapping']);
+        $this->assertSame(0, ImportBatch::query()->count());
+        // The foreign group's year is untouched — no cross-centre move.
+        $this->assertSame($this->annee->id, $foreignGroup->fresh()->annee_scolaire_id);
     }
 
     public function test_preview_and_result_pages_render(): void

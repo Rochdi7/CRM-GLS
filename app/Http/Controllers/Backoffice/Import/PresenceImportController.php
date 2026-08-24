@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice\Import;
 
+use App\Domain\Groups\Actions\ReaffecterGroupeVersAnnee;
 use App\Http\Controllers\Backoffice\Concerns\ResolvesActingEmployee;
 use App\Http\Controllers\Backoffice\Import\Concerns\BuildsImportPreview;
 use App\Http\Controllers\Backoffice\Import\Concerns\ResolvesImportScope;
@@ -25,6 +26,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -63,13 +65,11 @@ final class PresenceImportController extends Controller
 
         $labels = $sheetReader->distinctColumnValues($request->file('file')->getRealPath(), 'Groupe');
 
-        $groups = Group::query()
-            ->where('etablissement_id', $etablissementId)
-            ->where('annee_scolaire_id', $anneeScolaireId)
-            ->orderBy('nom')
-            ->get(['id', 'nom']);
-
-        return response()->json(['groupeLabels' => $labels, 'existingGroups' => $groups, 'niveaux' => Group::NIVEAUX]);
+        return response()->json([
+            'groupeLabels' => $labels,
+            'existingGroups' => $this->existingGroupOptions($etablissementId, $anneeScolaireId),
+            'niveaux' => Group::NIVEAUX,
+        ]);
     }
 
     public function analyze(
@@ -176,11 +176,26 @@ final class PresenceImportController extends Controller
     private function resolveGroupeMapping(InscriptionImporter $groupCreator, array $mapping, int $etablissementId, int $anneeScolaireId): array
     {
         return DB::transaction(function () use ($groupCreator, $mapping, $etablissementId, $anneeScolaireId): array {
+            $reaffecter = app(ReaffecterGroupeVersAnnee::class);
             $resolved = [];
 
             foreach ($mapping as $entry) {
                 if ($entry['action'] === 'map') {
-                    $resolved[$entry['label']] = ['action' => 'map', 'group_id' => (int) $entry['group_id']];
+                    // Mapping onto a group from another année re-affects it
+                    // (with its inscriptions/séances) to the selected year —
+                    // same rule as the Inscriptions import, so one import
+                    // never leaves data split across two years.
+                    $group = Group::findOrFail((int) $entry['group_id']);
+
+                    if ((int) $group->etablissement_id !== $etablissementId) {
+                        throw ValidationException::withMessages([
+                            'groupe_mapping' => __('The mapped group belongs to another centre.'),
+                        ]);
+                    }
+
+                    $reaffecter->handle($group, $anneeScolaireId);
+
+                    $resolved[$entry['label']] = ['action' => 'map', 'group_id' => $group->id];
 
                     continue;
                 }
@@ -210,5 +225,27 @@ final class PresenceImportController extends Controller
         }
 
         return $query->get(['id', 'nom_centre']);
+    }
+
+    /**
+     * The centre's groups from EVERY année, labeled with their year — same
+     * options (and same re-affectation contract) as the Inscriptions import.
+     *
+     * @return \Illuminate\Support\Collection<int, array{id: int, nom: string, anneeNom: ?string, horsAnnee: bool}>
+     */
+    private function existingGroupOptions(int $etablissementId, int $anneeScolaireId)
+    {
+        return Group::query()
+            ->where('etablissement_id', $etablissementId)
+            ->with('anneeScolaire:id,nom')
+            ->orderBy('nom')
+            ->get(['id', 'nom', 'annee_scolaire_id'])
+            ->map(fn (Group $g): array => [
+                'id' => $g->id,
+                'nom' => $g->nom,
+                'anneeNom' => $g->anneeScolaire?->nom,
+                'horsAnnee' => (int) $g->annee_scolaire_id !== $anneeScolaireId,
+            ])
+            ->values();
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice\Import;
 
+use App\Domain\Groups\Actions\ReaffecterGroupeVersAnnee;
 use App\Http\Controllers\Backoffice\Concerns\ResolvesActingEmployee;
 use App\Http\Controllers\Backoffice\Import\Concerns\BuildsImportPreview;
 use App\Http\Controllers\Backoffice\Import\Concerns\ResolvesImportScope;
@@ -24,6 +25,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -56,13 +58,11 @@ final class InscriptionImportController extends Controller
 
         $labels = $sheetReader->distinctColumnValues($request->file('file')->getRealPath(), 'Groupe');
 
-        $groups = Group::query()
-            ->where('etablissement_id', $etablissementId)
-            ->where('annee_scolaire_id', $anneeScolaireId)
-            ->orderBy('nom')
-            ->get(['id', 'nom']);
-
-        return response()->json(['groupeLabels' => $labels, 'existingGroups' => $groups, 'niveaux' => Group::NIVEAUX]);
+        return response()->json([
+            'groupeLabels' => $labels,
+            'existingGroups' => $this->existingGroupOptions($etablissementId, $anneeScolaireId),
+            'niveaux' => Group::NIVEAUX,
+        ]);
     }
 
     public function analyze(AnalyzeInscriptionImportRequest $request, InscriptionImporter $importer, CenterAccessService $centerAccess): RedirectResponse
@@ -130,10 +130,43 @@ final class InscriptionImportController extends Controller
     }
 
     /**
+     * The mapping screen's "Groupe existant" options: the centre's groups
+     * from EVERY année, each labeled with its year. Mapping onto an
+     * other-year group re-affects it (with its inscriptions/séances) to the
+     * import's selected year — see resolveGroupeMapping. Restricting the
+     * list to the selected year forced the operator to CREATE a duplicate
+     * group whenever the data had been imported under the wrong year, which
+     * is how the data ended up split across two years.
+     *
+     * @return \Illuminate\Support\Collection<int, array{id: int, nom: string, anneeNom: ?string, horsAnnee: bool}>
+     */
+    private function existingGroupOptions(int $etablissementId, int $anneeScolaireId)
+    {
+        return Group::query()
+            ->where('etablissement_id', $etablissementId)
+            ->with('anneeScolaire:id,nom')
+            ->orderBy('nom')
+            ->get(['id', 'nom', 'annee_scolaire_id'])
+            ->map(fn (Group $g): array => [
+                'id' => $g->id,
+                'nom' => $g->nom,
+                'anneeNom' => $g->anneeScolaire?->nom,
+                'horsAnnee' => (int) $g->annee_scolaire_id !== $anneeScolaireId,
+            ])
+            ->values();
+    }
+
+    /**
      * Resolves the posted mapping choices into ImportContext's shape,
      * eagerly creating any "action: create" group (with its full
      * catalog-wide group_frais sync) right now so every row referencing
      * that label sees a consistent, already-resolved group_id.
+     *
+     * A "map" onto a group from ANOTHER année re-affects that group — with
+     * its inscriptions and séances — to the import's selected year
+     * (ReaffecterGroupeVersAnnee), so one import never leaves the same
+     * group's data split across two years. The group must belong to the
+     * batch's centre; a cross-centre id is refused.
      *
      * @param  array<int, array{label: string, action: string, group_id?: int, nom?: string, niveau?: string}>  $mapping
      * @return array<string, array{action: string, group_id?: int}>
@@ -141,11 +174,22 @@ final class InscriptionImportController extends Controller
     private function resolveGroupeMapping(InscriptionImporter $importer, array $mapping, int $etablissementId, int $anneeScolaireId): array
     {
         return DB::transaction(function () use ($importer, $mapping, $etablissementId, $anneeScolaireId): array {
+            $reaffecter = app(ReaffecterGroupeVersAnnee::class);
             $resolved = [];
 
             foreach ($mapping as $entry) {
                 if ($entry['action'] === 'map') {
-                    $resolved[$entry['label']] = ['action' => 'map', 'group_id' => (int) $entry['group_id']];
+                    $group = Group::findOrFail((int) $entry['group_id']);
+
+                    if ((int) $group->etablissement_id !== $etablissementId) {
+                        throw ValidationException::withMessages([
+                            'groupe_mapping' => __('The mapped group belongs to another centre.'),
+                        ]);
+                    }
+
+                    $reaffecter->handle($group, $anneeScolaireId);
+
+                    $resolved[$entry['label']] = ['action' => 'map', 'group_id' => $group->id];
 
                     continue;
                 }

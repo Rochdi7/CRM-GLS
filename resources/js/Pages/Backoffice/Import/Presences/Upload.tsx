@@ -13,6 +13,10 @@ interface PresenceImportUploadProps {
 interface ExistingGroup {
     id: number;
     nom: string;
+    /** The année scolaire the group currently belongs to. */
+    anneeNom: string | null;
+    /** True when that année differs from the import's selected one — mapping it re-affects the group (server-side). */
+    horsAnnee: boolean;
 }
 
 interface GroupeMappingEntry {
@@ -58,7 +62,11 @@ function buildMapping(labels: string[], groups: ExistingGroup[]): GroupeMappingE
 
     return labels.map((label) => {
         const matches = byKey.get(groupKey(label)) ?? [];
-        const unique = matches.length === 1 ? matches[0] : null;
+        // A same-year group wins; a lone other-year match is still selected —
+        // the server then re-affects it to the selected année (see the hint).
+        const sameYear = matches.filter((g) => !g.horsAnnee);
+        const unique =
+            sameYear.length === 1 ? sameYear[0] : sameYear.length === 0 && matches.length === 1 ? matches[0] : null;
 
         return {
             label,
@@ -68,6 +76,13 @@ function buildMapping(labels: string[], groups: ExistingGroup[]): GroupeMappingE
             niveau: '',
         };
     });
+}
+
+/** Option label: the year tag marks a group that will be re-affected to the selected année if mapped. */
+function groupOptionLabel(group: ExistingGroup, ambiguous: boolean): string {
+    const annee = group.horsAnnee && group.anneeNom ? ` — ${group.anneeNom}` : '';
+
+    return ambiguous ? `${group.nom}${annee} (#${group.id})` : `${group.nom}${annee}`;
 }
 
 /**
@@ -212,6 +227,11 @@ export default function PresenceImportUpload({ etablissements, centerLocked }: P
 
             {step === 'mapping' && (
                 <Card title="Associer les groupes">
+                    <div className="alert alert-info">
+                        Associer un groupe marqué d&apos;une autre année (ex. « — 2026/2027 ») le
+                        <strong> réaffecte automatiquement à l&apos;année sélectionnée</strong>, avec ses inscriptions
+                        et séances — rien ne reste réparti sur deux années.
+                    </div>
                     <form onSubmit={submitAnalyze}>
                         <table className="table">
                             <thead>
@@ -250,9 +270,7 @@ export default function PresenceImportUpload({ etablissements, centerLocked }: P
                                                         <option value="">Choisir…</option>
                                                         {existingGroups.map((g) => (
                                                             <option key={g.id} value={g.id}>
-                                                                {duplicateNames.has(groupKey(g.nom))
-                                                                    ? `${g.nom} (#${g.id})`
-                                                                    : g.nom}
+                                                                {groupOptionLabel(g, duplicateNames.has(groupKey(g.nom)))}
                                                             </option>
                                                         ))}
                                                     </select>
