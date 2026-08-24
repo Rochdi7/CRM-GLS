@@ -203,10 +203,35 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
         });
     }
 
+    // One click sends the receipt straight to the student's email when one
+    // is on file (the server queues the mail, so this returns instantly);
+    // the address prompt only appears for students with no email.
     function openEmailRecu(row: EncaissementRow) {
-        setEmailTarget(row);
         emailForm.clearErrors();
-        emailForm.setData('email', row.studentEmail ?? '');
+        const studentEmail = row.studentEmail?.trim() ?? '';
+
+        if (studentEmail !== '') {
+            // router.post with an explicit payload: useForm's setData is
+            // async state, so setData + post in the same tick posts stale data.
+            router.post(
+                row.recuEmailUrl,
+                { email: studentEmail },
+                {
+                    preserveScroll: true,
+                    // A server-side rejection (e.g. malformed stored email)
+                    // falls back to the prompt so the cashier can correct it.
+                    onError: (errors) => {
+                        emailForm.setData('email', studentEmail);
+                        emailForm.setError('email', errors.email ?? '');
+                        setEmailTarget(row);
+                    },
+                },
+            );
+            return;
+        }
+
+        emailForm.setData('email', '');
+        setEmailTarget(row);
     }
 
     function closeEmailModal() {

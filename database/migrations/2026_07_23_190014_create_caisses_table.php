@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /*
@@ -37,6 +38,31 @@ return new class extends Migration
             $table->index('responsable_employee_id', 'caisses_responsable_employee_id_idx');
             $table->index('type', 'caisses_type_idx');
         });
+
+        // Payment-method accounts per centre (TPE / Chèque / Virement — see
+        // docs/caisse-comptes-methode-architecture.md). Two PostgreSQL guards
+        // make "one dirham = one row" structural:
+        //  - a partial UNIQUE on (etablissement_id, type) for the three method
+        //    types — a centre can never hold two TPE accounts;
+        //  - a CHECK that a method account always belongs to a centre and never
+        //    to an employee (it is not somebody's till).
+        // Literals, not Caisse::TYPES_METHODE, for the same reason as above.
+        // The accounts themselves are provisioned with the centre
+        // (EtablissementObserver → CaisseProvisioner), never here.
+        DB::statement(<<<'SQL'
+            CREATE UNIQUE INDEX caisses_methode_par_centre_unique
+            ON caisses (etablissement_id, type)
+            WHERE type IN ('TPE', 'Chèque', 'Virement')
+        SQL);
+
+        DB::statement(<<<'SQL'
+            ALTER TABLE caisses
+            ADD CONSTRAINT caisses_compte_methode_centre_check
+            CHECK (
+                type NOT IN ('TPE', 'Chèque', 'Virement')
+                OR (etablissement_id IS NOT NULL AND responsable_employee_id IS NULL)
+            )
+        SQL);
     }
 
     public function down(): void

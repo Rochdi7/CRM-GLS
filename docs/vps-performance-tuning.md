@@ -21,8 +21,8 @@ Two independent causes were measured on 24/08/2026:
      now computed on the first visit only (closure props + partial
      reloads);
    - three date columns had no index (`encaissements.date_paiement`,
-     `inscription_fees.date_echeance`, `depenses.date_depense`) — added by
-     migration `2026_08_24_100000_add_date_indexes_for_reports`.
+     `inscription_fees.date_echeance`, `depenses.date_depense`) — now
+     declared in each table's `create_*` migration.
 2. **Fixed overhead on EVERY request** (server configuration — this
    document): sessions AND the cache live in PostgreSQL
    (`SESSION_DRIVER=database`, `CACHE_STORE=database`), so each page does a

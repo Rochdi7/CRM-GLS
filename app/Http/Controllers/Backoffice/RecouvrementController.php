@@ -26,8 +26,8 @@ final class RecouvrementController extends Controller
         $groupFilter = (string) $request->string('groupFilter');
         $fraisFilter = (string) $request->string('fraisFilter');
         $statutFilter = (string) $request->string('statutFilter');
-        $dateFrom = (string) $request->string('dateFrom');
-        $dateTo = (string) $request->string('dateTo');
+        $dateFrom = $request->has('dateFrom') ? (string) $request->string('dateFrom') : now()->subMonth()->toDateString();
+        $dateTo = $request->has('dateTo') ? (string) $request->string('dateTo') : now()->toDateString();
         $dureeBucket = (string) $request->string('dureeBucket');
         $perPage = (int) $request->integer('perPage', GetRetardsList::DEFAULT_PER_PAGE);
 

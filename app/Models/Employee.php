@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 use Spatie\MediaLibrary\MediaCollections\Models\Media;
@@ -270,9 +271,37 @@ class Employee extends Model implements HasMedia
         });
     }
 
+    /**
+     * EVERY account this employee is responsable of — the physical till
+     * provisioned for them plus any « Externe » safe an admin assigned to
+     * them from Comptes de caisse. Use it for "is this one of MY accounts?"
+     * checks (transfer validation, the Ma caisse journal scope). For "the
+     * till cash goes into / comes out of" use till(): picking `first()` of
+     * this relation gives an arbitrary account once a second one exists.
+     */
     public function caisses(): HasMany
     {
         return $this->hasMany(Caisse::class, 'responsable_employee_id');
+    }
+
+    /**
+     * The employee's PHYSICAL till (type « Caissière ») — the ONE account
+     * every Espèces payment credits and every dépense / remboursement /
+     * transfer request debits (CaisseResolver::tillOf).
+     *
+     * Filtered on the type and ordered by id on purpose (audit 24/08/2026):
+     * `caisses()->first()` had no filter and no ordering, so an employee
+     * made responsable of an « Externe » safe could see their cash routed
+     * into the safe instead of their till, and two Caissière rows (pre-
+     * provisioner data) were picked non-deterministically. The partial
+     * unique index `caisses_une_caissiere_par_employe` now guarantees at
+     * most one row matches.
+     */
+    public function till(): HasOne
+    {
+        return $this->hasOne(Caisse::class, 'responsable_employee_id')
+            ->where('type', Caisse::TYPE_CAISSIERE)
+            ->orderBy('id');
     }
 
     public function encaissements(): HasMany

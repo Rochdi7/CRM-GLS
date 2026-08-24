@@ -89,11 +89,18 @@ final class CaisseResolver
         return $this->tillOf($agent);
     }
 
-    /** The employee's physical till (Espèces). */
+    /**
+     * The employee's physical till (Espèces) — type « Caissière » ONLY.
+     *
+     * Never `caisses()->first()`: that relation also returns an « Externe »
+     * safe the employee was made responsable of, and money would then be
+     * routed into the safe (audit 24/08/2026). Employee::till() filters on
+     * the type; the provisioner self-heals an account predating it.
+     */
     public function tillOf(Employee $agent): Caisse
     {
-        return $agent->caisses()->first()
+        return $agent->till()->first()
             ?? $this->provisioner->provisionFor($agent)
-            ?? $agent->caisses()->firstOrFail();
+            ?? $agent->till()->firstOrFail();
     }
 }

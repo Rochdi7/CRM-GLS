@@ -885,7 +885,7 @@ final class EncaissementImportTest extends TestCase
         $viewer = $this->userWith('payments.view');
         $this->actingAs($viewer);
         app(\App\Services\Context\CurrentContext::class)->setEtablissement($this->centre->id);
-        $this->get(route('backoffice.encaissements.index', ['view' => 'cheque']))
+        $this->get(route('backoffice.encaissements.index', ['view' => 'cheque', 'dateFrom' => '', 'dateTo' => '']))
             ->assertOk()
             ->assertInertia(fn (\Inertia\Testing\AssertableInertia $page) => $page
                 ->has('encaissements.data', 1)

@@ -69,7 +69,7 @@ export default function SelectField({
     // dropdown was cut off and slid under the following rows. Fixed
     // positioning anchored to the button's own bounding rect escapes every
     // scroll container (same fix as DateField.tsx / RowActions.tsx).
-    const [panelPos, setPanelPos] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
+    const [panelPos, setPanelPos] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null);
 
     function measurePanel() {
         const button = buttonRef.current;
@@ -78,12 +78,17 @@ export default function SelectField({
         }
         const rect = button.getBoundingClientRect();
 
-        // Flip above the control when there isn't room below.
-        const openUpward = rect.bottom + PANEL_MAX_HEIGHT > window.innerHeight && rect.top > PANEL_MAX_HEIGHT;
-        const height = Math.min(PANEL_MAX_HEIGHT, openUpward ? rect.top - 8 : window.innerHeight - rect.bottom - 8);
+        // Always prefer opening BELOW the control; flip above only when the
+        // space below is genuinely too small AND there is more room above.
+        // The panel is anchored by `bottom` when flipped so a short list hugs
+        // the control instead of floating PANEL_MAX_HEIGHT px above it.
+        const spaceBelow = window.innerHeight - rect.bottom - 8;
+        const spaceAbove = rect.top - 8;
+        const openUpward = spaceBelow < Math.min(PANEL_MAX_HEIGHT, 160) && spaceAbove > spaceBelow;
+        const height = Math.min(PANEL_MAX_HEIGHT, openUpward ? spaceAbove : spaceBelow);
 
         setPanelPos({
-            top: openUpward ? rect.top - height - 4 : rect.bottom + 4,
+            ...(openUpward ? { bottom: window.innerHeight - rect.top + 4 } : { top: rect.bottom + 4 }),
             left: Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)),
             width: rect.width,
             maxHeight: height,
@@ -237,6 +242,7 @@ export default function SelectField({
                         style={{
                             position: 'fixed',
                             top: panelPos.top,
+                            bottom: panelPos.bottom,
                             left: panelPos.left,
                             width: panelPos.width,
                             maxHeight: panelPos.maxHeight,

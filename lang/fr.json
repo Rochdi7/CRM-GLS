@@ -572,6 +572,7 @@
     "Receipt": "Reçu",
     "Receipts": "Justificatifs",
     "Receipt sent by email.": "Reçu envoyé par email.",
+    "Receipt queued for sending to :email.": "Reçu en cours d'envoi à :email.",
     "Received on": "Reçu le",
     "Recent expenses": "Dépenses récentes",
     "Recent payments": "Encaissements récents",
@@ -914,5 +915,8 @@
     "Select a centre in the top bar before recording a non-cash payment.": "Sélectionnez un centre dans la barre du haut avant d'enregistrer un paiement autre qu'en espèces.",
     "A till transfer can only move cash between cash accounts.": "Un transfert de caisse ne peut déplacer que des espèces entre des caisses physiques.",
     "The payment method of a recorded payment cannot be changed.": "La méthode d'un paiement enregistré ne peut plus être modifiée.",
-    "Only an external cash account can be deleted.": "Seul un compte externe peut être supprimé."
+    "Only an external cash account can be deleted.": "Seul un compte externe peut être supprimé.",
+    "A payment-method account is provisioned with its centre and cannot be edited.": "Un compte de méthode de paiement est créé avec son centre et ne peut pas être modifié.",
+    "An employee's till cannot be re-assigned to someone else.": "La caisse d'un employé ne peut pas être réattribuée à quelqu'un d'autre.",
+    "Page": "Page"
 }

@@ -181,11 +181,11 @@ final class EncaissementsInertiaCrudTest extends TestCase
     public function test_index_requires_payments_view(): void
     {
         $this->actingAs($this->userWith('dashboard.view'))
-            ->get(route('backoffice.encaissements.index'))
+            ->get(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => '']))
             ->assertForbidden();
 
         $this->actingAs($this->userWith('payments.view'))
-            ->get(route('backoffice.encaissements.index'))
+            ->get(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => '']))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Backoffice/Encaissements/Index', false)
@@ -221,7 +221,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
         // Context on the STUDENT's centre — the row must be there.
         app(CurrentContext::class)->setEtablissement($this->centre->id);
         $this->actingAs($user)
-            ->get(route('backoffice.encaissements.index'))
+            ->get(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => '']))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('encaissements.data.0.reference', 'ENC-XTILL')
@@ -231,7 +231,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
         // centre's student, so it must NOT leak here.
         app(CurrentContext::class)->setEtablissement($otherCentre->id);
         $this->actingAs($user)
-            ->get(route('backoffice.encaissements.index'))
+            ->get(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => '']))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('encaissements.data', [])
@@ -259,7 +259,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->actingAs($user);
         app(CurrentContext::class)->setEtablissement($this->centre->id);
 
-        $this->get(route('backoffice.encaissements.index'))
+        $this->get(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => '']))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->where('encaissements.data.0.reference', 'ENC-GLOBAL'));
     }
@@ -294,7 +294,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
         }
 
         $this->actingAs($user)
-            ->get(route('backoffice.encaissements.index'))
+            ->get(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => '']))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('encaissements.data', 1)
@@ -347,7 +347,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
 
         // Default year active: only the 2025/2026 payment is listed.
         $this->actingAs($user)
-            ->get(route('backoffice.encaissements.index'))
+            ->get(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => '']))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('encaissements.data', 1)
@@ -357,7 +357,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
         // Switch to 2026/2027: only that year's payment is listed.
         app(CurrentContext::class)->setAnneeScolaire($nextYear->id);
         $this->actingAs($user)
-            ->get(route('backoffice.encaissements.index'))
+            ->get(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => '']))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('encaissements.data', 1)
@@ -386,7 +386,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
 
         // Default year 2025/2026 (sept 2025 → août 2026): only ENC-AV1.
         $this->actingAs($user)
-            ->get(route('backoffice.encaissements.index', ['view' => 'avance']))
+            ->get(route('backoffice.encaissements.index', ['view' => 'avance', 'dateFrom' => '', 'dateTo' => '']))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('encaissements.data', 1)
@@ -491,12 +491,12 @@ final class EncaissementsInertiaCrudTest extends TestCase
 
         $this->assertSame(InscriptionFee::STATUT_PAYE, $feeFull->fresh()->statut);
 
-        $chequeRows = $this->get(route('backoffice.encaissements.index', ['view' => 'cheque']))
+        $chequeRows = $this->get(route('backoffice.encaissements.index', ['view' => 'cheque', 'dateFrom' => '', 'dateTo' => '']))
             ->viewData('page')['props']['encaissements']['data'];
         $this->assertCount(1, $chequeRows);
         $this->assertSame('Chèque', $chequeRows[0]['methode']);
 
-        $avanceRows = $this->get(route('backoffice.encaissements.index', ['view' => 'avance']))
+        $avanceRows = $this->get(route('backoffice.encaissements.index', ['view' => 'avance', 'dateFrom' => '', 'dateTo' => '']))
             ->viewData('page')['props']['encaissements']['data'];
         $this->assertCount(1, $avanceRows);
         $this->assertSame('400.00', (string) $avanceRows[0]['montant']);
@@ -506,7 +506,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
         // Default "Paiements" tab lists only fee-allocated rows: the avance is
         // the parent of the apply rows that later credit each fee, so showing
         // it here would display the same money twice. It has its own tab.
-        $allRows = $this->get(route('backoffice.encaissements.index'))
+        $allRows = $this->get(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => '']))
             ->viewData('page')['props']['encaissements']['data'];
         $this->assertCount(1, $allRows);
         $this->assertSame('Chèque', $allRows[0]['methode']);
@@ -541,7 +541,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame(InscriptionFee::STATUT_PAYE_PARTIELLEMENT, $fee->fresh()->statut);
         $this->assertSame(2, Encaissement::count());
 
-        $avanceRows = $this->get(route('backoffice.encaissements.index', ['view' => 'avance']))
+        $avanceRows = $this->get(route('backoffice.encaissements.index', ['view' => 'avance', 'dateFrom' => '', 'dateTo' => '']))
             ->viewData('page')['props']['encaissements']['data'];
         $this->assertCount(1, $avanceRows);
         $this->assertSame('600.00', (string) $avanceRows[0]['montantUtilise']);
@@ -621,7 +621,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->post(route('backoffice.avances.convert'), [
             'inscription_id' => $inscription->id,
             'encaissement_ids' => [$encaissement->id],
-        ])->assertRedirect(route('backoffice.encaissements.index', ['view' => 'avance']));
+        ])->assertRedirect(route('backoffice.encaissements.index', ['view' => 'avance', 'dateFrom' => '', 'dateTo' => '']));
 
         // Detached, fee owed again, money record intact, till untouched.
         $this->assertNull($encaissement->fresh()->inscription_fee_id);
@@ -629,7 +629,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame(1, Encaissement::count());
         $this->assertSame('1000.00', (string) $caisse->fresh()->solde);
 
-        $avanceRows = $this->get(route('backoffice.encaissements.index', ['view' => 'avance']))
+        $avanceRows = $this->get(route('backoffice.encaissements.index', ['view' => 'avance', 'dateFrom' => '', 'dateTo' => '']))
             ->viewData('page')['props']['encaissements']['data'];
         $this->assertCount(1, $avanceRows);
         $this->assertSame('0.00', (string) $avanceRows[0]['montantUtilise']);
@@ -657,7 +657,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame(InscriptionFee::STATUT_PAYE, $fee2->fresh()->statut);
         $this->assertSame('1000.00', (string) $caisse->fresh()->solde);
 
-        $avanceRows = $this->get(route('backoffice.encaissements.index', ['view' => 'avance']))
+        $avanceRows = $this->get(route('backoffice.encaissements.index', ['view' => 'avance', 'dateFrom' => '', 'dateTo' => '']))
             ->viewData('page')['props']['encaissements']['data'];
         $this->assertCount(1, $avanceRows);
         $this->assertSame('1000.00', (string) $avanceRows[0]['montantUtilise']);
@@ -725,7 +725,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame($parentAvance->id, $fresh->applied_from_encaissement_id);
         $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $fee->fresh()->statut);
 
-        $avanceRows = collect($this->get(route('backoffice.encaissements.index', ['view' => 'avance']))
+        $avanceRows = collect($this->get(route('backoffice.encaissements.index', ['view' => 'avance', 'dateFrom' => '', 'dateTo' => '']))
             ->viewData('page')['props']['encaissements']['data']);
         $this->assertCount(2, $avanceRows);
         // Parent stays fully used (its 600 went to the apply row)…
@@ -1008,10 +1008,32 @@ final class EncaissementsInertiaCrudTest extends TestCase
             'email' => 'parent@example.test',
         ])->assertRedirect();
 
-        \Illuminate\Support\Facades\Mail::assertSent(
+        // Queued, never sent inline: the PDF render + SMTP must not block
+        // the cashier's request (worker: crm-gls-queue.service).
+        \Illuminate\Support\Facades\Mail::assertNotSent(\App\Domain\Payments\Mail\EncaissementRecuMail::class);
+        \Illuminate\Support\Facades\Mail::assertQueued(
             \App\Domain\Payments\Mail\EncaissementRecuMail::class,
             fn ($mail) => $mail->hasTo('parent@example.test'),
         );
+    }
+
+    public function test_queued_recu_mail_survives_serialization_and_renders_the_pdf(): void
+    {
+        $user = $this->userWith('payments.view');
+        $this->actingAs($user);
+        [$student, , $fee] = $this->enrolledStudentWithFee(1500);
+        $encaissement = Encaissement::create([
+            'reference' => 'ENC-MAIL3', 'student_id' => $student->id, 'inscription_fee_id' => $fee->id,
+            'caisse_id' => Caisse::factory()->create(['etablissement_id' => $this->centre->id])->id,
+            'agent_id' => $user->employee->id, 'montant' => 1500, 'methode' => 'Espèces', 'date_paiement' => '2025-09-20',
+        ]);
+
+        // What the worker does: unserialize the job payload, then build the mail.
+        $mail = unserialize(serialize(new \App\Domain\Payments\Mail\EncaissementRecuMail($encaissement)));
+
+        $this->assertSame($encaissement->id, $mail->encaissement->id);
+        $this->assertCount(1, $mail->attachments());
+        $this->assertStringContainsString('ENC-MAIL3', $mail->envelope()->subject);
     }
 
     public function test_recu_email_requires_a_valid_address(): void

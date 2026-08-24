@@ -82,9 +82,11 @@ final class DepenseController extends Controller
         // The acting employee's own till balance — shown read-only in the
         // Dépense create modal so staff can see what they're spending
         // against (same till StoreDepenseRequest silently derives on save).
+        // The physical till only (Employee::till()) — the same account
+        // CaisseResolver::tillOf() debits on save, never an Externe safe.
         $employee = $user->employee;
         $soldeActuel = $employee !== null
-            ? (string) ($employee->caisses()->first()?->solde ?? '0.00')
+            ? (string) ($employee->till()->first()?->solde ?? '0.00')
             : null;
 
         return Inertia::render('Backoffice/Depenses/Index', [

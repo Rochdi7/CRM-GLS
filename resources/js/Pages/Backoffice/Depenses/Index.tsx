@@ -25,7 +25,6 @@ type Tab = 'depenses' | 'paiements-prof' | 'remboursements' | 'validation';
 
 interface DepenseFormState {
     type_depense_id: number | '';
-    caisse_id: number | '';
     group_id: number | '';
     montant: string;
     methode_paiement: string;
@@ -104,7 +103,6 @@ const DEPENSE_STATUT_BADGE: Record<string, 'success' | 'warning' | 'danger'> = {
 function emptyDepenseForm(): DepenseFormState {
     return {
         type_depense_id: '',
-        caisse_id: '',
         group_id: '',
         montant: '',
         methode_paiement: '',
@@ -130,8 +128,8 @@ function emptyRemboursementForm(): RemboursementFormState {
 
 /**
  * "Gestion des dépenses" — replaces the Livewire tabbed page (Dépenses +
- * Remboursements). Only montant/caisse_id (and beneficiaire_id for refunds)
- * are frozen after creation — everything else stays editable, matching
+ * Remboursements). montant/caisse_id (and beneficiaire_id for refunds) are
+ * server-derived and frozen — the forms never carry a caisse field — everything else stays editable, matching
  * DepensesIndex/RemboursementsIndex exactly. No max-refund-amount check and
  * no insufficient-balance check are added (docs/phase-10-finance-mapping.md
  * Q1: preserved as-is).
@@ -273,7 +271,6 @@ export default function DepensesIndex({
         depenseForm.clearErrors();
         depenseForm.setData({
             type_depense_id: row.typeDepenseId ?? '',
-            caisse_id: row.caisseId ?? '',
             group_id: row.groupId ?? '',
             montant: row.montant,
             methode_paiement: row.methodePaiement ?? '',

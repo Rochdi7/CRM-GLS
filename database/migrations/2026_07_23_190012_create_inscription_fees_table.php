@@ -33,6 +33,8 @@ return new class extends Migration
 
             $table->index('inscription_id', 'inscription_fees_inscription_id_idx');
             $table->index('frais_id', 'inscription_fees_frais_id_idx');
+            // Leading predicate of the Recouvrements overdue scan.
+            $table->index('date_echeance', 'inscription_fees_date_echeance_idx');
         });
     }
 

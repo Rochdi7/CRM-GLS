@@ -1,4 +1,5 @@
 import { router, useForm } from '@inertiajs/react';
+import { pageWindow } from '@/Components/Tables/Pagination';
 import { useRef, useState, type FormEvent } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
@@ -2261,10 +2262,10 @@ function ClientFeesPagination({ total, perPage, page, onPageChange }: ClientFees
     const to = Math.min(total, page * perPage);
 
     return (
-        <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+        <div className="gls-pagination-footer d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
             <p className="text-muted mb-0">{total} total</p>
             <nav aria-label="Pagination des frais">
-                <ul className="pagination pagination-sm mb-0">
+                <ul className="pagination pagination-sm mb-0 flex-nowrap">
                     <li className={`page-item${page === 1 ? ' disabled' : ''}`} aria-disabled={page === 1 ? true : undefined}>
                         <button type="button" className="page-link border-0" aria-label="Première page" onClick={() => onPageChange(1)}>
                             «
@@ -2275,13 +2276,19 @@ function ClientFeesPagination({ total, perPage, page, onPageChange }: ClientFees
                             ‹
                         </button>
                     </li>
-                    {Array.from({ length: lastPage }, (_, i) => i + 1).map((n) => (
-                        <li className={`page-item${n === page ? ' active' : ''}`} aria-current={n === page ? 'page' : undefined} key={n}>
-                            <button type="button" className="page-link border-0" onClick={() => onPageChange(n)}>
-                                {n}
-                            </button>
-                        </li>
-                    ))}
+                    {pageWindow(page, lastPage, 1).map((n, i) =>
+                        n === null ? (
+                            <li className="page-item disabled" aria-disabled="true" key={`gap-${i}`}>
+                                <span className="page-link">…</span>
+                            </li>
+                        ) : (
+                            <li className={`page-item${n === page ? ' active' : ''}`} aria-current={n === page ? 'page' : undefined} key={n}>
+                                <button type="button" className="page-link border-0" onClick={() => onPageChange(n)}>
+                                    {n}
+                                </button>
+                            </li>
+                        ),
+                    )}
                     <li className={`page-item${page === lastPage ? ' disabled' : ''}`} aria-disabled={page === lastPage ? true : undefined}>
                         <button type="button" className="page-link border-0" aria-label="Page suivante" onClick={() => onPageChange(page + 1)}>
                             ›

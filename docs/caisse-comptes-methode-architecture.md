@@ -180,8 +180,8 @@ avant/après). Rien n'est supprimé, l'historique du journal reste lisible.
 |---|---|---|
 | `encaissements` | `methode ≠ Espèces` AND `applied_from_encaissement_id IS NULL` AND caisse.type ∈ espèces | debit till / credit compte méthode |
 | `encaissements` (apply rows) | `applied_from_encaissement_id IS NOT NULL` | `caisse_id` suit l'avance parente, **aucun mouvement** |
-| `depenses` | `methode_paiement ≠ Espèces`, caisse espèces | si `Approuvée` : credit till / debit compte ; si `En attente`/`Refusée` : `caisse_id` seulement |
-| `remboursements` | backfill `methode = Espèces` | aucun mouvement |
+| `depenses` | **aucune** — une dépense se règle toujours depuis la caisse physique, quel que soit `methode_paiement` (décision 2 ci-dessous). La version initiale de la commande déplaçait les dépenses approuvées non-espèces vers le compte de méthode : contradiction avec la règle, retirée à l'audit du 24/08/2026. | aucun |
+| `remboursements` | **aucune** (même règle) | aucun mouvement |
 | `caisse_transfers` | — | aucun (espèces par définition) |
 
 Modes : **dry-run par défaut**, `--apply` pour exécuter ; idempotent (une ligne

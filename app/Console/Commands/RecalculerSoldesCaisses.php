@@ -6,7 +6,6 @@ namespace App\Console\Commands;
 
 use App\Domain\Finance\Support\CaisseLedger;
 use App\Models\Caisse;
-use App\Models\Depense;
 use App\Models\Encaissement;
 use App\Services\CaisseProvisioner;
 use Illuminate\Console\Command;
@@ -25,6 +24,14 @@ use Illuminate\Support\Facades\DB;
  *    (« Reclassement par méthode de paiement ») — never a raw update;
  *  - the row's `caisse_id` is updated (Auditable records before/after);
  *  - nothing is ever deleted.
+ *
+ * ⚠ ENCAISSEMENTS ONLY. Dépenses and remboursements are NEVER re-homed:
+ * they always settle from the employee's physical till whatever their
+ * `methode_paiement` label says (CLAUDE.md §11, accounting rule confirmed
+ * 24/08/2026). An earlier version of this command moved approved non-cash
+ * dépenses into the centre's method account — that contradicted the rule
+ * (the till was credited back for cash that had really left it) and was
+ * removed on the 24/08/2026 audit.
  *
  * Idempotent: a row already in a method account is skipped, so a second run
  * is a no-op. DRY-RUN BY DEFAULT — pass --apply to execute.
@@ -163,40 +170,6 @@ final class RecalculerSoldesCaisses extends Command
             $moves[] = $entry;
         }
 
-        // 2. Dépenses — no student, the till centre is the only candidate.
-        $depenses = Depense::query()
-            ->with('caisse')
-            ->whereNotNull('methode_paiement')
-            ->where('methode_paiement', '!=', Encaissement::METHODE_ESPECES)
-            ->whereHas('caisse', fn ($q) => $q->whereIn('type', Caisse::TYPES_ESPECES))
-            ->orderBy('id')
-            ->get();
-
-        foreach ($depenses as $row) {
-            $entry = [
-                'table' => 'depenses',
-                'model' => $row,
-                'reference' => $row->reference,
-                'methode' => $row->methode_paiement,
-                'montant' => (float) $row->montant,
-                'from' => $row->caisse,
-                'tillCentre' => $row->caisse?->etablissement_id,
-                'studentCentre' => null,
-                'legacy' => false,
-                // Only an approved expense ever debited the till.
-                'moveMoney' => $row->statut === Depense::STATUT_APPROUVEE,
-            ];
-
-            if ($row->caisse?->etablissement_id === null) {
-                $unresolvable[] = $entry;
-
-                continue;
-            }
-
-            $entry['centre'] = (int) $row->caisse->etablissement_id;
-            $moves[] = $entry;
-        }
-
         return ['moves' => $moves, 'ambiguous' => $ambiguous, 'unresolvable' => $unresolvable];
     }
 
@@ -209,27 +182,23 @@ final class RecalculerSoldesCaisses extends Command
         $model = $move['model'];
         $extra = ['reclassement' => true, 'methode' => $move['methode'], 'caisse_origine' => $from->nom, 'caisse_cible' => $target->nom];
 
+        if ($move['table'] !== 'encaissements') {
+            // Defensive: only payments are ever re-homed (see class docblock).
+            throw new \LogicException("Seuls les encaissements peuvent être reclassés (reçu : {$move['table']}).");
+        }
+
         if ($move['moveMoney']) {
-            if ($move['table'] === 'encaissements') {
-                $this->ledger->debit($from->id, $move['montant'], self::MOTIF." — {$move['reference']}", $model, $extra);
-                $this->ledger->credit($target->id, $move['montant'], self::MOTIF." — {$move['reference']}", $model, $extra);
-            } else {
-                // An approved expense debited the till: give it back, take it
-                // from the method account.
-                $this->ledger->credit($from->id, $move['montant'], self::MOTIF." — {$move['reference']}", $model, $extra);
-                $this->ledger->debit($target->id, $move['montant'], self::MOTIF." — {$move['reference']}", $model, $extra);
-            }
+            $this->ledger->debit($from->id, $move['montant'], self::MOTIF." — {$move['reference']}", $model, $extra);
+            $this->ledger->credit($target->id, $move['montant'], self::MOTIF." — {$move['reference']}", $model, $extra);
         }
 
         $model->update(['caisse_id' => $target->id]);
 
-        if ($move['table'] === 'encaissements') {
-            // Apply rows of this avance never moved money; they just follow.
-            Encaissement::query()
-                ->where('applied_from_encaissement_id', $model->id)
-                ->get()
-                ->each(fn (Encaissement $apply) => $apply->update(['caisse_id' => $target->id]));
-        }
+        // Apply rows of this avance never moved money; they just follow.
+        Encaissement::query()
+            ->where('applied_from_encaissement_id', $model->id)
+            ->get()
+            ->each(fn (Encaissement $apply) => $apply->update(['caisse_id' => $target->id]));
     }
 
     /** @param array{moves: list<array<string, mixed>>, ambiguous: list<array<string, mixed>>, unresolvable: list<array<string, mixed>>} $plan */

@@ -26,8 +26,11 @@ interface EmploiDuTempsIndexProps {
     permissions: { create: boolean; update: boolean; delete: boolean };
 }
 
-/** Default hour rows the weekly grid always shows, even with no créneaux yet — actual créneau start times are added on top of these (see heuresGrille). */
-const HEURES_GRILLE_PAR_DEFAUT = Array.from({ length: 14 }, (_, i) => `${String(8 + i).padStart(2, '0')}:00`);
+/** "HH:MM" → minutes since midnight, used to place créneaux on the hour grid (see heuresGrille / cellules). */
+function toMinutes(heure: string): number {
+    const [h, m] = heure.split(':').map(Number);
+    return h * 60 + (m || 0);
+}
 
 const EMPTY_EDIT_FORM: CreneauForm = {
     group_id: '',
@@ -87,12 +90,56 @@ export default function EmploiDuTempsIndex({
         return map;
     }, [creneaux]);
 
+    // Hour rows: the default 08:00–21:00 range, extended to cover any créneau
+    // starting earlier / ending later. Rows are always full hours so a
+    // créneau can span several of them with rowSpan (10:00–12:30 covers the
+    // 10h, 11h and 12h rows), instead of being pinned to its start row only.
     const heuresGrille = useMemo(() => {
-        const heures = new Set<string>();
-        creneaux.forEach((c) => heures.add(c.heureDebut));
-        HEURES_GRILLE_PAR_DEFAUT.forEach((h) => heures.add(h));
-        return Array.from(heures).sort();
+        let first = 8;
+        let last = 21;
+        creneaux.forEach((c) => {
+            first = Math.min(first, Math.floor(toMinutes(c.heureDebut) / 60));
+            last = Math.max(last, Math.ceil(toMinutes(c.heureFin) / 60) - 1);
+        });
+        return Array.from({ length: last - first + 1 }, (_, i) => `${String(first + i).padStart(2, '0')}:00`);
     }, [creneaux]);
+
+    // Per (jour, hour row) → the créneaux anchored in that cell and how many
+    // rows the cell spans; cells swallowed by a spanning cell above are skipped.
+    const cellules = useMemo(() => {
+        const anchors = new Map<string, { rows: CreneauRow[]; rowSpan: number }>();
+        const skipped = new Set<string>();
+        const firstHour = heuresGrille.length ? Number(heuresGrille[0].slice(0, 2)) : 8;
+
+        jourOptions.forEach((jour) => {
+            const jourKey = String(jour.value);
+            const list = [...(parRang.get(jourKey) ?? [])].sort(
+                (a, b) => toMinutes(a.heureDebut) - toMinutes(b.heureDebut),
+            );
+            let anchorIdx = -1;
+            let coveredUntil = -1; // exclusive row index covered by the current anchor
+
+            list.forEach((c) => {
+                const startIdx = Math.floor(toMinutes(c.heureDebut) / 60) - firstHour;
+                const endIdx = Math.ceil(toMinutes(c.heureFin) / 60) - firstHour; // exclusive
+                if (startIdx >= coveredUntil) {
+                    anchorIdx = startIdx;
+                    coveredUntil = startIdx;
+                }
+                const key = `${jourKey}|${anchorIdx}`;
+                const cell = anchors.get(key) ?? { rows: [], rowSpan: 1 };
+                cell.rows.push(c);
+                coveredUntil = Math.max(coveredUntil, endIdx);
+                cell.rowSpan = Math.max(1, coveredUntil - anchorIdx);
+                anchors.set(key, cell);
+                for (let i = anchorIdx + 1; i < coveredUntil; i++) {
+                    skipped.add(`${jourKey}|${i}`);
+                }
+            });
+        });
+
+        return { anchors, skipped };
+    }, [heuresGrille, jourOptions, parRang]);
 
     function reload(nextFilters: Partial<typeof filters>) {
         router.get(
@@ -270,7 +317,7 @@ export default function EmploiDuTempsIndex({
                             </tr>
                         </thead>
                         <tbody>
-                            {heuresGrille.map((heure) => {
+                            {heuresGrille.map((heure, rowIdx) => {
                                 const heureFin = `${String(Number(heure.slice(0, 2)) + 1).padStart(2, '0')}:00`;
 
                                 return (
@@ -279,12 +326,19 @@ export default function EmploiDuTempsIndex({
                                             {heure.slice(0, 5)} - {heureFin}
                                         </td>
                                         {jourOptions.map((jour) => {
-                                            const rows = (parRang.get(String(jour.value)) ?? []).filter(
-                                                (c) => c.heureDebut === heure,
-                                            );
+                                            const key = `${jour.value}|${rowIdx}`;
+                                            if (cellules.skipped.has(key)) {
+                                                return null;
+                                            }
+                                            const cell = cellules.anchors.get(key);
+                                            const rows = cell?.rows ?? [];
 
                                             return (
-                                                <td key={jour.value} style={{ minWidth: 160, verticalAlign: 'top' }}>
+                                                <td
+                                                    key={jour.value}
+                                                    rowSpan={cell?.rowSpan ?? 1}
+                                                    style={{ minWidth: 160, verticalAlign: 'top' }}
+                                                >
                                                     {rows.map((row) => (
                                                         <div
                                                             key={row.id}

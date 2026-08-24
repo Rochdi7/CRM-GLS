@@ -89,13 +89,19 @@ final class GetAnnualFraisSummary
         );
 
         // Encaissements — ALL payments received that month, by date_paiement,
-        // center via the till (same scoping as the previous implementation).
+        // centre via the STUDENT: the one definition of "a payment's centre"
+        // shared by the Encaissements list, EncaissementPolicy and the
+        // dashboard card (GetDashboardStats). Scoping via the till (the
+        // previous implementation) attributed the cash of a multi-centre
+        // operator to the centre their till lives in, not the centre the
+        // money was collected for — the chart and the card disagreed for
+        // the same month (audit 24/08/2026).
         $encaissements = $this->byMonth(
             DB::table('encaissements')
                 ->whereBetween('date_paiement', $range)
                 ->when($centreId, fn (Builder $q) => $q->whereIn(
-                    'caisse_id',
-                    DB::table('caisses')->select('id')->where('etablissement_id', $centreId),
+                    'student_id',
+                    DB::table('students')->select('id')->where('etablissement_id', $centreId),
                 )),
             'date_paiement',
         );

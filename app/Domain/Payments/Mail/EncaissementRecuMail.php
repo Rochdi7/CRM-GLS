@@ -20,12 +20,21 @@ use Illuminate\Queue\SerializesModels;
  * natively (autoScriptToLang/autoLangToFont) and dompdf cannot do at all.
  * Sent on demand from the Encaissements list "Envoyer le reçu par email"
  * row action (EncaissementController::sendRecuEmail).
+ *
+ * Always QUEUED (`Mail::queue`): the PDF render + SMTP round-trip run in the
+ * queue worker, not in the cashier's request. `SerializesModels` stores only
+ * the encaissement id (+ loaded relation names) and re-fetches on the worker,
+ * so the property must be public/protected (not private) for the trait to
+ * restore it.
  */
 final class EncaissementRecuMail extends Mailable
 {
     use Queueable, SerializesModels;
 
-    public function __construct(private readonly Encaissement $encaissement)
+    /** Retry a transient SMTP failure a few times before giving up. */
+    public int $tries = 3;
+
+    public function __construct(public readonly Encaissement $encaissement)
     {
     }
 

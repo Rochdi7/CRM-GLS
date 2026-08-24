@@ -1,3 +1,4 @@
+import CountUp from '@/Components/Dashboard/CountUp';
 import StatCard from '@/Components/Dashboard/StatCard';
 import { formatMontant, formatMontantCompact } from '@/Lib/money';
 import type { DashboardStats } from '@/Types';
@@ -31,14 +32,14 @@ export default function StatsGrid({ stats }: StatsGridProps) {
             <StatCard
                 icon="ti-school"
                 iconBg="bg-danger-transparent"
-                value={stats.studentsTotal}
+                value={<CountUp value={stats.studentsTotal} />}
                 label="Étudiants"
             />
 
             <StatCard
                 icon="ti-users"
                 iconBg="bg-secondary-transparent"
-                value={stats.employeesTotal}
+                value={<CountUp value={stats.employeesTotal} />}
                 label="Employés"
                 secondaryLabel="Actifs"
                 secondaryValue={stats.employeesActive}
@@ -47,7 +48,7 @@ export default function StatsGrid({ stats }: StatsGridProps) {
             <StatCard
                 icon="ti-user"
                 iconBg="bg-warning-transparent"
-                value={stats.enseignantsTotal}
+                value={<CountUp value={stats.enseignantsTotal} />}
                 label="Total d'enseignants"
                 secondaryLabel="Employés actifs"
                 secondaryValue={stats.employeesActive}
@@ -56,7 +57,7 @@ export default function StatsGrid({ stats }: StatsGridProps) {
             <StatCard
                 icon="ti-users"
                 iconBg="bg-secondary-transparent"
-                value={stats.parentsTotal}
+                value={<CountUp value={stats.parentsTotal} />}
                 label="Parents"
                 secondaryLabel="Sur"
                 secondaryValue={`${stats.studentsTotal} étudiants`}
@@ -65,7 +66,7 @@ export default function StatsGrid({ stats }: StatsGridProps) {
             <StatCard
                 icon="ti-users-group"
                 iconBg="bg-primary-transparent"
-                value={stats.groupsEnFormation}
+                value={<CountUp value={stats.groupsEnFormation} />}
                 label="Groupes actifs"
                 secondaryLabel="Total groupes"
                 secondaryValue={stats.groupsTotal}
@@ -74,7 +75,7 @@ export default function StatsGrid({ stats }: StatsGridProps) {
             <StatCard
                 icon="ti-clipboard-list"
                 iconBg="bg-info-transparent"
-                value={stats.inscriptionsTotal}
+                value={<CountUp value={stats.inscriptionsTotal} />}
                 label="Inscriptions"
                 footer={
                     <>
@@ -94,7 +95,7 @@ export default function StatsGrid({ stats }: StatsGridProps) {
             <StatCard
                 icon="ti-cash-banknote"
                 iconBg="bg-success-transparent"
-                value={formatMontantCompact(stats.paymentsMonth)}
+                value={<CountUp value={stats.paymentsMonth} format={formatMontantCompact} />}
                 valueTitle={`${formatMontant(stats.paymentsMonth)} MAD`}
                 unit="MAD"
                 label="Encaissements ce mois-ci"
@@ -103,7 +104,7 @@ export default function StatsGrid({ stats }: StatsGridProps) {
             <StatCard
                 icon="ti-cash-banknote-off"
                 iconBg="bg-danger-transparent"
-                value={formatMontantCompact(stats.depensesMonth)}
+                value={<CountUp value={stats.depensesMonth} format={formatMontantCompact} />}
                 valueTitle={`${formatMontant(stats.depensesMonth)} MAD`}
                 unit="MAD"
                 label="Dépenses ce mois-ci"

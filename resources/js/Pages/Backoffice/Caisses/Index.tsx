@@ -56,8 +56,8 @@ const TRANSACTION_TYPE_BADGE: Record<string, 'success' | 'danger'> = {
 
 function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJournalData }) {
     const [typeFilter, setTypeFilter] = useState('');
-    const [dateFrom, setDateFrom] = useState('');
-    const [dateTo, setDateTo] = useState('');
+    const [dateFrom, setDateFrom] = useState(todayIso);
+    const [dateTo, setDateTo] = useState(todayIso);
     const [page, setPage] = useState(1);
     const [journal, setJournal] = useState<CaisseJournalData>(data);
     const [loading, setLoading] = useState(false);
@@ -92,13 +92,6 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
                             <div>
                                 <p className="mb-0 text-muted">Encaissements</p>
                                 <h5 className="mb-0 text-success">{Number(journal.totalEncaissements).toFixed(2)} DH</h5>
-                                {/* All methods; only Espèces is inside « Solde espèces ». */}
-                                <p className="mb-0 text-muted fs-12">
-                                    {Object.entries(journal.encaissementsParMethode)
-                                        .filter(([, v]) => Number(v) > 0)
-                                        .map(([m, v]) => `${m} ${Number(v).toFixed(2)}`)
-                                        .join(' · ') || '—'}
-                                </p>
                             </div>
                         </div>
                     </div>

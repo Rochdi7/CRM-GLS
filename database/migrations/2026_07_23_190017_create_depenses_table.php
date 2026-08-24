@@ -42,6 +42,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['caisse_id', 'date_depense'], 'depenses_caisse_date_idx');
+            $table->index('date_depense', 'depenses_date_depense_idx');
             $table->index('type_depense_id', 'depenses_type_depense_id_idx');
             $table->index('agent_id', 'depenses_agent_id_idx');
             $table->index('group_id', 'depenses_group_id_idx');

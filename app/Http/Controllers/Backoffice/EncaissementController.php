@@ -61,8 +61,8 @@ final class EncaissementController extends Controller
         $search = (string) $request->string('search');
         $caisseFilter = (string) $request->string('caisseFilter');
         $methodeFilter = (string) $request->string('methodeFilter');
-        $dateFrom = (string) $request->string('dateFrom');
-        $dateTo = (string) $request->string('dateTo');
+        $dateFrom = $request->has('dateFrom') ? (string) $request->string('dateFrom') : now()->toDateString();
+        $dateTo = $request->has('dateTo') ? (string) $request->string('dateTo') : now()->toDateString();
         $referenceFilter = (string) $request->string('referenceFilter');
         $studentFilter = (string) $request->string('studentFilter');
         $numeroChequeFilter = (string) $request->string('numeroChequeFilter');
@@ -316,6 +316,12 @@ final class EncaissementController extends Controller
 
         $data = $request->validated();
 
+        // Centre isolation, same as store()'s inscription check: the student
+        // receiving the credit must be within the cashier's centres —
+        // otherwise a tampered student_id books an avance for another
+        // centre's student (it would then show on THAT centre's pages).
+        $this->assertCenterAccess($request, Student::query()->findOrFail((int) $data['student_id'])->etablissement_id);
+
         // Same rule as store(): the method decides the account.
         $caisse = app(CaisseResolver::class)->resolveFor($agent, (string) $data['methode']);
 
@@ -418,8 +424,13 @@ final class EncaissementController extends Controller
      * Emails the same receipt (rendered as a PDF, A5) to a given address —
      * defaults to the student's own email in the UI prompt, but any address
      * can be typed since not every student has one on file. Reuses the
-     * "recu" Blade view via EncaissementRecuMail (dompdf attachment); mail
+     * "recu" Blade view via EncaissementRecuMail (mPDF attachment); mail
      * is `log` in local dev per project convention (§15).
+     *
+     * QUEUED, never sent inline: rendering the A5 PDF with mPDF plus the SMTP
+     * round-trip takes seconds, and the cashier must not wait on it. The
+     * worker (`crm-gls-queue.service`, docs/vps-deployment.md) does the work;
+     * the UI gets an immediate "queued" confirmation.
      */
     public function sendRecuEmail(SendRecuEmailRequest $request, Encaissement $encaissement): RedirectResponse
     {
@@ -432,9 +443,9 @@ final class EncaissementController extends Controller
             'fee.inscription.etablissement',
         ]);
 
-        Mail::to($request->validated('email'))->send(new EncaissementRecuMail($encaissement));
+        Mail::to($request->validated('email'))->queue(new EncaissementRecuMail($encaissement));
 
-        return back()->with('success', __('Receipt sent by email.'));
+        return back()->with('success', __('Receipt queued for sending to :email.', ['email' => $request->validated('email')]));
     }
 
     public function show(Encaissement $encaissement, GetEncaissementDetails $getEncaissementDetails): Response

@@ -47,6 +47,9 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['caisse_id', 'date_paiement'], 'encaissements_caisse_date_idx');
+            // Standalone date index: the composite above cannot serve the
+            // dashboard aggregates / list ordering that do not filter by till.
+            $table->index('date_paiement', 'encaissements_date_paiement_idx');
             $table->index('student_id', 'encaissements_student_id_idx');
             $table->index('inscription_fee_id', 'encaissements_inscription_fee_id_idx');
             $table->index('agent_id', 'encaissements_agent_id_idx');

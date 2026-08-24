@@ -99,13 +99,13 @@ final class ListPerformanceTest extends TestCase
             $this->overdueFee($i);
         }
         // Warm-up: first request loads user/permissions/context once.
-        $this->countQueries(route('backoffice.recouvrement.index'));
-        $withThree = $this->countQueries(route('backoffice.recouvrement.index'));
+        $this->countQueries(route('backoffice.recouvrement.index', ['dateFrom' => '', 'dateTo' => '']));
+        $withThree = $this->countQueries(route('backoffice.recouvrement.index', ['dateFrom' => '', 'dateTo' => '']));
 
         for ($i = 4; $i <= 15; $i++) {
             $this->overdueFee($i);
         }
-        $withFifteen = $this->countQueries(route('backoffice.recouvrement.index'));
+        $withFifteen = $this->countQueries(route('backoffice.recouvrement.index', ['dateFrom' => '', 'dateTo' => '']));
 
         $this->assertSame($withThree, $withFifteen, "Recouvrement queries grew from {$withThree} to {$withFifteen} — per-fee montantPaye() is back.");
     }
@@ -115,7 +115,7 @@ final class ListPerformanceTest extends TestCase
         $this->overdueFee(1);
 
         $this->actingAs($this->admin)
-            ->get(route('backoffice.recouvrement.index'))
+            ->get(route('backoffice.recouvrement.index', ['dateFrom' => '', 'dateTo' => '']))
             ->assertInertia(fn (Assert $page) => $page
                 ->has('retards.data', 1)
                 ->where('retards.data.0.resteAPayer', '750.00')
@@ -129,13 +129,13 @@ final class ListPerformanceTest extends TestCase
         for ($i = 1; $i <= 3; $i++) {
             $this->overdueFee($i);
         }
-        $this->countQueries(route('backoffice.encaissements.index'));
-        $withThree = $this->countQueries(route('backoffice.encaissements.index'));
+        $this->countQueries(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => '']));
+        $withThree = $this->countQueries(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => '']));
 
         for ($i = 4; $i <= 12; $i++) {
             $this->overdueFee($i);
         }
-        $withTwelve = $this->countQueries(route('backoffice.encaissements.index'));
+        $withTwelve = $this->countQueries(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => '']));
 
         $this->assertSame($withThree, $withTwelve, "Encaissements queries grew from {$withThree} to {$withTwelve}.");
     }
@@ -144,7 +144,7 @@ final class ListPerformanceTest extends TestCase
     {
         $this->overdueFee(1);
 
-        $version = (string) $this->actingAs($this->admin)->get(route('backoffice.encaissements.index'))->inertiaPage()['version'];
+        $version = (string) $this->actingAs($this->admin)->get(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => '']))->inertiaPage()['version'];
 
         $partial = [
             'X-Inertia' => 'true',
@@ -166,8 +166,8 @@ final class ListPerformanceTest extends TestCase
         $this->assertArrayNotHasKey('banques', $props);
 
         // The partial reload must not run the student/caisse catalog queries.
-        $full = $this->countQueries(route('backoffice.encaissements.index'));
-        $onlyRows = $this->countQueries(route('backoffice.encaissements.index'), $partial);
+        $full = $this->countQueries(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => '']));
+        $onlyRows = $this->countQueries(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => '']), $partial);
         $this->assertLessThan($full, $onlyRows);
     }
 

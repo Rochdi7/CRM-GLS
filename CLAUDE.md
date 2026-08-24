@@ -324,11 +324,23 @@ the database layer. Non-negotiable invariants already enforced in code:
   `caisse_id` (`EncaissementController@update` refuses a different value).
   Nothing is derived on top of stored balances any more (the old
   `GetComptesCaisse::DERIVED_TYPES` counted a TPE payment twice) — never
-  reintroduce a live-aggregated "account". Historical non-cash rows still in a
-  till are re-homed by `php artisan caisse:recalculer-soldes` (dry-run by
+  reintroduce a live-aggregated "account". Historical non-cash PAYMENTS still
+  in a till are re-homed by `php artisan caisse:recalculer-soldes` (dry-run by
   default, `--apply`, both legs journaled through `CaisseLedger`; refuses
-  ambiguous rows unless `--ambiguous=caisse|student`). Never run it on
-  production without reading its dry-run output first. Tests: `tests/Feature/Backoffice/Finance/ComptesMethodeTest.php`.
+  ambiguous rows unless `--ambiguous=caisse|student`) — **encaissements
+  only**: it never touches a dépense or a remboursement (they always settle
+  from the till, see above; the 24/08/2026 audit removed a branch that moved
+  them). Never run it on production without reading its dry-run output
+  first. `php artisan caisse:verifier-coherence` is the READ-ONLY auditor
+  (mis-routed rows, duplicate/missing accounts, tills per employee,
+  solde vs journaled movements; `--strict` fails on warnings) — run it
+  before and after. Two more PostgreSQL guards (migration
+  `harden_caisses_integrity`): `caisses.solde` NOT NULL and ONE « Caissière »
+  till per employee (partial unique index); the physical till is always
+  `Employee::till()` / `CaisseResolver::tillOf()` — never
+  `caisses()->first()`, which also returns an « Externe » safe the employee
+  is responsable of. Tests: `tests/Feature/Backoffice/Finance/ComptesMethodeTest.php`,
+  `FinancialInvariantsAuditTest.php`.
 - **Till transfers are two-step and RECIPIENT-validated**: request (balances
   untouched) → acceptance by the **employee who owns the DESTINATION till**
   (balances move). The person whose caisse is about to be credited is the only

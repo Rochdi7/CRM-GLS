@@ -76,7 +76,9 @@ final class CaisseController extends Controller
         // The transfer modal's fixed source: the acting employee's OWN till
         // (even super-admins transfer from their own till — the source is
         // never chosen client-side, matching CaisseTransferController::store).
-        $myCaisse = $user->employee?->caisses()->first();
+        // Physical till only (Employee::till()) — the exact account
+        // CaisseTransferController::store() will use as the source.
+        $myCaisse = $user->employee?->till()->first();
 
         return Inertia::render('Backoffice/Caisses/Index', [
             'myCaisse' => $myCaisse !== null ? [
@@ -189,6 +191,31 @@ final class CaisseController extends Controller
     {
         abort_unless($request->user()->can('cash-accounts.update'), 403);
 
+        // A centre's TPE/Chèque/Virement account is provisioned, not
+        // managed: its name is derived, its centre is its identity and the
+        // PostgreSQL CHECK forbids a responsable. Editing it here would at
+        // best rename it and at worst hit the CHECK (500). The tab hides the
+        // action; this is the server-side rule (React is not a boundary).
+        if ($caisse->isCompteMethode()) {
+            throw ValidationException::withMessages([
+                'nom' => __('A payment-method account is provisioned with its centre and cannot be edited.'),
+            ]);
+        }
+
+        $data = $request->validated();
+
+        // An employee's physical till belongs to that employee for good:
+        // re-assigning it would leave them till-less (the provisioner would
+        // then create a second, empty one) and hand their cash history to
+        // someone else. Only an « Externe » safe may change hands.
+        if ($caisse->type === Caisse::TYPE_CAISSIERE
+            && array_key_exists('responsable_employee_id', $data)
+            && (int) ($data['responsable_employee_id'] ?? 0) !== (int) ($caisse->responsable_employee_id ?? 0)) {
+            throw ValidationException::withMessages([
+                'responsable_employee_id' => __("An employee's till cannot be re-assigned to someone else."),
+            ]);
+        }
+
         $newCentre = $this->resolveCaisseCentre($request, $caisse->etablissement_id);
 
         // Re-homing a till that already carries movements would retroactively
@@ -202,7 +229,7 @@ final class CaisseController extends Controller
         }
 
         $caisse->update([
-            ...$request->validated(),
+            ...$data,
             'etablissement_id' => $newCentre,
         ]);
 

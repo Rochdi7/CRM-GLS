@@ -8,7 +8,10 @@ interface ContextSwitcherProps {
 }
 
 /** Fixed-position coordinates for a dropdown menu, measured from its trigger. */
-type MenuPos = { top: number; left: number } | null;
+/** Bootstrap's .dropdown-menu min-width (10rem) at the theme's 14px base. */
+const MENU_MIN_WIDTH = 160;
+
+type MenuPos = { top: number; left: number; minWidth: number } | null;
 
 /**
  * Measures a trigger button's position for a `position: fixed` dropdown menu
@@ -29,13 +32,20 @@ type MenuPos = { top: number; left: number } | null;
  * beats `!important`, so app.css re-asserts `left` with its own
  * `!important`, reading the actual offset from this custom property (custom
  * properties aren't subject to the same shorthand override). The menu's
- * right edge is then aligned to the trigger's right edge with
- * `translateX(-100%)`.
+ * left edge follows the trigger's left edge, clamped so the whole menu
+ * stays inside the viewport (mobile).
  */
 function measureMenuPos(trigger: HTMLElement): MenuPos {
     const rect = trigger.getBoundingClientRect();
+    // The menu is anchored by its LEFT edge (see menuStyle) and is at least as
+    // wide as its trigger, then clamped to the viewport: on a phone the year
+    // button sits flush left and is narrower than the menu, so right-aligning
+    // it (the old translateX(-100%)) pushed half of it off-screen.
+    const viewportPad = 8;
+    const menuWidth = Math.max(rect.width, MENU_MIN_WIDTH);
+    const left = Math.max(viewportPad, Math.min(rect.left, window.innerWidth - menuWidth - viewportPad));
 
-    return { top: rect.bottom + 4, left: rect.right };
+    return { top: rect.bottom + 4, left, minWidth: menuWidth };
 }
 
 /** Builds the fixed-position style, including the `--gls-menu-left` custom property app.css reads. */
@@ -48,7 +58,7 @@ function menuStyle(pos: MenuPos): CSSProperties | undefined {
         position: 'fixed',
         top: pos.top,
         right: 'auto',
-        transform: 'translateX(-100%)',
+        minWidth: pos.minWidth,
         ['--gls-menu-left' as string]: `${pos.left}px`,
     } as CSSProperties;
 }

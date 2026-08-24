@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Finance\Actions\DemanderTransfertCaisse;
 use App\Domain\Finance\Actions\ValiderTransfertCaisse;
+use App\Domain\Finance\Support\CaisseResolver;
 use App\Domain\Finance\Queries\GetCaisseTransferDetails;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\CaisseTransfers\StoreCaisseTransferRequest;
@@ -51,12 +52,13 @@ final class CaisseTransferController extends Controller
             ]);
         }
 
-        // The source is ALWAYS the requester's own till — never chosen
-        // client-side, for any role including super-admin (the modal shows
-        // no source picker). Same server-derived-till rule + self-heal as
-        // EncaissementController::store().
-        $source = $requester->caisses()->first()
-            ?? app(\App\Services\CaisseProvisioner::class)->provisionFor($requester);
+        // The source is ALWAYS the requester's own PHYSICAL till — never
+        // chosen client-side, for any role including super-admin (the modal
+        // shows no source picker). Same server-derived-till rule + self-heal
+        // as EncaissementController::store() (CaisseResolver::tillOf — type
+        // Caissière only, never an Externe safe they happen to be
+        // responsable of).
+        $source = app(CaisseResolver::class)->tillOf($requester);
 
         $data = $request->validated();
 

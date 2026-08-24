@@ -302,7 +302,8 @@ html[data-theme='dark'] .gls-select2-search__clear:hover {
  * desktop. Scale it down while keeping the header-left layout untouched.
  */
 @media (min-width: 992px) {
-    .header .header-left .logo img {
+    .header .header-left .logo img,
+    .header .header-left .dark-logo img {
         width: 90px;
     }
 }
@@ -1207,4 +1208,167 @@ html[data-theme='dark'] .gls-seancecal-day.is-today {
 /* Pagination under the table — same reasoning, it sits below the fold cost. */
 .pagination {
     margin-bottom: 0;
+}
+
+/* Dashboard KPI count-up: tabular digits so the number doesn't jitter in width while it rolls. */
+.stat-counter-animated {
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------------------
+ * Mobile tables + pagination (every CRUD list, via DataTable + Pagination)
+ *
+ * On a phone Laravel's default pager (Précédent 1 2 3 4 5 6 7 8 Suivant)
+ * overflowed the card and the row count sat on its own line. The pager is
+ * now windowed in Pagination.tsx; this block handles the layout side:
+ * footer stacks and centres, touch-sized (min 36px) page links, and the
+ * table wrapper scrolls with momentum.
+ * ------------------------------------------------------------------------- */
+.table-responsive {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+}
+
+.pagination .page-link {
+    min-width: 36px;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pagination .page-link .ti {
+    font-size: 16px;
+    line-height: 1;
+}
+
+@media (max-width: 767.98px) {
+    .gls-pagination-footer {
+        flex-direction: column;
+        justify-content: center !important;
+        padding: 12px !important;
+    }
+
+    .gls-pagination-footer nav {
+        max-width: 100%;
+        overflow-x: auto;
+    }
+
+    .pagination .page-link {
+        min-width: 40px;
+        min-height: 40px;
+        padding: 0 6px;
+    }
+
+    /* Touch-friendly rows: a little more vertical room than the desktop
+     * density pass, and cells stay on one line inside the scroll wrapper. */
+    .table th,
+    .table td {
+        padding: 10px 12px;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+ * Dark-mode gaps in the PreSkool theme (24/08/2026 mobile QA)
+ *
+ * style.css only re-skins `.nav-tabs.nav-tabs-solid` for dark mode; the plain
+ * `.nav-tabs` bar (Encaissements / Dépenses / Chèques / Étudiants / Settings
+ * page tabs, PageTabs.tsx) kept its light `background-color:#FFF` and read as
+ * a white slab on the dark page. Same for `.page-link`, `.bg-light-subtle`,
+ * `.input-group-text` and the read-only `.form-control.bg-light` inputs.
+ * Palette = the theme's own dark tokens (#131022 surface, #1B1632 border,
+ * #B9B7C0 text, #EFEFF2 strong text).
+ * ------------------------------------------------------------------------- */
+html[data-theme='dark'] .nav-tabs {
+    background-color: #131022;
+    border-color: #1B1632;
+}
+html[data-theme='dark'] .nav-tabs .nav-link {
+    color: #B9B7C0;
+}
+html[data-theme='dark'] .nav-tabs .nav-link:hover,
+html[data-theme='dark'] .nav-tabs .nav-link:focus {
+    color: #3d5ee1;
+    border-color: transparent transparent #1B1632 transparent;
+}
+html[data-theme='dark'] .nav-tabs .nav-link.active,
+html[data-theme='dark'] .nav-tabs .nav-link.active:hover,
+html[data-theme='dark'] .nav-tabs .nav-link.active:focus {
+    color: #3d5ee1;
+    background-color: #1B1632;
+    border-color: #1B1632 #1B1632 #1B1632;
+}
+html[data-theme='dark'] .nav-tabs .nav-link.disabled {
+    color: #6d6a7a;
+}
+
+/* Tab counters that flip to a white badge on the active tab. */
+html[data-theme='dark'] .nav-tabs .badge.bg-white.text-dark {
+    color: #EFEFF2 !important;
+    background: #1B1632 !important;
+}
+
+/* Pagination footer (Pagination.tsx / LocalPagination.tsx). */
+html[data-theme='dark'] .page-link {
+    color: #B9B7C0;
+    background-color: #131022;
+    border-color: #1B1632;
+}
+html[data-theme='dark'] .page-link:hover,
+html[data-theme='dark'] .page-link:focus {
+    color: #EFEFF2;
+    background-color: #1B1632;
+}
+html[data-theme='dark'] .page-item.disabled .page-link {
+    color: #6d6a7a;
+    background-color: #131022;
+}
+html[data-theme='dark'] .page-item.active .page-link {
+    color: #fff;
+    background-color: #3d5ee1;
+    border-color: #3d5ee1;
+}
+
+/* Inline expansion rows (Encaissements avance detail) + read-only inputs
+ * (Caisses transfer modal) + input-group addons. */
+html[data-theme='dark'] .bg-light-subtle {
+    background-color: #1B1632 !important;
+}
+html[data-theme='dark'] .form-control.bg-light,
+html[data-theme='dark'] .form-control[readonly] {
+    background: #1B1632 !important;
+    color: #B9B7C0;
+    border-color: #1B1632;
+}
+html[data-theme='dark'] .input-group-text {
+    background: #131022;
+    color: #B9B7C0;
+    border-color: #1B1632;
+}
+
+/* Text utilities on dark: `.text-dark` labels and `.text-muted` inside cards
+ * otherwise stay near-black on the dark surface. */
+html[data-theme='dark'] .card .text-dark,
+html[data-theme='dark'] .modal-content .text-dark {
+    color: #EFEFF2 !important;
+}
+html[data-theme='dark'] .text-muted {
+    color: #8f8c9c !important;
+}
+html[data-theme='dark'] .progress {
+    background-color: #1B1632;
+}
+
+/* `.table tbody tr td a { color: #202C4B }` (style.css) is more specific than
+ * the theme's own dark `a` rule, so links in table cells (student names,
+ * account names on Caisse globale…) rendered navy-on-navy in dark mode. */
+html[data-theme='dark'] .table tbody tr td a:not(.btn):not(.badge) {
+    color: #EFEFF2;
+}
+html[data-theme='dark'] .table tbody tr td a:not(.btn):not(.badge):hover {
+    color: #3d5ee1;
+}
+html[data-theme='dark'] .table tbody tr.table-light > * {
+    background: #1B1632 !important;
+    color: #B9B7C0 !important;
 }

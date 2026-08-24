@@ -65,6 +65,15 @@ final class RemboursementController extends Controller
         // reached the till, so it comes back out of the centre's Chèque
         // account (CaisseResolver::forRemboursement).
         $data = $request->validated();
+
+        // Centre isolation (same rule as studentPayments() above and as
+        // EncaissementController@store): the beneficiary must be a student
+        // of a centre the cashier can reach. Without it a tampered
+        // beneficiaire_id refunded another centre's student out of this
+        // till — the linked payment (if any) is checked by the action to
+        // belong to that same student, so this one check covers both.
+        $this->assertCenterAccess($request, Student::query()->findOrFail((int) $data['beneficiaire_id'])->etablissement_id);
+
         $encaissement = ! empty($data['encaissement_id'])
             ? Encaissement::query()->with(['cheque', 'caisse'])->find((int) $data['encaissement_id'])
             : null;
