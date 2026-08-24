@@ -238,6 +238,97 @@ final class EncaissementsInertiaCrudTest extends TestCase
             );
     }
 
+    /**
+     * The top-bar year switcher must scope the list: a payment belongs to
+     * the academic year of its fee's inscription, and an avance (no fee) to
+     * the year its payment date falls in.
+     */
+    public function test_index_only_lists_payments_of_the_active_academic_year(): void
+    {
+        $user = $this->userWith('payments.view');
+        $agent = $user->employee;
+        $caisse = Caisse::factory()->create(['etablissement_id' => $this->centre->id]);
+
+        // A payment on an inscription of the DEFAULT year (2025/2026).
+        [$student, , $fee] = $this->enrolledStudentWithFee(1000);
+        Encaissement::create([
+            'reference' => 'ENC-Y1', 'agent_id' => $agent->id, 'student_id' => $student->id,
+            'inscription_fee_id' => $fee->id, 'caisse_id' => $caisse->id,
+            'montant' => 300, 'methode' => Encaissement::METHODE_ESPECES, 'date_paiement' => '2025-09-20',
+        ]);
+
+        // A payment on an inscription of the NEXT year (2026/2027).
+        $nextYear = AnneeScolaire::create([
+            'nom' => '2026/2027', 'date_debut' => '2026-09-01', 'date_fin' => '2027-08-31',
+            'par_defaut' => false, 'inscription_ouverte' => true,
+        ]);
+        $group2 = Group::factory()->create(['etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $nextYear->id]);
+        $inscription2 = Inscription::create([
+            'reference' => 'INS-Y2', 'student_id' => $student->id, 'group_id' => $group2->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $nextYear->id,
+            'statut' => Inscription::STATUT_ACTIVE, 'date_inscription' => '2026-09-15',
+            'montant_total' => 1000,
+        ]);
+        $fee2 = InscriptionFee::create([
+            'inscription_id' => $inscription2->id, 'nom' => 'Frais',
+            'montant_initial' => 1000, 'montant' => 1000,
+            'date_echeance' => '2026-09-30', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+        Encaissement::create([
+            'reference' => 'ENC-Y2', 'agent_id' => $agent->id, 'student_id' => $student->id,
+            'inscription_fee_id' => $fee2->id, 'caisse_id' => $caisse->id,
+            'montant' => 400, 'methode' => Encaissement::METHODE_ESPECES, 'date_paiement' => '2026-09-20',
+        ]);
+
+        // Default year active: only the 2025/2026 payment is listed.
+        $this->actingAs($user)
+            ->get(route('backoffice.encaissements.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('encaissements.data', 1)
+                ->where('encaissements.data.0.reference', 'ENC-Y1')
+            );
+
+        // Switch to 2026/2027: only that year's payment is listed.
+        app(CurrentContext::class)->setAnneeScolaire($nextYear->id);
+        $this->actingAs($user)
+            ->get(route('backoffice.encaissements.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('encaissements.data', 1)
+                ->where('encaissements.data.0.reference', 'ENC-Y2')
+            );
+    }
+
+    /** An avance (no fee) follows its payment date into the year it falls in. */
+    public function test_avances_tab_follows_the_payment_date_year(): void
+    {
+        $user = $this->userWith('payments.view');
+        $agent = $user->employee;
+        $caisse = Caisse::factory()->create(['etablissement_id' => $this->centre->id]);
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+
+        Encaissement::create([
+            'reference' => 'ENC-AV1', 'agent_id' => $agent->id, 'student_id' => $student->id,
+            'inscription_fee_id' => null, 'caisse_id' => $caisse->id,
+            'montant' => 500, 'methode' => Encaissement::METHODE_ESPECES, 'date_paiement' => '2025-10-01',
+        ]);
+        Encaissement::create([
+            'reference' => 'ENC-AV2', 'agent_id' => $agent->id, 'student_id' => $student->id,
+            'inscription_fee_id' => null, 'caisse_id' => $caisse->id,
+            'montant' => 500, 'methode' => Encaissement::METHODE_ESPECES, 'date_paiement' => '2026-10-01',
+        ]);
+
+        // Default year 2025/2026 (sept 2025 → août 2026): only ENC-AV1.
+        $this->actingAs($user)
+            ->get(route('backoffice.encaissements.index', ['view' => 'avance']))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('encaissements.data', 1)
+                ->where('encaissements.data.0.reference', 'ENC-AV1')
+            );
+    }
+
     public function test_student_inscriptions_lookup_returns_current_year_registrations(): void
     {
         $this->actingAs($this->userWith('payments.view', 'payments.create'));

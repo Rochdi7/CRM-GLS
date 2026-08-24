@@ -68,6 +68,21 @@ final class GetEncaissementsList
                 $this->context->etablissementId(),
                 fn ($q, $centreId) => $q->whereHas('student', fn ($s) => $s->where('etablissement_id', $centreId)),
             )
+            // Year of a payment = the academic year of the inscription its
+            // fee belongs to (like the Inscriptions list). An avance has no
+            // fee — and therefore no inscription — so it is matched by its
+            // payment date falling inside the selected year instead.
+            ->when($this->context->anneeScolaire(), function ($q, $annee): void {
+                $q->where(function ($sub) use ($annee): void {
+                    $sub->whereHas('fee.inscription', fn ($i) => $i->where('annee_scolaire_id', $annee->id))
+                        ->orWhere(fn ($w) => $w
+                            ->whereNull('inscription_fee_id')
+                            ->whereBetween('date_paiement', [
+                                $annee->date_debut->toDateString(),
+                                $annee->date_fin->toDateString(),
+                            ]));
+                });
+            })
             // Page view tabs (wimschool-style, read-only filters): "cheque" =
             // cheque payments; "avance" = unallocated advances — payments
             // with NO fee attached (Encaissement::isAvance()): fresh avances
