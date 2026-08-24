@@ -223,13 +223,25 @@ final class CenterAccessTest extends TestCase
             $context->availableCentres()->pluck('id')->all(),
         );
 
+        // « Tous les centres » is for GLOBAL users only — a multi-center
+        // employee always works in exactly ONE center, defaulting to their
+        // PRIMARY one (employees.etablissement_id).
+        $this->assertFalse($context->canPickAllCenters());
+        $this->assertFalse($context->isAllCenters());
+        $this->assertSame($this->centerA->id, $context->etablissementId());
+
         // Selecting one of their own centers is honored.
         $context->setEtablissement($this->centerB->id);
         $this->assertSame($this->centerB->id, $context->etablissementId());
 
-        // A center they don't hold is silently refused (stays on B).
+        // A center they don't hold is silently refused (stays on B)...
         $context->setEtablissement($centerC->id);
         $this->assertSame($this->centerB->id, $context->etablissementId());
+
+        // ...and so is « Tous les centres » (null) — they keep center B.
+        $context->setEtablissement(null);
+        $this->assertSame($this->centerB->id, $context->etablissementId());
+        $this->assertFalse($context->isAllCenters());
     }
 
     public function test_a_single_center_employee_still_cannot_switch_centers(): void

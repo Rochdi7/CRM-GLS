@@ -54,6 +54,7 @@ final class HandleInertiaRequests extends Middleware
                     'etablissementId' => $context->etablissementId(),
                     'isAllCenters' => $context->isAllCenters(),
                     'canSwitchCenter' => $context->canSwitchCenter(),
+                    'canPickAllCenters' => $context->canPickAllCenters(),
                     'currentCenter' => $context->etablissement() === null ? null : [
                         'id' => $context->etablissement()->id,
                         'name' => $context->etablissement()->nom_centre,

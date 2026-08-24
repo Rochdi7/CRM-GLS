@@ -15,12 +15,15 @@ use Illuminate\Support\Collection;
  *
  * Persisted in the session (per user), so switching from the top bar sticks
  * across pages. Center choices are permission-aware:
- *  - `centers.access-all` ⇒ every center, plus "Tous les centres";
+ *  - `centers.access-all` (super-admin / hand-granted — no role carries it,
+ *    CLAUDE.md §16) ⇒ every center, plus "Tous les centres";
  *  - otherwise the centers the user's employee is assigned to
- *    (employee_etablissement pivot). A multi-center employee may switch
- *    freely between THEIR centers and pick "Tous les centres", which then
- *    means "all of mine" — every query still runs through
- *    CenterAccessService::scopeAccessibleCenters(), so it can never widen
+ *    (employee_etablissement pivot). A multi-center employee switches
+ *    freely between THEIR centers but ALWAYS works in exactly one at a
+ *    time — « Tous les centres » is never offered nor accepted for them
+ *    (global users only); their default is their PRIMARY center
+ *    (employees.etablissement_id). Every query still runs through
+ *    CenterAccessService::scopeAccessibleCenters(), so nothing can widen
  *    beyond the assignment;
  *  - a single-center employee stays locked to it, exactly as before.
  *
@@ -140,12 +143,20 @@ final class CurrentContext
                 $center = Etablissement::find($ids[0]);
             } else {
                 // Multi-center employee: honor the session choice as long as
-                // it is one of THEIR centers; null = "all of mine".
+                // it is one of THEIR centers. « Tous les centres » is for
+                // GLOBAL users only (super-admin / hand-granted
+                // centers.access-all) — a multi-center employee ALWAYS works
+                // in exactly one center at a time, defaulting to their
+                // PRIMARY one (employees.etablissement_id — where their
+                // caisse lives), falling back to their first assigned center.
                 $id = session(self::SESSION_CENTER);
 
-                $center = ($id !== null && in_array((int) $id, $ids, true))
-                    ? Etablissement::find($id)
-                    : null;
+                if ($id === null || ! in_array((int) $id, $ids, true)) {
+                    $primary = $user->employee?->etablissement_id;
+                    $id = ($primary !== null && in_array((int) $primary, $ids, true)) ? $primary : $ids[0];
+                }
+
+                $center = Etablissement::find($id);
             }
         } else {
             $id = session(self::SESSION_CENTER);
@@ -182,13 +193,23 @@ final class CurrentContext
             return false;
         }
 
-        if ($this->centerAccess->hasGlobalAccess($user)) {
-            return session(self::SESSION_CENTER) === null;
-        }
+        // « Tous les centres » exists ONLY for global users (super-admin /
+        // hand-granted centers.access-all). A multi-center employee always
+        // works in exactly one of their centers — never "all of mine".
+        return $this->centerAccess->hasGlobalAccess($user)
+            && session(self::SESSION_CENTER) === null;
+    }
 
-        // Only meaningful for employees holding more than one center.
-        return count($this->centerAccess->accessibleCenterIds($user)) > 1
-            && $this->etablissement() === null;
+    /**
+     * Whether the switcher may offer « Tous les centres » — global users
+     * only. Shared to the ContextSwitcher so the option is not even drawn
+     * for a multi-center employee (the server refuses it regardless).
+     */
+    public function canPickAllCenters(): bool
+    {
+        $user = auth()->user();
+
+        return $user !== null && $this->centerAccess->hasGlobalAccess($user);
     }
 
     public function setEtablissement(?int $id): void
@@ -207,6 +228,13 @@ final class CurrentContext
         }
 
         if ($id === null) {
+            // « Tous les centres » — global users only; a multi-center
+            // employee posting null is silently refused (they keep their
+            // current center), same as an id outside their assignment.
+            if (! $this->centerAccess->hasGlobalAccess($user)) {
+                return;
+            }
+
             session()->forget(self::SESSION_CENTER);
             $this->centerResolved = false;
             $this->resolvedCenter = null;

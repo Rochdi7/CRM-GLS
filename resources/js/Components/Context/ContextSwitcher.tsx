@@ -204,15 +204,21 @@ export default function ContextSwitcher({ context }: ContextSwitcherProps) {
                         className={`dropdown-menu dropdown-menu-end${centerMenuOpen ? ' show' : ''}`}
                         style={centerMenuOpen ? menuStyle(centerMenuPos) : undefined}
                     >
-                        <button
-                            type="button"
-                            className={`dropdown-item border-0 bg-transparent w-100 text-start${context.isAllCenters ? ' active' : ''}`}
-                            onClick={() => submitContext({ etablissement_id: null })}
-                        >
-                            <i className="ti ti-world me-2" />
-                            Tous les centres
-                        </button>
-                        <div className="dropdown-divider" />
+                        {/* Global users only — a multi-center employee picks ONE of
+                            their centers; the server refuses null for them anyway. */}
+                        {context.canPickAllCenters && (
+                            <>
+                                <button
+                                    type="button"
+                                    className={`dropdown-item border-0 bg-transparent w-100 text-start${context.isAllCenters ? ' active' : ''}`}
+                                    onClick={() => submitContext({ etablissement_id: null })}
+                                >
+                                    <i className="ti ti-world me-2" />
+                                    Tous les centres
+                                </button>
+                                <div className="dropdown-divider" />
+                            </>
+                        )}
                         {context.availableCenters.map((centre) => (
                             <button
                                 key={centre.id}

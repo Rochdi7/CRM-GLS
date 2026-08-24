@@ -17,6 +17,8 @@ export interface Context {
     etablissementId: number | null;
     isAllCenters: boolean;
     canSwitchCenter: boolean;
+    /** « Tous les centres » is offered to global users only (super-admin / hand-granted centers.access-all). */
+    canPickAllCenters: boolean;
     currentCenter: ContextOption | null;
     currentAcademicYear: ContextOption | null;
     availableCenters: ContextOption[];

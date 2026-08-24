@@ -508,12 +508,15 @@ the database layer. Non-negotiable invariants already enforced in code:
   widgets (e.g. the dashboard stat cards,
   `resources/js/Pages/Backoffice/Dashboard/Index.tsx`) simply re-render on
   the next Inertia navigation/reload, since context lives server-side in the
-  session, not in client state. Center switching is permission-aware — only
-  `centers.access-all` users can change center or pick "Tous les centres";
-  others are locked to the centers their employee is assigned to (see the
-  multi-center rule below) — a single-center employee cannot switch at all,
-  while one assigned to several may switch among *those* centers and pick
-  "Tous les centres", which then means "all of mine". The header no
+  session, not in client state. Center switching is governed by « Centres
+  affectés » — a single-center employee cannot switch at all; one assigned
+  to several may switch among *those* centers but ALWAYS works in exactly
+  one at a time, defaulting to their PRIMARY center
+  (`employees.etablissement_id`). **« Tous les centres » exists ONLY for
+  global users** (super-admin, or a hand-granted `centers.access-all`):
+  `CurrentContext::canPickAllCenters()` gates the option in the switcher
+  and `setEtablissement(null)` is refused server-side for everyone else —
+  never re-offer "all of mine" to multi-center employees. The header no
   longer has the language or notification dropdowns. Seed data:
   `ReferentialDataSeeder` (years 2025/2026-default + 2026/2027, 7 GLS
   branches, 2 rooms each). Tests: `tests/Feature/Backoffice/Context/`,
