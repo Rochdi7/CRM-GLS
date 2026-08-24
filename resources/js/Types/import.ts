@@ -42,9 +42,3 @@ export interface ImportEtablissementOption {
     id: number;
     nom_centre: string;
 }
-
-export interface ImportAnneeScolaireOption {
-    id: number;
-    nom: string;
-    par_defaut: boolean;
-}

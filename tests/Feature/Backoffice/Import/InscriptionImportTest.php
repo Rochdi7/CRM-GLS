@@ -617,21 +617,25 @@ final class InscriptionImportTest extends TestCase
         $this->assertSame('student_not_found', $row->errors[0]['code']);
     }
 
-    public function test_analyze_rejects_a_centre_the_user_cannot_access(): void
+    public function test_analyze_ignores_a_posted_centre_when_the_context_locks_one(): void
     {
+        // Non-global single-centre user: the active context IS their centre,
+        // so a hostile/stale etablissement_id in the request is ignored — the
+        // batch can only ever land in the centre they actually work in.
         $user = User::factory()->create();
         $user->givePermissionTo('import.view', 'import.create');
         Employee::factory()->create(['user_id' => $user->id, 'etablissement_id' => $this->centre->id]);
 
-        $response = $this->actingAs($user->fresh())->post(route('backoffice.import.inscriptions.analyze'), [
+        $this->actingAs($user->fresh())->post(route('backoffice.import.inscriptions.analyze'), [
             'file' => $this->sampleUpload(),
             'etablissement_id' => $this->otherCentre->id,
             'annee_scolaire_id' => $this->annee->id,
             'groupe_mapping' => [],
         ]);
 
-        $response->assertForbidden();
-        $this->assertSame(0, ImportBatch::query()->count());
+        $batch = ImportBatch::query()->firstOrFail();
+        $this->assertSame($this->centre->id, $batch->etablissement_id);
+        $this->assertSame($this->annee->id, $batch->annee_scolaire_id);
     }
 
     public function test_preview_and_result_pages_render(): void

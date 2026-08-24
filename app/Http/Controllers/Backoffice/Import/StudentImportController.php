@@ -6,14 +6,15 @@ namespace App\Http\Controllers\Backoffice\Import;
 
 use App\Http\Controllers\Backoffice\Concerns\ResolvesActingEmployee;
 use App\Http\Controllers\Backoffice\Import\Concerns\BuildsImportPreview;
+use App\Http\Controllers\Backoffice\Import\Concerns\ResolvesImportScope;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Import\AnalyzeStudentImportRequest;
 use App\Http\Requests\Backoffice\Import\CommitImportRequest;
-use App\Models\AnneeScolaire;
 use App\Models\Etablissement;
 use App\Models\ImportBatch;
 use App\Models\ImportRow;
 use App\Services\Authorization\CenterAccessService;
+use App\Services\Context\CurrentContext;
 use App\Services\Import\DTO\ImportContext;
 use App\Services\Import\StudentImporter;
 use Illuminate\Http\JsonResponse;
@@ -26,6 +27,7 @@ final class StudentImportController extends Controller
 {
     use BuildsImportPreview;
     use ResolvesActingEmployee;
+    use ResolvesImportScope;
 
     public function create(Request $request, CenterAccessService $centerAccess): Response
     {
@@ -33,7 +35,7 @@ final class StudentImportController extends Controller
 
         return Inertia::render('Backoffice/Import/Students/Upload', [
             'etablissements' => $this->etablissementOptions($request, $centerAccess),
-            'anneesScolaires' => AnneeScolaire::query()->orderByDesc('date_debut')->get(['id', 'nom', 'par_defaut']),
+            'centerLocked' => ! app(CurrentContext::class)->isAllCenters(),
         ]);
     }
 
@@ -41,18 +43,14 @@ final class StudentImportController extends Controller
     {
         $this->authorize('create', ImportBatch::class);
 
-        $data = $request->validated();
-
-        abort_unless(
-            $centerAccess->canAccessCenter($request->user(), (int) $data['etablissement_id']),
-            403,
-        );
+        $request->validated();
+        [$etablissementId, $anneeScolaireId] = $this->importScope($request, $centerAccess);
 
         $admin = $this->actingEmployee($request);
 
         $context = new ImportContext(
-            etablissementId: (int) $data['etablissement_id'],
-            anneeScolaireId: (int) $data['annee_scolaire_id'],
+            etablissementId: $etablissementId,
+            anneeScolaireId: $anneeScolaireId,
         );
 
         $batch = $importer->analyze($request->file('file'), $context, $admin);

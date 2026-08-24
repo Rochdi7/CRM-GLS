@@ -6,16 +6,17 @@ namespace App\Http\Controllers\Backoffice\Import;
 
 use App\Http\Controllers\Backoffice\Concerns\ResolvesActingEmployee;
 use App\Http\Controllers\Backoffice\Import\Concerns\BuildsImportPreview;
+use App\Http\Controllers\Backoffice\Import\Concerns\ResolvesImportScope;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Import\AnalyzeInscriptionImportRequest;
 use App\Http\Requests\Backoffice\Import\CommitImportRequest;
 use App\Http\Requests\Backoffice\Import\PeekInscriptionGroupesRequest;
-use App\Models\AnneeScolaire;
 use App\Models\Etablissement;
 use App\Models\Group;
 use App\Models\ImportBatch;
 use App\Models\ImportRow;
 use App\Services\Authorization\CenterAccessService;
+use App\Services\Context\CurrentContext;
 use App\Services\Import\DTO\ImportContext;
 use App\Services\Import\InscriptionImporter;
 use App\Services\Import\SheetReader;
@@ -30,6 +31,7 @@ final class InscriptionImportController extends Controller
 {
     use BuildsImportPreview;
     use ResolvesActingEmployee;
+    use ResolvesImportScope;
 
     public function create(Request $request, CenterAccessService $centerAccess): Response
     {
@@ -37,7 +39,7 @@ final class InscriptionImportController extends Controller
 
         return Inertia::render('Backoffice/Import/Inscriptions/Upload', [
             'etablissements' => $this->etablissementOptions($request, $centerAccess),
-            'anneesScolaires' => AnneeScolaire::query()->orderByDesc('date_debut')->get(['id', 'nom', 'par_defaut']),
+            'centerLocked' => ! app(CurrentContext::class)->isAllCenters(),
         ]);
     }
 
@@ -49,15 +51,14 @@ final class InscriptionImportController extends Controller
     public function peekGroupes(PeekInscriptionGroupesRequest $request, SheetReader $sheetReader, CenterAccessService $centerAccess): JsonResponse
     {
         $this->authorize('create', ImportBatch::class);
-        $data = $request->validated();
-
-        abort_unless($centerAccess->canAccessCenter($request->user(), (int) $data['etablissement_id']), 403);
+        $request->validated();
+        [$etablissementId, $anneeScolaireId] = $this->importScope($request, $centerAccess);
 
         $labels = $sheetReader->distinctColumnValues($request->file('file')->getRealPath(), 'Groupe');
 
         $groups = Group::query()
-            ->where('etablissement_id', $data['etablissement_id'])
-            ->where('annee_scolaire_id', $data['annee_scolaire_id'])
+            ->where('etablissement_id', $etablissementId)
+            ->where('annee_scolaire_id', $anneeScolaireId)
             ->orderBy('nom')
             ->get(['id', 'nom']);
 
@@ -68,21 +69,20 @@ final class InscriptionImportController extends Controller
     {
         $this->authorize('create', ImportBatch::class);
         $data = $request->validated();
-
-        abort_unless($centerAccess->canAccessCenter($request->user(), (int) $data['etablissement_id']), 403);
+        [$etablissementId, $anneeScolaireId] = $this->importScope($request, $centerAccess);
 
         $admin = $this->actingEmployee($request);
 
         $groupeMapping = $this->resolveGroupeMapping(
             $importer,
             $data['groupe_mapping'],
-            (int) $data['etablissement_id'],
-            (int) $data['annee_scolaire_id'],
+            $etablissementId,
+            $anneeScolaireId,
         );
 
         $context = new ImportContext(
-            etablissementId: (int) $data['etablissement_id'],
-            anneeScolaireId: (int) $data['annee_scolaire_id'],
+            etablissementId: $etablissementId,
+            anneeScolaireId: $anneeScolaireId,
             groupeMapping: $groupeMapping,
         );
 

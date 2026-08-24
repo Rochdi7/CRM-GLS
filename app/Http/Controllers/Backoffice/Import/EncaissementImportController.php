@@ -6,11 +6,11 @@ namespace App\Http\Controllers\Backoffice\Import;
 
 use App\Http\Controllers\Backoffice\Concerns\ResolvesActingEmployee;
 use App\Http\Controllers\Backoffice\Import\Concerns\BuildsImportPreview;
+use App\Http\Controllers\Backoffice\Import\Concerns\ResolvesImportScope;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Import\AnalyzeEncaissementImportRequest;
 use App\Http\Requests\Backoffice\Import\CommitImportRequest;
 use App\Http\Requests\Backoffice\Import\PeekEncaissementOperateursRequest;
-use App\Models\AnneeScolaire;
 use App\Models\Employee;
 use App\Models\Etablissement;
 use App\Models\ImportBatch;
@@ -18,6 +18,7 @@ use App\Models\ImportRow;
 use App\Models\Inscription;
 use App\Models\Student;
 use App\Services\Authorization\CenterAccessService;
+use App\Services\Context\CurrentContext;
 use App\Services\Import\DTO\ImportContext;
 use App\Services\Import\EncaissementImporter;
 use App\Services\Import\SheetReader;
@@ -31,6 +32,7 @@ final class EncaissementImportController extends Controller
 {
     use BuildsImportPreview;
     use ResolvesActingEmployee;
+    use ResolvesImportScope;
 
     public function create(Request $request, CenterAccessService $centerAccess): Response
     {
@@ -38,7 +40,7 @@ final class EncaissementImportController extends Controller
 
         return Inertia::render('Backoffice/Import/Encaissements/Upload', [
             'etablissements' => $this->etablissementOptions($request, $centerAccess),
-            'anneesScolaires' => AnneeScolaire::query()->orderByDesc('date_debut')->get(['id', 'nom', 'par_defaut']),
+            'centerLocked' => ! app(CurrentContext::class)->isAllCenters(),
         ]);
     }
 
@@ -50,9 +52,8 @@ final class EncaissementImportController extends Controller
     public function peekOperateurs(PeekEncaissementOperateursRequest $request, SheetReader $sheetReader, CenterAccessService $centerAccess): JsonResponse
     {
         $this->authorize('create', ImportBatch::class);
-        $data = $request->validated();
-
-        abort_unless($centerAccess->canAccessCenter($request->user(), (int) $data['etablissement_id']), 403);
+        $request->validated();
+        [$etablissementId, $anneeScolaireId] = $this->importScope($request, $centerAccess);
 
         $labels = $sheetReader->distinctColumnValues($request->file('file')->getRealPath(), 'Opérateur');
 
@@ -61,17 +62,14 @@ final class EncaissementImportController extends Controller
         // (super-admin / centers.access-all) sign payments in every center
         // while being attached to a single primary one.
         $employees = Employee::query()
-            ->availableForCenter((int) $data['etablissement_id'])
+            ->availableForCenter($etablissementId)
             ->orderBy('nom')
             ->get(['id', 'nom', 'prenom']);
 
         return response()->json([
             'operateurLabels' => $labels,
             'employees' => $employees,
-            'readiness' => $this->inscriptionReadiness(
-                (int) $data['etablissement_id'],
-                (int) $data['annee_scolaire_id'],
-            ),
+            'readiness' => $this->inscriptionReadiness($etablissementId, $anneeScolaireId),
         ]);
     }
 
@@ -105,8 +103,7 @@ final class EncaissementImportController extends Controller
     {
         $this->authorize('create', ImportBatch::class);
         $data = $request->validated();
-
-        abort_unless($centerAccess->canAccessCenter($request->user(), (int) $data['etablissement_id']), 403);
+        [$etablissementId, $anneeScolaireId] = $this->importScope($request, $centerAccess);
 
         $admin = $this->actingEmployee($request);
 
@@ -116,8 +113,8 @@ final class EncaissementImportController extends Controller
         }
 
         $context = new ImportContext(
-            etablissementId: (int) $data['etablissement_id'],
-            anneeScolaireId: (int) $data['annee_scolaire_id'],
+            etablissementId: $etablissementId,
+            anneeScolaireId: $anneeScolaireId,
             operateurMapping: $operateurMapping,
             includeInactiveInscriptions: (bool) ($data['include_inactive_inscriptions'] ?? false),
         );

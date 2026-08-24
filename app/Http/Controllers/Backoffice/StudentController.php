@@ -12,6 +12,7 @@ use App\Http\Requests\Backoffice\Students\StoreStudentRequest;
 use App\Http\Requests\Backoffice\Students\UpdateStudentRequest;
 use App\Models\Etablissement;
 use App\Models\Student;
+use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
 use App\Support\Phone\Countries;
 use Illuminate\Http\RedirectResponse;
@@ -106,6 +107,7 @@ final class StudentController extends Controller
 
         $data = $request->validated();
         $payload = $this->buildPayload($data);
+        $payload['etablissement_id'] = $this->resolveEtablissementId($request, $data, null);
 
         $student = Student::create([
             ...$payload,
@@ -124,6 +126,7 @@ final class StudentController extends Controller
 
         $data = $request->validated();
         $payload = $this->buildPayload($data);
+        $payload['etablissement_id'] = $this->resolveEtablissementId($request, $data, $student->etablissement_id);
 
         $student->update($payload);
         $this->storePhoto($student, $request);
@@ -148,6 +151,41 @@ final class StudentController extends Controller
 
         return redirect()->route('backoffice.students.index')
             ->with('success', __('Student deleted.'));
+    }
+
+    /**
+     * The centre a student is written to follows §11's context rule: a
+     * centre active in the top bar always wins over anything the client
+     * posts (the form doesn't even show the select then — but the server
+     * must not trust that). Only a global user in « Tous les centres »
+     * picks the centre on the form, and even then only one they can access.
+     * On edit, an absent/ignored choice keeps the student's current centre.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function resolveEtablissementId(Request $request, array $data, ?int $current): ?int
+    {
+        $context = app(CurrentContext::class);
+
+        if (! $context->isAllCenters()) {
+            // Create: the active centre. Edit: keep the record's own centre
+            // (a multi-centre employee working in centre A must never
+            // silently MOVE a centre-B student by saving the modal), only
+            // adopting the active centre when the record has none.
+            return $current ?? $context->etablissementId();
+        }
+
+        $posted = isset($data['etablissement_id']) && $data['etablissement_id'] !== null && $data['etablissement_id'] !== ''
+            ? (int) $data['etablissement_id']
+            : null;
+
+        if ($posted !== null) {
+            abort_unless(app(CenterAccessService::class)->canAccessCenter($request->user(), $posted), 403);
+
+            return $posted;
+        }
+
+        return $current;
     }
 
     /**
@@ -176,7 +214,6 @@ final class StudentController extends Controller
             'niveau' => $data['niveau'] ?? null,
             'domaine' => $data['domaine'] ?? null,
             'examen_type' => $data['examen_type'] ?? null,
-            'etablissement_id' => $data['etablissement_id'] ?? null,
             'parent_nom' => $data['parent_nom'] ?? null,
             'parent_relation' => $data['parent_relation'] ?? null,
             'parent_sexe' => $data['parent_sexe'] ?? null,

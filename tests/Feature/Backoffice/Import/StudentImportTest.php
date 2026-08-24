@@ -92,35 +92,63 @@ final class StudentImportTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Backoffice/Import/Students/Upload')
                 ->has('etablissements')
-                ->has('anneesScolaires'));
+                ->has('centerLocked'));
     }
 
-    public function test_analyze_requires_etablissement_and_annee_scolaire(): void
+    public function test_analyze_requires_a_centre_in_all_centers_mode(): void
     {
+        // Global user in « Tous les centres »: the année comes from the
+        // context, but a specific centre must still be chosen on the form.
         $user = $this->userWith('import.view', 'import.create');
 
         $response = $this->actingAs($user)->post(route('backoffice.import.students.analyze'), [
             'file' => $this->sampleUpload(),
         ]);
 
-        $response->assertSessionHasErrors(['etablissement_id', 'annee_scolaire_id']);
+        $response->assertSessionHasErrors(['etablissement_id']);
         $this->assertSame(0, ImportBatch::query()->count());
     }
 
-    public function test_analyze_rejects_a_centre_the_user_cannot_access(): void
+    public function test_analyze_ignores_a_posted_centre_when_the_context_locks_one(): void
     {
+        // Non-global single-centre user: the active context IS their centre,
+        // so a hostile/stale etablissement_id in the request is ignored — the
+        // batch can only ever land in the centre they actually work in.
         $user = User::factory()->create();
         $user->givePermissionTo('import.view', 'import.create');
         Employee::factory()->create(['user_id' => $user->id, 'etablissement_id' => $this->centre->id]);
 
-        $response = $this->actingAs($user->fresh())->post(route('backoffice.import.students.analyze'), [
+        $this->actingAs($user->fresh())->post(route('backoffice.import.students.analyze'), [
             'file' => $this->sampleUpload(),
             'etablissement_id' => $this->otherCentre->id,
             'annee_scolaire_id' => $this->annee->id,
         ]);
 
-        $response->assertForbidden();
-        $this->assertSame(0, ImportBatch::query()->count());
+        $batch = ImportBatch::query()->firstOrFail();
+        $this->assertSame($this->centre->id, $batch->etablissement_id);
+    }
+
+    public function test_analyze_uses_the_active_context_year_never_client_input(): void
+    {
+        // The bug this guards against: the Upload form used to carry its own
+        // Année dropdown, so a batch could silently land in a different year
+        // than the one every list page displays.
+        $otherAnnee = AnneeScolaire::create([
+            'nom' => '2026/2027', 'date_debut' => '2026-09-01', 'date_fin' => '2027-08-31',
+            'par_defaut' => false, 'inscription_ouverte' => true,
+        ]);
+        $user = $this->userWith('import.view', 'import.create');
+
+        $this->actingAs($user)
+            ->withSession(['context.annee_scolaire_id' => $this->annee->id])
+            ->post(route('backoffice.import.students.analyze'), [
+                'file' => $this->sampleUpload(),
+                'etablissement_id' => $this->centre->id,
+                'annee_scolaire_id' => $otherAnnee->id,
+            ]);
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $this->assertSame($this->annee->id, $batch->annee_scolaire_id);
     }
 
     public function test_analyze_parses_all_41_rows_as_nouveau(): void

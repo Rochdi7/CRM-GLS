@@ -2,12 +2,12 @@ import { useForm } from '@inertiajs/react';
 import { type FormEvent, useState } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
-import SelectField from '@/Components/Forms/SelectField';
-import type { ImportAnneeScolaireOption, ImportEtablissementOption } from '@/Types/import';
+import ImportScopeFields from '@/Components/Import/ImportScopeFields';
+import type { ImportEtablissementOption } from '@/Types/import';
 
 interface InscriptionImportUploadProps {
     etablissements: ImportEtablissementOption[];
-    anneesScolaires: ImportAnneeScolaireOption[];
+    centerLocked: boolean;
 }
 
 interface ExistingGroup {
@@ -26,7 +26,6 @@ interface GroupeMappingEntry {
 interface UploadFormState {
     file: File | null;
     etablissement_id: string;
-    annee_scolaire_id: string;
     groupe_mapping: GroupeMappingEntry[];
 }
 
@@ -72,13 +71,14 @@ function buildMapping(labels: string[], groups: ExistingGroup[]): GroupeMappingE
 }
 
 /**
- * Two steps: (1) pick Centre + Année + file, peek the file's distinct
- * "Groupe" labels scoped to that centre/année; (2) map every label to an
- * existing group or "créer le groupe" before Analyze is allowed — the
- * import plan's mandatory scoping + no-cross-centre-group-mapping rule.
+ * Two steps: (1) confirm the active context's Centre + Année (from the
+ * top-bar switcher — see ImportScopeFields) + pick the file, peek the
+ * file's distinct "Groupe" labels scoped to that centre/année; (2) map
+ * every label to an existing group or "créer le groupe" before Analyze is
+ * allowed — the import plan's mandatory scoping +
+ * no-cross-centre-group-mapping rule.
  */
-export default function InscriptionImportUpload({ etablissements, anneesScolaires }: InscriptionImportUploadProps) {
-    const defaultAnnee = anneesScolaires.find((a) => a.par_defaut) ?? anneesScolaires[0];
+export default function InscriptionImportUpload({ etablissements, centerLocked }: InscriptionImportUploadProps) {
     const [step, setStep] = useState<'scope' | 'mapping'>('scope');
     const [existingGroups, setExistingGroups] = useState<ExistingGroup[]>([]);
     const [niveaux, setNiveaux] = useState<string[]>([]);
@@ -88,7 +88,6 @@ export default function InscriptionImportUpload({ etablissements, anneesScolaire
     const form = useForm<UploadFormState>({
         file: null,
         etablissement_id: '',
-        annee_scolaire_id: defaultAnnee ? String(defaultAnnee.id) : '',
         groupe_mapping: [],
     });
 
@@ -102,8 +101,7 @@ export default function InscriptionImportUpload({ etablissements, anneesScolaire
 
         const formData = new FormData();
         if (form.data.file) formData.append('file', form.data.file);
-        formData.append('etablissement_id', form.data.etablissement_id);
-        formData.append('annee_scolaire_id', form.data.annee_scolaire_id);
+        if (form.data.etablissement_id !== '') formData.append('etablissement_id', form.data.etablissement_id);
 
         try {
             const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
@@ -153,7 +151,7 @@ export default function InscriptionImportUpload({ etablissements, anneesScolaire
             .filter((key, index, all) => all.indexOf(key) !== index)
     );
 
-    const canPeek = form.data.file !== null && form.data.etablissement_id !== '' && form.data.annee_scolaire_id !== '';
+    const canPeek = form.data.file !== null && (centerLocked || form.data.etablissement_id !== '');
     const canAnalyze = form.data.groupe_mapping.every((e) =>
         e.action === 'map' ? e.group_id !== '' : e.nom !== '' && e.niveau !== ''
     );
@@ -170,32 +168,13 @@ export default function InscriptionImportUpload({ etablissements, anneesScolaire
             {step === 'scope' && (
                 <Card title="Importer des inscriptions depuis l'ancien CRM">
                     <form onSubmit={handlePeekSubmit}>
-                        <div className="row">
-                            <div className="col-md-6">
-                                <SelectField
-                                    id="import-etablissement"
-                                    label="Centre"
-                                    required
-                                    placeholder="Choisir un centre…"
-                                    options={etablissements.map((e) => ({ value: e.id, label: e.nom_centre }))}
-                                    value={form.data.etablissement_id}
-                                    error={form.errors.etablissement_id}
-                                    onChange={(e) => form.setData('etablissement_id', e.target.value)}
-                                />
-                            </div>
-                            <div className="col-md-6">
-                                <SelectField
-                                    id="import-annee-scolaire"
-                                    label="Année scolaire"
-                                    required
-                                    placeholder="Choisir une année scolaire…"
-                                    options={anneesScolaires.map((a) => ({ value: a.id, label: a.nom }))}
-                                    value={form.data.annee_scolaire_id}
-                                    error={form.errors.annee_scolaire_id}
-                                    onChange={(e) => form.setData('annee_scolaire_id', e.target.value)}
-                                />
-                            </div>
-                        </div>
+                        <ImportScopeFields
+                            etablissements={etablissements}
+                            centerLocked={centerLocked}
+                            etablissementId={form.data.etablissement_id}
+                            error={form.errors.etablissement_id}
+                            onChange={(value) => form.setData('etablissement_id', value)}
+                        />
 
                         <div className="mb-3">
                             <label className="form-label" htmlFor="import-file">

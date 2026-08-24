@@ -22,8 +22,9 @@ final class AnalyzePresenceImportRequest extends FormRequest
     {
         return [
             'file' => ['required', 'file', 'mimes:xlsx', 'max:10240'],
-            'etablissement_id' => ['required', 'integer', 'exists:etablissements,id'],
-            'annee_scolaire_id' => ['required', 'integer', 'exists:annees_scolaires,id'],
+            // Honored only in « Tous les centres » mode — otherwise the
+            // active context decides (ResolvesImportScope), never the client.
+            'etablissement_id' => ['nullable', 'integer', 'exists:etablissements,id'],
             'groupe_mapping' => ['present', 'array'],
             'groupe_mapping.*.label' => ['required', 'string'],
             'groupe_mapping.*.action' => ['required', Rule::in(['map', 'create'])],
