@@ -10,6 +10,7 @@ use App\Models\Caisse;
 use App\Models\Employee;
 use App\Models\Encaissement;
 use App\Models\InscriptionFee;
+use App\Models\Student;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -33,6 +34,11 @@ final class EnregistrerEncaissement
         return DB::transaction(function () use ($data, $agent): Encaissement {
             $encaissement = Encaissement::create([
                 ...$data,
+                // Dedupe scope for legacy refs (unique per centre). The
+                // importer passes its batch centre; a normal payment takes
+                // the student's.
+                'etablissement_id' => $data['etablissement_id']
+                    ?? Student::query()->whereKey($data['student_id'])->value('etablissement_id'),
                 'reference' => ReferenceGenerator::make('ENC', 'encaissements'),
                 'agent_id' => $agent->id,
             ]);

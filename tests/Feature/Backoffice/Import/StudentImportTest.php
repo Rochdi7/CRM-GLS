@@ -58,6 +58,120 @@ final class StudentImportTest extends TestCase
     }
 
     /**
+     * The export writes "-" for any missing value. It was accepted for the
+     * phone and the birth date but rejected for Sexe (« invalid_enum »),
+     * which dropped the student AND orphaned her inscriptions and payments
+     * downstream (Rabat, 24/08/2026).
+     */
+    public function test_a_dash_sexe_is_a_missing_value_not_an_invalid_one(): void
+    {
+        $user = $this->userWith('import.view', 'import.create');
+
+        $this->actingAs($user)->post(route('backoffice.import.students.analyze'), [
+            'file' => $this->buildUpload([
+                ['E1', 'MAJDOULINE', 'ZANOUNY', '-', '-', '-'],
+                ['E2', 'AYOUB', 'MEDDAH', '0612345678', 'Autre', '01/01/2000'],
+            ]),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ])->assertSessionHasNoErrors();
+
+        $rows = ImportBatch::query()->firstOrFail()->rows()->orderBy('source_row_number')->get();
+        $this->assertSame(ImportRow::STATUT_NOUVEAU, $rows[0]->status, json_encode($rows[0]->errors));
+        $this->assertSame('', (string) ($rows[0]->raw['sexe'] ?? ''));
+        $this->assertSame(ImportRow::STATUT_ERREUR, $rows[1]->status, 'a real unknown value is still refused');
+        $this->assertSame('invalid_enum', $rows[1]->errors[0]['code']);
+    }
+
+    /**
+     * The old CRM holds the same person twice (double-click: two refs, same
+     * phone and birth date, created the same minute) in ~50 cases across
+     * the centres. Importing both copies turned every payment of that
+     * student into an ambiguity conflict. The second copy is a DOUBLON;
+     * a real homonym (different birth date) is still two students.
+     */
+    public function test_the_same_person_entered_twice_in_the_file_is_imported_once(): void
+    {
+        $user = $this->userWith('import.view', 'import.create');
+
+        $this->actingAs($user)->post(route('backoffice.import.students.analyze'), [
+            'file' => $this->buildUpload([
+                ['E21', 'ABDELKABIR', 'BOUDRARI', '212762368242', 'Homme', '04/07/1997'],
+                ['E52', 'ABDELKABIR', 'BOUDRARI', '212762368242', 'Homme', '04/07/1997'],   // same DOB
+                ['E53', 'ABDELKABIR', 'BOUDRARI', '-', 'Homme', '04/07/1997'],              // same DOB, no phone
+                ['E378', 'ABDELHAMID', 'KARTOUT', '212765335901', 'Homme', '-'],
+                ['E379', 'ABDELHAMID', 'KARTOUT', '212765335901', 'Homme', '-'],            // no DOB, same phone
+                ['E329', 'YOUSSEF', 'MOUHIB', '212634671963', 'Homme', '21/08/2002'],
+                ['E214', 'YOUSSEF', 'MOUHIB', '212777897867', 'Homme', '-'],                // real homonym
+            ]),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ])->assertSessionHasNoErrors();
+
+        $rows = ImportBatch::query()->firstOrFail()->rows()->orderBy('source_row_number')->get()->keyBy('legacy_ref');
+        $this->assertSame(ImportRow::STATUT_NOUVEAU, $rows['E21']->status);
+        $this->assertSame(ImportRow::STATUT_DOUBLON, $rows['E52']->status);
+        $this->assertSame('duplicate_in_file', $rows['E52']->errors[0]['code']);
+        $this->assertSame('E21', $rows['E52']->resolution['matched_legacy_ref']);
+        $this->assertSame(ImportRow::STATUT_DOUBLON, $rows['E53']->status);
+        $this->assertSame(ImportRow::STATUT_NOUVEAU, $rows['E378']->status);
+        $this->assertSame(ImportRow::STATUT_DOUBLON, $rows['E379']->status);
+        $this->assertSame(ImportRow::STATUT_NOUVEAU, $rows['E329']->status);
+        $this->assertSame(ImportRow::STATUT_NOUVEAU, $rows['E214']->status, 'different phone, one without DOB ⇒ two people');
+
+        $this->commitAllSelected($user, $rows->first()->batch, $rows->where('status', ImportRow::STATUT_NOUVEAU)->pluck('id')->all());
+        $this->assertSame(1, Student::query()->where('nom', 'BOUDRARI')->count());
+        $this->assertSame(1, Student::query()->where('nom', 'KARTOUT')->count());
+        $this->assertSame(2, Student::query()->where('nom', 'MOUHIB')->count());
+    }
+
+    /**
+     * Minimal inline-strings students workbook (same ZipArchive approach as
+     * the other import tests — OpenSpout's writer dies on the Windows temp
+     * folder).
+     *
+     * @param  array<int, array<int, string>>  $rows  [réf, prénom, nom, téléphone, sexe, date de naissance]
+     */
+    private function buildUpload(array $rows): UploadedFile
+    {
+        $dir = storage_path('framework/testing/import');
+        if (! is_dir($dir)) {
+            mkdir($dir, 0777, true);
+        }
+        $path = $dir.DIRECTORY_SEPARATOR.uniqid('etu', true).'.xlsx';
+
+        $header = ['N°', 'Réf', 'Prénom', 'Nom', 'Téléphone', 'Sexe', 'Date de naissance'];
+        $all = [$header];
+        foreach ($rows as $offset => $row) {
+            $all[] = [(string) ($offset + 1), ...array_values($row)];
+        }
+
+        $sheetRows = '';
+        foreach ($all as $index => $row) {
+            $cells = '';
+            foreach (array_values($row) as $column => $value) {
+                $cells .= sprintf(
+                    '<c r="%s" t="inlineStr"><is><t xml:space="preserve">%s</t></is></c>',
+                    chr(ord('A') + $column).($index + 1),
+                    htmlspecialchars((string) $value, ENT_XML1 | ENT_QUOTES, 'UTF-8')
+                );
+            }
+            $sheetRows .= sprintf('<row r="%d">%s</row>', $index + 1, $cells);
+        }
+
+        $zip = new \ZipArchive;
+        $zip->open($path, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
+        $zip->addFromString('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>');
+        $zip->addFromString('_rels/.rels', '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+        $zip->addFromString('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Feuille1" sheetId="1" r:id="rId1"/></sheets></workbook>');
+        $zip->addFromString('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>');
+        $zip->addFromString('xl/worksheets/sheet1.xml', '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'.$sheetRows.'</sheetData></worksheet>');
+        $zip->close();
+
+        return new UploadedFile($path, 'liste-etudiants.xlsx', null, null, true);
+    }
+
+    /**
      * commit() now processes a small chunk per call (progress-bar UX) —
      * loops the JSON endpoint to completion the way the real Preview page's
      * useCommitProgress hook does, and returns the final chunk's response.

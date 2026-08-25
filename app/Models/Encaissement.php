@@ -46,7 +46,7 @@ class Encaissement extends Model
     ];
 
     protected $fillable = [
-        'reference', 'legacy_ref', 'legacy_source', 'student_id', 'inscription_fee_id', 'applied_from_encaissement_id', 'cheque_id', 'montant', 'methode',
+        'reference', 'legacy_ref', 'legacy_source', 'etablissement_id', 'student_id', 'inscription_fee_id', 'applied_from_encaissement_id', 'cheque_id', 'montant', 'methode',
         'date_paiement', 'caisse_id', 'agent_id',
         'numero_cheque', 'banque', 'date_echeance_cheque', 'note',
     ];
@@ -64,6 +64,17 @@ class Encaissement extends Model
     public function student(): BelongsTo
     {
         return $this->belongsTo(Student::class);
+    }
+
+    /**
+     * The student's centre at the time of payment — dedupe scope for
+     * legacy refs (unique per centre, see migration
+     * create_encaissements_table). Money routing never
+     * reads it: caisse_id is the account.
+     */
+    public function etablissement(): BelongsTo
+    {
+        return $this->belongsTo(Etablissement::class);
     }
 
     public function fee(): BelongsTo

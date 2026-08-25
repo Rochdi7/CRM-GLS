@@ -33,8 +33,15 @@ final class SheetReader
      */
     private const array HEADER_REF_TOKENS = ['Réf', 'Réf.', 'Élève'];
 
-    /** Pathological-file guard — real exports are a few dozen/hundred rows. */
-    private const int FOOTER_CUTOFF_ROW_CAP = 5000;
+    /**
+     * Pathological-file guard only. It was 5 000 — and the Rabat payments
+     * export has 5 340 data rows, so the 24/08/2026 import silently read
+     * the first 5 000 and dropped 340 payments (363 450 DH) with no error,
+     * the result page even reporting « Lignes dans le fichier : 5000 ». A
+     * full-year export of the biggest centre is ~5–6 k rows and grows every
+     * year; the cap must stay far above anything a real export can reach.
+     */
+    private const int FOOTER_CUTOFF_ROW_CAP = 200000;
 
     /**
      * @param  array<int, string>  $expectedColumns  column names that must be present in the detected header row

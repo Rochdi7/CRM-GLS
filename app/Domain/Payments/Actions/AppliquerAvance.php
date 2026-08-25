@@ -74,6 +74,7 @@ final class AppliquerAvance
             $application = Encaissement::create([
                 'reference' => ReferenceGenerator::make('ENC', 'encaissements'),
                 'student_id' => $avance->student_id,
+                'etablissement_id' => $avance->etablissement_id,
                 'inscription_fee_id' => $fee->id,
                 'applied_from_encaissement_id' => $avance->id,
                 'montant' => $montant,

@@ -105,6 +105,41 @@ final class InscriptionImportTest extends TestCase
     }
 
     /**
+     * Two students with the same name in the centre: the export's Téléphone
+     * column picks the right one; without a phone match the row stays a
+     * CONFLIT with both candidates (never a guess).
+     */
+    public function test_homonyms_are_told_apart_by_the_phone_column(): void
+    {
+        $twinA = Student::factory()->create(['etablissement_id' => $this->centre->id, 'prenom' => 'YOUSSEF', 'nom' => 'MOUHIB', 'telephone' => '+212611111111']);
+        $twinB = Student::factory()->create(['etablissement_id' => $this->centre->id, 'prenom' => 'YOUSSEF', 'nom' => 'MOUHIB', 'telephone' => '+212622222222']);
+        $group = Group::factory()->create([
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id, 'nom' => 'Herr Driss 13h',
+        ]);
+        $group->frais()->sync([Frais::first()->id => ['montant' => 300, 'date_echeance' => '2026-09-01']]);
+
+        $user = $this->userWith('import.view', 'import.create');
+        $this->actingAs($user)->post(route('backoffice.import.inscriptions.analyze'), [
+            'file' => $this->buildUpload([
+                ['1SL126', 'YOUSSEF MOUHIB', 'Herr Driss 13h', 'Active', '05/01/2026', '212622222222'],
+                ['2SL126', 'YOUSSEF MOUHIB', 'Herr Driss 13h', 'Active', '06/01/2026', '-'],
+                ['3SL126', 'YOUSSEF MOUHIB', 'Herr Driss 13h', 'Active', '07/01/2026', '0699999999'],
+            ]),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'groupe_mapping' => [['label' => 'Herr Driss 13h', 'action' => 'map', 'group_id' => $group->id]],
+        ])->assertSessionHasNoErrors();
+
+        $rows = ImportBatch::query()->firstOrFail()->rows()->orderBy('source_row_number')->get();
+        $this->assertSame(ImportRow::STATUT_NOUVEAU, $rows[0]->status);
+        $this->assertSame($twinB->id, (int) $rows[0]->resolution['student_id']);
+        $this->assertSame(ImportRow::STATUT_CONFLIT, $rows[1]->status, 'no phone ⇒ still ambiguous');
+        $this->assertSame(ImportRow::STATUT_CONFLIT, $rows[2]->status, 'unknown phone ⇒ still ambiguous');
+        $this->assertSame('ambiguous_student', $rows[2]->errors[0]['code']);
+        $this->assertNotSame($twinA->id, (int) ($rows[2]->resolution['student_id'] ?? 0));
+    }
+
+    /**
      * Builds a one-off inscriptions xlsx — the shipped sample has no
      * recycled réf., and the recycled-réf. bug can only be reproduced with
      * one.
@@ -129,10 +164,12 @@ final class InscriptionImportTest extends TestCase
         $sheetRows = '';
         // The leading "N°" column is what SheetReader keys the header row
         // off — a sheet without it is not recognised as an export at all.
-        $header = ['N°', 'Réf', 'Étudiant', 'Groupe', 'Statut', "Date d'inscription"];
+        // Téléphone is optional per row (6th value) — the real export
+        // carries it and the importer uses it to tell homonyms apart.
+        $header = ['N°', 'Réf', 'Étudiant', 'Groupe', 'Statut', "Date d'inscription", 'Téléphone'];
         $numbered = [];
         foreach ($rows as $offset => $row) {
-            $numbered[] = [(string) ($offset + 1), ...array_values($row)];
+            $numbered[] = [(string) ($offset + 1), ...array_pad(array_values($row), 6, '')];
         }
 
         foreach ([$header, ...$numbered] as $index => $row) {

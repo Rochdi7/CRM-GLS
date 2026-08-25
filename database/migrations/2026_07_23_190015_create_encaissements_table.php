@@ -20,11 +20,16 @@ return new class extends Migration
         Schema::create('encaissements', function (Blueprint $table): void {
             $table->id();
             $table->string('reference', 20)->unique();
-            // Legacy import provenance. Unlike students/inscriptions this table
-            // has no etablissement_id (the centre is reached via student /
-            // inscription), so legacy_ref is scoped GLOBALLY instead.
+            // Legacy import provenance. legacy_ref is unique PER CENTRE like
+            // students/inscriptions — every centre's old CRM numbers its
+            // payments from P1, so « P3 » exists in all seven exports (the
+            // 24/08/2026 Rabat import lost 4 297 rows to a global check).
+            // etablissement_id is that dedupe scope (the student's centre at
+            // payment time); money routing never reads it — caisse_id is the
+            // account.
             $table->string('legacy_ref', 50)->nullable();
             $table->string('legacy_source', 30)->nullable();
+            $table->foreignId('etablissement_id')->nullable()->constrained('etablissements')->nullOnDelete();
             $table->foreignId('student_id')->constrained('students')->restrictOnDelete();
             // Nullable: an "avance" is money received but not yet allocated to
             // any fee (gls-crm-schema.md §11's documented trade-off), applied
@@ -55,7 +60,7 @@ return new class extends Migration
             $table->index('agent_id', 'encaissements_agent_id_idx');
             $table->index('applied_from_encaissement_id', 'encaissements_applied_from_idx');
             $table->index('cheque_id', 'encaissements_cheque_id_idx');
-            $table->unique('legacy_ref', 'encaissements_legacy_ref_unique');
+            $table->unique(['etablissement_id', 'legacy_ref'], 'encaissements_etab_legacy_ref_unique');
         });
     }
 

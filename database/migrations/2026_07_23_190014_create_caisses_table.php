@@ -30,7 +30,10 @@ return new class extends Migration
             $table->string('type', 30)->default('Caissière');
             $table->foreignId('etablissement_id')->nullable()->constrained('etablissements')->nullOnDelete();
             $table->foreignId('responsable_employee_id')->nullable()->constrained('employees')->nullOnDelete();
-            $table->decimal('solde', 12, 2)->nullable()->default(0);
+            // NOT NULL (24/08/2026 audit): a NULL balance is meaningless —
+            // "(float) null" silently reads 0 and the next ledger movement
+            // would journal a false « avant ».
+            $table->decimal('solde', 12, 2)->default(0);
             $table->string('statut', 20)->default('Active');
             $table->timestamps();
 
@@ -62,6 +65,19 @@ return new class extends Migration
                 type NOT IN ('TPE', 'Chèque', 'Virement')
                 OR (etablissement_id IS NOT NULL AND responsable_employee_id IS NULL)
             )
+        SQL);
+
+        // ONE physical till per employee (24/08/2026 audit): the provisioner's
+        // "exists() then create()" is not atomic — two concurrent requests
+        // (observer + first « Ma caisse » visit) could each create a till and
+        // the employee's cash would be split across two rows picked
+        // non-deterministically. Partial: an « Externe » safe assigned to the
+        // same employee is unaffected; NULL responsables (legacy tills) are
+        // ignored by PostgreSQL's unique semantics.
+        DB::statement(<<<'SQL'
+            CREATE UNIQUE INDEX caisses_une_caissiere_par_employe
+            ON caisses (responsable_employee_id)
+            WHERE type = 'Caissière' AND responsable_employee_id IS NOT NULL
         SQL);
     }
 

@@ -506,7 +506,7 @@ final class InscriptionImporter implements Importer
             $parseErrors[] = ['field' => 'date_inscription', 'code' => 'unparseable', 'message' => $e->getMessage()];
         }
 
-        $studentResolution = $this->resolveStudent($etudiant);
+        $studentResolution = $this->resolveStudent($etudiant, CellNormalizer::normalizePhone($rawRow['Téléphone'] ?? null));
         $groupResolution = $this->resolveGroup($context, $groupe);
 
         $raw = [
@@ -643,10 +643,10 @@ final class InscriptionImporter implements Importer
 
         Student::query()
             ->where('etablissement_id', $etablissementId)
-            ->get(['id', 'prenom', 'nom'])
+            ->get(['id', 'prenom', 'nom', 'telephone'])
             ->each(function (Student $student) use (&$index): void {
                 $key = mb_strtolower(CellNormalizer::text("{$student->prenom} {$student->nom}"));
-                $index[$key][] = ['id' => $student->id, 'nom' => "{$student->prenom} {$student->nom}"];
+                $index[$key][] = ['id' => $student->id, 'nom' => "{$student->prenom} {$student->nom}", 'telephone' => $student->telephone];
             });
 
         return $index;
@@ -765,7 +765,7 @@ final class InscriptionImporter implements Importer
     /**
      * @return array{student_id: ?int, candidates: array<int, array{id: int, nom: string}>, conflicts: array<int, array{field: string, code: string, message: string}>}
      */
-    private function resolveStudent(string $etudiant): array
+    private function resolveStudent(string $etudiant, ?string $telephone = null): array
     {
         if ($etudiant === '') {
             return ['student_id' => null, 'candidates' => [], 'conflicts' => [
@@ -778,6 +778,17 @@ final class InscriptionImporter implements Importer
 
         if (count($matches) === 1) {
             return ['student_id' => $matches[0]['id'], 'candidates' => [], 'conflicts' => []];
+        }
+
+        // Homonyms: the inscriptions export carries the student's phone,
+        // and the students export (already imported) stored it — when
+        // exactly one of the same-name students has this phone, it is him.
+        if (count($matches) > 1 && $telephone !== null) {
+            $byPhone = array_values(array_filter($matches, fn (array $s): bool => $s['telephone'] === $telephone));
+
+            if (count($byPhone) === 1) {
+                return ['student_id' => $byPhone[0]['id'], 'candidates' => [], 'conflicts' => []];
+            }
         }
 
         if (count($matches) > 1) {

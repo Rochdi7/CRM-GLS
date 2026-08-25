@@ -75,7 +75,7 @@ final class EncaissementImporter implements Importer
      * execution limit) on real files. Preloading once and matching in
      * memory turns O(rows) queries into O(1).
      *
-     * @var array<string, int>|null normalized full name => students.id, scoped to the current batch's centre
+     * @var array<string, list<int>>|null normalized full name => every students.id carrying it (homonyms ⇒ several), scoped to the current batch's centre
      */
     private ?array $studentsByNormalizedName = null;
 
@@ -145,7 +145,7 @@ final class EncaissementImporter implements Importer
             fn (Inscription $inscription): int => $inscription->id,
             $this->activeInscriptionByStudentId
         ));
-        $this->existingEncaissementLegacyRefs = $this->preloadExistingLegacyRefs();
+        $this->existingEncaissementLegacyRefs = $this->preloadExistingLegacyRefs($context->etablissementId);
         $this->existingEncaissementCompositeKeys = $this->preloadExistingCompositeKeys();
 
         return DB::transaction(function () use ($filePath, $headerRow, $headerMap, $file, $context, $importingAdmin, $operateurEmployees): ImportBatch {
@@ -220,7 +220,7 @@ final class EncaissementImporter implements Importer
                     // legacy_ref is the real backstop — this turns that
                     // constraint violation into a row marked "déjà importé"
                     // instead of a raw SQL error in the failure list.
-                    if ($this->alreadyImported($row)) {
+                    if ($this->alreadyImported($row, $batch)) {
                         $row->update([
                             'status' => ImportRow::STATUT_DOUBLON,
                             'errors' => [[
@@ -269,6 +269,9 @@ final class EncaissementImporter implements Importer
                         'date_paiement' => $data['date_paiement'],
                         'caisse_id' => $resolution['caisse_id'],
                         'note' => $this->importNote($row, $data),
+                        // Legacy refs restart at P1 in every centre's old
+                        // CRM — the batch centre is the dedupe scope.
+                        'etablissement_id' => $batch->etablissement_id,
                         'legacy_ref' => $row->legacy_ref,
                         'legacy_source' => self::LEGACY_SOURCE,
                     ], $agent);
@@ -441,10 +444,13 @@ final class EncaissementImporter implements Importer
         return $note;
     }
 
-    private function alreadyImported(ImportRow $row): bool
+    private function alreadyImported(ImportRow $row, ImportBatch $batch): bool
     {
         if ($row->legacy_ref !== null && $row->legacy_ref !== '') {
-            return Encaissement::query()->where('legacy_ref', $row->legacy_ref)->exists();
+            return Encaissement::query()
+                ->where('etablissement_id', $batch->etablissement_id)
+                ->where('legacy_ref', $row->legacy_ref)
+                ->exists();
         }
 
         $data = $row->raw;
@@ -784,7 +790,7 @@ final class EncaissementImporter implements Importer
             ->get(['id', 'prenom', 'nom'])
             ->each(function (Student $student) use (&$index): void {
                 $key = mb_strtolower(CellNormalizer::text("{$student->prenom} {$student->nom}"));
-                $index[$key] = array_key_exists($key, $index) ? -1 : $student->id;
+                $index[$key][] = $student->id;
             });
 
         return $index;
@@ -857,10 +863,18 @@ final class EncaissementImporter implements Importer
             ->all();
     }
 
-    /** @return array<string, true> */
-    private function preloadExistingLegacyRefs(): array
+    /**
+     * Scoped to the batch centre: every centre's old CRM numbers its
+     * payments from P1, so Rabat's « P3 » and Marrakech's « P3 » are two
+     * different payments (the 24/08/2026 Rabat import lost 4 297 rows to a
+     * global check).
+     *
+     * @return array<string, true>
+     */
+    private function preloadExistingLegacyRefs(int $etablissementId): array
     {
         return Encaissement::query()
+            ->where('etablissement_id', $etablissementId)
             ->whereNotNull('legacy_ref')
             ->pluck('legacy_ref')
             ->flip()
@@ -934,15 +948,17 @@ final class EncaissementImporter implements Importer
 
         $matches = [];
         foreach (array_unique($candidates) as $candidate) {
-            $id = $this->studentsByNormalizedName[$candidate] ?? null;
+            $ids = $this->studentsByNormalizedName[$candidate] ?? [];
 
-            if ($id === -1) {
-                // A same-name twin sits among the candidates — never pick.
+            if (count($ids) > 1) {
+                // A same-name twin sits among the candidates — never pick
+                // here; resolveStudent() decides whether the inscription
+                // scope can still tell the twins apart.
                 return null;
             }
 
-            if ($id !== null) {
-                $matches[$id] = $candidate;
+            if ($ids !== []) {
+                $matches[$ids[0]] = $candidate;
             }
         }
 
@@ -958,9 +974,24 @@ final class EncaissementImporter implements Importer
         }
 
         $normalizedTarget = mb_strtolower(CellNormalizer::text($payeurName));
-        $match = $this->studentsByNormalizedName[$normalizedTarget] ?? null;
+        $matches = $this->studentsByNormalizedName[$normalizedTarget] ?? [];
 
-        if ($match === -1) {
+        if (count($matches) > 1) {
+            // Homonyms (two students with the same name in the centre —
+            // Casablanca has 19 such names, 171 payment rows). A payment
+            // can only attach to an inscription of the batch's centre+année,
+            // so when exactly ONE of the homonyms holds such an inscription
+            // the payer is that one; the file carries nothing else (no
+            // phone, no ref) to tell them apart. Still ambiguous otherwise.
+            $enrolled = array_values(array_filter(
+                $matches,
+                fn (int $id): bool => isset($this->activeInscriptionByStudentId[$id]),
+            ));
+
+            if (count($enrolled) === 1) {
+                return ['student_id' => $enrolled[0], 'conflicts' => []];
+            }
+
             return ['student_id' => null, 'conflicts' => [
                 ['field' => 'student_id', 'code' => 'ambiguous_student', 'message' => sprintf(
                     'Plusieurs étudiants correspondent à "%s".',
@@ -969,8 +1000,8 @@ final class EncaissementImporter implements Importer
             ]];
         }
 
-        if ($match !== null) {
-            return ['student_id' => $match, 'conflicts' => []];
+        if ($matches !== []) {
+            return ['student_id' => $matches[0], 'conflicts' => []];
         }
 
         return ['student_id' => null, 'conflicts' => [
@@ -1076,7 +1107,7 @@ final class EncaissementImporter implements Importer
                     'field' => 'legacy_ref',
                     'code' => 'already_in_database',
                     'message' => sprintf(
-                        "Déjà importé : %sla réf. %s existe déjà (import précédent) — le montant n'a pas été compté deux fois.",
+                        "Déjà importé : %sla réf. %s existe déjà dans ce centre (import précédent) — le montant n'a pas été compté deux fois.",
                         $payeur !== '' ? $payeur.' — ' : '',
                         $legacyRef
                     ),

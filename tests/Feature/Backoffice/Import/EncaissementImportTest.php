@@ -899,6 +899,105 @@ final class EncaissementImportTest extends TestCase
         );
     }
 
+    /**
+     * Every centre's old CRM numbers its payments from P1 — the same « P3 »
+     * is a DIFFERENT payment in Rabat and in Marrakech. The 24/08/2026
+     * Rabat import skipped 4 297 of 5 000 rows as « déjà importé » because
+     * the ref check was global. The scope is the batch centre; a re-upload
+     * within the same centre still dedupes.
+     */
+    public function test_same_legacy_ref_in_another_centre_is_a_different_payment(): void
+    {
+        $this->studentWithActiveFee('AHMED', 'AMIMI', 'Frais test', 1000);
+        $user = $this->userWith('import.view', 'import.create');
+        $mapping = [['label' => 'op', 'employee_id' => $this->operatorEmployee->id]];
+        $upload = fn () => $this->buildUpload([
+            ['P3', 'AHMED AMIMI', 'Réglement', '100', 'Espèces', 'Frais test', '10/01/2026', 'op'],
+        ]);
+
+        // Centre A: imported.
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $upload(), 'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id, 'operateur_mapping' => $mapping,
+        ])->assertSessionHasNoErrors();
+        $batchA = ImportBatch::query()->firstOrFail();
+        $this->commitAllSelected($user, $batchA, $batchA->rows()->pluck('id')->all())->assertOk();
+        $first = Encaissement::query()->where('legacy_ref', 'P3')->sole();
+        $this->assertSame($this->centre->id, (int) $first->etablissement_id);
+
+        // Centre B, same P3 for a homonymous student there: NOT a duplicate.
+        $centreB = Etablissement::factory()->create();
+        $studentB = Student::factory()->create(['etablissement_id' => $centreB->id, 'prenom' => 'AHMED', 'nom' => 'AMIMI']);
+        $groupB = Group::factory()->create(['etablissement_id' => $centreB->id, 'annee_scolaire_id' => $this->annee->id]);
+        $inscriptionB = Inscription::create([
+            'reference' => 'INS-'.fake()->unique()->numerify('#####'),
+            'student_id' => $studentB->id, 'group_id' => $groupB->id,
+            'etablissement_id' => $centreB->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => Inscription::STATUT_ACTIVE, 'date_inscription' => '2026-07-01',
+        ]);
+        InscriptionFee::create([
+            'inscription_id' => $inscriptionB->id, 'nom' => 'Frais test',
+            'montant_initial' => 1000, 'montant' => 1000,
+            'date_echeance' => '2026-09-01', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+        $operateurB = Employee::factory()->create(['etablissement_id' => $centreB->id]);
+
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $upload(), 'etablissement_id' => $centreB->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => [['label' => 'op', 'employee_id' => $operateurB->id]],
+        ])->assertSessionHasNoErrors();
+        $batchB = ImportBatch::query()->where('etablissement_id', $centreB->id)->firstOrFail();
+        $rowB = $batchB->rows()->firstOrFail();
+        $this->assertSame(ImportRow::STATUT_NOUVEAU, $rowB->status, json_encode($rowB->errors));
+
+        $this->commitAllSelected($user, $batchB, [$rowB->id])->assertOk();
+        $this->assertSame(2, Encaissement::query()->where('legacy_ref', 'P3')->count());
+        $this->assertSame(1, Encaissement::query()->where('legacy_ref', 'P3')->where('etablissement_id', $centreB->id)->count());
+
+        // Same centre again: still a duplicate.
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $upload(), 'etablissement_id' => $centreB->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => [['label' => 'op', 'employee_id' => $operateurB->id]],
+        ]);
+        $batchC = ImportBatch::query()->where('etablissement_id', $centreB->id)->where('id', '!=', $batchB->id)->firstOrFail();
+        $this->assertSame(ImportRow::STATUT_DOUBLON, $batchC->rows()->firstOrFail()->status);
+        $this->commitAllSelected($user, $batchC, $batchC->rows()->pluck('id')->all());
+        $this->assertSame(2, Encaissement::query()->where('legacy_ref', 'P3')->count());
+    }
+
+    /**
+     * Homonyms: the payments export carries only a name. When exactly one of
+     * the same-name students holds an inscription in the batch's
+     * centre+année, the money is his (it can attach nowhere else); when
+     * both are enrolled it stays a CONFLIT for a human.
+     */
+    public function test_homonym_payer_is_resolved_to_the_only_enrolled_twin(): void
+    {
+        $enrolled = $this->studentWithActiveFee('SOUMIA', 'LABHIRI', 'Frais test', 1000);
+        Student::factory()->create(['etablissement_id' => $this->centre->id, 'prenom' => 'SOUMIA', 'nom' => 'LABHIRI']);
+        $this->studentWithActiveFee('AYA', 'HAKIM', 'Frais test', 1000);
+        $this->studentWithActiveFee('AYA', 'HAKIM', 'Frais test', 1000);
+
+        $user = $this->userWith('import.view', 'import.create');
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->buildUpload([
+                ['P1', 'SOUMIA LABHIRI SOUMIA LABHIRI', 'Réglement', '100', 'Espèces', 'Frais test', '10/01/2026', 'op'],
+                ['P2', 'AYA HAKIM AYA HAKIM', 'Réglement', '200', 'Espèces', 'Frais test', '10/01/2026', 'op'],
+            ]),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => [['label' => 'op', 'employee_id' => $this->operatorEmployee->id]],
+        ])->assertSessionHasNoErrors();
+
+        $rows = ImportBatch::query()->firstOrFail()->rows()->orderBy('source_row_number')->get();
+        $this->assertSame(ImportRow::STATUT_NOUVEAU, $rows[0]->status, json_encode($rows[0]->resolution));
+        $this->assertSame($enrolled->id, (int) $rows[0]->resolution['student_id']);
+        $this->assertSame(ImportRow::STATUT_CONFLIT, $rows[1]->status, 'both twins enrolled ⇒ a human decides');
+        $this->assertSame('ambiguous_student', $rows[1]->errors[0]['code']);
+    }
+
     public function test_committing_the_same_batch_twice_never_double_writes_a_payment(): void
     {
         // analyze() dedupes against a snapshot taken at upload time. Committing

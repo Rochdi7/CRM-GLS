@@ -47,6 +47,9 @@ final class StudentImporter implements Importer
     /** @var array<string, list<Student>>|null normalized "prenom|nom" => matching Students */
     private ?array $existingByName = null;
 
+    /** @var array<string, list<array{legacy_ref: string, date_naissance: ?string, telephone: ?string}>> clean rows seen earlier in THIS file, by normalized "prenom|nom" — catches the old CRM's double entries */
+    private array $seenThisFile = [];
+
     /** @var array<int, array<string, mixed>> buffered ImportRow attribute arrays, flushed every INSERT_BUFFER_SIZE rows */
     private array $pendingRows = [];
 
@@ -69,6 +72,7 @@ final class StudentImporter implements Importer
         );
 
         $this->pendingRows = [];
+        $this->seenThisFile = [];
         [$this->existingByLegacyRef, $this->existingByName] = $this->preloadExistingStudents($context->etablissementId);
 
         return DB::transaction(function () use ($filePath, $headerRow, $headerMap, $file, $context, $importingAdmin): ImportBatch {
@@ -193,6 +197,14 @@ final class StudentImporter implements Importer
         $prenom = CellNormalizer::text($rawRow['Prénom'] ?? '');
         $nom = CellNormalizer::text($rawRow['Nom'] ?? '');
         $sexe = CellNormalizer::text($rawRow['Sexe'] ?? '');
+
+        // The export writes a literal "-" for a missing value (same as Date
+        // de naissance / Téléphone). It is "unknown", not an invalid enum —
+        // the Rabat file has one such student, and rejecting the row also
+        // orphaned her inscription and payments (« étudiant introuvable »).
+        if ($sexe === '-') {
+            $sexe = '';
+        }
         $telephone = CellNormalizer::normalizePhone($rawRow['Téléphone'] ?? '');
 
         try {
@@ -256,7 +268,48 @@ final class StudentImporter implements Importer
             return;
         }
 
+        // Same person entered twice in the old CRM (a double-click: two
+        // refs, same name, same phone AND birth date, created the same
+        // minute — 47 of the 51 "homonyms" across the seven centres). The
+        // DB check above cannot see the first copy, it is still in this
+        // file. Keeping both made every inscription and payment of that
+        // student an « ambiguous_student » conflict downstream. Same rule
+        // as findDuplicate(): name + birth date, or name + phone when the
+        // row has no birth date — never name alone.
+        $twin = $this->findDuplicateInFile($prenom, $nom, $dateNaissance, $telephone);
+
+        if ($twin !== null) {
+            $this->pushPendingRow($batch, $rowNumber, [
+                'raw' => $raw,
+                'status' => ImportRow::STATUT_DOUBLON,
+                'errors' => [[
+                    'field' => 'legacy_ref',
+                    'code' => 'duplicate_in_file',
+                    'message' => sprintf(
+                        'Doublon dans le fichier : %s %s (réf. %s) est la même personne que la réf. %s (%s) — saisie deux fois dans l\'ancien CRM, une seule fiche est créée.',
+                        $prenom,
+                        $nom,
+                        $legacyRef,
+                        $twin['legacy_ref'],
+                        $dateNaissance !== null ? 'même date de naissance '.$dateNaissance : 'même téléphone',
+                    ),
+                ]],
+                'legacy_ref' => $legacyRef ?: null,
+                'resolution' => ['matched_legacy_ref' => $twin['legacy_ref']],
+            ]);
+
+            return;
+        }
+
         $errors = [...$parseErrors, ...$this->validator->validateStudent($normalized)];
+
+        if ($errors === []) {
+            $this->seenThisFile[mb_strtolower($prenom).'|'.mb_strtolower($nom)][] = [
+                'legacy_ref' => $legacyRef,
+                'date_naissance' => $dateNaissance,
+                'telephone' => $telephone,
+            ];
+        }
 
         $this->pushPendingRow($batch, $rowNumber, [
             'raw' => $raw,
@@ -264,6 +317,28 @@ final class StudentImporter implements Importer
             'errors' => $errors === [] ? null : $errors,
             'legacy_ref' => $legacyRef ?: null,
         ]);
+    }
+
+    /**
+     * @return array{legacy_ref: string, date_naissance: ?string, telephone: ?string}|null
+     */
+    private function findDuplicateInFile(string $prenom, string $nom, ?string $dateNaissance, ?string $telephone): ?array
+    {
+        foreach ($this->seenThisFile[mb_strtolower($prenom).'|'.mb_strtolower($nom)] ?? [] as $seen) {
+            if ($dateNaissance !== null && $seen['date_naissance'] !== null) {
+                if ($seen['date_naissance'] === $dateNaissance) {
+                    return $seen;
+                }
+
+                continue; // both dated, different dates ⇒ two people
+            }
+
+            if ($telephone !== null && $seen['telephone'] === $telephone) {
+                return $seen;
+            }
+        }
+
+        return null;
     }
 
     /**

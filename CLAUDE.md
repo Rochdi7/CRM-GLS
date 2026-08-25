@@ -334,8 +334,11 @@ the database layer. Non-negotiable invariants already enforced in code:
   first. `php artisan caisse:verifier-coherence` is the READ-ONLY auditor
   (mis-routed rows, duplicate/missing accounts, tills per employee,
   solde vs journaled movements; `--strict` fails on warnings) — run it
-  before and after. Two more PostgreSQL guards (migration
-  `harden_caisses_integrity`): `caisses.solde` NOT NULL and ONE « Caissière »
+  before and after. Two more PostgreSQL guards (in `create_caisses_table` —
+  **every schema change lives in the `create_*` migration of its table; no
+  alter migrations. Production, which already ran the create files, gets the
+  same change as a one-off idempotent SQL applied by hand, see
+  `docs/production-schema-patches.sql`**): `caisses.solde` NOT NULL and ONE « Caissière »
   till per employee (partial unique index); the physical till is always
   `Employee::till()` / `CaisseResolver::tillOf()` — never
   `caisses()->first()`, which also returns an « Externe » safe the employee
@@ -406,6 +409,25 @@ the database layer. Non-negotiable invariants already enforced in code:
   validated transfers). Lookup endpoints that hang off another module's
   record (student inscriptions/cheques/payments) are center-scoped with
   `CenterAccessService`, not with that module's `*.view` permission.
+- **Legacy import refs (`legacy_ref`) are unique PER CENTRE, never
+  globally** — students, inscriptions AND encaissements all carry an
+  `etablissement_id` + a `(etablissement_id, legacy_ref)` unique index
+  (encaissements got theirs on 25/08/2026 after the Rabat payments import
+  skipped 4 297 rows: every centre's old CRM numbers payments from P1, so
+  « P3 » exists in all seven exports). Every importer's dedupe (preload +
+  commit-time re-check) is scoped to the batch centre; never widen it back.
+  Other legacy-export facts the importers rely on (25/08/2026, verified by
+  running the real pipeline on all seven centres' exports): the old CRM
+  holds the same student twice in ~50 cases (two refs, same phone + birth
+  date) — `StudentImporter` skips the second copy as `duplicate_in_file`
+  (name + birth date, or name + phone when undated; never name alone);
+  inscriptions tell real homonyms apart by the export's Téléphone column,
+  payments by "exactly one twin is enrolled in this centre+année"; a
+  literal `-` is a missing value in EVERY column (Sexe included);
+  `SheetReader::FOOTER_CUTOFF_ROW_CAP` must stay far above a full-year
+  export (Rabat = 5 340 payment rows; the old 5 000 cap silently dropped
+  340 of them). Old-CRM exports "old data" vs "active data" share the SAME
+  students/payments files — only the inscriptions file differs by statut.
 - **`reference` codes are system-generated** via
   `Domain\Shared\Support\ReferenceGenerator` (EMP-/ETU-/INS-/ENC-/DEP-/RMB-/TRF-…),
   never typed by users.
