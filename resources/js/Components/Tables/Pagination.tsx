@@ -61,8 +61,8 @@ function urlForPage(paginator: PaginatedData<unknown>, page: number): string | n
 }
 
 /**
- * Bootstrap 5 `.pagination` markup (PreSkool look). The footer reports the row
- * range and the count of the WHOLE filtered result set ("1–10 de 3 933"),
+ * Bootstrap 5 `.pagination` markup (PreSkool look). The footer reports the
+ * count of the WHOLE filtered result set ("3 933 total" — no from–to range),
  * and stays visible on a single-page list — the pager itself hides there.
  * Page numbers are windowed client-side from current_page/last_page (Laravel's
  * own `links` array puts up to 7 numbers side by side, which overflowed the
@@ -90,14 +90,11 @@ export default function Pagination<T>({ paginator, preserveScroll = true, only }
         );
     }
 
-    const { current_page: current, last_page: last, total, from, to } = paginator;
+    const { current_page: current, last_page: last, total } = paginator;
     const singlePage = last <= 1;
     const pages = pageWindow(current, last, isPhone ? 1 : 2);
 
-    const summary =
-        total > 0 && from !== null && to !== null
-            ? `${formatTotal(from)}–${formatTotal(to)} ${t('of')} ${formatTotal(total)}`
-            : `${formatTotal(total)} ${t('total')}`;
+    const summary = `${formatTotal(total)} ${t('total')}`;
 
     return (
         <div className="gls-pagination-footer d-flex align-items-center justify-content-between flex-wrap gap-2 p-3">
