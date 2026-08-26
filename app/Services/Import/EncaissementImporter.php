@@ -1244,8 +1244,22 @@ final class EncaissementImporter implements Importer
             $reste = round($reste - $part, 2);
         }
 
-        // The remainder always lands on the last named fee.
-        $allocations[] = [$splitFeeIds[$last], number_format(max(0.0, $reste), 2, '.', '')];
+        // The remainder lands on the last named fee — but ONLY if there is
+        // one. When the earlier lines already absorbed the whole payment the
+        // share is 0.00, and a caisse movement must be strictly positive:
+        // emitting it made EnregistrerEncaissement refuse and took the WHOLE
+        // payment down with it (149 rows, 169 950 DH, 26/08/2026).
+        if ($reste > 0.0) {
+            $allocations[] = [$splitFeeIds[$last], number_format($reste, 2, '.', '')];
+        }
+
+        // Every named fee was already settled: the money is still real, so it
+        // goes to the last fee as an overpayment rather than being refused.
+        // Losing a payment is never better than recording it on the fee the
+        // file itself names.
+        if ($allocations === []) {
+            return [[$splitFeeIds[$last], $montant]];
+        }
 
         return $allocations;
     }

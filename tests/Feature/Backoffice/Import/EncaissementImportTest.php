@@ -1536,4 +1536,46 @@ final class EncaissementImportTest extends TestCase
             );
         }
     }
+
+    /**
+     * A multi-fee payment whose EARLIER fees are already settled must still
+     * land. The split gave the last fee the remainder unconditionally, so
+     * when the earlier lines absorbed everything that share was 0.00 — and
+     * a caisse movement must be strictly positive, so
+     * EnregistrerEncaissement refused and took the WHOLE payment down
+     * (149 rows, 169 950 DH, 26/08/2026).
+     */
+    public function test_a_split_payment_never_emits_a_zero_line(): void
+    {
+        $student = $this->studentWithActiveFee('ABDERRAHMANE', 'BOUGMA', 'Frais de Janvier', 300);
+        $inscription = Inscription::query()->firstOrFail();
+        $mars = InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => 'Frais de Mars',
+            'montant_initial' => 300, 'montant' => 300,
+            'date_echeance' => '2026-09-01', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+
+        $user = $this->userWith('import.view', 'import.create');
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->buildUpload([
+                // 300 DH covering TWO 300 DH fees: Janvier takes it all,
+                // Mars would get 0.00.
+                ['P1', 'ABDERRAHMANE BOUGMA', 'Réglement', '300 Dh', 'Espèces', 'Frais de Janvier, Frais de Mars', '05/01/2026', 'mustapha'],
+            ]),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+        ])->assertSessionHasNoErrors();
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $row = $batch->rows()->firstOrFail();
+        $this->commitAllSelected($user, $batch, [$row->id]);
+
+        // The payment landed — one line, no zero-amount sibling.
+        $this->assertSame(ImportRow::STATUT_INSERE, $row->fresh()->status);
+        $this->assertSame(1, Encaissement::query()->count());
+        $this->assertSame('300.00', number_format((float) Encaissement::query()->sum('montant'), 2, '.', ''));
+        $this->assertSame(0, Encaissement::query()->where('montant', '<=', 0)->count());
+        $this->assertSame(0.0, $mars->fresh()->montantPaye());
+    }
 }
