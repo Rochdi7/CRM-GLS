@@ -1319,7 +1319,11 @@ final class EncaissementImportTest extends TestCase
 
         $this->assertSame(ImportRow::STATUT_NOUVEAU, $row->status);
         $this->assertSame($fee->id, $row->resolution['inscription_fee_id']);
-        $this->assertSame('Frais annuel', $row->resolution['fee_matched_loosely']['attached_to'] ?? null);
+        // WHICH line receives the money is decided at commit time against
+        // live balances (pickLooseFee), so analyze only records the
+        // candidates — never a name it cannot yet know.
+        $this->assertNotNull($row->resolution['fee_matched_loosely'] ?? null);
+        $this->assertContains($fee->id, $row->resolution['loose_fee_ids'] ?? []);
 
         $this->commitAllSelected($user, $batch, [$row->id]);
 
@@ -1435,5 +1439,101 @@ final class EncaissementImportTest extends TestCase
 
         $this->actingAs($user)->get(route('backoffice.import.encaissements.result', $batch))
             ->assertInertia(fn (Assert $page) => $page->component('Backoffice/Import/Encaissements/Result'));
+    }
+
+    /**
+     * One payment settling SEVERAL fees: the old CRM writes them
+     * comma-separated in a single Frais cell ("Frais d'inscription A1/A2/B1,
+     * Frais de Juin" for a 1 600 DH cheque). Attaching the whole amount to
+     * the first line showed 1 600 DH paid on a 300 DH fee (26/08/2026).
+     */
+    public function test_one_payment_naming_several_fees_is_split_across_them(): void
+    {
+        $student = $this->studentWithActiveFee('ABDERRAHMANE', 'BOUGMA', "Frais d'inscription A1/A2/B1", 300);
+        $inscription = Inscription::query()->firstOrFail();
+        InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => 'Frais de Juin',
+            'montant_initial' => 1300, 'montant' => 1300,
+            'date_echeance' => '2026-09-01', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+
+        $user = $this->userWith('import.view', 'import.create');
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->buildUpload([
+                ['P3934', 'ABDERRAHMANE BOUGMA', 'Réglement', '1600 Dh', 'Espèces', "Frais d'inscription, Frais de Juin", '09/06/2026', 'mustapha'],
+            ]),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+        ])->assertSessionHasNoErrors();
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $row = $batch->rows()->firstOrFail();
+        $this->assertSame(ImportRow::STATUT_NOUVEAU, $row->status);
+
+        $this->commitAllSelected($user, $batch, [$row->id]);
+
+        // TWO encaissements, each capped at its own fee, re-summing exactly.
+        $this->assertSame(2, Encaissement::query()->count());
+        $this->assertSame('1600.00', number_format((float) Encaissement::query()->sum('montant'), 2, '.', ''));
+
+        $parInscription = Encaissement::query()->get()->keyBy(
+            fn (Encaissement $e) => InscriptionFee::findOrFail($e->inscription_fee_id)->nom
+        );
+        $this->assertSame('300.00', (string) $parInscription["Frais d'inscription A1/A2/B1"]->montant);
+        $this->assertSame('1300.00', (string) $parInscription['Frais de Juin']->montant);
+
+        // The legacy ref stays unique: only the first part carries it.
+        $this->assertSame(1, Encaissement::query()->where('legacy_ref', 'P3934')->count());
+    }
+
+    /**
+     * Consecutive unmatched payments of ONE student must walk DOWN the
+     * unpaid lines, not all pile onto the first. analyze() reads a snapshot
+     * taken before any row was written, so resolving the target there made
+     * every such payment pick the same line — one 300 DH fee ended up
+     * holding 7 600 DH (334 fees overpaid across the seven centres,
+     * 26/08/2026). pickLooseFee() re-picks at commit time against live
+     * balances.
+     */
+    public function test_successive_loose_payments_walk_down_the_unpaid_fees(): void
+    {
+        $student = $this->studentWithActiveFee('ABDERRAHMANE', 'BOUGMA', 'Frais A', 300);
+        $inscription = Inscription::query()->firstOrFail();
+        InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => 'Frais B',
+            'montant_initial' => 300, 'montant' => 300,
+            'date_echeance' => '2026-09-01', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+
+        $user = $this->userWith('import.view', 'import.create');
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->buildUpload([
+                // Neither label exists on the inscription ⇒ both loose.
+                ['P1', 'ABDERRAHMANE BOUGMA', 'Réglement', '300 Dh', 'Espèces', 'Libellé inconnu', '05/01/2026', 'mustapha'],
+                ['P2', 'ABDERRAHMANE BOUGMA', 'Réglement', '300 Dh', 'Espèces', 'Autre libellé', '06/01/2026', 'mustapha'],
+            ]),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+        ])->assertSessionHasNoErrors();
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $rows = $batch->rows()->orderBy('source_row_number')->get();
+        $this->commitAllSelected($user, $batch, $rows->pluck('id')->all());
+
+        $this->assertSame(2, Encaissement::query()->count());
+
+        // The two payments landed on DIFFERENT lines, each settled at 300.
+        $feeIds = Encaissement::query()->pluck('inscription_fee_id')->unique();
+        $this->assertCount(2, $feeIds, 'Both payments piled onto the same fee.');
+
+        foreach (InscriptionFee::all() as $fee) {
+            $this->assertLessThanOrEqual(
+                (float) $fee->montant + 0.01,
+                $fee->montantPaye(),
+                sprintf('Fee "%s" was overpaid.', $fee->nom)
+            );
+        }
     }
 }

@@ -55,6 +55,26 @@ final class EncaissementImporter implements Importer
     /** ImportRow rows are buffered and mass-inserted every N rows — real exports run into the thousands of rows, and one create() call per row (Eloquent events + a round-trip each) was a large part of the 30s timeout. */
     private const int INSERT_BUFFER_SIZE = 500;
 
+    /**
+     * Legacy Frais label (lower-case) => the catalogue fee it really is.
+     *
+     * GLS charges exactly TWO inscription fees — « Frais d'inscription
+     * A1/A2/B1 » (300 DH) and « Frais d'inscription B2 » (200 DH) — but the
+     * old CRM spelled the first one four different ways over the years.
+     * Without this map 1 793 payments matched no line by name and fell to
+     * the loose fallback, which piled them onto whatever line was still
+     * unpaid (26/08/2026). Monthly fees are unaffected: they already match
+     * exactly.
+     */
+    private const array FRAIS_ALIASES = [
+        "frais d'inscription" => "Frais d'inscription A1/A2/B1",
+        "frais d'inscription 1" => "Frais d'inscription A1/A2/B1",
+        "frais d'inscription a1" => "Frais d'inscription A1/A2/B1",
+        "frais d'inscription a2" => "Frais d'inscription A1/A2/B1",
+        "frais d'inscription b1" => "Frais d'inscription A1/A2/B1",
+        "frais d'inscription 2" => "Frais d'inscription B2",
+    ];
+
     /** File label => Encaissement::METHODE_* — "Virement bancaire" is NOT a literal match. */
     private const array METHODE_MAP = [
         'Espèces' => Encaissement::METHODE_ESPECES,
@@ -91,6 +111,13 @@ final class EncaissementImporter implements Importer
      * statuts were actually searched rather than guessing.
      */
     private bool $includeInactiveInscriptions = false;
+
+    /**
+     * Import-only override: when set, EVERY imported payment lands in this
+     * caisse whatever its méthode (see ImportContext::$caisseForceeId).
+     * Null = the normal per-méthode routing of CaisseResolver.
+     */
+    private ?int $caisseForceeId = null;
 
     /** @var array<int, Collection<int, InscriptionFee>>|null inscription_id => its fee lines, preloaded once */
     private ?array $feesByInscriptionId = null;
@@ -140,6 +167,7 @@ final class EncaissementImporter implements Importer
         $this->pendingRows = [];
         $this->studentsByNormalizedName = $this->preloadStudents($context->etablissementId);
         $this->includeInactiveInscriptions = $context->includeInactiveInscriptions;
+        $this->caisseForceeId = $context->caisseForceeId;
         $this->activeInscriptionByStudentId = $this->preloadActiveInscriptions($context);
         $this->feesByInscriptionId = $this->preloadFees(array_map(
             fn (Inscription $inscription): int => $inscription->id,
@@ -256,28 +284,50 @@ final class EncaissementImporter implements Importer
                     // from the money that actually arrived. Import-only: a
                     // fee created through normal CRUD always has its montant
                     // set by the user and is never touched here.
-                    $this->backfillImportedFeeAmount(
-                        $resolution['inscription_fee_id'] ?? null,
+                    // ONE payment settling SEVERAL fees (comma-separated
+                    // Frais cell) becomes one encaissement PER fee, so each
+                    // line settles for what it is really owed instead of one
+                    // line absorbing the whole amount. A single-fee row keeps
+                    // exactly its previous single-write behaviour.
+                    $allocations = $this->allocateAcrossFees(
+                        $resolution['split_fee_ids'] ?? null,
+                        // A loosely-matched row picks its line HERE, against
+                        // live balances, so consecutive payments of one
+                        // student walk down the unpaid lines instead of all
+                        // piling on the first.
+                        $this->pickLooseFee($resolution)
+                            ?? ($resolution['inscription_fee_id'] ?? null),
                         (string) $data['montant'],
                     );
 
-                    $encaissement = $action->handle([
-                        'student_id' => $resolution['student_id'],
-                        'inscription_fee_id' => $resolution['inscription_fee_id'] ?? null,
-                        'cheque_id' => $cheque?->id,
-                        'numero_cheque' => $cheque?->numero_cheque,
-                        'banque' => $cheque?->banque,
-                        'montant' => $data['montant'],
-                        'methode' => $data['methode'],
-                        'date_paiement' => $data['date_paiement'],
-                        'caisse_id' => $resolution['caisse_id'],
-                        'note' => $this->importNote($row, $data),
-                        // Legacy refs restart at P1 in every centre's old
-                        // CRM — the batch centre is the dedupe scope.
-                        'etablissement_id' => $batch->etablissement_id,
-                        'legacy_ref' => $row->legacy_ref,
-                        'legacy_source' => self::LEGACY_SOURCE,
-                    ], $agent);
+                    $encaissement = null;
+
+                    foreach ($allocations as $index => [$feeId, $montant]) {
+                        $this->backfillImportedFeeAmount($feeId, $montant);
+
+                        $created = $action->handle([
+                            'student_id' => $resolution['student_id'],
+                            'inscription_fee_id' => $feeId,
+                            'cheque_id' => $cheque?->id,
+                            'numero_cheque' => $cheque?->numero_cheque,
+                            'banque' => $cheque?->banque,
+                            'montant' => $montant,
+                            'methode' => $data['methode'],
+                            'date_paiement' => $data['date_paiement'],
+                            'caisse_id' => $resolution['caisse_id'],
+                            'note' => $this->importNote($row, $data, $feeId),
+                            // Legacy refs restart at P1 in every centre's old
+                            // CRM — the batch centre is the dedupe scope. A
+                            // split keeps the ref on the FIRST part only: it
+                            // is unique per centre, and the parts are one
+                            // payment, so the others carry none.
+                            'etablissement_id' => $batch->etablissement_id,
+                            'legacy_ref' => $index === 0 ? $row->legacy_ref : null,
+                            'legacy_source' => self::LEGACY_SOURCE,
+                        ], $agent);
+
+                        $encaissement ??= $created;
+                    }
 
                     $row->update([
                         'status' => ImportRow::STATUT_INSERE,
@@ -422,17 +472,23 @@ final class EncaissementImporter implements Importer
      *
      * @param  array<string, mixed>  $data
      */
-    private function importNote(ImportRow $row, array $data): string
+    private function importNote(ImportRow $row, array $data, ?int $feeId = null): string
     {
         $note = sprintf("Importé de l'ancien CRM (Réf. %s)", $row->legacy_ref);
 
         $loose = $row->resolution['fee_matched_loosely'] ?? null;
 
         if ($loose !== null) {
+            // The line is chosen at commit time against live balances
+            // (pickLooseFee), so the note names whichever fee actually
+            // received the money — not a guess made during analyze.
+            $nom = $loose['attached_to']
+                ?? ($feeId !== null ? InscriptionFee::find($feeId)?->nom : null);
+
             $note .= sprintf(
                 ' — frais "%s" rattaché à "%s" (libellé absent de cette inscription)',
                 $loose['requested'],
-                $loose['attached_to']
+                $nom ?? '?'
             );
         }
 
@@ -514,6 +570,19 @@ final class EncaissementImporter implements Importer
         $payeurRaw = CellNormalizer::text($rawRow['Élève / Payeur'] ?? '');
         $methodeLabel = CellNormalizer::text($rawRow['Méthode'] ?? '');
         $fraisLabel = CellNormalizer::text($rawRow['Frais'] ?? '');
+
+        // A literal "-" is the export's "no value" marker in EVERY column
+        // (same convention CellNormalizer::parseDate already honours), so a
+        // "-" Frais cell means the money arrived without being allocated to
+        // a fee — an avance, exactly like an empty cell. Treating "-" as a
+        // real label made 62 payments (44 320 DH) fail to match and land on
+        // an unrelated fee line via the loose fallback (26/08/2026).
+        if ($fraisLabel === '-') {
+            $fraisLabel = '';
+        }
+
+        $fraisLabel = $this->canonicalFraisLabel($fraisLabel);
+
         $isAvance = $fraisLabel === '';
         $operateurLabel = CellNormalizer::text($rawRow['Opérateur'] ?? '');
 
@@ -604,6 +673,8 @@ final class EncaissementImporter implements Importer
         $caisseId = null;
         $candidateFees = [];
         $looseFeeMatch = null;
+        $splitFeeIds = null;
+        $looseFeeIds = null;
 
         // The account depends only on the mapped opérateur + the method (and
         // the batch's centre for non-cash rows), so it resolves regardless
@@ -626,6 +697,8 @@ final class EncaissementImporter implements Importer
                 $inscriptionFeeId = $feeResolution['inscription_fee_id'];
                 $candidateFees = $feeResolution['candidates'];
                 $looseFeeMatch = $feeResolution['fee_matched_loosely'] ?? null;
+                $splitFeeIds = $feeResolution['split_fee_ids'] ?? null;
+                $looseFeeIds = $feeResolution['loose_fee_ids'] ?? null;
                 $conflicts = [...$conflicts, ...$feeResolution['conflicts']];
             }
         }
@@ -706,6 +779,8 @@ final class EncaissementImporter implements Importer
                 'agent_id' => $agentId,
                 'caisse_id' => $caisseId,
                 'fee_matched_loosely' => $looseFeeMatch,
+                'split_fee_ids' => $splitFeeIds,
+                'loose_fee_ids' => $looseFeeIds,
             ],
         ]);
     }
@@ -765,6 +840,12 @@ final class EncaissementImporter implements Importer
      */
     private function resolveCaisseFor(int $employeeId, string $methode, int $etablissementId): int
     {
+        // A forced caisse short-circuits every routing rule — the whole
+        // point of the option (legacy import only, never normal entry).
+        if ($this->caisseForceeId !== null) {
+            return $this->caisseForceeId;
+        }
+
         $key = "{$employeeId}|{$methode}|{$etablissementId}";
 
         if (isset($this->caisseIdByEmployeeId[$key])) {
@@ -1040,6 +1121,183 @@ final class EncaissementImporter implements Importer
      *
      * @return array{inscription_fee_id: ?int, candidates: array<int, array{id: int, nom: string, montant: string, statut: string}>, conflicts: array<int, array{field: string, code: string, message: string}>}
      */
+    /**
+     * Rewrites a legacy Frais label to the catalogue name it really means
+     * (see FRAIS_ALIASES). Handles the comma-separated multi-fee cell too,
+     * part by part, so "Frais d'inscription 1, Frais de Juin" resolves as
+     * a normal split. A label with no alias is returned untouched.
+     */
+    private function canonicalFraisLabel(string $label): string
+    {
+        if ($label === '') {
+            return '';
+        }
+
+        $parts = array_map(
+            function (string $part): string {
+                $part = CellNormalizer::text($part);
+
+                return self::FRAIS_ALIASES[mb_strtolower($part)] ?? $part;
+            },
+            explode(',', $label)
+        );
+
+        return implode(', ', array_filter($parts, fn (string $p): bool => $p !== ''));
+    }
+
+    /**
+     * Picks the fee line a loosely-matched payment lands on, at COMMIT time
+     * against LIVE balances: the first line that still owes something, in
+     * the inscription's own order.
+     *
+     * analyze() cannot make this call — it reads a snapshot taken before any
+     * row was written, so every unmatched payment of one student resolved to
+     * the same "first unpaid" line and stacked on it (a 300 DH fee holding
+     * 7 600 DH, 26/08/2026). Returns null when the row was not loosely
+     * matched, or when every candidate line is already settled — the
+     * remaining amount then falls through to the recorded fee, exactly as an
+     * overpayment would through the UI.
+     *
+     * @param  array<string, mixed>  $resolution
+     */
+    private function pickLooseFee(array $resolution): ?int
+    {
+        $ids = $resolution['loose_fee_ids'] ?? null;
+
+        if (! is_array($ids) || $ids === []) {
+            return null;
+        }
+
+        $fees = InscriptionFee::query()
+            ->whereIn('id', $ids)
+            ->withSum('encaissements', 'montant')
+            ->get()
+            ->keyBy('id');
+
+        foreach ($ids as $id) {
+            $fee = $fees->get($id);
+
+            if ($fee === null) {
+                continue;
+            }
+
+            $du = (float) $fee->montant;
+            $paye = (float) ($fee->encaissements_sum_montant ?? 0);
+
+            // A fee priced 0.00 (the legacy inscriptions export carries no
+            // amounts) has no known due — it is back-filled from the money
+            // that arrives, so it is always a valid target.
+            if ($du <= 0.0 || $paye + 0.01 < $du) {
+                return $id;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Splits one payment across the fees it settles.
+     *
+     * Each fee takes what it still owes (its montant minus what is already
+     * paid), in the order the file lists them; the LAST fee takes whatever
+     * is left, so the parts always re-sum to the exact amount received and
+     * no centime is invented or lost. A fee priced at 0.00 (the legacy
+     * inscriptions export carries no amounts) has no known due, so it is
+     * skipped by the cap and settled by that final remainder.
+     *
+     * Returns [[feeId, "montant"], …] — a single pair for an ordinary row.
+     *
+     * @param  list<int>|null  $splitFeeIds
+     * @return list<array{0: ?int, 1: string}>
+     */
+    private function allocateAcrossFees(?array $splitFeeIds, ?int $singleFeeId, string $montant): array
+    {
+        if ($splitFeeIds === null || count($splitFeeIds) < 2) {
+            return [[$singleFeeId, $montant]];
+        }
+
+        $fees = InscriptionFee::query()
+            ->whereIn('id', $splitFeeIds)
+            ->get()
+            ->keyBy('id');
+
+        $reste = round((float) $montant, 2);
+        $allocations = [];
+        $last = count($splitFeeIds) - 1;
+
+        foreach ($splitFeeIds as $index => $feeId) {
+            if ($index === $last) {
+                break;
+            }
+
+            $fee = $fees->get($feeId);
+            $du = $fee === null ? 0.0 : round((float) $fee->montant - $fee->montantPaye(), 2);
+
+            // Never more than what is left, never negative.
+            $part = max(0.0, min($du, $reste));
+
+            if ($part <= 0.0) {
+                continue;
+            }
+
+            $allocations[] = [$feeId, number_format($part, 2, '.', '')];
+            $reste = round($reste - $part, 2);
+        }
+
+        // The remainder always lands on the last named fee.
+        $allocations[] = [$splitFeeIds[$last], number_format(max(0.0, $reste), 2, '.', '')];
+
+        return $allocations;
+    }
+
+    /**
+     * A comma-separated Frais cell naming SEVERAL fees of one inscription.
+     * Returns their ids in the order the cell lists them, or null when the
+     * cell names a single fee (the normal case) or when the parts do not all
+     * resolve inside ONE inscription — a partial match would silently drop
+     * money, so that stays for the ordinary single-fee path to report.
+     *
+     * @param  list<Inscription>  $inscriptions
+     * @return list<int>|null
+     */
+    private function resolveSplitFees(array $inscriptions, string $fraisLabel): ?array
+    {
+        if (! str_contains($fraisLabel, ',')) {
+            return null;
+        }
+
+        $parts = array_values(array_filter(array_map(
+            fn (string $part): string => mb_strtolower(CellNormalizer::text($part)),
+            explode(',', $fraisLabel)
+        ), fn (string $part): bool => $part !== ''));
+
+        if (count($parts) < 2) {
+            return null;
+        }
+
+        foreach ($inscriptions as $inscription) {
+            $fees = $this->feesByInscriptionId[$inscription->id] ?? collect();
+            $ids = [];
+
+            foreach ($parts as $part) {
+                $match = $fees->first(
+                    fn (InscriptionFee $fee) => mb_strtolower(CellNormalizer::text($fee->nom)) === $part
+                );
+
+                if ($match === null) {
+                    continue 2;
+                }
+
+                $ids[] = $match->id;
+            }
+
+            // Every named fee found on the SAME inscription.
+            return array_values(array_unique($ids));
+        }
+
+        return null;
+    }
+
     private function resolveInscriptionFee(int $studentId, string $fraisLabel): array
     {
         $inscriptions = $this->activeInscriptionByStudentId[$studentId] ?? [];
@@ -1071,6 +1329,25 @@ final class EncaissementImporter implements Importer
             }
         }
 
+        // ONE payment settling SEVERAL fees: the old CRM writes them
+        // comma-separated in a single cell ("Frais d'inscription A1/A2/B1,
+        // Frais de Juin" — 1 600 DH covering two 300/1 300 lines). Attaching
+        // the whole amount to the first line inflated it far past its own
+        // montant (a 300 DH fee showing 1 600 DH paid, 26/08/2026).
+        // Resolved here into the list of fees actually named; commit() then
+        // writes ONE encaissement per fee, capped at each line's remaining
+        // due, so every line settles for what it is really owed.
+        $split = $this->resolveSplitFees($inscriptions, $fraisLabel);
+
+        if ($split !== null) {
+            return [
+                'inscription_fee_id' => $split[0],
+                'split_fee_ids' => $split,
+                'candidates' => [],
+                'conflicts' => [],
+            ];
+        }
+
         // No exact label anywhere: fall back within the best-ranked
         // inscription only (see below — the first still-unpaid line).
         $inscription = $inscriptions[0];
@@ -1090,28 +1367,33 @@ final class EncaissementImporter implements Importer
         // inscription's first still-unpaid line so the money lands on the
         // right registration and the balance stays correct.
         //
-        // Deliberately the FIRST UNPAID line, not just any line: dropping it
-        // on an already-settled fee would flip a correct "Payé" into an
-        // overpayment. When everything is already paid there is nothing
-        // sensible to attach to, so that stays a conflict for a human.
+        // ⚠ The candidate lines are recorded, but WHICH one receives the
+        // money is decided at COMMIT time, not here. analyze() sees a
+        // snapshot taken before a single row was written, so every unmatched
+        // payment of one student picked the SAME "first unpaid" line and
+        // stacked on it — one 300 DH inscription fee absorbed 7 600 DH over
+        // 8 payments (334 fees overpaid across the seven centres,
+        // 26/08/2026). Only commit() knows what each line still owes after
+        // the rows before it landed.
         foreach ($inscriptions as $candidateInscription) {
             $candidateFees = $this->feesByInscriptionId[$candidateInscription->id] ?? collect();
 
-            $fallback = $candidateFees->first(
-                fn (InscriptionFee $fee): bool => $fee->statut !== InscriptionFee::STATUT_PAYE
-            );
-
-            if ($fallback !== null) {
-                return [
-                    'inscription_fee_id' => $fallback->id,
-                    'candidates' => $candidates,
-                    'conflicts' => [],
-                    'fee_matched_loosely' => [
-                        'requested' => $fraisLabel,
-                        'attached_to' => $fallback->nom,
-                    ],
-                ];
+            if ($candidateFees->isEmpty()) {
+                continue;
             }
+
+            return [
+                // A placeholder so the row is resolvable; commit() re-picks
+                // among loose_fee_ids against live balances.
+                'inscription_fee_id' => $candidateFees->first()->id,
+                'loose_fee_ids' => $candidateFees->pluck('id')->all(),
+                'candidates' => $candidates,
+                'conflicts' => [],
+                'fee_matched_loosely' => [
+                    'requested' => $fraisLabel,
+                    'attached_to' => null,
+                ],
+            ];
         }
 
         return ['inscription_fee_id' => null, 'candidates' => $candidates, 'conflicts' => [

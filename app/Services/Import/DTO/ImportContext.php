@@ -21,6 +21,16 @@ final readonly class ImportContext
      *         accepted as a fallback, so historical payments from a
      *         cancelled enrolment still land instead of being refused.
      *         Active always wins where both exist.
+     * @param  ?int  $caisseForceeId  Encaissements only, IMPORT ONLY: put every
+     *         imported payment in THIS caisse whatever its méthode, instead of
+     *         the normal routing (Espèces → the agent's till, TPE/Chèque/
+     *         Virement → the centre's account for that method, CLAUDE.md §11).
+     *         Exists because the legacy export's « Opérateur » column names
+     *         people who no longer hold a till, and the historical money is
+     *         reconciled in one place rather than re-split across nine
+     *         cashiers. NEVER set outside the legacy import: normal payment
+     *         entry must keep the per-centre routing, which is what makes a
+     *         centre's TPE/Chèque totals reconcilable at all.
      * @param  list<string>  $statutsRetenus  Inscriptions only: which statuts
      *         this batch imports into the selected year (after the legacy
      *         translation, so "Archivée" is filtered as "Changement"). Empty
@@ -36,5 +46,6 @@ final readonly class ImportContext
         public array $operateurMapping = [],
         public bool $includeInactiveInscriptions = false,
         public array $statutsRetenus = [],
+        public ?int $caisseForceeId = null,
     ) {}
 }

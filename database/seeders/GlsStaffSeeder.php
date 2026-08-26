@@ -121,23 +121,30 @@ final class GlsStaffSeeder extends Seeder
             // Rattaché au siège : le super-admin voit de toute façon tous les
             // centres via Gate::before, mais son centre principal (et donc sa
             // caisse) doit rester exact.
-            'rafik@glszentrum.com' => ['Mohammed', 'Rafik', $H, $DIR, '+212 661 95 93 41', ['GLS Marrakech']],
+            // Centres affectés élargis à tous les centres à la main sur
+            // l'écran Employés (26/08/2026) — reflété ici pour qu'un re-seed
+            // ne les efface pas (syncEtablissements() est inconditionnel).
+            'rafik@glszentrum.com' => ['Mohammed', 'Rafik', $H, $DIR, '+212 661 95 93 41', ['GLS Marrakech', 'GLS Agadir', 'GLS Casablanca', 'GLS Kénitra', 'GLS Online', 'GLS Rabat', 'GLS Salé']],
             // Le frère, Amine — même nom de famille, compte et caisse séparés.
-            'amine.rafik@glszentrum.com' => ['Amine', 'Rafik', $H, $DIR, '+212 661 95 93 41', ['GLS Marrakech']],
-            'latifa.abouelfath@glszentrum.com' => ['Latifa', 'Abou Elfath', $F, $DIR, '+212 669 72 87 05', ['GLS Marrakech']],
+            // Affecté aussi à Agadir et Online à la main (26/08/2026).
+            'amine.rafik@glszentrum.com' => ['Amine', 'Rafik', $H, $DIR, '+212 661 95 93 41', ['GLS Marrakech', 'GLS Agadir', 'GLS Online']],
+            // Affectée aussi à Agadir et Online à la main (26/08/2026).
+            'latifa.abouelfath@glszentrum.com' => ['Latifa', 'Abou Elfath', $F, $DIR, '+212 669 72 87 05', ['GLS Marrakech', 'GLS Agadir', 'GLS Online']],
             // Responsable de système — la SEULE catégorie dont le rôle par
             // défaut est `super-admin` (PermissionRegistry::defaultRoleFor()),
             // donc cohérente avec sa présence dans SUPER_ADMINS ci-dessus.
             // Compte VISIBLE : à ne pas confondre avec le compte technique du
             // développeur (App\Support\Access\HiddenAccount), qui porte une
             // autre adresse et n'apparaît nulle part dans l'interface.
-            'rochdi.karouali@glszentrum.com' => ['Rochdi', 'Karouali', $H, $SYS, '+212 689 98 10 22', ['GLS Marrakech']],
+            // Centres affectés élargis à tous les centres à la main
+            // (26/08/2026) — reflété ici pour qu'un re-seed ne les efface pas.
+            'rochdi.karouali@glszentrum.com' => ['Rochdi', 'Karouali', $H, $SYS, '+212 689 98 10 22', ['GLS Marrakech', 'GLS Agadir', 'GLS Casablanca', 'GLS Kénitra', 'GLS Online', 'GLS Rabat', 'GLS Salé']],
             'ichrak.fakroune@glszentrum.com' => ['Ichrak', 'Fakroune', $F, $AAD, '+212 655 61 53 65', ['GLS Marrakech']],
             'mustapha.benlmekki@glszentrum.com' => ['Mustapha', 'Ben Lmekki', $H, $AAD, '+212 707 04 65 81', ['GLS Marrakech']],
 
-            // Directeur à Marrakech, Responsable administrative à Salé —
-            // Marrakech en premier ⇒ centre principal (sa caisse y est).
-            'abderrahimelmoulabbi@glszentrum.com' => ['Abderrahim', 'Elmoulabbi', $H, $DIR, '+212 603 86 52 51', ['GLS Marrakech', 'GLS Salé']],
+            // Corrigé à la main sur l'écran Employés (26/08/2026) : ne
+            // travaille plus qu'à Salé, Marrakech retiré.
+            'abderrahimelmoulabbi@glszentrum.com' => ['Abderrahim', 'Elmoulabbi', $H, $DIR, '+212 603 86 52 51', ['GLS Salé']],
 
             // ---- GLS Rabat ----------------------------------------------
             'elmehdi.bakhach@glszentrum.com' => ['El Mehdi', 'Bakhach', $H, $DIR, '+212 677 65 77 02', ['GLS Rabat']],
