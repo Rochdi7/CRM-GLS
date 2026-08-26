@@ -63,6 +63,7 @@ final class ImporterCentreLegacy extends Command
         {--annee-courante= : Année des inscriptions actives (défaut : l\'année par défaut)}
         {--annee-precedente= : Année des inscriptions annulées/archivées}
         {--caisse= : E-mail/identifiant de l\'employé dont la caisse reçoit TOUS les paiements importés (ex. rafik@glszentrum.com)}
+        {--retry-echecs : Re-tenter les lignes ECHEC_COMMIT des lots précédents (après correction de leur cause)}
         {--sans-paiements : Importer étudiants + inscriptions seulement}
         {--dry-run : Analyser sans rien écrire en base}';
 
@@ -238,6 +239,24 @@ final class ImporterCentreLegacy extends Command
             $batch->delete();
 
             return true;
+        }
+
+        // A row that failed a previous commit keeps ECHEC_COMMIT and is
+        // deliberately NOT commit-eligible (that made the progress loop spin
+        // forever). Once its cause is fixed — a code fix, a missing student
+        // added — --retry-echecs re-queues it as CONFLIT, exactly what the
+        // Preview screen's "relancer" button does.
+        if ($this->option('retry-echecs')) {
+            $requeued = ImportRow::query()
+                ->whereHas('batch', fn ($q) => $q
+                    ->where('module', $importer->module())
+                    ->where('etablissement_id', $context->etablissementId))
+                ->whereIn('status', ImportRow::RETRYABLE_STATUTS)
+                ->update(['status' => ImportRow::STATUT_CONFLIT, 'errors' => null]);
+
+            if ($requeued > 0) {
+                $this->line(sprintf('  %-42s %d ligne(s) en échec re-tentée(s)', '', $requeued));
+            }
         }
 
         $ids = $batch->rows()->whereIn('status', ImportRow::SELECTABLE_STATUTS)->pluck('id')->all();
