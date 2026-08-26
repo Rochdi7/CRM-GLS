@@ -31,6 +31,9 @@ final class GetEncaissementsList
         private readonly CurrentContext $context,
     ) {}
 
+    /**
+     * @return array{data: LengthAwarePaginator, montantTotal: string}
+     */
     public function __invoke(
         User $user,
         string $search = '',
@@ -44,13 +47,8 @@ final class GetEncaissementsList
         string $studentFilter = '',
         string $numeroChequeFilter = '',
         string $banqueFilter = '',
-    ): LengthAwarePaginator {
-        $encaissements = Encaissement::query()
-            ->with(['student', 'fee.inscription', 'caisse', 'agent'])
-            // Per-fee paid total, computed by the DB (no N+1): feeds the
-            // edit modal's read-only "Reste à payer" figure.
-            ->with(['fee' => fn ($q) => $q->withSum('encaissements', 'montant')])
-            ->when($view === 'avance', fn ($q) => $q->withSum('applications', 'montant'))
+    ): array {
+        $base = Encaissement::query()
             // What has been given back on this payment (Remboursement.
             // encaissement_id). A FULLY refunded payment is money that is no
             // longer there, so it leaves the Paiements / Chèques tabs
@@ -137,7 +135,20 @@ final class GetEncaissementsList
             })
             // Latest recorded first — the row just saved is always on top,
             // whatever payment date was typed.
-            ->orderByDesc('id')
+            ->orderByDesc('id');
+
+        // Sum over every row matching the current filters/tab (not just the
+        // page shown) — mirrors GetDepensesList's montantTotal so every
+        // finance list states the total it represents, not just the visible
+        // page's subtotal.
+        $montantTotal = (clone $base)->sum('montant');
+
+        $encaissements = (clone $base)
+            ->with(['student', 'fee.inscription', 'caisse', 'agent'])
+            // Per-fee paid total, computed by the DB (no N+1): feeds the
+            // edit modal's read-only "Reste à payer" figure.
+            ->with(['fee' => fn ($q) => $q->withSum('encaissements', 'montant')])
+            ->when($view === 'avance', fn ($q) => $q->withSum('applications', 'montant'))
             ->paginate($perPage)
             ->withQueryString();
 
@@ -176,7 +187,10 @@ final class GetEncaissementsList
             ];
         });
 
-        return $encaissements;
+        return [
+            'data' => $encaissements,
+            'montantTotal' => number_format((float) $montantTotal, 2, '.', ''),
+        ];
     }
 
     /**

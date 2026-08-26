@@ -90,6 +90,17 @@ trait BuildsImportPreview
                 ->orderBy('source_row_number')
                 ->paginate(self::PREVIEW_PER_PAGE, ['*'], 'skipped_page')
                 ->withQueryString(),
+            // Rows that were never committable: CONFLIT (a lookup did not
+            // resolve) and ERREUR (a cell would not parse). They were always
+            // recorded, but the result page listed only failed + skipped —
+            // so 2 755 unimported payments (2,1 M DH, 25/08/2026) had no
+            // screen to inspect them on once the operator left the preview.
+            // Money that did not land must stay auditable after the fact.
+            'unresolvedRows' => $batch->rows()
+                ->whereIn('status', [ImportRow::STATUT_CONFLIT, ImportRow::STATUT_ERREUR])
+                ->orderBy('source_row_number')
+                ->paginate(self::PREVIEW_PER_PAGE, ['*'], 'unresolved_page')
+                ->withQueryString(),
             'statusCounts' => $this->statusCounts($batch),
         ];
     }

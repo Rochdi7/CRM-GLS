@@ -91,7 +91,7 @@ function emptyAvanceForm(): AvanceFormState {
  * directly under that row; numéro/banque/échéance are always read off that
  * Cheque record server-side (EncaissementController@store).
  */
-export default function EncaissementsIndex({ encaissements, caisses, students, methodes, banques, filters, can }: EncaissementsPageProps) {
+export default function EncaissementsIndex({ encaissements, montantTotal, caisses, students, methodes, banques, filters, can }: EncaissementsPageProps) {
     const isLoading = useInertiaLoading();
     const [deleteTarget, setDeleteTarget] = useState<EncaissementRow | null>(null);
     const [deleting, setDeleting] = useState(false);
@@ -674,6 +674,10 @@ export default function EncaissementsIndex({ encaissements, caisses, students, m
                         />
                     }
                 />
+
+                <p className="fw-medium px-3 mb-3">
+                    Montant total : {Number(montantTotal).toFixed(2)} MAD
+                </p>
 
                 {encaissements.data.length === 0 ? (
                     <EmptyState

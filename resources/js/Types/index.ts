@@ -426,6 +426,9 @@ export interface DepenseDetails {
     montant: MoneyDisplay;
     typeDepense: string | null;
     dateDepense: string | null;
+    /** « Paiement prof » only — the teaching period the payment covers. */
+    periodeDebut: string | null;
+    periodeFin: string | null;
     caisse: string | null;
     centre: string | null;
     agent: string | null;
@@ -1064,6 +1067,12 @@ export interface GroupRow {
     showUrl: string;
     /** Keyed by frais_id — prefills the edit modal's fee-lines table without a second request. */
     fraisLignes: Record<number, { montant: string; dateEcheance: string; classification: string }>;
+    /**
+     * Active catalog fees this group NO LONGER carries — the edit modal's
+     * « Frais retirés » list, the only place a removed fee can be restored
+     * from (mirrors the Inscriptions modal's « Frais masqués »).
+     */
+    fraisRetires: GroupFormOption[];
 }
 
 /** One row of the "Statistique" drill-down modal (GetGroupStudentsBySegment). */
@@ -1076,6 +1085,61 @@ export interface GroupStudentSegmentRow {
     dateNaissance: string | null;
     niveauScolaire: string | null;
     dateInscription: string | null;
+}
+
+/**
+ * "Détails paiement" — the group's payment matrix
+ * (App\Domain\Groups\Queries\GetGroupPaymentMatrix).
+ */
+export type GroupPaymentCellState = 'paye' | 'partiel' | 'impaye';
+
+export interface GroupPaymentCell {
+    state: GroupPaymentCellState;
+    /** What the student actually paid on this fee line. */
+    montant: string;
+    /** What the line is worth after remise. */
+    du: string;
+    reste: string;
+}
+
+export interface GroupPaymentColumn {
+    /** frais_id as a string — the key into GroupPaymentRow.cells. */
+    key: string;
+    nom: string;
+    dateEcheance: string | null;
+    dateEcheanceIso: string | null;
+    classification: string | null;
+    montant: string;
+    /** Column footer: everything collected on this fee across the group. */
+    total: string;
+}
+
+export interface GroupPaymentRow {
+    key: string;
+    numero: string;
+    student: string | null;
+    studentShowUrl: string | null;
+    reference: string;
+    /** Active | Changement | Annulée — drives the row colour. */
+    statut: string;
+    dateInscription: string | null;
+    dateInscriptionIso: string | null;
+    total: string;
+    reste: string;
+    /**
+     * Keyed by column key. A MISSING key means the fee is not on this
+     * student's inscription — an empty grey cell, not a debt.
+     */
+    cells: Record<string, GroupPaymentCell>;
+}
+
+export type GroupPaymentSort = 'nom' | 'date' | 'nom_desc';
+
+export interface GroupPaymentMatrix {
+    columns: GroupPaymentColumn[];
+    rows: GroupPaymentRow[];
+    totals: { parColonne: Record<string, string>; general: string };
+    sort: GroupPaymentSort;
 }
 
 export interface GroupFraisLigne {
@@ -1443,6 +1507,8 @@ export interface EncaissementsFilters {
 
 export interface EncaissementsPageProps {
     encaissements: PaginatedData<EncaissementRow>;
+    /** Sum of `montant` over every row matching the current filters/tab (not just the page shown). */
+    montantTotal: MoneyDisplay;
     caisses: FinanceOption[];
     students: FinanceOption[];
     methodes: string[];
@@ -1508,6 +1574,8 @@ export interface ChequeParentOption {
 
 export interface ChequesPageProps {
     cheques: PaginatedData<ChequeRow>;
+    /** Sum of `montant` over every chèque matching the current filters (not just the page shown). */
+    montantTotal: MoneyDisplay;
     filters: ChequesFilters;
     perPageOptions: number[];
     sources: string[];
@@ -1581,6 +1649,9 @@ export interface DepenseRow {
     montant: MoneyDisplay;
     methodePaiement: string | null;
     dateDepense: string | null;
+    /** « Paiement prof » only — the teaching period the payment covers. */
+    periodeDebut: string | null;
+    periodeFin: string | null;
     referenceFacture: string | null;
     description: string | null;
     motsCles: string | null;

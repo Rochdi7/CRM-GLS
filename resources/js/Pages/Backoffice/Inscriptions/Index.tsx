@@ -134,6 +134,34 @@ const AVAILABLE_FEES_PER_PAGE = 5;
  * and final-amount preview are display-only, never trusted as the source
  * of truth (the server recomputes independently on save).
  */
+/**
+ * Hides or restores one inscription fee line — a plain JSON POST rather than
+ * an Inertia visit.
+ *
+ * These two actions fire from inside the OPEN edit modal, and the modal
+ * updates its own table from local state afterwards. Routing them through
+ * `router.post()` made Inertia re-run the index controller and rebuild the
+ * whole page payload (the paginated list plus the students / groups / frais
+ * option catalogs) for every single click, which is what made removing a fee
+ * feel slow. Nothing behind the modal depends on the result.
+ *
+ * Throws on a non-2xx response so the caller's `.finally()` still clears its
+ * spinner and the optimistic UI update is skipped.
+ */
+async function postFeeVisibility(url: string): Promise<{ fee?: InscriptionFeeLine }> {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': csrf, Accept: 'application/json' },
+    });
+
+    if (!response.ok) {
+        throw new Error('fee visibility request failed');
+    }
+
+    return response.json();
+}
+
 export default function InscriptionsIndex({
     inscriptions,
     filters,
@@ -606,19 +634,21 @@ export default function InscriptionsIndex({
             clearTimeout(feesSaveTimeout.current);
         }
 
+        // fetch(), not router.post(): an Inertia visit re-runs the index
+        // controller and rebuilds the entire page payload (paginated list +
+        // students/groups/frais catalogs) just to hide one row, which is what
+        // made this feel slow. The endpoint returns plain JSON and the table
+        // below is updated from local state.
         setHideProcessingId(line.id);
-        router.post(`/backoffice/inscriptions/${editingInscription.id}/fees/${line.id}/hide`, {}, {
-            preserveScroll: true,
-            preserveState: true,
-            onSuccess: () => {
+        postFeeVisibility(`/backoffice/inscriptions/${editingInscription.id}/fees/${line.id}/hide`)
+            .then(() => {
                 feesForm.setData('fee_lines', feesForm.data.fee_lines.filter((_, i) => i !== index));
                 setHiddenFees((previous) => [
                     ...previous,
                     { id: line.id as number, nom: line.nom, montant: line.montantInitial, dateEcheance: line.dateEcheance },
                 ]);
-            },
-            onFinish: () => setHideProcessingId(null),
-        });
+            })
+            .finally(() => setHideProcessingId(null));
     }
 
     function restoreHiddenFee(fee: HiddenInscriptionFee) {
@@ -626,20 +656,20 @@ export default function InscriptionsIndex({
             return;
         }
 
+        // fetch() — see removeEditingLine(). The response carries the restored
+        // line's full shape, so it is spliced straight back into the table
+        // instead of re-fetching the whole fee list afterwards (the old path
+        // cost an Inertia reload PLUS a second request).
         setRestoreProcessingId(fee.id);
-        router.post(`/backoffice/inscriptions/${editingInscription.id}/fees/${fee.id}/restore`, {}, {
-            preserveScroll: true,
-            preserveState: true,
-            onSuccess: () => {
+        postFeeVisibility(`/backoffice/inscriptions/${editingInscription.id}/fees/${fee.id}/restore`)
+            .then((data) => {
                 setHiddenFees((previous) => previous.filter((f) => f.id !== fee.id));
-                setLoadingEditingFees(true);
-                fetch(`/backoffice/inscriptions/${editingInscription.id}/fees`, { headers: { Accept: 'application/json' } })
-                    .then((response) => response.json())
-                    .then((data: { fees: InscriptionFeeLine[] }) => feesForm.setData('fee_lines', data.fees))
-                    .finally(() => setLoadingEditingFees(false));
-            },
-            onFinish: () => setRestoreProcessingId(null),
-        });
+
+                if (data.fee) {
+                    feesForm.setData('fee_lines', [...feesForm.data.fee_lines, data.fee]);
+                }
+            })
+            .finally(() => setRestoreProcessingId(null));
     }
 
     /**

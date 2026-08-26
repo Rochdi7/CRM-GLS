@@ -33,6 +33,9 @@ final class GetDepenseDetails
             'montant' => number_format((float) $depense->montant, 2, '.', ''),
             'typeDepense' => $depense->typeDepense?->nom,
             'dateDepense' => $depense->date_depense?->format('d/m/Y'),
+            // « Paiement prof » only — null on every ordinary dépense.
+            'periodeDebut' => $depense->periode_debut?->format('d/m/Y'),
+            'periodeFin' => $depense->periode_fin?->format('d/m/Y'),
             'caisse' => $depense->caisse?->nom,
             'centre' => $depense->caisse?->etablissement?->nom_centre,
             'agent' => $depense->agent?->nomComplet(),

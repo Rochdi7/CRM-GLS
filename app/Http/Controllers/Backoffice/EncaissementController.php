@@ -74,21 +74,24 @@ final class EncaissementController extends Controller
             $view = '';
         }
 
+        $encaissementsList = $getEncaissementsList(
+            $request->user(),
+            $search,
+            $caisseFilter,
+            $methodeFilter,
+            $dateFrom,
+            $dateTo,
+            $perPage,
+            $view,
+            $referenceFilter,
+            $studentFilter,
+            $numeroChequeFilter,
+            $banqueFilter,
+        );
+
         return Inertia::render('Backoffice/Encaissements/Index', [
-            'encaissements' => $getEncaissementsList(
-                $request->user(),
-                $search,
-                $caisseFilter,
-                $methodeFilter,
-                $dateFrom,
-                $dateTo,
-                $perPage,
-                $view,
-                $referenceFilter,
-                $studentFilter,
-                $numeroChequeFilter,
-                $banqueFilter,
-            ),
+            'encaissements' => $encaissementsList['data'],
+            'montantTotal' => $encaissementsList['montantTotal'],
             // Closures: the page reloads on every search/filter/page change
             // with `only: ['encaissements', 'filters']`, so these option
             // lists (every student of the centre!) are computed on the first

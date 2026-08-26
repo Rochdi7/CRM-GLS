@@ -36,7 +36,7 @@ final class FraisSeeder extends Seeder
         'GLS Casablanca' => 1400,
         'GLS Rabat' => 1400,
         'GLS Marrakech' => 1300,
-        'GLS Kénitra' => 1300,
+        'GLS Kénitra' => 1200,
         'GLS Salé' => 1300,
         'GLS Agadir' => 1200,
         'GLS Online' => 1000,

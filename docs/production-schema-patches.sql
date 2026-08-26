@@ -54,10 +54,22 @@ UPDATE encaissements e
  WHERE s.id = e.student_id
    AND e.etablissement_id IS NULL;
 
-DROP INDEX IF EXISTS encaissements_legacy_ref_unique;
+-- Constraint FIRST: Postgres refuses DROP INDEX on an index backing a
+-- UNIQUE constraint, and inside this transaction that error aborts the
+-- whole file. Dropping the constraint removes its index with it; the
+-- DROP INDEX below only covers a plain (non-constraint) unique index.
 ALTER TABLE encaissements DROP CONSTRAINT IF EXISTS encaissements_legacy_ref_unique;
+DROP INDEX IF EXISTS encaissements_legacy_ref_unique;
 
 CREATE UNIQUE INDEX IF NOT EXISTS encaissements_etab_legacy_ref_unique
     ON encaissements (etablissement_id, legacy_ref);
+
+-- ---------------------------------------------------------------------------
+-- 26/08/2026 — depenses.periode_debut / periode_fin
+-- The teaching PERIOD a « Paiement prof » covers, as opposed to date_depense
+-- (the day the money left the till). Nullable: an ordinary dépense has none.
+-- ---------------------------------------------------------------------------
+ALTER TABLE depenses ADD COLUMN IF NOT EXISTS periode_debut date;
+ALTER TABLE depenses ADD COLUMN IF NOT EXISTS periode_fin date;
 
 COMMIT;

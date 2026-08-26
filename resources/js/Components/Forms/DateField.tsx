@@ -1,7 +1,8 @@
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEventHandler } from 'react';
 import FormError from '@/Components/Forms/FormError';
+import { t } from '@/Lib/i18n';
 
 interface DateFieldProps {
     id: string;
@@ -14,6 +15,8 @@ interface DateFieldProps {
     required?: boolean;
     disabled?: boolean;
     placeholder?: string;
+    /** Allows emptying the field (shows a clear × button when it holds a value). Defaults to true for optional fields, false when `required`. */
+    clearable?: boolean;
     /** Preferred horizontal alignment: 'right' anchors the panel to the input's right edge instead of its left. Either way the panel is finally clamped into the viewport, so this only decides which edge it lines up with when there's room for both. */
     panelAlign?: 'left' | 'right';
 }
@@ -44,6 +47,13 @@ function parseIso(value: string): { year: number; month: number; day: number } |
 
 /** Parses what the user types — 'dd-mm-yyyy' (also accepts 'dd/mm/yyyy') — into an ISO date, validating real calendar dates (no 31-02). */
 function parseDisplay(text: string): string | null {
+    // A blank inside the mask means a slot the user hasn't filled yet (e.g.
+    // ' 5-02-2026' after clearing the day's first digit). trim() would turn
+    // that into a valid-looking '5-02-2026', silently committing a date that
+    // was never typed — so reject any value still holding a blank slot.
+    if (/\s/.test(text)) {
+        return null;
+    }
     const match = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/.exec(text.trim());
     if (!match) {
         return null;
@@ -59,38 +69,157 @@ function parseDisplay(text: string): string | null {
 }
 
 /**
- * Masks free-typed input into 'dd-mm-yyyy' as the user types: strips
- * non-digits, caps each group (2/2/4 digits — day/month can't exceed 31/12),
- * and auto-inserts the dashes. Backspacing across a dash removes it along
- * with the digit before it, so deleting feels natural.
+ * The mask is a fixed 10-character template `DD-MM-YYYY` over 8 digit slots.
+ * Slot i lives at these string offsets (2 and 5 are the literal dashes).
  */
-function maskDateInput(raw: string, previous: string): string {
-    const deleting = raw.length < previous.length;
-    let digits = raw.replace(/\D/g, '').slice(0, 8);
+const SLOT_OFFSETS = [0, 1, 3, 4, 6, 7, 8, 9];
 
-    if (deleting && previous.endsWith('-') && raw === previous.slice(0, -1)) {
-        digits = digits.slice(0, -1);
+/** String offset -> the digit slot the caret sits in front of. */
+function offsetToSlot(offset: number): number {
+    for (let i = 0; i < SLOT_OFFSETS.length; i += 1) {
+        if (SLOT_OFFSETS[i] >= offset) {
+            return i;
+        }
+    }
+    return SLOT_OFFSETS.length;
+}
+
+/** Renders 8 digit slots (blank = undefined) as 'dd-mm-yyyy', trimmed of trailing blanks. */
+function renderSlots(slots: (string | undefined)[]): string {
+    let out = '';
+    for (let i = 0; i < 8; i += 1) {
+        if (i === 2 || i === 4) {
+            out += '-';
+        }
+        out += slots[i] ?? ' ';
+    }
+    // Trailing blanks (and the dash before them) are not shown, so a partly
+    // typed date reads '25-02' rather than '25-02-    '.
+    return out.replace(/[\s-]+$/, '');
+}
+
+/** Reads 'dd-mm-yyyy' (possibly partial) back into 8 digit slots. */
+function textToSlots(text: string): (string | undefined)[] {
+    const slots: (string | undefined)[] = new Array(8).fill(undefined);
+    for (let i = 0; i < 8; i += 1) {
+        const ch = text[SLOT_OFFSETS[i]];
+        if (ch && /\d/.test(ch)) {
+            slots[i] = ch;
+        }
+    }
+    return slots;
+}
+
+interface MaskResult {
+    text: string;
+    caret: number;
+}
+
+/**
+ * Masks free-typed input into 'dd-mm-yyyy' using FIXED digit slots, so editing
+ * in the middle of the value overwrites the digit under the caret instead of
+ * re-flowing every following digit. The old implementation concatenated all
+ * digits and re-split them 2/2/4, which meant typing a digit into the month
+ * pushed the rest rightwards and mangled the year (25-02-2026 -> 25-02-0267)
+ * while the caret jumped to the end.
+ *
+ * `raw`/`caret` are the browser's post-edit value and caret; `previous` is the
+ * masked text before the edit. Returns the new masked text and where the caret
+ * should land.
+ */
+function maskDateInput(raw: string, caret: number, previous: string): MaskResult {
+    const prevSlots = textToSlots(previous);
+
+    // Locate the edit by diffing `previous` against `raw` from both ends: the
+    // common prefix is what the user left untouched before the caret, the
+    // common suffix what they left after it. Everything between was replaced
+    // by whatever now sits in raw[prefix..caret]. This handles plain typing,
+    // backspace, and selection-replacement uniformly — inferring the operation
+    // from raw.length vs previous.length misread a selection replacement as a
+    // deletion and silently threw away the typed digits.
+    let prefix = 0;
+    while (prefix < previous.length && prefix < raw.length && raw[prefix] === previous[prefix] && prefix < caret) {
+        prefix += 1;
     }
 
-    let day = digits.slice(0, 2);
-    let month = digits.slice(2, 4);
-    const year = digits.slice(4, 8);
-
-    if (day.length === 2 && Number(day) > 31) {
-        day = day[0];
-    }
-    if (month.length === 2 && Number(month) > 12) {
-        month = month[0];
+    let suffix = 0;
+    while (
+        suffix < previous.length - prefix &&
+        suffix < raw.length - caret &&
+        raw[raw.length - 1 - suffix] === previous[previous.length - 1 - suffix]
+    ) {
+        suffix += 1;
     }
 
-    let out = day;
-    if (digits.length >= 3 || (day.length === 2 && !deleting)) {
-        out += '-' + month;
+    const inserted = raw.slice(prefix, caret).replace(/\D/g, '');
+    // The span of `previous` that disappeared — its slots are cleared before
+    // the typed digits are written in.
+    const removedFrom = prefix;
+    const removedTo = previous.length - suffix;
+
+    const slots = prevSlots.slice();
+    for (let offset = removedFrom; offset < removedTo; offset += 1) {
+        const slot = SLOT_OFFSETS.indexOf(offset);
+        if (slot !== -1) {
+            slots[slot] = undefined;
+        }
     }
-    if (digits.length >= 5) {
-        out += '-' + year;
+
+    if (inserted === '') {
+        // Pure deletion. Backspacing onto a dash removes the digit before it
+        // instead, so the key always takes away something visible.
+        if (removedTo - removedFrom === 1 && SLOT_OFFSETS.indexOf(removedFrom) === -1) {
+            const slot = offsetToSlot(removedFrom) - 1;
+            if (slot >= 0) {
+                slots[slot] = undefined;
+            }
+        }
+        return { text: renderSlots(slots), caret: removedFrom };
     }
-    return out;
+
+    let slot = offsetToSlot(removedFrom);
+    for (const digit of inserted) {
+        if (slot > 7) {
+            break;
+        }
+        slots[slot] = digit;
+        slot += 1;
+    }
+
+    clampSlots(slots);
+
+    // Land the caret after the last slot written, skipping over a dash so the
+    // next keystroke goes straight into the following group.
+    const nextOffset = slot >= 8 ? 10 : SLOT_OFFSETS[slot];
+    return { text: renderSlots(slots), caret: nextOffset };
+}
+
+/**
+ * Keeps a complete day/month group inside its calendar range, in place — a
+ * typed '35' becomes '31', '19' as a month becomes '12'. Never re-flows other
+ * slots (that is what broke mid-string editing).
+ */
+function clampSlots(slots: (string | undefined)[]): void {
+    if (slots[0] !== undefined && slots[1] !== undefined) {
+        const day = Number(slots[0] + slots[1]);
+        if (day > 31) {
+            slots[0] = '3';
+            slots[1] = '1';
+        } else if (day === 0) {
+            slots[0] = '0';
+            slots[1] = '1';
+        }
+    }
+    if (slots[2] !== undefined && slots[3] !== undefined) {
+        const month = Number(slots[2] + slots[3]);
+        if (month > 12) {
+            slots[2] = '1';
+            slots[3] = '2';
+        } else if (month === 0) {
+            slots[2] = '0';
+            slots[3] = '1';
+        }
+    }
 }
 
 interface GridDay {
@@ -123,11 +252,19 @@ export default function DateField({
     required,
     disabled = false,
     placeholder,
+    clearable,
     panelAlign = 'left',
 }: DateFieldProps) {
+    // A required field must stay filled, so it gets no clear button unless
+    // the caller explicitly asks for one.
+    const canClear = clearable ?? !required;
     const [open, setOpen] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+    /** Set while programmatically refocusing after a clear, so onFocus doesn't reopen the panel. */
+    const suppressOpenRef = useRef(false);
+    /** Caret offset to restore after the masked value re-renders. */
+    const pendingCaretRef = useRef<number | null>(null);
 
     // The panel is `position: fixed` rather than absolute: inside a
     // `.table-responsive` (overflow-x: auto) an absolutely-positioned panel is
@@ -190,9 +327,24 @@ export default function DateField({
         setOpen(false);
     }
 
-    function handleTextChange(text: string) {
-        const masked = maskDateInput(text, typedText ?? formatted);
+    function handleTextChange(text: string, caret: number) {
+        const { text: masked, caret: nextCaret } = maskDateInput(text, caret, typedText ?? formatted);
         setTypedText(masked);
+        // React re-renders with the masked value, which would otherwise drop
+        // the caret at the end — put it back where the edit happened.
+        pendingCaretRef.current = nextCaret;
+
+        // Emptying the input clears the value straight away — that is how a
+        // date FILTER is removed («from this date» no longer applies). Without
+        // this the old value silently came back on blur and the filter was
+        // impossible to unset.
+        if (masked === '') {
+            if (value !== '') {
+                emit('');
+            }
+            return;
+        }
+
         const iso = parseDisplay(masked);
         if (iso) {
             emit(iso);
@@ -200,6 +352,19 @@ export default function DateField({
             setViewYear(next.year);
             setViewMonth(next.month);
         }
+    }
+
+    function clear() {
+        setTypedText(null);
+        if (value !== '') {
+            emit('');
+        }
+        setOpen(false);
+        // Keep the caret in the field, but don't let the refocus reopen the
+        // panel we just closed — clearing a filter should leave the calendar
+        // shut, not pop it straight back up.
+        suppressOpenRef.current = true;
+        inputRef.current?.focus();
     }
 
     function handleTextBlur() {
@@ -213,6 +378,15 @@ export default function DateField({
         setViewYear(next.getFullYear());
         setViewMonth(next.getMonth());
     }
+
+    useLayoutEffect(() => {
+        const caret = pendingCaretRef.current;
+        if (caret === null || !inputRef.current) {
+            return;
+        }
+        pendingCaretRef.current = null;
+        inputRef.current.setSelectionRange(caret, caret);
+    });
 
     useEffect(() => {
         if (!open) {
@@ -247,6 +421,13 @@ export default function DateField({
         if (open && event.key === 'Escape') {
             event.stopPropagation();
             setOpen(false);
+            return;
+        }
+        // Delete wipes the whole field in one keystroke (the panel is open on
+        // focus, so users reach for Delete rather than 10 backspaces).
+        if (canClear && event.key === 'Delete' && !disabled) {
+            event.preventDefault();
+            clear();
         }
     }
 
@@ -273,6 +454,7 @@ export default function DateField({
     });
 
     const display = typedText ?? formatted;
+    const showClear = canClear && !disabled && display !== '';
     const todayIso = toIso(today.getFullYear(), today.getMonth(), today.getDate());
 
     return (
@@ -300,25 +482,55 @@ export default function DateField({
                     aria-describedby={error ? `${id}-error` : undefined}
                     aria-haspopup="dialog"
                     aria-expanded={open}
-                    onChange={(event) => handleTextChange(event.target.value)}
+                    onChange={(event) =>
+                        handleTextChange(event.target.value, event.target.selectionStart ?? event.target.value.length)
+                    }
                     onBlur={handleTextBlur}
                     onFocus={() => {
+                        if (suppressOpenRef.current) {
+                            suppressOpenRef.current = false;
+                            return;
+                        }
                         if (!disabled) {
                             openPanel();
                         }
                     }}
                 />
-                <i
-                    className="ti ti-calendar text-muted"
-                    aria-hidden="true"
-                    style={{
-                        position: 'absolute',
-                        right: '0.75rem',
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        pointerEvents: 'none',
-                    }}
-                />
+                {showClear ? (
+                    <button
+                        type="button"
+                        className="btn btn-sm p-0 border-0 bg-transparent text-muted lh-1"
+                        aria-label={t('Clear date')}
+                        title={t('Clear date')}
+                        // mousedown fires before the input's blur, so the click
+                        // isn't swallowed by the outside-click close.
+                        onMouseDown={(event) => {
+                            event.preventDefault();
+                            clear();
+                        }}
+                        style={{
+                            position: 'absolute',
+                            right: '0.6rem',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            zIndex: 2,
+                        }}
+                    >
+                        <i className="ti ti-x fs-16" aria-hidden="true" />
+                    </button>
+                ) : (
+                    <i
+                        className="ti ti-calendar text-muted"
+                        aria-hidden="true"
+                        style={{
+                            position: 'absolute',
+                            right: '0.75rem',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            pointerEvents: 'none',
+                        }}
+                    />
+                )}
                 {open && panelPos && (
                     <div
                         className="bg-white border rounded-3 shadow p-3"
@@ -336,7 +548,7 @@ export default function DateField({
                             <button
                                 type="button"
                                 className="btn btn-outline-light bg-white btn-icon rounded-circle"
-                                aria-label="Mois précédent"
+                                aria-label={t('Previous month')}
                                 onClick={() => moveMonth(-1)}
                             >
                                 <i className="ti ti-chevron-left" aria-hidden="true" />
@@ -345,7 +557,7 @@ export default function DateField({
                             <button
                                 type="button"
                                 className="btn btn-outline-light bg-white btn-icon rounded-circle"
-                                aria-label="Mois suivant"
+                                aria-label={t('Next month')}
                                 onClick={() => moveMonth(1)}
                             >
                                 <i className="ti ti-chevron-right" aria-hidden="true" />

@@ -294,9 +294,8 @@ final class InscriptionImporter implements Importer
                     $groupId = $resolution['group_id'] ?? $data['group_id'] ?? null;
                     $group = Group::findOrFail($groupId);
 
-                    if ((int) $group->etablissement_id !== (int) $batch->etablissement_id
-                        || (int) $group->annee_scolaire_id !== (int) $batch->annee_scolaire_id) {
-                        throw new \RuntimeException('Le groupe résolu ne correspond pas au centre/année du lot.');
+                    if ((int) $group->etablissement_id !== (int) $batch->etablissement_id) {
+                        throw new \RuntimeException('Le groupe résolu ne correspond pas au centre du lot.');
                     }
 
                     $feeLines = $this->buildFeeLines($group);
@@ -309,7 +308,16 @@ final class InscriptionImporter implements Importer
                         'student_id' => $resolution['student_id'] ?? $data['student_id'],
                         'group_id' => $group->id,
                         'etablissement_id' => $batch->etablissement_id,
-                        'annee_scolaire_id' => $batch->annee_scolaire_id,
+                        // The GROUP's année, not the batch's. A legacy export
+                        // splits one running group across three files (Active
+                        // / Annulé / Archive) that land in different années,
+                        // which would tear the group in half — 6 Marrakech
+                        // groups, 287 inscriptions (26/08/2026). A group is a
+                        // real cohort sitting in one room: it belongs to
+                        // exactly one année, and every inscription follows it
+                        // whatever its own statut. The batch année still
+                        // decides where a NEW group is created.
+                        'annee_scolaire_id' => $group->annee_scolaire_id,
                         'statut' => $data['statut'],
                         'date_inscription' => $data['date_inscription'],
                         'date_debut' => $group->date_debut_formation?->toDateString(),
@@ -671,10 +679,13 @@ final class InscriptionImporter implements Importer
             return [];
         }
 
+        // Centre only — a mapped group from ANOTHER année is valid: the
+        // inscription follows its group's année (see commit()), so a group
+        // already created by the Active file is reused by the Annulé /
+        // Archive files instead of being duplicated a year apart.
         return Group::query()
             ->whereIn('id', $mappedIds)
             ->where('etablissement_id', $context->etablissementId)
-            ->where('annee_scolaire_id', $context->anneeScolaireId)
             ->pluck('id')
             ->flip()
             ->map(fn () => true)

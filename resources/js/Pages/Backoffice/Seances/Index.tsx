@@ -443,10 +443,9 @@ export default function SeancesIndex({
                             />
                         </div>
                         <div className="col-md-6">
-                            <FormField
+                            <DateField
                                 id="seance-date"
                                 label="Date"
-                                type="date"
                                 required
                                 value={form.data.date_seance}
                                 onChange={(event) => form.setData('date_seance', event.target.value)}

@@ -29,6 +29,8 @@ interface DepenseFormState {
     montant: string;
     methode_paiement: string;
     date_depense: string;
+    periode_debut: string;
+    periode_fin: string;
     reference_facture: string;
     description: string;
     mots_cles: string;
@@ -107,6 +109,8 @@ function emptyDepenseForm(): DepenseFormState {
         montant: '',
         methode_paiement: '',
         date_depense: new Date().toISOString().slice(0, 10),
+        periode_debut: '',
+        periode_fin: '',
         reference_facture: '',
         description: '',
         mots_cles: '',
@@ -179,6 +183,10 @@ export default function DepensesIndex({
     const [tab, setTab] = useState<Tab>(initialTab);
 
     const [showDepenseModal, setShowDepenseModal] = useState(false);
+    // Which of the TWO expense modals is open: the ordinary « Ajouter une
+    // dépense » one, or the « Paiement prof » one (type locked, Groupe
+    // required, payment period instead of a supplier invoice reference).
+    const [profMode, setProfMode] = useState(false);
     const [editingDepense, setEditingDepense] = useState<DepenseRow | null>(null);
     // « Les détails de dépense » — the eye on the Validation tab. Everything
     // shown is already on the row, so opening it costs no extra request.
@@ -191,8 +199,12 @@ export default function DepensesIndex({
 
     const typeOptions: SelectOption[] = typesDepenses.map((t) => ({ value: t.id, label: t.nom }));
     // The Dépenses table excludes "Paiement prof", so filtering by it there
-    // could only ever return nothing — drop it from that filter only.
+    // could only ever return nothing — drop it from that filter. The same
+    // list drives the Dépense MODAL: a paiement prof is created from its own
+    // modal (locked type + required Groupe + period), so offering the type
+    // here would let a user key one in without any of that.
     const filterTypeOptions: SelectOption[] = typeOptions.filter((o) => o.value !== paiementProfTypeId);
+    const paiementProfLabel = typeOptions.find((o) => o.value === paiementProfTypeId)?.label ?? 'Paiement prof';
     const groupOptions: SelectOption[] = groups.map((g) => ({ value: g.id, label: g.nom }));
     const methodeOptions: SelectOption[] = methodes.map((m) => ({ value: m, label: m }));
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.nom }));
@@ -259,15 +271,37 @@ export default function DepensesIndex({
 
     // --- Dépenses ---
 
+    /**
+     * Ordinary dépense — the type is picked freely (minus « Paiement prof »,
+     * which has its own modal), there is NO Groupe field, and Référence
+     * facture applies.
+     */
     function openCreateDepense() {
         setEditingDepense(null);
+        setProfMode(false);
         depenseForm.clearErrors();
         depenseForm.setData(emptyDepenseForm());
         setShowDepenseModal(true);
     }
 
+    /**
+     * « Paiement prof » — same table, same till, different contract: the type
+     * is fixed and not changeable, Groupe is REQUIRED, the payment period
+     * (du / au) is captured, and the supplier-invoice reference is dropped.
+     */
+    function openCreatePaiementProf() {
+        setEditingDepense(null);
+        setProfMode(true);
+        depenseForm.clearErrors();
+        depenseForm.setData({ ...emptyDepenseForm(), type_depense_id: paiementProfTypeId ?? '' });
+        setShowDepenseModal(true);
+    }
+
     function openEditDepense(row: DepenseRow) {
         setEditingDepense(row);
+        // Which modal an edit opens follows the ROW, not the tab it was
+        // clicked from — the Validation tab lists both kinds.
+        setProfMode(paiementProfTypeId !== null && row.typeDepenseId === paiementProfTypeId);
         depenseForm.clearErrors();
         depenseForm.setData({
             type_depense_id: row.typeDepenseId ?? '',
@@ -275,6 +309,8 @@ export default function DepensesIndex({
             montant: row.montant,
             methode_paiement: row.methodePaiement ?? '',
             date_depense: row.dateDepense ?? '',
+            periode_debut: row.periodeDebut ?? '',
+            periode_fin: row.periodeFin ?? '',
             reference_facture: row.referenceFacture ?? '',
             description: row.description ?? '',
             mots_cles: row.motsCles ?? '',
@@ -294,11 +330,26 @@ export default function DepensesIndex({
         depenseForm.setData('justificatifs', Array.from(event.target.files ?? []));
     }
 
+    /**
+     * Drop the fields the other modal owns before sending. The Form Requests
+     * mark them `prohibited` for the opposite type, so leaving a stale value
+     * (e.g. a group picked before switching modals) would fail validation —
+     * and, more importantly, the server must never receive a Groupe for an
+     * ordinary dépense or a supplier invoice ref for a paiement prof.
+     */
+    function depensePayload(data: DepenseFormState): Record<string, unknown> {
+        const { group_id, periode_debut, periode_fin, reference_facture, ...rest } = data;
+
+        return profMode
+            ? { ...rest, group_id, periode_debut, periode_fin }
+            : { ...rest, reference_facture };
+    }
+
     function submitDepense(event: FormEvent) {
         event.preventDefault();
 
         if (editingDepense) {
-            depenseForm.transform((data) => ({ ...data, _method: 'put' }));
+            depenseForm.transform((data) => ({ ...depensePayload(data), _method: 'put' }));
             depenseForm.post(`/backoffice/depenses/${editingDepense.id}`, {
                 forceFormData: true,
                 preserveScroll: true,
@@ -311,10 +362,12 @@ export default function DepensesIndex({
             return;
         }
 
+        depenseForm.transform((data) => depensePayload(data));
         depenseForm.post('/backoffice/depenses', {
             forceFormData: true,
             preserveScroll: true,
             onSuccess: () => closeDepenseModal(),
+            onFinish: () => depenseForm.transform((data) => data),
         });
     }
 
@@ -698,10 +751,10 @@ export default function DepensesIndex({
                         <button
                             type="button"
                             className="btn btn-primary d-flex align-items-center mb-3"
-                            onClick={openCreateDepense}
+                            onClick={openCreatePaiementProf}
                         >
                             <i className="ti ti-square-rounded-plus me-2" />
-                            Ajouter une dépense
+                            Ajouter un paiement prof
                         </button>
                     }
                 >
@@ -750,9 +803,11 @@ export default function DepensesIndex({
                                 head={
                                     <tr>
                                         <th>Référence</th>
+                                        <th>Groupe</th>
                                         <th>Caisse</th>
                                         <th className="text-end">Montant</th>
                                         <th>Date</th>
+                                        <th>Période</th>
                                         {canAudit && <th>Date d'opération</th>}
                                         <th>Justificatifs</th>
                                         <th className="text-end">Action</th>
@@ -764,9 +819,15 @@ export default function DepensesIndex({
                                         <td>
                                             <code>{row.reference}</code>
                                         </td>
+                                        <td>{row.groupNom ?? '—'}</td>
                                         <td>{row.caisse ?? '—'}</td>
                                         <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} MAD</td>
                                         <td>{row.dateDepense ?? '—'}</td>
+                                        <td>
+                                            {row.periodeDebut && row.periodeFin
+                                                ? `${row.periodeDebut} → ${row.periodeFin}`
+                                                : '—'}
+                                        </td>
                                         {canAudit && (
                                             <td className="text-normal-case">
                                                 <OperationDateCell
@@ -1052,6 +1113,15 @@ export default function DepensesIndex({
                         </div>
                         <div className="col-md-6"><DetailLine label="Référence de facture" value={detailsRow.referenceFacture} /></div>
                         <div className="col-md-6"><DetailLine label="Date" value={detailsRow.dateDepense} /></div>
+                        {/* « Paiement prof » only — the period the payment covers. */}
+                        {detailsRow.periodeDebut && detailsRow.periodeFin && (
+                            <div className="col-md-6">
+                                <DetailLine
+                                    label="Période payée"
+                                    value={`${detailsRow.periodeDebut} → ${detailsRow.periodeFin}`}
+                                />
+                            </div>
+                        )}
                         <div className="col-md-6"><DetailLine label="Ajouté par" value={detailsRow.agent} /></div>
 
                         {/* The operation trail — the reason this modal is
@@ -1097,10 +1167,19 @@ export default function DepensesIndex({
                 )}
             </Modal>
 
-            {/* Dépense modal */}
+            {/* Dépense / Paiement prof modal — ONE form, two contracts
+                (see openCreateDepense / openCreatePaiementProf). */}
             <Modal
                 show={showDepenseModal}
-                title={editingDepense ? 'Modifier la dépense' : 'Ajouter une dépense'}
+                title={
+                    profMode
+                        ? editingDepense
+                            ? 'Modifier le paiement prof'
+                            : 'Ajouter un paiement prof'
+                        : editingDepense
+                            ? 'Modifier la dépense'
+                            : 'Ajouter une dépense'
+                }
                 onClose={closeDepenseModal}
                 processing={depenseForm.processing}
                 size="xl"
@@ -1120,28 +1199,50 @@ export default function DepensesIndex({
                     )}
                     <div className="row">
                         <div className="col-md-4">
-                            <SelectField
-                                id="d-type"
-                                label="Type de dépense"
-                                options={typeOptions}
-                                placeholder="Sélectionner un type"
-                                required
-                                value={depenseForm.data.type_depense_id}
-                                onChange={(e) => depenseForm.setData('type_depense_id', e.target.value === '' ? '' : Number(e.target.value))}
-                                error={depenseForm.errors.type_depense_id}
-                            />
+                            {profMode ? (
+                                /* The type IS the modal — locked, so a
+                                   paiement prof can never be keyed in as an
+                                   ordinary dépense (and vice-versa). */
+                                <div className="mb-3">
+                                    <label className="form-label">Type de dépense</label>
+                                    <input
+                                        type="text"
+                                        className="form-control"
+                                        value={paiementProfLabel}
+                                        disabled
+                                        readOnly
+                                    />
+                                </div>
+                            ) : (
+                                <SelectField
+                                    id="d-type"
+                                    label="Type de dépense"
+                                    options={filterTypeOptions}
+                                    placeholder="Sélectionner un type"
+                                    required
+                                    value={depenseForm.data.type_depense_id}
+                                    onChange={(e) => depenseForm.setData('type_depense_id', e.target.value === '' ? '' : Number(e.target.value))}
+                                    error={depenseForm.errors.type_depense_id}
+                                />
+                            )}
                         </div>
-                        <div className="col-md-4">
-                            <SelectField
-                                id="d-group"
-                                label="Groupe (optionnel)"
-                                options={groupOptions}
-                                placeholder="Aucun groupe"
-                                value={depenseForm.data.group_id}
-                                onChange={(e) => depenseForm.setData('group_id', e.target.value === '' ? '' : Number(e.target.value))}
-                                error={depenseForm.errors.group_id}
-                            />
-                        </div>
+                        {/* Groupe: required on a paiement prof (a teacher is
+                            always paid for a given group), absent entirely
+                            from the Dépenses modal. */}
+                        {profMode && (
+                            <div className="col-md-4">
+                                <SelectField
+                                    id="d-group"
+                                    label="Groupe"
+                                    options={groupOptions}
+                                    placeholder="Sélectionner un groupe"
+                                    required
+                                    value={depenseForm.data.group_id}
+                                    onChange={(e) => depenseForm.setData('group_id', e.target.value === '' ? '' : Number(e.target.value))}
+                                    error={depenseForm.errors.group_id}
+                                />
+                            </div>
+                        )}
                         <div className="col-md-4">
                             {editingDepense ? (
                                 <div className="d-flex justify-content-between mb-3">
@@ -1184,15 +1285,42 @@ export default function DepensesIndex({
                                 error={depenseForm.errors.date_depense}
                             />
                         </div>
-                        <div className="col-md-4">
-                            <FormField
-                                id="d-reference-facture"
-                                label="Référence facture fournisseur"
-                                value={depenseForm.data.reference_facture}
-                                onChange={(e) => depenseForm.setData('reference_facture', e.target.value)}
-                                error={depenseForm.errors.reference_facture}
-                            />
-                        </div>
+                        {/* Supplier invoice on a dépense; the teaching period
+                            the payment covers on a paiement prof. */}
+                        {profMode ? (
+                            <>
+                                <div className="col-md-4">
+                                    <DateField
+                                        id="d-periode-debut"
+                                        label="Période du"
+                                        required
+                                        value={depenseForm.data.periode_debut}
+                                        onChange={(e) => depenseForm.setData('periode_debut', e.target.value)}
+                                        error={depenseForm.errors.periode_debut}
+                                    />
+                                </div>
+                                <div className="col-md-4">
+                                    <DateField
+                                        id="d-periode-fin"
+                                        label="Période au"
+                                        required
+                                        value={depenseForm.data.periode_fin}
+                                        onChange={(e) => depenseForm.setData('periode_fin', e.target.value)}
+                                        error={depenseForm.errors.periode_fin}
+                                    />
+                                </div>
+                            </>
+                        ) : (
+                            <div className="col-md-4">
+                                <FormField
+                                    id="d-reference-facture"
+                                    label="Référence facture fournisseur"
+                                    value={depenseForm.data.reference_facture}
+                                    onChange={(e) => depenseForm.setData('reference_facture', e.target.value)}
+                                    error={depenseForm.errors.reference_facture}
+                                />
+                            </div>
+                        )}
                     </div>
                     <div className="row">
                         <div className="col-md-6">
@@ -1200,6 +1328,7 @@ export default function DepensesIndex({
                                 id="d-description"
                                 label="Description"
                                 rows={2}
+                                required
                                 value={depenseForm.data.description}
                                 onChange={(e) => depenseForm.setData('description', e.target.value)}
                                 error={depenseForm.errors.description}

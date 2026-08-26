@@ -112,6 +112,14 @@ final class UserAuthorizationService
     private function guardPermissionNames(array $permissions): void
     {
         foreach ($permissions as $name) {
+            // « Tous les centres » is super-admin only (Gate::before) — the
+            // ability can never be handed to anyone, in any way.
+            if ($name === PermissionRegistry::GLOBAL_CENTER_ACCESS) {
+                throw ValidationException::withMessages([
+                    'permissions' => __("L'accès à tous les centres est réservé aux super administrateurs et ne peut pas être attribué."),
+                ]);
+            }
+
             if (! PermissionRegistry::exists($name)) {
                 throw ValidationException::withMessages([
                     'permissions' => __('Permission inconnue : :name', ['name' => $name]),

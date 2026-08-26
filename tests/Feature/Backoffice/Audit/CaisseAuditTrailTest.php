@@ -62,9 +62,19 @@ final class CaisseAuditTrailTest extends TestCase
         ]);
     }
 
+    /**
+     * A standalone cash account with an opening balance.
+     *
+     * « Externe », not an ownerless « Caissière »: an employee owns exactly
+     * one physical till (partial unique index
+     * `caisses_une_caissiere_par_employe`, 24/08/2026 audit) and it is
+     * provisioned with the employee — a test that needs an employee's till
+     * asks for `$employee->till()`, never a hand-made second one.
+     */
     private function caisse(float $solde = 1000): Caisse
     {
         return Caisse::factory()->create([
+            'type' => Caisse::TYPE_EXTERNE,
             'etablissement_id' => $this->centre->id,
             'solde' => $solde,
         ]);

@@ -34,7 +34,7 @@ final class UpdateRoleRequest extends FormRequest
         return [
             'label' => ['required', 'string', 'max:100'],
             'permissions' => ['array'],
-            'permissions.*' => ['string', Rule::in(PermissionRegistry::names())],
+            'permissions.*' => ['string', Rule::in(PermissionRegistry::grantable())],
         ];
     }
 }

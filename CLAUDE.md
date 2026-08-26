@@ -151,8 +151,7 @@ Shared components (reuse these — do not re-invent per page):
   selected (§11 "Active working context"), so showing a redundant Centre
   filter once the user has switched to Marrakech/Rabat/etc. is misleading —
   it should only appear when the top-bar switcher is on "Tous les centres"
-  (which itself is only selectable by `centers.access-all`/super-admin
-  users). Never gate this on a role check in the component — reuse the
+  (which itself is only selectable by super-admins). Never gate this on a role check in the component — reuse the
   existing `centerLocked` prop so the rule stays in sync with the context
   switcher automatically. Apply this to any new module's list page that adds
   a Centre column/filter (Groups, Inscriptions, Encaissements, Depenses,
@@ -373,6 +372,30 @@ the database layer. Non-negotiable invariants already enforced in code:
   double-click can't double-spend. The Dépenses list reports **approved** money
   as `montantTotal` and pending money separately as `montantEnAttente` — never
   fold the two together.
+- **A dépense and a « Paiement prof » are the SAME table but two different
+  forms** (26/08/2026). Gestion des dépenses has one modal per tab, and the
+  contract is enforced server-side by
+  `Requests\Backoffice\Depenses\Concerns\PaiementProfRules` (shared by
+  `Store`/`UpdateDepenseRequest`), keyed on the SUBMITTED
+  `type_depense_id` — never on which modal was open, so a crafted request
+  cannot mix the two:
+
+  | field | Dépense | Paiement prof |
+  |---|---|---|
+  | `type_depense_id` | any ACTIVE type except « Paiement prof » | locked to « Paiement prof » |
+  | `group_id` | prohibited (field not shown) | **required** |
+  | `periode_debut` / `periode_fin` | prohibited | **required**, fin ≥ début |
+  | `reference_facture` | optional | prohibited |
+  | `description` | **required** | **required** |
+
+  `periode_debut`/`periode_fin` are the teaching PERIOD the payment covers,
+  as opposed to `date_depense` (the day the money left the till) — nullable
+  columns, because an ordinary dépense has none. Everything else is
+  unchanged: same `depenses` table, same till, same approval flow, same
+  money invariants. The Dépenses modal's Type dropdown reuses
+  `filterTypeOptions` (« Paiement prof » stripped) so the type can only be
+  chosen from the modal that also collects its required fields. Tests:
+  `tests/Feature/Backoffice/Finance/PaiementProfModalTest.php`.
 - **Application-wide switches live in `app_settings`** (key/value), always read
   and written through `App\Support\Settings\AppSettings` — never queried
   directly, so the forever-cache stays coherent and every change is audited
@@ -579,7 +602,8 @@ the database layer. Non-negotiable invariants already enforced in code:
   to several may switch among *those* centers but ALWAYS works in exactly
   one at a time, defaulting to their PRIMARY center
   (`employees.etablissement_id`). **« Tous les centres » exists ONLY for
-  global users** (super-admin, or a hand-granted `centers.access-all`):
+  super-admins** (`centers.access-all` is answered by `Gate::before` and is
+  not grantable to anyone, see §16):
   `CurrentContext::canPickAllCenters()` gates the option in the switcher
   and `setEtablissement(null)` is refused server-side for everyone else —
   never re-offer "all of mine" to multi-center employees. The header no
@@ -834,15 +858,22 @@ keeps the primary column stable when an edit merely adds a center. Enforcing
   pivot too, not only the primary column — see `GetEmployeesList` and
   `GetUsersList` for the pattern.
 - **⚠ « Centres affectés » is the ONE authority on center reach — never a
-  role.** `centers.access-all` sits in `PermissionRegistry::superAdminOnly()`,
-  so NO role preset may carry it (writing it into a preset has no effect —
-  `matrix()` filters it out). A user reaches exactly the centers assigned on
-  their employee form; the top-bar switcher offers exactly those. A
-  cross-center job = more centers assigned on the employee form. A truly
-  global non-super-admin account (rare) gets the permission hand-granted,
-  one user at a time, on the Autorisations screen; super-admins see
-  everything via `Gate::before`. Never "fix" a can't-see-other-centers
-  complaint by editing a role preset — assign the centers instead.
+  role, never a permission.** `centers.access-all`
+  (`PermissionRegistry::GLOBAL_CENTER_ACCESS`) is an ability NAME only,
+  answered by `Gate::before` for super-admins: **nobody else can ever hold
+  it** (24/08/2026). It is excluded from `PermissionRegistry::grantable()` /
+  `groupedGrantable()` (what the Roles form and the Autorisations screen
+  offer), refused by `Store/UpdateRoleRequest`,
+  `SyncUserAuthorizationRequest` AND `UserAuthorizationService`, and
+  `RolesAndPermissionsSeeder` strips any stale grant from EVERY role
+  (custom ones included — they are not re-synced by the preset loop) and
+  every user's direct permissions on each run. A user reaches exactly the
+  centers assigned on their employee form; the top-bar switcher offers
+  exactly those, and « Tous les centres » is drawn for super-admins only.
+  A cross-center job = more centers assigned on the employee form. Never
+  "fix" a can't-see-other-centers complaint by editing a role or granting
+  a permission — assign the centers instead; a global view = super-admin.
+  Tests: `tests/Feature/Backoffice/Authorization/GlobalCenterAccessLockTest.php`.
 - **Super-admin safety**: role `super-admin` bypasses everything via
   `Gate::before`; it is protected (no rename/edit/delete), only super-admins
   grant/remove it, the last one can never lose it. First assignment:

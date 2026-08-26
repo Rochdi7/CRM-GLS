@@ -154,29 +154,71 @@ final class InscriptionController extends Controller
         Inscription $inscription,
         InscriptionFee $fee,
         BasculerVisibiliteFraisInscription $action,
-    ): RedirectResponse {
+    ): JsonResponse {
         $this->authorize('view', $inscription);
+
+        // Guarded here rather than letting the action throw a
+        // ValidationException: bootstrap/app.php only renders JSON error
+        // responses for `api/*`, so a validation failure on this JSON
+        // endpoint would be rendered down the HTML/Inertia redirect path and
+        // blow up. The fee simply not belonging to the inscription is a
+        // tampered request, not a user-correctable form error — 404 is the
+        // honest answer.
+        abort_unless($fee->inscription_id === $inscription->id, 404);
 
         $action->hide($inscription, $fee);
 
-        // back(), not a redirect to index: this is an in-modal action, and
-        // redirecting to the list route re-mounts the page, resetting the
-        // modal's own React state (showModal/editingInscription) and closing
-        // it mid-edit — losing every unsaved change in the form.
-        return back()->with('success', __('Fee hidden.'));
+        // JSON, not back(): this fires from INSIDE the open edit modal, whose
+        // React state already reflects the change optimistically. An Inertia
+        // redirect (even a `back()` with preserveState) re-runs index() and
+        // rebuilds the whole page payload — the paginated list plus the
+        // students / groups / frais option catalogs — just to hide one row,
+        // which is what made removing a fee feel slow. Nothing on the page
+        // behind the modal depends on this, so the client only needs the
+        // acknowledgement.
+        return response()->json([
+            'ok' => true,
+            'montantTotal' => $inscription->fresh()->montant_total,
+        ]);
     }
 
     public function restoreFee(
         Inscription $inscription,
         InscriptionFee $fee,
         BasculerVisibiliteFraisInscription $action,
-    ): RedirectResponse {
+    ): JsonResponse {
         $this->authorize('view', $inscription);
+
+        // Guarded here rather than letting the action throw a
+        // ValidationException: bootstrap/app.php only renders JSON error
+        // responses for `api/*`, so a validation failure on this JSON
+        // endpoint would be rendered down the HTML/Inertia redirect path and
+        // blow up. The fee simply not belonging to the inscription is a
+        // tampered request, not a user-correctable form error — 404 is the
+        // honest answer.
+        abort_unless($fee->inscription_id === $inscription->id, 404);
 
         $action->restore($inscription, $fee);
 
-        // back() — see hideFee(): keeps the edit modal mounted.
-        return back()->with('success', __('Fee restored.'));
+        // JSON — see hideFee(). The restored line's full shape comes back
+        // here too, so the client can splice it straight into the table
+        // instead of re-fetching the whole fee list afterwards.
+        return response()->json([
+            'ok' => true,
+            'montantTotal' => $inscription->fresh()->montant_total,
+            'fee' => [
+                'id' => $fee->id,
+                'fraisId' => $fee->frais_id,
+                'nom' => $fee->nom,
+                'montantInitial' => (string) $fee->montant_initial,
+                'remisePct' => $fee->remise_pct !== null ? (string) $fee->remise_pct : '',
+                'remiseMontant' => $fee->remise_montant !== null ? (string) $fee->remise_montant : '',
+                'note' => $fee->note ?? '',
+                'dateEcheance' => $fee->date_echeance?->toDateString() ?? '',
+                'statut' => $fee->statut,
+                'paye' => number_format($fee->montantPaye(), 2, '.', ''),
+            ],
+        ]);
     }
 
     /**

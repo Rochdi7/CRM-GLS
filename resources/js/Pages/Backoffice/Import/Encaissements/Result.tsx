@@ -9,6 +9,7 @@ interface EncaissementImportResultProps {
     batch: ImportBatch;
     failedRows: PaginatedData<ImportRow>;
     skippedRows: PaginatedData<ImportRow>;
+    unresolvedRows: PaginatedData<ImportRow>;
     statusCounts: ImportStatusCounts;
     excelTotal: string;
     importedTotal: string;
@@ -18,6 +19,7 @@ export default function EncaissementImportResult({
     batch,
     failedRows,
     skippedRows,
+    unresolvedRows,
     excelTotal,
     importedTotal,
 }: EncaissementImportResultProps) {
@@ -77,6 +79,12 @@ export default function EncaissementImportResult({
                     title="Lignes ignorées"
                     hint="Ces lignes n'ont volontairement pas été écrites — le plus souvent parce que les encaissements existaient déjà, ou parce que la même ligne apparaît deux fois dans le fichier. Rien n'a été perdu."
                     rows={skippedRows}
+                />
+
+                <ImportRowReasonTable
+                    title="Lignes non résolues"
+                    hint="Ces lignes n'ont pas pu être rattachées (étudiant, inscription ou frais introuvable) ou comportaient une cellule illisible. Elles sont conservées avec leur motif : corrigez la donnée manquante, puis relancez l'analyse du fichier — les encaissements déjà importés seront ignorés."
+                    rows={unresolvedRows}
                 />
 
                 <Link href="/backoffice/import/encaissements" className="btn btn-primary mt-3">

@@ -41,7 +41,8 @@ class Depense extends Model implements HasMedia
 
     protected $fillable = [
         'reference', 'type_depense_id', 'caisse_id', 'group_id', 'montant',
-        'methode_paiement', 'date_depense', 'reference_facture',
+        'methode_paiement', 'date_depense', 'periode_debut', 'periode_fin',
+        'reference_facture',
         'description', 'mots_cles', 'note', 'agent_id',
         'statut', 'approved_by', 'approved_at', 'motif_refus',
     ];
@@ -51,6 +52,8 @@ class Depense extends Model implements HasMedia
         return [
             'montant' => 'decimal:2',
             'date_depense' => 'date',
+            'periode_debut' => 'date',
+            'periode_fin' => 'date',
             'approved_at' => 'datetime',
         ];
     }

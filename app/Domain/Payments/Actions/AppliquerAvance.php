@@ -79,7 +79,16 @@ final class AppliquerAvance
                 'applied_from_encaissement_id' => $avance->id,
                 'montant' => $montant,
                 'methode' => $avance->methode,
-                'date_paiement' => now()->toDateString(),
+                // ⚠ The ORIGINAL payment date, never now(). The money reached
+                // the school when the avance was collected; applying it to a
+                // fee only re-allocates it (the till does not move here — see
+                // the docblock). Stamping today would rewrite when GLS was
+                // paid: the receipt, the fee's payment history and every
+                // date-windowed report (journal de caisse, année scolaire
+                // range, retards) would place a March payment in August, and
+                // an avance converted from an old inscription would silently
+                // migrate into the current academic year.
+                'date_paiement' => $avance->date_paiement,
                 'caisse_id' => $avance->caisse_id,
                 'agent_id' => $avance->agent_id,
             ]);

@@ -144,7 +144,9 @@ final class DepenseController extends Controller
 
         // A "Paiement prof" attribution must point at a group the user can
         // reach inside the active context — otherwise per-group expense
-        // reporting silently crosses centres (AssertsContextScope).
+        // reporting silently crosses centres (AssertsContextScope). It is
+        // the ONLY type that carries a group at all: PaiementProfRules makes
+        // group_id required for it and prohibited for every other type.
         if (($request->validated('group_id') ?? null) !== null) {
             $this->assertGroupInContext($request, Group::findOrFail((int) $request->validated('group_id')));
         }

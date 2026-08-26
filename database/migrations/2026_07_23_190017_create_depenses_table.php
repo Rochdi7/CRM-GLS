@@ -30,6 +30,12 @@ return new class extends Migration
             $table->string('statut', 20)->default('Approuvée');
             $table->string('methode_paiement', 20)->nullable();
             $table->date('date_depense');
+            // "Paiement prof" only — the teaching PERIOD the payment covers,
+            // as opposed to date_depense (the day the money was paid out).
+            // Nullable because an ordinary dépense has no period at all
+            // (StoreDepenseRequest requires them only for that type).
+            $table->date('periode_debut')->nullable();
+            $table->date('periode_fin')->nullable();
             $table->string('reference_facture', 100)->nullable();
             $table->foreignId('group_id')->nullable()->constrained('groups')->nullOnDelete();
             $table->string('description', 255)->nullable();

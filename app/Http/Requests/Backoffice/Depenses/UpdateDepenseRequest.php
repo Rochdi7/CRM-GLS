@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Backoffice\Depenses;
 
+use App\Http\Requests\Backoffice\Depenses\Concerns\PaiementProfRules;
 use App\Models\Depense;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -15,6 +16,8 @@ use Illuminate\Validation\Rule;
  */
 final class UpdateDepenseRequest extends FormRequest
 {
+    use PaiementProfRules;
+
     public function authorize(): bool
     {
         return true;
@@ -26,13 +29,11 @@ final class UpdateDepenseRequest extends FormRequest
     public function rules(): array
     {
         return [
+            ...$this->typeDependentRules(),
             'type_depense_id' => ['required', 'exists:types_depenses,id'],
-            'group_id' => ['nullable', 'exists:groups,id'],
             // Nullable on edit: rows predating the field stay correctable.
             'methode_paiement' => ['nullable', Rule::in(Depense::METHODES)],
             'date_depense' => ['required', 'date'],
-            'reference_facture' => ['nullable', 'string', 'max:100'],
-            'description' => ['nullable', 'string', 'max:255'],
             'mots_cles' => ['nullable', 'string', 'max:255'],
             'note' => ['nullable', 'string'],
             'justificatifs.*' => ['file', 'mimes:jpeg,jpg,png,webp,pdf', 'max:5120'],

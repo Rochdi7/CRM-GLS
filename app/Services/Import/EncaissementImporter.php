@@ -82,7 +82,7 @@ final class EncaissementImporter implements Importer
     /** @var array<int, int> employees.id => caisses.id, memoized within one analyze() call */
     private array $caisseIdByEmployeeId = [];
 
-    /** @var array<int, Inscription>|null student_id => their one active inscription in this batch's centre+année, preloaded once */
+    /** @var array<int, list<Inscription>>|null student_id => every inscription they hold in this batch's CENTRE (all années), best candidate first, preloaded once */
     private ?array $activeInscriptionByStudentId = null;
 
     /**
@@ -143,7 +143,10 @@ final class EncaissementImporter implements Importer
         $this->activeInscriptionByStudentId = $this->preloadActiveInscriptions($context);
         $this->feesByInscriptionId = $this->preloadFees(array_map(
             fn (Inscription $inscription): int => $inscription->id,
-            $this->activeInscriptionByStudentId
+            // Flattened: the index now holds EVERY inscription a student
+            // has in this centre (see preloadActiveInscriptions), so the
+            // fee preload must cover all of them, not one per student.
+            array_merge(...array_values($this->activeInscriptionByStudentId) ?: [[]])
         ));
         $this->existingEncaissementLegacyRefs = $this->preloadExistingLegacyRefs($context->etablissementId);
         $this->existingEncaissementCompositeKeys = $this->preloadExistingCompositeKeys();
@@ -819,8 +822,7 @@ final class EncaissementImporter implements Importer
     private function preloadActiveInscriptions(ImportContext $context): array
     {
         $query = Inscription::query()
-            ->where('etablissement_id', $context->etablissementId)
-            ->where('annee_scolaire_id', $context->anneeScolaireId);
+            ->where('etablissement_id', $context->etablissementId);
 
         if (! $context->includeInactiveInscriptions) {
             // Default: only a live enrolment may receive money.
@@ -828,18 +830,38 @@ final class EncaissementImporter implements Importer
         }
 
         return $query
-            // Statut priority first (Active > Annulée > Changement), most
+            // The BATCH's année first, then the centre's other années.
+            //
+            // A legacy payments export is ONE file per centre covering every
+            // année (the old CRM has no per-year payments export), while
+            // inscriptions come as separate Active / Annulé / Archive files
+            // that land in different années. Scoping this index to
+            // $context->anneeScolaireId meant a payment whose inscription
+            // lives in the OTHER année had nothing to attach to and was
+            // refused "no_inscription" — 414 Marrakech rows (2 755 across
+            // the seven centres, 2,1 M DH) on the 25/08/2026 import.
+            //
+            // The money is a fact of the enrolment, not of the année the
+            // operator happened to pick on the upload screen, so a payment
+            // now resolves against every inscription the student holds in
+            // this CENTRE. Centre scoping is never relaxed.
+            ->orderByRaw(
+                'case when annee_scolaire_id = ? then 0 else 1 end',
+                [$context->anneeScolaireId]
+            )
+            // Statut priority next (Active > Annulée > Changement), most
             // recent date only as the tie-breaker WITHIN one statut.
             ->orderByRaw(
                 'case statut when ? then 0 when ? then 1 when ? then 2 else 3 end',
                 [Inscription::STATUT_ACTIVE, Inscription::STATUT_ANNULEE, Inscription::STATUT_CHANGEMENT]
             )
             ->orderByDesc('date_inscription')
-            ->get(['id', 'student_id', 'statut'])
-            // keyBy keeps the LAST occurrence, so reverse first to make the
-            // highest-priority (Active, most recent) row the one that wins.
-            ->reverse()
-            ->keyBy('student_id')
+            ->get(['id', 'student_id', 'statut', 'annee_scolaire_id'])
+            // Every inscription of the student, best candidate first — the
+            // fee lookup walks them in order and takes the first whose own
+            // lines match the payment's Frais label.
+            ->groupBy('student_id')
+            ->map(fn (Collection $inscriptions): array => $inscriptions->values()->all())
             ->all();
     }
 
@@ -1020,24 +1042,39 @@ final class EncaissementImporter implements Importer
      */
     private function resolveInscriptionFee(int $studentId, string $fraisLabel): array
     {
-        $inscription = $this->activeInscriptionByStudentId[$studentId] ?? null;
+        $inscriptions = $this->activeInscriptionByStudentId[$studentId] ?? [];
 
-        if ($inscription === null) {
+        if ($inscriptions === []) {
             return ['inscription_fee_id' => null, 'candidates' => [], 'conflicts' => [
                 ['field' => 'inscription_fee_id', 'code' => 'no_inscription', 'message' => $this->includeInactiveInscriptions
-                    ? "Aucune inscription pour cet étudiant sur le centre/année sélectionné (ni active, ni annulée, ni changement) — importer d'abord les inscriptions."
-                    : "Aucune inscription active pour cet étudiant sur le centre/année sélectionné. Si son inscription a été annulée ou changée, cochez « Accepter les inscriptions annulées / changement » avant d'analyser."],
+                    ? "Aucune inscription pour cet étudiant dans ce centre (ni active, ni annulée, ni changement) — importer d'abord les inscriptions."
+                    : "Aucune inscription active pour cet étudiant dans ce centre. Si son inscription a été annulée ou changée, cochez « Accepter les inscriptions annulées / changement » avant d'analyser."],
             ]];
         }
 
-        $fees = $this->feesByInscriptionId[$inscription->id] ?? collect();
         $normalizedTarget = mb_strtolower(CellNormalizer::text($fraisLabel));
 
-        $exact = $fees->first(fn (InscriptionFee $fee) => mb_strtolower(CellNormalizer::text($fee->nom)) === $normalizedTarget);
+        // An EXACT fee-label match is the strongest signal of which
+        // inscription this payment belongs to — stronger than the année the
+        // operator picked — so every inscription is searched for one before
+        // falling back. Ordered best-candidate-first by the preload, so the
+        // batch's own année still wins a tie.
+        foreach ($inscriptions as $inscription) {
+            $fees = $this->feesByInscriptionId[$inscription->id] ?? collect();
 
-        if ($exact !== null) {
-            return ['inscription_fee_id' => $exact->id, 'candidates' => [], 'conflicts' => []];
+            $exact = $fees->first(
+                fn (InscriptionFee $fee) => mb_strtolower(CellNormalizer::text($fee->nom)) === $normalizedTarget
+            );
+
+            if ($exact !== null) {
+                return ['inscription_fee_id' => $exact->id, 'candidates' => [], 'conflicts' => []];
+            }
         }
+
+        // No exact label anywhere: fall back within the best-ranked
+        // inscription only (see below — the first still-unpaid line).
+        $inscription = $inscriptions[0];
+        $fees = $this->feesByInscriptionId[$inscription->id] ?? collect();
 
         $candidates = $fees->map(fn (InscriptionFee $fee): array => [
             'id' => $fee->id,
@@ -1057,20 +1094,24 @@ final class EncaissementImporter implements Importer
         // on an already-settled fee would flip a correct "Payé" into an
         // overpayment. When everything is already paid there is nothing
         // sensible to attach to, so that stays a conflict for a human.
-        $fallback = $fees->first(
-            fn (InscriptionFee $fee): bool => $fee->statut !== InscriptionFee::STATUT_PAYE
-        );
+        foreach ($inscriptions as $candidateInscription) {
+            $candidateFees = $this->feesByInscriptionId[$candidateInscription->id] ?? collect();
 
-        if ($fallback !== null) {
-            return [
-                'inscription_fee_id' => $fallback->id,
-                'candidates' => $candidates,
-                'conflicts' => [],
-                'fee_matched_loosely' => [
-                    'requested' => $fraisLabel,
-                    'attached_to' => $fallback->nom,
-                ],
-            ];
+            $fallback = $candidateFees->first(
+                fn (InscriptionFee $fee): bool => $fee->statut !== InscriptionFee::STATUT_PAYE
+            );
+
+            if ($fallback !== null) {
+                return [
+                    'inscription_fee_id' => $fallback->id,
+                    'candidates' => $candidates,
+                    'conflicts' => [],
+                    'fee_matched_loosely' => [
+                        'requested' => $fraisLabel,
+                        'attached_to' => $fallback->nom,
+                    ],
+                ];
+            }
         }
 
         return ['inscription_fee_id' => null, 'candidates' => $candidates, 'conflicts' => [

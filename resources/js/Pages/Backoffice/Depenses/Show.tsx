@@ -53,6 +53,14 @@ export default function DepenseShow({ depense, canAudit }: DepenseShowProps) {
                         </div>
                         <div className="border-top pt-3">
                             <DetailRow label="Date de la dépense" value={depense.dateDepense} />
+                            {/* « Paiement prof » only — the teaching period
+                                the payment covers. */}
+                            {depense.periodeDebut && depense.periodeFin && (
+                                <DetailRow
+                                    label="Période payée"
+                                    value={`${depense.periodeDebut} → ${depense.periodeFin}`}
+                                />
+                            )}
                             <DetailRow label="Caisse" value={depense.caisse} />
                             <DetailRow label="Centre" value={depense.centre} />
                             <DetailRow label="Enregistré par" value={depense.agent} />

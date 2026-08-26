@@ -89,6 +89,7 @@ function statutVariant(statut: string): 'primary' | 'warning' | 'success' | 'dan
  */
 export default function ChequesIndex({
     cheques,
+    montantTotal,
     filters,
     perPageOptions,
     sources,
@@ -422,6 +423,10 @@ export default function ChequesIndex({
                     perPageOptions={perPageOptions}
                     onPerPageChange={(perPage) => reload({ perPage })}
                 />
+
+                <p className="fw-medium px-3 mb-3">
+                    Montant total : {Number(montantTotal).toFixed(2)} MAD
+                </p>
 
                 {cheques.data.length === 0 ? (
                     <EmptyState title="Aucun chèque" message="Ajoutez votre premier chèque pour commencer." icon="ti ti-file-invoice" />

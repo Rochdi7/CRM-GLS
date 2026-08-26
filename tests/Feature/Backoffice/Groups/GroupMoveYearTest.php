@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Tests\Feature\Backoffice\Groups;
 
 use App\Models\AnneeScolaire;
-use App\Models\Caisse;
 use App\Models\Employee;
 use App\Models\Encaissement;
 use App\Models\Etablissement;
@@ -57,10 +56,9 @@ final class GroupMoveYearTest extends TestCase
         ]);
 
         $agent = Employee::factory()->create(['etablissement_id' => $this->centre->id]);
-        $caisse = Caisse::factory()->create([
-            'etablissement_id' => $this->centre->id,
-            'responsable_employee_id' => $agent->id,
-        ]);
+        // The till EmployeeObserver already provisioned — an employee owns
+        // exactly one (partial unique index, 24/08/2026 audit).
+        $caisse = $agent->till()->firstOrFail();
 
         foreach (range(1, 3) as $i) {
             $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);

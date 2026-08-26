@@ -125,6 +125,10 @@ final class GetDepensesList
             'montant' => number_format((float) $d->montant, 2, '.', ''),
             'methodePaiement' => $d->methode_paiement,
             'dateDepense' => $d->date_depense?->toDateString(),
+            // « Paiement prof » only — the teaching period the payment
+            // covers (null on every ordinary dépense).
+            'periodeDebut' => $d->periode_debut?->toDateString(),
+            'periodeFin' => $d->periode_fin?->toDateString(),
             'referenceFacture' => $d->reference_facture,
             'description' => $d->description,
             'motsCles' => $d->mots_cles,

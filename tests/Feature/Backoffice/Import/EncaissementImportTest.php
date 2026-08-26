@@ -461,18 +461,64 @@ final class EncaissementImportTest extends TestCase
         }
     }
 
-    public function test_no_active_inscription_in_selected_annee_is_erreur_never_falls_back_to_another_year(): void
+    public function test_a_payment_attaches_to_the_students_inscription_in_another_annee_of_the_same_centre(): void
     {
+        // A legacy payments export is ONE file per centre covering every
+        // année, while inscriptions arrive as separate Active / Annulé /
+        // Archive files that land in DIFFERENT années. Scoping the lookup
+        // to the batch's année refused every payment whose inscription sat
+        // in the other one — 414 Marrakech rows, 2 755 across the seven
+        // centres (2,1 M DH) on the 25/08/2026 import.
         $otherAnnee = AnneeScolaire::create([
             'nom' => '2024/2025', 'date_debut' => '2024-09-01', 'date_fin' => '2025-08-31', 'par_defaut' => false, 'inscription_ouverte' => false,
         ]);
         $student = Student::factory()->create(['etablissement_id' => $this->centre->id, 'prenom' => 'ABDERRAHMANE', 'nom' => 'BOUGMA']);
         $group = Group::factory()->create(['etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $otherAnnee->id]);
-        Inscription::create([
+        $inscription = Inscription::create([
             'reference' => 'INS-'.fake()->unique()->numerify('#####'),
             'student_id' => $student->id, 'group_id' => $group->id,
             'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $otherAnnee->id,
             'statut' => Inscription::STATUT_ACTIVE, 'date_inscription' => '2024-09-15',
+        ]);
+        $fee = InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => "Frais d'inscription",
+            'montant_initial' => 300, 'montant' => 300,
+            'date_echeance' => '2024-10-01', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+
+        $user = $this->userWith('import.view', 'import.create');
+        $this->actingAs($user)->post(route('backoffice.import.encaissements.analyze'), [
+            'file' => $this->sampleUpload(),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'operateur_mapping' => $this->defaultOperateurMapping(),
+        ]);
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $row = $batch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
+
+        $this->assertSame(ImportRow::STATUT_NOUVEAU, $row->status);
+        $this->assertSame($fee->id, $row->resolution['inscription_fee_id']);
+    }
+
+    public function test_a_payment_never_attaches_to_an_inscription_of_another_centre(): void
+    {
+        // Année scoping was relaxed so a payments file can span years;
+        // CENTRE scoping never is. One centre's money must never land on
+        // another centre's enrolment.
+        $autreCentre = Etablissement::factory()->create();
+        $student = Student::factory()->create(['etablissement_id' => $autreCentre->id, 'prenom' => 'ABDERRAHMANE', 'nom' => 'BOUGMA']);
+        $group = Group::factory()->create(['etablissement_id' => $autreCentre->id, 'annee_scolaire_id' => $this->annee->id]);
+        $inscription = Inscription::create([
+            'reference' => 'INS-'.fake()->unique()->numerify('#####'),
+            'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $autreCentre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => Inscription::STATUT_ACTIVE, 'date_inscription' => '2025-09-15',
+        ]);
+        InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => "Frais d'inscription",
+            'montant_initial' => 300, 'montant' => 300,
+            'date_echeance' => '2026-09-01', 'statut' => InscriptionFee::STATUT_NON_PAYE,
         ]);
 
         $user = $this->userWith('import.view', 'import.create');
@@ -487,7 +533,7 @@ final class EncaissementImportTest extends TestCase
         $row = $batch->rows()->where('legacy_ref', 'P4255')->firstOrFail();
 
         $this->assertSame(ImportRow::STATUT_CONFLIT, $row->status);
-        $this->assertSame('no_inscription', $row->errors[0]['code']);
+        $this->assertSame('student_not_found', $row->errors[0]['code']);
     }
 
     public function test_by_default_a_cancelled_inscription_does_not_receive_payments(): void

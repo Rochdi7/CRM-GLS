@@ -45,7 +45,7 @@ final class StoreRoleRequest extends FormRequest
                 Rule::unique('roles', 'name'),
             ],
             'permissions' => ['array'],
-            'permissions.*' => ['string', Rule::in(PermissionRegistry::names())],
+            'permissions.*' => ['string', Rule::in(PermissionRegistry::grantable())],
         ];
     }
 }

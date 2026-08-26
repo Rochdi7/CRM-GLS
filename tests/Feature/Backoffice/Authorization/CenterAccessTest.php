@@ -62,10 +62,9 @@ final class CenterAccessTest extends TestCase
     public function test_centers_access_all_opens_every_center(): void
     {
         $service = app(CenterAccessService::class);
-        // No ROLE carries centers.access-all any more (« Centres affectés »
-        // is the authority) — a truly global user gets it hand-granted.
-        $user = $this->userInCenterA('administrative-assistant');
-        $user->givePermissionTo('centers.access-all');
+        // centers.access-all is not grantable at all any more — ONLY a
+        // super-admin (Gate::before) reaches every centre.
+        $user = $this->userInCenterA('super-admin');
 
         $this->assertTrue($service->canAccessCenter($user->fresh(), $this->centerB->id));
     }
@@ -77,12 +76,11 @@ final class CenterAccessTest extends TestCase
         Student::factory()->create(['etablissement_id' => null]);
 
         $assistant = $this->userInCenterA('administrative-assistant');
-        $globalUser = $this->userInCenterA('administrative-assistant');
-        $globalUser->givePermissionTo('centers.access-all'); // hand-granted — no role carries it
+        $globalUser = $this->userInCenterA('super-admin'); // the ONLY global users
 
         $service = app(CenterAccessService::class);
 
-        // Assistant: own center + global rows. Hand-granted global user: everything.
+        // Assistant: own center + global rows. Super-admin: everything.
         $this->assertSame(2, $service->scopeAccessibleCenters(Student::query(), $assistant)->count());
         $this->assertSame(3, $service->scopeAccessibleCenters(Student::query(), $globalUser->fresh())->count());
     }

@@ -1372,3 +1372,34 @@ html[data-theme='dark'] .table tbody tr.table-light > * {
     background: #1B1632 !important;
     color: #B9B7C0 !important;
 }
+
+/* `<Modal size="wide">` — a step between Bootstrap's `.modal-xl` (capped at
+ * 1140px) and `.modal-fullscreen` (edge to edge, no framing): a centered
+ * dialog that takes most of the viewport while keeping its rounded corners
+ * and visible backdrop. Used by the wide matrix tables where a year of fee
+ * columns does not fit in `xl`. */
+.modal-wide {
+    max-width: 80vw;
+}
+
+/* « Statistique de groupe » grid — deliberately almost bare. The legacy CRM
+ * screen this replaces is a plain Bootstrap `.table-bordered`: the cells
+ * carry their own inline padding/colour, and the table just flows inside the
+ * modal (no sticky columns, no inner scroll box, no card chrome). Only two
+ * things need overriding here — see each rule. */
+
+/* The app-wide `.table thead th/tbody td { text-transform: uppercase }` would
+ * shout the fee names and student names; the legacy screen shows them as
+ * typed. */
+.gls-payment-matrix thead th,
+.gls-payment-matrix tbody td {
+    text-transform: none;
+}
+
+/* The coloured fills are light in BOTH themes (inverting them would break the
+ * shared reading with the Excel export), so cells keep dark text and the grid
+ * keeps visible rules on a dark background. */
+html[data-theme='dark'] .gls-payment-matrix,
+html[data-theme='dark'] .gls-payment-matrix > :not(caption) > * > * {
+    border-color: #3a3352;
+}

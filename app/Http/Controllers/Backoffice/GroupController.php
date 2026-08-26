@@ -6,8 +6,10 @@ namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Groups\Actions\ChangerEnseignantGroupe;
 use App\Domain\Groups\Actions\ReaffecterGroupeVersAnnee;
+use App\Domain\Groups\Actions\RetirerFraisGroupe;
 use App\Domain\Groups\Queries\GetGroupDetails;
 use App\Domain\Groups\Queries\GetGroupFormOptions;
+use App\Domain\Groups\Queries\GetGroupPaymentMatrix;
 use App\Domain\Groups\Queries\GetGroupsList;
 use App\Domain\Groups\Queries\GetGroupStudentsBySegment;
 use App\Http\Controllers\Controller;
@@ -112,6 +114,26 @@ final class GroupController extends Controller
         return response()->json(['students' => $getGroupStudentsBySegment($group, $segment)]);
     }
 
+    /**
+     * "Détails paiement" — the group's payment matrix (students × fees),
+     * fetched by the list page's kebab menu into a modal.
+     */
+    public function paymentMatrix(Request $request, Group $group, GetGroupPaymentMatrix $getGroupPaymentMatrix): JsonResponse
+    {
+        $this->authorize('view', $group);
+
+        $sort = (string) $request->string('sort');
+
+        if (! in_array($sort, GetGroupPaymentMatrix::SORTS, true)) {
+            $sort = GetGroupPaymentMatrix::SORT_NOM;
+        }
+
+        return response()->json([
+            'group' => ['nom' => $group->nom, 'niveau' => $group->niveau],
+            'matrix' => $getGroupPaymentMatrix($group, $sort),
+        ]);
+    }
+
     public function store(StoreGroupRequest $request): RedirectResponse
     {
         $this->authorize('create', Group::class);
@@ -166,6 +188,9 @@ final class GroupController extends Controller
             $request,
             $data['date_debut_formation'] ?? $group->date_debut_formation?->toDateString(),
             $group->etablissement_id,
+            // Only the fees this group still carries — see the helper's
+            // docblock: a removed fee must not come back on the next save.
+            $group->frais()->pluck('frais.id')->all(),
         );
 
         $changement = null;
@@ -344,7 +369,11 @@ final class GroupController extends Controller
 
         DB::transaction(function () use ($reaffecter, $group, $annee, $statutCible, $request): void {
             if ((int) $group->annee_scolaire_id !== $annee->id) {
-                $reaffecter->handle($group, $annee->id);
+                // force: an operator explicitly moving THIS group on the
+                // Groupes screen is a decision, unlike the import mapping
+                // step where the année is just whichever file was uploaded
+                // last (see ReaffecterGroupeVersAnnee).
+                $reaffecter->handle($group, $annee->id, force: true);
             }
 
             if ($statutCible !== null && $statutCible !== $group->statut) {
@@ -482,13 +511,77 @@ final class GroupController extends Controller
     }
 
     /**
+     * Removes ONE catalog fee from the group and cascades that removal to
+     * every inscription of the group — the modal's trash icon on a « Frais
+     * du groupe » row, mirroring the Inscriptions edit modal's own hide
+     * action (InscriptionController::hideFee).
+     *
+     * Nothing is deleted: the inscription fee lines are HIDDEN and the money
+     * already collected on them is released back into re-applicable avances
+     * (RetirerFraisGroupe). Gated by groups.update, like every other edit of
+     * a group.
+     */
+    public function removeFee(Request $request, Group $group, Frais $frai, RetirerFraisGroupe $action): RedirectResponse
+    {
+        $this->authorize('update', $group);
+
+        $result = $action->handle($group, $frai->id);
+
+        // back(), not a redirect to index: this fires from inside the open
+        // edit modal, and re-mounting the page would close it mid-edit,
+        // losing every unsaved change (same reasoning as
+        // InscriptionController::hideFee()).
+        return back()->with('success', $result['encaissementsConvertis'] > 0
+            ? __('Fee removed from the group. :count registration fee line(s) hidden and :montant DH returned as advances, ready to be re-applied.', [
+                'count' => $result['feesMasques'],
+                'montant' => number_format($result['encaissementsConvertis'], 2, ',', ' '),
+            ])
+            : __('Fee removed from the group. :count registration fee line(s) hidden.', [
+                'count' => $result['feesMasques'],
+            ]));
+    }
+
+    /**
+     * Reverse of removeFee() — re-attaches the fee to the group (at the
+     * center's price / the month-derived échéance unless the modal sent its
+     * own) and un-hides it on every inscription. Freed avances stay avances:
+     * re-allocating money is always an explicit AppliquerAvance decision,
+     * never a side effect of restoring a line.
+     */
+    public function restoreFee(Request $request, Group $group, Frais $frai, RetirerFraisGroupe $action): RedirectResponse
+    {
+        $this->authorize('update', $group);
+
+        $montant = $request->input('montant');
+        $echeance = $request->input('date_echeance');
+
+        $count = $action->restore(
+            $group,
+            $frai->id,
+            $montant !== null && $montant !== '' ? (float) $montant : $frai->montantPourCentre($group->etablissement_id),
+            $echeance !== null && $echeance !== ''
+                ? $echeance
+                : FraisEcheanceResolver::defaultFor($frai->nom, $group->date_debut_formation?->toDateString()),
+            ($c = $request->input('classification')) !== null && $c !== '' ? (string) $c : null,
+        );
+
+        return back()->with('success', __(':count registration fee line(s) restored.', ['count' => $count]));
+    }
+
+    /**
      * Builds the group_frais sync payload from the request's `fraisLignes`
-     * array — one entry per ACTIVE catalog fee (matching
-     * GroupsIndex::initFraisLignes()'s full-catalog assignment), validated
-     * server-side against the real catalog rather than trusted from the
-     * client (a stale/forged frais_id key is silently ignored, same net
-     * effect as the Livewire version which only ever renders active-catalog
-     * keys in the first place).
+     * array — validated server-side against the real ACTIVE catalog rather
+     * than trusted from the client (a stale/forged frais_id key is silently
+     * ignored).
+     *
+     * ⚠ On UPDATE this only covers fees the group STILL carries: a fee the
+     * user removed through removeFee() is gone from `group_frais`, and
+     * re-adding it here would silently resurrect it on the next save —
+     * re-attaching a line that removeFee() deliberately hid on every
+     * inscription, while the money it released stayed in avances. Passing
+     * `$existant` (the group's current frais ids) restricts the sync to
+     * those; a CREATE passes null and gets the whole catalog, which is the
+     * behavior a brand-new group has always had.
      *
      * A blank amount/échéance falls back to what THIS GROUP'S CENTER
      * charges for the fee (frais_etablissement.montant, else
@@ -502,11 +595,13 @@ final class GroupController extends Controller
         Request $request,
         ?string $dateDebutFormation = null,
         ?int $etablissementId = null,
+        ?array $existant = null,
     ): array {
         // Whole catalog rows, not just ids: each one carries the amount a
         // fee is worth in this center unless this group says otherwise.
         $catalogue = Frais::query()
             ->where('statut', Frais::STATUT_ACTIF)
+            ->when($existant !== null, fn ($q) => $q->whereIn('id', $existant))
             ->with('etablissements:id')
             ->get(['id', 'nom', 'montant_defaut']);
 

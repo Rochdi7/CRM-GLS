@@ -7,6 +7,7 @@ import Pagination from '@/Components/Tables/Pagination';
 import SearchInput from '@/Components/Tables/SearchInput';
 import TableToolbar from '@/Components/Tables/TableToolbar';
 import SelectField from '@/Components/Forms/SelectField';
+import DateField from '@/Components/Forms/DateField';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { t } from '@/Lib/i18n';
@@ -178,26 +179,19 @@ export default function AuditLogsIndex({
                         </div>
 
                         <div>
-                            <label className="form-label" htmlFor="audit-date-from">
-                                {t('From')}
-                            </label>
-                            <input
+                            <DateField
                                 id="audit-date-from"
-                                type="date"
-                                className="form-control"
+                                label={t('From')}
                                 value={filters.dateFrom}
                                 onChange={(event) => reload({ dateFrom: event.target.value })}
                             />
                         </div>
 
                         <div>
-                            <label className="form-label" htmlFor="audit-date-to">
-                                {t('To')}
-                            </label>
-                            <input
+                            <DateField
                                 id="audit-date-to"
-                                type="date"
-                                className="form-control"
+                                label={t('To')}
+                                panelAlign="right"
                                 value={filters.dateTo}
                                 onChange={(event) => reload({ dateTo: event.target.value })}
                             />

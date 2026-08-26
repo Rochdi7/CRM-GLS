@@ -213,6 +213,17 @@ Route::prefix('backoffice')
             // deletes the row — see the controller method.
             Route::put('groups/{group}/affectations/{affectation}', [GroupController::class, 'updateEnseignantAffectation'])
                 ->middleware('permission:groups.update')->name('groups.affectations.update');
+            // Removes ONE catalog fee from the group and cascades it to every
+            // inscription of the group: the fee lines are HIDDEN (never
+            // deleted) and the money already collected on them is released
+            // back into re-applicable avances (RetirerFraisGroupe). Restore
+            // is the exact reverse — it re-attaches the fee and un-hides the
+            // lines, but never re-applies the freed avances (that stays an
+            // explicit AppliquerAvance decision).
+            Route::delete('groups/{group}/frais/{frai}', [GroupController::class, 'removeFee'])
+                ->middleware('permission:groups.update')->name('groups.frais.remove');
+            Route::post('groups/{group}/frais/{frai}/restore', [GroupController::class, 'restoreFee'])
+                ->middleware('permission:groups.update')->name('groups.frais.restore');
             Route::post('groups/{group}/archive', [GroupController::class, 'archive'])->name('groups.archive');
             // Super-admin only (groups.move-year is in superAdminOnly()):
             // re-homes the group + inscriptions + séances + payments to
@@ -232,6 +243,11 @@ Route::prefix('backoffice')
                 ->name('groups.retourner-en-inscription');
             Route::get('groups/{group}/students-by-segment', [GroupController::class, 'studentsBySegment'])
                 ->name('groups.students-by-segment');
+            // "Détails paiement" matrix (students × fees) behind the list's
+            // kebab menu — money data, so it needs payments.view on top of
+            // the GroupPolicy@view check the controller runs.
+            Route::get('groups/{group}/payment-matrix', [GroupController::class, 'paymentMatrix'])
+                ->middleware('permission:payments.view')->name('groups.payment-matrix');
             Route::get('groups-historique', [GroupHistoriqueController::class, 'index'])
                 ->name('groups-historique.index');
 

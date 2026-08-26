@@ -139,11 +139,45 @@ Request → action → ledger → journal d'audit → base) :
 
 ## H. Tests
 
-Voir la section finale du rapport de session (chiffres exacts) — suite
-complète exécutée sur la base isolée `gls_crm_audit` ; `npx tsc --noEmit`
-et `npm run build` verts ; Pint : aucun nouveau signalement (les
-signalements restants — `ordered_imports`, `not_operator_with_successor_space`,
-`line_ending` — préexistent dans les mêmes fichiers à HEAD).
+Suite complète exécutée en 3 lots sur deux bases isolées (`gls_crm_audit`,
+`gls_crm_audit2`) — un lot unique meurt à 300 s à cause du
+`set_time_limit(300)` de `CombinedImportController`, compté en temps réel par
+PHP sous Windows.
+
+| Lot | Tests | Passés | Échecs |
+|---|---|---|---|
+| Hors finance / import (Unit, Attendance, Audit, Authorization, Context, Groups, Inertia, Inscriptions, People, Settings, Stock, Students) | 491 | **491** | 0 |
+| Finance | 213 | **211** | 2 (préexistants) |
+| Import | 101 | **101** | 0 |
+| **Total** | **805** | **803** | **2** |
+
+2 685 + 1 400 + 698 = **4 783 assertions**.
+
+Les 2 échecs sont **antérieurs à cet audit** — mesurés sur le même code avant
+toute modification — et appartiennent au diff non commité de l'utilisateur
+(filtre de date « aujourd'hui » par défaut sur la liste des encaissements) :
+`EncaissementsInertiaCrudTest::test_payments_can_be_converted_into_avances_and_reapplied_to_another_inscription`
+et `ListPerformanceTest::test_encaissements_partial_reload_skips_the_option_catalogs`.
+Ils n'ont pas été touchés.
+
+**Régression introduite puis corrigée pendant l'audit** : le nouvel index
+unique partiel a fait échouer 17 tests existants dont les fixtures créaient
+une 2ᵉ caisse « Caissière » pour un employé qui en avait déjà une
+(auto-provisionnée par `EmployeeObserver`). Les fixtures utilisent désormais
+`$employee->till()` — ce que fait la production — ou un compte « Externe »
+quand le test n'a besoin que d'un compte espèces autonome. 5 fichiers :
+`CaisseAuditTrailTest`, `GroupMoveYearTest`, `StudentShowDetailsTest`,
+`CaisseTransfersInertiaCrudTest`, `ComptesCaisseTest`. **Aucune assertion
+n'a été affaiblie** : les tests vérifient les mêmes règles sur la caisse
+réelle de l'employé.
+
+Autres vérifications : `npx tsc --noEmit` **0 erreur** ; `npm run build`
+**OK** (659 ms) ; `artisan route:list` inchangé ; `caisse:verifier-coherence`
+**0 anomalie** ; migration testée `down()` puis `up()`. Pint : **aucun
+nouveau signalement** — les fixers restants (`ordered_imports`,
+`fully_qualified_strict_types`, `not_operator_with_successor_space`,
+`line_ending`) sont déjà présents à HEAD sur les mêmes fichiers (vérifié en
+comparant avec les versions `git show HEAD:`).
 
 ## I. Risques résiduels
 

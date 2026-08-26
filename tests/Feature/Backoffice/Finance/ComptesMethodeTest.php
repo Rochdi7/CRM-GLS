@@ -289,6 +289,32 @@ final class ComptesMethodeTest extends TestCase
         $this->assertSame($compte->id, Encaissement::query()->whereNotNull('applied_from_encaissement_id')->firstOrFail()->caisse_id);
     }
 
+    /**
+     * Applying an avance RE-ALLOCATES money the school already received — it
+     * must never restamp when that money arrived. Regression: the apply row
+     * was created with now()->toDateString(), so a payment collected in
+     * September resurfaced as a payment made today, moving it into the wrong
+     * date window (journal de caisse, année scolaire, retards) and printing a
+     * false date on the receipt.
+     */
+    public function test_applying_an_avance_keeps_the_original_payment_date(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        [$student, , $fee] = $this->enrolledStudentWithFee(800);
+        $this->actingAs($user);
+        app(CurrentContext::class)->setEtablissement($this->centre->id);
+
+        $this->actingAs($user)->post(route('backoffice.avances.store'), [
+            'student_id' => $student->id, 'montant' => '800', 'methode' => Encaissement::METHODE_ESPECES, 'date_paiement' => '2025-09-20',
+        ])->assertSessionHasNoErrors();
+
+        $avance = Encaissement::query()->whereNull('inscription_fee_id')->firstOrFail();
+
+        $application = app(\App\Domain\Payments\Actions\AppliquerAvance::class)->handle($avance, $fee, 800.0);
+
+        $this->assertSame('2025-09-20', $application->fresh()->date_paiement->toDateString());
+    }
+
     public function test_cancelling_a_non_cash_payment_reverses_the_same_account_even_if_the_method_is_tampered(): void
     {
         $user = $this->superAdmin();

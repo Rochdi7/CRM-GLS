@@ -58,10 +58,12 @@ const TYPE_BADGE: Record<string, 'primary' | 'info' | 'warning' | 'secondary' | 
  * in PermissionRegistry::matrix(). The `permissions` prop is UI convenience
  * only (CLAUDE.md §5) — CaisseController re-checks every mutation.
  *
- * ⚠ No « Centre » column/filter here on purpose: unlike the CRUD list pages
- * covered by the centerLocked rule, this tab is deliberately NOT scoped to
- * the active center — its whole point is the global view of where the money
- * is, and only `centers.access-all` users reach it anyway.
+ * ⚠ No « Centre » column/filter here on purpose — but NOT because the tab
+ * ignores the context: GetComptesCaisse scopes to the active centre like
+ * every other screen (CLAUDE.md §11). The switcher already says which centre
+ * these accounts belong to, so a column repeating it would be the redundancy
+ * the centerLocked rule exists to remove. « Tous les centres » (super-admin
+ * only) is what shows every centre's accounts at once.
  */
 export default function ComptesPanel({
     comptes,

@@ -28,6 +28,9 @@ final class GetChequesList
         private readonly CurrentContext $context,
     ) {}
 
+    /**
+     * @return array{data: LengthAwarePaginator, montantTotal: string}
+     */
     public function __invoke(
         User $user,
         string $numeroFilter = '',
@@ -38,13 +41,12 @@ final class GetChequesList
         string $dateEcheanceFrom = '',
         string $dateEcheanceTo = '',
         int $perPage = self::DEFAULT_PER_PAGE,
-    ): LengthAwarePaginator {
+    ): array {
         if (! in_array($perPage, self::PER_PAGE_OPTIONS, true)) {
             $perPage = self::DEFAULT_PER_PAGE;
         }
 
-        $cheques = Cheque::query()
-            ->with(['student', 'agent', 'retournePar', 'encaissements' => fn ($q) => $q->with('student')])
+        $base = Cheque::query()
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(function ($q): void {
                 $id = $this->context->etablissementId();
@@ -73,7 +75,14 @@ final class GetChequesList
                     ->whereBetween('date_echeance', $this->context->anneeDateRange())
                     ->orWhereNull('date_echeance')),
             )
-            ->latest()
+            ->latest();
+
+        // Total over every chèque matching the current filters (not just the
+        // page shown) — same convention as GetDepensesList/GetEncaissementsList.
+        $montantTotal = (clone $base)->sum('montant');
+
+        $cheques = (clone $base)
+            ->with(['student', 'agent', 'retournePar', 'encaissements' => fn ($q) => $q->with('student')])
             ->paginate($perPage)
             ->withQueryString();
 
@@ -107,7 +116,10 @@ final class GetChequesList
             ])->values()->all(),
         ]);
 
-        return $cheques;
+        return [
+            'data' => $cheques,
+            'montantTotal' => number_format((float) $montantTotal, 2, '.', ''),
+        ];
     }
 
     /**

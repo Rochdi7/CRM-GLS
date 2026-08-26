@@ -685,13 +685,14 @@ final class InscriptionImportTest extends TestCase
         $this->assertSame($this->annee->id, $batch->annee_scolaire_id);
     }
 
-    public function test_mapping_a_group_from_another_year_reaffects_it_to_the_selected_year(): void
+    public function test_mapping_never_drags_a_still_running_group_back_into_a_closed_year(): void
     {
-        // The "half in one year, half in the other" split (24/08/2026): data
-        // previously imported under the WRONG année. Re-importing under the
-        // right one and mapping the file's label onto that existing group
-        // must MOVE the group + its inscriptions to the selected year and
-        // recognize the rows as already imported — never duplicate them.
+        // A group holding an ACTIVE inscription is still running (B1/B2
+        // mid-course). The legacy export splits it across three files
+        // imported into different années, so mapping must NOT drag it back
+        // into the closed year just because the Annulé file was uploaded
+        // last — that hid 287 live Marrakech inscriptions (26/08/2026).
+        // The group stays put; the row is still recognized as a duplicate.
         $student = $this->makeStudent('HASNA', 'TIMOUN');
         $group = Group::factory()->create([
             'nom' => 'Herr Driss 13h',
@@ -719,10 +720,10 @@ final class InscriptionImportTest extends TestCase
             'groupe_mapping' => [['label' => 'Herr Driss 13h', 'action' => 'map', 'group_id' => $group->id]],
         ]);
 
-        // The mapped group and its existing inscription now live in the
-        // ACTIVE année — nothing left behind under the old one.
-        $this->assertSame($this->annee->id, $group->fresh()->annee_scolaire_id);
-        $this->assertSame($this->annee->id, $existing->fresh()->annee_scolaire_id);
+        // The group and its inscription stay in the LATER année they were
+        // already in — the import never pulls a live cohort backwards.
+        $this->assertSame($this->otherAnnee->id, $group->fresh()->annee_scolaire_id);
+        $this->assertSame($this->otherAnnee->id, $existing->fresh()->annee_scolaire_id);
 
         // And the file's row is a recognized duplicate, not a re-insert.
         $batch = ImportBatch::query()->firstOrFail();
@@ -817,5 +818,64 @@ final class InscriptionImportTest extends TestCase
 
         $this->actingAs($user)->get(route('backoffice.import.inscriptions.result', $batch))
             ->assertInertia(fn (Assert $page) => $page->component('Backoffice/Import/Inscriptions/Result'));
+    }
+
+    /**
+     * A legacy export splits ONE running group across three files (Active /
+     * Annulé / Archive) that are imported into different années. A group is a
+     * real cohort in a real room — it belongs to exactly one année, and every
+     * inscription follows it whatever its own statut. Splitting it tore 6
+     * Marrakech groups (287 inscriptions) in half on 26/08/2026.
+     */
+    public function test_an_inscription_takes_its_groups_annee_not_the_batchs(): void
+    {
+        $autreAnnee = AnneeScolaire::create([
+            'nom' => '2027/2028', 'date_debut' => '2027-09-01', 'date_fin' => '2028-08-31',
+            'par_defaut' => false, 'inscription_ouverte' => true,
+        ]);
+
+        // The group still runs in the OTHER année (created by the Active file).
+        $group = Group::factory()->create([
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $autreAnnee->id,
+            'nom' => 'Herr Driss 13h',
+        ]);
+        $group->frais()->sync([Frais::first()->id => ['montant' => 300, 'date_echeance' => '2027-09-01']]);
+        $this->makeStudent('YOUSSEF', 'MOUHIB');
+
+        // The group is still RUNNING — an active student sits in it, which
+        // is what pins the cohort to its own année.
+        Inscription::create([
+            'reference' => 'INS-RUN-1',
+            'student_id' => $this->makeStudent('AUTRE', 'ELEVE')->id,
+            'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $autreAnnee->id,
+            'statut' => Inscription::STATUT_ACTIVE,
+            'date_inscription' => '2027-09-15',
+        ]);
+
+        $user = $this->userWith('import.view', 'import.create');
+
+        // This batch is submitted under $this->annee — the OLD year.
+        $this->actingAs($user)->post(route('backoffice.import.inscriptions.analyze'), [
+            'file' => $this->buildUpload([
+                ['1SL126', 'YOUSSEF MOUHIB', 'Herr Driss 13h', 'Annulé', '05/01/2026', '-'],
+            ]),
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'groupe_mapping' => [['label' => 'Herr Driss 13h', 'action' => 'map', 'group_id' => $group->id]],
+        ])->assertSessionHasNoErrors();
+
+        $batch = ImportBatch::query()->firstOrFail();
+        $row = $batch->rows()->firstOrFail();
+        $this->commitAllSelected($user, $batch, [$row->id]);
+
+        $inscription = Inscription::query()->where('legacy_ref', '1SL126')->firstOrFail();
+
+        // Follows the GROUP (2027/2028), not the batch (2025/2026).
+        $this->assertSame($autreAnnee->id, (int) $inscription->annee_scolaire_id);
+        $this->assertSame($group->id, (int) $inscription->group_id);
+        $this->assertSame('Annulée', $inscription->statut);
     }
 }

@@ -79,11 +79,13 @@ final class InscriptionFeeVisibilityTest extends TestCase
         [$inscription, $fee] = $this->inscriptionWithFee();
 
         $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
-            ->from(route('backoffice.inscriptions.index'))
-            ->post(route('backoffice.inscriptions.fees.hide', [$inscription, $fee]))
-            // back(), not a redirect to index — the edit modal must survive the
-            // request, so the response returns to the referring page.
-            ->assertRedirect(route('backoffice.inscriptions.index'));
+            ->postJson(route('backoffice.inscriptions.fees.hide', [$inscription, $fee]))
+            // JSON, not an Inertia redirect: the action fires from inside the
+            // open edit modal, which updates its own table from local state.
+            // Returning a redirect made Inertia re-run index() and rebuild the
+            // whole page payload for every click.
+            ->assertOk()
+            ->assertJson(['ok' => true]);
 
         $this->assertNotNull($fee->fresh()->masque_le);
 
@@ -103,11 +105,13 @@ final class InscriptionFeeVisibilityTest extends TestCase
         ]);
 
         $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
-            ->from(route('backoffice.inscriptions.index'))
-            ->post(route('backoffice.inscriptions.fees.hide', [$inscription, $fee]))
-            // back(), not a redirect to index — the edit modal must survive the
-            // request, so the response returns to the referring page.
-            ->assertRedirect(route('backoffice.inscriptions.index'));
+            ->postJson(route('backoffice.inscriptions.fees.hide', [$inscription, $fee]))
+            // JSON, not an Inertia redirect: the action fires from inside the
+            // open edit modal, which updates its own table from local state.
+            // Returning a redirect made Inertia re-run index() and rebuild the
+            // whole page payload for every click.
+            ->assertOk()
+            ->assertJson(['ok' => true]);
 
         $this->assertSame('200.00', (string) $inscription->fresh()->montant_total);
     }
@@ -124,11 +128,13 @@ final class InscriptionFeeVisibilityTest extends TestCase
         ]);
 
         $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
-            ->from(route('backoffice.inscriptions.index'))
-            ->post(route('backoffice.inscriptions.fees.hide', [$inscription, $fee]))
-            // back(), not a redirect to index — the edit modal must survive the
-            // request, so the response returns to the referring page.
-            ->assertRedirect(route('backoffice.inscriptions.index'));
+            ->postJson(route('backoffice.inscriptions.fees.hide', [$inscription, $fee]))
+            // JSON, not an Inertia redirect: the action fires from inside the
+            // open edit modal, which updates its own table from local state.
+            // Returning a redirect made Inertia re-run index() and rebuild the
+            // whole page payload for every click.
+            ->assertOk()
+            ->assertJson(['ok' => true]);
 
         $fresh = $fee->fresh();
         $this->assertNotNull($fresh->masque_le);
@@ -144,11 +150,12 @@ final class InscriptionFeeVisibilityTest extends TestCase
         $inscription->update(['montant_total' => null]);
 
         $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
-            ->from(route('backoffice.inscriptions.index'))
-            ->post(route('backoffice.inscriptions.fees.restore', [$inscription, $fee]))
-            // back(), not a redirect to index — the edit modal must survive the
-            // request, so the response returns to the referring page.
-            ->assertRedirect(route('backoffice.inscriptions.index'));
+            ->postJson(route('backoffice.inscriptions.fees.restore', [$inscription, $fee]))
+            // JSON — see the hide tests. The restored line's full shape comes
+            // back in the payload so the modal can splice it straight into its
+            // table without a second request.
+            ->assertOk()
+            ->assertJson(['ok' => true, 'fee' => ['id' => $fee->id]]);
 
         $this->assertNull($fee->fresh()->masque_le);
         $this->assertSame('1300.00', (string) $inscription->fresh()->montant_total);
@@ -163,7 +170,7 @@ final class InscriptionFeeVisibilityTest extends TestCase
         [$inscription, $fee] = $this->inscriptionWithFee();
 
         $this->actingAs($this->userWith('registrations.view', 'registrations.update'))
-            ->post(route('backoffice.inscriptions.fees.hide', [$inscription, $fee]))
+            ->postJson(route('backoffice.inscriptions.fees.hide', [$inscription, $fee]))
             ->assertForbidden();
 
         $this->assertNull($fee->fresh()->masque_le);
@@ -175,8 +182,13 @@ final class InscriptionFeeVisibilityTest extends TestCase
         [, $feeB] = $this->inscriptionWithFee();
 
         $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
-            ->post(route('backoffice.inscriptions.fees.hide', [$inscriptionA, $feeB]))
-            ->assertSessionHasErrors('fee');
+            // A fee that is not this inscription's is a tampered request, not
+            // a correctable form error — the controller aborts with 404
+            // (see hideFee(): these JSON endpoints must not raise a
+            // ValidationException, which bootstrap/app.php would try to
+            // render down the HTML/Inertia redirect path).
+            ->postJson(route('backoffice.inscriptions.fees.hide', [$inscriptionA, $feeB]))
+            ->assertNotFound();
 
         $this->assertNull($feeB->fresh()->masque_le);
     }

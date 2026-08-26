@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domain\Finance\Queries;
 
 use App\Models\Caisse;
+use App\Services\Context\CurrentContext;
+use App\Support\Access\DormantTill;
 use App\Support\Access\HiddenAccount;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -28,14 +30,21 @@ use Illuminate\Pagination\LengthAwarePaginator;
  * any more (the old DERIVED_TYPES aggregation counted a TPE payment twice —
  * once in the cashier's till, once in a live "TPE" line).
  *
- * ⚠ NOT center-scoped, unlike GetCaissesList: this tab is super-admin only
- * (`cash-accounts.*` is absent from every role in
- * PermissionRegistry::matrix()) and its whole point is the global view of
- * where the money is.
+ * ⚠ Follows the top-bar context like every other screen (CLAUDE.md §11,
+ * « Context scoping is MANDATORY »): a centre selected in the switcher shows
+ * THAT centre's accounts only. The tab is super-admin only (`cash-accounts.*`
+ * is absent from every role in PermissionRegistry::matrix()), and a
+ * super-admin is exactly who may pick « Tous les centres » — that is the
+ * global view of where the money is, not the default for a selected centre.
+ *
+ * Centre-less accounts (an Externe safe with no `etablissement_id`) are
+ * global and stay visible in every centre, same rule as GetCaisseGlobale.
  */
 final class GetComptesCaisse
 {
     public const DEFAULT_PER_PAGE = 15;
+
+    public function __construct(private readonly CurrentContext $context) {}
 
     /** The only type a user may create by hand. */
     public const CREATABLE_TYPES = [Caisse::TYPE_EXTERNE];
@@ -110,6 +119,13 @@ final class GetComptesCaisse
             // Same rule as GetCaissesList: the maintainer's auto-provisioned
             // till is hidden along with the account (HiddenAccount).
             ->tap(fn ($q) => HiddenAccount::hideCaisses($q))
+            // An empty till belonging to a teacher or a departed employee is
+            // noise — one that still holds money is never hidden (DormantTill).
+            ->tap(fn ($q) => DormantTill::hide($q))
+            // Active centre from the top-bar switcher; null = « Tous les
+            // centres » (super-admin only) ⇒ no narrowing.
+            ->when($this->context->etablissementId(), fn ($q, $id) => $q
+                ->where(fn ($w) => $w->whereNull('etablissement_id')->orWhere('etablissement_id', $id)))
             ->withSum('encaissements as encaissements_total', 'montant')
             ->withSum('depenses as depenses_total', 'montant')
             ->when($typeFilter !== '', fn ($q) => $q->where('type', $typeFilter))

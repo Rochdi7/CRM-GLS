@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Groups\Queries;
 
+use App\Models\Frais;
 use App\Models\Group;
 use App\Models\Inscription;
 use App\Models\User;
@@ -74,6 +75,14 @@ final class GetGroupsList
             ->paginate($perPage)
             ->withQueryString();
 
+        // Active catalog, fetched ONCE for the whole page (never per row):
+        // used to derive each group's « Frais retirés » — the catalog fees
+        // it no longer carries, which the edit modal offers for restore.
+        $catalogueActif = Frais::query()
+            ->where('statut', Frais::STATUT_ACTIF)
+            ->orderBy('nom')
+            ->get(['id', 'nom']);
+
         $groups->through(fn (Group $group): array => [
             'id' => $group->id,
             'nom' => $group->nom,
@@ -100,6 +109,17 @@ final class GetGroupsList
                     'classification' => $fee->pivot->classification ?: '',
                 ],
             ])->all(),
+            // Catalog fees this group NO LONGER carries — the edit modal's
+            // « Frais retirés » list, the only place a removed fee can be
+            // restored from (mirrors the Inscriptions modal's « Frais
+            // masqués »). Derived, not stored: a fee is "removed" for this
+            // group precisely when the active catalog offers it and
+            // group_frais has no row for it.
+            'fraisRetires' => $catalogueActif
+                ->whereNotIn('id', $group->frais->pluck('id'))
+                ->map(fn (Frais $frais): array => ['id' => $frais->id, 'nom' => $frais->nom])
+                ->values()
+                ->all(),
         ]);
 
         return $groups;

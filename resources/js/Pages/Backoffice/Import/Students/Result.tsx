@@ -9,10 +9,11 @@ interface StudentImportResultProps {
     batch: ImportBatch;
     failedRows: PaginatedData<ImportRow>;
     skippedRows: PaginatedData<ImportRow>;
+    unresolvedRows: PaginatedData<ImportRow>;
     statusCounts: ImportStatusCounts;
 }
 
-export default function StudentImportResult({ batch, failedRows, skippedRows }: StudentImportResultProps) {
+export default function StudentImportResult({ batch, failedRows, skippedRows, unresolvedRows }: StudentImportResultProps) {
     return (
         <BackofficeLayout
             title="Résultat de l'import — Students"
@@ -52,6 +53,12 @@ export default function StudentImportResult({ batch, failedRows, skippedRows }: 
                     title="Lignes ignorées"
                     hint="Ces lignes n'ont volontairement pas été écrites — le plus souvent parce que les étudiants existaient déjà, ou parce que la même ligne apparaît deux fois dans le fichier. Rien n'a été perdu."
                     rows={skippedRows}
+                />
+
+                <ImportRowReasonTable
+                    title="Lignes non résolues"
+                    hint="Ces lignes n'ont pas pu être rattachées ou comportaient une cellule illisible. Elles sont conservées avec leur motif : corrigez la donnée manquante, puis relancez l'analyse du fichier."
+                    rows={unresolvedRows}
                 />
 
                 <Link href="/backoffice/import/students" className="btn btn-primary mt-3">

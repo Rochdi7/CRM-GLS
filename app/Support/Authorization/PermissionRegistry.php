@@ -20,6 +20,18 @@ namespace App\Support\Authorization;
 final class PermissionRegistry
 {
     /**
+     * The ability that opens EVERY centre (« Tous les centres »). It is an
+     * ability NAME only — answered by Gate::before for super-admins — and is
+     * NEVER grantable: not to a role (preset or custom), not as a direct
+     * permission. « Centres affectés » on the employee form is the one
+     * authority on centre reach for everyone else (CLAUDE.md §16,
+     * 24/08/2026). `grantable()` excludes it, both Roles/Autorisations
+     * Form Requests validate against `grantable()`, and
+     * RolesAndPermissionsSeeder strips any stale grant on every run.
+     */
+    public const GLOBAL_CENTER_ACCESS = 'centers.access-all';
+
+    /**
      * Permissions grouped by module: [French group => [permission => French label]].
      *
      * @return array<string, array<string, string>>
@@ -236,6 +248,46 @@ final class PermissionRegistry
     }
 
     /**
+     * Machine names that MAY be granted to a role or a user — every
+     * permission except GLOBAL_CENTER_ACCESS (super-admin by construction).
+     *
+     * @return list<string>
+     */
+    public static function grantable(): array
+    {
+        return array_values(array_filter(
+            self::names(),
+            static fn (string $name): bool => $name !== self::GLOBAL_CENTER_ACCESS,
+        ));
+    }
+
+    public static function isGrantable(string $permission): bool
+    {
+        return $permission !== self::GLOBAL_CENTER_ACCESS && self::exists($permission);
+    }
+
+    /**
+     * `grouped()` without the un-grantable abilities — what the Roles form
+     * and the Autorisations screen offer as checkboxes.
+     *
+     * @return array<string, array<string, string>>
+     */
+    public static function groupedGrantable(): array
+    {
+        $groups = [];
+
+        foreach (self::grouped() as $group => $permissions) {
+            unset($permissions[self::GLOBAL_CENTER_ACCESS]);
+
+            if ($permissions !== []) {
+                $groups[$group] = $permissions;
+            }
+        }
+
+        return $groups;
+    }
+
+    /**
      * Role catalogue: [machine name => French label].
      *
      * One role per `Employee::CATEGORIES` job title, so every employee the
@@ -350,11 +402,11 @@ final class PermissionRegistry
             // « Centres affectés » is the ONE authority on which centers a
             // user reaches (employee_etablissement pivot, CLAUDE.md §16) —
             // no ROLE may widen it to the whole network. Someone who needs
-            // more centers gets them assigned on the employee form; a truly
-            // global non-super-admin account (rare) gets this permission
-            // hand-granted on the Autorisations screen. Super-admins see
-            // everything via Gate::before regardless.
-            'centers.access-all',
+            // more centers gets them assigned on the employee form. Since
+            // 24/08/2026 it is not hand-grantable either (see
+            // GLOBAL_CENTER_ACCESS / grantable()): ONLY super-admins, via
+            // Gate::before, ever see « Tous les centres ».
+            self::GLOBAL_CENTER_ACCESS,
         ])));
     }
 

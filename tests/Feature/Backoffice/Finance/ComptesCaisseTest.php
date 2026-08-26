@@ -260,12 +260,12 @@ final class ComptesCaisseTest extends TestCase
     public function test_the_row_totals_come_from_the_accounts_own_movements(): void
     {
         $employee = Employee::factory()->create(['etablissement_id' => $this->centre->id]);
-        $caisse = Caisse::factory()->create([
-            'type' => Caisse::TYPE_CAISSIERE,
-            'etablissement_id' => $this->centre->id,
-            'responsable_employee_id' => $employee->id,
-            'solde' => 100,
-        ]);
+        // The employee's own provisioned till (exactly one per employee since
+        // the 24/08/2026 audit); its opening balance moves through the ledger
+        // like any other movement, never a hand-written solde.
+        $caisse = $employee->till()->firstOrFail();
+        app(\App\Domain\Finance\Support\CaisseLedger::class)->credit($caisse->id, 100.0, 'Solde initial');
+        $caisse->refresh();
         $autre = Caisse::factory()->create(['type' => Caisse::TYPE_EXTERNE, 'etablissement_id' => $this->centre->id]);
 
         $this->makeEncaissement($caisse, '700');
@@ -311,16 +311,35 @@ final class ComptesCaisseTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->has('comptes.data', 1));
     }
 
-    public function test_the_list_is_not_scoped_to_the_active_center(): void
+    /**
+     * The tab follows the top-bar switcher like every other screen
+     * (CLAUDE.md §11). « Tous les centres » — which only a super-admin may
+     * pick, and this tab is super-admin only anyway — is what shows all of
+     * them at once.
+     */
+    public function test_the_list_follows_the_active_center(): void
     {
         $autreCentre = Etablissement::factory()->create();
         Caisse::factory()->create(['type' => Caisse::TYPE_EXTERNE, 'etablissement_id' => $this->centre->id]);
         Caisse::factory()->create(['type' => Caisse::TYPE_EXTERNE, 'etablissement_id' => $autreCentre->id]);
 
-        $this->actingAs($this->superAdmin())
+        $admin = $this->superAdmin();
+
+        // No centre in the context = « Tous les centres » ⇒ both.
+        $this->actingAs($admin)
             ->get(route('backoffice.caisses.index', ['tab' => 'comptes', 'compteTypeFilter' => Caisse::TYPE_EXTERNE]))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->has('comptes.data', 2));
+
+        // A centre selected ⇒ only its own.
+        $this->actingAs($admin)
+            ->post(route('backoffice.context.update'), ['etablissement_id' => $this->centre->id])
+            ->assertRedirect();
+
+        $this->actingAs($admin)
+            ->get(route('backoffice.caisses.index', ['tab' => 'comptes', 'compteTypeFilter' => Caisse::TYPE_EXTERNE]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('comptes.data', 1));
     }
 
     // ---------------------------------------------------------------

@@ -58,18 +58,21 @@ final class ChequeController extends Controller
         $dateEcheanceTo = (string) $request->string('dateEcheanceTo');
         $perPage = (int) $request->integer('perPage', GetChequesList::DEFAULT_PER_PAGE);
 
+        $chequesList = $getChequesList(
+            $request->user(),
+            $numeroFilter,
+            $proprietaireFilter,
+            $banqueFilter,
+            $typeFilter,
+            $statutFilter,
+            $dateEcheanceFrom,
+            $dateEcheanceTo,
+            $perPage,
+        );
+
         return Inertia::render('Backoffice/Cheques/Index', [
-            'cheques' => $getChequesList(
-                $request->user(),
-                $numeroFilter,
-                $proprietaireFilter,
-                $banqueFilter,
-                $typeFilter,
-                $statutFilter,
-                $dateEcheanceFrom,
-                $dateEcheanceTo,
-                $perPage,
-            ),
+            'cheques' => $chequesList['data'],
+            'montantTotal' => $chequesList['montantTotal'],
             'filters' => [
                 'numeroFilter' => $numeroFilter,
                 'proprietaireFilter' => $proprietaireFilter,

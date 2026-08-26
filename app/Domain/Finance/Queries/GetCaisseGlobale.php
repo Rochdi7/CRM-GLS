@@ -8,6 +8,7 @@ use App\Models\Caisse;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
+use App\Support\Access\DormantTill;
 use App\Support\Access\HiddenAccount;
 
 /**
@@ -22,7 +23,14 @@ use App\Support\Access\HiddenAccount;
  *
  * Every dirham appears once: the figures are the accounts' own balances,
  * nothing is derived on top (CLAUDE.md §11). Scope = the centres the user
- * may reach, narrowed to the active centre — same rule as the 'all' journal.
+ * may reach, narrowed to the active centre — same rule as the 'all' journal
+ * (« Tous les centres », super-admin only, lifts the narrowing and shows
+ * every reachable centre's accounts).
+ *
+ * Dormant personal tills are hidden — see App\Support\Access\DormantTill,
+ * shared with « Comptes de caisse »: a teacher's or a non-Actif employee's
+ * till at exactly 0.00 DH is noise, but one still holding money stays listed
+ * so no dirham drops out of the totals.
  */
 final class GetCaisseGlobale
 {
@@ -58,6 +66,7 @@ final class GetCaisseGlobale
         $caisses = Caisse::query()
             ->with(['etablissement', 'responsable'])
             ->tap(fn ($q) => HiddenAccount::hideCaisses($q))
+            ->tap(fn ($q) => DormantTill::hide($q))
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->when($this->context->etablissementId(), fn ($q, $id) => $q
                 ->where(fn ($w) => $w->whereNull('etablissement_id')->orWhere('etablissement_id', $id)))

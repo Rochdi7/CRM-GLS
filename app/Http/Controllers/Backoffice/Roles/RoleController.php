@@ -58,7 +58,7 @@ final class RoleController extends Controller
         $this->authorize('roles.create');
 
         return Inertia::render('Backoffice/Roles/Create', [
-            'permissionGroups' => PermissionRegistry::grouped(),
+            'permissionGroups' => PermissionRegistry::groupedGrantable(),
         ]);
     }
 
@@ -109,7 +109,7 @@ final class RoleController extends Controller
                 'label' => $role->displayLabel(),
             ],
             'selectedPermissions' => $role->permissions()->pluck('name')->all(),
-            'permissionGroups' => PermissionRegistry::grouped(),
+            'permissionGroups' => PermissionRegistry::groupedGrantable(),
         ]);
     }
 

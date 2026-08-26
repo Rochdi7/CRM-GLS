@@ -55,7 +55,7 @@ final class UserAuthorizationController extends Controller
                     'permissionNames' => $role->permissions->pluck('name')->values()->all(),
                 ])->values(),
             'roleLabels' => PermissionRegistry::roles(),
-            'groups' => PermissionRegistry::grouped(),
+            'groups' => PermissionRegistry::groupedGrantable(),
             'totalPermissions' => count(PermissionRegistry::names()),
             'isSuperAdmin' => $user->hasRole(Role::SUPER_ADMIN),
             'canAssignDirect' => auth()->user()->can('users.assign-permissions'),

@@ -7,7 +7,17 @@ interface ModalProps extends PropsWithChildren {
     onClose: () => void;
     /** Disables Escape/backdrop close while a request is in flight (e.g. save/delete). */
     processing?: boolean;
-    size?: 'default' | 'lg' | 'xl';
+    /**
+     * `fullscreen` maps to Bootstrap's own `.modal-fullscreen` — edge to
+     * edge, no framing.
+     *
+     * `wide` is our own step between `xl` and `fullscreen` (`.modal-wide`,
+     * resources/js/app.css): still a CENTERED dialog with its rounded
+     * corners and visible backdrop, but ~80vw instead of Bootstrap's
+     * 1140px cap — for the wide matrix tables (Groups → Statistique de
+     * groupe) where a year of fee columns does not fit in `xl`.
+     */
+    size?: 'default' | 'lg' | 'xl' | 'wide' | 'fullscreen';
     footer?: ReactNode;
     /**
      * Headerless variant — the PreSkool delete-confirmation modal
@@ -117,7 +127,11 @@ export default function Modal({ show, title, onClose, processing = false, size =
             >
                 <div
                     ref={dialogRef}
-                    className={`modal-dialog modal-dialog-centered${size === 'lg' ? ' modal-lg' : ''}${size === 'xl' ? ' modal-xl' : ''}`}
+                    className={
+                        size === 'fullscreen'
+                            ? 'modal-dialog modal-fullscreen'
+                            : `modal-dialog modal-dialog-centered${size === 'lg' ? ' modal-lg' : ''}${size === 'xl' ? ' modal-xl' : ''}${size === 'wide' ? ' modal-wide' : ''}`
+                    }
                 >
                     <div className="modal-content">
                         {!hideHeader && (

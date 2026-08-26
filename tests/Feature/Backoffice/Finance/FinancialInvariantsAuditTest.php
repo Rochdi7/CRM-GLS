@@ -159,7 +159,7 @@ final class FinancialInvariantsAuditTest extends TestCase
         $type = TypeDepense::create(['nom' => 'Fournitures', 'is_system' => false, 'statut' => 'Actif']);
         $this->post(route('backoffice.depenses.store'), [
             'type_depense_id' => $type->id, 'montant' => '100', 'methode_paiement' => Encaissement::METHODE_ESPECES,
-            'date_depense' => '2025-09-22',
+            'date_depense' => '2025-09-22', 'description' => 'Fournitures',
         ])->assertSessionHasNoErrors();
         $this->assertSame($till->id, Depense::query()->sole()->caisse_id);
 
@@ -352,7 +352,7 @@ final class FinancialInvariantsAuditTest extends TestCase
 
         $this->actingAs($user)->post(route('backoffice.depenses.store'), [
             'type_depense_id' => $type->id, 'montant' => '300', 'methode_paiement' => Encaissement::METHODE_VIREMENT,
-            'date_depense' => '2025-09-22',
+            'date_depense' => '2025-09-22', 'description' => 'Loyer',
         ])->assertSessionHasNoErrors();
         $depense = Depense::query()->sole();
         $this->assertSame('700.00', (string) $till->fresh()->solde);
@@ -412,6 +412,7 @@ final class FinancialInvariantsAuditTest extends TestCase
         $type = TypeDepense::create(['nom' => 'Fournitures', 'is_system' => false, 'statut' => 'Actif']);
         $this->post(route('backoffice.depenses.store'), [
             'type_depense_id' => $type->id, 'montant' => '120', 'methode_paiement' => Encaissement::METHODE_TPE, 'date_depense' => '2025-09-22',
+            'description' => 'Fournitures',
         ])->assertSessionHasNoErrors();
         $this->post(route('backoffice.remboursements.store'), [
             'beneficiaire_id' => $student->id, 'montant' => '80', 'date_remboursement' => '2025-09-23',

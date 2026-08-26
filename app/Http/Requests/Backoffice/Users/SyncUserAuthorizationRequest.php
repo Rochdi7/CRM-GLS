@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Backoffice\Users;
 
+use App\Support\Authorization\PermissionRegistry;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 /**
  * Shallow shape validation only, matching
@@ -32,7 +34,9 @@ final class SyncUserAuthorizationRequest extends FormRequest
             'roles' => ['array'],
             'roles.*' => ['string'],
             'directPermissions' => ['array'],
-            'directPermissions.*' => ['string'],
+            // centers.access-all is never grantable (super-admin only via
+            // Gate::before) — refused here AND in the service.
+            'directPermissions.*' => ['string', Rule::notIn([PermissionRegistry::GLOBAL_CENTER_ACCESS])],
         ];
     }
 }

@@ -45,9 +45,22 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
         return $user->fresh();
     }
 
+    /**
+     * A standalone cash account used as a transfer end.
+     *
+     * « Externe »: recipientOf() below re-points these at an employee who
+     * ALREADY owns a provisioned « Caissière » till, and an employee may own
+     * only one of those (partial unique index
+     * `caisses_une_caissiere_par_employe`, 24/08/2026 audit). Externe is a
+     * cash account too, so every transfer rule under test is unchanged.
+     */
     private function caisse(float $solde = 1000): Caisse
     {
-        return Caisse::factory()->create(['etablissement_id' => $this->centre->id, 'solde' => $solde]);
+        return Caisse::factory()->create([
+            'type' => Caisse::TYPE_EXTERNE,
+            'etablissement_id' => $this->centre->id,
+            'solde' => $solde,
+        ]);
     }
 
     /**

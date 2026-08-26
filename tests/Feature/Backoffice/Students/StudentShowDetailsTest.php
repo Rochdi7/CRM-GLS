@@ -53,10 +53,9 @@ final class StudentShowDetailsTest extends TestCase
         $this->centre = Etablissement::factory()->create();
         $this->student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
         $this->agent = Employee::factory()->create(['etablissement_id' => $this->centre->id]);
-        $this->caisse = Caisse::factory()->create([
-            'etablissement_id' => $this->centre->id,
-            'responsable_employee_id' => $this->agent->id,
-        ]);
+        // The till EmployeeObserver already provisioned — an employee owns
+        // exactly one (partial unique index, 24/08/2026 audit).
+        $this->caisse = $this->agent->till()->firstOrFail();
     }
 
     private function inscription(AnneeScolaire $annee, string $statut, string $date): Inscription

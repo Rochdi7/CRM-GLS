@@ -17,11 +17,14 @@ import FormField from '@/Components/Forms/FormField';
 import SelectField from '@/Components/Forms/SelectField';
 import FormActions from '@/Components/Forms/FormActions';
 import StatusBadge from '@/Components/Details/StatusBadge';
+import GroupPaymentMatrixTable from '@/Components/Groups/GroupPaymentMatrix';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { blockImplicitSubmit } from '@/Lib/forms';
 import type {
     GroupFraisCatalogOption,
     GroupFraisLigne,
+    GroupPaymentMatrix,
+    GroupPaymentSort,
     GroupRow,
     GroupsPageProps,
     GroupStudentSegmentRow,
@@ -214,17 +217,43 @@ export default function GroupsIndex({
     // stops the emploi du temps, and the user has to rebuild it.
     const emploiDuTempsArrete = flash.emploiDuTempsArrete;
     const isLoading = useInertiaLoading();
+    // UI convenience only — backoffice.groups.payment-matrix carries the real
+    // permission:payments.view gate (CLAUDE.md §5).
+    const canViewPayments = auth.isSuperAdmin || auth.permissions.includes('payments.view');
     const [showModal, setShowModal] = useState(false);
     const [editingGroup, setEditingGroup] = useState<GroupRow | null>(null);
     const [studentsModal, setStudentsModal] = useState<{ group: GroupRow; segment: StatsSegment } | null>(null);
     const [studentsRows, setStudentsRows] = useState<GroupStudentSegmentRow[]>([]);
     const [loadingStudents, setLoadingStudents] = useState(false);
+    const [paymentsGroup, setPaymentsGroup] = useState<GroupRow | null>(null);
+    const [paymentsMatrix, setPaymentsMatrix] = useState<GroupPaymentMatrix | null>(null);
+    const [paymentsSort, setPaymentsSort] = useState<GroupPaymentSort>('date');
+    const [loadingPayments, setLoadingPayments] = useState(false);
     const [fraisPage, setFraisPage] = useState(1);
     const [lifecycleTarget, setLifecycleTarget] = useState<{ group: GroupRow; action: LifecycleAction } | null>(null);
     const [lifecycleError, setLifecycleError] = useState<string | undefined>(undefined);
     const [lifecycleProcessing, setLifecycleProcessing] = useState(false);
+    // « Frais du groupe » removal: the fee awaiting confirmation, and whether
+    // a remove/restore request is in flight (both actions cascade to every
+    // inscription of the group, so the table is frozen while one runs).
+    const [fraisToRemove, setFraisToRemove] = useState<SelectOption | null>(null);
+    const [fraisProcessing, setFraisProcessing] = useState(false);
 
     const fraisCatalogOptions: SelectOption[] = fraisCatalog.map((f) => ({ value: f.id, label: f.nom }));
+    /**
+     * Fee rows the modal actually renders. Creating a group still offers the
+     * WHOLE active catalog (a new group starts with every fee assigned, as it
+     * always has); editing one shows only the fees that group still carries,
+     * so a fee removed through the trash icon disappears from the table
+     * instead of silently reappearing on the next save.
+     */
+    const fraisRowOptions: SelectOption[] =
+        editingGroup === null
+            ? fraisCatalogOptions
+            : fraisCatalogOptions.filter((f) => String(f.value) in editingGroup.fraisLignes);
+    /** Removed fees, restorable from the « Frais retirés » list below the table. */
+    const fraisRetires: SelectOption[] =
+        editingGroup?.fraisRetires.map((f) => ({ value: f.id, label: f.nom })) ?? [];
     const niveauOptions: SelectOption[] = niveaux.map((n) => ({ value: n, label: n }));
     const enseignantOptions: SelectOption[] = enseignants.map((e) => ({ value: e.id, label: e.nom }));
     // Create-mode status options omit "Fin de formation" — a group can only
@@ -383,6 +412,44 @@ export default function GroupsIndex({
     }
 
     /**
+     * "Détails paiement" — loads the group's students × frais matrix
+     * (GetGroupPaymentMatrix). Re-fetched on every sort change rather than
+     * re-ordered client-side, so the numbering (#1, #2…) and the column
+     * totals always come from one authoritative computation.
+     */
+    async function loadPaymentMatrix(group: GroupRow, sort: GroupPaymentSort) {
+        setLoadingPayments(true);
+        try {
+            const response = await fetch(`/backoffice/groups/${group.id}/payment-matrix?sort=${sort}`);
+            const data: { matrix: GroupPaymentMatrix } = await response.json();
+            setPaymentsMatrix(data.matrix);
+        } finally {
+            setLoadingPayments(false);
+        }
+    }
+
+    function openPaymentsModal(group: GroupRow) {
+        setPaymentsGroup(group);
+        setPaymentsMatrix(null);
+        // Date first, like the legacy « Statistique de groupe » screen.
+        setPaymentsSort('date');
+        void loadPaymentMatrix(group, 'date');
+    }
+
+    function changePaymentsSort(sort: GroupPaymentSort) {
+        setPaymentsSort(sort);
+
+        if (paymentsGroup) {
+            void loadPaymentMatrix(paymentsGroup, sort);
+        }
+    }
+
+    function closePaymentsModal() {
+        setPaymentsGroup(null);
+        setPaymentsMatrix(null);
+    }
+
+    /**
      * Re-derives the monthly due dates when the group's start date changes,
      * since the derived day comes from that date. Only rows still holding
      * the previously derived value are rewritten — once the user types a
@@ -411,6 +478,44 @@ export default function GroupsIndex({
         });
 
         form.setData({ ...form.data, date_debut_formation: value, fraisLignes: lignes });
+    }
+
+    /**
+     * Removes a fee from the group. This is NOT a form field — it fires
+     * immediately against the server, because it cascades: every inscription
+     * of the group has that fee line HIDDEN (never deleted), and the money
+     * already collected on it is released back into re-applicable avances.
+     * `preserveState` keeps the edit modal open with its unsaved changes;
+     * the refreshed `groups` prop drops the row from the table.
+     */
+    function removeFrais(frais: SelectOption) {
+        if (editingGroup === null) return;
+
+        setFraisProcessing(true);
+        router.delete(`/backoffice/groups/${editingGroup.id}/frais/${frais.value}`, {
+            preserveState: true,
+            preserveScroll: true,
+            onFinish: () => {
+                setFraisProcessing(false);
+                setFraisToRemove(null);
+            },
+        });
+    }
+
+    /** Reverse of removeFrais() — re-attaches the fee and un-hides its lines. */
+    function restoreFrais(frais: SelectOption) {
+        if (editingGroup === null) return;
+
+        setFraisProcessing(true);
+        router.post(
+            `/backoffice/groups/${editingGroup.id}/frais/${frais.value}/restore`,
+            {},
+            {
+                preserveState: true,
+                preserveScroll: true,
+                onFinish: () => setFraisProcessing(false),
+            },
+        );
     }
 
     function setLigne(fraisId: number, field: keyof GroupFraisLigne, value: string) {
@@ -621,6 +726,11 @@ export default function GroupsIndex({
                                                     Modifier
                                                 </RowActionItem>
                                             )}
+                                            {canViewPayments && (
+                                                <RowActionItem icon="ti-report-money" onClick={() => openPaymentsModal(group)}>
+                                                    Détails paiement
+                                                </RowActionItem>
+                                            )}
                                             {group.statut === 'En formation' && (
                                                 <>
                                                     <RowActionDivider />
@@ -783,7 +893,7 @@ export default function GroupsIndex({
                             assigné à ce groupe.
                         </p>
 
-                        {fraisCatalogOptions.length === 0 ? (
+                        {fraisRowOptions.length === 0 && fraisRetires.length === 0 ? (
                             <div className="alert alert-warning mb-0">
                                 Aucun frais dans le catalogue. Ajoutez des frais dans Paramètres → Frais d'abord.
                             </div>
@@ -801,13 +911,18 @@ export default function GroupsIndex({
                                             <th className="text-center" style={{ width: '24%' }}>
                                                 Échéance
                                             </th>
-                                            <th className="text-center" style={{ width: '24%' }}>
+                                            <th className="text-center" style={{ width: editingGroup === null ? '24%' : '19%' }}>
                                                 Montant
                                             </th>
+                                            {editingGroup !== null && (
+                                                <th className="text-center" style={{ width: '5%' }}>
+                                                    &nbsp;
+                                                </th>
+                                            )}
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {fraisCatalogOptions
+                                        {fraisRowOptions
                                             .slice((fraisPage - 1) * GROUP_FRAIS_PER_PAGE, fraisPage * GROUP_FRAIS_PER_PAGE)
                                             .map((fee) => {
                                             const ligne = form.data.fraisLignes[fee.value as number] ?? {
@@ -860,17 +975,57 @@ export default function GroupsIndex({
                                                             <span className="input-group-text">DH</span>
                                                         </div>
                                                     </td>
+                                                    {editingGroup !== null && (
+                                                        <td>
+                                                            <button
+                                                                type="button"
+                                                                className="btn btn-sm btn-outline-danger border-0"
+                                                                title="Retirer ce frais du groupe et de toutes ses inscriptions"
+                                                                disabled={fraisProcessing}
+                                                                onClick={() => setFraisToRemove(fee)}
+                                                            >
+                                                                <i className="ti ti-trash" />
+                                                            </button>
+                                                        </td>
+                                                    )}
                                                 </tr>
                                             );
                                         })}
                                     </tbody>
                                 </table>
                                 <GroupFraisPagination
-                                    total={fraisCatalogOptions.length}
+                                    total={fraisRowOptions.length}
                                     perPage={GROUP_FRAIS_PER_PAGE}
                                     page={fraisPage}
                                     onPageChange={setFraisPage}
                                 />
+                            </div>
+                        )}
+
+                        {fraisRetires.length > 0 && (
+                            <div className="mt-3">
+                                <h6 className="fs-14 mb-1">Frais retirés</h6>
+                                <p className="text-muted fs-13 mb-2">
+                                    Ces frais ne sont plus facturés par ce groupe et sont masqués sur ses inscriptions. Les
+                                    montants déjà encaissés sur eux sont revenus en avance et peuvent être ré-appliqués à un
+                                    autre frais. Restaurer un frais le réaffiche sur toutes les inscriptions du groupe — sans
+                                    ré-appliquer les avances, ce qui reste une décision explicite.
+                                </p>
+                                <div className="d-flex flex-wrap gap-2">
+                                    {fraisRetires.map((fee) => (
+                                        <span key={fee.value} className="badge bg-light text-dark border d-inline-flex align-items-center gap-2 p-2">
+                                            <span className="text-normal-case">{fee.label}</span>
+                                            <button
+                                                type="button"
+                                                className="btn btn-sm btn-link p-0 text-primary"
+                                                disabled={fraisProcessing}
+                                                onClick={() => restoreFrais(fee)}
+                                            >
+                                                Restaurer
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
                             </div>
                         )}
                     </div>
@@ -936,6 +1091,24 @@ export default function GroupsIndex({
                 )}
             </Modal>
 
+            <Modal
+                show={paymentsGroup !== null}
+                title={`Statistique de groupe — ${paymentsGroup?.nom ?? ''}`}
+                onClose={closePaymentsModal}
+                // A centred dialog, not modal-fullscreen: pinning the modal
+                // edge-to-edge only removes the framing. `wide` keeps the
+                // dialog while giving the grid ~80vw, so most of a year's fee
+                // columns fit without scrolling sideways.
+                size="wide"
+            >
+                <GroupPaymentMatrixTable
+                    matrix={paymentsMatrix}
+                    loading={loadingPayments}
+                    sort={paymentsSort}
+                    onSortChange={changePaymentsSort}
+                />
+            </Modal>
+
             <ConfirmDialog
                 show={lifecycleTarget !== null}
                 title={LIFECYCLE_CONFIRM_COPY[lifecycleTarget?.action ?? 'archive'].title}
@@ -952,6 +1125,19 @@ export default function GroupsIndex({
                     setLifecycleTarget(null);
                     setLifecycleError(undefined);
                 }}
+            />
+            <ConfirmDialog
+                show={fraisToRemove !== null}
+                title="Retirer ce frais du groupe ?"
+                recordLabel={fraisToRemove?.label ?? ''}
+                message="Ce frais sera retiré du groupe et masqué sur TOUTES ses inscriptions. Rien n'est supprimé : les montants déjà encaissés sur ce frais redeviennent des avances, réutilisables sur un autre frais de l'étudiant. Vous pourrez le restaurer depuis « Frais retirés »."
+                icon="ti ti-trash"
+                variant="danger"
+                confirmLabel="Retirer le frais"
+                processingLabel="Retrait…"
+                processing={fraisProcessing}
+                onConfirm={() => fraisToRemove !== null && removeFrais(fraisToRemove)}
+                onCancel={() => setFraisToRemove(null)}
             />
         </BackofficeLayout>
     );
