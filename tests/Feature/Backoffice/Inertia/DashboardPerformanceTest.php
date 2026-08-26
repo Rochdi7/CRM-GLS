@@ -131,16 +131,23 @@ final class DashboardPerformanceTest extends TestCase
             $this->enrollWithPartiallyPaidFee($i);
         }
 
+        // The chart window is the ACTIVE ANNÉE SCOLAIRE (Sep→Aug): a fee due
+        // 15/03 sits at index 6 (Sep=0 … Mar=6) and the first point is
+        // September of the previous calendar year.
+        $year = (int) now()->year;
+
         $this->actingAs($this->admin)
             ->get(route('backoffice.dashboard'))
             ->assertInertia(fn (Assert $page) => $page
-                ->where('annualFrais.chiffreAffaire.2', '5000.00')
-                ->where('annualFrais.collecte.2', '2000.00')
-                ->where('annualFrais.resteAPayer.2', '3000.00')
-                ->where('annualFrais.encaissements.2', '2000.00')
+                ->where('annualFrais.months.0', '09/'.($year - 1))
+                ->where('annualFrais.months.6', '03/'.$year)
+                ->where('annualFrais.chiffreAffaire.6', '5000.00')
+                ->where('annualFrais.collecte.6', '2000.00')
+                ->where('annualFrais.resteAPayer.6', '3000.00')
+                ->where('annualFrais.encaissements.6', '2000.00')
                 ->where('annualFrais.chiffreAffaire.0', '0.00')
                 ->where('annualFrais.collecte.0', '0.00')
-                ->where('annualFraisYears.0', (int) now()->year)
+                ->where('annualFraisPeriode', $this->annee->nom)
                 ->where('stats.inscriptionsTotal', 5)
                 ->where('stats.inscriptionsActives', 5)
                 ->where('stats.studentsTotal', 5)
@@ -161,9 +168,9 @@ final class DashboardPerformanceTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('backoffice.dashboard'))
             ->assertInertia(fn (Assert $page) => $page
-                ->where('annualFrais.chiffreAffaire.2', '0.00')
-                ->where('annualFrais.collecte.2', '0.00')
-                ->where('annualFrais.encaissements.2', '0.00')
+                ->where('annualFrais.chiffreAffaire.6', '0.00')
+                ->where('annualFrais.collecte.6', '0.00')
+                ->where('annualFrais.encaissements.6', '0.00')
                 ->where('stats.inscriptionsTotal', 0)
             );
 
@@ -172,9 +179,9 @@ final class DashboardPerformanceTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('backoffice.dashboard'))
             ->assertInertia(fn (Assert $page) => $page
-                ->where('annualFrais.chiffreAffaire.2', '2000.00')
-                ->where('annualFrais.collecte.2', '800.00')
-                ->where('annualFrais.encaissements.2', '800.00')
+                ->where('annualFrais.chiffreAffaire.6', '2000.00')
+                ->where('annualFrais.collecte.6', '800.00')
+                ->where('annualFrais.encaissements.6', '800.00')
                 ->where('stats.inscriptionsTotal', 2)
             );
     }
@@ -200,6 +207,6 @@ final class DashboardPerformanceTest extends TestCase
 
         $this->assertArrayNotHasKey('stats', $props);
         $this->assertArrayNotHasKey('annualFrais', $props);
-        $this->assertArrayNotHasKey('annualFraisYears', $props);
+        $this->assertArrayNotHasKey('annualFraisPeriode', $props);
     }
 }

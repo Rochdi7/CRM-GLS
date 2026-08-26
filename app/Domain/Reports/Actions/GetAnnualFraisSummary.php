@@ -6,11 +6,15 @@ namespace App\Domain\Reports\Actions;
 
 use App\Services\Context\CurrentContext;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * "Résumé des frais annuels" dashboard chart — 12 monthly points for the
- * given year, 5 series (docs clarified 2026-08-14):
+ * "Résumé des frais annuels" dashboard chart — one monthly point per month of
+ * the ACTIVE ACADEMIC YEAR (the top-bar context switcher, 26/08/2026 — the
+ * chart used to be a fixed calendar-year view with its own selector, which
+ * split every school year across two calendar years and piled the imported
+ * fees into one spike), 5 series (docs clarified 2026-08-14):
  *  - chiffreAffaire: sum of InscriptionFee.montant whose date_echeance falls
  *    in that month (what was billed/due that month);
  *  - collecte: Encaissement.montant received against those SAME fees
@@ -23,9 +27,8 @@ use Illuminate\Support\Facades\DB;
  *    at once (avances, late settlements).
  *
  * Center-scoped via CurrentContext (same active-center rule as
- * GetDashboardStats); NOT scoped by academic year — the chart is a fixed
- * calendar-year view with its own year selector, independent of the top-bar
- * année scolaire switcher.
+ * GetDashboardStats). When no année scolaire is selected (fresh session with
+ * no default year), the current calendar year is the fallback window.
  *
  * Performance (24/08/2026): every series is ONE PostgreSQL GROUP BY month
  * aggregate — 4 queries total, whatever the data volume. The previous
@@ -40,6 +43,12 @@ final class GetAnnualFraisSummary
         private readonly CurrentContext $context,
     ) {}
 
+    /** The chart header label — the année scolaire the window covers. */
+    public function periodeLabel(): string
+    {
+        return $this->context->anneeScolaire()?->nom ?? (string) now()->year;
+    }
+
     /**
      * @return array{
      *     months: list<string>,
@@ -50,17 +59,23 @@ final class GetAnnualFraisSummary
      *     encaissements: list<string>,
      * }
      */
-    public function __invoke(int $year): array
+    public function __invoke(): array
     {
         $centreId = $this->context->etablissementId();
-        $range = ["{$year}-01-01", "{$year}-12-31"];
+        $anneeId = $this->context->anneeScolaireId();
+        [$start, $end] = $this->window();
+        $range = [$start->toDateString(), $end->toDateString()];
 
-        // Chiffre d'affaire — fees due in the year, grouped by due month.
+        // Chiffre d'affaire — fees of the ACTIVE ANNÉE's inscriptions
+        // (annee_scolaire_id chain, CLAUDE.md §11 context scoping — the date
+        // window alone let another année's fees leak in whenever their due
+        // dates fell inside this année's months, e.g. 2025/2026 monthly fees
+        // due Sep–Dec 2026 showing under 2026/2027), grouped by due month.
         $chiffreAffaire = $this->byMonth(
             DB::table('inscription_fees')
                 ->whereNotNull('date_echeance')
                 ->whereBetween('date_echeance', $range)
-                ->when($centreId, fn (Builder $q) => $this->scopeFeesToCenter($q, 'inscription_fees', $centreId)),
+                ->when($centreId || $anneeId, fn (Builder $q) => $this->scopeFeesToContext($q, 'inscription_fees', $centreId, $anneeId)),
             'date_echeance',
         );
 
@@ -72,7 +87,7 @@ final class GetAnnualFraisSummary
                 ->join('inscription_fees', 'inscription_fees.id', '=', 'encaissements.inscription_fee_id')
                 ->whereNotNull('inscription_fees.date_echeance')
                 ->whereBetween('inscription_fees.date_echeance', $range)
-                ->when($centreId, fn (Builder $q) => $this->scopeFeesToCenter($q, 'inscription_fees', $centreId)),
+                ->when($centreId || $anneeId, fn (Builder $q) => $this->scopeFeesToContext($q, 'inscription_fees', $centreId, $anneeId)),
             'inscription_fees.date_echeance',
             'encaissements.montant',
         );
@@ -96,13 +111,25 @@ final class GetAnnualFraisSummary
         // operator to the centre their till lives in, not the centre the
         // money was collected for — the chart and the card disagreed for
         // the same month (audit 24/08/2026).
+        // Année scoping (§11): fee-linked payments belong to their fee's
+        // inscription année; avances (no fee) are matched by their payment
+        // date falling in the window — same split as the Encaissements list.
         $encaissements = $this->byMonth(
             DB::table('encaissements')
                 ->whereBetween('date_paiement', $range)
                 ->when($centreId, fn (Builder $q) => $q->whereIn(
                     'student_id',
                     DB::table('students')->select('id')->where('etablissement_id', $centreId),
-                )),
+                ))
+                ->when($anneeId, fn (Builder $q) => $q->where(fn (Builder $w) => $w
+                    ->whereNull('encaissements.inscription_fee_id')
+                    ->orWhereExists(function (Builder $sub) use ($anneeId): void {
+                        $sub->selectRaw('1')
+                            ->from('inscription_fees')
+                            ->join('inscriptions', 'inscriptions.id', '=', 'inscription_fees.inscription_id')
+                            ->whereColumn('inscription_fees.id', 'encaissements.inscription_fee_id')
+                            ->where('inscriptions.annee_scolaire_id', $anneeId);
+                    }))),
             'date_paiement',
         );
 
@@ -113,16 +140,25 @@ final class GetAnnualFraisSummary
         $depensesOut = [];
         $encaissementsOut = [];
 
-        for ($m = 1; $m <= 12; $m++) {
-            $months[] = sprintf('%02d/%d', $m, $year);
-            $ca = round($chiffreAffaire[$m], 2);
-            $col = round($collecte[$m], 2);
+        // One point per month of the window, in calendar order (09/2025 …
+        // 08/2026 for a school year).
+        $cursor = $start->copy()->startOfMonth();
+        $last = $end->copy()->startOfMonth();
+
+        while ($cursor->lessThanOrEqualTo($last)) {
+            $key = $cursor->format('Y-m');
+            $months[] = $cursor->format('m/Y');
+
+            $ca = round($chiffreAffaire[$key] ?? 0.0, 2);
+            $col = round($collecte[$key] ?? 0.0, 2);
 
             $caOut[] = number_format($ca, 2, '.', '');
             $collecteOut[] = number_format($col, 2, '.', '');
             $resteOut[] = number_format(max(0, $ca - $col), 2, '.', '');
-            $depensesOut[] = number_format(round($depenses[$m], 2), 2, '.', '');
-            $encaissementsOut[] = number_format(round($encaissements[$m], 2), 2, '.', '');
+            $depensesOut[] = number_format(round($depenses[$key] ?? 0.0, 2), 2, '.', '');
+            $encaissementsOut[] = number_format(round($encaissements[$key] ?? 0.0, 2), 2, '.', '');
+
+            $cursor->addMonth();
         }
 
         return [
@@ -136,65 +172,60 @@ final class GetAnnualFraisSummary
     }
 
     /**
-     * Years offered in the selector — every year with at least one due fee,
-     * always including the current year. One DISTINCT aggregate, never a
-     * full-table hydration.
+     * The chart window: the active année scolaire's date range, else the
+     * current calendar year.
      *
-     * @return list<int>
+     * @return array{0: Carbon, 1: Carbon}
      */
-    public function availableYears(): array
+    private function window(): array
     {
-        $centreId = $this->context->etablissementId();
+        $annee = $this->context->anneeScolaire();
 
-        $fromFees = DB::table('inscription_fees')
-            ->whereNotNull('date_echeance')
-            ->when($centreId, fn (Builder $q) => $this->scopeFeesToCenter($q, 'inscription_fees', $centreId))
-            ->selectRaw('DISTINCT EXTRACT(YEAR FROM date_echeance)::int AS annee')
-            ->pluck('annee')
-            ->map(fn ($y) => (int) $y);
+        if ($annee !== null) {
+            return [Carbon::parse($annee->date_debut), Carbon::parse($annee->date_fin)];
+        }
 
-        return $fromFees->push((int) now()->year)->unique()->sortDesc()->values()->all();
+        return [now()->startOfYear(), now()->endOfYear()];
     }
 
     /**
-     * SUM($amountColumn) grouped by the calendar month of $dateColumn, as a
-     * 1..12 array (months without rows read 0.0).
+     * SUM($amountColumn) grouped by the calendar month of $dateColumn, keyed
+     * 'YYYY-MM' (months without rows are simply absent).
      *
-     * @return array<int, float>
+     * @return array<string, float>
      */
     private function byMonth(Builder $query, string $dateColumn, string $amountColumn = 'montant'): array
     {
-        $out = array_fill(1, 12, 0.0);
-
         $rows = $query
-            ->selectRaw("EXTRACT(MONTH FROM {$dateColumn})::int AS mois, COALESCE(SUM({$amountColumn}), 0) AS total")
-            ->groupByRaw("EXTRACT(MONTH FROM {$dateColumn})")
+            ->selectRaw("to_char({$dateColumn}, 'YYYY-MM') AS mois, COALESCE(SUM({$amountColumn}), 0) AS total")
+            ->groupByRaw("to_char({$dateColumn}, 'YYYY-MM')")
             ->get();
 
-        foreach ($rows as $row) {
-            $month = (int) $row->mois;
+        $out = [];
 
-            if ($month >= 1 && $month <= 12) {
-                $out[$month] = (float) $row->total;
-            }
+        foreach ($rows as $row) {
+            $out[(string) $row->mois] = (float) $row->total;
         }
 
         return $out;
     }
 
     /**
-     * Fees belong to the active centre through their inscription (NULL-centre
-     * inscriptions are global — same rule as before).
+     * Fees belong to the active context through their inscription: the active
+     * centre (NULL-centre inscriptions are global — same rule as before) AND
+     * the active année scolaire (hard filter — an inscription always carries
+     * its année).
      */
-    private function scopeFeesToCenter(Builder $query, string $feesTable, int $centreId): Builder
+    private function scopeFeesToContext(Builder $query, string $feesTable, ?int $centreId, ?int $anneeId): Builder
     {
-        return $query->whereExists(function (Builder $sub) use ($feesTable, $centreId): void {
+        return $query->whereExists(function (Builder $sub) use ($feesTable, $centreId, $anneeId): void {
             $sub->selectRaw('1')
                 ->from('inscriptions')
                 ->whereColumn('inscriptions.id', "{$feesTable}.inscription_id")
-                ->where(fn (Builder $w) => $w
+                ->when($centreId, fn (Builder $q) => $q->where(fn (Builder $w) => $w
                     ->whereNull('inscriptions.etablissement_id')
-                    ->orWhere('inscriptions.etablissement_id', $centreId));
+                    ->orWhere('inscriptions.etablissement_id', $centreId)))
+                ->when($anneeId, fn (Builder $q) => $q->where('inscriptions.annee_scolaire_id', $anneeId));
         });
     }
 }

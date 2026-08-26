@@ -129,7 +129,7 @@ export interface SeancesCalendarData {
     days: Record<string, SeanceCalendarEntry[]>;
 }
 
-/** Mirrors App\Domain\Reports\Actions\GetAnnualFraisSummary's return shape — 12 monthly points, 5 series, each a pre-formatted decimal string (money never floated over the wire). */
+/** Mirrors App\Domain\Reports\Actions\GetAnnualFraisSummary's return shape — one monthly point per month of the active année scolaire, 5 series, each a pre-formatted decimal string (money never floated over the wire). */
 export interface AnnualFraisSummary {
     months: string[];
     chiffreAffaire: string[];
@@ -142,8 +142,8 @@ export interface AnnualFraisSummary {
 export interface DashboardPageProps {
     stats: DashboardStats;
     annualFrais: AnnualFraisSummary;
-    annualFraisYear: number;
-    annualFraisYears: number[];
+    /** The année scolaire the chart window covers (top-bar switcher), e.g. "2025/2026". */
+    annualFraisPeriode: string;
     seancesCalendar: SeancesCalendarData;
     [key: string]: unknown;
 }

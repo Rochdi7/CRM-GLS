@@ -1379,7 +1379,7 @@ html[data-theme='dark'] .table tbody tr.table-light > * {
  * and visible backdrop. Used by the wide matrix tables where a year of fee
  * columns does not fit in `xl`. */
 .modal-wide {
-    max-width: 80vw;
+    max-width: 95vw;
 }
 
 /* « Statistique de groupe » grid — deliberately almost bare. The legacy CRM
@@ -1394,6 +1394,32 @@ html[data-theme='dark'] .table tbody tr.table-light > * {
 .gls-payment-matrix thead th,
 .gls-payment-matrix tbody td {
     text-transform: none;
+}
+
+/* Fixed layout + narrow, wrapping columns so a year of fee columns fits the
+ * modal width without horizontal scrolling — the whole point of `wide`
+ * (compare the legacy screenshot: every month is visible at once, headers
+ * wrap onto two lines instead of forcing the column wide). The N°/Étudiant
+ * columns get a fixed share, the rest split the remaining width evenly. */
+.gls-payment-matrix {
+    table-layout: fixed;
+}
+
+.gls-payment-matrix thead th,
+.gls-payment-matrix tbody td {
+    font-size: 0.75rem;
+    word-break: break-word;
+    white-space: normal;
+}
+
+.gls-payment-matrix th:first-child,
+.gls-payment-matrix td:first-child {
+    width: 40px;
+}
+
+.gls-payment-matrix th:nth-child(2),
+.gls-payment-matrix td:nth-child(2) {
+    width: 140px;
 }
 
 /* The coloured fills are light in BOTH themes (inverting them would break the

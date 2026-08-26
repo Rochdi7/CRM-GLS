@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Backoffice;
 use App\Domain\Payments\Queries\GetRetardsList;
 use App\Http\Controllers\Controller;
 use App\Models\InscriptionFee;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -21,13 +22,25 @@ use Inertia\Response;
  */
 final class RecouvrementController extends Controller
 {
-    public function index(Request $request, GetRetardsList $getRetardsList): Response
+    public function index(Request $request, GetRetardsList $getRetardsList): Response|RedirectResponse
     {
+        // Same rule as EncaissementController: the default date window is
+        // applied ONLY to a bare first visit, as ONE redirect to the
+        // canonical URL carrying it explicitly. Every later request reads
+        // the literal values it sends — otherwise clearing the dates then
+        // paginating re-applied the default (26/08/2026).
+        if ($request->query() === []) {
+            return redirect()->route('backoffice.recouvrement.index', [
+                'dateFrom' => now()->subMonth()->toDateString(),
+                'dateTo' => now()->toDateString(),
+            ]);
+        }
+
         $groupFilter = (string) $request->string('groupFilter');
         $fraisFilter = (string) $request->string('fraisFilter');
         $statutFilter = (string) $request->string('statutFilter');
-        $dateFrom = $request->has('dateFrom') ? (string) $request->string('dateFrom') : now()->subMonth()->toDateString();
-        $dateTo = $request->has('dateTo') ? (string) $request->string('dateTo') : now()->toDateString();
+        $dateFrom = (string) $request->string('dateFrom');
+        $dateTo = (string) $request->string('dateTo');
         $dureeBucket = (string) $request->string('dureeBucket');
         $perPage = (int) $request->integer('perPage', GetRetardsList::DEFAULT_PER_PAGE);
 

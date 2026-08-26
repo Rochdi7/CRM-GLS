@@ -13,26 +13,17 @@ import type { DashboardPageProps, SharedProps } from '@/Types';
  * Students is still a Livewire route — mixed-navigation rule), plus the
  * "Résumé des frais annuels" chart (GetAnnualFraisSummary).
  */
-export default function DashboardIndex({ stats, annualFrais, annualFraisYear, annualFraisYears, seancesCalendar }: DashboardPageProps) {
+export default function DashboardIndex({ stats, annualFrais, annualFraisPeriode, seancesCalendar }: DashboardPageProps) {
     // auth.user is a shared prop (HandleInertiaRequests) — no page prop needed.
     const { auth } = usePage<SharedProps>().props;
 
-    function changeYear(year: number) {
-        // Partial reload — only the chart is recomputed server-side; the KPI
-        // cards and the calendar are untouched by a year change.
-        router.get(
-            '/backoffice/dashboard',
-            { year, calMonth: seancesCalendar.month },
-            { preserveState: true, preserveScroll: true, replace: true, only: ['annualFrais', 'annualFraisYear'] },
-        );
-    }
-
     function changeCalendarMonth(month: string) {
         // Partial reload — only the calendar prop is recomputed server-side;
-        // the chart keeps its year via the shared query string.
+        // the chart follows the top-bar année scolaire switcher, no query
+        // parameter of its own.
         router.get(
             '/backoffice/dashboard',
-            { year: annualFraisYear, calMonth: month },
+            { calMonth: month },
             { preserveState: true, preserveScroll: true, replace: true, only: ['seancesCalendar'] },
         );
     }
@@ -85,12 +76,7 @@ export default function DashboardIndex({ stats, annualFrais, annualFraisYear, an
 
             <div className="row">
                 <div className="col-md-12">
-                    <AnnualFraisChart
-                        data={annualFrais}
-                        year={annualFraisYear}
-                        years={annualFraisYears}
-                        onYearChange={changeYear}
-                    />
+                    <AnnualFraisChart data={annualFrais} periode={annualFraisPeriode} />
                 </div>
             </div>
         </BackofficeLayout>

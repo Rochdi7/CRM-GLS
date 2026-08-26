@@ -57,12 +57,26 @@ final class EncaissementController extends Controller
         Request $request,
         GetEncaissementsList $getEncaissementsList,
         GetBanquesList $getBanquesList,
-    ): Response {
+    ): Response|RedirectResponse {
+        // The today-default date window applies ONLY to a bare first visit
+        // (no query string at all — the sidebar link), as ONE redirect to the
+        // canonical URL carrying it explicitly. Every later request then
+        // reads the LITERAL values it was sent — keying the default on
+        // has('dateFrom') meant any request that lost the key (a stale
+        // ?page=2 pagination link, a hard reload) silently re-injected
+        // today's date after the user had cleared the filter (26/08/2026).
+        if ($request->query() === []) {
+            return redirect()->route('backoffice.encaissements.index', [
+                'dateFrom' => now()->toDateString(),
+                'dateTo' => now()->toDateString(),
+            ]);
+        }
+
         $search = (string) $request->string('search');
         $caisseFilter = (string) $request->string('caisseFilter');
         $methodeFilter = (string) $request->string('methodeFilter');
-        $dateFrom = $request->has('dateFrom') ? (string) $request->string('dateFrom') : now()->toDateString();
-        $dateTo = $request->has('dateTo') ? (string) $request->string('dateTo') : now()->toDateString();
+        $dateFrom = (string) $request->string('dateFrom');
+        $dateTo = (string) $request->string('dateTo');
         $referenceFilter = (string) $request->string('referenceFilter');
         $studentFilter = (string) $request->string('studentFilter');
         $numeroChequeFilter = (string) $request->string('numeroChequeFilter');

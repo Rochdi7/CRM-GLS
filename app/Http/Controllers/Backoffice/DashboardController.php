@@ -22,10 +22,9 @@ final class DashboardController extends Controller
         GetSeancesCalendar $getSeancesCalendar,
         CurrentContext $context,
     ): Response {
-        $year = (int) $request->integer('year', (int) now()->year);
-
-        // "Résumé des séances" calendar month — independent of the chart's
-        // year filter so the two widgets navigate without disturbing each other.
+        // "Résumé des séances" calendar month — the chart itself follows the
+        // top-bar année scolaire switcher (CurrentContext), no per-widget
+        // year parameter any more.
         $calMonth = (string) $request->string('calMonth');
 
         if (preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $calMonth) !== 1) {
@@ -33,15 +32,13 @@ final class DashboardController extends Controller
         }
 
         // Every widget is a closure so Inertia partial reloads
-        // (`only: ['seancesCalendar']` when paging the calendar,
-        // `only: ['annualFrais', …]` when changing the chart year) compute
+        // (`only: ['seancesCalendar']` when paging the calendar) compute
         // ONLY the requested widget. A plain value here would still be
         // evaluated server-side and then dropped from the response.
         return Inertia::render('Backoffice/Dashboard/Index', [
             'stats' => fn () => $getDashboardStats($context)->toArray(),
-            'annualFrais' => fn () => $getAnnualFraisSummary($year),
-            'annualFraisYear' => $year,
-            'annualFraisYears' => fn () => $getAnnualFraisSummary->availableYears(),
+            'annualFrais' => fn () => $getAnnualFraisSummary(),
+            'annualFraisPeriode' => fn () => $getAnnualFraisSummary->periodeLabel(),
             'seancesCalendar' => fn () => $getSeancesCalendar($context, $calMonth),
         ]);
     }

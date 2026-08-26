@@ -4,9 +4,8 @@ import { t } from '@/Lib/i18n';
 
 interface AnnualFraisChartProps {
     data: AnnualFraisSummary;
-    year: number;
-    years: number[];
-    onYearChange: (year: number) => void;
+    /** The année scolaire the window covers (top-bar switcher), e.g. "2025/2026". */
+    periode: string;
 }
 
 interface SeriesSpec {
@@ -36,6 +35,21 @@ const PAD_RIGHT = 16;
 const PAD_TOP = 16;
 const PAD_BOTTOM = 32;
 
+/**
+ * Compact axis labels — "50 000 000" does not fit the 56px left gutter and
+ * rendered truncated ("000 000"); French-style "50 M" / "500 k" always fits.
+ */
+function formatAxis(value: number): string {
+    if (value >= 1_000_000) {
+        return `${(value / 1_000_000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} M`;
+    }
+    if (value >= 1_000) {
+        return `${(value / 1_000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} k`;
+    }
+
+    return value.toLocaleString('fr-FR');
+}
+
 function niceMax(max: number): number {
     if (max <= 0) {
         return 100;
@@ -47,14 +61,51 @@ function niceMax(max: number): number {
     return step * magnitude;
 }
 
+interface Point {
+    x: number;
+    y: number;
+}
+
+/**
+ * Catmull-Rom → cubic-bézier smoothing (the legacy CRM's chart is a smoothed
+ * area chart; straight segments read as a different product). Control-point
+ * Y values are clamped to the plot band so a flat-zero month next to a spike
+ * never dips below the baseline.
+ */
+function smoothTop(points: Point[], minY: number, maxY: number): string {
+    if (points.length < 2) {
+        return points.map((p) => `M ${p.x} ${p.y}`).join(' ');
+    }
+
+    const clamp = (y: number) => Math.min(maxY, Math.max(minY, y));
+    let d = `M ${points[0].x} ${points[0].y}`;
+
+    for (let i = 0; i < points.length - 1; i++) {
+        const p0 = points[i - 1] ?? points[i];
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        const p3 = points[i + 2] ?? p2;
+
+        const cp1x = p1.x + (p2.x - p0.x) / 6;
+        const cp1y = clamp(p1.y + (p2.y - p0.y) / 6);
+        const cp2x = p2.x - (p3.x - p1.x) / 6;
+        const cp2y = clamp(p2.y - (p3.y - p1.y) / 6);
+
+        d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
+    }
+
+    return d;
+}
+
 /**
  * Custom SVG area chart — no new chart-library dependency (project has none
  * installed; this stays consistent with "own code only" §1). Multi-series
  * overlapping filled areas + a shared crosshair/tooltip on hover (dataviz
  * skill's interaction rules), legend always shown (5 series), thin 2px
- * strokes, recessive gridlines.
+ * strokes, recessive gridlines. The window is the ACTIVE ANNÉE SCOLAIRE
+ * (top-bar switcher) — no chart-local year dropdown.
  */
-export default function AnnualFraisChart({ data, year, years, onYearChange }: AnnualFraisChartProps) {
+export default function AnnualFraisChart({ data, periode }: AnnualFraisChartProps) {
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
     const values = useMemo(
@@ -77,16 +128,20 @@ export default function AnnualFraisChart({ data, year, years, onYearChange }: An
     const xFor = (i: number) => PAD_LEFT + (count <= 1 ? 0 : (i / (count - 1)) * plotWidth);
     const yFor = (v: number) => PAD_TOP + plotHeight - (v / maxValue) * plotHeight;
 
+    function seriesPoints(key: SeriesSpec['key']): Point[] {
+        return values[key].map((v, i) => ({ x: xFor(i), y: yFor(v) }));
+    }
+
     function areaPath(key: SeriesSpec['key']): string {
-        const points = values[key];
-        const top = points.map((v, i) => `${i === 0 ? 'M' : 'L'} ${xFor(i)} ${yFor(v)}`).join(' ');
-        const bottom = `L ${xFor(points.length - 1)} ${yFor(0)} L ${xFor(0)} ${yFor(0)} Z`;
+        const points = seriesPoints(key);
+        const top = smoothTop(points, PAD_TOP, PAD_TOP + plotHeight);
+        const bottom = `L ${points[points.length - 1].x} ${yFor(0)} L ${points[0].x} ${yFor(0)} Z`;
 
         return `${top} ${bottom}`;
     }
 
     function linePath(key: SeriesSpec['key']): string {
-        return values[key].map((v, i) => `${i === 0 ? 'M' : 'L'} ${xFor(i)} ${yFor(v)}`).join(' ');
+        return smoothTop(seriesPoints(key), PAD_TOP, PAD_TOP + plotHeight);
     }
 
     const gridLines = [0, 0.25, 0.5, 0.75, 1];
@@ -100,22 +155,8 @@ export default function AnnualFraisChart({ data, year, years, onYearChange }: An
                 </div>
                 <div className="d-flex align-items-center gap-2 mb-3">
                     <i className="ti ti-calendar text-muted" />
-                    <label className="text-muted mb-0" htmlFor="frais-chart-year">
-                        {t('Year')}
-                    </label>
-                    <select
-                        id="frais-chart-year"
-                        className="form-select form-select-sm"
-                        style={{ width: 100 }}
-                        value={year}
-                        onChange={(event) => onYearChange(Number(event.target.value))}
-                    >
-                        {years.map((y) => (
-                            <option key={y} value={y}>
-                                {y}
-                            </option>
-                        ))}
-                    </select>
+                    <span className="text-muted">{t('Academic year')}</span>
+                    <span className="badge bg-light text-dark fs-13">{periode}</span>
                 </div>
             </div>
             <div className="card-body pt-2">
@@ -143,7 +184,7 @@ export default function AnnualFraisChart({ data, year, years, onYearChange }: An
                                 <g key={fraction}>
                                     <line x1={PAD_LEFT} y1={y} x2={WIDTH - PAD_RIGHT} y2={y} stroke="var(--gls-chart-grid)" strokeWidth={1} />
                                     <text x={PAD_LEFT - 8} y={y + 4} textAnchor="end" fontSize={11} fill="var(--gls-chart-muted)">
-                                        {Math.round(maxValue * fraction).toLocaleString('fr-FR')}
+                                        {formatAxis(Math.round(maxValue * fraction))}
                                     </text>
                                 </g>
                             );
@@ -221,6 +262,13 @@ export default function AnnualFraisChart({ data, year, years, onYearChange }: An
                             style={{
                                 left: `${(xFor(hoverIndex) / WIDTH) * 100}%`,
                                 top: `${(PAD_TOP / HEIGHT) * 100}%`,
+                                // Right half of the plot: flip the tooltip to
+                                // the LEFT of the crosshair so it never clips
+                                // past the card edge on the last months.
+                                transform:
+                                    xFor(hoverIndex) > WIDTH / 2
+                                        ? 'translate(calc(-100% - 8px), 0)'
+                                        : 'translate(8px, 0)',
                             }}
                         >
                             <div className="gls-frais-tooltip-header">{data.months[hoverIndex]}</div>
