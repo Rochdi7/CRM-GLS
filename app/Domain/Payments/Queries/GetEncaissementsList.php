@@ -86,17 +86,40 @@ final class GetEncaissementsList
             // fee belongs to (like the Inscriptions list). An avance has no
             // fee — and therefore no inscription — so it is matched by its
             // payment date falling inside the selected year instead.
-            ->when($this->context->anneeScolaire(), function ($q, $annee): void {
-                $q->where(function ($sub) use ($annee): void {
-                    $sub->whereHas('fee.inscription', fn ($i) => $i->where('annee_scolaire_id', $annee->id))
-                        ->orWhere(fn ($w) => $w
-                            ->whereNull('inscription_fee_id')
-                            ->whereBetween('date_paiement', [
-                                $annee->date_debut->toDateString(),
-                                $annee->date_fin->toDateString(),
-                            ]));
-                });
-            })
+            //
+            // ⚠ An EXPLICIT date filter overrides that year window, the same
+            // way GetChequesList treats date_echeance. Without this the
+            // window was unconditional, so an avance dated outside the year
+            // could not be reached at all: clearing both date fields left it
+            // hidden with no way to ask for it (two RAZANE ZOUINE avances of
+            // 11/07/2025, invisible under 2025/2026 which opens on 01/09,
+            // 26/08/2026).
+            //
+            // The Avances tab is exempt entirely: an avance is money received
+            // and NOT yet allocated, so it stays outstanding until someone
+            // applies it — hiding one because it arrived before the current
+            // year opened makes real, unspent money unreachable. It is listed
+            // in full, like the transfer-validation inbox (CLAUDE.md §11
+            // "Deliberate exceptions").
+            ->when(
+                $view !== 'avance'
+                    && $this->context->anneeScolaire()
+                    && ! self::isIsoDate($dateFrom)
+                    && ! self::isIsoDate($dateTo),
+                function ($q): void {
+                    $annee = $this->context->anneeScolaire();
+
+                    $q->where(function ($sub) use ($annee): void {
+                        $sub->whereHas('fee.inscription', fn ($i) => $i->where('annee_scolaire_id', $annee->id))
+                            ->orWhere(fn ($w) => $w
+                                ->whereNull('inscription_fee_id')
+                                ->whereBetween('date_paiement', [
+                                    $annee->date_debut->toDateString(),
+                                    $annee->date_fin->toDateString(),
+                                ]));
+                    });
+                }
+            )
             // Page view tabs (wimschool-style, read-only filters): "cheque" =
             // cheque payments; "avance" = unallocated advances — payments
             // with NO fee attached (Encaissement::isAvance()): fresh avances

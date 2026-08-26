@@ -365,8 +365,16 @@ final class EncaissementsInertiaCrudTest extends TestCase
             );
     }
 
-    /** An avance (no fee) follows its payment date into the year it falls in. */
-    public function test_avances_tab_follows_the_payment_date_year(): void
+    /**
+     * An avance is money received and NOT yet allocated, so it stays
+     * outstanding until someone applies it. Scoping the tab to the active
+     * year hid real, unspent money with no way to ask for it — clearing both
+     * date fields did not bring it back (two RAZANE ZOUINE avances dated
+     * 11/07/2025, invisible under 2025/2026 which opens on 01/09, 26/08/2026).
+     * The tab now lists the full history; the Paiements tab keeps its year
+     * scoping (see test_encaissements_are_scoped_to_the_active_year).
+     */
+    public function test_avances_tab_lists_every_year(): void
     {
         $user = $this->userWith('payments.view');
         $agent = $user->employee;
@@ -384,9 +392,17 @@ final class EncaissementsInertiaCrudTest extends TestCase
             'montant' => 500, 'methode' => Encaissement::METHODE_ESPECES, 'date_paiement' => '2026-10-01',
         ]);
 
-        // Default year 2025/2026 (sept 2025 → août 2026): only ENC-AV1.
+        // Both are listed even though ENC-AV2 falls in the NEXT year.
         $this->actingAs($user)
             ->get(route('backoffice.encaissements.index', ['view' => 'avance', 'dateFrom' => '', 'dateTo' => '']))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('encaissements.data', 2));
+
+        // An explicit date filter still narrows the tab.
+        $this->actingAs($user)
+            ->get(route('backoffice.encaissements.index', [
+                'view' => 'avance', 'dateFrom' => '2025-09-01', 'dateTo' => '2026-08-31',
+            ]))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->has('encaissements.data', 1)
@@ -621,7 +637,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->post(route('backoffice.avances.convert'), [
             'inscription_id' => $inscription->id,
             'encaissement_ids' => [$encaissement->id],
-        ])->assertRedirect(route('backoffice.encaissements.index', ['view' => 'avance', 'dateFrom' => '', 'dateTo' => '']));
+        ])->assertRedirect(route('backoffice.encaissements.index', ['view' => 'avance']));
 
         // Detached, fee owed again, money record intact, till untouched.
         $this->assertNull($encaissement->fresh()->inscription_fee_id);
