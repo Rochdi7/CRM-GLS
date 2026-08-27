@@ -138,7 +138,6 @@ final class NettoyerFraisGroupesTest extends TestCase
         $this->artisan('groupes:nettoyer-frais')->assertSuccessful();
 
         $this->assertFalse($group->fresh()->frais()->where('nom', 'Frais de Juillet')->exists());
-        $this->assertTrue($group->fresh()->frais()->where('nom', 'Frais de Novembre')->exists());
 
         // Hidden, never deleted — that is what makes it reversible.
         $juillet = $inscription->fees()->where('nom', 'Frais de Juillet')->firstOrFail();
@@ -161,7 +160,20 @@ final class NettoyerFraisGroupesTest extends TestCase
     {
         // Nov 2025 -> Feb 2026: months 11, 12, 1, 2 are all inside.
         $group = $this->groupWithFees(['Frais de Novembre', 'Frais de Janvier', 'Frais de Mai']);
-        $this->enrol($group, ['Frais de Novembre', 'Frais de Janvier', 'Frais de Mai']);
+        $inscription = $this->enrol($group, ['Frais de Novembre', 'Frais de Janvier', 'Frais de Mai']);
+
+        // Both in-window months are paid, so only the WINDOW rule decides
+        // here — an unpaid month would be removed by the empty rule instead.
+        foreach (['Frais de Novembre', 'Frais de Janvier'] as $i => $nom) {
+            Encaissement::create([
+                'reference' => 'ENC-BND'.$i, 'agent_id' => $this->agent->id,
+                'student_id' => $inscription->student_id,
+                'inscription_fee_id' => $inscription->fees()->where('nom', $nom)->value('id'),
+                'caisse_id' => $this->caisse->id, 'montant' => 1300,
+                'methode' => Encaissement::METHODE_ESPECES, 'date_paiement' => '2025-12-01',
+                'etablissement_id' => $this->centre->id,
+            ]);
+        }
 
         $this->artisan('groupes:nettoyer-frais')->assertSuccessful();
 
@@ -176,7 +188,18 @@ final class NettoyerFraisGroupesTest extends TestCase
     {
         $group = $this->groupWithFees(['Frais de Novembre', 'Frais de Juillet']);
         $group->update(['date_debut_formation' => null, 'date_fin_formation' => null]);
-        $this->enrol($group, ['Frais de Novembre', 'Frais de Juillet']);
+        $inscription = $this->enrol($group, ['Frais de Novembre', 'Frais de Juillet']);
+
+        // Paid, so the empty-fee rule cannot remove it: what is asserted is
+        // that the WINDOW rule stays silent without dates.
+        Encaissement::create([
+            'reference' => 'ENC-NODATE', 'agent_id' => $this->agent->id,
+            'student_id' => $inscription->student_id,
+            'inscription_fee_id' => $inscription->fees()->where('nom', 'Frais de Juillet')->value('id'),
+            'caisse_id' => $this->caisse->id, 'montant' => 1300,
+            'methode' => Encaissement::METHODE_ESPECES, 'date_paiement' => '2026-07-10',
+            'etablissement_id' => $this->centre->id,
+        ]);
 
         $this->artisan('groupes:nettoyer-frais')->assertSuccessful();
 
@@ -193,5 +216,52 @@ final class NettoyerFraisGroupesTest extends TestCase
         $this->artisan('groupes:nettoyer-frais', ['--dry-run' => true])->assertSuccessful();
 
         $this->assertSame($avant, $group->fresh()->frais()->count());
+    }
+
+    /**
+     * A monthly fee nobody has ever paid anything on is removed even when its
+     * month is INSIDE the window — the import gave every group all 12 months,
+     * so a group billing 4 of them still showed 12 columns in « Détails
+     * paiement » (HERR ABDESSAMAD 10H, avril→novembre, still listing an empty
+     * Septembre/Octobre/Novembre/Août — 27/08/2026).
+     */
+    public function test_a_monthly_fee_with_no_payment_at_all_is_removed_even_inside_the_window(): void
+    {
+        // Window Nov -> Feb: both months are inside it.
+        $group = $this->groupWithFees(['Frais de Novembre', 'Frais de Janvier']);
+        $inscription = $this->enrol($group, ['Frais de Novembre', 'Frais de Janvier']);
+
+        // Only Novembre is ever paid.
+        $novembre = $inscription->fees()->where('nom', 'Frais de Novembre')->firstOrFail();
+        Encaissement::create([
+            'reference' => 'ENC-NOV', 'agent_id' => $this->agent->id,
+            'student_id' => $inscription->student_id, 'inscription_fee_id' => $novembre->id,
+            'caisse_id' => $this->caisse->id, 'montant' => 1300,
+            'methode' => Encaissement::METHODE_ESPECES, 'date_paiement' => '2025-11-10',
+            'etablissement_id' => $this->centre->id,
+        ]);
+
+        $this->artisan('groupes:nettoyer-frais')->assertSuccessful();
+
+        $frais = $group->fresh()->frais()->pluck('nom')->all();
+        $this->assertContains('Frais de Novembre', $frais, 'A paid month stays.');
+        $this->assertNotContains('Frais de Janvier', $frais, 'An unpaid month goes, even inside the window.');
+    }
+
+    /**
+     * « Frais d'inscription » is ALWAYS kept, even with nothing paid on it:
+     * a group that is starting has not collected its registration fee yet and
+     * must stay able to (decision 27/08/2026).
+     */
+    public function test_an_inscription_fee_is_kept_even_with_no_payment(): void
+    {
+        $group = $this->groupWithFees(["Frais d'inscription A1/A2/B1", 'Frais de Juillet']);
+        $this->enrol($group, ["Frais d'inscription A1/A2/B1", 'Frais de Juillet']);
+
+        $this->artisan('groupes:nettoyer-frais')->assertSuccessful();
+
+        $frais = $group->fresh()->frais()->pluck('nom')->all();
+        $this->assertContains("Frais d'inscription A1/A2/B1", $frais);
+        $this->assertNotContains('Frais de Juillet', $frais);
     }
 }

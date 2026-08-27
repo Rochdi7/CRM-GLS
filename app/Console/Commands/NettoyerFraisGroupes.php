@@ -18,12 +18,18 @@ use Illuminate\Support\Facades\DB;
  * The legacy import gave EVERY group the whole catalogue (17 fees), so a group
  * running Nov→Apr still carried « Frais de Juillet », « Frais de Août » and the
  * three ÖSD exam fees — 3 053 group_frais rows across 180 groups, and an equally
- * inflated « Détails paiement » matrix. Two rules clean that up:
+ * inflated « Détails paiement » matrix. Three rules clean that up:
  *
  *   1. the three « Frais dexam ÖSD » lines are removed from every group
  *      (they are billed case by case, never as part of a group's plan);
- *   2. a MONTHLY fee is removed when its month falls outside the group's
+ *   2. a MONTHLY fee nobody in the group has ever paid anything on is
+ *      removed — inside the window or not, a month never charged is noise;
+ *   3. a MONTHLY fee is removed when its month falls outside the group's
  *      date_debut_formation → date_fin_formation window.
+ *
+ * « Frais d'inscription » lines are ALWAYS kept, even at zero: a group that
+ * is starting has not collected its registration fee yet and must stay able
+ * to (decision 27/08/2026).
  *
  * ⚠ THE MONEY RULE OVERRIDES BOTH: a fee on which even ONE payment exists in
  * that group is NEVER removed, whatever its month. Removing it would push the
@@ -49,9 +55,10 @@ final class NettoyerFraisGroupes extends Command
         {--groupe= : Limiter à un groupe (id ou nom exact)}
         {--sans-osd : Ne pas retirer les frais d\'examen ÖSD}
         {--sans-mois : Ne pas retirer les frais mensuels hors période}
+        {--sans-vides : Ne pas retirer les frais mensuels sans aucun paiement}
         {--dry-run : Afficher ce qui serait retiré sans rien modifier}';
 
-    protected $description = "Retire des groupes les frais d'examen ÖSD et les frais mensuels hors de leur période de formation (jamais ceux qui portent un paiement).";
+    protected $description = "Retire des groupes les frais d'examen ÖSD et les frais mensuels sans paiement ou hors période (jamais ceux qui portent un paiement, jamais les frais d'inscription).";
 
     /** Catalogue fee name => calendar month it bills. */
     private const array MOIS = [
@@ -172,14 +179,27 @@ final class NettoyerFraisGroupes extends Command
             return 'examen ÖSD';
         }
 
-        if ($this->option('sans-mois')) {
-            return null;
-        }
-
         $mois = self::MOIS[mb_strtolower(trim($frais->nom))] ?? null;
 
         if ($mois === null) {
-            return null; // inscription fees and anything unknown are left alone
+            // Inscription fees are ALWAYS kept, even with nothing paid on
+            // them yet: a group that is starting has not collected its
+            // registration fee yet, and that column must stay chargeable
+            // (decision 27/08/2026). Same for any unknown label.
+            return null;
+        }
+
+        // A monthly fee nobody in the group has ever paid anything on is
+        // noise in « Détails paiement »: the import gave every group all 12
+        // months, so a group only ever billing 4 of them still showed 12
+        // columns. Checked BEFORE the window rule, since a never-charged
+        // month is removable whether or not it falls inside the period.
+        if (! $this->option('sans-vides') && ! $this->porteUnPaiement($groupe, $frais)) {
+            return 'aucun paiement';
+        }
+
+        if ($this->option('sans-mois')) {
+            return null;
         }
 
         if ($groupe->date_debut_formation === null || $groupe->date_fin_formation === null) {
