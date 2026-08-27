@@ -6,6 +6,7 @@ namespace App\Domain\Finance\Queries;
 
 use App\Models\Caisse;
 use App\Models\CaisseTransfer;
+use App\Models\Depense;
 
 /**
  * Extracted from resources/views/backoffice/caisses/show.blade.php's own
@@ -23,8 +24,19 @@ final class GetCaisseDetails
     {
         $caisse->loadMissing(['etablissement', 'responsable']);
 
-        $encaissements = $caisse->encaissements()->with('student')->latest('date_paiement')->limit(10)->get();
-        $depenses = $caisse->depenses()->with('typeDepense')->latest('date_depense')->limit(10)->get();
+        // Same movement filters as GetCaisseJournal: this page shows what
+        // actually MOVED the till, so it must reconcile with the `solde`
+        // printed above it.
+        //  - an "apply" row (applied_from_encaissement_id) only re-allocates
+        //    an avance already counted once — AppliquerAvance never credits;
+        //  - a pending/refused dépense debited nothing (approval flow).
+        // Listing either made this page contradict the balance beside it.
+        $encaissements = $caisse->encaissements()
+            ->whereNull('applied_from_encaissement_id')
+            ->with('student')->latest('date_paiement')->limit(10)->get();
+        $depenses = $caisse->depenses()
+            ->where('statut', Depense::STATUT_APPROUVEE)
+            ->with('typeDepense')->latest('date_depense')->limit(10)->get();
         $remboursements = $caisse->remboursements()->with('beneficiaire')->latest('date_remboursement')->limit(10)->get();
         $transfers = CaisseTransfer::query()
             ->with(['caisseSource', 'caisseDestination'])
