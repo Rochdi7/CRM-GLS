@@ -185,6 +185,7 @@ final class DepenseController extends Controller
     public function approve(Request $request, Depense $depense, ApprouverDepense $action): RedirectResponse
     {
         $this->authorize('approve', $depense);
+        $this->assertDepenseInContext($request, $depense);
 
         $action->handle($depense, $this->actingEmployee($request));
 
@@ -196,6 +197,7 @@ final class DepenseController extends Controller
     public function refuse(Request $request, Depense $depense, RefuserDepense $action): RedirectResponse
     {
         $this->authorize('approve', $depense);
+        $this->assertDepenseInContext($request, $depense);
 
         $validated = $request->validate([
             'motif_refus' => ['nullable', 'string', 'max:255'],
@@ -205,6 +207,30 @@ final class DepenseController extends Controller
 
         return redirect()->route('backoffice.depenses.index')
             ->with('success', __('Expense refused — no money was moved.'));
+    }
+
+    /**
+     * A dépense carries no `etablissement_id` of its own — its centre is the
+     * one of the till it settles from (CaisseResolver always books it to the
+     * acting employee's physical till). Approving is the moment the money
+     * actually leaves, so the record must belong to the ACTIVE centre and not
+     * merely to one the user may reach: a multi-centre employee working in
+     * Marrakech must not debit the Rabat till from that screen
+     * (CLAUDE.md §11, « Writes are guarded, not just reads »).
+     *
+     * No année check — dépenses carry no `annee_scolaire_id` (they are date
+     * -windowed instead), so `null` correctly skips it.
+     */
+    private function assertDepenseInContext(Request $request, Depense $depense): void
+    {
+        $this->assertRecordInContext(
+            $request,
+            'id',
+            $depense->caisse?->etablissement_id,
+            null,
+            __('This expense belongs to another centre than the active one.'),
+            '',
+        );
     }
 
     /**
@@ -267,12 +293,24 @@ final class DepenseController extends Controller
     public function update(UpdateDepenseRequest $request, Depense $depense): RedirectResponse
     {
         $this->authorize('update', $depense);
+        $this->assertDepenseInContext($request, $depense);
 
         if (($request->validated('group_id') ?? null) !== null) {
             $this->assertGroupInContext($request, Group::findOrFail((int) $request->validated('group_id')));
         }
 
         $payload = collect($request->validated())->except(['justificatifs'])->all();
+
+        // Switching a « Paiement prof » back to an ordinary type sends none
+        // of the prof-only fields, and `prohibited` only rejects fields that
+        // ARE sent — so without this the row would keep a stale group_id and
+        // teaching période it no longer has. Nulled explicitly here, keyed on
+        // the SUBMITTED type exactly like PaiementProfRules.
+        if (! $request->isPaiementProf()) {
+            $payload['group_id'] = null;
+            $payload['periode_debut'] = null;
+            $payload['periode_fin'] = null;
+        }
 
         // montant / caisse_id are absent from $payload by construction — the
         // till balance already moved (UpdateDepenseRequest excludes them).

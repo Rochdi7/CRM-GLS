@@ -197,6 +197,17 @@ final class ChequeController extends Controller
     public function updateStatut(Request $request, Cheque $cheque): RedirectResponse
     {
         $this->authorize('update', $cheque);
+        // Marking « Rejeté » has money consequences downstream
+        // (CaisseResolver::forRemboursement branches on it), so the lifecycle
+        // move is guarded like every other write: reach AND active centre.
+        $this->assertRecordInContext(
+            $request,
+            'statut',
+            $cheque->etablissement_id,
+            null,
+            __('This cheque belongs to another centre than the active one.'),
+            '',
+        );
 
         $statut = $request->string('statut')->toString();
 
@@ -250,6 +261,14 @@ final class ChequeController extends Controller
     public function markRetourne(Request $request, Cheque $cheque): RedirectResponse
     {
         $this->authorize('update', $cheque);
+        $this->assertRecordInContext(
+            $request,
+            'statut',
+            $cheque->etablissement_id,
+            null,
+            __('This cheque belongs to another centre than the active one.'),
+            '',
+        );
 
         if ($cheque->statut !== Cheque::STATUT_REJETE) {
             throw ValidationException::withMessages([

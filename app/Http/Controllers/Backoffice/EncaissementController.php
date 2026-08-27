@@ -544,6 +544,11 @@ final class EncaissementController extends Controller
      */
     public function destroy(Encaissement $encaissement, SupprimerEncaissement $action): RedirectResponse
     {
+        // Explicit, in addition to the route's `permission:payments.delete`
+        // and `can:delete,encaissement`: every other mutation in this
+        // controller authorizes on its own too (defense in depth, §16).
+        $this->authorize('delete', $encaissement);
+
         $action->handle($encaissement);
 
         return redirect()->route('backoffice.encaissements.index')
@@ -567,6 +572,22 @@ final class EncaissementController extends Controller
         }
 
         unset($data['methode']);
+
+        // ⚠ `date_paiement` stays EDITABLE on purpose — unlike
+        // montant/caisse_id/methode, which are frozen because they decide how
+        // much moved and into which account. The Phase 10 mapping lists it
+        // among the four fields an edit may write
+        // (docs/phase-10-finance-audit.md §"Edit: only `methode`,
+        // `date_paiement`, cheque-conditional fields, `note`"), so a
+        // mis-keyed payment date can still be corrected in place.
+        //
+        // The 27/08/2026 audit flagged this as a reporting risk (moving the
+        // date relocates the row in the caisse journal and in the annual
+        // summary, after a month may already have been reconciled). It is
+        // NOT closed here because it is a documented product decision, not
+        // an oversight: three tests assert the date is writable. Revisit it
+        // as a business rule — e.g. bound the new date to the active année,
+        // or require a reason — rather than by silently freezing the field.
 
         if ($encaissement->cheque_id !== null) {
             // A payment funded by a tracked chèque (Chèques module) keeps its
