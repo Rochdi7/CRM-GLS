@@ -110,19 +110,17 @@ export const backofficeNavigation: NavGroup[] = [
                 // Chèques page — visibility itself still requires
                 // payments.view, since that's the page this link opens.
                 permissions: ['payments.view'],
-                matchPaths: ['/backoffice/encaissements', '/backoffice/cheques'],
-                inertia: true,
-            },
-            {
-                // Bulk correction of money booked against the wrong group /
-                // année. Super-admin only: payments.reallocate is in
-                // PermissionRegistry::superAdminOnly(), so no role preset can
-                // hold it and the entry stays hidden for everyone else.
-                label: t('Move payments'),
-                href: '/backoffice/encaissements/reaffecter',
-                icon: 'ti ti-arrows-exchange',
-                permissions: ['payments.reallocate'],
-                matchPaths: ['/backoffice/encaissements/reaffecter'],
+                matchPaths: [
+                    '/backoffice/encaissements',
+                    '/backoffice/cheques',
+                    // « Déplacer des encaissements » (bulk re-allocation) has
+                    // no sidebar entry either — it stays reachable only by
+                    // its direct URL / a link, while the route and its
+                    // super-admin-only payments.reallocate permission are
+                    // unchanged. Listed here so the Encaissements entry keeps
+                    // the active highlight while on that page.
+                    '/backoffice/encaissements/reaffecter',
+                ],
                 inertia: true,
             },
             {
