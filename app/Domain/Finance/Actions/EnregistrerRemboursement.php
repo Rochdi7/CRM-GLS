@@ -51,6 +51,31 @@ final class EnregistrerRemboursement
                         'montant' => __("The amount cannot exceed the advance's remaining balance."),
                     ]);
                 }
+
+                // A refund LINKED to an ordinary fee payment can never give
+                // back more than that payment brought in, cumulatively:
+                // without this, the same 1 000 DH row could be refunded
+                // 5 000 DH, twice over, and the till would go out by money it
+                // never received. Computed here, inside the transaction on
+                // the row already locked above, so two concurrent refunds
+                // serialize instead of both seeing the same remaining.
+                //
+                // ⚠ A refund with NO `encaissement_id` stays deliberately
+                // uncapped — that is the documented decision
+                // (docs/phase-10-finance-audit.md §2.6 Q1, asserted by
+                // test_no_maximum_refund_amount_check_exists): an outflow
+                // unrelated to any tracked payment has no amount to cap
+                // against. Only the linked case is constrained.
+                if (! $encaissement->isAvance()) {
+                    $dejaRembourse = (float) $encaissement->remboursements()->sum('montant');
+                    $restant = round(max(0.0, (float) $encaissement->montant - $dejaRembourse), 2);
+
+                    if (round((float) $data['montant'], 2) > $restant) {
+                        throw ValidationException::withMessages([
+                            'montant' => __("The amount cannot exceed the payment's refundable balance."),
+                        ]);
+                    }
+                }
             }
 
             $remboursement = Remboursement::create([
