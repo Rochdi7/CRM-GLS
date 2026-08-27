@@ -116,6 +116,14 @@ final class HandleInertiaRequests extends Middleware
                 // "password regenerated" is written, with no password value).
                 // `pull()` for the same one-render-only reason as above.
                 'regeneratedPassword' => fn () => $request->session()->pull('regeneratedPassword'),
+                // The registration just created by InscriptionController@store,
+                // handed to the Inscriptions list page so it can offer
+                // « Voulez-vous ajouter un paiement ? » and open the payment
+                // modal already scoped to it. `pull()` for the same
+                // one-render-only reason as newEmployeeCredentials above: the
+                // prompt must not reappear on the next search/pagination
+                // reload of the same page.
+                'nouvelleInscription' => fn () => $request->session()->pull('nouvelleInscription'),
             ],
             'locale' => app()->getLocale(),
         ];

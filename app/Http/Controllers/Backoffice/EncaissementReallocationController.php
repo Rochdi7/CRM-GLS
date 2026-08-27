@@ -92,6 +92,12 @@ final class EncaissementReallocationController extends Controller
             'montant' => $resultat['montant'],
         ]);
 
+        if ($resultat['fraisCrees'] > 0) {
+            $message .= ' '.__(':count fee line(s) recreated on the target registration.', [
+                'count' => $resultat['fraisCrees'],
+            ]);
+        }
+
         if ($resultat['avances'] > 0) {
             $message .= ' '.__(':count left as unallocated advances (no matching fee).', [
                 'count' => $resultat['avances'],

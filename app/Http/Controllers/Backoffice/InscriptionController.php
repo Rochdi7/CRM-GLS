@@ -23,6 +23,7 @@ use App\Http\Requests\Backoffice\Inscriptions\StoreInscriptionRequest;
 use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionFeesRequest;
 use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionLivresRequest;
 use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionRequest;
+use App\Models\Encaissement;
 use App\Models\Group;
 use App\Domain\Settings\Support\FraisEcheanceResolver;
 use App\Models\Inscription;
@@ -103,6 +104,12 @@ final class InscriptionController extends Controller
             'frais' => $getInscriptionFormOptions->frais(),
             'canManageFees' => $request->user()->can('registrations.manage-fees'),
             'canChangeGroup' => $request->user()->can('registrations.change-group'),
+            // « Ajouter un paiement » (row menu + the post-creation prompt):
+            // the modal posts to encaissements.store, so it is gated on the
+            // PAYMENT permission, not a registrations one. UI convenience
+            // only — EncaissementController@store re-authorizes.
+            'canCreatePayment' => $request->user()->can('payments.create'),
+            'methodesPaiement' => Encaissement::METHODES,
             // Cancellation reasons for the "Annuler l'inscription" form.
             // A closure so a partial reload that doesn't ask for it skips the
             // query (CLAUDE.md §17 performance rules). « Changement de
@@ -446,7 +453,9 @@ final class InscriptionController extends Controller
 
         $assignerLivres->validateAvailability($livreIds, []);
 
-        DB::transaction(function () use ($data, $group, $creatingStudent, $request, $livreIds, $assignerLivres): void {
+        $created = null;
+
+        DB::transaction(function () use ($data, $group, $creatingStudent, $request, $livreIds, $assignerLivres, &$created): void {
             if ($creatingStudent) {
                 $phonePays = $data['phone_pays'] ?? Countries::DEFAULT;
                 $niveau = $data['new_niveau'] ?? null;
@@ -530,10 +539,25 @@ final class InscriptionController extends Controller
             if ($livreIds !== []) {
                 $assignerLivres->handle($inscription, $livreIds, $request->user()->employee);
             }
+
+            $created = $inscription->load('student');
         });
 
+        // One-time hand-off to the list page's « Voulez-vous ajouter un
+        // paiement ? » prompt, which opens the payment modal already scoped
+        // to this registration — so a cashier who has just enrolled someone
+        // does not have to go to Encaissements and search for them again.
+        // `pull()`-style single render (HandleInertiaRequests), exactly like
+        // newEmployeeCredentials: the prompt is a one-time notice, not a
+        // state that should reappear on the next search/pagination reload.
         return redirect()->route('backoffice.inscriptions.index')
-            ->with('success', __('Registration created.'));
+            ->with('success', __('Registration created.'))
+            ->with('nouvelleInscription', $created === null ? null : [
+                'id' => $created->id,
+                'reference' => $created->reference,
+                'studentId' => $created->student_id,
+                'studentLabel' => trim(($created->student?->reference ?? '').' | '.trim(($created->student?->prenom ?? '').' '.($created->student?->nom ?? ''))),
+            ]);
     }
 
     /**

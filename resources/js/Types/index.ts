@@ -47,6 +47,13 @@ export interface FlashMessages {
     emploiDuTempsArrete?: { creneaux: number; seances: number; url: string } | null;
     /** One-time regenerated password for an existing user (Users module) — not consumed by the Employees page. */
     regeneratedPassword?: string | null;
+    /**
+     * The registration just created (InscriptionController::store()) — drives
+     * the Inscriptions page's « Voulez-vous ajouter un paiement ? » prompt and
+     * pre-scopes the payment modal to it. One-time (`pull()` server-side), so
+     * it never reappears on a later reload of the list.
+     */
+    nouvelleInscription?: NouvelleInscription | null;
 }
 
 export interface SharedProps {
@@ -1189,6 +1196,14 @@ export interface GroupsPageProps {
 // --- Phase 9: Inscriptions (Inertia/React list + modal CRUD with fee lines) -
 
 /** One row of the Inscriptions list — mirrors GetInscriptionsList's ->through() mapping exactly. */
+/** One-time hand-off from a successful inscription creation to the payment prompt. */
+export interface NouvelleInscription {
+    id: number;
+    reference: string;
+    studentId: number | null;
+    studentLabel: string;
+}
+
 export interface InscriptionRow {
     id: number;
     reference: string;
@@ -1293,6 +1308,10 @@ export interface InscriptionsPageProps {
     canChangeGroup: boolean;
     /** Active cancellation reasons (« Changement de groupe » excluded) for the "Annuler l'inscription" form. */
     motifsAnnulation: string[];
+    /** UI convenience only — hides « Ajouter un paiement »; real enforcement is payments.create on EncaissementController::store. */
+    canCreatePayment: boolean;
+    /** Encaissement::METHODES — the payment modal's per-row méthode dropdown. */
+    methodesPaiement: string[];
     [key: string]: unknown;
 }
 

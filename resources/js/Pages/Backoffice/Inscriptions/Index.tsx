@@ -1,6 +1,6 @@
-import { router, useForm } from '@inertiajs/react';
+import { router, useForm, usePage } from '@inertiajs/react';
 import { pageWindow } from '@/Components/Tables/Pagination';
-import { useRef, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
@@ -11,6 +11,7 @@ import TableToolbar from '@/Components/Tables/TableToolbar';
 import FilterTextInput from '@/Components/Tables/FilterTextInput';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import Pagination from '@/Components/Tables/Pagination';
+import LocalPagination from '@/Components/Tables/LocalPagination';
 import RowActions, { RowActionDivider, RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
 import ConfirmDialog from '@/Components/Modals/ConfirmDialog';
@@ -29,8 +30,67 @@ import type {
     InscriptionGroupFeesResponse,
     InscriptionRow,
     InscriptionsPageProps,
+    NouvelleInscription,
+    PaymentLine,
     SelectOption,
+    SharedProps,
+    StudentChequeOption,
+    UnpaidFee,
 } from '@/Types';
+
+/** How many fee rows the payment modal shows at once (mirrors the Encaissements create modal). */
+const PAIEMENT_LINES_PER_PAGE = 4;
+/** Encaissement::METHODE_ESPECES / METHODE_CHEQUE — the two the payment modal branches on. */
+const METHODE_ESPECES = 'Espèces';
+const METHODE_CHEQUE = 'Chèque';
+
+/** The « Ajouter un paiement » modal's form — identical shape to the Encaissements create form. */
+interface PaiementFormState {
+    student_id: number | '';
+    inscription_id: number | '';
+    date_paiement: string;
+    note: string;
+    payment_lines: PaymentLine[];
+}
+
+/**
+ * The just-created registration, shaped as an InscriptionRow so the payment
+ * prompt and the payment modal can be driven by the same target state as a
+ * row action. Only the fields those two read are meaningful — the rest carry
+ * the empty values the list would show before its own reload.
+ */
+function rowFromNouvelleInscription(nouvelle: NouvelleInscription): InscriptionRow {
+    return {
+        id: nouvelle.id,
+        reference: nouvelle.reference,
+        studentId: nouvelle.studentId,
+        groupId: null,
+        student: nouvelle.studentLabel,
+        studentShowUrl: null,
+        groupe: null,
+        date: null,
+        dateDebut: null,
+        dateFin: null,
+        montantTotal: null,
+        feesCount: 0,
+        // A registration always starts Active (forced server-side in
+        // InscriptionController@store), which is also what gates payment.
+        statut: 'Active',
+        showUrl: `/backoffice/inscriptions/${nouvelle.id}`,
+    };
+}
+
+/** Frais whose échéance falls inside the current calendar month — the « Paiements en cours » filter. */
+function echeanceCeMois(dateEcheance: string | null): boolean {
+    if (!dateEcheance) {
+        return false;
+    }
+
+    const now = new Date();
+    const [annee, mois] = dateEcheance.split('-');
+
+    return Number(annee) === now.getFullYear() && Number(mois) === now.getMonth() + 1;
+}
 
 interface InscriptionFormState {
     inscription_mode: 'new' | 'existing';
@@ -181,6 +241,8 @@ export default function InscriptionsIndex({
     canManageFees,
     canChangeGroup,
     motifsAnnulation,
+    canCreatePayment,
+    methodesPaiement,
 }: InscriptionsPageProps) {
     const isLoading = useInertiaLoading();
     const [showModal, setShowModal] = useState(false);
@@ -219,6 +281,162 @@ export default function InscriptionsIndex({
     const [suiviTarget, setSuiviTarget] = useState<InscriptionRow | null>(null);
     const [suiviFees, setSuiviFees] = useState<InscriptionFeeLine[] | null>(null);
     const [suiviEnCoursOnly, setSuiviEnCoursOnly] = useState(false);
+
+    // ── « Ajouter un paiement » ──────────────────────────────────
+    // A cashier who has just enrolled someone (or who is looking at the row)
+    // can settle frais without leaving for Encaissements and re-searching the
+    // student there. Same server contract as the Encaissements create modal —
+    // it posts to encaissements.store with the same payment_lines shape, so
+    // every money invariant (per-fee max:reste re-checked under lock, the
+    // fee->inscription ownership guard, the CaisseResolver routing, the
+    // active-context assertion) is enforced by exactly the same code path.
+    const [paiementTarget, setPaiementTarget] = useState<InscriptionRow | null>(null);
+    const [paiementFees, setPaiementFees] = useState<UnpaidFee[] | null>(null);
+    // Default ON, matching the old CRM: only the frais whose échéance falls in
+    // the current month are proposed, since that is what a walk-in payment
+    // almost always settles. Unticking it widens the table to every unpaid
+    // frais of the inscription (the endpoint never returns fully-paid ones).
+    const [paiementEnCoursOnly, setPaiementEnCoursOnly] = useState(true);
+    const [paiementCheques, setPaiementCheques] = useState<StudentChequeOption[]>([]);
+    const [paiementLinesPage, setPaiementLinesPage] = useState(1);
+    // The post-creation « Voulez-vous ajouter un paiement ? » step, driven off
+    // the one-time `nouvelleInscription` flash rather than local form state:
+    // the create modal submits an Inertia visit, so the page remounts with
+    // fresh props before any local "just saved" flag could survive.
+    const { flash } = usePage<SharedProps>().props;
+    const [paiementPrompt, setPaiementPrompt] = useState<InscriptionRow | null>(null);
+
+    const paiementForm = useForm<PaiementFormState>({
+        student_id: '',
+        inscription_id: '',
+        date_paiement: new Date().toISOString().slice(0, 10),
+        note: '',
+        payment_lines: [],
+    });
+
+    const methodePaiementOptions: SelectOption[] = (methodesPaiement ?? []).map((m) => ({ value: m, label: m }));
+
+    function openPaiement(inscription: InscriptionRow): void {
+        setPaiementPrompt(null);
+        setPaiementTarget(inscription);
+        setPaiementFees(null);
+        setPaiementCheques([]);
+        setPaiementEnCoursOnly(true);
+        setPaiementLinesPage(1);
+        paiementForm.clearErrors();
+        paiementForm.setData({
+            student_id: inscription.studentId ?? '',
+            inscription_id: inscription.id,
+            date_paiement: new Date().toISOString().slice(0, 10),
+            note: '',
+            payment_lines: [],
+        });
+
+        fetch(`/backoffice/inscriptions/${inscription.id}/unpaid-fees`, { headers: { Accept: 'application/json' } })
+            .then((response) => response.json())
+            .then((data: { fees: UnpaidFee[] }) => {
+                setPaiementFees(data.fees);
+                const today = new Date().toISOString().slice(0, 10);
+                paiementForm.setData(
+                    'payment_lines',
+                    data.fees.map((fee) => ({
+                        feeId: fee.id,
+                        nom: fee.nom,
+                        montantInitial: fee.montantInitial,
+                        reste: fee.reste,
+                        dateEcheance: fee.dateEcheance,
+                        montant: '',
+                        methode: METHODE_ESPECES,
+                        datePaiement: today,
+                        chequeId: '',
+                    })),
+                );
+            })
+            .catch(() => setPaiementFees([]));
+
+        // Tracked chèques of the student — the only source a Chèque-method row
+        // may draw on (no manual numéro/banque entry anywhere in the app).
+        if (inscription.studentId) {
+            fetch(`/backoffice/students/${inscription.studentId}/cheques`, { headers: { Accept: 'application/json' } })
+                .then((response) => (response.ok ? response.json() : { cheques: [] }))
+                .then((data: { cheques: StudentChequeOption[] }) => setPaiementCheques(data.cheques))
+                .catch(() => setPaiementCheques([]));
+        }
+    }
+
+    function closePaiement(): void {
+        setPaiementTarget(null);
+        setPaiementFees(null);
+        setPaiementCheques([]);
+        setPaiementLinesPage(1);
+        paiementForm.clearErrors();
+        paiementForm.reset();
+    }
+
+    function setPaiementLine(index: number, patch: Partial<PaymentLine>): void {
+        paiementForm.setData((previous) => ({
+            ...previous,
+            payment_lines: previous.payment_lines.map((line, i) => (i === index ? { ...line, ...patch } : line)),
+        }));
+    }
+
+    function submitPaiement(event: FormEvent): void {
+        event.preventDefault();
+
+        // camelCase client state -> the snake_case shape
+        // StoreEncaissementRequest validates. Rows left at montant '' are
+        // ignored server-side, so the whole table is submitted at once.
+        paiementForm.transform((data) => ({
+            ...data,
+            payment_lines: data.payment_lines.map((line) => ({
+                fee_id: line.feeId,
+                montant: line.montant,
+                methode: line.methode,
+                date_paiement: line.datePaiement,
+                cheque_id: line.methode === METHODE_CHEQUE ? line.chequeId : null,
+            })),
+        }));
+
+        paiementForm.post('/backoffice/encaissements', {
+            preserveScroll: true,
+            onSuccess: () => closePaiement(),
+            // A refused row can be paginated out of view — jump to the page
+            // holding the first payment_lines.<i>.* error so the save never
+            // fails silently off-screen.
+            onError: (errors) => {
+                const firstErrorKey = Object.keys(errors as Record<string, string>).find((key) =>
+                    key.startsWith('payment_lines.'),
+                );
+                if (!firstErrorKey) {
+                    return;
+                }
+                const lineIndex = Number(firstErrorKey.split('.')[1]);
+                if (Number.isNaN(lineIndex)) {
+                    return;
+                }
+                setPaiementLinesPage(Math.floor(lineIndex / PAIEMENT_LINES_PER_PAGE) + 1);
+            },
+            // Reset the transform so a later submit on this form instance does
+            // not carry the payment_lines mapping over.
+            onFinish: () => paiementForm.transform((data) => data),
+        });
+    }
+
+    // The create modal's Inertia visit lands back here carrying the one-time
+    // `nouvelleInscription` flash: ask whether to record a payment right away.
+    // Keyed on the id so the prompt opens once per creation and never again on
+    // a later filter/pagination reload (the flash is pulled server-side).
+    const nouvelleInscription = flash.nouvelleInscription ?? null;
+    const nouvelleInscriptionId = nouvelleInscription?.id ?? null;
+
+    useEffect(() => {
+        if (nouvelleInscription === null || !canCreatePayment) {
+            return;
+        }
+
+        setPaiementPrompt(rowFromNouvelleInscription(nouvelleInscription));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [nouvelleInscriptionId]);
 
     function openSuivi(inscription: InscriptionRow): void {
         setSuiviTarget(inscription);
@@ -390,6 +608,22 @@ export default function InscriptionsIndex({
                 setEditingAvailableLivres(data.livres);
             })
             .finally(() => setLoadingEditingLivres(false));
+    }
+
+    /**
+     * « Modification des frais d'inscription » — the same edit modal, opened
+     * straight on its fee table (the frais live inside it, saved by their own
+     * PUT .../fees endpoint). A separate row action because editing an amount
+     * or a remise is a distinct, far more frequent job than correcting the
+     * student/group fields at the top of the modal.
+     */
+    function openEditFrais(inscription: InscriptionRow) {
+        openEdit(inscription);
+        // After the modal has painted — the section only exists once
+        // editingInscription is set and the modal body is mounted.
+        window.setTimeout(() => {
+            document.getElementById('ins-frais-section')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        }, 150);
     }
 
     function closeModal() {
@@ -1045,14 +1279,22 @@ export default function InscriptionsIndex({
                                         <StatusBadge label={inscription.statut} variant={statutVariant(inscription.statut)} dot />
                                     </td>
                                     <td className="text-end">
+                                        {/* Grouped into four blocks separated by
+                                            dividers: edit-the-record, change its
+                                            lifecycle, move it to another group,
+                                            then money — so the destructive and the
+                                            financial actions are never adjacent to
+                                            a routine "Modifier" click. */}
                                         <RowActions view={inscription.showUrl}>
                                             <RowActionItem icon="ti-edit" onClick={() => openEdit(inscription)}>
                                                 Modifier
                                             </RowActionItem>
 
-                                            <RowActionItem icon="ti-credit-card" onClick={() => openSuivi(inscription)}>
-                                                Suivi des paiements
-                                            </RowActionItem>
+                                            {canManageFees && (
+                                                <RowActionItem icon="ti-edit" onClick={() => openEditFrais(inscription)}>
+                                                    Modification des frais d&apos;inscription
+                                                </RowActionItem>
+                                            )}
 
                                             <RowActionDivider />
 
@@ -1073,6 +1315,26 @@ export default function InscriptionsIndex({
                                                         Changement de groupe
                                                     </RowActionItem>
                                                 </>
+                                            )}
+
+                                            <RowActionDivider />
+
+                                            <RowActionItem icon="ti-credit-card" onClick={() => openSuivi(inscription)}>
+                                                Suivi des paiements
+                                            </RowActionItem>
+
+                                            {/* Active only: settling frais from here on a
+                                                cancelled/archived registration would book money
+                                                against one the student no longer holds. (The
+                                                Encaissements page's own dropdown is wider — it
+                                                lists every inscription of the active year — so a
+                                                deliberate correction on a closed registration
+                                                stays possible there, where the cashier picks it
+                                                explicitly.) */}
+                                            {canCreatePayment && inscription.statut === 'Active' && (
+                                                <RowActionItem icon="ti-credit-card" onClick={() => openPaiement(inscription)}>
+                                                    Ajouter un paiement
+                                                </RowActionItem>
                                             )}
 
                                             <RowActionDivider />
@@ -1531,7 +1793,11 @@ export default function InscriptionsIndex({
                             )}
 
                             {editingInscription && (
-                                <div className="border-top pt-3">
+                                // id: the « Modification des frais d'inscription »
+                                // row action opens this same modal and scrolls
+                                // straight here, so the fee table is reachable in
+                                // one click instead of « Modifier » + scroll.
+                                <div className="border-top pt-3" id="ins-frais-section">
                                     <div className="d-flex align-items-center justify-content-between mb-1">
                                         <h6 className="mb-0">Frais de cette inscription</h6>
                                     </div>
@@ -2087,6 +2353,264 @@ export default function InscriptionsIndex({
                         </>
                     );
                 })()}
+            </Modal>
+
+            {/*
+              * Post-creation step: the inscription is already saved (this is a
+              * plain yes/no, not a second half of the create form) — declining
+              * simply dismisses it. Saying yes opens the payment modal below,
+              * already scoped to the new registration, so the cashier never has
+              * to walk to Encaissements and search the student again.
+              */}
+            <Modal
+                show={paiementPrompt !== null}
+                title="Ajouter un paiement ?"
+                onClose={() => setPaiementPrompt(null)}
+                footer={
+                    <div className="d-flex justify-content-end gap-2">
+                        <button type="button" className="btn btn-outline-secondary" onClick={() => setPaiementPrompt(null)}>
+                            Non
+                        </button>
+                        <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={() => paiementPrompt && openPaiement(paiementPrompt)}
+                        >
+                            Oui, ajouter un paiement
+                        </button>
+                    </div>
+                }
+            >
+                <p className="mb-0">
+                    L&apos;inscription <span className="fw-semibold">{paiementPrompt?.reference}</span> a été créée.
+                    Voulez-vous enregistrer un paiement maintenant ?
+                </p>
+            </Modal>
+
+            {/*
+              * « Ajouter un paiement » — the Encaissements create modal without
+              * its student/inscription cascade (both are already known here).
+              * It posts to the SAME encaissements.store endpoint with the same
+              * payment_lines payload, so nothing about the money path is
+              * duplicated: the till routing, the per-fee remaining-balance
+              * re-check under lock and the active-context guard all run there.
+              */}
+            <Modal
+                show={paiementTarget !== null}
+                title={`Ajouter un paiement : ${paiementTarget?.reference ?? ''}`}
+                size="xl"
+                onClose={closePaiement}
+                processing={paiementForm.processing}
+                footer={
+                    <FormActions
+                        form="inscription-paiement-form"
+                        onCancel={closePaiement}
+                        processing={paiementForm.processing}
+                        submitLabel="Valider"
+                        cancelLabel="Fermer"
+                    />
+                }
+            >
+                <form id="inscription-paiement-form" onSubmit={submitPaiement}>
+                    <div className="mb-3">
+                        <label className="form-label fw-semibold" htmlFor="ins-paiement-student">
+                            Étudiant <span className="text-danger">*</span>
+                        </label>
+                        <input
+                            id="ins-paiement-student"
+                            type="text"
+                            className="form-control"
+                            value={paiementTarget?.student ?? '—'}
+                            disabled
+                        />
+                    </div>
+
+                    <div className="form-check mb-3">
+                        <input
+                            type="checkbox"
+                            className="form-check-input"
+                            id="ins-paiement-en-cours"
+                            checked={paiementEnCoursOnly}
+                            onChange={(event) => {
+                                setPaiementEnCoursOnly(event.target.checked);
+                                setPaiementLinesPage(1);
+                            }}
+                        />
+                        <label className="form-check-label fw-semibold" htmlFor="ins-paiement-en-cours">
+                            Paiements en cours
+                        </label>
+                        <div className="form-text">
+                            Coché : uniquement les frais dont l&apos;échéance tombe ce mois-ci. Décoché : tous les frais non soldés.
+                        </div>
+                    </div>
+
+                    {paiementFees === null ? (
+                        <div className="text-center py-4">
+                            <div className="spinner-border spinner-border-sm text-primary" role="status" />
+                        </div>
+                    ) : (() => {
+                        // Filtering hides rows, it never rebuilds payment_lines:
+                        // each row keeps its real index in the submitted array,
+                        // so an amount typed before ticking the box is still sent
+                        // with the right fee and the server's per-row errors
+                        // (payment_lines.<i>.*) still land on the right line.
+                        const rows = paiementForm.data.payment_lines
+                            .map((line, index) => ({ line, index }))
+                            .filter(({ line }) => !paiementEnCoursOnly || echeanceCeMois(line.dateEcheance));
+                        const pageRows = rows.slice(
+                            (paiementLinesPage - 1) * PAIEMENT_LINES_PER_PAGE,
+                            paiementLinesPage * PAIEMENT_LINES_PER_PAGE,
+                        );
+
+                        if (rows.length === 0) {
+                            return (
+                                <div className="alert alert-success d-flex align-items-center" role="alert">
+                                    <i className="ti ti-check me-2 fs-18" />
+                                    {paiementEnCoursOnly
+                                        ? "Aucun frais à échéance ce mois-ci. Décochez « Paiements en cours » pour voir tous les frais non soldés."
+                                        : 'Pas de factures à payer.'}
+                                </div>
+                            );
+                        }
+
+                        return (
+                            <>
+                                <div className="table-responsive mb-3">
+                                    <table className="table table-bordered align-middle mb-0">
+                                        <thead className="table-light">
+                                            <tr>
+                                                <th>Frais</th>
+                                                <th>Date d&apos;échéance</th>
+                                                <th className="text-end">Montant</th>
+                                                <th className="text-end">Reste à payer</th>
+                                                <th style={{ minWidth: 140 }}>Montant de paiement</th>
+                                                <th style={{ minWidth: 150 }}>Méthode</th>
+                                                <th style={{ minWidth: 160 }}>Date</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {pageRows.map(({ line, index }) => {
+                                                const rowErrors = paiementForm.errors as Record<string, string | undefined>;
+                                                const montantError = rowErrors[`payment_lines.${index}.montant`];
+                                                const dateError = rowErrors[`payment_lines.${index}.date_paiement`];
+                                                const chequeError = rowErrors[`payment_lines.${index}.cheque_id`];
+                                                const isCheque = line.methode === METHODE_CHEQUE;
+
+                                                return (
+                                                    <Fragment key={line.feeId}>
+                                                        <tr>
+                                                            <td className="fw-medium text-wrap-cell">{line.nom}</td>
+                                                            <td>{line.dateEcheance ? formatFr(line.dateEcheance) : '—'}</td>
+                                                            <td className="text-end">{Number(line.montantInitial).toFixed(2)} DH</td>
+                                                            <td className="text-end">{Number(line.reste).toFixed(2)} DH</td>
+                                                            <td>
+                                                                <div className="input-group input-group-sm">
+                                                                    <input
+                                                                        id={`ins-pl-montant-${index}`}
+                                                                        type="number"
+                                                                        step="0.01"
+                                                                        min="0"
+                                                                        max={line.reste}
+                                                                        placeholder="0"
+                                                                        className={`form-control${montantError ? ' is-invalid' : ''}`}
+                                                                        value={line.montant}
+                                                                        onChange={(event) =>
+                                                                            setPaiementLine(index, { montant: event.target.value })
+                                                                        }
+                                                                        aria-invalid={montantError ? true : undefined}
+                                                                    />
+                                                                    <span className="input-group-text">DH</span>
+                                                                </div>
+                                                                {montantError && <div className="text-danger fs-12 mt-1">{montantError}</div>}
+                                                            </td>
+                                                            <td>
+                                                                <SelectField
+                                                                    id={`ins-pl-methode-${index}`}
+                                                                    options={methodePaiementOptions}
+                                                                    value={line.methode}
+                                                                    onChange={(event) =>
+                                                                        setPaiementLine(index, {
+                                                                            methode: event.target.value,
+                                                                            chequeId: event.target.value === METHODE_CHEQUE ? line.chequeId : '',
+                                                                        })
+                                                                    }
+                                                                />
+                                                            </td>
+                                                            <td>
+                                                                <DateField
+                                                                    id={`ins-pl-date-${index}`}
+                                                                    value={line.datePaiement}
+                                                                    onChange={(event) =>
+                                                                        setPaiementLine(index, { datePaiement: event.target.value })
+                                                                    }
+                                                                    error={dateError}
+                                                                    panelAlign="right"
+                                                                />
+                                                            </td>
+                                                        </tr>
+                                                        {isCheque && (
+                                                            <tr>
+                                                                <td colSpan={7} className="bg-light-subtle">
+                                                                    <SelectField
+                                                                        id={`ins-pl-cheque-${index}`}
+                                                                        label="Chèque enregistré"
+                                                                        required
+                                                                        options={paiementCheques.map((cheque) => ({
+                                                                            value: cheque.id,
+                                                                            label: `${cheque.numeroCheque}${cheque.banque ? ` — ${cheque.banque}` : ''} (reste ${Number(cheque.reste).toFixed(2)} DH)`,
+                                                                        }))}
+                                                                        placeholder={
+                                                                            paiementCheques.length === 0
+                                                                                ? "Aucun chèque enregistré pour cet étudiant — ajoutez-en un dans Chèques"
+                                                                                : 'Choisir un chèque'
+                                                                        }
+                                                                        disabled={paiementCheques.length === 0}
+                                                                        value={line.chequeId}
+                                                                        onChange={(event) =>
+                                                                            setPaiementLine(index, {
+                                                                                chequeId: event.target.value ? Number(event.target.value) : '',
+                                                                            })
+                                                                        }
+                                                                        error={chequeError}
+                                                                    />
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                    </Fragment>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <LocalPagination
+                                    page={paiementLinesPage}
+                                    pageCount={Math.ceil(rows.length / PAIEMENT_LINES_PER_PAGE)}
+                                    onPageChange={setPaiementLinesPage}
+                                    total={rows.length}
+                                    perPage={PAIEMENT_LINES_PER_PAGE}
+                                />
+
+                                {paiementForm.errors.payment_lines && (
+                                    <div className="text-danger small mb-3">{paiementForm.errors.payment_lines}</div>
+                                )}
+                            </>
+                        );
+                    })()}
+
+                    {/*
+                     * No Caisse field, exactly like the Encaissements modal: the
+                     * account is derived server-side from each row's méthode
+                     * (CaisseResolver) — never chosen client-side, for any role.
+                     */}
+                    <TextareaField
+                        id="ins-paiement-note"
+                        label="Note"
+                        value={paiementForm.data.note}
+                        onChange={(event) => paiementForm.setData('note', event.target.value)}
+                        error={paiementForm.errors.note}
+                    />
+                </form>
             </Modal>
 
             <ConfirmDialog

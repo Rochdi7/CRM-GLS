@@ -306,6 +306,18 @@ html[data-theme='dark'] .gls-select2-search__clear:hover {
     .header .header-left .dark-logo img {
         width: 90px;
     }
+    /*
+     * The theme lays .header-left out as `justify-content: space-between`, so
+     * the (now smaller) logo is pinned to the far left of the 252px sidebar
+     * column while the toggle button holds the right edge — visually
+     * off-balance. Let the logo link grow into the free space and center its
+     * image there instead; the image size is untouched.
+     */
+    .header .header-left .logo,
+    .header .header-left .dark-logo {
+        flex: 1 1 auto;
+        text-align: center;
+    }
 }
 /*
  * On mobile the theme sizes BOTH .logo img and .dark-logo img at 140px. Only
