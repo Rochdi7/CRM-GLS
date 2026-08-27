@@ -345,9 +345,12 @@ final class InscriptionController extends Controller
         }
     }
 
-    public function groupFees(Group $group, GetGroupInscriptionFees $getGroupInscriptionFees): JsonResponse
+    public function groupFees(Request $request, Group $group, GetGroupInscriptionFees $getGroupInscriptionFees): JsonResponse
     {
         $this->authorize('create', Inscription::class);
+        // Centre reach (403) + active context (422): tariffs of another
+        // centre's group are not readable through a forged id (SEC-07).
+        $this->assertGroupInContext($request, $group);
 
         return response()->json([
             'fees' => $getGroupInscriptionFees($group),
@@ -360,9 +363,10 @@ final class InscriptionController extends Controller
      * form's book multi-select. Same permission gate as groupFees() (both
      * are pure lookups for the create flow, not a mutation).
      */
-    public function groupLivres(Group $group): JsonResponse
+    public function groupLivres(Request $request, Group $group): JsonResponse
     {
         $this->authorize('create', Inscription::class);
+        $this->assertGroupInContext($request, $group);
 
         return response()->json([
             'livres' => $this->availableLivresQuery($group->etablissement_id)->get()
@@ -605,6 +609,19 @@ final class InscriptionController extends Controller
         $data = $request->validated();
         $this->assertStudentInContext($request, Student::findOrFail((int) $data['student_id']));
 
+        // Once money has been received on this registration its student is
+        // frozen: the payments carry that student_id, and re-pointing the
+        // inscription would leave every receipt disagreeing with it (DB-07).
+        if ((int) $data['student_id'] !== (int) $inscription->student_id
+            && Encaissement::query()->whereIn('inscription_fee_id', $inscription->fees()->select('id'))->exists()) {
+            throw ValidationException::withMessages([
+                'student_id' => __('The student of a registration with recorded payments cannot be changed.'),
+            ]);
+        }
+
+        // `statut` is deliberately NOT accepted here: Active -> Annulée goes
+        // through cancel() (reason required), Changement only through
+        // changeGroup(), reactivation through updateStatut() (audit CRUD-F4).
         // Only 5 columns are ever updated — fees/totals/center/year/group are
         // never touched on edit, matching InscriptionsIndex::save()'s
         // $editing branch exactly. date_debut/date_fin come straight from
@@ -616,7 +633,6 @@ final class InscriptionController extends Controller
         // registrations.change-group gate), never a silent field swap.
         $inscription->update([
             'student_id' => $data['student_id'],
-            'statut' => $data['statut'],
             'date_inscription' => $data['date_inscription'],
             'date_debut' => $data['date_debut'] ?? null,
             'date_fin' => $data['date_fin'] ?? null,
@@ -656,7 +672,10 @@ final class InscriptionController extends Controller
             abort(422, __('Invalid status.'));
         }
 
-        if ($inscription->statut === Inscription::STATUT_ACTIVE) {
+        // Only a CANCELLED registration comes back. A « Changement » one has
+        // a successor Active inscription created by changeGroup(): waking it
+        // up would leave the student enrolled twice at once (DB-08).
+        if ($inscription->statut !== Inscription::STATUT_ANNULEE) {
             throw ValidationException::withMessages([
                 'statut' => __('This status change is not allowed from the current status.'),
             ]);

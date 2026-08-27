@@ -1599,19 +1599,6 @@ export default function InscriptionsIndex({
                                         />
                                     )}
                                 </div>
-                                {editingInscription && (
-                                    <div className="col-md-4">
-                                        <SelectField
-                                            id="ins-statut"
-                                            label="Statut"
-                                            required
-                                            options={statutOptions}
-                                            value={form.data.statut}
-                                            onChange={(event) => form.setData('statut', event.target.value)}
-                                            error={form.errors.statut}
-                                        />
-                                    </div>
-                                )}
                                 {form.data.group_id !== '' && (
                                     <>
                                         <div className="col-md-4">

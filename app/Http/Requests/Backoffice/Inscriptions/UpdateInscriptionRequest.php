@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Backoffice\Inscriptions;
 
-use App\Models\Inscription;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 /**
  * Validates exactly the fields the current Livewire InscriptionsIndex form
@@ -33,7 +31,6 @@ final class UpdateInscriptionRequest extends FormRequest
     {
         return [
             'student_id' => ['required', 'exists:students,id'],
-            'statut' => ['required', Rule::in(Inscription::STATUTS)],
             'date_inscription' => ['required', 'date'],
             'date_debut' => ['nullable', 'date'],
             'date_fin' => ['nullable', 'date', 'after_or_equal:date_debut'],

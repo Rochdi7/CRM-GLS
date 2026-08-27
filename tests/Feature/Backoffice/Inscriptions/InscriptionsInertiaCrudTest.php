@@ -635,7 +635,10 @@ final class InscriptionsInertiaCrudTest extends TestCase
         ])->assertRedirect(route('backoffice.inscriptions.index'));
 
         $fresh = $inscription->fresh();
-        $this->assertSame('Annulée', $fresh->statut);
+        // A bare statut flip is never accepted here (audit CRUD-F4):
+        // cancelling needs cancel() + a reason.
+        $this->assertSame('Active', $fresh->statut);
+        $this->assertNull($fresh->motif_annulation);
         $this->assertSame('2025-09-10', $fresh->date_debut->toDateString());
         $this->assertSame('2026-07-01', $fresh->date_fin->toDateString());
         // Untouched by update.
@@ -720,9 +723,9 @@ final class InscriptionsInertiaCrudTest extends TestCase
     }
 
     /**
-     * "Réactiver" — the reverse move (Changement/Annulée -> Active), a
-     * two-way toggle symmetric with Archiver/Annuler so a mistaken
-     * archive/cancel doesn't require the full edit modal to undo.
+     * "Réactiver" — Annulée -> Active only. A « Changement » registration
+     * has a successor created by changeGroup(); reactivating it would enrol
+     * the student twice (audit DB-08).
      */
     public function test_reactiver_sets_statut_back_to_active(): void
     {
@@ -734,6 +737,13 @@ final class InscriptionsInertiaCrudTest extends TestCase
             'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
             'statut' => 'Changement', 'date_inscription' => '2025-09-15',
         ]);
+
+        $this->from(route('backoffice.inscriptions.index'))
+            ->patch(route('backoffice.inscriptions.update-statut', $inscription), ['statut' => 'Active'])
+            ->assertSessionHasErrors('statut');
+        $this->assertSame('Changement', $inscription->fresh()->statut);
+
+        $inscription->update(['statut' => 'Annulée']);
 
         $this->patch(route('backoffice.inscriptions.update-statut', $inscription), [
             'statut' => 'Active',
