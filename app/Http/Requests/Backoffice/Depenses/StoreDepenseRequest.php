@@ -6,6 +6,7 @@ namespace App\Http\Requests\Backoffice\Depenses;
 
 use App\Http\Requests\Backoffice\Depenses\Concerns\PaiementProfRules;
 use App\Models\Depense;
+use App\Models\TypeDepense;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -35,7 +36,14 @@ final class StoreDepenseRequest extends FormRequest
     {
         return [
             ...$this->typeDependentRules(),
-            'type_depense_id' => ['required', 'exists:types_depenses,id'],
+            // Only an ACTIVE catalog type may be chosen: the dropdown already
+            // filters on `statut`, but React is not a boundary — a stale form
+            // or a crafted post could otherwise file a dépense under a type
+            // the admin has deliberately retired.
+            'type_depense_id' => [
+                'required',
+                Rule::exists('types_depenses', 'id')->where('statut', TypeDepense::STATUT_ACTIF),
+            ],
             'montant' => ['required', 'numeric', 'min:0.01'],
             'methode_paiement' => ['required', Rule::in(Depense::METHODES)],
             'date_depense' => ['required', 'date'],

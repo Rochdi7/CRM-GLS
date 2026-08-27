@@ -22,8 +22,14 @@ use App\Models\TypeDepense;
  */
 trait PaiementProfRules
 {
-    /** True when the submitted type is the seeded « Paiement prof » type. */
-    protected function isPaiementProf(): bool
+    /**
+     * True when the submitted type is the seeded « Paiement prof » type.
+     *
+     * Public because DepenseController::update() reuses the SAME decision to
+     * null the prof-only columns when the type is switched away — one source
+     * of truth, so the rules and the payload can never disagree.
+     */
+    public function isPaiementProf(): bool
     {
         $typeId = $this->input('type_depense_id');
 
