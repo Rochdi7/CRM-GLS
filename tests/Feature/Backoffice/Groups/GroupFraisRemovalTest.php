@@ -145,7 +145,7 @@ final class GroupFraisRemovalTest extends TestCase
 
         $this->actingAs($this->superAdmin())
             ->delete("/backoffice/groups/{$this->group->id}/frais/{$this->fraisAvril->id}")
-            ->assertRedirect();
+            ->assertOk();
 
         // The group no longer offers the fee — a future inscription in this
         // group will not receive it either.
@@ -176,7 +176,7 @@ final class GroupFraisRemovalTest extends TestCase
 
         $this->actingAs($this->superAdmin())
             ->delete("/backoffice/groups/{$this->group->id}/frais/{$this->fraisAvril->id}")
-            ->assertRedirect();
+            ->assertOk();
 
         $encaissement->refresh();
 
@@ -201,7 +201,7 @@ final class GroupFraisRemovalTest extends TestCase
 
         $this->actingAs($user)->delete("/backoffice/groups/{$this->group->id}/frais/{$this->fraisAvril->id}");
         $this->actingAs($user)->post("/backoffice/groups/{$this->group->id}/frais/{$this->fraisAvril->id}/restore")
-            ->assertRedirect();
+            ->assertOk();
 
         $this->assertDatabaseHas('group_frais', [
             'group_id' => $this->group->id,
@@ -266,7 +266,7 @@ final class GroupFraisRemovalTest extends TestCase
 
         $this->actingAs($this->superAdmin())
             ->delete("/backoffice/groups/{$this->group->id}/frais/{$this->fraisAvril->id}")
-            ->assertRedirect();
+            ->assertOk();
 
         // A refunded payment's money already LEFT the till — turning it into
         // an avance would hand the student money they were given back. It

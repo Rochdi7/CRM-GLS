@@ -22,6 +22,13 @@ return new class extends Migration
             $table->foreignId('etablissement_id')->nullable()->constrained('etablissements')->nullOnDelete();
             $table->foreignId('annee_scolaire_id')->nullable()->constrained('annees_scolaires')->nullOnDelete();
             $table->string('statut', 30)->default('Active'); // Active / Expirée / Archivée / Annulée
+            // Why the enrollment was cancelled — free text validated against
+            // the MotifAnnulation catalog's ACTIVE names at write time, the
+            // same no-FK arrangement as seances.motif_annulation (a reason
+            // later deactivated or renamed must not rewrite what a past
+            // cancellation actually said). Required by the cancel form,
+            // NULL on every row that was never cancelled.
+            $table->string('motif_annulation', 120)->nullable();
             $table->date('date_inscription');
             $table->date('date_debut')->nullable();
             $table->date('date_fin')->nullable();

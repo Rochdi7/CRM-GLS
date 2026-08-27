@@ -338,6 +338,10 @@ Route::prefix('backoffice')
             // (InscriptionController::updateStatut).
             Route::patch('inscriptions/{inscription}/statut', [InscriptionController::class, 'updateStatut'])
                 ->middleware('permission:registrations.update')->name('inscriptions.update-statut');
+            // Cancelling needs a reason + end date + a fee-cleanup decision,
+            // so it is its own endpoint rather than a value of update-statut.
+            Route::post('inscriptions/{inscription}/annuler', [InscriptionController::class, 'cancel'])
+                ->middleware('permission:registrations.update')->name('inscriptions.cancel');
             Route::delete('inscriptions/{inscription}', [InscriptionController::class, 'destroy'])
                 ->middleware('permission:registrations.delete')->name('inscriptions.destroy');
             Route::get('inscriptions/{inscription}', [InscriptionController::class, 'show'])

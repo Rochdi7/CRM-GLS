@@ -80,6 +80,10 @@ final class CaisseController extends Controller
         // CaisseTransferController::store() will use as the source.
         $myCaisse = $user->employee?->till()->first();
 
+        $transfersList = $canViewTransfers && $tab === 'transferts'
+            ? $getCaisseTransfersList($user, $search, $statutFilter, $typeFilter)
+            : null;
+
         return Inertia::render('Backoffice/Caisses/Index', [
             'myCaisse' => $myCaisse !== null ? [
                 'id' => $myCaisse->id,
@@ -98,9 +102,11 @@ final class CaisseController extends Controller
             'globale' => $canViewCaisses && $tab === 'globale'
                 ? $getCaisseGlobale($user)
                 : null,
-            'transfers' => $canViewTransfers && $tab === 'transferts'
-                ? $getCaisseTransfersList($user, $search, $statutFilter, $typeFilter)
-                : null,
+            'transfers' => $transfersList['data'] ?? null,
+            // Montant over the WHOLE filtered set, not the visible page — the
+            // React page used to sum its own rows, so the figure moved on
+            // every page click while the filters were unchanged (27/08/2026).
+            'transfersMontantTotal' => $transfersList['montantTotal'] ?? '0.00',
             'transferStatutCounts' => $canViewTransfers && $tab === 'transferts'
                 ? $getCaisseTransfersList->statutCounts($user)
                 : [],

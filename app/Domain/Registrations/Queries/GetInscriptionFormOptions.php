@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Registrations\Queries;
 
+use App\Domain\Settings\Support\FraisEcheanceResolver;
 use App\Models\Frais;
 use App\Models\Group;
 use App\Models\Student;
@@ -71,6 +72,14 @@ final class GetInscriptionFormOptions
             ->where('statut', Frais::STATUT_ACTIF)
             ->orderBy('nom')
             ->get()
+            // Same teaching-calendar order as the group fee table — see
+            // GetGroupFormOptions::fraisCatalog().
+            ->sortBy([
+                fn (Frais $a, Frais $b): int => FraisEcheanceResolver::ordreFromNom($a->nom)
+                    <=> FraisEcheanceResolver::ordreFromNom($b->nom),
+                fn (Frais $a, Frais $b): int => strcmp($a->nom, $b->nom),
+            ])
+            ->values()
             ->map(fn (Frais $f): array => [
                 'id' => $f->id,
                 'label' => $f->nom,

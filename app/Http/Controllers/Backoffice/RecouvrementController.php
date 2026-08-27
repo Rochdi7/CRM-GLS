@@ -52,17 +52,23 @@ final class RecouvrementController extends Controller
             $dureeBucket = '';
         }
 
+        $retardsList = $getRetardsList(
+            $request->user(),
+            $groupFilter,
+            $fraisFilter,
+            $statutFilter,
+            $dateFrom,
+            $dateTo,
+            $dureeBucket,
+            $perPage,
+        );
+
         return Inertia::render('Backoffice/Recouvrement/Index', [
-            'retards' => $getRetardsList(
-                $request->user(),
-                $groupFilter,
-                $fraisFilter,
-                $statutFilter,
-                $dateFrom,
-                $dateTo,
-                $dureeBucket,
-                $perPage,
-            ),
+            'retards' => $retardsList['data'],
+            // Reste-à-payer over the WHOLE filtered set, not the visible page
+            // — same separate-prop shape as the other finance lists
+            // (ChequeController, EncaissementController).
+            'montantTotal' => $retardsList['montantTotal'],
             'bucketCounts' => $getRetardsList->bucketCounts(
                 $request->user(),
                 $groupFilter,

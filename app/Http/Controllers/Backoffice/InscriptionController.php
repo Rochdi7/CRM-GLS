@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Domain\Registrations\Actions\AnnulerInscription;
 use App\Domain\Registrations\Actions\AssignerLivresInscription;
 use App\Domain\Registrations\Actions\BasculerVisibiliteFraisInscription;
 use App\Domain\Registrations\Actions\ChangerGroupeInscription;
@@ -12,16 +13,21 @@ use App\Domain\Registrations\Queries\GetGroupInscriptionFees;
 use App\Domain\Registrations\Queries\GetInscriptionDetails;
 use App\Domain\Registrations\Queries\GetInscriptionFormOptions;
 use App\Domain\Registrations\Queries\GetInscriptionsList;
+use App\Domain\Settings\Queries\GetMotifsAnnulationList;
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
+use App\Http\Requests\Backoffice\Inscriptions\CancelInscriptionRequest;
 use App\Http\Requests\Backoffice\Inscriptions\ChangeGroupInscriptionRequest;
 use App\Http\Requests\Backoffice\Inscriptions\StoreInscriptionRequest;
 use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionFeesRequest;
 use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionLivresRequest;
 use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionRequest;
 use App\Models\Group;
+use App\Domain\Settings\Support\FraisEcheanceResolver;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
+use App\Models\MotifAnnulation;
 use App\Models\Student;
 use App\Models\StockArticle;
 use App\Models\StockType;
@@ -52,10 +58,13 @@ use Inertia\Response;
  */
 final class InscriptionController extends Controller
 {
+    use AssertsContextScope;
+
     public function index(
         Request $request,
         GetInscriptionsList $getInscriptionsList,
         GetInscriptionFormOptions $getInscriptionFormOptions,
+        GetMotifsAnnulationList $getMotifsAnnulationList,
     ): Response {
         $this->authorize('viewAny', Inscription::class);
 
@@ -94,6 +103,16 @@ final class InscriptionController extends Controller
             'frais' => $getInscriptionFormOptions->frais(),
             'canManageFees' => $request->user()->can('registrations.manage-fees'),
             'canChangeGroup' => $request->user()->can('registrations.change-group'),
+            // Cancellation reasons for the "Annuler l'inscription" form.
+            // A closure so a partial reload that doesn't ask for it skips the
+            // query (CLAUDE.md §17 performance rules). « Changement de
+            // groupe » is stripped: it is the system reason the group-change
+            // flow writes, and choosing it here would claim a group change
+            // that never happened — CancelInscriptionRequest refuses it too.
+            'motifsAnnulation' => fn (): array => array_values(array_filter(
+                $getMotifsAnnulationList->activeNames(),
+                fn (string $nom): bool => $nom !== MotifAnnulation::MOTIF_CHANGEMENT_GROUPE,
+            )),
         ]);
     }
 
@@ -119,7 +138,18 @@ final class InscriptionController extends Controller
         $this->authorize('view', $inscription);
 
         return response()->json([
-            'fees' => $inscription->fees()->whereNull('masque_le')->get()->map(fn (InscriptionFee $fee): array => [
+            'fees' => $inscription->fees()->whereNull('masque_le')->get()
+                // Teaching-calendar order (janvier → décembre), with the
+                // one-off charges (inscription, examen) first — the fee lines
+                // are created in whatever order the group assigned them, which
+                // read as random in the edit table. See
+                // FraisEcheanceResolver::ordreFromNom().
+                ->sortBy([
+                    fn (InscriptionFee $a, InscriptionFee $b): int => FraisEcheanceResolver::ordreFromNom($a->nom)
+                        <=> FraisEcheanceResolver::ordreFromNom($b->nom),
+                    fn (InscriptionFee $a, InscriptionFee $b): int => strcmp($a->nom, $b->nom),
+                ])
+                ->map(fn (InscriptionFee $fee): array => [
                 'id' => $fee->id,
                 'fraisId' => $fee->frais_id,
                 'nom' => $fee->nom,
@@ -135,7 +165,13 @@ final class InscriptionController extends Controller
             ])->values(),
             // Hidden fees — feeds the edit modal's "Frais masqués" list, the
             // only place a hidden fee can be restored from.
-            'hiddenFees' => $inscription->fees()->whereNotNull('masque_le')->get()->map(fn (InscriptionFee $fee): array => [
+            'hiddenFees' => $inscription->fees()->whereNotNull('masque_le')->get()
+                ->sortBy([
+                    fn (InscriptionFee $a, InscriptionFee $b): int => FraisEcheanceResolver::ordreFromNom($a->nom)
+                        <=> FraisEcheanceResolver::ordreFromNom($b->nom),
+                    fn (InscriptionFee $a, InscriptionFee $b): int => strcmp($a->nom, $b->nom),
+                ])
+                ->map(fn (InscriptionFee $fee): array => [
                 'id' => $fee->id,
                 'nom' => $fee->nom,
                 'montant' => (string) $fee->montant,
@@ -318,6 +354,7 @@ final class InscriptionController extends Controller
         AssignerLivresInscription $action,
     ): RedirectResponse {
         $this->authorize('view', $inscription);
+        $this->assertInscriptionInContext($request, $inscription, 'livre_ids');
 
         $data = $request->validated();
         $livreIds = array_map('intval', $data['livre_ids'] ?? []);
@@ -352,6 +389,16 @@ final class InscriptionController extends Controller
         $data = $request->validated();
         $group = Group::findOrFail($data['group_id']);
         $creatingStudent = $data['inscription_mode'] === 'new';
+
+        // The registration inherits centre + année from the SELECTED group,
+        // so that group must sit inside the active context — a stale or
+        // forged group_id would otherwise enrol into another year/centre
+        // (AssertsContextScope). Same for an existing student's centre.
+        $this->assertGroupInContext($request, $group);
+
+        if (! $creatingStudent) {
+            $this->assertStudentInContext($request, Student::findOrFail((int) $data['student_id']));
+        }
         $livreIds = array_map('intval', $data['livre_ids'] ?? []);
 
         $assignerLivres->validateAvailability($livreIds, []);
@@ -462,9 +509,11 @@ final class InscriptionController extends Controller
         ChangerGroupeInscription $action,
     ): RedirectResponse {
         $this->authorize('changeGroup', $inscription);
+        $this->assertInscriptionInContext($request, $inscription, 'new_group_id');
 
         $data = $request->validated();
         $newGroup = Group::findOrFail($data['new_group_id']);
+        $this->assertGroupInContext($request, $newGroup, 'new_group_id');
 
         $action->handle(
             $inscription,
@@ -484,8 +533,10 @@ final class InscriptionController extends Controller
     public function update(UpdateInscriptionRequest $request, Inscription $inscription): RedirectResponse
     {
         $this->authorize('update', $inscription);
+        $this->assertInscriptionInContext($request, $inscription, 'student_id');
 
         $data = $request->validated();
+        $this->assertStudentInContext($request, Student::findOrFail((int) $data['student_id']));
 
         // Only 5 columns are ever updated — fees/totals/center/year/group are
         // never touched on edit, matching InscriptionsIndex::save()'s
@@ -510,40 +561,79 @@ final class InscriptionController extends Controller
     }
 
     /**
-     * Quick status action from the list's row menu — "Annuler" (Active ->
-     * Annulée) and "Réactiver" (Changement/Annulée -> Active, the reverse
-     * move, so a mistaken cancel doesn't require opening the full edit
-     * modal to undo). Reaching "Changement" is deliberately NOT offered
-     * here — that status is only ever set by the dedicated changeGroup()
-     * flow, which also migrates fees and creates a replacement Active
-     * inscription; a bare Active -> Changement with no successor would
-     * leave the student's enrollment history looking like a change that
-     * never actually happened. Every other transition (e.g. an already-
-     * Annulée row being annulled again) is refused.
+     * Quick status action from the list's row menu — "Réactiver"
+     * (Changement/Annulée -> Active, the reverse move, so a mistaken cancel
+     * doesn't require opening the full edit modal to undo).
+     *
+     * Cancelling is NOT reachable here any more: Active -> Annulée now needs
+     * a reason, an end date and a decision about the leftover fee lines, so
+     * it goes through cancel() and its own form. Keeping a bare
+     * `statut=Annulée` path open would be a way to cancel with no reason
+     * recorded, which is exactly what that form exists to prevent — the
+     * value is refused outright below.
+     *
+     * Reaching "Changement" is likewise deliberately NOT offered here — that
+     * status is only ever set by the dedicated changeGroup() flow, which also
+     * migrates fees and creates a replacement Active inscription; a bare
+     * Active -> Changement with no successor would leave the student's
+     * enrollment history looking like a change that never actually happened.
      */
     public function updateStatut(Request $request, Inscription $inscription): RedirectResponse
     {
         $this->authorize('update', $inscription);
+        $this->assertInscriptionInContext($request, $inscription, 'statut');
 
         $statut = $request->string('statut')->toString();
 
-        if (! in_array($statut, [Inscription::STATUT_ACTIVE, Inscription::STATUT_ANNULEE], true)) {
+        if ($statut !== Inscription::STATUT_ACTIVE) {
             abort(422, __('Invalid status.'));
         }
 
-        $isReactivation = $statut === Inscription::STATUT_ACTIVE;
-        $currentIsActive = $inscription->statut === Inscription::STATUT_ACTIVE;
-
-        if ($isReactivation === $currentIsActive) {
+        if ($inscription->statut === Inscription::STATUT_ACTIVE) {
             throw ValidationException::withMessages([
                 'statut' => __('This status change is not allowed from the current status.'),
             ]);
         }
 
-        $inscription->update(['statut' => $statut]);
+        // The reason belongs to the cancellation that is being undone; leaving
+        // it behind would label a live enrollment with why it was once
+        // cancelled.
+        $inscription->update([
+            'statut' => Inscription::STATUT_ACTIVE,
+            'motif_annulation' => null,
+        ]);
 
         return redirect()->route('backoffice.inscriptions.index')
             ->with('success', __('Registration status updated.'));
+    }
+
+    /**
+     * "Annuler l'inscription" — Active -> Annulée. Unlike the old bare status
+     * flip this records WHY (a required reason from the MotifAnnulation
+     * catalog), when the enrollment ended, and what happens to the fee lines
+     * the student will now never owe. See AnnulerInscription for the fee
+     * rules, which are the same two scopes the group-change flow offers.
+     */
+    public function cancel(
+        CancelInscriptionRequest $request,
+        Inscription $inscription,
+        AnnulerInscription $action,
+    ): RedirectResponse {
+        $this->authorize('update', $inscription);
+        $this->assertInscriptionInContext($request, $inscription, 'motif_annulation');
+
+        $data = $request->validated();
+
+        $action->handle(
+            $inscription,
+            $data['motif_annulation'],
+            $data['date_fin'],
+            $data['unpaid_fees_scope'] ?? null,
+            $data['note'] ?? null,
+        );
+
+        return redirect()->route('backoffice.inscriptions.index')
+            ->with('success', __('Registration cancelled.'));
     }
 
     /**

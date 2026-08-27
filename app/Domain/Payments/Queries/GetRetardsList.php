@@ -54,6 +54,9 @@ final class GetRetardsList
         private readonly CurrentContext $context,
     ) {}
 
+    /**
+     * @return array{data: LengthAwarePaginator, montantTotal: string}
+     */
     public function __invoke(
         User $user,
         string $groupFilter = '',
@@ -63,7 +66,7 @@ final class GetRetardsList
         string $dateTo = '',
         string $dureeBucket = '',
         int $perPage = self::DEFAULT_PER_PAGE,
-    ): LengthAwarePaginator {
+    ): array {
         if (! in_array($perPage, self::PER_PAGE_OPTIONS, true)) {
             $perPage = self::DEFAULT_PER_PAGE;
         }
@@ -125,7 +128,17 @@ final class GetRetardsList
             ['path' => request()->url(), 'query' => request()->query()],
         );
 
-        return $paginator;
+        // Total still owed across the WHOLE filtered set, not the page.
+        // The page previously summed `retards.data` in React, so the figure
+        // was the visible page's subtotal: it moved on every page click while
+        // the filters were unchanged, and understated the real exposure
+        // (27/08/2026). $fees is the fully filtered collection already
+        // materialised above, so this costs nothing extra — it must stay on
+        // THAT variable, never on $slice.
+        return [
+            'data' => $paginator,
+            'montantTotal' => number_format((float) $fees->sum('reste'), 2, '.', ''),
+        ];
     }
 
     /**

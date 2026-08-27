@@ -75,6 +75,18 @@ final class GetGroupFormOptions
             ->with('etablissements:id')
             ->orderBy('nom')
             ->get()
+            // Teaching-calendar order (janvier → décembre) rather than
+            // alphabetical, which interleaves Avril/Août/Octobre. Non-monthly
+            // fees (inscription, examen) sort first — see
+            // FraisEcheanceResolver::ordreFromNom(). Sorted in PHP because the
+            // key comes from the fee's NAME, not a column; the catalog is a
+            // dozen-odd rows, so there is nothing to gain from SQL here.
+            ->sortBy([
+                fn (Frais $a, Frais $b): int => FraisEcheanceResolver::ordreFromNom($a->nom)
+                    <=> FraisEcheanceResolver::ordreFromNom($b->nom),
+                fn (Frais $a, Frais $b): int => strcmp($a->nom, $b->nom),
+            ])
+            ->values()
             ->map(fn (Frais $f): array => [
                 'id' => $f->id,
                 'nom' => $f->nom,

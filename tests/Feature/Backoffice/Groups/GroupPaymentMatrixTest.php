@@ -74,7 +74,9 @@ final class GroupPaymentMatrixTest extends TestCase
 
         $this->group->frais()->sync([
             $this->frais['avril']->id => ['montant' => 1300, 'date_echeance' => '2026-04-01'],
-            $this->frais['inscription']->id => ['montant' => 300, 'date_echeance' => '2026-01-01'],
+            // No due date — an inscription fee names no month, so
+            // FraisEcheanceResolver derives none and it is settled up front.
+            $this->frais['inscription']->id => ['montant' => 300, 'date_echeance' => null],
             $this->frais['mars']->id => ['montant' => 1300, 'date_echeance' => '2026-03-01'],
         ]);
     }
@@ -155,8 +157,40 @@ final class GroupPaymentMatrixTest extends TestCase
             ["Frais d'inscription", 'Frais de Mars', "Frais d'Avril"],
             array_column($columns, 'nom'),
         );
-        $this->assertSame(['01/01/2026', '01/03/2026', '01/04/2026'], array_column($columns, 'dateEcheance'));
+        $this->assertSame([null, '01/03/2026', '01/04/2026'], array_column($columns, 'dateEcheance'));
+        // The dateless up-front charge leads, ahead of every instalment.
         $this->assertSame((string) $this->frais['inscription']->id, $columns[0]['key']);
+    }
+
+    public function test_monthly_columns_read_in_school_year_order_not_calendar_order(): void
+    {
+        // The regression this guards (27/08/2026): monthly due dates used to
+        // take their YEAR from today, so all twelve landed in one calendar
+        // year and « Frais de Septembre » sorted nine months AFTER « Frais de
+        // Janvier » — the matrix opened the school year on Janvier instead of
+        // on the group's real first month. See FraisEcheanceResolver.
+        $septembre = Frais::create(['nom' => 'Frais de Septembre', 'montant_defaut' => 1300]);
+        $janvier = Frais::create(['nom' => 'Frais de Janvier', 'montant_defaut' => 1300]);
+
+        // Exactly what the resolver derives for a 2025/2026 group, which is
+        // what the group form and the importer now store.
+        $this->group->frais()->syncWithoutDetaching([
+            $septembre->id => ['montant' => 1300, 'date_echeance' => '2025-09-01'],
+            $janvier->id => ['montant' => 1300, 'date_echeance' => '2026-01-01'],
+        ]);
+
+        $this->enrol('Chaimae', 'Bammadi');
+
+        $this->assertSame(
+            [
+                "Frais d'inscription",   // dateless, settled up front
+                'Frais de Septembre',    // the school year's first month
+                'Frais de Janvier',
+                'Frais de Mars',
+                "Frais d'Avril",
+            ],
+            array_column($this->matrix()['columns'], 'nom'),
+        );
     }
 
     public function test_each_cell_state_reflects_what_was_paid_on_that_fee(): void

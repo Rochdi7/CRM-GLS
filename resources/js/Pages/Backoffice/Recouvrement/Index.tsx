@@ -33,6 +33,7 @@ const DUREE_TABS: Array<{ key: string; label: string }> = [
  */
 export default function RecouvrementIndex({
     retards,
+    montantTotal,
     bucketCounts,
     filters,
     perPageOptions,
@@ -68,7 +69,10 @@ export default function RecouvrementIndex({
         reload({ dureeBucket: bucket });
     }
 
-    const totalReste = retards.data.reduce((sum, row) => sum + Number(row.resteAPayer), 0);
+    // Server-computed over the WHOLE filtered set (GetRetardsList). Summing
+    // retards.data here would total only the visible page, so the figure moved
+    // on every page click while the filters were unchanged.
+    const totalReste = Number(montantTotal ?? 0);
 
     return (
         <BackofficeLayout

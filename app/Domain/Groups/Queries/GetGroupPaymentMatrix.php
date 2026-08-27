@@ -103,9 +103,13 @@ final class GetGroupPaymentMatrix
     }
 
     /**
-     * The group's fee columns, earliest due date first (fees with no due date
-     * fall to the end, then alphabetically) — the reading order the cashiers
-     * expect: "Frais d'inscription" then Mars, Avril, Mai…
+     * The group's fee columns in the order the legacy « Statistique de
+     * groupe » screen used, which is the one the cashiers read by:
+     * the one-off charges a student settles UP FRONT first — inscription,
+     * exam, annuel: the fees carrying no due date — then the monthly
+     * instalments in school-year order, earliest échéance first
+     * (Septembre → Août, not Janvier → Décembre; the year each month falls
+     * in comes from FraisEcheanceResolver).
      *
      * @return list<array{key: string, nom: string, dateEcheance: ?string,
      *                    dateEcheanceIso: ?string, classification: ?string,
@@ -130,10 +134,15 @@ final class GetGroupPaymentMatrix
             ->values()
             ->all();
 
-        // Nulls last: PHP sorts null before any string, so compare on a
-        // far-future sentinel instead of on the raw value.
-        usort($columns, fn (array $a, array $b): int => [$a['dateEcheanceIso'] ?? '9999-12-31', $a['nom']]
-            <=> [$b['dateEcheanceIso'] ?? '9999-12-31', $b['nom']]);
+        // Dateless fees FIRST (rank 0), then the dated ones by échéance.
+        // Sorting on the raw value instead would work by accident — PHP puts
+        // null before any string — but says nothing about the intent, and a
+        // dateless fee is deliberately at the top, not merely unsorted.
+        usort($columns, fn (array $a, array $b): int => [
+            $a['dateEcheanceIso'] === null ? 0 : 1, $a['dateEcheanceIso'] ?? '', $a['nom'],
+        ] <=> [
+            $b['dateEcheanceIso'] === null ? 0 : 1, $b['dateEcheanceIso'] ?? '', $b['nom'],
+        ]);
 
         return $columns;
     }

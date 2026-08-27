@@ -124,6 +124,33 @@ final class ListPerformanceTest extends TestCase
             );
     }
 
+    /**
+     * The "Montant total" header covers every overdue fee the filters match,
+     * not the page being looked at. The React page used to sum `retards.data`
+     * itself, so the figure was the visible page's subtotal: it moved on every
+     * page click while the filters were unchanged, and understated the real
+     * exposure (27/08/2026).
+     */
+    public function test_recouvrement_total_covers_every_filtered_row_not_just_the_page(): void
+    {
+        // More overdue fees than one page holds, so a page-scoped sum cannot
+        // match. Each leaves 750 outstanding (1000 due, 250 paid).
+        $perPage = 10;
+        $rows = $perPage + 3;
+        for ($i = 1; $i <= $rows; $i++) {
+            $this->overdueFee($i);
+        }
+
+        $this->actingAs($this->admin)
+            ->get(route('backoffice.recouvrement.index', [
+                'dateFrom' => '', 'dateTo' => '', 'perPage' => $perPage,
+            ]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('retards.data', $perPage)
+                ->where('montantTotal', number_format($rows * 750, 2, '.', ''))
+            );
+    }
+
     public function test_encaissements_query_count_does_not_grow_with_rows_on_a_page(): void
     {
         for ($i = 1; $i <= 3; $i++) {

@@ -18,6 +18,7 @@ import FormField from '@/Components/Forms/FormField';
 import TextareaField from '@/Components/Forms/TextareaField';
 import FormActions from '@/Components/Forms/FormActions';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
+import { t } from '@/Lib/i18n';
 import type { EncaissementRow, EncaissementsPageProps, InscriptionPaymentRow, PaymentLine, SelectOption, StudentChequeOption, UnpaidFee } from '@/Types';
 
 interface CreateFormState {
@@ -133,13 +134,32 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
     const applyForm = useForm<ApplyAvanceFormState>({ inscription_id: '', fee_id: '', montant: '' });
     const emailForm = useForm<{ email: string }>({ email: '' });
 
-    // Partial reload: only the paginated rows + the echoed filters are
-    // recomputed; the option lists (caisses/students/banques — closures
-    // server-side) keep their first-visit values.
-    const RELOAD_ONLY = ['encaissements', 'filters'];
+    // Partial reload: only the paginated rows, the echoed filters and the
+    // total they add up to are recomputed; the option lists
+    // (caisses/students/banques — closures server-side) keep their
+    // first-visit values.
+    //
+    // ⚠ `montantTotal` MUST stay in this list: a prop left out of `only` is
+    // not re-sent, so the figure collapsed to 0.00 MAD the moment any filter
+    // or page changed, while the rows below it were correct (26/08/2026).
+    const RELOAD_ONLY = ['encaissements', 'montantTotal', 'filters'];
 
     function reload(nextFilters: Partial<typeof filters>) {
-        router.get('/backoffice/encaissements', { ...filters, ...nextFilters, page: undefined }, {
+        const next = { ...filters, ...nextFilters, page: undefined };
+
+        // A cleared date must reach the server as an EXPLICIT empty value.
+        // Inertia omits empty strings from the query string, so clearing both
+        // dates while no other filter was set produced a bare URL — which the
+        // controller reads as a first visit and answers by redirecting with
+        // today's date re-injected. Sending a marker keeps "cleared" distinct
+        // from "never set" (27/08/2026).
+        const withExplicitDates = {
+            ...next,
+            dateFrom: next.dateFrom === '' ? '-' : next.dateFrom,
+            dateTo: next.dateTo === '' ? '-' : next.dateTo,
+        };
+
+        router.get('/backoffice/encaissements', withExplicitDates, {
             preserveState: true,
             preserveScroll: true,
             replace: true,
@@ -513,8 +533,11 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
 
     return (
         <BackofficeLayout
-            title="Encaissements"
-            breadcrumbs={[{ label: 'Tableau de bord', href: '/backoffice/dashboard' }, { label: 'Encaissements' }]}
+            title={filters.view === 'avance' ? 'Avances' : 'Encaissements'}
+            breadcrumbs={[
+                { label: 'Tableau de bord', href: '/backoffice/dashboard' },
+                { label: filters.view === 'avance' ? 'Avances' : 'Encaissements' },
+            ]}
             actions={
                 filters.view === 'avance' ? (
                     <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreateAvance}>
@@ -544,7 +567,18 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                             type="button"
                             className={`nav-link d-inline-flex align-items-center${filters.view === tab.view ? ' active' : ''}`}
                             aria-current={filters.view === tab.view ? 'page' : undefined}
-                            onClick={() => reload({ view: tab.view })}
+                            onClick={() =>
+                                reload({
+                                    view: tab.view,
+                                    // Avances carry no date window (the fields are not even
+                                    // drawn there), so a value left over from the
+                                    // Encaissements tab must be dropped on the way in —
+                                    // otherwise it keeps filtering invisibly and hides real
+                                    // unspent money.
+                                    dateFrom: tab.view === 'avance' ? '' : filters.dateFrom,
+                                    dateTo: tab.view === 'avance' ? '' : filters.dateTo,
+                                })
+                            }
                         >
                             <i className={`${tab.icon} me-2`} aria-hidden="true" />
                             {tab.label}
@@ -559,7 +593,10 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                 </li>
             </ul>
 
-            <Card title="Encaissements" bodyClassName="p-0 py-3">
+            <Card
+                title={filters.view === 'avance' ? 'Avances' : 'Encaissements'}
+                bodyClassName="p-0 py-3"
+            >
                 <div className="px-3 pt-2">
                     <div className="row g-3 mb-3">
                         {filters.view === 'cheque' ? (
@@ -639,26 +676,37 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                 </div>
                             </>
                         )}
-                        <div className="col-6 col-md-4 col-lg-2">
-                            <label className="form-label" htmlFor="enc-f-du">
-                                Date de début
-                            </label>
-                            <DateField
-                                id="enc-f-du"
-                                value={filters.dateFrom}
-                                onChange={(event) => reload({ dateFrom: event.target.value })}
-                            />
-                        </div>
-                        <div className="col-6 col-md-4 col-lg-2">
-                            <label className="form-label" htmlFor="enc-f-au">
-                                Date de fin
-                            </label>
-                            <DateField
-                                id="enc-f-au"
-                                value={filters.dateTo}
-                                onChange={(event) => reload({ dateTo: event.target.value })}
-                            />
-                        </div>
+                        {/* No date window on the Avances tab: an avance is money received
+                            and not yet allocated, so it stays outstanding until someone
+                            applies it — the backend lists the tab in full for exactly that
+                            reason (GetEncaissementsList, CLAUDE.md §11 "Deliberate
+                            exceptions"). Offering date fields there was misleading: they
+                            still filtered, so a leftover value silently hid real unspent
+                            money. */}
+                        {filters.view !== 'avance' && (
+                            <>
+                                <div className="col-6 col-md-4 col-lg-2">
+                                    <label className="form-label" htmlFor="enc-f-du">
+                                        Date de début
+                                    </label>
+                                    <DateField
+                                        id="enc-f-du"
+                                        value={filters.dateFrom}
+                                        onChange={(event) => reload({ dateFrom: event.target.value })}
+                                    />
+                                </div>
+                                <div className="col-6 col-md-4 col-lg-2">
+                                    <label className="form-label" htmlFor="enc-f-au">
+                                        Date de fin
+                                    </label>
+                                    <DateField
+                                        id="enc-f-au"
+                                        value={filters.dateTo}
+                                        onChange={(event) => reload({ dateTo: event.target.value })}
+                                    />
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
 
@@ -676,7 +724,10 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                 />
 
                 <p className="fw-medium px-3 mb-3">
-                    Montant total : {Number(montantTotal).toFixed(2)} MAD
+                    {/* Avances total what is still AVAILABLE (montant − applied − refunded),
+                        so the label states that rather than claiming a plain sum. */}
+                    {filters.view === 'avance' ? t('Remaining total') : t('Total amount')} :{' '}
+                    {Number(montantTotal ?? 0).toFixed(2)} MAD
                 </p>
 
                 {encaissements.data.length === 0 ? (

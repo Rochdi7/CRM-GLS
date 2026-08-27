@@ -267,6 +267,7 @@ export default function CaissesIndex({
     journalMine,
     globale,
     transfers,
+    transfersMontantTotal,
     transferCaisses,
     transferStatuts,
     myCaisse,
@@ -536,7 +537,11 @@ export default function CaissesIndex({
                         search={<SearchInput value={transferFilters.search} onSearch={(value) => reloadTransfers({ search: value })} />}
                     />
 
-                    <p className="px-3 fw-semibold">Total : {transfers.data.reduce((sum, r) => sum + Number(r.montant), 0).toFixed(2)}</p>
+                    {/* Server-computed over the WHOLE filtered set
+                        (GetCaisseTransfersList). Summing transfers.data here
+                        totalled only the visible page, so the figure moved on
+                        every page click while the filters were unchanged. */}
+                    <p className="px-3 fw-semibold">Total : {Number(transfersMontantTotal ?? 0).toFixed(2)}</p>
 
                     {transfers.data.length === 0 ? (
                         <EmptyState title="Aucun transfert" icon="ti ti-arrows-exchange" />

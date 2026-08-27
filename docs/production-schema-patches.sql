@@ -72,4 +72,38 @@ CREATE UNIQUE INDEX IF NOT EXISTS encaissements_etab_legacy_ref_unique
 ALTER TABLE depenses ADD COLUMN IF NOT EXISTS periode_debut date;
 ALTER TABLE depenses ADD COLUMN IF NOT EXISTS periode_fin date;
 
+-- ---------------------------------------------------------------------------
+-- 27/08/2026 — inscriptions.motif_annulation
+-- Why an enrollment was cancelled. Free text validated against the ACTIVE
+-- MotifAnnulation names at write time (no FK), exactly like
+-- seances.motif_annulation, so deactivating or renaming a reason later never
+-- rewrites what a past cancellation said. NULL on rows never cancelled.
+-- ---------------------------------------------------------------------------
+ALTER TABLE inscriptions ADD COLUMN IF NOT EXISTS motif_annulation varchar(120);
+
 COMMIT;
+
+-- ---------------------------------------------------------------------------
+-- 27/08/2026 — DATA repair (no DDL): monthly fee due dates with the wrong year
+--
+-- FraisEcheanceResolver used to take the YEAR from now(), so all twelve
+-- monthly fees of a group landed in the same calendar year. A school year
+-- straddles two: a 2025/2026 group owes Septembre–Décembre in 2025 and
+-- Janvier–Août in 2026. With one year for all of them, « Frais de Septembre »
+-- sorted nine months AFTER « Frais de Janvier », and every screen ordering
+-- fees by échéance — the group fee table, the inscription form,
+-- « Statistique de groupe » — opened the school year on Janvier instead of on
+-- the group's first month.
+--
+-- The resolver now anchors on the group's date_debut_formation, falling back
+-- to its académic year's start. The stored dates are re-derived by an
+-- artisan command, NOT by SQL — it only rewrites rows whose day+month still
+-- match the old default (a due date edited by hand is left alone) and is
+-- idempotent:
+--
+--   php artisan frais:repair-echeance-annee            # dry-run, read it first
+--   php artisan frais:repair-echeance-annee --apply
+--
+-- Touches group_frais.date_echeance and inscription_fees.date_echeance.
+-- Local run 27/08/2026: 1 016 group fees, 31 948 inscription lines.
+-- ---------------------------------------------------------------------------

@@ -36,17 +36,19 @@ final class GetCaisseTransfersList
 
     public const TYPE_RECU = 'recu';
 
+    /**
+     * @return array{data: LengthAwarePaginator, montantTotal: string}
+     */
     public function __invoke(
         User $user,
         string $search = '',
         string $statutFilter = CaisseTransfer::STATUT_EN_ATTENTE,
         string $typeFilter = '',
         int $perPage = self::DEFAULT_PER_PAGE,
-    ): LengthAwarePaginator {
+    ): array {
         $myCaisseIds = $user->employee?->caisses()->pluck('id')->all() ?? [];
 
-        $transfers = CaisseTransfer::query()
-            ->with(['caisseSource.responsable', 'caisseDestination.responsable', 'requestedBy', 'validatedBy'])
+        $base = CaisseTransfer::query()
             ->where(function (Builder $q) use ($user): void {
                 $q->whereHas('caisseSource', function (Builder $sq) use ($user): void {
                     $this->centerAccess->scopeAccessibleCenters($sq, $user);
@@ -71,7 +73,18 @@ final class GetCaisseTransfersList
                     $sub->where('reference', 'ilike', $term)->orWhere('note', 'ilike', $term);
                 });
             })
-            ->latest()
+            ->latest();
+
+        // Total over the WHOLE filtered set, before pagination. The page used
+        // to sum `transfers.data` in React, so the figure was the visible
+        // page's subtotal: it changed on every page click while the filters
+        // were unchanged (27/08/2026). Mirrors the montantTotal its three
+        // sibling finance queries already return (GetEncaissementsList,
+        // GetChequesList, GetDepensesList).
+        $montantTotal = (clone $base)->sum('montant');
+
+        $transfers = $base
+            ->with(['caisseSource.responsable', 'caisseDestination.responsable', 'requestedBy', 'validatedBy'])
             ->paginate($perPage)
             ->withQueryString();
 
@@ -109,7 +122,10 @@ final class GetCaisseTransfersList
             ];
         });
 
-        return $transfers;
+        return [
+            'data' => $transfers,
+            'montantTotal' => number_format((float) $montantTotal, 2, '.', ''),
+        ];
     }
 
     /**

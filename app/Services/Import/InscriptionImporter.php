@@ -446,6 +446,10 @@ final class InscriptionImporter implements Importer
             // modal list nothing at all — its query keeps only fees whose
             // reste (montant - payé) is above zero.
             $dateDebut = $group->date_debut_formation?->toDateString();
+            // Fallback anchor for the due-date YEAR when the group has no
+            // start date — which is the norm for imported groups, the legacy
+            // export carries none. See FraisEcheanceResolver::anneeFor().
+            $debutAnnee = $group->anneeScolaire?->date_debut?->toDateString();
 
             // Priced at what the group's own center charges — the same
             // monthly fee is 1400 in Rabat and 1200 in Agadir — falling
@@ -459,7 +463,7 @@ final class InscriptionImporter implements Importer
             foreach ($catalogue as $frais) {
                 $sync[$frais->id] = [
                     'montant' => $frais->montantPourCentre($group->etablissement_id),
-                    'date_echeance' => FraisEcheanceResolver::defaultFor($frais->nom, $dateDebut),
+                    'date_echeance' => FraisEcheanceResolver::defaultFor($frais->nom, $dateDebut, $debutAnnee),
                     'classification' => null,
                 ];
             }

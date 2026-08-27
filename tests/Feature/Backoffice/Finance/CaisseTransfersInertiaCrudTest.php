@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Backoffice\Finance;
 
+use App\Domain\Finance\Queries\GetCaisseTransfersList;
 use App\Models\Caisse;
 use App\Models\CaisseTransfer;
 use App\Models\Employee;
@@ -135,6 +136,41 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
             ->assertInertia(fn ($page) => $page->has('transfers.data.0'));
         $receiverRow = $receiverResponse->viewData('page')['props']['transfers']['data'][0];
         $this->assertSame('Réception', $receiverRow['typeTransaction']);
+    }
+
+    /**
+     * The header total covers the WHOLE filtered set, not the page being
+     * looked at. The React page used to sum `transfers.data` itself, so the
+     * figure was the visible page's subtotal: it moved on every page click
+     * while the filters were unchanged, and understated the real amount
+     * (27/08/2026).
+     */
+    public function test_transfer_total_covers_every_filtered_row_not_just_the_page(): void
+    {
+        $sender = $this->userWith('cash-transfers.view', 'cash-transfers.create');
+        $receiver = $this->userWith('cash-transfers.view');
+        $receiverCaisse = $receiver->employee->caisses()->first();
+
+        $this->actingAs($sender);
+        $sender->employee->caisses()->first()->update(['solde' => 100000]);
+
+        // One more row than a page holds (DEFAULT_PER_PAGE = 15), so a
+        // page-scoped sum cannot match the real total.
+        $rows = GetCaisseTransfersList::DEFAULT_PER_PAGE + 1;
+        for ($i = 0; $i < $rows; $i++) {
+            $this->post(route('backoffice.caisse-transfers.store'), [
+                'caisse_destination_id' => $receiverCaisse->id,
+                'montant' => '100',
+            ]);
+        }
+
+        $response = $this->get(route('backoffice.caisses.index', ['tab' => 'transferts']))->assertOk();
+
+        $props = $response->viewData('page')['props'];
+
+        // Every row x 100 across all pages, though this page shows fewer.
+        $this->assertSame(number_format($rows * 100, 2, '.', ''), (string) $props['transfersMontantTotal']);
+        $this->assertGreaterThan(count($props['transfers']['data']), (int) $props['transfers']['total']);
     }
 
     public function test_requesting_a_transfer_does_not_move_any_balance(): void

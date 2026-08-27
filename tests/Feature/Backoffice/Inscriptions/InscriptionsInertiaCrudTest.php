@@ -695,7 +695,13 @@ final class InscriptionsInertiaCrudTest extends TestCase
         $this->assertSame('Active', $inscription->fresh()->statut);
     }
 
-    public function test_annuler_sets_statut_to_annulee(): void
+    /**
+     * Cancelling is NOT reachable through this endpoint any more — it needs a
+     * reason, an end date and a fee-cleanup decision, so it goes through
+     * inscriptions.cancel(). Leaving a bare `statut=Annulée` path open would
+     * be a way to cancel with no reason recorded.
+     */
+    public function test_update_statut_rejects_annulee_as_a_target(): void
     {
         $this->actingAs($this->userWith('registrations.view', 'registrations.update'));
         $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
@@ -708,9 +714,9 @@ final class InscriptionsInertiaCrudTest extends TestCase
 
         $this->patch(route('backoffice.inscriptions.update-statut', $inscription), [
             'statut' => 'Annulée',
-        ])->assertRedirect(route('backoffice.inscriptions.index'));
+        ])->assertStatus(422);
 
-        $this->assertSame('Annulée', $inscription->fresh()->statut);
+        $this->assertSame('Active', $inscription->fresh()->statut);
     }
 
     /**
@@ -780,14 +786,16 @@ final class InscriptionsInertiaCrudTest extends TestCase
         $inscription = Inscription::create([
             'reference' => 'INS-STATUT-NOPERM', 'student_id' => $student->id, 'group_id' => $group->id,
             'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
-            'statut' => 'Active', 'date_inscription' => '2025-09-15',
+            'statut' => 'Annulée', 'date_inscription' => '2025-09-15',
         ]);
 
+        // Reactivation, i.e. the one transition this endpoint still accepts —
+        // so a 403 here proves the permission gate, not the value guard.
         $this->patch(route('backoffice.inscriptions.update-statut', $inscription), [
-            'statut' => 'Annulée',
+            'statut' => 'Active',
         ])->assertForbidden();
 
-        $this->assertSame('Active', $inscription->fresh()->statut);
+        $this->assertSame('Annulée', $inscription->fresh()->statut);
     }
 
     public function test_user_without_update_permission_cannot_update(): void

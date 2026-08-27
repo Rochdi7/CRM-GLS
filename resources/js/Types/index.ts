@@ -1291,6 +1291,8 @@ export interface InscriptionsPageProps {
     canManageFees: boolean;
     /** UI convenience only — hides the "Changement de groupe" row action; real enforcement is registrations.change-group on the server (InscriptionController::changeGroup). */
     canChangeGroup: boolean;
+    /** Active cancellation reasons (« Changement de groupe » excluded) for the "Annuler l'inscription" form. */
+    motifsAnnulation: string[];
     [key: string]: unknown;
 }
 
@@ -1434,6 +1436,8 @@ export interface CaissesPageProps {
     /** « Caisse globale » tab (cash-registers.view), computed only when that tab is active. */
     globale: CaisseGlobaleData | null;
     transfers: PaginatedData<CaisseTransferRow> | null;
+    /** Montant summed over the WHOLE filtered set of transfers, not the visible page. */
+    transfersMontantTotal: MoneyDisplay;
     transferStatutCounts: Record<string, number>;
     transferCaisses: CaisseTransferFormOption[];
     transferStatuts: string[];
@@ -1787,6 +1791,8 @@ export interface RecouvrementFilters {
 
 export interface RecouvrementPageProps {
     retards: PaginatedData<RetardRow>;
+    /** Reste-à-payer summed over the WHOLE filtered set, not the visible page. */
+    montantTotal: MoneyDisplay;
     bucketCounts: Record<string, number>;
     filters: RecouvrementFilters;
     perPageOptions: number[];

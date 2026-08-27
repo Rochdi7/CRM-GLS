@@ -15,7 +15,9 @@ use Carbon\CarbonImmutable;
  *
  *   month → taken from the fee's name (Septembre = 9, Janvier = 1, …)
  *   day   → the group's own date_debut_formation (its "jj")
- *   year  → the current year
+ *   year  → the calendar year that month falls in FOR THIS GROUP, derived
+ *            from date_debut_formation, or from the group's académic year
+ *            when it has none — see anneeFor() below.
  *
  * A fee whose name carries no month (inscription, annuel, exam…) has no
  * derivable due date and returns null, leaving it to be set by hand.
@@ -46,10 +48,16 @@ final class FraisEcheanceResolver
     /**
      * @param  string  $fraisNom  e.g. "Frais de Septembre"
      * @param  ?string $dateDebutFormation  the group's start date (Y-m-d)
+     * @param  ?string $debutAnneeScolaire  the group's académic year start
+     *                 (Y-m-d) — the fallback anchor when the group carries no
+     *                 start date of its own
      * @return ?string Y-m-d, or null when the name carries no month
      */
-    public static function defaultFor(string $fraisNom, ?string $dateDebutFormation): ?string
-    {
+    public static function defaultFor(
+        string $fraisNom,
+        ?string $dateDebutFormation,
+        ?string $debutAnneeScolaire = null,
+    ): ?string {
         $mois = self::moisFromNom($fraisNom);
 
         if ($mois === null) {
@@ -57,13 +65,52 @@ final class FraisEcheanceResolver
         }
 
         $jour = self::jourFrom($dateDebutFormation);
-        $annee = (int) CarbonImmutable::now()->year;
+        $annee = self::anneeFor($mois, $dateDebutFormation, $debutAnneeScolaire);
 
         // Clamp to the month's real length so "31" in February becomes the
         // 28th/29th instead of overflowing into March.
         $jour = min($jour, (int) CarbonImmutable::create($annee, $mois, 1)->daysInMonth);
 
         return CarbonImmutable::create($annee, $mois, $jour)->toDateString();
+    }
+
+    /**
+     * The calendar year the given month falls in for a group starting on
+     * $dateDebutFormation.
+     *
+     * A school year straddles TWO calendar years: a group starting in
+     * September 2025 runs Septembre–Décembre in 2025 and Janvier–Août in
+     * 2026. Anchoring on the current year instead (what this did until
+     * 27/08/2026) stamped every month with the same year, so « Frais de
+     * Septembre » landed nine months AFTER « Frais de Janvier » and every
+     * screen that orders fees by due date — the group fee table, the
+     * inscription form, « Statistique de groupe » — read the school year
+     * backwards, opening on Janvier instead of on the group's real first
+     * month.
+     *
+     * Rule: months at or after the start month belong to the start year,
+     * earlier months roll into the next one.
+     *
+     * Anchor preference:
+     *   1. the group's own date_debut_formation — the real first lesson;
+     *   2. the group's ACADÉMIC YEAR start (September) — which is what
+     *      defines the school year in the first place, and which every group
+     *      has even though date_debut_formation is optional and in practice
+     *      almost never filled in;
+     *   3. the current calendar year, when neither is known.
+     */
+    private static function anneeFor(
+        int $mois,
+        ?string $dateDebutFormation,
+        ?string $debutAnneeScolaire = null,
+    ): int {
+        $debut = self::debutFrom($dateDebutFormation) ?? self::debutFrom($debutAnneeScolaire);
+
+        if ($debut === null) {
+            return (int) CarbonImmutable::now()->year;
+        }
+
+        return $mois >= $debut->month ? $debut->year : $debut->year + 1;
     }
 
     /** The month a fee's name refers to, or null if it names none. */
@@ -83,17 +130,38 @@ final class FraisEcheanceResolver
         return null;
     }
 
+    /**
+     * The sort key that puts a fee list in TEACHING-CALENDAR order — janvier
+     * to décembre — instead of alphabetical (which interleaves "Avril",
+     * "Août", "Octobre" meaninglessly).
+     *
+     * Fees whose name carries no month (inscription, examen, annuel…) are not
+     * part of the monthly cycle and sort FIRST (key 0), so the one-off charges
+     * a student pays up front stay at the top of the table, ahead of the
+     * twelve monthly instalments.
+     */
+    public static function ordreFromNom(string $fraisNom): int
+    {
+        return self::moisFromNom($fraisNom) ?? 0;
+    }
+
     /** The group's start day, defaulting to the 1st when unknown. */
     private static function jourFrom(?string $dateDebutFormation): int
     {
+        return self::debutFrom($dateDebutFormation)?->day ?? 1;
+    }
+
+    /** The group's start date, or null when absent/unparseable. */
+    private static function debutFrom(?string $dateDebutFormation): ?CarbonImmutable
+    {
         if ($dateDebutFormation === null || $dateDebutFormation === '') {
-            return 1;
+            return null;
         }
 
         try {
-            return (int) CarbonImmutable::parse($dateDebutFormation)->day;
+            return CarbonImmutable::parse($dateDebutFormation);
         } catch (\Throwable) {
-            return 1;
+            return null;
         }
     }
 

@@ -11,6 +11,7 @@ use App\Models\Student;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 
@@ -164,7 +165,17 @@ final class GetEncaissementsList
         // page shown) — mirrors GetDepensesList's montantTotal so every
         // finance list states the total it represents, not just the visible
         // page's subtotal.
-        $montantTotal = (clone $base)->sum('montant');
+        //
+        // The Avances tab totals what is still AVAILABLE, not what was once
+        // received: an avance's remaining is montant − what has been applied
+        // to fees (applications) − what was refunded, the same arithmetic the
+        // per-row "Montant restant" column shows. Summing `montant` there
+        // announced money that is already spent (26/08/2026). Computed as ONE
+        // aggregate over the filtered set — never a per-row accessor in a
+        // loop (CLAUDE.md §17 "read models").
+        $montantTotal = $view === 'avance'
+            ? $this->sumAvancesRestantes(clone $base)
+            : (clone $base)->sum('montant');
 
         $encaissements = (clone $base)
             ->with(['student', 'fee.inscription', 'caisse', 'agent'])
@@ -214,6 +225,37 @@ final class GetEncaissementsList
             'data' => $encaissements,
             'montantTotal' => number_format((float) $montantTotal, 2, '.', ''),
         ];
+    }
+
+    /**
+     * Total STILL AVAILABLE across the filtered avances: montant minus what
+     * has been applied to fees minus what was refunded — the per-row
+     * "Montant restant" column, summed by the database in one aggregate
+     * (never a per-row accessor in a loop, CLAUDE.md §17 "read models").
+     *
+     * The inherited select AND order are dropped first: an aggregate query
+     * cannot also carry `encaissements.*` with its correlated `withSum`
+     * subquery, nor `order by id` — PostgreSQL rejects both with "column
+     * encaissements.id must appear in the GROUP BY clause". A refund on an
+     * avance never exceeds what is left, so the per-row result cannot go
+     * negative.
+     *
+     * @param  Builder<Encaissement>  $query  the filtered avances
+     */
+    private function sumAvancesRestantes(Builder $query): float
+    {
+        $query->getQuery()->columns = null;
+        $query->getQuery()->orders = null;
+
+        return (float) $query
+            ->selectRaw(
+                'coalesce(sum(encaissements.montant'
+                .' - coalesce((select sum(a.montant) from encaissements a'
+                .' where a.applied_from_encaissement_id = encaissements.id), 0)'
+                .' - coalesce((select sum(r.montant) from remboursements r'
+                .' where r.encaissement_id = encaissements.id), 0)), 0) as total',
+            )
+            ->value('total');
     }
 
     /**

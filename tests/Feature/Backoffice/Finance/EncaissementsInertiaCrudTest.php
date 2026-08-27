@@ -17,6 +17,7 @@ use App\Models\User;
 use App\Services\Context\CurrentContext;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Inertia;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -564,6 +565,145 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame('0.00', (string) $avanceRows[0]['montantRestant']);
     }
 
+    public function test_montant_total_is_resent_on_a_partial_reload(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        $this->actingAs($user);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(5000);
+
+        $this->post(route('backoffice.encaissements.store'), [
+            'student_id' => $student->id, 'inscription_id' => $inscription->id,
+            'date_paiement' => '2025-09-20',
+            'payment_lines' => [
+                ['fee_id' => $fee->id, 'montant' => '1200', 'methode' => 'Espèces', 'date_paiement' => '2025-09-20'],
+            ],
+        ])->assertRedirect();
+
+        // Exactly what the page's reload() sends: an Inertia partial visit
+        // asking only for the rows, the total and the echoed filters. A prop
+        // missing from that list is not re-sent and blanks out on screen.
+        // '-' is what the page sends for a cleared date (route() drops empty
+        // strings, so the key would vanish entirely otherwise).
+        $response = $this->get(
+            route('backoffice.encaissements.index', ['dateFrom' => '-', 'dateTo' => '-']),
+            [
+                'X-Inertia' => 'true',
+                'X-Inertia-Version' => Inertia::getVersion(),
+                'X-Inertia-Partial-Component' => 'Backoffice/Encaissements/Index',
+                'X-Inertia-Partial-Data' => 'encaissements,montantTotal,filters',
+            ],
+        );
+
+        // A partial reload answers with JSON (not the HTML shell), so the
+        // props are read straight off the body rather than via viewData().
+        $response->assertOk();
+        $props = $response->json('props');
+
+        $this->assertArrayHasKey('montantTotal', $props, 'montantTotal must be re-sent by the partial reload.');
+        $this->assertSame('1200.00', (string) $props['montantTotal']);
+        $this->assertCount(1, $props['encaissements']['data']);
+    }
+
+    public function test_montant_total_follows_the_student_filter(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        $this->actingAs($user);
+
+        [$studentA, $inscriptionA, $feeA] = $this->enrolledStudentWithFee(5000);
+        [$studentB, $inscriptionB, $feeB] = $this->enrolledStudentWithFee(5000);
+
+        foreach ([[$inscriptionA, $feeA, '900'], [$inscriptionB, $feeB, '2500']] as [$inscription, $fee, $montant]) {
+            $this->post(route('backoffice.encaissements.store'), [
+                'student_id' => $inscription->student_id, 'inscription_id' => $inscription->id,
+                'date_paiement' => '2025-09-20',
+                'payment_lines' => [
+                    ['fee_id' => $fee->id, 'montant' => $montant, 'methode' => 'Espèces', 'date_paiement' => '2025-09-20'],
+                ],
+            ])->assertRedirect();
+        }
+
+        // Unfiltered: both students' money.
+        $this->get(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => '']))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('montantTotal', '3400.00'));
+
+        // Narrowing to one student must move the total with the rows — it must
+        // never keep a figure from the previous filter state (26/08/2026: the
+        // total was left out of the partial-reload `only:` list, so it kept a
+        // stale value while the rows below it were correct).
+        $this->get(route('backoffice.encaissements.index', [
+            'studentFilter' => $studentA->id, 'dateFrom' => '', 'dateTo' => '',
+        ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('encaissements.data', 1)
+                ->where('montantTotal', '900.00')
+            );
+    }
+
+    public function test_montant_total_sums_the_whole_filtered_set_not_just_the_page(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        $this->actingAs($user);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(5000);
+
+        foreach (['300', '700'] as $montant) {
+            $this->post(route('backoffice.encaissements.store'), [
+                'student_id' => $student->id, 'inscription_id' => $inscription->id,
+                'date_paiement' => '2025-09-20',
+                'payment_lines' => [
+                    ['fee_id' => $fee->id, 'montant' => $montant, 'methode' => 'Espèces', 'date_paiement' => '2025-09-20'],
+                ],
+            ])->assertRedirect();
+        }
+
+        $this->get(route('backoffice.encaissements.index', [
+            'dateFrom' => '2025-09-01', 'dateTo' => '2025-09-30',
+        ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('montantTotal', '1000.00'));
+
+        // Outside the window the total is 0, not the unfiltered sum.
+        $this->get(route('backoffice.encaissements.index', [
+            'dateFrom' => '2025-10-01', 'dateTo' => '2025-10-31',
+        ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('montantTotal', '0.00'));
+    }
+
+    public function test_avances_montant_total_reports_what_is_still_available(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update');
+        $this->actingAs($user);
+        [$student, , $fee] = $this->enrolledStudentWithFee(1000);
+
+        $this->post(route('backoffice.avances.store'), [
+            'student_id' => $student->id,
+            'montant' => '600',
+            'methode' => 'Espèces',
+            'date_paiement' => '2025-09-21',
+        ])->assertRedirect();
+
+        $avanceUrl = route('backoffice.encaissements.index', ['view' => 'avance', 'dateFrom' => '', 'dateTo' => '']);
+
+        // Nothing applied yet: the whole avance is still available.
+        $this->get($avanceUrl)
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('montantTotal', '600.00'));
+
+        $avance = Encaissement::whereNull('inscription_fee_id')->firstOrFail();
+        $this->post(route('backoffice.avances.apply', $avance), [
+            'fee_id' => $fee->id,
+            'montant' => '250',
+        ])->assertSessionHasNoErrors()->assertRedirect();
+
+        // 600 received − 250 applied to a fee = 350 still unallocated. The
+        // gross 600 would announce money that is already spent.
+        $this->get($avanceUrl)
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('montantTotal', '350.00'));
+    }
+
     public function test_applying_more_than_the_avances_remaining_balance_is_rejected(): void
     {
         $user = $this->userWith('payments.view', 'payments.create', 'payments.update');
@@ -1050,6 +1190,31 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame($encaissement->id, $mail->encaissement->id);
         $this->assertCount(1, $mail->attachments());
         $this->assertStringContainsString('ENC-MAIL3', $mail->envelope()->subject);
+    }
+
+    public function test_recu_email_embeds_its_logo_instead_of_linking_to_it(): void
+    {
+        // The regression this guards (27/08/2026): the header logo was an
+        // asset() URL to a .webp. A URL is fetched by the mail client, so
+        // Gmail could not reach a local APP_URL and image proxies block it —
+        // the header rendered as a broken-image box — and no major mail
+        // client decodes WebP anyway. It must travel INSIDE the message.
+        $user = $this->userWith('payments.view');
+        $this->actingAs($user);
+        [$student, , $fee] = $this->enrolledStudentWithFee(1500);
+        $encaissement = Encaissement::create([
+            'reference' => 'ENC-MAIL4', 'student_id' => $student->id, 'inscription_fee_id' => $fee->id,
+            'caisse_id' => Caisse::factory()->create(['etablissement_id' => $this->centre->id])->id,
+            'agent_id' => $user->employee->id, 'montant' => 1500, 'methode' => 'Espèces', 'date_paiement' => '2025-09-20',
+        ]);
+
+        $html = (new \App\Domain\Payments\Mail\EncaissementRecuMail($encaissement))->render();
+
+        // Self-contained: embed() inlines it, and Symfony turns it into a
+        // cid: part when the message is actually assembled.
+        $this->assertMatchesRegularExpression('/<img[^>]+src="(data:image\/png;base64,|cid:)/', $html);
+        $this->assertDoesNotMatchRegularExpression('/<img[^>]+src="https?:\/\//', $html);
+        $this->assertStringNotContainsString('.webp', $html);
     }
 
     public function test_recu_email_requires_a_valid_address(): void

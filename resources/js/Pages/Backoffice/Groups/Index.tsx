@@ -203,6 +203,36 @@ function emptyForm(fraisCatalog: GroupFraisCatalogOption[]): GroupFormState {
  * absent from the current Livewire form (docs/phase-8-students-groups-
  * inventory.md).
  */
+/**
+ * Removes or restores one « Frais du groupe » line — a plain JSON request
+ * rather than an Inertia visit.
+ *
+ * Both fire from inside the OPEN edit modal, which updates its own fee table
+ * from local state afterwards. Routing them through `router.delete()`/
+ * `router.post()` made Inertia re-run the index controller and rebuild the
+ * whole page payload for every single click. Nothing behind the modal depends
+ * on the result. Mirrors postFeeVisibility() in the Inscriptions page.
+ *
+ * Throws on a non-2xx response so the caller's `.finally()` still clears its
+ * spinner and the optimistic UI update is skipped.
+ */
+async function postGroupFrais(
+    url: string,
+    method: 'DELETE' | 'POST',
+): Promise<{ ligne?: { montant: string; date_echeance: string; classification: string } }> {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+    const response = await fetch(url, {
+        method,
+        headers: { 'X-CSRF-TOKEN': csrf, Accept: 'application/json' },
+    });
+
+    if (!response.ok) {
+        throw new Error('group fee visibility request failed');
+    }
+
+    return response.json();
+}
+
 export default function GroupsIndex({
     groups,
     statutCounts,
@@ -233,11 +263,16 @@ export default function GroupsIndex({
     const [lifecycleTarget, setLifecycleTarget] = useState<{ group: GroupRow; action: LifecycleAction } | null>(null);
     const [lifecycleError, setLifecycleError] = useState<string | undefined>(undefined);
     const [lifecycleProcessing, setLifecycleProcessing] = useState(false);
-    // « Frais du groupe » removal: the fee awaiting confirmation, and whether
-    // a remove/restore request is in flight (both actions cascade to every
-    // inscription of the group, so the table is frozen while one runs).
-    const [fraisToRemove, setFraisToRemove] = useState<SelectOption | null>(null);
-    const [fraisProcessing, setFraisProcessing] = useState(false);
+    // « Frais du groupe » removal — the LIVE working copy of which fees the
+    // group carries and which it has dropped, mirroring the Inscriptions edit
+    // modal (removeEditingLine/restoreHiddenFee). They start from the server
+    // row on openEdit() and are updated locally as soon as the JSON request
+    // resolves, so the trash icon empties the row instantly instead of waiting
+    // on a full Inertia page rebuild. `null` means "not editing".
+    const [fraisActifs, setFraisActifs] = useState<number[] | null>(null);
+    const [fraisRetiresIds, setFraisRetiresIds] = useState<number[]>([]);
+    // Per-row spinner: the id of the fee whose remove/restore is in flight.
+    const [fraisProcessingId, setFraisProcessingId] = useState<number | null>(null);
 
     const fraisCatalogOptions: SelectOption[] = fraisCatalog.map((f) => ({ value: f.id, label: f.nom }));
     /**
@@ -248,12 +283,13 @@ export default function GroupsIndex({
      * instead of silently reappearing on the next save.
      */
     const fraisRowOptions: SelectOption[] =
-        editingGroup === null
+        editingGroup === null || fraisActifs === null
             ? fraisCatalogOptions
-            : fraisCatalogOptions.filter((f) => String(f.value) in editingGroup.fraisLignes);
+            : fraisCatalogOptions.filter((f) => fraisActifs.includes(f.value as number));
     /** Removed fees, restorable from the « Frais retirés » list below the table. */
-    const fraisRetires: SelectOption[] =
-        editingGroup?.fraisRetires.map((f) => ({ value: f.id, label: f.nom })) ?? [];
+    const fraisRetires: SelectOption[] = fraisCatalogOptions.filter((f) =>
+        fraisRetiresIds.includes(f.value as number),
+    );
     const niveauOptions: SelectOption[] = niveaux.map((n) => ({ value: n, label: n }));
     const enseignantOptions: SelectOption[] = enseignants.map((e) => ({ value: e.id, label: e.nom }));
     // Create-mode status options omit "Fin de formation" — a group can only
@@ -299,6 +335,8 @@ export default function GroupsIndex({
 
     function openCreate() {
         setEditingGroup(null);
+        setFraisActifs(null);
+        setFraisRetiresIds([]);
         form.reset();
         form.clearErrors();
         form.setData(emptyForm(fraisCatalog));
@@ -333,6 +371,8 @@ export default function GroupsIndex({
             fraisLignes: lignes,
         });
 
+        setFraisActifs(Object.keys(group.fraisLignes).map(Number));
+        setFraisRetiresIds(group.fraisRetires.map((f) => f.id));
         setFraisPage(1);
         setShowModal(true);
     }
@@ -340,6 +380,8 @@ export default function GroupsIndex({
     function closeModal() {
         setShowModal(false);
         setEditingGroup(null);
+        setFraisActifs(null);
+        setFraisRetiresIds([]);
         form.reset();
         form.clearErrors();
         setFraisPage(1);
@@ -485,37 +527,70 @@ export default function GroupsIndex({
      * immediately against the server, because it cascades: every inscription
      * of the group has that fee line HIDDEN (never deleted), and the money
      * already collected on it is released back into re-applicable avances.
-     * `preserveState` keeps the edit modal open with its unsaved changes;
-     * the refreshed `groups` prop drops the row from the table.
+     *
+     * fetch(), not router.delete(): an Inertia visit re-runs the index
+     * controller and rebuilds the whole page payload (paginated list +
+     * frais/enseignants catalogs) just to drop one row, which is what made the
+     * trash icon feel slow. The endpoint returns plain JSON and the table is
+     * updated from local state — same pattern as the Inscriptions edit modal
+     * (removeEditingLine).
      */
     function removeFrais(frais: SelectOption) {
         if (editingGroup === null) return;
 
-        setFraisProcessing(true);
-        router.delete(`/backoffice/groups/${editingGroup.id}/frais/${frais.value}`, {
-            preserveState: true,
-            preserveScroll: true,
-            onFinish: () => {
-                setFraisProcessing(false);
-                setFraisToRemove(null);
-            },
-        });
+        const fraisId = frais.value as number;
+
+        setFraisProcessingId(fraisId);
+        postGroupFrais(`/backoffice/groups/${editingGroup.id}/frais/${fraisId}`, 'DELETE')
+            .then(() => {
+                setFraisActifs((previous) => {
+                    const next = (previous ?? []).filter((id) => id !== fraisId);
+
+                    // Removing the last row of the current page would leave the
+                    // client-side pager pointing past the end (a blank table).
+                    setFraisPage((page) =>
+                        Math.min(page, Math.max(1, Math.ceil(next.length / GROUP_FRAIS_PER_PAGE))),
+                    );
+
+                    return next;
+                });
+                setFraisRetiresIds((previous) =>
+                    previous.includes(fraisId) ? previous : [...previous, fraisId],
+                );
+            })
+            .finally(() => setFraisProcessingId(null));
     }
 
-    /** Reverse of removeFrais() — re-attaches the fee and un-hides its lines. */
+    /**
+     * Reverse of removeFrais() — re-attaches the fee and un-hides its lines.
+     * The response carries the restored row's shape, so it is spliced straight
+     * back into the form state instead of re-fetching the page.
+     */
     function restoreFrais(frais: SelectOption) {
         if (editingGroup === null) return;
 
-        setFraisProcessing(true);
-        router.post(
-            `/backoffice/groups/${editingGroup.id}/frais/${frais.value}/restore`,
-            {},
-            {
-                preserveState: true,
-                preserveScroll: true,
-                onFinish: () => setFraisProcessing(false),
-            },
-        );
+        const fraisId = frais.value as number;
+
+        setFraisProcessingId(fraisId);
+        postGroupFrais(`/backoffice/groups/${editingGroup.id}/frais/${fraisId}/restore`, 'POST')
+            .then((data) => {
+                setFraisRetiresIds((previous) => previous.filter((id) => id !== fraisId));
+                setFraisActifs((previous) =>
+                    (previous ?? []).includes(fraisId) ? (previous ?? []) : [...(previous ?? []), fraisId],
+                );
+
+                if (data.ligne) {
+                    form.setData('fraisLignes', {
+                        ...form.data.fraisLignes,
+                        [fraisId]: {
+                            montant: data.ligne.montant,
+                            date_echeance: data.ligne.date_echeance,
+                            classification: data.ligne.classification,
+                        },
+                    });
+                }
+            })
+            .finally(() => setFraisProcessingId(null));
     }
 
     function setLigne(fraisId: number, field: keyof GroupFraisLigne, value: string) {
@@ -981,10 +1056,17 @@ export default function GroupsIndex({
                                                                 type="button"
                                                                 className="btn btn-sm btn-outline-danger border-0"
                                                                 title="Retirer ce frais du groupe et de toutes ses inscriptions"
-                                                                disabled={fraisProcessing}
-                                                                onClick={() => setFraisToRemove(fee)}
+                                                                aria-label="Retirer ce frais"
+                                                                disabled={fraisProcessingId === fee.value}
+                                                                onClick={() => removeFrais(fee)}
                                                             >
-                                                                <i className="ti ti-trash" />
+                                                                <i
+                                                                    className={
+                                                                        fraisProcessingId === fee.value
+                                                                            ? 'ti ti-loader-2'
+                                                                            : 'ti ti-trash'
+                                                                    }
+                                                                />
                                                             </button>
                                                         </td>
                                                     )}
@@ -1018,10 +1100,10 @@ export default function GroupsIndex({
                                             <button
                                                 type="button"
                                                 className="btn btn-sm btn-link p-0 text-primary"
-                                                disabled={fraisProcessing}
+                                                disabled={fraisProcessingId === fee.value}
                                                 onClick={() => restoreFrais(fee)}
                                             >
-                                                Restaurer
+                                                {fraisProcessingId === fee.value ? 'Restauration…' : 'Restaurer'}
                                             </button>
                                         </span>
                                     ))}
@@ -1125,19 +1207,6 @@ export default function GroupsIndex({
                     setLifecycleTarget(null);
                     setLifecycleError(undefined);
                 }}
-            />
-            <ConfirmDialog
-                show={fraisToRemove !== null}
-                title="Retirer ce frais du groupe ?"
-                recordLabel={fraisToRemove?.label ?? ''}
-                message="Ce frais sera retiré du groupe et masqué sur TOUTES ses inscriptions. Rien n'est supprimé : les montants déjà encaissés sur ce frais redeviennent des avances, réutilisables sur un autre frais de l'étudiant. Vous pourrez le restaurer depuis « Frais retirés »."
-                icon="ti ti-trash"
-                variant="danger"
-                confirmLabel="Retirer le frais"
-                processingLabel="Retrait…"
-                processing={fraisProcessing}
-                onConfirm={() => fraisToRemove !== null && removeFrais(fraisToRemove)}
-                onCancel={() => setFraisToRemove(null)}
             />
         </BackofficeLayout>
     );

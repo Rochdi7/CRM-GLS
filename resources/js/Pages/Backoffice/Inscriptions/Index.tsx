@@ -180,6 +180,7 @@ export default function InscriptionsIndex({
     frais,
     canManageFees,
     canChangeGroup,
+    motifsAnnulation,
 }: InscriptionsPageProps) {
     const isLoading = useInertiaLoading();
     const [showModal, setShowModal] = useState(false);
@@ -247,11 +248,28 @@ export default function InscriptionsIndex({
         return Number.isInteger(value) ? String(value) : value.toFixed(2);
     }
     const [showFeesDetails, setShowFeesDetails] = useState(false);
-    const [statutTarget, setStatutTarget] = useState<{ inscription: InscriptionRow; statut: 'Annulée' | 'Active' } | null>(null);
+    // Reactivation only (Annulée/Changement -> Active). Cancelling has its own
+    // form modal below — it needs a reason, an end date and a fee decision.
+    const [statutTarget, setStatutTarget] = useState<{ inscription: InscriptionRow; statut: 'Active' } | null>(null);
+    const [cancelTarget, setCancelTarget] = useState<InscriptionRow | null>(null);
     const [statutError, setStatutError] = useState<string | undefined>(undefined);
     const [statutProcessing, setStatutProcessing] = useState(false);
 
     const form = useForm<InscriptionFormState>(emptyForm(defaultCountry));
+    // "Annuler l'inscription". The fee scopes are the same two the group-change
+    // form offers and mean the same thing server-side (AnnulerInscription
+    // reuses ChangerGroupeInscription::SCOPES).
+    const cancelForm = useForm<{
+        motif_annulation: string;
+        date_fin: string;
+        unpaid_fees_scope: '' | 'overdue_only' | 'all';
+        note: string;
+    }>({
+        motif_annulation: '',
+        date_fin: new Date().toISOString().slice(0, 10),
+        unpaid_fees_scope: '',
+        note: '',
+    });
     const changeGroupForm = useForm<{
         new_group_id: number | '';
         date_fin: string;
@@ -806,9 +824,40 @@ export default function InscriptionsIndex({
         });
     }
 
-    function confirmStatutChange(inscription: InscriptionRow, statut: 'Annulée' | 'Active') {
+    function confirmStatutChange(inscription: InscriptionRow, statut: 'Active') {
         setStatutTarget({ inscription, statut });
         setStatutError(undefined);
+    }
+
+    function openCancel(inscription: InscriptionRow) {
+        setCancelTarget(inscription);
+        cancelForm.clearErrors();
+        cancelForm.setData({
+            motif_annulation: '',
+            // Defaults to today: the enrollment stops when the cancellation is
+            // recorded unless the user says otherwise.
+            date_fin: new Date().toISOString().slice(0, 10),
+            unpaid_fees_scope: '',
+            note: '',
+        });
+    }
+
+    function closeCancel() {
+        setCancelTarget(null);
+        cancelForm.clearErrors();
+    }
+
+    function submitCancel(event: FormEvent) {
+        event.preventDefault();
+
+        if (!cancelTarget) {
+            return;
+        }
+
+        cancelForm.post(`/backoffice/inscriptions/${cancelTarget.id}/annuler`, {
+            preserveScroll: true,
+            onSuccess: () => closeCancel(),
+        });
     }
 
     function handleStatutChange() {
@@ -1008,7 +1057,7 @@ export default function InscriptionsIndex({
                                             <RowActionDivider />
 
                                             {inscription.statut === 'Active' ? (
-                                                <RowActionItem icon="ti-x" danger onClick={() => confirmStatutChange(inscription, 'Annulée')}>
+                                                <RowActionItem icon="ti-x" danger onClick={() => openCancel(inscription)}>
                                                     Annuler
                                                 </RowActionItem>
                                             ) : (
@@ -2056,17 +2105,13 @@ export default function InscriptionsIndex({
 
             <ConfirmDialog
                 show={statutTarget !== null}
-                title={statutTarget?.statut === 'Annulée' ? "Annuler l'inscription" : "Réactiver l'inscription"}
+                title="Réactiver l'inscription"
                 recordLabel={statutTarget?.inscription.reference ?? ''}
-                message={
-                    statutTarget?.statut === 'Annulée'
-                        ? 'Voulez-vous vraiment annuler cette inscription ?'
-                        : 'Voulez-vous vraiment réactiver cette inscription ?'
-                }
-                icon={statutTarget?.statut === 'Annulée' ? 'ti-x' : 'ti-refresh'}
-                variant={statutTarget?.statut === 'Annulée' ? 'danger' : 'primary'}
-                confirmLabel={statutTarget?.statut === 'Annulée' ? 'Oui, annuler' : 'Oui, réactiver'}
-                processingLabel={statutTarget?.statut === 'Annulée' ? 'Annulation…' : 'Réactivation…'}
+                message="Voulez-vous vraiment réactiver cette inscription ?"
+                icon="ti-refresh"
+                variant="primary"
+                confirmLabel="Oui, réactiver"
+                processingLabel="Réactivation…"
                 error={statutError}
                 processing={statutProcessing}
                 onConfirm={handleStatutChange}
@@ -2075,6 +2120,131 @@ export default function InscriptionsIndex({
                     setStatutError(undefined);
                 }}
             />
+
+            <Modal
+                show={cancelTarget !== null}
+                title="Annuler l&rsquo;inscription"
+                onClose={closeCancel}
+                processing={cancelForm.processing}
+                size="lg"
+            >
+                {cancelTarget && (
+                    <form onSubmit={submitCancel} onKeyDown={blockImplicitSubmit}>
+                        <div className="alert alert-info d-flex align-items-start gap-2">
+                            <i className="ti ti-alert-circle fs-20" />
+                            <span>
+                                Si vous confirmez l&rsquo;opération, les types de frais non payés sélectionnés
+                                ci-dessous seront automatiquement supprimés. Les paiements déjà encaissés ne
+                                sont jamais supprimés : ils restent disponibles comme avance pour l&rsquo;étudiant.
+                            </span>
+                        </div>
+
+                        <div className="row g-3">
+                            <div className="col-md-6">
+                                <label className="form-label">Référence du registre</label>
+                                <input type="text" className="form-control" value={cancelTarget.reference} disabled readOnly />
+                            </div>
+                            <div className="col-md-6">
+                                <label className="form-label">Étudiant</label>
+                                <input type="text" className="form-control" value={cancelTarget.student ?? ''} disabled readOnly />
+                            </div>
+
+                            <div className="col-md-6">
+                                <label className="form-label">Statut actuel</label>
+                                <input type="text" className="form-control" value={cancelTarget.statut} disabled readOnly />
+                            </div>
+                            <div className="col-md-6">
+                                <SelectField
+                                    id="cancel-motif"
+                                    label="Raison d&rsquo;annulation"
+                                    required
+                                    value={cancelForm.data.motif_annulation}
+                                    onChange={(event) => cancelForm.setData('motif_annulation', event.target.value)}
+                                    error={cancelForm.errors.motif_annulation}
+                                    placeholder="Choisir un élément"
+                                    options={motifsAnnulation.map((nom) => ({ value: nom, label: nom }))}
+                                />
+                            </div>
+
+                            <div className="col-md-6">
+                                <DateField
+                                    id="cancel-date-fin"
+                                    label="Date de fin"
+                                    required
+                                    value={cancelForm.data.date_fin}
+                                    onChange={(event) => cancelForm.setData('date_fin', event.target.value)}
+                                    error={cancelForm.errors.date_fin}
+                                />
+                            </div>
+                            <div className="col-md-6">
+                                <label className="form-label">Note</label>
+                                <textarea
+                                    className="form-control"
+                                    rows={3}
+                                    value={cancelForm.data.note}
+                                    onChange={(event) => cancelForm.setData('note', event.target.value)}
+                                />
+                            </div>
+
+                            <div className="col-12">
+                                <div className="form-check">
+                                    <input
+                                        type="radio"
+                                        className="form-check-input"
+                                        id="cancel-scope-all"
+                                        name="cancel-scope"
+                                        checked={cancelForm.data.unpaid_fees_scope === 'all'}
+                                        onChange={() => cancelForm.setData('unpaid_fees_scope', 'all')}
+                                    />
+                                    <label className="form-check-label" htmlFor="cancel-scope-all">
+                                        Supprimer tous les types de frais Non payés
+                                    </label>
+                                </div>
+                                <div className="form-check">
+                                    <input
+                                        type="radio"
+                                        className="form-check-input"
+                                        id="cancel-scope-overdue"
+                                        name="cancel-scope"
+                                        checked={cancelForm.data.unpaid_fees_scope === 'overdue_only'}
+                                        onChange={() => cancelForm.setData('unpaid_fees_scope', 'overdue_only')}
+                                    />
+                                    <label className="form-check-label" htmlFor="cancel-scope-overdue">
+                                        Supprimer tous les types de frais Non payés ayant une date supérieure à
+                                        la date de fin
+                                        {cancelForm.data.date_fin ? ' : ' + formatFr(cancelForm.data.date_fin) : ''}
+                                    </label>
+                                </div>
+                                <div className="form-check">
+                                    <input
+                                        type="radio"
+                                        className="form-check-input"
+                                        id="cancel-scope-none"
+                                        name="cancel-scope"
+                                        checked={cancelForm.data.unpaid_fees_scope === ''}
+                                        onChange={() => cancelForm.setData('unpaid_fees_scope', '')}
+                                    />
+                                    <label className="form-check-label" htmlFor="cancel-scope-none">
+                                        Ne rien supprimer
+                                    </label>
+                                </div>
+                                {cancelForm.errors.unpaid_fees_scope && (
+                                    <div className="text-danger fs-13 mt-1">{cancelForm.errors.unpaid_fees_scope}</div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="d-flex justify-content-end gap-2 mt-4">
+                            <button type="button" className="btn btn-outline-secondary" onClick={closeCancel}>
+                                Fermer
+                            </button>
+                            <button type="submit" className="btn btn-danger" disabled={cancelForm.processing}>
+                                {cancelForm.processing ? 'Annulation…' : 'Confirmer l’annulation'}
+                            </button>
+                        </div>
+                    </form>
+                )}
+            </Modal>
 
             <Modal
                 show={changeGroupTarget !== null}

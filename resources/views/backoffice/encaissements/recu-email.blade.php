@@ -5,11 +5,26 @@
     en table HTML (compat. large des clients mail, incl. Outlook) plutôt
     qu'en texte brut, avec la couleur de marque du reçu imprimé (#1b5a90,
     voir recu.blade.php .toolbar button) et le logo GLS.
+
+    ⚠ Le logo est EMBARQUÉ dans le message ($message->embed(), un cid:), pas
+    référencé par une URL asset(). Une URL est chargée depuis les serveurs du
+    client mail : Gmail ne peut pas atteindre un APP_URL local, les proxys
+    d'images la bloquent, et beaucoup de clients n'affichent rien tant que le
+    destinataire n'a pas cliqué « afficher les images » — l'en-tête tombait
+    alors sur le rectangle d'image cassée. Embarqué, le logo voyage avec
+    l'email et s'affiche partout, hors ligne compris.
+
+    ⚠ Et c'est un PNG, pas le .webp du backoffice : Gmail, Outlook et Apple
+    Mail ne savent pas décoder WebP dans un email. gls-blanc-email.png est le
+    gls-blanc.webp détouré et réduit à 64px de haut (affiché en 32 → net en
+    écran retina) pour rester léger en pièce jointe.
 --}}
 @php
     $centre = $encaissement->fee?->inscription?->etablissement ?? $encaissement->student?->etablissement;
     $montantAffiche = rtrim(rtrim(number_format((float) $encaissement->montant, 2, '.', ' '), '0'), '.').' DH';
     $fraisNom = $encaissement->fee?->nom ?? 'Avance';
+    // Logo blanc sur fond bleu, embarqué en cid — voir l'en-tête du fichier.
+    $logoPath = public_path('assets/images/logo/gls-blanc-email.png');
 @endphp
 <!DOCTYPE html>
 <html lang="fr">
@@ -26,7 +41,11 @@
                     {{-- En-tête --}}
                     <tr>
                         <td style="background: #1b5a90; padding: 28px 32px; text-align: center;">
-                            <img src="{{ asset('assets/images/logo/gls-blanc.webp') }}" alt="GLS" height="32" style="height: 32px; display: inline-block;">
+                            @if (is_file($logoPath))
+                                <img src="{{ $message->embed($logoPath) }}" alt="GLS" width="59" height="32" style="width: 59px; height: 32px; display: inline-block; border: 0;">
+                            @else
+                                <span style="font-size: 20px; font-weight: bold; color: #ffffff; letter-spacing: 1px;">GLS</span>
+                            @endif
                         </td>
                     </tr>
 

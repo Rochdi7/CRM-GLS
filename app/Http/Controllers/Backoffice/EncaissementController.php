@@ -53,6 +53,14 @@ final class EncaissementController extends Controller
         $this->authorizeResource(Encaissement::class, 'encaissement');
     }
 
+    /** '-' means the user cleared this filter; anything else is a literal value. */
+    private static function filterValue(mixed $value): string
+    {
+        $value = (string) $value;
+
+        return $value === '-' ? '' : $value;
+    }
+
     public function index(
         Request $request,
         GetEncaissementsList $getEncaissementsList,
@@ -65,7 +73,21 @@ final class EncaissementController extends Controller
         // has('dateFrom') meant any request that lost the key (a stale
         // ?page=2 pagination link, a hard reload) silently re-injected
         // today's date after the user had cleared the filter (26/08/2026).
-        if ($request->query() === []) {
+        // ⚠ Only a TRULY bare visit redirects, and never a partial reload.
+        // `route()` drops empty-string parameters, so the page's own
+        // reload({dateFrom: '', dateTo: ''}) arrives with no date keys at
+        // all: clearing both dates while every other filter was empty looked
+        // exactly like a first visit, so the controller redirected and
+        // re-injected today — the very thing the canonical URL exists to
+        // prevent. Worse, Inertia follows that redirect as a fresh FULL
+        // visit, dropping the X-Inertia-Partial-Data header, so the rows and
+        // the total came from two different requests and disagreed on screen
+        // (27/08/2026).
+        //
+        // `X-Inertia-Partial-Data` marks a reload driven by the page itself,
+        // which always sends the full filter set — an absent key there means
+        // "cleared", never "unset".
+        if ($request->query() === [] && ! $request->hasHeader('X-Inertia-Partial-Data')) {
             return redirect()->route('backoffice.encaissements.index', [
                 'dateFrom' => now()->toDateString(),
                 'dateTo' => now()->toDateString(),
@@ -75,8 +97,12 @@ final class EncaissementController extends Controller
         $search = (string) $request->string('search');
         $caisseFilter = (string) $request->string('caisseFilter');
         $methodeFilter = (string) $request->string('methodeFilter');
-        $dateFrom = (string) $request->string('dateFrom');
-        $dateTo = (string) $request->string('dateTo');
+        // '-' is the page's explicit "cleared" marker (see reload() in
+        // Encaissements/Index.tsx): Inertia omits empty strings from the
+        // query string, so a cleared date would otherwise be indistinguishable
+        // from one that was never set.
+        $dateFrom = self::filterValue($request->string('dateFrom'));
+        $dateTo = self::filterValue($request->string('dateTo'));
         $referenceFilter = (string) $request->string('referenceFilter');
         $studentFilter = (string) $request->string('studentFilter');
         $numeroChequeFilter = (string) $request->string('numeroChequeFilter');

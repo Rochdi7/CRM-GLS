@@ -12,12 +12,12 @@ use App\Domain\Groups\Queries\GetGroupFormOptions;
 use App\Domain\Groups\Queries\GetGroupPaymentMatrix;
 use App\Domain\Groups\Queries\GetGroupsList;
 use App\Domain\Groups\Queries\GetGroupStudentsBySegment;
+use App\Domain\Settings\Support\FraisEcheanceResolver;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Groups\ChangerEnseignantRequest;
 use App\Http\Requests\Backoffice\Groups\StoreGroupRequest;
 use App\Http\Requests\Backoffice\Groups\UpdateGroupEnseignantRequest;
 use App\Http\Requests\Backoffice\Groups\UpdateGroupRequest;
-use App\Domain\Settings\Support\FraisEcheanceResolver;
 use App\Models\AnneeScolaire;
 use App\Models\Frais;
 use App\Models\Group;
@@ -145,6 +145,8 @@ final class GroupController extends Controller
             $request,
             $data['date_debut_formation'] ?? null,
             app(CurrentContext::class)->etablissementId(),
+            null,
+            $this->debutAnneeScolaireActive(),
         );
 
         DB::transaction(function () use ($request, $data, $fraisLignes, &$group): void {
@@ -191,6 +193,7 @@ final class GroupController extends Controller
             // Only the fees this group still carries — see the helper's
             // docblock: a removed fee must not come back on the next save.
             $group->frais()->pluck('frais.id')->all(),
+            $group->anneeScolaire?->date_debut?->toDateString(),
         );
 
         $changement = null;
@@ -521,24 +524,32 @@ final class GroupController extends Controller
      * (RetirerFraisGroupe). Gated by groups.update, like every other edit of
      * a group.
      */
-    public function removeFee(Request $request, Group $group, Frais $frai, RetirerFraisGroupe $action): RedirectResponse
+    public function removeFee(Request $request, Group $group, Frais $frai, RetirerFraisGroupe $action): JsonResponse
     {
         $this->authorize('update', $group);
 
         $result = $action->handle($group, $frai->id);
 
-        // back(), not a redirect to index: this fires from inside the open
-        // edit modal, and re-mounting the page would close it mid-edit,
-        // losing every unsaved change (same reasoning as
-        // InscriptionController::hideFee()).
-        return back()->with('success', $result['encaissementsConvertis'] > 0
-            ? __('Fee removed from the group. :count registration fee line(s) hidden and :montant DH returned as advances, ready to be re-applied.', [
-                'count' => $result['feesMasques'],
-                'montant' => number_format($result['encaissementsConvertis'], 2, ',', ' '),
-            ])
-            : __('Fee removed from the group. :count registration fee line(s) hidden.', [
-                'count' => $result['feesMasques'],
-            ]));
+        // JSON, not back(): this fires from INSIDE the open edit modal, which
+        // updates its own fee table from local state (same pattern as
+        // InscriptionController::hideFee). An Inertia redirect — even a
+        // `back()` with preserveState — re-runs index() and rebuilds the whole
+        // page payload (paginated list + frais/enseignants catalogs) just to
+        // drop one row, which is what made the trash icon feel slow. Nothing
+        // on the page behind the modal depends on the result.
+        return response()->json([
+            'ok' => true,
+            'feesMasques' => $result['feesMasques'],
+            'encaissementsConvertis' => $result['encaissementsConvertis'],
+            'message' => $result['encaissementsConvertis'] > 0
+                ? __('Fee removed from the group. :count registration fee line(s) hidden and :montant DH returned as advances, ready to be re-applied.', [
+                    'count' => $result['feesMasques'],
+                    'montant' => number_format($result['encaissementsConvertis'], 2, ',', ' '),
+                ])
+                : __('Fee removed from the group. :count registration fee line(s) hidden.', [
+                    'count' => $result['feesMasques'],
+                ]),
+        ]);
     }
 
     /**
@@ -548,24 +559,42 @@ final class GroupController extends Controller
      * re-allocating money is always an explicit AppliquerAvance decision,
      * never a side effect of restoring a line.
      */
-    public function restoreFee(Request $request, Group $group, Frais $frai, RetirerFraisGroupe $action): RedirectResponse
+    public function restoreFee(Request $request, Group $group, Frais $frai, RetirerFraisGroupe $action): JsonResponse
     {
         $this->authorize('update', $group);
 
         $montant = $request->input('montant');
         $echeance = $request->input('date_echeance');
 
-        $count = $action->restore(
-            $group,
-            $frai->id,
-            $montant !== null && $montant !== '' ? (float) $montant : $frai->montantPourCentre($group->etablissement_id),
-            $echeance !== null && $echeance !== ''
-                ? $echeance
-                : FraisEcheanceResolver::defaultFor($frai->nom, $group->date_debut_formation?->toDateString()),
-            ($c = $request->input('classification')) !== null && $c !== '' ? (string) $c : null,
-        );
+        $montantFinal = $montant !== null && $montant !== ''
+            ? (float) $montant
+            : $frai->montantPourCentre($group->etablissement_id);
+        $echeanceFinale = $echeance !== null && $echeance !== ''
+            ? $echeance
+            : FraisEcheanceResolver::defaultFor(
+                $frai->nom,
+                $group->date_debut_formation?->toDateString(),
+                $group->anneeScolaire?->date_debut?->toDateString(),
+            );
+        $classification = ($c = $request->input('classification')) !== null && $c !== '' ? (string) $c : null;
 
-        return back()->with('success', __(':count registration fee line(s) restored.', ['count' => $count]));
+        $count = $action->restore($group, $frai->id, $montantFinal, $echeanceFinale, $classification);
+
+        // JSON — see removeFee(). The response carries the restored row's full
+        // shape so the modal can splice it straight back into its table
+        // instead of re-fetching the page.
+        return response()->json([
+            'ok' => true,
+            'count' => $count,
+            'ligne' => [
+                'id' => $frai->id,
+                'nom' => $frai->nom,
+                'montant' => number_format($montantFinal, 2, '.', ''),
+                'date_echeance' => $echeanceFinale,
+                'classification' => $classification ?? '',
+            ],
+            'message' => __(':count registration fee line(s) restored.', ['count' => $count]),
+        ]);
     }
 
     /**
@@ -591,11 +620,28 @@ final class GroupController extends Controller
      *
      * @return array<int, array{montant: float, date_echeance: ?string, classification: ?string}>
      */
+    /**
+     * The active académic year's start date — the fallback anchor a monthly
+     * fee's due date takes its YEAR from when the group carries no
+     * date_debut_formation of its own (see FraisEcheanceResolver).
+     */
+    private function debutAnneeScolaireActive(): ?string
+    {
+        $anneeId = app(CurrentContext::class)->anneeScolaireId();
+
+        if ($anneeId === null) {
+            return null;
+        }
+
+        return AnneeScolaire::find($anneeId)?->date_debut?->toDateString();
+    }
+
     private function normalizedFraisLignes(
         Request $request,
         ?string $dateDebutFormation = null,
         ?int $etablissementId = null,
         ?array $existant = null,
+        ?string $debutAnneeScolaire = null,
     ): array {
         // Whole catalog rows, not just ids: each one carries the amount a
         // fee is worth in this center unless this group says otherwise.
@@ -619,7 +665,7 @@ final class GroupController extends Controller
 
             $echeance = ($ligne['date_echeance'] ?? '') !== ''
                 ? $ligne['date_echeance']
-                : FraisEcheanceResolver::defaultFor($frais->nom, $dateDebutFormation);
+                : FraisEcheanceResolver::defaultFor($frais->nom, $dateDebutFormation, $debutAnneeScolaire);
 
             $sync[$frais->id] = [
                 'montant' => $montant,
