@@ -528,7 +528,6 @@ export default function InscriptionsIndex({
     const domaineOptions: SelectOption[] = domaines.map((d) => ({ value: d, label: d }));
     const examenOptions: SelectOption[] = examenTypes.map((e) => ({ value: e, label: e }));
     const parentRelationOptions: SelectOption[] = parentRelations.map((r) => ({ value: r, label: r }));
-    const statutOptions: SelectOption[] = statuts.map((s) => ({ value: s, label: s }));
     const statutFilterOptions: SelectOption[] = statuts.map((s) => ({ value: s, label: s }));
 
     const showsDomaine = niveauxAvecDomaine.includes(form.data.new_niveau);

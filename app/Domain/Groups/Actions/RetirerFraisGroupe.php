@@ -59,7 +59,9 @@ final class RetirerFraisGroupe
         return DB::transaction(function () use ($group, $fraisId): array {
             $group->frais()->detach($fraisId);
 
-            $inscriptionIds = $group->inscriptions()->pluck('id');
+            // Only LIVE registrations follow the group: a cancelled or
+            // moved-on student's lines are frozen history (audit DB-10).
+            $inscriptionIds = $group->inscriptions()->where('statut', Inscription::STATUT_ACTIVE)->pluck('id');
 
             $fees = InscriptionFee::query()
                 ->whereIn('inscription_id', $inscriptionIds)
@@ -91,7 +93,10 @@ final class RetirerFraisGroupe
                 // fee belongs to the inscription and recomputes its statut,
                 // and a fee is only really "no longer active" once its money
                 // has been released.
-                $feesDeLInscription->each(fn (InscriptionFee $fee) => $fee->update(['masque_le' => now()]));
+                $feesDeLInscription->each(fn (InscriptionFee $fee) => $fee->update([
+                    'masque_le' => now(),
+                    'masque_origine' => InscriptionFee::MASQUE_ORIGINE_GROUPE,
+                ]));
 
                 $this->recalculerMontantTotal($inscription);
             }
@@ -121,15 +126,19 @@ final class RetirerFraisGroupe
                 ],
             ]);
 
-            $inscriptionIds = $group->inscriptions()->pluck('id');
+            $inscriptionIds = $group->inscriptions()->where('statut', Inscription::STATUT_ACTIVE)->pluck('id');
 
+            // Only lines THIS mechanism hid come back; an exemption granted
+            // by hand on one registration (hideFee) is kept (audit R-04).
+            // Legacy rows hidden before the origin existed count as ours.
             $fees = InscriptionFee::query()
                 ->whereIn('inscription_id', $inscriptionIds)
                 ->where('frais_id', $fraisId)
                 ->whereNotNull('masque_le')
+                ->where(fn ($q) => $q->whereNull('masque_origine')->orWhere('masque_origine', InscriptionFee::MASQUE_ORIGINE_GROUPE))
                 ->get();
 
-            $fees->each(fn (InscriptionFee $fee) => $fee->update(['masque_le' => null]));
+            $fees->each(fn (InscriptionFee $fee) => $fee->update(['masque_le' => null, 'masque_origine' => null]));
 
             Inscription::query()->whereIn('id', $fees->pluck('inscription_id')->unique())
                 ->get()

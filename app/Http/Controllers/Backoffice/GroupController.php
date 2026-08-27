@@ -16,6 +16,7 @@ use App\Domain\Settings\Support\FraisEcheanceResolver;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Requests\Backoffice\Groups\ChangerEnseignantRequest;
+use App\Http\Requests\Backoffice\Groups\RestoreGroupFraisRequest;
 use App\Http\Requests\Backoffice\Groups\StoreGroupRequest;
 use App\Http\Requests\Backoffice\Groups\UpdateGroupEnseignantRequest;
 use App\Http\Requests\Backoffice\Groups\UpdateGroupRequest;
@@ -223,6 +224,13 @@ final class GroupController extends Controller
             // formation, so the groups_historique snapshot always stays in
             // sync with the live statut.
             if (in_array($statut, Group::STATUTS_HISTORIQUE, true) && ! in_array($group->statut, Group::STATUTS_HISTORIQUE, true)) {
+                $statut = $group->statut;
+            }
+
+            // And the other way round: a group that reached a terminal
+            // status is history (groups_historique snapshot written); the
+            // edit modal never brings it back to life (audit CRUD-F14).
+            if (in_array($group->statut, Group::STATUTS_HISTORIQUE, true)) {
                 $statut = $group->statut;
             }
 
@@ -584,13 +592,13 @@ final class GroupController extends Controller
      * re-allocating money is always an explicit AppliquerAvance decision,
      * never a side effect of restoring a line.
      */
-    public function restoreFee(Request $request, Group $group, Frais $frai, RetirerFraisGroupe $action): JsonResponse
+    public function restoreFee(RestoreGroupFraisRequest $request, Group $group, Frais $frai, RetirerFraisGroupe $action): JsonResponse
     {
         $this->authorize('update', $group);
         $this->assertGroupInContext($request, $group, 'frais');
 
-        $montant = $request->input('montant');
-        $echeance = $request->input('date_echeance');
+        $montant = $request->validated('montant');
+        $echeance = $request->validated('date_echeance');
 
         $montantFinal = $montant !== null && $montant !== ''
             ? (float) $montant
@@ -671,8 +679,11 @@ final class GroupController extends Controller
     ): array {
         // Whole catalog rows, not just ids: each one carries the amount a
         // fee is worth in this center unless this group says otherwise.
+        // On EDIT the group's current pivot is the authority — a fee since
+        // set Inactif in the catalog stays assigned (its lines stay owed);
+        // only RetirerFraisGroupe removes a fee from a group (audit CRUD-F6).
         $catalogue = Frais::query()
-            ->where('statut', Frais::STATUT_ACTIF)
+            ->when($existant === null, fn ($q) => $q->where('statut', Frais::STATUT_ACTIF))
             ->when($existant !== null, fn ($q) => $q->whereIn('id', $existant))
             ->with('etablissements:id')
             ->get(['id', 'nom', 'montant_defaut']);

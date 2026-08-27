@@ -44,7 +44,7 @@ final class GetInscriptionsList
 
         $inscriptions = Inscription::query()
             ->with(['student', 'group'])
-            ->withCount('fees')
+            ->withCount(['fees' => fn ($q) => $q->whereNull('masque_le')])
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(function ($q): void {
                 if (! $this->context->isAllCenters()) {

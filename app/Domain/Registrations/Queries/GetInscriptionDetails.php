@@ -27,8 +27,10 @@ final class GetInscriptionDetails
     {
         $inscription->loadMissing(['student', 'group.enseignant', 'anneeScolaire', 'fees.encaissements']);
 
-        $totalDu = (float) $inscription->fees->sum('montant');
-        $totalPaye = (float) $inscription->fees->sum(fn ($fee) => $fee->encaissements->sum('montant'));
+        // Hidden lines are not owed (audit R-03) — same rule as montant_total.
+        $feesVisibles = $inscription->fees->filter(fn (InscriptionFee $fee): bool => ! $fee->estMasque())->values();
+        $totalDu = (float) $feesVisibles->sum('montant');
+        $totalPaye = (float) $feesVisibles->sum(fn ($fee) => $fee->encaissements->sum('montant'));
         $reste = max(0, $totalDu - $totalPaye);
 
         return [
@@ -47,7 +49,7 @@ final class GetInscriptionDetails
             'totalDu' => number_format($totalDu, 2, '.', ''),
             'totalPaye' => number_format($totalPaye, 2, '.', ''),
             'reste' => number_format($reste, 2, '.', ''),
-            'fees' => $inscription->fees->map(function (InscriptionFee $fee): array {
+            'fees' => $feesVisibles->map(function (InscriptionFee $fee): array {
                 $feePaid = (float) $fee->encaissements->sum('montant');
 
                 return [

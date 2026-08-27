@@ -71,9 +71,29 @@ final class MettreAJourFraisInscription
                     ];
 
                     if ($existing !== null) {
+                        // Money already received on the line is the floor:
+                        // pricing it below the paid amount would make the
+                        // surplus vanish instead of becoming an avance (DB-06).
+                        $paye = $existing->montantPaye();
+                        if ($montant + 0.005 < $paye) {
+                            throw ValidationException::withMessages([
+                                'fee_lines' => __('A fee cannot be priced below the amount already paid on it (:paye DH).', ['paye' => number_format($paye, 2, '.', '')]),
+                            ]);
+                        }
+
                         $existing->update($attributes);
                         $fee = $existing;
                     } else {
+                        // The same catalog fee already exists on this
+                        // registration as a hidden line: adding it again would
+                        // duplicate it the day the group restores it (R-07).
+                        if (! empty($attributes['frais_id'])
+                            && $inscription->fees()->where('frais_id', $attributes['frais_id'])->whereNotNull('masque_le')->exists()) {
+                            throw ValidationException::withMessages([
+                                'fee_lines' => __('This fee already exists on the registration as a hidden line — restore it instead of adding it again.'),
+                            ]);
+                        }
+
                         $fee = $inscription->fees()->create($attributes);
                     }
 

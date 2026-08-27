@@ -24,7 +24,7 @@ final class BasculerVisibiliteFraisInscription
     {
         $this->assertBelongsTo($inscription, $fee);
 
-        $fee->update(['masque_le' => now()]);
+        $fee->update(['masque_le' => now(), 'masque_origine' => InscriptionFee::MASQUE_ORIGINE_MANUEL]);
 
         $this->recalculerMontantTotal($inscription);
     }
@@ -33,7 +33,7 @@ final class BasculerVisibiliteFraisInscription
     {
         $this->assertBelongsTo($inscription, $fee);
 
-        $fee->update(['masque_le' => null]);
+        $fee->update(['masque_le' => null, 'masque_origine' => null]);
 
         $this->recalculerMontantTotal($inscription);
     }

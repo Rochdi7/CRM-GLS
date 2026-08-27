@@ -73,6 +73,7 @@ final class GetAnnualFraisSummary
         // due Sep–Dec 2026 showing under 2026/2027), grouped by due month.
         $chiffreAffaire = $this->byMonth(
             DB::table('inscription_fees')
+                ->whereNull('masque_le')
                 ->whereNotNull('date_echeance')
                 ->whereBetween('date_echeance', $range)
                 ->when($centreId || $anneeId, fn (Builder $q) => $this->scopeFeesToContext($q, 'inscription_fees', $centreId, $anneeId)),
@@ -85,6 +86,7 @@ final class GetAnnualFraisSummary
         $collecte = $this->byMonth(
             DB::table('encaissements')
                 ->join('inscription_fees', 'inscription_fees.id', '=', 'encaissements.inscription_fee_id')
+                ->whereNull('inscription_fees.masque_le')
                 ->whereNotNull('inscription_fees.date_echeance')
                 ->whereBetween('inscription_fees.date_echeance', $range)
                 ->when($centreId || $anneeId, fn (Builder $q) => $this->scopeFeesToContext($q, 'inscription_fees', $centreId, $anneeId)),

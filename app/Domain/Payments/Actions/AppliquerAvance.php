@@ -6,6 +6,7 @@ namespace App\Domain\Payments\Actions;
 
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Models\Encaissement;
+use App\Models\Cheque;
 use App\Models\InscriptionFee;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -51,6 +52,14 @@ final class AppliquerAvance
             if ($fee->estMasque()) {
                 throw ValidationException::withMessages([
                     'fee_id' => __('This fee is no longer active.'),
+                ]);
+            }
+
+            // An avance funded by a cheque the bank bounced is not money
+            // (audit DB-05): the Chèque account was reversed, nothing to apply.
+            if ($avance->cheque_id !== null && $avance->cheque?->statut === Cheque::STATUT_REJETE) {
+                throw ValidationException::withMessages([
+                    'avance' => __('This advance was funded by a rejected cheque and cannot be applied.'),
                 ]);
             }
 

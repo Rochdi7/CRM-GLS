@@ -970,5 +970,8 @@
     "unknown (predates the journal)": "auteur inconnu (antérieur au journal)",
     "via role": "via rôle",
     "was": "était",
-    "Électricien": "Électricien"
+    "Électricien": "Électricien",
+    "A fee cannot be priced below the amount already paid on it (:paye DH).": "Un frais ne peut pas être fixé en dessous du montant déjà payé (:paye DH).",
+    "This fee already exists on the registration as a hidden line — restore it instead of adding it again.": "Ce frais existe déjà sur l'inscription en ligne masquée — restaurez-le au lieu de l'ajouter à nouveau.",
+    "This advance was funded by a rejected cheque and cannot be applied.": "Cette avance a été financée par un chèque rejeté et ne peut pas être appliquée."
 }

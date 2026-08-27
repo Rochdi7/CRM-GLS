@@ -34,7 +34,7 @@ class InscriptionFee extends Model
     protected $fillable = [
         'inscription_id', 'frais_id', 'nom',
         'montant_initial', 'remise_pct', 'remise_montant', 'montant',
-        'date_echeance', 'note', 'statut', 'masque_le',
+        'date_echeance', 'note', 'statut', 'masque_le', 'masque_origine',
     ];
 
     /**
@@ -66,6 +66,11 @@ class InscriptionFee extends Model
             'masque_le' => 'datetime',
         ];
     }
+
+    /** Who hid the line: the group (RetirerFraisGroupe) or a person (hideFee). */
+    public const MASQUE_ORIGINE_GROUPE = 'groupe';
+
+    public const MASQUE_ORIGINE_MANUEL = 'manuel';
 
     public function estMasque(): bool
     {
