@@ -21,7 +21,10 @@ final class ReaffecterEncaissementsRequest extends FormRequest
         return [
             'encaissement_ids' => ['required', 'array', 'min:1'],
             'encaissement_ids.*' => ['integer', 'exists:encaissements,id'],
-            'inscription_id' => ['required', 'integer', 'exists:inscriptions,id'],
+            // A GROUP, never one registration: the selection spans several
+            // students and each one's money must land on his OWN inscription
+            // in that group (see ReaffecterEncaissements).
+            'group_id' => ['required', 'integer', 'exists:groups,id'],
         ];
     }
 
@@ -32,7 +35,7 @@ final class ReaffecterEncaissementsRequest extends FormRequest
     {
         return [
             'encaissement_ids.required' => __('Select at least one payment to move.'),
-            'inscription_id.required' => __('Select the registration to move the payments to.'),
+            'group_id.required' => __('Select the group to move the payments to.'),
         ];
     }
 }

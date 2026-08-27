@@ -38,20 +38,19 @@ interface Props {
     filters: { search: string; group_id: number | null; frais: string; annee_id: number | null };
     groupes: GroupOption[];
     annees: SelectOption[];
+    fraisOptions: SelectOption[];
 }
 
 const URL = '/backoffice/encaissements/reaffecter';
 
-export default function ReallocatePayments({ paiements, montantTotal, filters, groupes, annees }: Props) {
+export default function ReallocatePayments({ paiements, montantTotal, filters, groupes, annees, fraisOptions }: Props) {
     const loading = useInertiaLoading();
     const [selected, setSelected] = useState<number[]>([]);
     const [showModal, setShowModal] = useState(false);
-    const [targetGroup, setTargetGroup] = useState<string>('');
-    const [targetInscriptions, setTargetInscriptions] = useState<SelectOption[]>([]);
 
-    const form = useForm<{ encaissement_ids: number[]; inscription_id: number | '' }>({
+    const form = useForm<{ encaissement_ids: number[]; group_id: number | '' }>({
         encaissement_ids: [],
-        inscription_id: '',
+        group_id: '',
     });
 
     const rows = paiements.data;
@@ -81,26 +80,23 @@ export default function ReallocatePayments({ paiements, montantTotal, filters, g
     };
 
     const openModal = () => {
-        setTargetGroup('');
-        setTargetInscriptions([]);
-        form.setData({ encaissement_ids: selected, inscription_id: '' });
+        form.setData({ encaissement_ids: selected, group_id: '' });
         setShowModal(true);
     };
 
-    const onGroupChange = async (groupId: string) => {
-        setTargetGroup(groupId);
-        form.setData('inscription_id', '');
-        setTargetInscriptions([]);
+    // Each student's money can only ever land on HIS OWN registration in the
+    // target group, so the modal shows who is involved rather than asking the
+    // operator to pick one registration for everybody.
+    const selectedByStudent = useMemo(() => {
+        const map = new Map<string, { count: number; montant: number }>();
 
-        if (groupId === '') {
-            return;
-        }
-
-        const res = await fetch(`${URL}/groupes/${groupId}/inscriptions`, {
-            headers: { Accept: 'application/json' },
+        rows.filter((r) => selected.includes(r.id)).forEach((r) => {
+            const current = map.get(r.etudiant) ?? { count: 0, montant: 0 };
+            map.set(r.etudiant, { count: current.count + 1, montant: current.montant + Number(r.montant) });
         });
-        setTargetInscriptions(await res.json());
-    };
+
+        return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    }, [rows, selected]);
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
@@ -156,10 +152,7 @@ export default function ReallocatePayments({ paiements, montantTotal, filters, g
                         label={t('Fee')}
                         id="frais"
                         value={filters.frais}
-                        options={[...new Set(rows.map((r) => r.frais).filter(Boolean))].map((nom) => ({
-                            value: nom as string,
-                            label: nom as string,
-                        }))}
+                        options={fraisOptions}
                         placeholder={t('All fees')}
                         onChange={(e) => reload({ frais: e.target.value })}
                     />
@@ -264,24 +257,36 @@ export default function ReallocatePayments({ paiements, montantTotal, filters, g
 
                     <SelectField
                         label={t('Target group')}
-                        id="target_group"
-                        value={targetGroup}
+                        id="group_id"
+                        value={form.data.group_id}
                         options={groupes}
                         placeholder={t('Choose a group')}
-                        onChange={(e) => onGroupChange(e.target.value)}
+                        onChange={(e) => form.setData('group_id', e.target.value ? Number(e.target.value) : '')}
+                        error={form.errors.group_id}
                         required
                     />
 
-                    <SelectField
-                        label={t('Target registration')}
-                        id="inscription_id"
-                        value={form.data.inscription_id}
-                        options={targetInscriptions}
-                        placeholder={targetGroup === '' ? t('Choose a group first') : t('Choose a registration')}
-                        onChange={(e) => form.setData('inscription_id', e.target.value ? Number(e.target.value) : '')}
-                        error={form.errors.inscription_id}
-                        required
-                    />
+                    <div className="mt-3">
+                        <div className="fw-semibold fs-13 mb-2">
+                            {t('Students concerned')} ({selectedByStudent.length})
+                        </div>
+                        <div className="border rounded" style={{ maxHeight: 220, overflowY: 'auto' }}>
+                            <table className="table table-sm mb-0">
+                                <tbody>
+                                    {selectedByStudent.map(([etudiant, info]) => (
+                                        <tr key={etudiant}>
+                                            <td>{etudiant}</td>
+                                            <td className="text-end text-muted">{info.count}</td>
+                                            <td className="text-end">{info.montant.toFixed(2)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <p className="text-muted fs-13 mt-2 mb-0">
+                            {t('Each student’s money goes to HIS OWN registration in that group — money never moves between students. A student not enrolled there keeps his payment as an unallocated advance.')}
+                        </p>
+                    </div>
                 </form>
             </Modal>
         </BackofficeLayout>

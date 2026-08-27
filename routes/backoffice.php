@@ -438,8 +438,6 @@ Route::prefix('backoffice')
                 ->middleware('permission:payments.reallocate')->name('encaissements.reaffecter.index');
             Route::post('encaissements/reaffecter', [EncaissementReallocationController::class, 'store'])
                 ->middleware('permission:payments.reallocate')->name('encaissements.reaffecter.store');
-            Route::get('encaissements/reaffecter/groupes/{group}/inscriptions', [EncaissementReallocationController::class, 'inscriptions'])
-                ->middleware('permission:payments.reallocate')->name('encaissements.reaffecter.inscriptions');
 
             Route::get('encaissements', [EncaissementController::class, 'index'])
                 ->middleware('permission:payments.view')->name('encaissements.index');
