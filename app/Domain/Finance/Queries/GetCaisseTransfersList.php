@@ -48,14 +48,20 @@ final class GetCaisseTransfersList
     ): array {
         $myCaisseIds = $user->employee?->caisses()->pluck('id')->all() ?? [];
 
+        // ⚠ NOT narrowed to the active centre — CLAUDE.md §11 names the
+        // transfer-validation inbox a deliberate exception to context
+        // scoping: only the employee owning the DESTINATION till may
+        // validate (ValiderTransfertCaisse), so a pending transfer that
+        // hid behind a centre switch could never be cleared by anyone and
+        // the money would stay « En attente » forever. Centre REACH still
+        // applies (scopeAccessibleCenters) — this widens the window to the
+        // centres the user may already see, never beyond them.
         $base = CaisseTransfer::query()
             ->where(function (Builder $q) use ($user): void {
                 $q->whereHas('caisseSource', function (Builder $sq) use ($user): void {
                     $this->centerAccess->scopeAccessibleCenters($sq, $user);
-                    $this->scopeToActiveCenter($sq);
                 })->orWhereHas('caisseDestination', function (Builder $dq) use ($user): void {
                     $this->centerAccess->scopeAccessibleCenters($dq, $user);
-                    $this->scopeToActiveCenter($dq);
                 });
             })
             ->when($statutFilter !== '', fn ($q) => $q->where('statut', $statutFilter))
@@ -137,10 +143,8 @@ final class GetCaisseTransfersList
             ->where(function (Builder $q) use ($user): void {
                 $q->whereHas('caisseSource', function (Builder $sq) use ($user): void {
                     $this->centerAccess->scopeAccessibleCenters($sq, $user);
-                    $this->scopeToActiveCenter($sq);
                 })->orWhereHas('caisseDestination', function (Builder $dq) use ($user): void {
                     $this->centerAccess->scopeAccessibleCenters($dq, $user);
-                    $this->scopeToActiveCenter($dq);
                 });
             })
             ->selectRaw('statut, COUNT(*) as total')
