@@ -383,12 +383,16 @@ final class FinancialInvariantsAuditTest extends TestCase
         $this->payLine($user, $student, $inscription, $fee, '1000', Encaissement::METHODE_ESPECES);
         $this->assertSame($rabat->id, Encaissement::query()->sole()->caisse->etablissement_id);
 
-        $summary = app(GetAnnualFraisSummary::class)(2025);
-        $this->assertSame('1000.00', $summary['encaissements'][8]); // September
+        // The chart window is the ACTIVE ACADEMIC YEAR (2025/2026 =
+        // 01/09/2025 → 31/08/2026), not a calendar year, so September is
+        // index 0 — and __invoke() takes no argument. Both were left over
+        // from the calendar-year version replaced in fd6451b.
+        $summary = app(GetAnnualFraisSummary::class)();
+        $this->assertSame('1000.00', $summary['encaissements'][0]); // September
 
         app(CurrentContext::class)->setEtablissement($rabat->id);
-        $summary = app(GetAnnualFraisSummary::class)(2025);
-        $this->assertSame('0.00', $summary['encaissements'][8]);
+        $summary = app(GetAnnualFraisSummary::class)();
+        $this->assertSame('0.00', $summary['encaissements'][0]);
     }
 
     // ── Ledger invariant: solde = Σ credits − Σ debits, entries chain ───
