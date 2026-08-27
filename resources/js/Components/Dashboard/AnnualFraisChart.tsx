@@ -30,24 +30,28 @@ const SERIES: SeriesSpec[] = [
 
 const WIDTH = 1000;
 const HEIGHT = 320;
-const PAD_LEFT = 56;
-const PAD_RIGHT = 16;
+// Wide enough for a fully-written, ungrouped axis label ("40000000" at 11px)
+// — see formatAxis: the abbreviated "40 M" form fitted 56px, the full one does
+// not. Ungrouped digits are narrower than the space-separated form.
+const PAD_LEFT = 74;
+// Half an "MM/YYYY" label — the last category is centred on the plot's right
+// edge, so a narrower gutter clips it ("08/2026" rendered as "08/202").
+const PAD_RIGHT = 34;
 const PAD_TOP = 16;
 const PAD_BOTTOM = 32;
 
 /**
- * Compact axis labels — "50 000 000" does not fit the 56px left gutter and
- * rendered truncated ("000 000"); French-style "50 M" / "500 k" always fits.
+ * Axis labels are written out in full and UNGROUPED ("2000000", not "2 M" and
+ * not "2 000 000") — the amounts are money, so the exact magnitude is what the
+ * reader is checking, and the fr-FR narrow no-break space made each tick read
+ * as three separate numbers at 11px. Digits only, so the eye takes one value.
+ *
+ * Deliberately NOT toLocaleString: every French locale groups thousands.
+ * PAD_LEFT is sized for the widest label this produces; keep the two in step
+ * if either the gutter or the font size changes, or the label truncates again.
  */
 function formatAxis(value: number): string {
-    if (value >= 1_000_000) {
-        return `${(value / 1_000_000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} M`;
-    }
-    if (value >= 1_000) {
-        return `${(value / 1_000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} k`;
-    }
-
-    return value.toLocaleString('fr-FR');
+    return String(Math.round(value));
 }
 
 function niceMax(max: number): number {
