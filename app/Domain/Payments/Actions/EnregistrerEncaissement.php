@@ -12,6 +12,7 @@ use App\Models\Encaissement;
 use App\Models\InscriptionFee;
 use App\Models\Student;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Records a student payment in ONE transaction (schema §10 + §11):
@@ -32,6 +33,18 @@ final class EnregistrerEncaissement
     public function handle(array $data, Employee $agent): Encaissement
     {
         return DB::transaction(function () use ($data, $agent): Encaissement {
+            // Last line of defense for EVERY caller (form, prompt, import):
+            // money never lands on a hidden fee line (audit R-01).
+            if (! empty($data['inscription_fee_id'])) {
+                $fee = InscriptionFee::query()->whereKey((int) $data['inscription_fee_id'])->lockForUpdate()->first();
+
+                if ($fee !== null && $fee->estMasque()) {
+                    throw ValidationException::withMessages([
+                        'payment_lines' => __('This fee is no longer active.'),
+                    ]);
+                }
+            }
+
             $encaissement = Encaissement::create([
                 ...$data,
                 // Dedupe scope for legacy refs (unique per centre). The

@@ -313,6 +313,16 @@ final class EncaissementController extends Controller
             // payment on the same fee can't push it past its montant.
             foreach ($parFee as $feeId => $total) {
                 $lockedFee = InscriptionFee::query()->whereKey($feeId)->lockForUpdate()->firstOrFail();
+
+                // A hidden line (fee removed from the group, or exempted on
+                // this registration) is not owed: refuse under the same lock
+                // so a form loaded before the removal cannot pay it (R-01).
+                if ($lockedFee->estMasque()) {
+                    throw ValidationException::withMessages([
+                        'payment_lines' => __('This fee is no longer active.'),
+                    ]);
+                }
+
                 $reste = round(max(0.0, (float) $lockedFee->montant - $lockedFee->montantPaye()), 2);
 
                 if ($total > $reste) {

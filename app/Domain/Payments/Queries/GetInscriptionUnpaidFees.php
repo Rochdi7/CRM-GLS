@@ -24,6 +24,9 @@ final class GetInscriptionUnpaidFees
     public function __invoke(Inscription $inscription): Collection
     {
         return $inscription->fees()
+            // A hidden line (RetirerFraisGroupe / hideFee) is not owed and
+            // must never be offered for payment (audit R-01).
+            ->whereNull('masque_le')
             ->orderBy('date_echeance')
             ->get()
             ->map(function (InscriptionFee $fee): ?array {
