@@ -25,14 +25,13 @@ use Inertia\Response;
  * in UserAuthorizationService::syncAuthorization() — this controller is a
  * thin wrapper and reimplements none of it.
  *
- * Permission-string based only ($this->authorize('users.assign-roles')) —
- * deliberately no UserPolicy/RolePolicy, per docs/roles-and-permissions.md.
+ * Gated by UserPolicy@manageAuthorization (audit 27/08/2026 SEC-03/04).
  */
 final class UserAuthorizationController extends Controller
 {
     public function edit(User $user): Response
     {
-        $this->authorize('users.assign-roles');
+        $this->authorize('manageAuthorization', $user);
 
         $user->load(['roles', 'permissions']);
 
@@ -68,8 +67,9 @@ final class UserAuthorizationController extends Controller
         UserAuthorizationService $service,
     ): RedirectResponse {
         // Re-authorize on the mutation itself, never trust the `edit` action
-        // alone (matches the Livewire component's mount()+save() pattern).
-        $this->authorize('users.assign-roles');
+        // alone. UserPolicy: permission + centre reach + no self-edit + a
+        // super-admin target only for a super-admin actor.
+        $this->authorize('manageAuthorization', $user);
 
         $data = $request->validated();
 

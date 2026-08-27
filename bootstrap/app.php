@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
@@ -35,6 +36,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Inertia + React (docs/inertia-react-migration-plan.md) — shares
         // props on requests Inertia actually serves.
         $middleware->web(append: [
+            EnsureUserIsActive::class,
             HandleInertiaRequests::class,
         ]);
     })

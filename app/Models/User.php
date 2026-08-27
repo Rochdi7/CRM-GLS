@@ -24,6 +24,18 @@ class User extends Authenticatable
     use HasRoles;
 
     /**
+     * Mirrors the DB defaults (CLAUDE.md §11: a model with a DB-default
+     * column mirrors it here, or an in-memory instance reads NULL — which
+     * EnsureUserIsActive would take for "deactivated").
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'is_active' => true,
+        'must_change_password' => true,
+    ];
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>

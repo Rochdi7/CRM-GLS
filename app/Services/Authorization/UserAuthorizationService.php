@@ -29,6 +29,15 @@ final class UserAuthorizationService
      */
     public function syncAuthorization(User $actor, User $target, array $roleNames, array $directPermissions = []): void
     {
+        // Nobody edits their own authorization — a director could otherwise
+        // grant himself the union of every non-super-admin preset (SEC-04).
+        // Enforced here too so non-HTTP callers get the same rule.
+        if ($actor->is($target)) {
+            throw ValidationException::withMessages([
+                'roles' => __('Vous ne pouvez pas modifier vos propres autorisations.'),
+            ]);
+        }
+
         $this->guardRoleNames($roleNames);
         $this->guardPermissionNames($directPermissions);
         $this->guardSuperAdminRules($actor, $target, $roleNames);

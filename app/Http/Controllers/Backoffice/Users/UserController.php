@@ -7,11 +7,14 @@ namespace App\Http\Controllers\Backoffice\Users;
 use App\Domain\Employees\Queries\GetUsersList;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Users\UpdateUserRequest;
+use App\Models\Role;
 use App\Models\User;
 use App\Services\Context\CurrentContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -23,10 +26,9 @@ use Inertia\Response;
  * Users are NEVER created here — only produced by EmployeeObserver when an
  * Employee is created — so there is deliberately no store()/create() action.
  *
- * Everything is gated on `users.assign-roles` (there is no separate
- * `users.update` permission — intentional, see docs/roles-and-permissions.md)
- * except the index itself, which only needs `users.view` (matches the
- * Livewire component's mount()).
+ * Mutations are gated by UserPolicy (`users.assign-roles` + target/centre
+ * rules — there is no separate `users.update` permission, intentional, see
+ * docs/roles-and-permissions.md); the index only needs `users.view`.
  */
 final class UserController extends Controller
 {
@@ -52,19 +54,30 @@ final class UserController extends Controller
 
     public function update(UpdateUserRequest $request, User $user): RedirectResponse
     {
-        // Second layer of defense in depth — the `permission:users.assign-roles`
-        // route middleware is the first (matches the Livewire component's
-        // authorize() call in both mount() and every mutation method).
-        $this->authorize('users.assign-roles');
+        // UserPolicy: permission + target not super-admin (unless actor is)
+        // + not self + centre reach (audit SEC-01/03/04).
+        $this->authorize('update', $user);
 
         $data = $request->validated();
+        $isActive = (bool) ($data['is_active'] ?? $user->is_active);
+        $deactivating = $user->is_active && ! $isActive;
 
-        $user->update([
-            'name' => $data['name'],
-            'email' => $data['email'],
-            'username' => $data['username'] ?? null,
-            'is_active' => $data['is_active'] ?? $user->is_active,
-        ]);
+        if ($deactivating) {
+            $this->guardDeactivation($user);
+        }
+
+        DB::transaction(function () use ($user, $data, $isActive, $deactivating): void {
+            $user->update([
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'username' => $data['username'] ?? null,
+                'is_active' => $isActive,
+            ]);
+
+            if ($deactivating) {
+                $this->revokeSessions($user);
+            }
+        });
 
         return back()->with('success', __('Utilisateur mis à jour.'));
     }
@@ -77,7 +90,7 @@ final class UserController extends Controller
      */
     public function regeneratePassword(Request $request, User $user): RedirectResponse
     {
-        $this->authorize('users.assign-roles');
+        $this->authorize('update', $user);
 
         $plain = Str::password(12);
         $user->update(['password' => $plain, 'must_change_password' => true]);
@@ -90,5 +103,44 @@ final class UserController extends Controller
         return back()
             ->with('success', __('Mot de passe régénéré.'))
             ->with('regeneratedPassword', $plain);
+    }
+
+    /**
+     * Deactivating must never lock the system: never yourself (the policy
+     * already refuses self for everyone but a super-admin, whom Gate::before
+     * lets through) and never the last active super-admin.
+     */
+    private function guardDeactivation(User $user): void
+    {
+        if ($user->is(auth()->user())) {
+            throw ValidationException::withMessages([
+                'is_active' => __('Vous ne pouvez pas désactiver votre propre compte.'),
+            ]);
+        }
+
+        if ($user->hasRole(Role::SUPER_ADMIN)
+            && User::query()->role(Role::SUPER_ADMIN)->where('is_active', true)->count() <= 1) {
+            throw ValidationException::withMessages([
+                'is_active' => __('Impossible de désactiver le dernier super administrateur actif.'),
+            ]);
+        }
+    }
+
+    /**
+     * A deactivated login is out immediately: its "remember me" cookie
+     * stops matching and, with the database session driver, its open
+     * sessions are dropped. EnsureUserIsActive covers every driver on the
+     * next request.
+     */
+    private function revokeSessions(User $user): void
+    {
+        $user->setRememberToken(Str::random(60));
+        $user->save();
+
+        if (config('session.driver') === 'database') {
+            DB::table((string) config('session.table', 'sessions'))
+                ->where('user_id', $user->id)
+                ->delete();
+        }
     }
 }
