@@ -118,6 +118,9 @@ final class PresenceImportController extends Controller
     public function commit(CommitImportRequest $request, ImportBatch $batch, PresenceImporter $importer): JsonResponse
     {
         $this->authorize('create', ImportBatch::class);
+        // The batch itself must be within reach: a batch of another centre
+        // is never committed/retried from here (audit SEC-05).
+        $this->authorize('view', $batch);
         abort_unless($batch->module === ImportBatch::MODULE_PRESENCES, 404);
 
         $admin = $this->actingEmployee($request);
@@ -149,6 +152,9 @@ final class PresenceImportController extends Controller
     public function retryFailed(Request $request, ImportBatch $batch): RedirectResponse
     {
         $this->authorize('create', ImportBatch::class);
+        // The batch itself must be within reach: a batch of another centre
+        // is never committed/retried from here (audit SEC-05).
+        $this->authorize('view', $batch);
         abort_unless($batch->module === ImportBatch::MODULE_PRESENCES, 404);
 
         $requeued = $batch->rows()
