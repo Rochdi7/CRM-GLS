@@ -37,6 +37,8 @@ interface SeancesIndexProps {
     groupOptions: GroupOption[];
     enseignants: SelectOption[];
     statuts: string[];
+    /** Active reasons from Paramètres → Raisons d'annulation ou archivage. */
+    motifsAnnulation: string[];
     permissions: { create: boolean; update: boolean; delete: boolean; mark: boolean };
 }
 
@@ -68,6 +70,7 @@ export default function SeancesIndex({
     groupOptions,
     enseignants,
     statuts,
+    motifsAnnulation,
     permissions,
 }: SeancesIndexProps) {
     const [showModal, setShowModal] = useState(false);
@@ -546,13 +549,15 @@ export default function SeancesIndex({
                     <p className="fw-medium">
                         {annulerTarget ? `${annulerTarget.groupNom ?? ''} — ${annulerTarget.dateSeance}` : ''}
                     </p>
-                    <TextareaField
+                    <SelectField
                         id="seance-annuler-motif"
-                        label="Motif de l'annulation"
-                        rows={4}
+                        label="Motif de l&rsquo;annulation"
+                        required
                         value={annulerForm.data.motif}
                         onChange={(event) => annulerForm.setData('motif', event.target.value)}
                         error={annulerForm.errors.motif}
+                        placeholder="Choisir un élément"
+                        options={motifsAnnulation.map((nom) => ({ value: nom, label: nom }))}
                     />
                     <div className="d-flex justify-content-end gap-2 mt-3">
                         <FormActions

@@ -161,6 +161,11 @@ final class PermissionRegistry
                 // append-only by default (CLAUDE.md §11); a super-admin grants
                 // this one by hand when a real correction case needs it.
                 'payments.delete' => 'Supprimer un encaissement',
+                // Bulk re-allocation of already-recorded payments to another
+                // group/année. Like groups.move-year it rewrites which
+                // registration (and therefore which year) money belongs to,
+                // so it is super-admin only — see superAdminOnly() below.
+                'payments.reallocate' => 'Déplacer des encaissements vers un autre groupe / une autre année',
             ],
             'Recouvrement' => [
                 'collections.view' => 'Consulter la gestion des recouvrements',
@@ -399,6 +404,10 @@ final class PermissionRegistry
             // inscription, séance (and therefore payment) hanging off it —
             // a history-altering act reserved to super-admins (24/08/2026).
             'groups.move-year',
+            // Re-allocating a payment changes the inscription — and therefore
+            // the année — the money is booked against. Same history-altering
+            // class as groups.move-year (26/08/2026).
+            'payments.reallocate',
             // « Centres affectés » is the ONE authority on which centers a
             // user reaches (employee_etablissement pivot, CLAUDE.md §16) —
             // no ROLE may widen it to the whole network. Someone who needs

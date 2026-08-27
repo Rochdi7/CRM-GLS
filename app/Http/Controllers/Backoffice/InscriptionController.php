@@ -298,6 +298,46 @@ final class InscriptionController extends Controller
      * `registrations.manage-fees` (audit doc §12 point 1 — that permission
      * is not part of the live create workflow).
      */
+    /**
+     * A new inscription may only be charged the fees its GROUP currently
+     * offers (`group_frais`) — the same pivot GetGroupInscriptionFees feeds
+     * the create modal's « Frais disponibles » table from.
+     *
+     * The modal already shows exactly those rows, so this never fires in
+     * normal use. It exists because the client array is otherwise trusted
+     * verbatim: a modal left open while the fee was removed from the group
+     * in another tab — or a crafted request — would otherwise file a line
+     * for a fee the group deliberately no longer carries, resurrecting on
+     * ONE registration what RetirerFraisGroupe hid on all the others.
+     *
+     * A line with no `frais_id` is a free-text manual fee, which the form
+     * allows on purpose and which belongs to no catalog entry — it is not
+     * checked here.
+     *
+     * @param  array<int, array<string, mixed>>  $feeLines
+     */
+    private function assertFeeLinesBelongToGroup(Group $group, array $feeLines): void
+    {
+        $soumis = collect($feeLines)
+            ->pluck('frais_id')
+            ->filter(fn ($id): bool => $id !== null && $id !== '')
+            ->map(fn ($id): int => (int) $id)
+            ->unique();
+
+        if ($soumis->isEmpty()) {
+            return;
+        }
+
+        $offerts = $group->frais()->pluck('frais.id')->all();
+        $intrus = $soumis->diff($offerts);
+
+        if ($intrus->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'fee_lines' => __('One of the selected fees is no longer assigned to this group. Reopen the form to reload its fees.'),
+            ]);
+        }
+    }
+
     public function groupFees(Group $group, GetGroupInscriptionFees $getGroupInscriptionFees): JsonResponse
     {
         $this->authorize('create', Inscription::class);
@@ -400,6 +440,8 @@ final class InscriptionController extends Controller
         if (! $creatingStudent) {
             $this->assertStudentInContext($request, Student::findOrFail((int) $data['student_id']));
         }
+        $this->assertFeeLinesBelongToGroup($group, $data['fee_lines'] ?? []);
+
         $livreIds = array_map('intval', $data['livre_ids'] ?? []);
 
         $assignerLivres->validateAvailability($livreIds, []);

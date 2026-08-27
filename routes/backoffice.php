@@ -18,6 +18,7 @@ use App\Http\Controllers\Backoffice\AuditLogController;
 use App\Http\Controllers\Backoffice\DepenseController;
 use App\Http\Controllers\Backoffice\Employees\EmployeeController;
 use App\Http\Controllers\Backoffice\EncaissementController;
+use App\Http\Controllers\Backoffice\EncaissementReallocationController;
 use App\Http\Controllers\Backoffice\EtablissementController;
 use App\Http\Controllers\Backoffice\FraisController;
 use App\Http\Controllers\Backoffice\GroupController;
@@ -426,6 +427,20 @@ Route::prefix('backoffice')
             // Payments — Inertia list + modal add/edit (the cascading
             // multi-row payment form). Controller serves both the list and
             // the read-only receipt page. ⚠ NEVER add a destroy route.
+            // « Déplacer des encaissements » — bulk correction of money booked
+            // against the wrong groupe/année. Super-admin only
+            // (payments.reallocate is in PermissionRegistry::superAdminOnly),
+            // like groups.move-year: it rewrites which registration — and so
+            // which année — a payment belongs to. The listing is deliberately
+            // NOT year-scoped, since the rows to fix are the ones the active
+            // year hides.
+            Route::get('encaissements/reaffecter', [EncaissementReallocationController::class, 'index'])
+                ->middleware('permission:payments.reallocate')->name('encaissements.reaffecter.index');
+            Route::post('encaissements/reaffecter', [EncaissementReallocationController::class, 'store'])
+                ->middleware('permission:payments.reallocate')->name('encaissements.reaffecter.store');
+            Route::get('encaissements/reaffecter/groupes/{group}/inscriptions', [EncaissementReallocationController::class, 'inscriptions'])
+                ->middleware('permission:payments.reallocate')->name('encaissements.reaffecter.inscriptions');
+
             Route::get('encaissements', [EncaissementController::class, 'index'])
                 ->middleware('permission:payments.view')->name('encaissements.index');
             Route::post('encaissements', [EncaissementController::class, 'store'])
@@ -466,6 +481,7 @@ Route::prefix('backoffice')
                 ->middleware('permission:payments.create')->name('avances.convert');
             Route::post('avances/{encaissement}/apply', [EncaissementController::class, 'applyAvance'])
                 ->middleware('permission:payments.create')->name('avances.apply');
+
 
             // Chèques — off-ledger inventory of physical checks in hand
             // (garantie / à déposer), tracked reception -> dépôt ->

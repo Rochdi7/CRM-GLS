@@ -32,16 +32,12 @@ final class GetDashboardStats
         $anneeRange = $context->anneeDateRange();
         $centreId = $context->etablissementId();
 
-        // Students follow the year switcher through their inscriptions: a
-        // student "belongs" to the years they hold an inscription in. A
-        // student never enrolled anywhere stays visible in every year (they
-        // were just created and are about to be enrolled — hiding them would
-        // make a fresh student vanish from the dashboard).
+        // Students carry NO academic year — only their inscriptions do, so
+        // the card counts every student of the centre whatever the year
+        // switcher says (same rule as GetStudentsList). Year-bearing figures
+        // below (groups, inscriptions, money) still follow the switcher.
         $studentsQuery = Student::query()
-            ->when($centreId, fn ($q) => $q->where('etablissement_id', $centreId))
-            ->when($anneeId, fn ($q) => $q->where(fn ($sub) => $sub
-                ->whereHas('inscriptions', fn ($i) => $i->where('annee_scolaire_id', $anneeId))
-                ->orWhereDoesntHave('inscriptions')));
+            ->when($centreId, fn ($q) => $q->where('etablissement_id', $centreId));
 
         // Employees are staff — they exist regardless of academic year, so
         // they are scoped by center only (no year dimension to scope on).

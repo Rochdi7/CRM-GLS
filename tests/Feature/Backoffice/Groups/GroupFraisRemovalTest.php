@@ -247,6 +247,92 @@ final class GroupFraisRemovalTest extends TestCase
         $this->assertNotNull($fee->fresh()->masque_le);
     }
 
+    /**
+     * The whole point of removing a fee from a group: the NEXT inscription
+     * into that group must not be offered it any more. The create modal's
+     * « Frais disponibles » table is fed by GET
+     * groups/{group}/inscription-fees, so that endpoint — not the catalog —
+     * is what has to follow the group's current pivot.
+     */
+    public function test_a_removed_group_fee_is_no_longer_offered_to_a_new_inscription(): void
+    {
+        $user = $this->superAdmin();
+
+        $avant = $this->actingAs($user)
+            ->getJson("/backoffice/groups/{$this->group->id}/inscription-fees")
+            ->assertOk()
+            ->json('fees');
+
+        $this->assertEqualsCanonicalizing(
+            [$this->fraisAvril->id, $this->fraisInscription->id],
+            array_column($avant, 'fraisId'),
+        );
+
+        $this->actingAs($user)->delete("/backoffice/groups/{$this->group->id}/frais/{$this->fraisAvril->id}");
+
+        $apres = $this->actingAs($user)
+            ->getJson("/backoffice/groups/{$this->group->id}/inscription-fees")
+            ->assertOk()
+            ->json('fees');
+
+        $this->assertSame([$this->fraisInscription->id], array_column($apres, 'fraisId'));
+    }
+
+    /**
+     * A fee still in the catalog but never assigned to THIS group must not
+     * leak into the group's offer either — the endpoint reads the pivot, not
+     * Frais::where(statut, Actif).
+     */
+    public function test_a_catalog_fee_the_group_never_carried_is_not_offered(): void
+    {
+        $orphelin = Frais::create(['nom' => 'Frais de Mai', 'montant_defaut' => 1300]);
+
+        $fees = $this->actingAs($this->superAdmin())
+            ->getJson("/backoffice/groups/{$this->group->id}/inscription-fees")
+            ->assertOk()
+            ->json('fees');
+
+        $this->assertNotContains($orphelin->id, array_column($fees, 'fraisId'));
+    }
+
+    /**
+     * The client fee_lines array is not trusted: a create modal left open
+     * while the fee was removed from the group in another tab must not be
+     * able to file the removed fee on the new registration.
+     */
+    public function test_store_refuses_a_fee_line_the_group_no_longer_offers(): void
+    {
+        $user = $this->superAdmin();
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+
+        $this->actingAs($user)->delete("/backoffice/groups/{$this->group->id}/frais/{$this->fraisAvril->id}");
+
+        $this->actingAs($user)
+            ->from('/backoffice/inscriptions')
+            ->post('/backoffice/inscriptions', [
+                'inscription_mode' => 'existing',
+                'student_id' => $student->id,
+                'phone_pays' => 'MA',
+                'group_id' => $this->group->id,
+                'date_inscription' => '2026-01-10',
+                'fee_lines' => [
+                    [
+                        'frais_id' => $this->fraisAvril->id,
+                        'nom' => $this->fraisAvril->nom,
+                        'montant_initial' => '1300',
+                        'date_echeance' => '2026-04-01',
+                    ],
+                ],
+            ])
+            ->assertSessionHasErrors('fee_lines');
+
+        $this->assertDatabaseMissing('inscription_fees', [
+            'frais_id' => $this->fraisAvril->id,
+            'inscription_id' => null,
+        ]);
+        $this->assertSame(0, Inscription::query()->where('student_id', $student->id)->count());
+    }
+
     public function test_a_refunded_payment_is_left_attached_and_does_not_abort_the_removal(): void
     {
         $inscription = $this->enrol('Fassi');

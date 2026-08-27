@@ -68,6 +68,11 @@ final class SeanceController extends Controller
             'groupOptions' => $formOptions->groups($user),
             'enseignants' => $formOptions->enseignants(),
             'statuts' => Seance::STATUTS,
+            // Cancellation reasons for the "Annuler la séance" form, read from
+            // the managed catalog (Paramètres → Raisons d'annulation ou
+            // archivage) — never a hard-coded list. A closure so a partial
+            // reload that doesn't ask for it skips the query (CLAUDE.md §17).
+            'motifsAnnulation' => fn (): array => AnnulerSeanceRequest::motifs(),
             'permissions' => [
                 'create' => $user->can('create', Seance::class),
                 'update' => $user->can('attendance.update'),
@@ -209,6 +214,8 @@ final class SeanceController extends Controller
             'canMark' => $seance !== null && $user->can('mark', $seance),
             'canValidate' => $seance !== null && $user->can('validate', $seance),
             'canCancel' => $seance !== null && $user->can('cancel', $seance),
+            // Same managed catalog as the list page's cancel modal.
+            'motifsAnnulation' => fn (): array => AnnulerSeanceRequest::motifs(),
             'filters' => [
                 'date' => $filterDate,
                 'enseignant' => $filterEnseignant,

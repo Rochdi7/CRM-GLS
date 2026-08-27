@@ -114,6 +114,18 @@ export const backofficeNavigation: NavGroup[] = [
                 inertia: true,
             },
             {
+                // Bulk correction of money booked against the wrong group /
+                // année. Super-admin only: payments.reallocate is in
+                // PermissionRegistry::superAdminOnly(), so no role preset can
+                // hold it and the entry stays hidden for everyone else.
+                label: t('Move payments'),
+                href: '/backoffice/encaissements/reaffecter',
+                icon: 'ti ti-arrows-exchange',
+                permissions: ['payments.reallocate'],
+                matchPaths: ['/backoffice/encaissements/reaffecter'],
+                inertia: true,
+            },
+            {
                 label: t('Cash management'),
                 href: '/backoffice/caisses',
                 icon: 'ti ti-cash',

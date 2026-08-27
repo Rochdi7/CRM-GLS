@@ -620,9 +620,13 @@ the database layer. Non-negotiable invariants already enforced in code:
     year FK (dépenses, remboursements, chèques, journal de caisse rows) use
     the active year's `date_debut`–`date_fin` as the **default date
     window** — `CurrentContext::anneeDateRange()` — which an explicit date
-    filter on the page overrides. Students (list + dashboard) belong to the
-    years they hold an inscription in, plus never-enrolled students
-    (visible in every year: just created, about to be enrolled).
+    filter on the page overrides. **Students carry NO année at all** — only
+    their INSCRIPTIONS do. Every student list, dropdown, lookup and stat
+    card shows every student of the active CENTRE whatever the year
+    switcher says: the same person enrolled in 2025/2026 is the same
+    person in 2026/2027 and must stay findable and re-enrollable. Never
+    re-add a `whereHas('inscriptions', …annee…)` filter to a student
+    query (`GetStudentsList`, `GetDashboardStats`).
   - **Creates** inherit `etablissement_id`/`annee_scolaire_id` from the
     active context or from the parent record (group → inscription → séance),
     never from client input.

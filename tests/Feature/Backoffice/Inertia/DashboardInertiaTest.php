@@ -194,11 +194,11 @@ final class DashboardInertiaTest extends TestCase
     }
 
     /**
-     * A student belongs to the years they hold an inscription in; a student
-     * never enrolled anywhere stays visible in every year (just created,
-     * about to be enrolled).
+     * A student carries no academic year — only their inscriptions do — so
+     * the students card counts every student of the centre whatever the
+     * top-bar year says.
      */
-    public function test_students_follow_the_selected_academic_year(): void
+    public function test_students_ignore_the_selected_academic_year(): void
     {
         $admin = User::factory()->create();
         $admin->assignRole(Role::SUPER_ADMIN);
@@ -225,17 +225,17 @@ final class DashboardInertiaTest extends TestCase
         // Never enrolled — visible in every year.
         Student::factory()->create(['etablissement_id' => $centre->id]);
 
-        // Default year (2025/2026): its 2 enrolled students + the fresh one.
+        // Default year (2025/2026): all 4 students of the centre.
         $this->actingAs($admin)
             ->get(route('backoffice.dashboard'))
-            ->assertInertia(fn (Assert $page) => $page->where('stats.studentsTotal', 3));
+            ->assertInertia(fn (Assert $page) => $page->where('stats.studentsTotal', 4));
 
         app(\App\Services\Context\CurrentContext::class)->setAnneeScolaire($oldYear->id);
 
-        // 2024/2025: its 1 enrolled student + the fresh one.
+        // 2024/2025: still all 4 — the year does not filter people.
         $this->actingAs($admin)
             ->get(route('backoffice.dashboard'))
-            ->assertInertia(fn (Assert $page) => $page->where('stats.studentsTotal', 2));
+            ->assertInertia(fn (Assert $page) => $page->where('stats.studentsTotal', 4));
     }
 
     public function test_all_centers_selection_aggregates_every_center(): void

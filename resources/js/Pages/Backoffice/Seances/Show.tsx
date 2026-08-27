@@ -6,7 +6,6 @@ import DateField from '@/Components/Forms/DateField';
 import SelectField from '@/Components/Forms/SelectField';
 import Modal from '@/Components/Modals/Modal';
 import ConfirmDialog from '@/Components/Modals/ConfirmDialog';
-import TextareaField from '@/Components/Forms/TextareaField';
 import FormActions from '@/Components/Forms/FormActions';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
@@ -39,6 +38,8 @@ interface SeanceShowProps {
     canMark: boolean;
     canValidate: boolean;
     canCancel: boolean;
+    /** Active reasons from Paramètres → Raisons d'annulation ou archivage. */
+    motifsAnnulation: string[];
     filters: { date: string; enseignant: number | null };
     enseignantOptions: SelectOption[];
     seanceOptions: SelectOption[];
@@ -78,6 +79,7 @@ export default function SeanceShow({
     canMark,
     canValidate,
     canCancel,
+    motifsAnnulation,
     filters,
     enseignantOptions,
     seanceOptions,
@@ -667,13 +669,15 @@ export default function SeanceShow({
                 processing={annulerForm.processing}
             >
                 <form onSubmit={submitAnnuler}>
-                    <TextareaField
+                    <SelectField
                         id="seance-annuler-motif"
-                        label="Motif de l'annulation"
-                        rows={4}
+                        label="Motif de l&rsquo;annulation"
+                        required
                         value={annulerForm.data.motif}
                         onChange={(event) => annulerForm.setData('motif', event.target.value)}
                         error={annulerForm.errors.motif}
+                        placeholder="Choisir un élément"
+                        options={motifsAnnulation.map((nom) => ({ value: nom, label: nom }))}
                     />
                     <div className="d-flex justify-content-end gap-2 mt-3">
                         <FormActions

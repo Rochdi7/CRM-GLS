@@ -8,6 +8,7 @@ use App\Models\AnneeScolaire;
 use App\Models\Etablissement;
 use App\Models\Group;
 use App\Models\Inscription;
+use App\Models\MotifAnnulation;
 use App\Models\Presence;
 use App\Models\Seance;
 use App\Models\Student;
@@ -227,41 +228,98 @@ final class SeancesInertiaCrudTest extends TestCase
         $this->assertSame(Seance::STATUT_PREVUE, $seance->fresh()->statut);
     }
 
-    public function test_annuler_cancels_the_seance_with_a_reason(): void
+    public function test_annuler_cancels_the_seance_with_a_catalog_reason(): void
     {
+        $this->seedMotifs();
         $seance = $this->makeSeance();
 
         $this->actingAs($this->userWith('attendance.view', 'attendance.mark'))
-            ->post(route('backoffice.seances.annuler', $seance), ['motif' => 'Jour férié'])
+            ->post(route('backoffice.seances.annuler', $seance), ['motif' => 'Problème du temps'])
             ->assertRedirect();
 
         $seance->refresh();
         $this->assertSame(Seance::STATUT_ANNULEE, $seance->statut);
-        $this->assertSame('Jour férié', $seance->motif_annulation);
+        $this->assertSame('Problème du temps', $seance->motif_annulation);
     }
 
-    public function test_annuler_does_not_require_a_reason(): void
+    public function test_annuler_requires_a_reason(): void
     {
+        $this->seedMotifs();
         $seance = $this->makeSeance();
 
         $this->actingAs($this->userWith('attendance.view', 'attendance.mark'))
             ->post(route('backoffice.seances.annuler', $seance), ['motif' => ''])
-            ->assertRedirect();
+            ->assertSessionHasErrors('motif');
 
-        $seance->refresh();
-        $this->assertSame(Seance::STATUT_ANNULEE, $seance->statut);
-        $this->assertSame('', $seance->motif_annulation);
+        $this->assertSame(Seance::STATUT_PREVUE, $seance->fresh()->statut);
+    }
+
+    public function test_annuler_refuses_a_reason_outside_the_catalog(): void
+    {
+        $this->seedMotifs();
+        $seance = $this->makeSeance();
+
+        $this->actingAs($this->userWith('attendance.view', 'attendance.mark'))
+            ->post(route('backoffice.seances.annuler', $seance), ['motif' => 'Jour férié'])
+            ->assertSessionHasErrors('motif');
+
+        $this->assertSame(Seance::STATUT_PREVUE, $seance->fresh()->statut);
+    }
+
+    public function test_annuler_refuses_an_inactive_reason(): void
+    {
+        $this->seedMotifs();
+        MotifAnnulation::create(['nom' => 'Ancienne raison', 'statut' => MotifAnnulation::STATUT_INACTIF]);
+        $seance = $this->makeSeance();
+
+        $this->actingAs($this->userWith('attendance.view', 'attendance.mark'))
+            ->post(route('backoffice.seances.annuler', $seance), ['motif' => 'Ancienne raison'])
+            ->assertSessionHasErrors('motif');
+
+        $this->assertSame(Seance::STATUT_PREVUE, $seance->fresh()->statut);
+    }
+
+    /**
+     * « Changement de groupe » is the system reason the inscription
+     * group-change flow writes; it says nothing about why a class session did
+     * not take place, so the séance form must never accept it.
+     */
+    public function test_annuler_refuses_the_group_change_system_reason(): void
+    {
+        $this->seedMotifs();
+        $seance = $this->makeSeance();
+
+        $this->actingAs($this->userWith('attendance.view', 'attendance.mark'))
+            ->post(route('backoffice.seances.annuler', $seance), [
+                'motif' => MotifAnnulation::MOTIF_CHANGEMENT_GROUPE,
+            ])
+            ->assertSessionHasErrors('motif');
+
+        $this->assertSame(Seance::STATUT_PREVUE, $seance->fresh()->statut);
     }
 
     public function test_annuler_requires_attendance_mark(): void
     {
+        $this->seedMotifs();
         $seance = $this->makeSeance();
 
         $this->actingAs($this->userWith('attendance.view'))
-            ->post(route('backoffice.seances.annuler', $seance), ['motif' => 'Jour férié'])
+            ->post(route('backoffice.seances.annuler', $seance), ['motif' => 'Problème du temps'])
             ->assertForbidden();
 
         $this->assertSame(Seance::STATUT_PREVUE, $seance->fresh()->statut);
+    }
+
+    /** Starter catalog rows the "Annuler la séance" dropdown offers. */
+    private function seedMotifs(): void
+    {
+        MotifAnnulation::create(['nom' => 'Problème du temps', 'statut' => MotifAnnulation::STATUT_ACTIF]);
+        MotifAnnulation::create(['nom' => 'Autre', 'statut' => MotifAnnulation::STATUT_ACTIF]);
+        MotifAnnulation::create([
+            'nom' => MotifAnnulation::MOTIF_CHANGEMENT_GROUPE,
+            'statut' => MotifAnnulation::STATUT_ACTIF,
+            'is_system' => true,
+        ]);
     }
 
     public function test_resaving_the_roll_call_updates_instead_of_duplicating(): void

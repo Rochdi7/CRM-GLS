@@ -64,11 +64,12 @@ final class StudentsInertiaCrudTest extends TestCase
     }
 
     /**
-     * Year switcher: the list shows the students enrolled in the active
-     * year, plus students never enrolled anywhere (just created, about to
-     * be enrolled — they must not vanish from the list).
+     * A STUDENT carries no academic year — only their inscriptions do. The
+     * list therefore shows every student of the centre whatever the top-bar
+     * year says: the same person enrolled in 2025/2026 must stay findable
+     * (and re-enrollable) in 2026/2027.
      */
-    public function test_index_follows_the_selected_academic_year(): void
+    public function test_index_ignores_the_selected_academic_year(): void
     {
         $year1 = \App\Models\AnneeScolaire::create(['nom' => '2025/2026', 'date_debut' => '2025-09-01', 'date_fin' => '2026-08-31', 'par_defaut' => true, 'inscription_ouverte' => true]);
         $year2 = \App\Models\AnneeScolaire::create(['nom' => '2026/2027', 'date_debut' => '2026-09-01', 'date_fin' => '2027-08-31', 'par_defaut' => false, 'inscription_ouverte' => true]);
@@ -94,19 +95,19 @@ final class StudentsInertiaCrudTest extends TestCase
 
         $this->actingAs($this->userWith('students.view'));
 
-        // Default year 2025/2026: AnneeUn + JamaisInscrit, never AnneeDeux.
+        // Default year 2025/2026: all three students, both years included.
         $this->get(route('backoffice.students.index'))
             ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page->where('students.total', 2));
+            ->assertInertia(fn (Assert $page) => $page->where('students.total', 3));
         $this->get(route('backoffice.students.index', ['search' => 'AnneeDeux']))
-            ->assertInertia(fn (Assert $page) => $page->where('students.total', 0));
+            ->assertInertia(fn (Assert $page) => $page->where('students.total', 1));
 
-        // Switch to 2026/2027: AnneeDeux + JamaisInscrit, never AnneeUn.
+        // Switch to 2026/2027: still all three — the year does not filter people.
         app(\App\Services\Context\CurrentContext::class)->setAnneeScolaire($year2->id);
         $this->get(route('backoffice.students.index'))
-            ->assertInertia(fn (Assert $page) => $page->where('students.total', 2));
+            ->assertInertia(fn (Assert $page) => $page->where('students.total', 3));
         $this->get(route('backoffice.students.index', ['search' => 'AnneeUn']))
-            ->assertInertia(fn (Assert $page) => $page->where('students.total', 0));
+            ->assertInertia(fn (Assert $page) => $page->where('students.total', 1));
     }
 
     public function test_a_student_can_be_created_with_a_generated_reference(): void
