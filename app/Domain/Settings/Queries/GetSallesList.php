@@ -17,7 +17,7 @@ final class GetSallesList
 {
     public function __construct(private readonly CurrentContext $context) {}
 
-    public function __invoke(int $perPage = 8): LengthAwarePaginator
+    public function __invoke(int $perPage = 10): LengthAwarePaginator
     {
         $centerId = $this->context->etablissementId();
 

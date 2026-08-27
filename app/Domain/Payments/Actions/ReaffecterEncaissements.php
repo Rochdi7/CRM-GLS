@@ -147,7 +147,8 @@ final class ReaffecterEncaissements
                 ->groupBy('inscription_id');
 
             $deplaces = 0;
-            $restes = count($sansInscription) > 0 ? $encaissements->count() - $aDeplacer->count() : 0;
+            // The unplaceable ones are already counted: they kept their fee.
+            $restes = $encaissements->count() - $aDeplacer->count();
             $montant = 0.0;
             $fraisCrees = 0;
 

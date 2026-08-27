@@ -21,7 +21,7 @@ use Illuminate\Support\Collection;
  */
 final class GetRemboursementsList
 {
-    public const DEFAULT_PER_PAGE = 15;
+    public const DEFAULT_PER_PAGE = 10;
 
     public function __construct(
         private readonly CenterAccessService $centerAccess,

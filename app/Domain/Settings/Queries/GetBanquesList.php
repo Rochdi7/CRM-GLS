@@ -13,7 +13,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
  */
 final class GetBanquesList
 {
-    public function __invoke(int $perPage = 8): LengthAwarePaginator
+    public function __invoke(int $perPage = 10): LengthAwarePaginator
     {
         $banques = Banque::query()->orderBy('nom')->paginate($perPage)->withQueryString();
 

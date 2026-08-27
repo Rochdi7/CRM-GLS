@@ -28,7 +28,7 @@ use Illuminate\Support\Collection;
  */
 final class GetActivityLogList
 {
-    public const DEFAULT_PER_PAGE = 25;
+    public const DEFAULT_PER_PAGE = 10;
 
     /**
      * @return array{data: LengthAwarePaginator}

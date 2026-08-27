@@ -78,7 +78,6 @@ function emptyForm(defaultCountry: string, contextCenterId: number | null): Empl
 export default function EmployeesIndex({
     employees,
     filters,
-    perPageOptions,
     categories,
     statuts,
     sexes,
@@ -360,9 +359,6 @@ export default function EmployeesIndex({
                 </div>
 
                 <TableLengthRow
-                    perPage={filters.perPage}
-                    perPageOptions={perPageOptions}
-                    onPerPageChange={(perPage) => reload({ perPage })}
                     search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} placeholder="Rechercher" />}
                 />
 

@@ -13,7 +13,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
  */
 final class GetEtablissementsList
 {
-    public function __invoke(int $perPage = 8): LengthAwarePaginator
+    public function __invoke(int $perPage = 10): LengthAwarePaginator
     {
         $etablissements = Etablissement::query()
             ->withCount('salles')

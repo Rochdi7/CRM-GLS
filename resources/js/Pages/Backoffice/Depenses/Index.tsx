@@ -47,9 +47,6 @@ interface RemboursementFormState {
     note: string;
 }
 
-/** Local list — the controller sends no perPageOptions prop (default perPage is 15, unclamped server-side). */
-const PER_PAGE_OPTIONS = [15, 25, 50, 100];
-
 /**
  * « Date d'opération » cell — when the row was really keyed in, and when it
  * was last edited if that ever happened.
@@ -629,9 +626,6 @@ export default function DepensesIndex({
                     </div>
 
                     <TableLengthRow
-                        perPage={filters.perPage}
-                        perPageOptions={PER_PAGE_OPTIONS}
-                        onPerPageChange={(perPage) => reload({ perPage })}
                         search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} />}
                     />
 
@@ -784,9 +778,6 @@ export default function DepensesIndex({
                     </div>
 
                     <TableLengthRow
-                        perPage={filters.perPage}
-                        perPageOptions={PER_PAGE_OPTIONS}
-                        onPerPageChange={(perPage) => reload({ perPage })}
                         search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} />}
                     />
 
@@ -983,9 +974,6 @@ export default function DepensesIndex({
                     </div>
 
                     <TableLengthRow
-                        perPage={filters.perPage}
-                        perPageOptions={PER_PAGE_OPTIONS}
-                        onPerPageChange={(perPage) => reload({ perPage })}
                         search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} />}
                     />
 

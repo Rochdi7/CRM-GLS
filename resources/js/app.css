@@ -1202,15 +1202,6 @@ html[data-theme='dark'] .gls-seancecal-day.is-today {
     margin-bottom: 12px !important;
 }
 
-/* "Lignes par page [10] entrées" — a full-height form-select on its own line
- * cost ~60px for one number. */
-.gls-length-row .form-select-sm {
-    height: 30px;
-    padding-top: 2px;
-    padding-bottom: 2px;
-    font-size: 12px;
-}
-
 /* Card header above the filters: the theme gives it 20px+ of vertical padding
  * on top of the content padding already applied. */
 .card-header {

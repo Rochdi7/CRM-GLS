@@ -14,7 +14,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
  */
 final class GetAnneesScolairesList
 {
-    public function __invoke(int $perPage = 8): LengthAwarePaginator
+    public function __invoke(int $perPage = 10): LengthAwarePaginator
     {
         $annees = AnneeScolaire::query()->orderByDesc('date_debut')->paginate($perPage)->withQueryString();
 

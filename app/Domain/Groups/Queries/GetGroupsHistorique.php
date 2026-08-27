@@ -28,7 +28,7 @@ final class GetGroupsHistorique
         private readonly CurrentContext $context,
     ) {}
 
-    public function __invoke(User $user, int $perPage = 15): LengthAwarePaginator
+    public function __invoke(User $user, int $perPage = 10): LengthAwarePaginator
     {
         $historiques = GroupHistorique::query()
             ->with(['group', 'enseignant', 'etablissement', 'anneeScolaire', 'archivedBy'])

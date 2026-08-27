@@ -66,7 +66,6 @@ function statutVariant(statut: string): 'success' | 'secondary' | 'danger' | 'in
 export default function SeancesIndex({
     seances,
     filters,
-    perPageOptions,
     groupOptions,
     enseignants,
     statuts,
@@ -312,9 +311,6 @@ export default function SeancesIndex({
                 </div>
 
                 <TableLengthRow
-                    perPage={filters.perPage}
-                    perPageOptions={perPageOptions}
-                    onPerPageChange={(perPage) => reload({ perPage })}
                     search={
                         <SearchInput
                             value={filters.search}

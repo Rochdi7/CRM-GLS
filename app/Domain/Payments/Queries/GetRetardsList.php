@@ -28,7 +28,7 @@ final class GetRetardsList
     /** @var list<int> */
     public const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
-    public const DEFAULT_PER_PAGE = 25;
+    public const DEFAULT_PER_PAGE = 10;
 
     /** Non-overlapping day-late ranges — each overdue fee falls in exactly one. */
     public const BUCKET_1J = '1j';

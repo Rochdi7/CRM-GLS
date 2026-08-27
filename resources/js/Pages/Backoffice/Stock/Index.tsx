@@ -107,7 +107,6 @@ export default function StockIndex({
     stockTypesList,
     filters,
     typeFilters,
-    perPageOptions,
     articleOptions,
     stockTypes,
     statuts,
@@ -434,9 +433,6 @@ export default function StockIndex({
                     </div>
 
                     <TableLengthRow
-                        perPage={filters.perPage}
-                        perPageOptions={perPageOptions}
-                        onPerPageChange={(perPage) => reload({ perPage })}
                         search={
                             <SearchInput
                                 value={filters.search}
@@ -615,9 +611,6 @@ export default function StockIndex({
             {tab === 'types' && (
                 <Card title="Types de stock" bodyClassName="p-0 py-3">
                     <TableLengthRow
-                        perPage={typeFilters.typePerPage}
-                        perPageOptions={perPageOptions}
-                        onPerPageChange={(typePerPage) => reloadTypes({ typePerPage })}
                         search={
                             <SearchInput
                                 value={typeFilters.typeSearch}

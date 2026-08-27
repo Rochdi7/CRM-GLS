@@ -27,7 +27,7 @@ use Illuminate\Support\Collection;
  */
 final class GetDepensesList
 {
-    public const DEFAULT_PER_PAGE = 15;
+    public const DEFAULT_PER_PAGE = 10;
 
     /** Everything EXCEPT the "Paiement prof" system type — the Dépenses tab. */
     public const SCOPE_HORS_PAIEMENT_PROF = 'hors-paiement-prof';

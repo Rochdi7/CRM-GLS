@@ -85,7 +85,6 @@ export default function SeanceShow({
     seanceOptions,
     seances,
     listFilters,
-    perPageOptions,
     groupOptions,
     statuts,
     listPermissions,
@@ -386,9 +385,6 @@ export default function SeanceShow({
                     </div>
 
                     <TableLengthRow
-                        perPage={listFilters.perPage}
-                        perPageOptions={perPageOptions}
-                        onPerPageChange={(perPage) => reloadList({ perPage })}
                         search={
                             <SearchInput
                                 value={listFilters.search}

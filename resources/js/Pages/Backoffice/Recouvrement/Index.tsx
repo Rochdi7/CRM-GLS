@@ -5,7 +5,6 @@ import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
 import TableToolbar from '@/Components/Tables/TableToolbar';
-import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import Pagination from '@/Components/Tables/Pagination';
 import DateField from '@/Components/Forms/DateField';
 import SelectField from '@/Components/Forms/SelectField';
@@ -36,7 +35,6 @@ export default function RecouvrementIndex({
     montantTotal,
     bucketCounts,
     filters,
-    perPageOptions,
     groupOptions,
     fraisOptions,
     statuts,
@@ -181,7 +179,6 @@ export default function RecouvrementIndex({
                     </div>
                 )}
 
-                <TableLengthRow perPage={filters.perPage} perPageOptions={perPageOptions} onPerPageChange={(perPage) => reload({ perPage })} />
 
                 {retards.data.length === 0 ? (
                     <EmptyState title={t('No collections found')} icon="ti ti-alert-circle" />

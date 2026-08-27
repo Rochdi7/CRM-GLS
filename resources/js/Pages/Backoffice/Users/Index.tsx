@@ -22,7 +22,7 @@ import type { SharedProps, UserEditForm, UserRow, UsersIndexPageProps } from '@/
  * come exclusively from Employee creation via EmployeeObserver) — no
  * "New user" action exists anywhere on this page.
  */
-export default function UsersIndex({ users, filters, perPageOptions, centerLocked }: UsersIndexPageProps) {
+export default function UsersIndex({ users, filters, centerLocked }: UsersIndexPageProps) {
     const { flash } = usePage<SharedProps>().props;
     const isLoading = useInertiaLoading();
 
@@ -42,14 +42,6 @@ export default function UsersIndex({ users, filters, perPageOptions, centerLocke
         router.get(
             '/backoffice/users',
             { search: value, perPage: filters.perPage },
-            { preserveState: true, preserveScroll: true, replace: true },
-        );
-    }
-
-    function changePerPage(value: number) {
-        router.get(
-            '/backoffice/users',
-            { search: filters.search, perPage: value },
             { preserveState: true, preserveScroll: true, replace: true },
         );
     }
@@ -139,9 +131,6 @@ export default function UsersIndex({ users, filters, perPageOptions, centerLocke
         >
             <Card title="Utilisateurs" bodyClassName="p-0 py-3">
                 <TableLengthRow
-                    perPage={filters.perPage}
-                    perPageOptions={perPageOptions}
-                    onPerPageChange={changePerPage}
                     search={<SearchInput value={filters.search} onSearch={search} placeholder="Rechercher" />}
                 />
 

@@ -6,7 +6,6 @@ import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
 import TableToolbar from '@/Components/Tables/TableToolbar';
 import FilterTextInput from '@/Components/Tables/FilterTextInput';
-import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
@@ -83,7 +82,6 @@ function emptyForm(defaultCountry: string, contextCenterId: number | null): Stud
 export default function StudentsIndex({
     students,
     filters,
-    perPageOptions,
     niveauxInteret,
     domaines,
     examenTypes,
@@ -383,11 +381,6 @@ export default function StudentsIndex({
                     </TableToolbar>
                 </div>
 
-                <TableLengthRow
-                    perPage={filters.perPage}
-                    perPageOptions={perPageOptions}
-                    onPerPageChange={(perPage) => reload({ perPage })}
-                />
 
                 {students.data.length === 0 ? (
                     <EmptyState title="Aucun étudiant" message="Ajoutez votre premier étudiant pour commencer." icon="ti ti-school" />

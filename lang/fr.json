@@ -961,5 +961,6 @@
     "unknown (predates the journal)": "auteur inconnu (antérieur au journal)",
     "via role": "via rôle",
     "was": "était",
-    "Électricien": "Électricien"
+    "Électricien": "Électricien",
+    ":count fee line(s) recreated on the target registration.": ":count ligne(s) de frais recréée(s) sur l'inscription cible."
 }

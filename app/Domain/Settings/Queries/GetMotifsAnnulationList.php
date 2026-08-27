@@ -13,7 +13,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
  */
 final class GetMotifsAnnulationList
 {
-    public function __invoke(int $perPage = 8): LengthAwarePaginator
+    public function __invoke(int $perPage = 10): LengthAwarePaginator
     {
         $motifs = MotifAnnulation::query()->orderBy('nom')->paginate($perPage)->withQueryString();
 

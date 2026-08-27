@@ -6,7 +6,6 @@ import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
 import TableToolbar from '@/Components/Tables/TableToolbar';
 import FilterTextInput from '@/Components/Tables/FilterTextInput';
-import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionDivider, RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
@@ -91,7 +90,6 @@ export default function ChequesIndex({
     cheques,
     montantTotal,
     filters,
-    perPageOptions,
     sources,
     types,
     statuts,
@@ -418,11 +416,6 @@ export default function ChequesIndex({
                     </TableToolbar>
                 </div>
 
-                <TableLengthRow
-                    perPage={filters.perPage}
-                    perPageOptions={perPageOptions}
-                    onPerPageChange={(perPage) => reload({ perPage })}
-                />
 
                 <p className="fw-medium px-3 mb-3">
                     Montant total : {Number(montantTotal).toFixed(2)} MAD

@@ -26,7 +26,7 @@ use Illuminate\Support\Collection;
  */
 final class GetEncaissementsList
 {
-    public const DEFAULT_PER_PAGE = 15;
+    public const DEFAULT_PER_PAGE = 10;
 
     /** SQL for an avance's remaining balance: montant − applied to fees − refunded. */
     private const AVANCE_RESTANT_SQL = '(encaissements.montant'

@@ -7,7 +7,6 @@ import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
 import TableToolbar from '@/Components/Tables/TableToolbar';
 import FilterTextInput from '@/Components/Tables/FilterTextInput';
-import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import Pagination from '@/Components/Tables/Pagination';
 import RowActions, { RowActionDivider, RowActionItem } from '@/Components/Tables/RowActions';
 import Modal from '@/Components/Modals/Modal';
@@ -237,7 +236,6 @@ export default function GroupsIndex({
     groups,
     statutCounts,
     filters,
-    perPageOptions,
     niveaux,
     enseignants,
     fraisCatalog,
@@ -725,11 +723,6 @@ export default function GroupsIndex({
                     </TableToolbar>
                 </div>
 
-                <TableLengthRow
-                    perPage={filters.perPage}
-                    perPageOptions={perPageOptions}
-                    onPerPageChange={(perPage) => reload({ perPage })}
-                />
 
                 {groups.data.length === 0 ? (
                     <EmptyState title="Aucun groupe avec ce statut" icon="ti ti-users-group" />

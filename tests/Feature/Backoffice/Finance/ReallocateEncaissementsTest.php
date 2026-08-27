@@ -123,8 +123,14 @@ final class ReallocateEncaissementsTest extends TestCase
         $this->assertSame($soldeAvant, (float) $caisse->fresh()->solde);
     }
 
-    /** A payment whose fee has no counterpart is freed, never forced somewhere wrong. */
-    public function test_a_payment_with_no_matching_fee_stays_an_unallocated_advance(): void
+    /**
+     * THE FRAIS FOLLOWS THE MONEY. When the target registration has no fee
+     * of that name, the line is recreated there from the source fee - same
+     * nom, same montant, same echeance - instead of the payment being left as
+     * an avance with no frais at all, which is what the operator sees as
+     * "le frais a disparu de l'encaissement".
+     */
+    public function test_a_missing_fee_is_recreated_on_the_target_registration(): void
     {
         $agent = $this->superAdminAgent();
         $caisse = Caisse::factory()->create(['etablissement_id' => $this->centre->id]);
@@ -134,7 +140,7 @@ final class ReallocateEncaissementsTest extends TestCase
         $groupeCible = Group::factory()->create([
             'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->anneeSuivante->id,
         ]);
-        $this->inscriptionWithFee($student, $this->anneeSuivante, 'Frais de Juin', 1300, $groupeCible);
+        [$cibleInscription] = $this->inscriptionWithFee($student, $this->anneeSuivante, 'Frais de Juin', 1300, $groupeCible);
 
         $paiement = Encaissement::create([
             'reference' => 'ENC-MV2', 'agent_id' => $agent->id, 'student_id' => $student->id,
@@ -145,9 +151,105 @@ final class ReallocateEncaissementsTest extends TestCase
 
         $result = app(ReaffecterEncaissements::class)->handle([$paiement->id], $groupeCible);
 
+        $this->assertSame(1, $result['deplaces']);
+        $this->assertSame(0, $result['avances']);
+        $this->assertSame(1, $result['fraisCrees']);
+
+        // "Frais de Mars" now exists on the target registration, copied from
+        // the source line - and the money sits on it.
+        $recreee = InscriptionFee::query()
+            ->where('inscription_id', $cibleInscription->id)
+            ->where('nom', 'Frais de Mars')
+            ->firstOrFail();
+
+        $this->assertSame('1300.00', $recreee->montant);
+        $this->assertSame($feeSource->date_echeance->toDateString(), $recreee->date_echeance->toDateString());
+
+        $applied = Encaissement::query()->where('applied_from_encaissement_id', $paiement->id)->firstOrFail();
+        $this->assertSame($recreee->id, $applied->inscription_fee_id);
+        // The date the money was received is untouched by the move.
+        $this->assertSame('2026-03-10', $applied->date_paiement->toDateString());
+        $this->assertSame(InscriptionFee::STATUT_PAYE, $recreee->fresh()->statut);
+
+        // The untouched "Frais de Juin" line is not disturbed.
+        $this->assertSame(
+            InscriptionFee::STATUT_NON_PAYE,
+            InscriptionFee::query()->where('inscription_id', $cibleInscription->id)
+                ->where('nom', 'Frais de Juin')->value('statut')
+        );
+    }
+
+    /**
+     * A student with no registration in the target group has nowhere to carry
+     * the fee - so the payment is left ENTIRELY alone, still attached to its
+     * original frais. Detaching it first and only then discovering the
+     * problem is what stripped the frais off the encaissement.
+     */
+    public function test_an_unplaceable_payment_keeps_its_original_fee(): void
+    {
+        $agent = $this->superAdminAgent();
+        $caisse = Caisse::factory()->create(['etablissement_id' => $this->centre->id]);
+
+        $student = Student::factory()->create([
+            'etablissement_id' => $this->centre->id, 'prenom' => 'SANS', 'nom' => 'GROUPE',
+        ]);
+        [, $feeSource] = $this->inscriptionWithFee($student, $this->annee, 'Frais de Juillet', 1300);
+
+        $groupeCible = Group::factory()->create([
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->anneeSuivante->id,
+        ]);
+
+        $paiement = Encaissement::create([
+            'reference' => 'ENC-KEEP', 'agent_id' => $agent->id, 'student_id' => $student->id,
+            'inscription_fee_id' => $feeSource->id, 'caisse_id' => $caisse->id,
+            'montant' => 1300, 'methode' => Encaissement::METHODE_ESPECES,
+            'date_paiement' => '2026-07-10', 'etablissement_id' => $this->centre->id,
+        ]);
+
+        $result = app(ReaffecterEncaissements::class)->handle([$paiement->id], $groupeCible);
+
         $this->assertSame(0, $result['deplaces']);
-        $this->assertSame(1, $result['avances']);
-        $this->assertNull($paiement->fresh()->inscription_fee_id, 'It is freed, not forced onto a wrong fee.');
+        $this->assertContains('SANS GROUPE', $result['sansInscription']);
+        $this->assertSame($feeSource->id, $paiement->fresh()->inscription_fee_id);
+        $this->assertSame('2026-07-10', $paiement->fresh()->date_paiement->toDateString());
+    }
+
+    /**
+     * A masked line of the same name is brought back rather than duplicated -
+     * the student's statement keeps ONE "Frais de Juillet", not two.
+     */
+    public function test_a_masked_fee_of_the_same_name_is_unmasked_not_duplicated(): void
+    {
+        $agent = $this->superAdminAgent();
+        $caisse = Caisse::factory()->create(['etablissement_id' => $this->centre->id]);
+
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        [, $feeSource] = $this->inscriptionWithFee($student, $this->annee, 'Frais de Juillet', 1300);
+        $groupeCible = Group::factory()->create([
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->anneeSuivante->id,
+        ]);
+        [$cibleInscription, $feeCible] = $this->inscriptionWithFee(
+            $student, $this->anneeSuivante, 'Frais de Juillet', 1300, $groupeCible
+        );
+        $feeCible->update(['masque_le' => now()]);
+
+        $paiement = Encaissement::create([
+            'reference' => 'ENC-MASK', 'agent_id' => $agent->id, 'student_id' => $student->id,
+            'inscription_fee_id' => $feeSource->id, 'caisse_id' => $caisse->id,
+            'montant' => 1300, 'methode' => Encaissement::METHODE_ESPECES,
+            'date_paiement' => '2026-07-10', 'etablissement_id' => $this->centre->id,
+        ]);
+
+        $result = app(ReaffecterEncaissements::class)->handle([$paiement->id], $groupeCible);
+
+        $this->assertSame(1, $result['deplaces']);
+        $this->assertSame(0, $result['fraisCrees'], 'No duplicate line was created.');
+        $this->assertNull($feeCible->fresh()->masque_le);
+        $this->assertSame(
+            1,
+            InscriptionFee::query()->where('inscription_id', $cibleInscription->id)
+                ->where('nom', 'Frais de Juillet')->count()
+        );
     }
 
     /** payments.reallocate is super-admin only — no role preset may hold it. */
@@ -236,34 +338,4 @@ final class ReallocateEncaissementsTest extends TestCase
         }
     }
 
-    /** A student not enrolled in the target group keeps his money as an avance. */
-    public function test_a_student_missing_from_the_target_group_is_reported_not_forced(): void
-    {
-        $agent = $this->superAdminAgent();
-        $caisse = Caisse::factory()->create(['etablissement_id' => $this->centre->id]);
-
-        $student = Student::factory()->create([
-            'etablissement_id' => $this->centre->id, 'prenom' => 'SANS', 'nom' => 'GROUPE',
-        ]);
-        [, $feeSource] = $this->inscriptionWithFee($student, $this->annee, 'Frais de Juillet', 1300);
-
-        // Target group where this student has NO registration.
-        $groupeCible = Group::factory()->create([
-            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->anneeSuivante->id,
-        ]);
-
-        $paiement = Encaissement::create([
-            'reference' => 'ENC-ORPH', 'agent_id' => $agent->id, 'student_id' => $student->id,
-            'inscription_fee_id' => $feeSource->id, 'caisse_id' => $caisse->id,
-            'montant' => 1300, 'methode' => Encaissement::METHODE_ESPECES,
-            'date_paiement' => '2026-07-10', 'etablissement_id' => $this->centre->id,
-        ]);
-
-        $result = app(ReaffecterEncaissements::class)->handle([$paiement->id], $groupeCible);
-
-        $this->assertSame(0, $result['deplaces']);
-        $this->assertSame(1, $result['avances']);
-        $this->assertContains('SANS GROUPE', $result['sansInscription']);
-        $this->assertNull($paiement->fresh()->inscription_fee_id);
-    }
 }

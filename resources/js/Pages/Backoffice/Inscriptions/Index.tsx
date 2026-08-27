@@ -9,7 +9,6 @@ import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { blockImplicitSubmit } from '@/Lib/forms';
 import TableToolbar from '@/Components/Tables/TableToolbar';
 import FilterTextInput from '@/Components/Tables/FilterTextInput';
-import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import Pagination from '@/Components/Tables/Pagination';
 import LocalPagination from '@/Components/Tables/LocalPagination';
 import RowActions, { RowActionDivider, RowActionItem } from '@/Components/Tables/RowActions';
@@ -225,7 +224,6 @@ async function postFeeVisibility(url: string): Promise<{ fee?: InscriptionFeeLin
 export default function InscriptionsIndex({
     inscriptions,
     filters,
-    perPageOptions,
     statuts,
     niveauxInteret,
     domaines,
@@ -1240,11 +1238,6 @@ export default function InscriptionsIndex({
                     </TableToolbar>
                 </div>
 
-                <TableLengthRow
-                    perPage={filters.perPage}
-                    perPageOptions={perPageOptions}
-                    onPerPageChange={(perPage) => reload({ perPage })}
-                />
 
                 {inscriptions.data.length === 0 ? (
                     <EmptyState title="Aucune inscription pour le moment" icon="ti ti-clipboard-list" />

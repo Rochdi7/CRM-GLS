@@ -55,9 +55,6 @@ interface ApplyAvanceFormState {
     montant: string;
 }
 
-/** Local list — the controller sends no perPageOptions prop (default perPage is 15, unclamped server-side). */
-const PER_PAGE_OPTIONS = [15, 25, 50, 100];
-
 function emptyCreateForm(): CreateFormState {
     return {
         student_id: '',
@@ -746,9 +743,6 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                 </div>
 
                 <TableLengthRow
-                    perPage={filters.perPage}
-                    perPageOptions={PER_PAGE_OPTIONS}
-                    onPerPageChange={(perPage) => reload({ perPage })}
                     search={
                         <SearchInput
                             value={filters.search}
