@@ -48,7 +48,7 @@ final class UpdateEmployeeRequest extends FormRequest
             'phone_pays' => ['nullable', Rule::in(array_keys(Countries::LIST))],
             'telephone' => ['nullable', 'string', 'max:20'],
             'whatsapp' => ['nullable', 'string', 'max:20'],
-            'email' => ['nullable', 'email', 'max:255'],
+            'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')->ignore($this->route('employee')?->user_id)],
             'adresse' => ['nullable', 'string', 'max:255'],
             'note' => ['nullable', 'string'],
             'photo' => ['nullable', 'image', 'max:2048'],

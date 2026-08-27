@@ -29,7 +29,7 @@ final class UpdateInscriptionFeesRequest extends FormRequest
         return [
             'fee_lines' => ['nullable', 'array'],
             'fee_lines.*.id' => ['nullable', 'integer', 'exists:inscription_fees,id'],
-            'fee_lines.*.frais_id' => ['nullable', 'integer'],
+            'fee_lines.*.frais_id' => ['nullable', 'integer', 'exists:frais,id'],
             'fee_lines.*.nom' => ['required', 'string', 'max:150'],
             'fee_lines.*.montant_initial' => ['nullable', 'numeric', 'min:0'],
             'fee_lines.*.remise_pct' => ['nullable', 'numeric', 'min:0', 'max:100'],

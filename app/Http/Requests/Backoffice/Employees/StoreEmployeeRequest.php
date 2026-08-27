@@ -61,7 +61,9 @@ final class StoreEmployeeRequest extends FormRequest
             'phone_pays' => ['nullable', Rule::in(array_keys(Countries::LIST))],
             'telephone' => ['nullable', 'string', 'max:20'],
             'whatsapp' => ['nullable', 'string', 'max:20'],
-            'email' => ['nullable', 'email', 'max:255'],
+            // The observer creates the LOGIN from this address: a clash with
+            // users.email must fail here (422), not after the row is inserted.
+            'email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')],
             'adresse' => ['nullable', 'string', 'max:255'],
             'note' => ['nullable', 'string'],
             'photo' => ['nullable', 'image', 'max:2048'],

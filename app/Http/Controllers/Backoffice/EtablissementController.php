@@ -8,6 +8,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Etablissements\StoreEtablissementRequest;
 use App\Http\Requests\Backoffice\Etablissements\UpdateEtablissementRequest;
 use App\Models\Etablissement;
+use App\Models\Caisse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\RedirectResponse;
 
 /**
@@ -71,15 +73,46 @@ final class EtablissementController extends Controller
      */
     public function destroy(Etablissement $etablissement): RedirectResponse
     {
-        $etablissement->loadCount(['salles', 'employees', 'students']);
-
-        if ($etablissement->salles_count || $etablissement->employees_count || $etablissement->students_count) {
+        // EVERY table carrying a centre is checked, not three (audit
+        // CRUD-F1): most FKs are nullOnDelete, so a delete that slipped
+        // through would silently turn this centre's groups/payments into
+        // NULL-centre (= global) records. The only rows allowed to go with
+        // the centre are its own auto-provisioned, never-used method
+        // accounts (EtablissementObserver → CaisseProvisioner).
+        if ($this->centreEnUtilisation($etablissement)) {
             return back()->withErrors(['delete' => __('This center is still in use and cannot be deleted.')]);
         }
 
-        $etablissement->delete();
+        DB::transaction(function () use ($etablissement): void {
+            $etablissement->caisses()->delete();
+            $etablissement->frais()->detach();
+            $etablissement->delete();
+        });
 
         return redirect()->route('backoffice.settings', ['tab' => 'etablissements'])
             ->with('success', __('Établissement supprimé.'));
+    }
+
+    private function centreEnUtilisation(Etablissement $etablissement): bool
+    {
+        $id = $etablissement->id;
+
+        foreach (['salles', 'employees', 'students', 'groups', 'groups_historique', 'inscriptions', 'cheques',
+            'encaissements', 'seances', 'stock_articles', 'import_batches', 'employee_etablissement'] as $table) {
+            if (DB::table($table)->where('etablissement_id', $id)->exists()) {
+                return true;
+            }
+        }
+
+        // A method account that ever held money, or a physical till, keeps
+        // the centre: only pristine method accounts are disposable.
+        return $etablissement->caisses()
+            ->where(fn ($q) => $q->whereNotIn('type', Caisse::TYPES_METHODE)->orWhere('solde', '!=', 0))
+            ->exists()
+            || DB::table('encaissements')->whereIn('caisse_id', $etablissement->caisses()->select('id'))->exists()
+            || DB::table('depenses')->whereIn('caisse_id', $etablissement->caisses()->select('id'))->exists()
+            || DB::table('remboursements')->whereIn('caisse_id', $etablissement->caisses()->select('id'))->exists()
+            || DB::table('caisse_transfers')->whereIn('caisse_source_id', $etablissement->caisses()->select('id'))
+                ->orWhereIn('caisse_destination_id', $etablissement->caisses()->select('id'))->exists();
     }
 }

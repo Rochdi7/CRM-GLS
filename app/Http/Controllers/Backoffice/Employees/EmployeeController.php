@@ -16,6 +16,8 @@ use App\Services\Context\CurrentContext;
 use App\Support\Phone\Countries;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -88,17 +90,23 @@ final class EmployeeController extends Controller
         // column) is present on the instance the "created" event receives.
         $centerIds = $this->resolveCenterIds($data);
 
-        $employee = new Employee([
-            ...$payload,
-            // Primary center = the first assigned one (see Employee::syncEtablissements).
-            'etablissement_id' => $centerIds[0],
-            'reference' => ReferenceGenerator::make('EMP', 'employees'),
-        ]);
-        $employee->requestedUsername = $data['username'] ?? null;
-        $employee->save();
+        $employee = DB::transaction(function () use ($payload, $centerIds, $data, $request): Employee {
+            $employee = new Employee([
+                ...$payload,
+                // Primary center = the first assigned one (see Employee::syncEtablissements).
+                'etablissement_id' => $centerIds[0],
+                'reference' => ReferenceGenerator::make('EMP', 'employees'),
+            ]);
+            $employee->requestedUsername = $data['username'] ?? null;
+            // Employee + login + till + role are one unit: a failure in the
+            // observer must not leave a role-less employee without a login.
+            $employee->save();
 
-        $employee->syncEtablissements($centerIds);
-        $this->storePhoto($employee, $request);
+            $employee->syncEtablissements($centerIds);
+            $this->storePhoto($employee, $request);
+
+            return $employee;
+        });
 
         return redirect()->route('backoffice.employees.index')
             ->with('success', __('Employee created. Its login credentials have been generated.'))
@@ -113,9 +121,18 @@ final class EmployeeController extends Controller
         $data = $request->validated();
         $payload = $this->buildPayload($data, $request, $employee);
 
-        $employee->update($payload);
-        $employee->syncEtablissements($this->resolveCenterIds($data));
-        $this->storePhoto($employee, $request);
+        DB::transaction(function () use ($employee, $payload, $data, $request): void {
+            $employee->update($payload);
+            $employee->syncEtablissements($this->resolveCenterIds($data));
+            $this->storePhoto($employee, $request);
+
+            // The login's e-mail follows the staff record (they were two
+            // independent columns — audit CRUD-F17). Kept only when the
+            // employee has a real address; a placeholder login e-mail stays.
+            if ($payload['email'] !== null && $employee->user !== null && $employee->user->email !== $payload['email']) {
+                $employee->user->update(['email' => $payload['email']]);
+            }
+        });
 
         return redirect()->route('backoffice.employees.index')
             ->with('success', __('Employee updated.'));
@@ -125,19 +142,59 @@ final class EmployeeController extends Controller
     {
         $this->authorize('delete', $employee);
 
-        $employee->loadCount(['groupes', 'encaissements', 'depenses', 'remboursements']);
-
-        if ($employee->groupes_count || $employee->encaissements_count
-            || $employee->depenses_count || $employee->remboursements_count) {
+        if ($this->employeeHasActivity($employee)) {
             throw ValidationException::withMessages([
                 'delete' => __('This employee has activity history and cannot be deleted. Deactivate instead.'),
             ]);
         }
 
-        $employee->delete();
+        // Nothing else may point at this employee any more, so the login
+        // and the empty tills go with it — an orphan login with a live role
+        // was the audit's CRUD-F3 hole.
+        DB::transaction(function () use ($employee): void {
+            $employee->caisses()->delete();
+
+            if ($employee->user !== null) {
+                $employee->user->forceFill([
+                    'is_active' => false,
+                    'remember_token' => Str::random(60),
+                ])->save();
+                $employee->user->syncRoles([]);
+            }
+
+            $employee->delete();
+        });
 
         return redirect()->route('backoffice.employees.index')
             ->with('success', __('Employee deleted.'));
+    }
+
+    /**
+     * Every RESTRICT/keep-worthy reference to this employee — the four
+     * relations the old guard counted plus cheques, transfers, teaching
+     * assignments, import batches and any till that ever held money.
+     */
+    private function employeeHasActivity(Employee $employee): bool
+    {
+        $employee->loadCount(['groupes', 'encaissements', 'depenses', 'remboursements']);
+
+        if ($employee->groupes_count || $employee->encaissements_count
+            || $employee->depenses_count || $employee->remboursements_count) {
+            return true;
+        }
+
+        $id = $employee->id;
+        $caisseIds = $employee->caisses()->select('id');
+
+        return DB::table('cheques')->where('agent_id', $id)->exists()
+            || DB::table('caisse_transfers')->where('requested_by', $id)->orWhere('validated_by', $id)->exists()
+            || DB::table('group_enseignants')->where('enseignant_id', $id)->exists()
+            || DB::table('import_batches')->where('created_by', $id)->exists()
+            || $employee->caisses()->where('solde', '!=', 0)->exists()
+            || DB::table('encaissements')->whereIn('caisse_id', $caisseIds)->exists()
+            || DB::table('depenses')->whereIn('caisse_id', $caisseIds)->exists()
+            || DB::table('remboursements')->whereIn('caisse_id', $caisseIds)->exists()
+            || DB::table('caisse_transfers')->whereIn('caisse_source_id', $caisseIds)->orWhereIn('caisse_destination_id', $caisseIds)->exists();
     }
 
     /**

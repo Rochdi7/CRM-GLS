@@ -285,7 +285,18 @@ final class InscriptionController extends Controller
         $this->authorize('view', $inscription);
         $this->assertInscriptionInContext($request, $inscription, 'fee_lines');
 
-        $action->handle($inscription, $request->validated('fee_lines', []));
+        $lines = $request->validated('fee_lines', []);
+
+        // A NEW catalog line must be a fee the group carries (same rule as
+        // store(); existing lines keep their historical frais_id) — CRUD-F8.
+        if ($inscription->group !== null) {
+            $this->assertFeeLinesBelongToGroup(
+                $inscription->group,
+                array_values(array_filter($lines, fn (array $l): bool => empty($l['id']))),
+            );
+        }
+
+        $action->handle($inscription, $lines);
 
         return redirect()->route('backoffice.inscriptions.index')
             ->with('success', __('Registration fees updated.'));
@@ -739,12 +750,19 @@ final class InscriptionController extends Controller
      * This same fix is worth carrying back to the Livewire component if
      * it is ever revisited — it has the identical latent gap.
      */
-    public function destroy(Inscription $inscription): RedirectResponse
+    public function destroy(Request $request, Inscription $inscription, AssignerLivresInscription $assignerLivres): RedirectResponse
     {
         $this->authorize('delete', $inscription);
 
         try {
-            DB::transaction(fn () => $inscription->delete());
+            DB::transaction(function () use ($inscription, $assignerLivres, $request): void {
+                // Books handed out with this registration go back to the
+                // shelf FIRST (one « Entrée » movement each) — the FK
+                // cascade alone deleted the assignment and left the stock
+                // one short forever (audit DB-02).
+                $assignerLivres->handle($inscription, [], $request->user()?->employee);
+                $inscription->delete();
+            });
         } catch (QueryException) {
             throw ValidationException::withMessages([
                 'delete' => __('This registration has payments and cannot be deleted.'),
