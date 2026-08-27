@@ -558,11 +558,109 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame(InscriptionFee::STATUT_PAYE_PARTIELLEMENT, $fee->fresh()->statut);
         $this->assertSame(2, Encaissement::count());
 
-        $avanceRows = $this->get(route('backoffice.encaissements.index', ['view' => 'avance', 'dateFrom' => '', 'dateTo' => '']))
+        // A fully used avance leaves the default (« reste ») listing — ask for all of them.
+        $avanceRows = $this->get(route('backoffice.encaissements.index', ['view' => 'avance', 'soldeFilter' => 'tous', 'dateFrom' => '', 'dateTo' => '']))
             ->viewData('page')['props']['encaissements']['data'];
         $this->assertCount(1, $avanceRows);
         $this->assertSame('600.00', (string) $avanceRows[0]['montantUtilise']);
         $this->assertSame('0.00', (string) $avanceRows[0]['montantRestant']);
+    }
+
+    /**
+     * The Avances tab defaults to avances that still have money to allocate;
+     * « Épuisées » lists the fully used ones, « Toutes » both.
+     */
+    public function test_avances_tab_defaults_to_avances_with_a_remaining_balance(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update');
+        $this->actingAs($user);
+        $caisse = $user->employee->caisses()->first();
+
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
+
+        foreach (['600', '400'] as $montant) {
+            $this->post(route('backoffice.avances.store'), [
+                'student_id' => $student->id,
+                'caisse_id' => $caisse->id,
+                'montant' => $montant,
+                'methode' => 'Espèces',
+                'date_paiement' => now()->toDateString(),
+            ])->assertRedirect();
+        }
+
+        $used = Encaissement::query()->where('montant', 600)->firstOrFail();
+        $this->post(route('backoffice.avances.apply', $used), [
+            'inscription_id' => $inscription->id,
+            'fee_id' => $fee->id,
+            'montant' => '600',
+        ])->assertRedirect();
+
+        $page = fn (array $extra = []) => $this->get(route('backoffice.encaissements.index', ['view' => 'avance', 'dateFrom' => '', 'dateTo' => ''] + $extra))
+            ->viewData('page')['props'];
+
+        $default = $page();
+        $this->assertSame('restant', $default['filters']['soldeFilter']);
+        $this->assertCount(1, $default['encaissements']['data']);
+        $this->assertSame('400.00', (string) $default['encaissements']['data'][0]['montantRestant']);
+        $this->assertSame('400.00', (string) $default['montantTotal']);
+
+        $epuise = $page(['soldeFilter' => 'epuise'])['encaissements']['data'];
+        $this->assertCount(1, $epuise);
+        $this->assertSame($used->id, $epuise[0]['id']);
+        $this->assertSame('0.00', (string) $epuise[0]['montantRestant']);
+
+        $this->assertCount(2, $page(['soldeFilter' => 'tous'])['encaissements']['data']);
+    }
+
+    /**
+     * « Groupe » filter: a fee payment follows its inscription's group, an
+     * avance (no fee) follows the groups its student is enrolled in.
+     */
+    public function test_group_filter_applies_to_payments_and_avances(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        $this->actingAs($user);
+        $caisse = $user->employee->caisses()->first();
+
+        [$studentA, $inscriptionA, $feeA] = $this->enrolledStudentWithFee(1000);
+        [$studentB, $inscriptionB, $feeB] = $this->enrolledStudentWithFee(1000);
+
+        foreach ([[$studentA, $inscriptionA, $feeA], [$studentB, $inscriptionB, $feeB]] as [$student, $inscription, $fee]) {
+            $this->post(route('backoffice.encaissements.store'), [
+                'student_id' => $student->id,
+                'inscription_id' => $inscription->id,
+                'caisse_id' => $caisse->id,
+                'date_paiement' => '2025-09-20',
+                'payment_lines' => [
+                    ['fee_id' => $fee->id, 'montant' => '300', 'methode' => 'Espèces', 'date_paiement' => '2025-09-20'],
+                ],
+            ])->assertRedirect();
+            $this->post(route('backoffice.avances.store'), [
+                'student_id' => $student->id,
+                'caisse_id' => $caisse->id,
+                'montant' => '200',
+                'methode' => 'Espèces',
+                'date_paiement' => now()->toDateString(),
+            ])->assertRedirect();
+        }
+
+        $groupA = $inscriptionA->group_id;
+        $rows = fn (array $extra) => collect($this->get(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => ''] + $extra))
+            ->viewData('page')['props']['encaissements']['data']);
+
+        $this->assertCount(2, $rows([]));
+        $payments = $rows(['groupFilter' => $groupA]);
+        $this->assertCount(1, $payments);
+        $this->assertSame($studentA->id, $payments[0]['studentId']);
+
+        $this->assertCount(2, $rows(['view' => 'avance']));
+        $avances = $rows(['view' => 'avance', 'groupFilter' => $groupA]);
+        $this->assertCount(1, $avances);
+        $this->assertSame($studentA->id, $avances[0]['studentId']);
+
+        $groups = $this->get(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => '']))
+            ->viewData('page')['props']['groups'];
+        $this->assertContains($groupA, array_column($groups, 'id'));
     }
 
     public function test_montant_total_is_resent_on_a_partial_reload(): void
@@ -813,7 +911,8 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame(InscriptionFee::STATUT_PAYE, $fee2->fresh()->statut);
         $this->assertSame('1000.00', (string) $caisse->fresh()->solde);
 
-        $avanceRows = $this->get(route('backoffice.encaissements.index', ['view' => 'avance', 'dateFrom' => '', 'dateTo' => '']))
+        // A fully used avance leaves the default (« reste ») listing — ask for all of them.
+        $avanceRows = $this->get(route('backoffice.encaissements.index', ['view' => 'avance', 'soldeFilter' => 'tous', 'dateFrom' => '', 'dateTo' => '']))
             ->viewData('page')['props']['encaissements']['data'];
         $this->assertCount(1, $avanceRows);
         $this->assertSame('1000.00', (string) $avanceRows[0]['montantUtilise']);
@@ -881,7 +980,8 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame($parentAvance->id, $fresh->applied_from_encaissement_id);
         $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $fee->fresh()->statut);
 
-        $avanceRows = collect($this->get(route('backoffice.encaissements.index', ['view' => 'avance', 'dateFrom' => '', 'dateTo' => '']))
+        // A fully used avance leaves the default (« reste ») listing — ask for all of them.
+        $avanceRows = collect($this->get(route('backoffice.encaissements.index', ['view' => 'avance', 'soldeFilter' => 'tous', 'dateFrom' => '', 'dateTo' => '']))
             ->viewData('page')['props']['encaissements']['data']);
         $this->assertCount(2, $avanceRows);
         // Parent stays fully used (its 600 went to the apply row)…

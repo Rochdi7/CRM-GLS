@@ -1,4 +1,5 @@
-import type { GroupPaymentCell, GroupPaymentMatrix, GroupPaymentSort } from '@/Types';
+import { useCallback, useRef } from 'react';
+import type { GroupPaymentCell, GroupPaymentColumn, GroupPaymentMatrix, GroupPaymentSort } from '@/Types';
 
 interface GroupPaymentMatrixProps {
     matrix: GroupPaymentMatrix | null;
@@ -58,12 +59,86 @@ function money(value: string): string {
     return `${Math.round(Number(value))} DH`;
 }
 
-function cellTitle(cell: GroupPaymentCell): string | undefined {
-    if (cell.state === 'paye') {
-        return undefined;
+function echeanceLine(column: GroupPaymentColumn): string | null {
+    return column.dateEcheance ? `Échéance ${column.dateEcheance}` : null;
+}
+
+/** Lines of the hover tooltip of a money cell (null = nothing to show). */
+function cellTip(cell: GroupPaymentCell, column: GroupPaymentColumn): string[] | null {
+    const lines: string[] = [];
+
+    if (cell.state !== 'paye') {
+        lines.push(`Reste à payer ${money(cell.reste)}`);
     }
 
-    return `Reste à payer ${money(cell.reste)}`;
+    const echeance = echeanceLine(column);
+    if (echeance) {
+        lines.push(echeance);
+    }
+
+    return lines.length > 0 ? lines : null;
+}
+
+/**
+ * Hover tooltip owned by the component instead of the native `title`
+ * attribute. The browser tooltip only shows after a ~1s pause, dies on the
+ * slightest mouse move, and inside a scrolling box in a modal it often
+ * never appears at all — which is what read as « bugged ».
+ *
+ * It is driven IMPERATIVELY through a ref, not React state: a state update
+ * on hover would re-render the whole grid (45 students × a year of fees) on
+ * every cell change and feel sluggish. Here mouseenter just writes text +
+ * position into one fixed `<div>`, anchored under the hovered cell (not the
+ * cursor, so there is nothing to track on mousemove).
+ */
+function useMatrixTooltip() {
+    const ref = useRef<HTMLDivElement>(null);
+
+    const hide = useCallback(() => {
+        const el = ref.current;
+        if (el) {
+            el.style.display = 'none';
+        }
+    }, []);
+
+    const showFor = useCallback((lines: string[], target: HTMLElement) => {
+        const el = ref.current;
+        if (!el) {
+            return;
+        }
+
+        el.textContent = '';
+        for (const line of lines) {
+            const div = document.createElement('div');
+            div.textContent = line;
+            el.appendChild(div);
+        }
+
+        const rect = target.getBoundingClientRect();
+        el.style.display = 'block';
+
+        const width = el.offsetWidth;
+        const height = el.offsetHeight;
+        let left = rect.left + rect.width / 2 - width / 2;
+        left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+        let top = rect.bottom + 6;
+        if (top + height > window.innerHeight - 8) {
+            top = rect.top - height - 6;
+        }
+
+        el.style.left = `${left}px`;
+        el.style.top = `${top}px`;
+    }, []);
+
+    const bind = (lines: string[] | null) =>
+        lines
+            ? {
+                  onMouseEnter: (event: React.MouseEvent<HTMLElement>) => showFor(lines, event.currentTarget),
+                  onMouseLeave: hide,
+              }
+            : { onMouseEnter: hide };
+
+    return { ref, bind, hide };
 }
 
 /**
@@ -109,6 +184,8 @@ export default function GroupPaymentMatrixTable({ matrix, loading, sort, onSortC
 }
 
 function MatrixBody({ matrix, loading }: { matrix: GroupPaymentMatrix | null; loading: boolean }) {
+    const { ref: tipRef, bind, hide } = useMatrixTooltip();
+
     if (loading) {
         return (
             <div className="py-5 text-center">
@@ -147,7 +224,7 @@ function MatrixBody({ matrix, loading }: { matrix: GroupPaymentMatrix | null; lo
                 scrolls in BOTH directions (down through the students, sideways
                 through a year of fee columns) while the modal itself stays a
                 centred dialog. */}
-            <div className="table-responsive" style={{ maxHeight: '75vh' }}>
+            <div className="table-responsive" style={{ maxHeight: '75vh' }} onScroll={hide} onMouseLeave={hide}>
                 <table className="table table-bordered w-100 mb-0 gls-payment-matrix">
                     <thead>
                         <tr className="bg-light">
@@ -162,7 +239,7 @@ function MatrixBody({ matrix, loading }: { matrix: GroupPaymentMatrix | null; lo
                                     key={column.key}
                                     className="h6 border-top-0"
                                     style={CELL_STYLE}
-                                    title={column.dateEcheance ? `Échéance ${column.dateEcheance}` : undefined}
+                                    {...bind(column.dateEcheance ? [echeanceLine(column) as string] : null)}
                                 >
                                     {column.nom}
                                 </th>
@@ -178,7 +255,7 @@ function MatrixBody({ matrix, loading }: { matrix: GroupPaymentMatrix | null; lo
                                     <td style={{ ...CELL_STYLE, background: rowFill }}>{row.numero}</td>
                                     <td
                                         style={{ ...CELL_STYLE, background: rowFill }}
-                                        title={`${row.reference} — ${row.statut}`}
+                                        {...bind([`${row.reference} — ${row.statut}`])}
                                     >
                                         {row.studentShowUrl ? (
                                             <a href={row.studentShowUrl} className="text-reset">
@@ -199,7 +276,7 @@ function MatrixBody({ matrix, loading }: { matrix: GroupPaymentMatrix | null; lo
                                                 <td
                                                     key={column.key}
                                                     style={{ ...MONEY_CELL_STYLE, background: ABSENT_FILL }}
-                                                    title="Frais non affecté à cet étudiant"
+                                                    {...bind(['Frais non affecté à cet étudiant'])}
                                                 />
                                             );
                                         }
@@ -208,7 +285,7 @@ function MatrixBody({ matrix, loading }: { matrix: GroupPaymentMatrix | null; lo
                                             <td
                                                 key={column.key}
                                                 style={{ ...MONEY_CELL_STYLE, background: CELL_FILL[cell.state] }}
-                                                title={cellTitle(cell)}
+                                                {...bind(cellTip(cell, column))}
                                             >
                                                 {money(cell.montant)}
                                             </td>
@@ -229,6 +306,7 @@ function MatrixBody({ matrix, loading }: { matrix: GroupPaymentMatrix | null; lo
                     </tbody>
                 </table>
             </div>
+            <div ref={tipRef} className="gls-matrix-tooltip" role="tooltip" style={{ display: 'none' }} />
         </>
     );
 }

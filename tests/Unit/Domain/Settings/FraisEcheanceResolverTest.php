@@ -105,4 +105,13 @@ final class FraisEcheanceResolverTest extends TestCase
         $this->assertSame(12, FraisEcheanceResolver::moisFromNom('frais de decembre'));
         $this->assertSame(2, FraisEcheanceResolver::moisFromNom('FRAIS DE FEVRIER'));
     }
+
+    public function test_exam_fees_sort_after_every_month(): void
+    {
+        $this->assertSame(0, FraisEcheanceResolver::ordreFromNom("Frais d'inscription A1/A2/B1"));
+        $this->assertSame(12, FraisEcheanceResolver::ordreFromNom('Frais de Décembre'));
+        $this->assertGreaterThan(12, FraisEcheanceResolver::ordreFromNom("Frais d'exam ÖSD A1"));
+        $this->assertGreaterThan(12, FraisEcheanceResolver::ordreFromNom('Frais dexam ÖSD B2'));
+        $this->assertGreaterThan(12, FraisEcheanceResolver::ordreFromNom("Frais d'examen"));
+    }
 }

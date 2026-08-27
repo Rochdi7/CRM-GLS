@@ -8,6 +8,7 @@ use App\Domain\Finance\Actions\EnregistrerRemboursement;
 use App\Domain\Finance\Support\CaisseResolver;
 use App\Domain\Finance\Queries\GetStudentPaymentsForRefund;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Requests\Backoffice\Remboursements\StoreRemboursementRequest;
 use App\Http\Requests\Backoffice\Remboursements\UpdateRemboursementRequest;
 use App\Models\Encaissement;
@@ -33,6 +34,8 @@ use Illuminate\Validation\ValidationException;
  */
 final class RemboursementController extends Controller
 {
+    use AssertsContextScope;
+
     /**
      * A student's fee-targeted payments — the create form's "which payment
      * are we refunding?" cascade (GetStudentPaymentsForRefund). Gated the
@@ -72,7 +75,7 @@ final class RemboursementController extends Controller
         // beneficiaire_id refunded another centre's student out of this
         // till — the linked payment (if any) is checked by the action to
         // belong to that same student, so this one check covers both.
-        $this->assertCenterAccess($request, Student::query()->findOrFail((int) $data['beneficiaire_id'])->etablissement_id);
+        $this->assertStudentInContext($request, Student::query()->findOrFail((int) $data['beneficiaire_id']), 'beneficiaire_id');
 
         $encaissement = ! empty($data['encaissement_id'])
             ? Encaissement::query()->with(['cheque', 'caisse'])->find((int) $data['encaissement_id'])

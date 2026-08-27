@@ -39,6 +39,12 @@ final class StoreGroupRequest extends FormRequest
             'fraisLignes.*.montant' => ['required', 'numeric', 'min:0'],
             'fraisLignes.*.date_echeance' => ['nullable', 'date'],
             'fraisLignes.*.classification' => ['nullable', Rule::in(Group::NIVEAUX)],
+            // Catalog fees the user took OUT of the new group with the trash
+            // icon before saving — same gesture as the edit modal's
+            // removeFee(), but purely client-side here since nothing exists
+            // yet to detach from.
+            'fraisRetires' => ['nullable', 'array'],
+            'fraisRetires.*' => ['integer', 'exists:frais,id'],
         ];
     }
 }

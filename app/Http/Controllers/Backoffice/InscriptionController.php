@@ -276,6 +276,7 @@ final class InscriptionController extends Controller
         // registrations.manage-fees — already enforced by the route
         // middleware, deliberately NOT also requiring registrations.update.
         $this->authorize('view', $inscription);
+        $this->assertInscriptionInContext($request, $inscription, 'fee_lines');
 
         $action->handle($inscription, $request->validated('fee_lines', []));
 

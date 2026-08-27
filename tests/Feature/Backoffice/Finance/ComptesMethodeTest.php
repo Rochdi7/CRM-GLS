@@ -236,7 +236,13 @@ final class ComptesMethodeTest extends TestCase
         $this->assertSame('1000.00', (string) $this->compte($this->centre, Encaissement::METHODE_TPE)->solde);
     }
 
-    public function test_a_non_cash_payment_goes_to_the_active_centre_and_never_to_another_centres_account(): void
+    /**
+     * A payment must be taken in the centre the cashier is WORKING in
+     * (top-bar switcher): paying an inscription of another centre from here
+     * is refused outright (AssertsContextScope, 27/08/2026), so no other
+     * centre's method account can ever be credited by mistake.
+     */
+    public function test_a_payment_for_an_inscription_of_another_centre_than_the_active_one_is_refused(): void
     {
         $user = $this->userWith('payments.view', 'payments.create');
         $rabat = Etablissement::factory()->create();
@@ -245,12 +251,19 @@ final class ComptesMethodeTest extends TestCase
         // The employee is working in the OTHER centre (context switcher).
         $this->actingAs($user);
         app(CurrentContext::class)->setEtablissement($rabat->id);
-        $this->payLine($user, $student, $inscription, $fee, '1000', Encaissement::METHODE_VIREMENT);
 
-        $this->assertSame('1000.00', (string) $this->compte($rabat, Encaissement::METHODE_VIREMENT)->solde);
+        $this->actingAs($user)->post(route('backoffice.encaissements.store'), [
+            'student_id' => $student->id, 'inscription_id' => $inscription->id, 'date_paiement' => '2025-09-20',
+            'payment_lines' => [
+                ['fee_id' => $fee->id, 'montant' => '1000', 'methode' => Encaissement::METHODE_VIREMENT, 'date_paiement' => '2025-09-20'],
+            ],
+        ])->assertSessionHasErrors('inscription_id');
+
+        $this->assertSame(0, Encaissement::count());
+        $this->assertSame('0.00', (string) $this->compte($rabat, Encaissement::METHODE_VIREMENT)->solde);
         $this->assertSame('0.00', (string) $this->compte($this->centre, Encaissement::METHODE_VIREMENT)->solde);
-        $this->assertSame('0.00', (string) $this->compte($rabat, Encaissement::METHODE_TPE)->solde);
         $this->assertSame('0.00', (string) $user->employee->caisses()->first()->fresh()->solde);
+        $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $fee->fresh()->statut);
     }
 
     public function test_all_centres_context_falls_back_to_the_agents_primary_centre(): void

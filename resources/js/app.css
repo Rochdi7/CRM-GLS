@@ -1429,3 +1429,30 @@ html[data-theme='dark'] .gls-payment-matrix,
 html[data-theme='dark'] .gls-payment-matrix > :not(caption) > * > * {
     border-color: #3a3352;
 }
+
+/* React-controlled hover tooltip of the matrix (replaces the flaky native
+ * `title`): fixed so neither the scroll box nor the modal can clip it, above
+ * the modal z-index, and inert to the pointer so it never steals the hover. */
+.gls-matrix-tooltip {
+    position: fixed;
+    z-index: 1100;
+    pointer-events: none;
+    padding: 0.35rem 0.6rem;
+    border-radius: 0.25rem;
+    background: rgba(33, 37, 41, 0.95);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.35;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+/* Inscription fee lines — Remise cell: keep "% | DH" inputs readable side by side */
+.fee-remise-group .form-control {
+    min-width: 62px;
+    flex: 1 1 62px;
+}
+.fee-remise-group .input-group-text {
+    flex: 0 0 auto;
+}

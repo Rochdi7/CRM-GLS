@@ -109,6 +109,7 @@ final class CreneauController extends Controller
     public function update(UpdateCreneauRequest $request, Creneau $creneau, GenererSeancesDepuisCreneau $generer): RedirectResponse
     {
         $this->authorize('update', $creneau);
+        $this->assertGroupInContext($request, $creneau->group, 'salle_id');
 
         $data = $request->validated();
         $this->assertSalleDuCentre($data['salle_id'] ?? null, $creneau->group);
@@ -146,9 +147,10 @@ final class CreneauController extends Controller
         }
     }
 
-    public function destroy(Creneau $creneau, GenererSeancesDepuisCreneau $generer): RedirectResponse
+    public function destroy(Request $request, Creneau $creneau, GenererSeancesDepuisCreneau $generer): RedirectResponse
     {
         $this->authorize('delete', $creneau);
+        $this->assertGroupInContext($request, $creneau->group, 'group_id');
 
         $generer->supprimerFuturs($creneau);
         $creneau->delete();

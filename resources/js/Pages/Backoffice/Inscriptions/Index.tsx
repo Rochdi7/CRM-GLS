@@ -1417,7 +1417,7 @@ export default function InscriptionsIndex({
 
                                                         return (
                                                             <tr key={line.fraisId ?? index}>
-                                                                <td className="fw-medium">{line.nom}</td>
+                                                                <td className="fw-medium text-wrap-cell" style={{ minWidth: 220 }}>{line.nom}</td>
                                                                 <td style={{ width: 110 }}>
                                                                     <input
                                                                         type="number"
@@ -1428,8 +1428,8 @@ export default function InscriptionsIndex({
                                                                         onChange={(event) => setLine(index, 'montantInitial', event.target.value)}
                                                                     />
                                                                 </td>
-                                                                <td style={{ width: 190 }}>
-                                                                    <div className="input-group input-group-sm">
+                                                                <td style={{ width: 210, minWidth: 210 }}>
+                                                                    <div className="input-group input-group-sm flex-nowrap fee-remise-group">
                                                                         <input
                                                                             type="number"
                                                                             step="0.01"
@@ -1602,7 +1602,7 @@ export default function InscriptionsIndex({
 
                                                         return (
                                                             <tr key={line.id ?? `new-${index}`}>
-                                                                <td style={{ width: 160 }}>
+                                                                <td style={{ width: 240, minWidth: 240 }}>
                                                                     {canManageFees ? (
                                                                         <input
                                                                             type="text"
@@ -1625,8 +1625,8 @@ export default function InscriptionsIndex({
                                                                         onChange={(event) => setEditingLine(index, 'montantInitial', event.target.value)}
                                                                     />
                                                                 </td>
-                                                                <td style={{ width: 190 }}>
-                                                                    <div className="input-group input-group-sm">
+                                                                <td style={{ width: 210, minWidth: 210 }}>
+                                                                    <div className="input-group input-group-sm flex-nowrap fee-remise-group">
                                                                         <input
                                                                             type="number"
                                                                             step="0.01"

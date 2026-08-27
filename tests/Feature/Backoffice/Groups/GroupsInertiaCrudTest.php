@@ -103,6 +103,28 @@ final class GroupsInertiaCrudTest extends TestCase
         $this->assertEqualsCanonicalizing([300.0, 1300.0], $group->frais->pluck('pivot.montant')->map(fn ($m) => (float) $m)->all());
     }
 
+    public function test_fees_trashed_before_saving_are_not_attached_to_the_new_group(): void
+    {
+        $this->actingAs($this->userWith('groups.view', 'groups.create'));
+        $f1 = Frais::create(['nom' => "Frais d'inscription", 'statut' => 'Actif']);
+        $f2 = Frais::create(['nom' => "Frais d'exam ÖSD B2", 'statut' => 'Actif']);
+
+        $this->post(route('backoffice.groups.store'), [
+            'nom' => 'Groupe sans examen',
+            'niveau' => 'A1.1',
+            'statut' => Group::STATUT_EN_INSCRIPTION,
+            'date_debut_formation' => '2025-09-01',
+            'date_fin_formation' => '2026-06-30',
+            'fraisLignes' => [
+                $f1->id => ['montant' => '300'],
+            ],
+            'fraisRetires' => [$f2->id],
+        ])->assertSessionDoesntHaveErrors();
+
+        $group = Group::where('nom', 'Groupe sans examen')->firstOrFail();
+        $this->assertSame([$f1->id], $group->frais()->pluck('frais.id')->all());
+    }
+
     public function test_fees_left_at_zero_are_still_saved(): void
     {
         $this->actingAs($this->userWith('groups.view', 'groups.create'));

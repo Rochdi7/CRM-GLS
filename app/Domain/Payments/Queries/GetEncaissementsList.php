@@ -6,6 +6,7 @@ namespace App\Domain\Payments\Queries;
 
 use App\Models\Caisse;
 use App\Models\Encaissement;
+use App\Models\Group;
 use App\Models\Inscription;
 use App\Models\Student;
 use App\Models\User;
@@ -26,6 +27,13 @@ use Illuminate\Support\Collection;
 final class GetEncaissementsList
 {
     public const DEFAULT_PER_PAGE = 15;
+
+    /** SQL for an avance's remaining balance: montant − applied to fees − refunded. */
+    private const AVANCE_RESTANT_SQL = '(encaissements.montant'
+        .' - coalesce((select sum(a.montant) from encaissements a'
+        .' where a.applied_from_encaissement_id = encaissements.id), 0)'
+        .' - coalesce((select sum(r.montant) from remboursements r'
+        .' where r.encaissement_id = encaissements.id), 0))';
 
     public function __construct(
         private readonly CenterAccessService $centerAccess,
@@ -48,6 +56,8 @@ final class GetEncaissementsList
         string $studentFilter = '',
         string $numeroChequeFilter = '',
         string $banqueFilter = '',
+        string $soldeFilter = '',
+        string $groupFilter = '',
     ): array {
         $base = Encaissement::query()
             // What has been given back on this payment (Remboursement.
@@ -128,6 +138,15 @@ final class GetEncaissementsList
             // ConvertirEncaissementsEnAvance / ChangerGroupeInscription.
             ->when($view === 'cheque', fn ($q) => $q->where('methode', Encaissement::METHODE_CHEQUE))
             ->when($view === 'avance', fn ($q) => $q->whereNull('inscription_fee_id'))
+            // Avances tab « Solde » filter: 'restant' = money still left
+            // (montant − applied − refunded > 0; the default: what a cashier
+            // has to allocate), 'epuise' = fully used/refunded (history).
+            // Same arithmetic as the "Montant restant" column and
+            // sumAvancesRestantes(), evaluated in SQL — never a per-row
+            // accessor in a loop.
+            ->when($view === 'avance' && in_array($soldeFilter, ['restant', 'epuise'], true), fn ($q) => $q->whereRaw(
+                self::AVANCE_RESTANT_SQL.($soldeFilter === 'restant' ? ' > 0' : ' <= 0'),
+            ))
             // Default "Paiements" tab: only rows allocated to a fee. An avance
             // is the PARENT of the "apply" rows that later credit each fee
             // (applied_from_encaissement_id) — listing it alongside them would
@@ -145,6 +164,17 @@ final class GetEncaissementsList
             ->when(self::isIsoDate($dateTo), fn ($q) => $q->where('date_paiement', '<=', $dateTo))
             ->when($referenceFilter !== '', fn ($q) => $q->where('reference', 'ilike', "%{$referenceFilter}%"))
             ->when($studentFilter !== '', fn ($q) => $q->where('student_id', (int) $studentFilter))
+            // Groupe: a fee-allocated payment belongs to the group of the
+            // inscription its fee is on; an avance has no fee, so it belongs
+            // to the groups its student is enrolled in (that is where the
+            // money will end up being applied).
+            ->when($groupFilter !== '', fn ($q) => $q->where(function ($w) use ($groupFilter): void {
+                $groupId = (int) $groupFilter;
+                $w->whereHas('fee.inscription', fn ($i) => $i->where('group_id', $groupId))
+                    ->orWhere(fn ($a) => $a
+                        ->whereNull('inscription_fee_id')
+                        ->whereHas('student.inscriptions', fn ($i) => $i->where('group_id', $groupId)));
+            }))
             ->when($numeroChequeFilter !== '', fn ($q) => $q->where('numero_cheque', 'ilike', "%{$numeroChequeFilter}%"))
             ->when($banqueFilter !== '', fn ($q) => $q->where('banque', 'ilike', "%{$banqueFilter}%"))
             ->when($search !== '', function ($q) use ($search): void {
@@ -248,13 +278,7 @@ final class GetEncaissementsList
         $query->getQuery()->orders = null;
 
         return (float) $query
-            ->selectRaw(
-                'coalesce(sum(encaissements.montant'
-                .' - coalesce((select sum(a.montant) from encaissements a'
-                .' where a.applied_from_encaissement_id = encaissements.id), 0)'
-                .' - coalesce((select sum(r.montant) from remboursements r'
-                .' where r.encaissement_id = encaissements.id), 0)), 0) as total',
-            )
+            ->selectRaw('coalesce(sum'.self::AVANCE_RESTANT_SQL.', 0) as total')
             ->value('total');
     }
 
@@ -290,6 +314,22 @@ final class GetEncaissementsList
     /**
      * @return Collection<int, array{id:int, nom:string}>
      */
+    /**
+     * Groups of the active centre + année, for the « Groupe » filter.
+     *
+     * @return Collection<int, array{id:int, nom:string}>
+     */
+    public function groupOptions(User $user): Collection
+    {
+        return Group::query()
+            ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+            ->tap(fn ($q) => $this->scopeToActiveCenter($q))
+            ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
+            ->orderBy('nom')
+            ->get(['id', 'nom'])
+            ->map(fn (Group $g): array => ['id' => $g->id, 'nom' => $g->nom]);
+    }
+
     public function studentOptions(User $user): Collection
     {
         return Student::query()

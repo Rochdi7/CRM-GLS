@@ -9,6 +9,7 @@ use App\Domain\Payments\Queries\GetEncaissementsList;
 use App\Domain\Settings\Queries\GetBanquesList;
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Requests\Backoffice\Cheques\StoreChequeRequest;
 use App\Http\Requests\Backoffice\Cheques\UpdateChequeRequest;
 use App\Models\Cheque;
@@ -41,6 +42,8 @@ use Inertia\Response;
  */
 final class ChequeController extends Controller
 {
+    use AssertsContextScope;
+
     public function index(
         Request $request,
         GetChequesList $getChequesList,
@@ -118,7 +121,9 @@ final class ChequeController extends Controller
             : null;
 
         if ($student !== null) {
-            $this->assertCenterAccess($request, $student->etablissement_id);
+            // Reach + active centre (AssertsContextScope): the cheque lands in
+            // the student's centre, so that centre must be the one at work.
+            $this->assertStudentInContext($request, $student);
         }
 
         // Never store a NULL centre: under « Tous les centres » a NULL-centre
@@ -158,6 +163,12 @@ final class ChequeController extends Controller
         }
 
         $payload = $this->normalizedPayload($data);
+
+        // Re-owning a cheque to a student is a centre move too: the new owner
+        // must sit in the active centre (AssertsContextScope).
+        if (! empty($payload['student_id'])) {
+            $this->assertStudentInContext($request, Student::findOrFail((int) $payload['student_id']));
+        }
 
         // Once the cheque has funded payments its identity is frozen: those
         // Encaissement rows (student_id, numero_cheque, banque) were copied

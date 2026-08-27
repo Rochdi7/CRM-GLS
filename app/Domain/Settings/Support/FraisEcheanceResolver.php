@@ -135,14 +135,29 @@ final class FraisEcheanceResolver
      * to décembre — instead of alphabetical (which interleaves "Avril",
      * "Août", "Octobre" meaninglessly).
      *
-     * Fees whose name carries no month (inscription, examen, annuel…) are not
-     * part of the monthly cycle and sort FIRST (key 0), so the one-off charges
-     * a student pays up front stay at the top of the table, ahead of the
-     * twelve monthly instalments.
+     * Fees whose name carries no month (inscription, annuel…) are not part of
+     * the monthly cycle and sort FIRST (key 0), so the one-off charges a
+     * student pays up front stay at the top of the table, ahead of the
+     * twelve monthly instalments. EXAM fees (« Frais d'exam ÖSD A1 »…) are
+     * the exception: an exam is settled at the very end of the training, so
+     * they always sort LAST (key 99), after Décembre.
      */
     public static function ordreFromNom(string $fraisNom): int
     {
+        if (self::isExamen($fraisNom)) {
+            return self::ORDRE_EXAMEN;
+        }
+
         return self::moisFromNom($fraisNom) ?? 0;
+    }
+
+    /** Sort key of exam fees — after every month (1…12). */
+    public const int ORDRE_EXAMEN = 99;
+
+    /** Whether the fee is an exam fee ("exam", "examen", "d'exam", "dexam"…). */
+    public static function isExamen(string $fraisNom): bool
+    {
+        return str_contains(self::normalize($fraisNom), 'exam');
     }
 
     /** The group's start day, defaulting to the 1st when unknown. */

@@ -626,6 +626,23 @@ the database layer. Non-negotiable invariants already enforced in code:
   - **Creates** inherit `etablissement_id`/`annee_scolaire_id` from the
     active context or from the parent record (group → inscription → séance),
     never from client input.
+  - **Writes are guarded, not just reads** (27/08/2026): every store()/
+    mutation whose centre/année comes from a CLIENT-CHOSEN parent (group,
+    inscription, student, stock article, séance) or that edits a record
+    carrying its own centre/année calls the matching
+    `Controllers\Backoffice\Concerns\AssertsContextScope` helper
+    (`assertGroupInContext` / `assertInscriptionInContext` /
+    `assertStudentInContext` / `assertRecordInContext`) right after
+    `authorize()`. It checks centre REACH (403) **and** the active context
+    (422 on the form field) — the policy alone cannot, since it knows
+    nothing about the top-bar switcher and `create()` takes no model. A
+    stale dropdown loaded before a switch, or a forged id, must never file
+    a record into a year/centre the current screen does not show. Applied
+    to inscriptions (create/edit/fees/livres/cancel/change-group),
+    encaissements (store/avance/convert/apply), remboursements, chèques,
+    stock movements, groupes (every mutation), séances, créneaux and
+    dépenses « Paiement prof ». A new module's write path adds the same
+    call. Tests: `tests/Feature/Backoffice/Context/ContextScopeWriteGuardTest.php`.
   - **Deliberate exceptions** (do not "fix"): employees/users (staff has no
     year), stock (physical inventory), the transfer-validation inbox (a
     pending transfer must never hide behind a year switch), and the caisse

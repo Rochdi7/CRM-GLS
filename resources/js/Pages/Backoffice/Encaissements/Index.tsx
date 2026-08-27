@@ -68,6 +68,12 @@ function emptyCreateForm(): CreateFormState {
     };
 }
 
+const SOLDE_OPTIONS: SelectOption[] = [
+    { value: 'restant', label: 'Avec reste à utiliser' },
+    { value: 'epuise', label: 'Épuisées (entièrement utilisées)' },
+    { value: 'tous', label: 'Toutes' },
+];
+
 function emptyAvanceForm(): AvanceFormState {
     return {
         student_id: '',
@@ -92,7 +98,7 @@ function emptyAvanceForm(): AvanceFormState {
  * directly under that row; numéro/banque/échéance are always read off that
  * Cheque record server-side (EncaissementController@store).
  */
-export default function EncaissementsIndex({ encaissements, montantTotal, caisses, students, methodes, banques, filters, can }: EncaissementsPageProps) {
+export default function EncaissementsIndex({ encaissements, montantTotal, caisses, students, groups, methodes, banques, filters, can }: EncaissementsPageProps) {
     const isLoading = useInertiaLoading();
     const [deleteTarget, setDeleteTarget] = useState<EncaissementRow | null>(null);
     const [deleting, setDeleting] = useState(false);
@@ -119,6 +125,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
 
     const caisseOptions: SelectOption[] = caisses.map((c) => ({ value: c.id, label: c.nom }));
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.nom }));
+    const groupOptions: SelectOption[] = groups.map((g) => ({ value: g.id, label: g.nom }));
     const methodeOptions: SelectOption[] = methodes.map((m) => ({ value: m, label: m }));
 
     const createForm = useForm<CreateFormState>(emptyCreateForm());
@@ -636,6 +643,18 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                 onChange={(event) => reload({ studentFilter: event.target.value })}
                             />
                         </div>
+                        <div className="col-6 col-md-4 col-lg-2">
+                            <label className="form-label" htmlFor="enc-f-group">
+                                Groupe
+                            </label>
+                            <SelectField
+                                id="enc-f-group"
+                                options={groupOptions}
+                                placeholder="Tous les groupes"
+                                value={filters.groupFilter}
+                                onChange={(event) => reload({ groupFilter: event.target.value })}
+                            />
+                        </div>
                         {filters.view === 'cheque' ? (
                             <div className="col-6 col-md-4 col-lg-2">
                                 <label className="form-label" htmlFor="enc-f-banque">
@@ -674,6 +693,22 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                         onChange={(event) => reload({ methodeFilter: event.target.value })}
                                     />
                                 </div>
+                                {/* Avances only: by default the tab lists what still has
+                                    money to allocate; « Épuisées » shows the history of
+                                    fully used ones. */}
+                                {filters.view === 'avance' && (
+                                    <div className="col-6 col-md-4 col-lg-2">
+                                        <label className="form-label" htmlFor="enc-f-solde">
+                                            {t('Balance')}
+                                        </label>
+                                        <SelectField
+                                            id="enc-f-solde"
+                                            options={SOLDE_OPTIONS}
+                                            value={filters.soldeFilter}
+                                            onChange={(event) => reload({ soldeFilter: event.target.value })}
+                                        />
+                                    </div>
+                                )}
                             </>
                         )}
                         {/* No date window on the Avances tab: an avance is money received

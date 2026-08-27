@@ -14,6 +14,7 @@ use App\Domain\Groups\Queries\GetGroupsList;
 use App\Domain\Groups\Queries\GetGroupStudentsBySegment;
 use App\Domain\Settings\Support\FraisEcheanceResolver;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Requests\Backoffice\Groups\ChangerEnseignantRequest;
 use App\Http\Requests\Backoffice\Groups\StoreGroupRequest;
 use App\Http\Requests\Backoffice\Groups\UpdateGroupEnseignantRequest;
@@ -42,6 +43,8 @@ use Inertia\Response;
  */
 final class GroupController extends Controller
 {
+    use AssertsContextScope;
+
     public function index(
         Request $request,
         GetGroupsList $getGroupsList,
@@ -139,13 +142,25 @@ final class GroupController extends Controller
         $this->authorize('create', Group::class);
 
         $data = $request->validated();
+        // A new group starts with the WHOLE active catalog, minus the fees
+        // the user removed with the trash icon before saving (`fraisRetires`).
+        // Nothing submitted ⇒ null ⇒ every fee, as it always has been.
+        $retires = array_map('intval', (array) ($data['fraisRetires'] ?? []));
+        $existant = $retires === []
+            ? null
+            : Frais::query()
+                ->where('statut', Frais::STATUT_ACTIF)
+                ->whereNotIn('id', $retires)
+                ->pluck('id')
+                ->all();
+
         // A new group inherits the active center (see the transaction
         // below), so that is the center whose fee prices apply.
         $fraisLignes = $this->normalizedFraisLignes(
             $request,
             $data['date_debut_formation'] ?? null,
             app(CurrentContext::class)->etablissementId(),
-            null,
+            $existant,
             $this->debutAnneeScolaireActive(),
         );
 
@@ -184,6 +199,7 @@ final class GroupController extends Controller
     public function update(UpdateGroupRequest $request, Group $group): RedirectResponse
     {
         $this->authorize('update', $group);
+        $this->assertGroupInContext($request, $group, 'nom');
 
         $data = $request->validated();
         $fraisLignes = $this->normalizedFraisLignes(
@@ -272,6 +288,7 @@ final class GroupController extends Controller
         ChangerEnseignantGroupe $changerEnseignant,
     ): RedirectResponse {
         $this->authorize('update', $group);
+        $this->assertGroupInContext($request, $group, 'enseignant_id');
 
         $data = $request->validated();
 
@@ -317,6 +334,7 @@ final class GroupController extends Controller
         GroupEnseignant $affectation,
     ): RedirectResponse {
         $this->authorize('update', $group);
+        $this->assertGroupInContext($request, $group, 'date_debut');
 
         abort_unless($affectation->group_id === $group->id, 404);
 
@@ -352,6 +370,7 @@ final class GroupController extends Controller
     public function moveYear(Request $request, Group $group, ReaffecterGroupeVersAnnee $reaffecter): RedirectResponse
     {
         $this->authorize('moveYear', $group);
+        $this->assertGroupInContext($request, $group, 'annee_scolaire_id');
 
         $data = $request->validate([
             'annee_scolaire_id' => ['required', 'integer', 'exists:annees_scolaires,id'],
@@ -423,6 +442,7 @@ final class GroupController extends Controller
     public function archive(Request $request, Group $group): RedirectResponse
     {
         $this->authorize('archive', $group);
+        $this->assertGroupInContext($request, $group, 'statut');
 
         if ($group->statut === Group::STATUT_FIN_FORMATION) {
             return back();
@@ -444,6 +464,7 @@ final class GroupController extends Controller
     public function annuler(Request $request, Group $group): RedirectResponse
     {
         $this->authorize('archive', $group);
+        $this->assertGroupInContext($request, $group, 'statut');
 
         if (in_array($group->statut, Group::STATUTS_HISTORIQUE, true)) {
             return back();
@@ -464,6 +485,7 @@ final class GroupController extends Controller
     public function reactiver(Request $request, Group $group): RedirectResponse
     {
         $this->authorize('archive', $group);
+        $this->assertGroupInContext($request, $group, 'statut');
 
         if ($group->statut !== Group::STATUT_ANNULEE) {
             return back();
@@ -483,6 +505,7 @@ final class GroupController extends Controller
     public function activer(Request $request, Group $group): RedirectResponse
     {
         $this->authorize('archive', $group);
+        $this->assertGroupInContext($request, $group, 'statut');
 
         if ($group->statut !== Group::STATUT_EN_INSCRIPTION) {
             return back();
@@ -502,6 +525,7 @@ final class GroupController extends Controller
     public function retournerEnInscription(Request $request, Group $group): RedirectResponse
     {
         $this->authorize('archive', $group);
+        $this->assertGroupInContext($request, $group, 'statut');
 
         if ($group->statut !== Group::STATUT_EN_FORMATION) {
             return back();
@@ -527,6 +551,7 @@ final class GroupController extends Controller
     public function removeFee(Request $request, Group $group, Frais $frai, RetirerFraisGroupe $action): JsonResponse
     {
         $this->authorize('update', $group);
+        $this->assertGroupInContext($request, $group, 'frais');
 
         $result = $action->handle($group, $frai->id);
 
@@ -562,6 +587,7 @@ final class GroupController extends Controller
     public function restoreFee(Request $request, Group $group, Frais $frai, RetirerFraisGroupe $action): JsonResponse
     {
         $this->authorize('update', $group);
+        $this->assertGroupInContext($request, $group, 'frais');
 
         $montant = $request->input('montant');
         $echeance = $request->input('date_echeance');

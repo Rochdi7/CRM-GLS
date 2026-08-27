@@ -10,6 +10,7 @@ use App\Domain\Stock\Queries\GetStockArticlesList;
 use App\Domain\Stock\Queries\GetStockMouvementsList;
 use App\Domain\Stock\Queries\GetStockTypesList;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Requests\Backoffice\Stock\StoreStockArticleRequest;
 use App\Http\Requests\Backoffice\Stock\StoreStockMouvementRequest;
 use App\Http\Requests\Backoffice\Stock\UpdateStockArticleRequest;
@@ -33,6 +34,8 @@ use Inertia\Response;
  */
 final class StockController extends Controller
 {
+    use AssertsContextScope;
+
     public function index(
         Request $request,
         GetStockArticlesList $getArticles,
@@ -245,6 +248,18 @@ final class StockController extends Controller
         $article = StockArticle::findOrFail((int) $data['stock_article_id']);
 
         $this->authorize('move', $article);
+
+        // Stock has no year, but it is per centre: a movement must hit an
+        // article of the ACTIVE centre, not one reachable through a stale
+        // dropdown loaded before the top-bar switch (AssertsContextScope).
+        $this->assertRecordInContext(
+            $request,
+            'stock_article_id',
+            $article->etablissement_id,
+            null,
+            __('This stock item belongs to another centre than the active one.'),
+            '',
+        );
 
         $enregistrerMouvement(
             $article,

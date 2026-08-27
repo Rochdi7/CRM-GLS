@@ -1507,6 +1507,10 @@ export interface EncaissementsFilters {
     studentFilter: string;
     numeroChequeFilter: string;
     banqueFilter: string;
+    /** Avances tab only: 'restant' (default) | 'epuise' | 'tous'. */
+    soldeFilter: string;
+    /** Group id: fee rows by their inscription's group, avances by the student's inscriptions. */
+    groupFilter: string;
 }
 
 export interface EncaissementsPageProps {
@@ -1515,6 +1519,8 @@ export interface EncaissementsPageProps {
     montantTotal: MoneyDisplay;
     caisses: FinanceOption[];
     students: FinanceOption[];
+    /** Groups of the active centre + année — the « Groupe » filter's options. */
+    groups: FinanceOption[];
     methodes: string[];
     /** Active bank names from the catalog (Paramètres → Banques) — the Chèque form's dropdown source. */
     banques: string[];

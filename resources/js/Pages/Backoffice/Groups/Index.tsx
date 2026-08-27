@@ -276,15 +276,16 @@ export default function GroupsIndex({
 
     const fraisCatalogOptions: SelectOption[] = fraisCatalog.map((f) => ({ value: f.id, label: f.nom }));
     /**
-     * Fee rows the modal actually renders. Creating a group still offers the
-     * WHOLE active catalog (a new group starts with every fee assigned, as it
-     * always has); editing one shows only the fees that group still carries,
+     * Fee rows the modal actually renders. Creating a group offers the WHOLE
+     * active catalog (a new group starts with every fee assigned) minus the
+     * rows the user trashed before saving — purely local state, posted to
+     * store() as `fraisRetires`; editing one shows only the fees that group still carries,
      * so a fee removed through the trash icon disappears from the table
      * instead of silently reappearing on the next save.
      */
     const fraisRowOptions: SelectOption[] =
         editingGroup === null || fraisActifs === null
-            ? fraisCatalogOptions
+            ? fraisCatalogOptions.filter((f) => !fraisRetiresIds.includes(f.value as number))
             : fraisCatalogOptions.filter((f) => fraisActifs.includes(f.value as number));
     /** Removed fees, restorable from the « Frais retirés » list below the table. */
     const fraisRetires: SelectOption[] = fraisCatalogOptions.filter((f) =>
@@ -536,9 +537,21 @@ export default function GroupsIndex({
      * (removeEditingLine).
      */
     function removeFrais(frais: SelectOption) {
-        if (editingGroup === null) return;
-
         const fraisId = frais.value as number;
+
+        // Create mode: nothing exists on the server yet, so the removal is
+        // local — the id is excluded from the table and posted as
+        // `fraisRetires` on save.
+        if (editingGroup === null) {
+            setFraisRetiresIds((previous) => (previous.includes(fraisId) ? previous : [...previous, fraisId]));
+            setFraisPage((page) => {
+                const remaining = fraisRowOptions.length - 1;
+
+                return Math.min(page, Math.max(1, Math.ceil(remaining / GROUP_FRAIS_PER_PAGE)));
+            });
+
+            return;
+        }
 
         setFraisProcessingId(fraisId);
         postGroupFrais(`/backoffice/groups/${editingGroup.id}/frais/${fraisId}`, 'DELETE')
@@ -567,9 +580,13 @@ export default function GroupsIndex({
      * back into the form state instead of re-fetching the page.
      */
     function restoreFrais(frais: SelectOption) {
-        if (editingGroup === null) return;
-
         const fraisId = frais.value as number;
+
+        if (editingGroup === null) {
+            setFraisRetiresIds((previous) => previous.filter((id) => id !== fraisId));
+
+            return;
+        }
 
         setFraisProcessingId(fraisId);
         postGroupFrais(`/backoffice/groups/${editingGroup.id}/frais/${fraisId}/restore`, 'POST')
@@ -605,8 +622,10 @@ export default function GroupsIndex({
         const options = { preserveScroll: true, onSuccess: () => closeModal() };
 
         if (editingGroup) {
+            form.transform((data) => data);
             form.put(`/backoffice/groups/${editingGroup.id}`, options);
         } else {
+            form.transform((data) => ({ ...data, fraisRetires: fraisRetiresIds }));
             form.post('/backoffice/groups', options);
         }
     }
@@ -989,11 +1008,9 @@ export default function GroupsIndex({
                                             <th className="text-center" style={{ width: editingGroup === null ? '24%' : '19%' }}>
                                                 Montant
                                             </th>
-                                            {editingGroup !== null && (
-                                                <th className="text-center" style={{ width: '5%' }}>
-                                                    &nbsp;
-                                                </th>
-                                            )}
+                                            <th className="text-center" style={{ width: '5%' }}>
+                                                &nbsp;
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -1050,26 +1067,28 @@ export default function GroupsIndex({
                                                             <span className="input-group-text">DH</span>
                                                         </div>
                                                     </td>
-                                                    {editingGroup !== null && (
-                                                        <td>
-                                                            <button
-                                                                type="button"
-                                                                className="btn btn-sm btn-outline-danger border-0"
-                                                                title="Retirer ce frais du groupe et de toutes ses inscriptions"
-                                                                aria-label="Retirer ce frais"
-                                                                disabled={fraisProcessingId === fee.value}
-                                                                onClick={() => removeFrais(fee)}
-                                                            >
-                                                                <i
-                                                                    className={
-                                                                        fraisProcessingId === fee.value
-                                                                            ? 'ti ti-loader-2'
-                                                                            : 'ti ti-trash'
-                                                                    }
-                                                                />
-                                                            </button>
-                                                        </td>
-                                                    )}
+                                                    <td>
+                                                        <button
+                                                            type="button"
+                                                            className="btn btn-sm btn-outline-danger border-0"
+                                                            title={
+                                                                editingGroup === null
+                                                                    ? 'Retirer ce frais du groupe'
+                                                                    : 'Retirer ce frais du groupe et de toutes ses inscriptions'
+                                                            }
+                                                            aria-label="Retirer ce frais"
+                                                            disabled={fraisProcessingId === fee.value}
+                                                            onClick={() => removeFrais(fee)}
+                                                        >
+                                                            <i
+                                                                className={
+                                                                    fraisProcessingId === fee.value
+                                                                        ? 'ti ti-loader-2'
+                                                                        : 'ti ti-trash'
+                                                                }
+                                                            />
+                                                        </button>
+                                                    </td>
                                                 </tr>
                                             );
                                         })}
@@ -1087,12 +1106,19 @@ export default function GroupsIndex({
                         {fraisRetires.length > 0 && (
                             <div className="mt-3">
                                 <h6 className="fs-14 mb-1">Frais retirés</h6>
-                                <p className="text-muted fs-13 mb-2">
-                                    Ces frais ne sont plus facturés par ce groupe et sont masqués sur ses inscriptions. Les
-                                    montants déjà encaissés sur eux sont revenus en avance et peuvent être ré-appliqués à un
-                                    autre frais. Restaurer un frais le réaffiche sur toutes les inscriptions du groupe — sans
-                                    ré-appliquer les avances, ce qui reste une décision explicite.
-                                </p>
+                                {editingGroup === null ? (
+                                    <p className="text-muted fs-13 mb-2">
+                                        Ces frais ne seront pas facturés par ce groupe. Restaurer un frais le remet dans le
+                                        tableau ci-dessus avant l'enregistrement.
+                                    </p>
+                                ) : (
+                                    <p className="text-muted fs-13 mb-2">
+                                        Ces frais ne sont plus facturés par ce groupe et sont masqués sur ses inscriptions. Les
+                                        montants déjà encaissés sur eux sont revenus en avance et peuvent être ré-appliqués à un
+                                        autre frais. Restaurer un frais le réaffiche sur toutes les inscriptions du groupe — sans
+                                        ré-appliquer les avances, ce qui reste une décision explicite.
+                                    </p>
+                                )}
                                 <div className="d-flex flex-wrap gap-2">
                                     {fraisRetires.map((fee) => (
                                         <span key={fee.value} className="badge bg-light text-dark border d-inline-flex align-items-center gap-2 p-2">

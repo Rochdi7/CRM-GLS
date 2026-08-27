@@ -267,6 +267,14 @@ final class SeanceController extends Controller
     public function update(UpdateSeanceRequest $request, Seance $seance): RedirectResponse
     {
         $this->authorize('update', $seance);
+        $this->assertRecordInContext(
+            $request,
+            'statut',
+            $seance->etablissement_id,
+            $seance->annee_scolaire_id,
+            __('This session belongs to another centre than the active one.'),
+            __('This session belongs to another academic year than the active one.'),
+        );
 
         $data = $request->validated();
 
@@ -286,6 +294,14 @@ final class SeanceController extends Controller
     public function destroy(Request $request, Seance $seance): RedirectResponse
     {
         $this->authorize('delete', $seance);
+        $this->assertRecordInContext(
+            $request,
+            'statut',
+            $seance->etablissement_id,
+            $seance->annee_scolaire_id,
+            __('This session belongs to another centre than the active one.'),
+            __('This session belongs to another academic year than the active one.'),
+        );
 
         // Roll-call lines go with the séance (FK cascade) — attendance is
         // operational data, not money; deletion is allowed by permission.
@@ -301,6 +317,14 @@ final class SeanceController extends Controller
         EnregistrerPresences $enregistrerPresences,
     ): HttpResponse|RedirectResponse {
         $this->authorize('mark', $seance);
+        $this->assertRecordInContext(
+            $request,
+            'statut',
+            $seance->etablissement_id,
+            $seance->annee_scolaire_id,
+            __('This session belongs to another centre than the active one.'),
+            __('This session belongs to another academic year than the active one.'),
+        );
 
         $enregistrerPresences($seance, $request->validated('presences'));
 
@@ -317,6 +341,14 @@ final class SeanceController extends Controller
     public function valider(Request $request, Seance $seance): RedirectResponse
     {
         $this->authorize('validate', $seance);
+        $this->assertRecordInContext(
+            $request,
+            'statut',
+            $seance->etablissement_id,
+            $seance->annee_scolaire_id,
+            __('This session belongs to another centre than the active one.'),
+            __('This session belongs to another academic year than the active one.'),
+        );
 
         $seance->valider();
 
@@ -327,6 +359,14 @@ final class SeanceController extends Controller
     public function annuler(AnnulerSeanceRequest $request, Seance $seance): RedirectResponse
     {
         $this->authorize('cancel', $seance);
+        $this->assertRecordInContext(
+            $request,
+            'statut',
+            $seance->etablissement_id,
+            $seance->annee_scolaire_id,
+            __('This session belongs to another centre than the active one.'),
+            __('This session belongs to another academic year than the active one.'),
+        );
 
         $seance->annuler((string) $request->validated('motif'));
 

@@ -16,6 +16,7 @@ use App\Domain\Payments\Queries\GetInscriptionPayments;
 use App\Domain\Payments\Queries\GetInscriptionUnpaidFees;
 use App\Domain\Settings\Queries\GetBanquesList;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Requests\Backoffice\Encaissements\ApplyAvanceRequest;
 use App\Http\Requests\Backoffice\Encaissements\ConvertAvanceRequest;
 use App\Http\Requests\Backoffice\Encaissements\SendRecuEmailRequest;
@@ -48,6 +49,8 @@ use Inertia\Response;
  */
 final class EncaissementController extends Controller
 {
+    use AssertsContextScope;
+
     public function __construct()
     {
         $this->authorizeResource(Encaissement::class, 'encaissement');
@@ -105,6 +108,7 @@ final class EncaissementController extends Controller
         $dateTo = self::filterValue($request->string('dateTo'));
         $referenceFilter = (string) $request->string('referenceFilter');
         $studentFilter = (string) $request->string('studentFilter');
+        $groupFilter = (string) $request->string('groupFilter');
         $numeroChequeFilter = (string) $request->string('numeroChequeFilter');
         $banqueFilter = (string) $request->string('banqueFilter');
         $perPage = (int) $request->integer('perPage', GetEncaissementsList::DEFAULT_PER_PAGE);
@@ -112,6 +116,12 @@ final class EncaissementController extends Controller
         $view = (string) $request->string('view');
         if (! in_array($view, ['', 'avance', 'cheque'], true)) {
             $view = '';
+        }
+        // Avances tab only: 'restant' (default — avances with money still to
+        // allocate) | 'epuise' (fully used) | 'tous'.
+        $soldeFilter = (string) $request->string('soldeFilter');
+        if (! in_array($soldeFilter, ['restant', 'epuise', 'tous'], true)) {
+            $soldeFilter = 'restant';
         }
 
         $encaissementsList = $getEncaissementsList(
@@ -127,6 +137,8 @@ final class EncaissementController extends Controller
             $studentFilter,
             $numeroChequeFilter,
             $banqueFilter,
+            $soldeFilter,
+            $groupFilter,
         );
 
         return Inertia::render('Backoffice/Encaissements/Index', [
@@ -138,6 +150,7 @@ final class EncaissementController extends Controller
             // visit only, never again per keystroke.
             'caisses' => fn () => $getEncaissementsList->caisseOptions($request->user()),
             'students' => fn () => $getEncaissementsList->studentOptions($request->user()),
+            'groups' => fn () => $getEncaissementsList->groupOptions($request->user()),
             'methodes' => Encaissement::METHODES,
             'banques' => fn () => $getBanquesList->activeNames(),
             'filters' => [
@@ -152,6 +165,8 @@ final class EncaissementController extends Controller
                 'studentFilter' => $studentFilter,
                 'numeroChequeFilter' => $numeroChequeFilter,
                 'banqueFilter' => $banqueFilter,
+                'soldeFilter' => $soldeFilter,
+                'groupFilter' => $groupFilter,
             ],
             // UI convenience only — destroy() re-authorizes server-side and the
             // route itself is behind permission:payments.delete.
@@ -230,7 +245,11 @@ final class EncaissementController extends Controller
             ]);
         }
 
-        $this->assertCenterAccess($request, $inscription->etablissement_id);
+        // Centre reach + ACTIVE context (centre + année): the inscription
+        // being paid decides the payment's year on every list, so paying a
+        // registration of another year/centre from here would file the
+        // money where the current screen never shows it (AssertsContextScope).
+        $this->assertInscriptionInContext($request, $inscription);
 
         $touchedLines = collect($data['payment_lines'])->filter(fn ($l) => ($l['montant'] ?? '') !== '');
 
@@ -363,7 +382,7 @@ final class EncaissementController extends Controller
         // receiving the credit must be within the cashier's centres —
         // otherwise a tampered student_id books an avance for another
         // centre's student (it would then show on THAT centre's pages).
-        $this->assertCenterAccess($request, Student::query()->findOrFail((int) $data['student_id'])->etablissement_id);
+        $this->assertStudentInContext($request, Student::query()->findOrFail((int) $data['student_id']));
 
         // Same rule as store(): the method decides the account.
         $caisse = app(CaisseResolver::class)->resolveFor($agent, (string) $data['methode']);
@@ -399,7 +418,7 @@ final class EncaissementController extends Controller
 
         $data = $request->validated();
         $inscription = Inscription::findOrFail((int) $data['inscription_id']);
-        $this->assertCenterAccess($request, $inscription->etablissement_id);
+        $this->assertInscriptionInContext($request, $inscription);
 
         $action->handle($inscription, array_map('intval', $data['encaissement_ids']));
 
@@ -417,7 +436,14 @@ final class EncaissementController extends Controller
         $this->authorize('update', $encaissement);
 
         $data = $request->validated();
-        $fee = InscriptionFee::findOrFail($data['fee_id']);
+        $fee = InscriptionFee::with('inscription')->findOrFail($data['fee_id']);
+
+        // The fee's registration must be in the active context — an avance
+        // applied to last year's fee would book the allocation into a year
+        // the cashier is not working in.
+        if ($fee->inscription !== null) {
+            $this->assertInscriptionInContext($request, $fee->inscription, 'fee_id');
+        }
 
         $action->handle($encaissement, $fee, (float) $data['montant']);
 
