@@ -9,6 +9,8 @@ use App\Domain\Payments\Actions\ConvertirEncaissementsEnAvance;
 use App\Models\Encaissement;
 use App\Models\Frais;
 use App\Models\Group;
+use App\Models\ImportBatch;
+use App\Models\ImportRow;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
 use App\Models\Student;
@@ -121,9 +123,15 @@ final class AppliquerMatriceGroupe extends Command
             }
 
             $cellules = [];
+            $listes = [];
 
             foreach ($this->lireMatrice($fichier) as [$nomEtudiant, $nomFrais, $montant]) {
                 $student = $this->trouverEtudiant($groupe, $nomEtudiant);
+
+                if ($student !== null) {
+                    $listes[$student->id] = true;
+                }
+
                 $inscription = $student ? $this->inscriptionDans($groupe, $student) : null;
                 $fee = $inscription ? $this->fraisDe($inscription, $nomFrais, $dry) : null;
 
@@ -140,7 +148,7 @@ final class AppliquerMatriceGroupe extends Command
                 ];
             }
 
-            $matrices[$groupe->id] = ['groupe' => $groupe, 'cellules' => $cellules];
+            $matrices[$groupe->id] = ['groupe' => $groupe, 'cellules' => $cellules, 'listes' => $listes];
         }
 
         $this->info(sprintf('%d groupe(s) lu(s)%s.', count($matrices), $dry ? '   [DRY-RUN]' : ''));
@@ -149,7 +157,7 @@ final class AppliquerMatriceGroupe extends Command
         $liberes = 0;
         $montantLibere = 0.0;
 
-        foreach ($matrices as ['groupe' => $groupe, 'cellules' => $cellules]) {
+        foreach ($matrices as ['groupe' => $groupe, 'cellules' => $cellules, 'listes' => $listes]) {
             $aLiberer = Encaissement::query()
                 ->whereNotNull('inscription_fee_id')
                 ->whereHas('fee.inscription', fn ($i) => $i->where('group_id', $groupe->id))
@@ -160,7 +168,12 @@ final class AppliquerMatriceGroupe extends Command
                 // run) is newer than the matrix, so its absence from the
                 // file says nothing — releasing it would undo the cashier's
                 // work (28/08/2026).
+                // ⚠ And only for students the file LISTS. The old CRM drops a
+                // student who left the group from its matrix, so their
+                // absence says nothing about where their money is — 283
+                // Agadir/Online rows were freed with nowhere to go (28/08/2026).
                 ->filter(fn (Encaissement $e): bool => $this->estImporte($e)
+                    && isset($listes[$e->student_id])
                     && ! isset($cellules[$e->student_id.'|'.$e->inscription_fee_id]));
 
             if ($aLiberer->isEmpty()) {
@@ -292,6 +305,99 @@ final class AppliquerMatriceGroupe extends Command
             $montantPlace += array_sum(array_column($lignes, 2));
         }
 
+        // ---- Pass 3: REHOME what the matrix released but names nowhere.
+        // A payment freed from a matrix group belongs to the student's OTHER
+        // group — usually one « En formation » with no export yet (Agadir:
+        // 13 running groups, 5 files; 385 avances / 265 250 DH stranded on
+        // 28/08/2026). The import row still names the fee (« Frais de Mai »),
+        // so it is settled on that fee of the student's inscription in a
+        // group WITHOUT a matrix — never in one that has a file, or the
+        // RELEASE pass would take it back on the next run.
+        $rehomes = 0;
+        $montantRehome = 0.0;
+        $sansCible = 0;
+
+        $centreIds = collect($matrices)->map(fn (array $m): int => (int) $m['groupe']->etablissement_id)->unique();
+
+        $restantes = Encaissement::query()
+            ->whereNull('inscription_fee_id')
+            ->whereIn('etablissement_id', $centreIds)
+            ->orderBy('date_paiement')
+            ->get()
+            ->filter(fn (Encaissement $e): bool => $this->estImporte($e) && $e->montantRestant() > 0.0);
+
+        foreach ($restantes as $avance) {
+            $label = $this->fraisDOrigine($avance);
+
+            if ($label === null) {
+                continue; // a genuine avance in the old CRM too
+            }
+
+            $inscription = Inscription::query()
+                ->where('student_id', $avance->student_id)
+                ->with('group')
+                ->get()
+                // A matrix group is off-limits only when the file lists this
+                // student — then the matrix already decided their cells.
+                ->reject(fn (Inscription $i): bool => isset($matrices[$i->group_id]['listes'][$i->student_id]))
+                ->sortBy([
+                    fn (Inscription $a, Inscription $b): int => ($a->statut === Inscription::STATUT_ACTIVE ? 0 : 1) <=> ($b->statut === Inscription::STATUT_ACTIVE ? 0 : 1),
+                    fn (Inscription $a, Inscription $b): int => (($a->group?->statut ?? '') === Group::STATUT_EN_FORMATION ? 0 : 1) <=> (($b->group?->statut ?? '') === Group::STATUT_EN_FORMATION ? 0 : 1),
+                    fn (Inscription $a, Inscription $b): int => strcmp((string) $b->date_inscription, (string) $a->date_inscription),
+                ])
+                ->first();
+
+            if ($inscription === null) {
+                $sansCible++;
+
+                continue;
+            }
+
+            $fee = $this->fraisDe($inscription, $label, $dry);
+
+            if ($fee === null) {
+                $sansCible++;
+
+                continue;
+            }
+
+            $fee = $fee->exists ? $fee->fresh() : $fee;
+            $part = min($avance->montantRestant(), round((float) $fee->montant - $fee->montantPaye(), 2));
+
+            if ($part <= 0.0) {
+                $sansCible++;
+
+                continue;
+            }
+
+            if ($rehomes === 0) {
+                $this->line('');
+                $this->line('  Replacés hors matrice (frais nommé par l’import, inscription dans un groupe sans fichier) :');
+            }
+
+            $this->line(sprintf('      %-11s %9s  %-26s -> %s', $avance->reference, number_format($part, 2, '.', ''), mb_substr($fee->nom, 0, 26), mb_substr((string) ($inscription->group?->nom ?? '?'), 0, 28)));
+
+            if (! $dry) {
+                DB::transaction(function () use ($appliquer, $avance, $fee, $part): void {
+                    $avance = $avance->fresh();
+                    $cible = $fee->fresh();
+
+                    if ($avance === null || $cible === null || ! $avance->isAvance()) {
+                        return;
+                    }
+
+                    $part = min($part, $avance->montantRestant(), round((float) $cible->montant - $cible->montantPaye(), 2));
+
+                    if ($part > 0.0) {
+                        $appliquer->handle($avance, $cible, $part);
+                    }
+                });
+            }
+
+            $rehomes++;
+            $montantRehome += $part;
+        }
+
         $this->line('');
         $this->info(sprintf(
             '%sLibérés : %d (%s MAD)   Placés : %d (%s MAD)   Déjà corrects : %d',
@@ -300,6 +406,10 @@ final class AppliquerMatriceGroupe extends Command
             $places, number_format($montantPlace, 2, '.', ''),
             $dejaOk
         ));
+
+        if ($rehomes > 0 || $sansCible > 0) {
+            $this->info(sprintf('%sReplacés hors matrice : %d (%s MAD)   Sans cible : %d', $dry ? '[DRY-RUN] ' : '', $rehomes, number_format($montantRehome, 2, '.', ''), $sansCible));
+        }
 
         if ($this->montantsReleves > 0) {
             $this->line(sprintf('%d frais dont le montant dû a été relevé au montant payé dans la matrice.', $this->montantsReleves));
@@ -380,6 +490,35 @@ final class AppliquerMatriceGroupe extends Command
      * legacy_ref, or it is an application row whose ROOT avance does. A
      * payment cashed in the CRM itself has neither and is never touched.
      */
+    /**
+     * The fee the old CRM named for this money, read from the import row of
+     * its ROOT payment (an application row inherits its parent's label).
+     * Null = the source carried no fee: a real avance, left alone.
+     */
+    private function fraisDOrigine(Encaissement $e): ?string
+    {
+        for ($i = 0; $i < 10 && $e !== null && $e->legacy_ref === null; $i++) {
+            $e = $e->applied_from_encaissement_id === null ? null : Encaissement::find($e->applied_from_encaissement_id);
+        }
+
+        if ($e === null || $e->legacy_ref === null) {
+            return null;
+        }
+
+        $raw = ImportRow::query()
+            ->whereHas('batch', fn ($q) => $q
+                ->where('module', ImportBatch::MODULE_ENCAISSEMENTS)
+                ->where('etablissement_id', $e->etablissement_id))
+            ->where('legacy_ref', $e->legacy_ref)
+            ->value('raw');
+
+        $label = trim((string) ($raw['frais_label'] ?? ''));
+
+        // A comma-separated label is a payment split across several fees —
+        // the importer already allocated it; nothing to guess here.
+        return $label === '' || $label === '-' || str_contains($label, ',') ? null : $label;
+    }
+
     private function estImporte(Encaissement $e): bool
     {
         for ($i = 0; $i < 10 && $e !== null; $i++) {
