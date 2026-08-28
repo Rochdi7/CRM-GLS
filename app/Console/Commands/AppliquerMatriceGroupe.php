@@ -172,9 +172,26 @@ final class AppliquerMatriceGroupe extends Command
                 // student who left the group from its matrix, so their
                 // absence says nothing about where their money is — 283
                 // Agadir/Online rows were freed with nowhere to go (28/08/2026).
-                ->filter(fn (Encaissement $e): bool => $this->estImporte($e)
-                    && isset($listes[$e->student_id])
-                    && ! isset($cellules[$e->student_id.'|'.$e->inscription_fee_id]));
+                ->filter(function (Encaissement $e) use ($listes, $cellules): bool {
+                    if (! $this->estImporte($e) || ! isset($listes[$e->student_id])) {
+                        return false;
+                    }
+
+                    $cle = $e->student_id.'|'.$e->inscription_fee_id;
+
+                    if (! isset($cellules[$cle])) {
+                        return true;
+                    }
+
+                    // Cell exists but holds MORE than the matrix shows
+                    // (1 200 on a month wimschool shows at 600): free the
+                    // whole cell, PLACE refills exactly the expected amount
+                    // and the surplus goes where the matrix wants it.
+                    // Kénitra AHMED 16h: Août +5 100 / Mai -3 300 (29/08/2026).
+                    $fee = $cellules[$cle]['fee'];
+
+                    return $fee->exists && $fee->montantPaye() > $cellules[$cle]['montant'] + 0.005;
+                });
 
             if ($aLiberer->isEmpty()) {
                 continue;
