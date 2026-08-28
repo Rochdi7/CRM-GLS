@@ -96,8 +96,6 @@ final class ReaffecterAvancesGroupesActifs extends Command
 
             $avances = Encaissement::query()
                 ->whereNull('inscription_fee_id')
-                // Skip application rows: their money is USED on the parent.
-                ->whereNull('applied_from_encaissement_id')
                 ->whereIn('student_id', $inscriptions->keys())
                 ->orderBy('date_paiement')
                 ->get();

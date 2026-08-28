@@ -449,8 +449,15 @@ final class InscriptionImportTest extends TestCase
         $this->assertSame($frais->id, $fee->frais_id);
         $this->assertSame('300.00', (string) $fee->montant);
         $this->assertSame('300.00', (string) $inscription->montant_total);
-        // date_debut/date_fin come from the group's own training period, never the xlsx.
-        $this->assertSame($group->date_debut_formation?->toDateString(), $inscription->date_debut?->toDateString());
+        // date_debut/date_fin come from the ROW's own « Date de début » /
+        // « Date de fin » — they are per student, not per group: inside one
+        // cohort a student joining in February has a different début from one
+        // who joined in December. The group's formation dates are only a
+        // fallback for an export lacking those columns, which is why this
+        // group (created by the factory with no formation dates) does not
+        // blank them out (28/08/2026).
+        $this->assertSame('2026-07-20', $inscription->date_debut?->toDateString());
+        $this->assertSame('2026-08-14', $inscription->date_fin?->toDateString());
     }
 
     public function test_a_group_created_by_the_import_inherits_the_catalog_amounts(): void

@@ -7,6 +7,7 @@ namespace App\Console\Commands;
 use App\Domain\Payments\Actions\AppliquerAvance;
 use App\Domain\Payments\Actions\ConvertirEncaissementsEnAvance;
 use App\Models\Encaissement;
+use App\Models\Frais;
 use App\Models\Group;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
@@ -52,6 +53,27 @@ use OpenSpout\Reader\XLSX\Reader;
  */
 final class AppliquerMatriceGroupe extends Command
 {
+    /** Legacy label (normalized) => catalogue fee (normalized). */
+    private const array ALIAS_FRAIS = [
+        'fraisdinscription' => 'fraisdinscriptiona1a2b1',
+        'fraisdinscription1' => 'fraisdinscriptiona1a2b1',
+        'fraisdinscriptiona1' => 'fraisdinscriptiona1a2b1',
+        'fraisdinscriptiona2' => 'fraisdinscriptiona1a2b1',
+        'fraisdinscriptionb1' => 'fraisdinscriptiona1a2b1',
+        'fraisdinscription2' => 'fraisdinscriptionb2',
+        'osda1' => 'fraisdexamosda1',
+        'osdb1' => 'fraisdexamosdb1',
+        'osdb2' => 'fraisdexamosdb2',
+        'examenosd' => 'fraisdexamosdb1',
+    ];
+
+    private int $lignesRetablies = 0;
+
+    private int $montantsReleves = 0;
+
+    /** @var array<string, list<string>> motif => cells */
+    private array $ignorees = [];
+
     protected $signature = 'matrice:appliquer
         {--dossier= : Dossier des XLSX, un par groupe, nommés comme le groupe}
         {--centre= : Centre (id ou partie du nom)}
@@ -103,10 +125,12 @@ final class AppliquerMatriceGroupe extends Command
             foreach ($this->lireMatrice($fichier) as [$nomEtudiant, $nomFrais, $montant]) {
                 $student = $this->trouverEtudiant($groupe, $nomEtudiant);
                 $inscription = $student ? $this->inscriptionDans($groupe, $student) : null;
-                $fee = $inscription ? $this->fraisDe($inscription, $nomFrais) : null;
+                $fee = $inscription ? $this->fraisDe($inscription, $nomFrais, $dry) : null;
 
                 if ($student === null || $inscription === null || $fee === null) {
                     $introuvables++;
+                    $motif = $student === null ? 'étudiant absent du centre' : ($inscription === null ? 'pas inscrit dans ce groupe' : 'frais hors catalogue « '.$nomFrais.' »');
+                    $this->ignorees[$motif][] = $groupe->nom.' / '.$nomEtudiant;
 
                     continue;
                 }
@@ -163,8 +187,24 @@ final class AppliquerMatriceGroupe extends Command
                 // it. Money already sitting on this very cell is correct by
                 // definition (the RELEASE pass only frees rows the matrix does
                 // not want), so it counts in both modes.
-                $fee = $fee->fresh();
-                $manque = round($attendu - $fee->montantPaye(), 2);
+                $fee = $fee->exists ? $fee->fresh() : $fee;
+
+                // The matrix shows what was PAID on this fee; a fee line
+                // billed below that (a 78 DH inscription fee carrying 300 DH
+                // in the old CRM) would make AppliquerAvance refuse the
+                // surplus for ever — the plan re-listed the same 222 DH on
+                // every pass (28/08/2026). Raise the amount due to what was
+                // actually paid; montant_initial keeps the original.
+                if ($attendu > (float) $fee->montant + 0.005) {
+                    if (! $dry && $fee->exists) {
+                        $fee->update(['montant' => $attendu]);
+                    }
+
+                    $fee->montant = $attendu;
+                    $this->montantsReleves++;
+                }
+
+                $manque = round(min($attendu, (float) $fee->montant) - $fee->montantPaye(), 2);
 
                 if ($manque <= 0.0) {
                     $dejaOk++;
@@ -172,14 +212,19 @@ final class AppliquerMatriceGroupe extends Command
                     continue;
                 }
 
-                $avances = $this->avancesDe($student, $fee->nom, $dry ? $groupe : null);
+                // ⚠ Same pool in BOTH modes. The real run once drew from
+                // avances only, so a payment still filed on the student's
+                // previous-year inscription (Rachid 16H30 → HALA 16H30,
+                // WASIM TARMAM, 28/08/2026) was never brought over: the matrix
+                // showed it, the dry-run planned it, the apply skipped it.
+                $avances = $this->avancesDe($student, $fee->nom, $groupe);
 
                 foreach ($avances as $avance) {
                     if ($manque <= 0.0) {
                         break;
                     }
 
-                    $part = min($manque, (float) ($dry ? $avance->montant : $avance->montantRestant()));
+                    $part = min($manque, (float) ($avance->isAvance() ? $avance->montantRestant() : $avance->montant));
 
                     if ($part <= 0.0) {
                         continue;
@@ -202,12 +247,30 @@ final class AppliquerMatriceGroupe extends Command
 
             if (! $dry) {
                 foreach ($lignes as [$avance, $fee, $part]) {
-                    DB::transaction(function () use ($appliquer, $avance, $fee, $part): void {
+                    DB::transaction(function () use ($convertir, $appliquer, $avance, $fee, $part): void {
                         $avance = $avance->fresh();
                         $cible = $fee->fresh();
 
-                        if ($avance === null || $cible === null || ! $avance->isAvance()) {
+                        if ($avance === null || $cible === null) {
                             return;
+                        }
+
+                        // Still filed on another group's inscription: detach it
+                        // first (row kept, old fee recomputed), then it is an
+                        // avance like any other.
+                        if (! $avance->isAvance()) {
+                            $source = $avance->fee?->inscription;
+
+                            if ($source === null) {
+                                return;
+                            }
+
+                            $convertir->handle($source, [$avance->id]);
+                            $avance = $avance->fresh();
+
+                            if ($avance === null || ! $avance->isAvance()) {
+                                return;
+                            }
                         }
 
                         $part = min($part, $avance->montantRestant(), round((float) $cible->montant - $cible->montantPaye(), 2));
@@ -231,6 +294,21 @@ final class AppliquerMatriceGroupe extends Command
             $places, number_format($montantPlace, 2, '.', ''),
             $dejaOk
         ));
+
+        if ($this->montantsReleves > 0) {
+            $this->line(sprintf('%d frais dont le montant dû a été relevé au montant payé dans la matrice.', $this->montantsReleves));
+        }
+
+        if ($this->lignesRetablies > 0) {
+            $this->line(sprintf('%d ligne(s) de frais rétablie(s) (démasquée(s) ou créée(s) depuis le catalogue) pour recevoir une cellule de la matrice.', $this->lignesRetablies));
+        }
+
+        foreach ($this->ignorees as $motif => $cells) {
+            $this->warn(sprintf('  %3d × %s', count($cells), $motif));
+            foreach (array_slice(array_unique($cells), 0, 8) as $c) {
+                $this->line('        '.$c);
+            }
+        }
 
         if ($introuvables > 0) {
             $this->warn(sprintf('  %d cellule(s) ignorée(s) : étudiant, inscription ou frais introuvable.', $introuvables));
@@ -259,15 +337,14 @@ final class AppliquerMatriceGroupe extends Command
      */
     private function avancesDe(Student $student, string $nomFrais, ?Group $groupeCourant): Collection
     {
-        // ⚠ Never an application row (applied_from_encaissement_id set): its
-        // money is already counted as USED on its parent avance. Detaching
-        // one leaves it re-allocatable by design, so treating it as a fresh
-        // avance would place the same dirhams twice — 137 rows / 135 522 DH
-        // of double-available money on 28/08/2026.
+        // A detached application row IS an avance of its own: its parent
+        // keeps counting it as used (Encaissement::montantUtilise sums
+        // every child, attached or not), so the money lives exactly once
+        // — here. Excluding it stranded 200 rows / 197 100 DH on
+        // 28/08/2026 (on no fee, on no parent balance, in no list).
         $avances = Encaissement::query()
             ->where('student_id', $student->id)
             ->whereNull('inscription_fee_id')
-            ->whereNull('applied_from_encaissement_id')
             ->orderBy('date_paiement')
             ->get()
             ->filter(fn (Encaissement $e): bool => $e->montantRestant() > 0.0);
@@ -288,26 +365,68 @@ final class AppliquerMatriceGroupe extends Command
         return $avances->concat($encoreRattaches);
     }
 
+    /**
+     * The filename is the only link to the group, so the match must survive
+     * what a Windows export puts in a name: a non-breaking space, a trailing
+     * blank, an apostrophe variant, an accent typed differently. A strict
+     * `where('nom', $nom)` silently ignored 12 Kénitra/Salé files whose group
+     * existed under the very same visible name (28/08/2026) — compare on the
+     * letters-and-digits key instead, exactly like the student lookup does.
+     */
     private function trouverGroupe(string $nom): ?Group
     {
-        return Group::query()
-            ->where('nom', $nom)
+        $candidats = Group::query()
             ->when($this->option('centre'), function ($q, $centre): void {
                 $q->whereHas('etablissement', fn ($e) => is_numeric($centre)
                     ? $e->whereKey((int) $centre)
                     : $e->where('nom_centre', 'ilike', '%'.$centre.'%'));
             })
-            ->first();
+            ->get();
+
+        return $candidats->first(fn (Group $g): bool => $g->nom === $nom)
+            ?? $candidats->first(fn (Group $g): bool => $this->cleNom($g->nom) === $this->cleNom($nom));
     }
 
+    /** Letters and digits only, accents folded — for filename ↔ group matching. */
+    private function cleNom(string $valeur): string
+    {
+        $valeur = strtr(mb_strtolower(trim($valeur)), [
+            'é' => 'e', 'è' => 'e', 'ê' => 'e', 'ë' => 'e', 'à' => 'a', 'â' => 'a',
+            'ô' => 'o', 'ö' => 'o', 'û' => 'u', 'ù' => 'u', 'ç' => 'c', 'ï' => 'i', 'î' => 'i',
+        ]);
+
+        return (string) preg_replace('/[^a-z0-9]/', '', $valeur);
+    }
+
+    /**
+     * ⚠ Homonyms are real: « HANANE SEBBAR » exists twice at Agadir. A bare
+     * ->first() picked whichever row came back and, when that was the twin
+     * NOT enrolled here, the whole student's column was dropped as
+     * « introuvable » — 4 900 DH left in avance on Badr 10H (28/08/2026).
+     * The matrix names a student INSIDE a group, so the one registered in
+     * that group is always the right one; the plain lookup is only the
+     * fallback when nobody of that name is enrolled.
+     */
     private function trouverEtudiant(Group $groupe, string $nom): ?Student
     {
         $cle = $this->cle($nom);
 
-        return Student::query()
+        $homonymes = Student::query()
             ->where('etablissement_id', $groupe->etablissement_id)
             ->whereRaw("lower(trim(prenom||' '||nom)) = ? or lower(trim(nom||' '||prenom)) = ?", [$cle, $cle])
-            ->first();
+            ->get();
+
+        if ($homonymes->count() <= 1) {
+            return $homonymes->first();
+        }
+
+        $inscrits = Inscription::query()
+            ->where('group_id', $groupe->id)
+            ->whereIn('student_id', $homonymes->pluck('id'))
+            ->pluck('student_id');
+
+        return $homonymes->first(fn (Student $s): bool => $inscrits->contains($s->id))
+            ?? $homonymes->first();
     }
 
     private function inscriptionDans(Group $groupe, Student $student): ?Inscription
@@ -319,13 +438,67 @@ final class AppliquerMatriceGroupe extends Command
             ->first();
     }
 
-    private function fraisDe(Inscription $inscription, string $nomFrais): ?InscriptionFee
+    /**
+     * The fee line a matrix cell lands on. The matrix is the authority: when
+     * it shows money under « Frais de Juillet » and the inscription has no
+     * such line (hidden by groupes:nettoyer-frais, or never generated because
+     * the group's window missed that month), the line is brought back — a
+     * hidden one is un-hidden, a missing one is created from the catalogue
+     * at the group's own amount. Dropping the cell as « introuvable » left the
+     * payment in avance while the old CRM displayed it paid (28/08/2026).
+     * Never in dry-run: an unsaved model stands in so the plan still prints.
+     */
+    private function fraisDe(Inscription $inscription, string $nomFrais, bool $dry): ?InscriptionFee
     {
-        return InscriptionFee::query()
+        $lignes = InscriptionFee::query()
             ->where('inscription_id', $inscription->id)
-            ->whereNull('masque_le')
             ->get()
-            ->first(fn (InscriptionFee $f): bool => $this->cleFrais($f->nom) === $this->cleFrais($nomFrais));
+            ->filter(fn (InscriptionFee $f): bool => $this->cleFrais($f->nom) === $this->cleFrais($nomFrais));
+
+        $visible = $lignes->first(fn (InscriptionFee $f): bool => $f->masque_le === null);
+
+        if ($visible !== null) {
+            return $visible;
+        }
+
+        $masquee = $lignes->first();
+
+        if ($masquee !== null) {
+            if (! $dry) {
+                $masquee->update(['masque_le' => null]);
+            }
+
+            $this->lignesRetablies++;
+
+            return $masquee;
+        }
+
+        $frais = Frais::all()->first(fn (Frais $f): bool => $this->cleFrais($f->nom) === $this->cleFrais($nomFrais));
+
+        if ($frais === null) {
+            return null;
+        }
+
+        $montant = (float) (DB::table('group_frais')
+            ->where('group_id', $inscription->group_id)
+            ->where('frais_id', $frais->id)
+            ->value('montant') ?? $frais->montant_defaut);
+
+        $this->lignesRetablies++;
+
+        if ($dry) {
+            return new InscriptionFee(['id' => -$frais->id, 'inscription_id' => $inscription->id, 'nom' => $frais->nom, 'montant' => $montant]);
+        }
+
+        return InscriptionFee::create([
+            'inscription_id' => $inscription->id,
+            'frais_id' => $frais->id,
+            'nom' => $frais->nom,
+            'montant_initial' => $montant,
+            'montant' => $montant,
+            'date_echeance' => $inscription->date_inscription,
+            'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
     }
 
     /**
@@ -398,6 +571,12 @@ final class AppliquerMatriceGroupe extends Command
             'ù' => 'u', 'ç' => 'c', 'â' => 'a', 'î' => 'i', 'ï' => 'i',
         ]);
 
-        return (string) preg_replace('/[^a-z0-9]/', '', $valeur);
+        $cle = (string) preg_replace('/[^a-z0-9]/', '', $valeur);
+
+        // The old CRM writes the two real inscription fees under four labels
+        // (same map as EncaissementImporter::FRAIS_ALIASES and
+        // CorrigerFraisPaiements::ALIAS) — 332 cells across Kénitra/Salé/
+        // Online were dropped as « frais hors catalogue » (28/08/2026).
+        return self::ALIAS_FRAIS[$cle] ?? $cle;
     }
 }

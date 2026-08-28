@@ -320,8 +320,18 @@ final class InscriptionImporter implements Importer
                         'annee_scolaire_id' => $group->annee_scolaire_id,
                         'statut' => $data['statut'],
                         'date_inscription' => $data['date_inscription'],
-                        'date_debut' => $group->date_debut_formation?->toDateString(),
-                        'date_fin' => $group->date_fin_formation?->toDateString(),
+                        // The ROW's own dates when the export carries them —
+                        // « Date de début » / « Date de fin » are per student,
+                        // not per group, and differ inside one cohort. The
+                        // group's formation dates are only a fallback for an
+                        // export that has no such columns. Copying the group's
+                        // dates unconditionally left every imported
+                        // inscription blank, because the legacy inscriptions
+                        // export carries no group dates at all — the group
+                        // itself is only dated later, by
+                        // `groupes:mettre-a-jour` (28/08/2026).
+                        'date_debut' => $data['date_debut'] ?? $group->date_debut_formation?->toDateString(),
+                        'date_fin' => $data['date_fin'] ?? $group->date_fin_formation?->toDateString(),
                         'montant_total' => $total > 0 ? $total : null,
                         'created_by' => $importingAdmin->id,
                     ]);
@@ -518,6 +528,15 @@ final class InscriptionImporter implements Importer
             $parseErrors[] = ['field' => 'date_inscription', 'code' => 'unparseable', 'message' => $e->getMessage()];
         }
 
+        // The export's own per-STUDENT start/end dates. They are not the
+        // group's dates: inside one cohort a student joining in February has
+        // a different début from one who joined in December. Optional —
+        // an older export may lack the columns entirely — and an
+        // unparseable value is dropped rather than guessed, since a wrong
+        // date is worse than a missing one (the row still imports).
+        $dateDebut = $this->optionalDate($rawRow['Date de début'] ?? null);
+        $dateFin = $this->optionalDate($rawRow['Date de fin'] ?? null);
+
         $studentResolution = $this->resolveStudent($etudiant, CellNormalizer::normalizePhone($rawRow['Téléphone'] ?? null));
         $groupResolution = $this->resolveGroup($context, $groupe);
 
@@ -528,6 +547,8 @@ final class InscriptionImporter implements Importer
             'statut' => $statut,
             'statut_label' => $statutLabel,
             'date_inscription' => $dateInscription,
+            'date_debut' => $dateDebut,
+            'date_fin' => $dateFin,
             'student_id' => $studentResolution['student_id'],
             'group_id' => $groupResolution['group_id'],
         ];
@@ -775,6 +796,22 @@ final class InscriptionImporter implements Importer
     private function compositeKey(int $studentId, int $groupId, string $dateInscription): string
     {
         return "{$studentId}|{$groupId}|{$dateInscription}";
+    }
+
+    /**
+     * A date column that may be absent or unreadable. Unlike
+     * « Date d'inscription » — which the row cannot be imported without —
+     * these are descriptive: a missing or malformed value leaves the column
+     * NULL and the inscription imports normally, rather than failing the row
+     * or inventing a date.
+     */
+    private function optionalDate(mixed $raw): ?string
+    {
+        try {
+            return CellNormalizer::parseDate($raw)?->toDateString();
+        } catch (ImportCellParseException) {
+            return null;
+        }
     }
 
     /**

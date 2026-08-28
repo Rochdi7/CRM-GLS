@@ -102,11 +102,7 @@ final class CorrigerFraisPaiements extends Command
             }
 
             $dejaBon = $paiement->fee !== null && $this->cle($paiement->fee->nom) === $cible;
-            // An application row is never a fresh avance — its money is
-            // already used on its parent. See AppliquerMatriceGroupe.
-            $estAvance = $paiement->fee === null
-                && $paiement->applied_from_encaissement_id === null
-                && $paiement->montantRestant() > 0;
+            $estAvance = $paiement->fee === null && $paiement->montantRestant() > 0;
 
             if ($dejaBon || (! $estAvance && $paiement->fee === null)) {
                 continue;

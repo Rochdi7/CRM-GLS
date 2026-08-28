@@ -61,6 +61,11 @@ final class GetDashboardStats
         // column in a SQL function) keeps the date index usable.
         $paymentsMonth = Encaissement::query()
             ->whereBetween('date_paiement', [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()])
+            // Money received = parent rows only. An application row
+            // (applied_from_encaissement_id) re-books part of an avance on a
+            // fee and copies its date, so summing both counted the same
+            // dirhams twice (28/08/2026).
+            ->whereNull('applied_from_encaissement_id')
             ->when($centreId, fn ($q) => $q->whereHas('student', fn ($s) => $s->where('etablissement_id', $centreId)))
             // Year of a payment = its fee's inscription's year; an avance
             // (no fee) follows its payment date — the exact rule the

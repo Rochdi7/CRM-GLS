@@ -137,6 +137,9 @@ final class GetEncaissementsList
             // AND rows later detached from their fee by
             // ConvertirEncaissementsEnAvance / ChangerGroupeInscription.
             ->when($view === 'cheque', fn ($q) => $q->where('methode', Encaissement::METHODE_CHEQUE))
+            // A detached application row (applied_from set, fee NULL) IS
+            // listed: its parent counts it as used, so it is the only place
+            // that money is still available (28/08/2026).
             ->when($view === 'avance', fn ($q) => $q->whereNull('inscription_fee_id'))
             // Avances tab « Solde » filter: 'restant' = money still left
             // (montant − applied − refunded > 0; the default: what a cashier
