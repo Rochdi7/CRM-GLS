@@ -79,8 +79,15 @@ final class AnneeScolaireController extends Controller
     {
         $annees_scolaire->loadCount(['groups', 'inscriptions']);
 
-        if ($annees_scolaire->groups_count || $annees_scolaire->inscriptions_count) {
+        if ($annees_scolaire->groups_count || $annees_scolaire->inscriptions_count
+            || DB::table('seances')->where('annee_scolaire_id', $annees_scolaire->id)->exists()
+            || DB::table('import_batches')->where('annee_scolaire_id', $annees_scolaire->id)->exists()) {
             return back()->withErrors(['delete' => __('This academic year is still in use and cannot be deleted.')]);
+        }
+
+        // The default year is what every new session opens on (CRUD-F11).
+        if ($annees_scolaire->par_defaut) {
+            return back()->withErrors(['delete' => __('The default academic year cannot be deleted. Choose another default first.')]);
         }
 
         $annees_scolaire->delete();

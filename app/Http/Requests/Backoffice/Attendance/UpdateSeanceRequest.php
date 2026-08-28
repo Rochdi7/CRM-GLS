@@ -30,7 +30,8 @@ final class UpdateSeanceRequest extends FormRequest
             'heure_debut' => ['nullable', 'date_format:H:i'],
             'heure_fin' => ['nullable', 'date_format:H:i', 'after:heure_debut'],
             'enseignant_id' => ['nullable', 'exists:employees,id'],
-            'statut' => ['required', Rule::in(Seance::STATUTS)],
+            // Cancelling needs a reason → SeanceController@annuler (CRUD-F15).
+            'statut' => ['required', Rule::in([Seance::STATUT_PREVUE, Seance::STATUT_EFFECTUEE])],
             'note' => ['nullable', 'string', 'max:1000'],
         ];
     }

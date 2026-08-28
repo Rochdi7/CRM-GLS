@@ -149,13 +149,17 @@ final class SeancesInertiaCrudTest extends TestCase
             'date_seance' => '2026-03-09',
             'heure_debut' => '10:00',
             'heure_fin' => '12:00',
-            'statut' => Seance::STATUT_ANNULEE,
+            // Annulée is NOT reachable here (needs a reason → annuler()),
+            // audit CRUD-F15; Effectuée/Prévue remain editable.
+            'statut' => Seance::STATUT_EFFECTUEE,
             'note' => 'Jour férié',
         ])->assertRedirect();
 
         $seance->refresh();
         $this->assertSame('2026-03-09', $seance->date_seance->toDateString());
-        $this->assertSame(Seance::STATUT_ANNULEE, $seance->statut);
+        $this->assertSame(Seance::STATUT_EFFECTUEE, $seance->statut);
+        // Back to Prévue so the delete below is still allowed.
+        $seance->update(['statut' => Seance::STATUT_PREVUE]);
 
         $this->delete(route('backoffice.seances.destroy', $seance))
             ->assertRedirect(route('backoffice.seances.index'));

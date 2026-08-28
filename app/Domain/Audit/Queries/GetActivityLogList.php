@@ -46,8 +46,11 @@ final class GetActivityLogList
         string $caisseId = '',
         bool $includeDeveloper = false,
         int $perPage = self::DEFAULT_PER_PAGE,
+        ?array $causerIds = null,
     ): array {
         $query = Activity::query()
+            // Centre reach of the reader (AuditLogController::causerScope).
+            ->when($causerIds !== null, fn (Builder $q) => $q->where(fn (Builder $w) => $w->whereNull('causer_id')->orWhereIn('causer_id', $causerIds)))
             // The maintainer's own activity is recorded like everyone else's,
             // but hidden here by default so routine maintenance does not bury
             // the entries that describe real school activity.

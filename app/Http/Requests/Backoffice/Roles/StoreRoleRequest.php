@@ -45,7 +45,10 @@ final class StoreRoleRequest extends FormRequest
                 Rule::unique('roles', 'name'),
             ],
             'permissions' => ['array'],
-            'permissions.*' => ['string', Rule::in(PermissionRegistry::grantable())],
+            // superAdminOnly() (deletes, approvals, system settings…) can never
+            // sit on a role — matrix() strips them from presets, the form must
+            // refuse them too (audit SEC-08).
+            'permissions.*' => ['string', Rule::in(array_values(array_diff(PermissionRegistry::grantable(), PermissionRegistry::superAdminOnly())))],
         ];
     }
 }

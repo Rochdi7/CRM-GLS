@@ -218,7 +218,7 @@ function emptyForm(fraisCatalog: GroupFraisCatalogOption[]): GroupFormState {
 async function postGroupFrais(
     url: string,
     method: 'DELETE' | 'POST',
-): Promise<{ ligne?: { montant: string; date_echeance: string; classification: string } }> {
+): Promise<{ message?: string; ligne?: { montant: string; date_echeance: string; classification: string } }> {
     const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
     const response = await fetch(url, {
         method,
@@ -271,6 +271,11 @@ export default function GroupsIndex({
     const [fraisRetiresIds, setFraisRetiresIds] = useState<number[]>([]);
     // Per-row spinner: the id of the fee whose remove/restore is in flight.
     const [fraisProcessingId, setFraisProcessingId] = useState<number | null>(null);
+    // Edit mode: removing a fee cascades to every registration (hidden lines,
+    // money released as avances) — confirmed first, then reported (F-002).
+    const [fraisRemoveTarget, setFraisRemoveTarget] = useState<SelectOption | null>(null);
+    const [fraisNotice, setFraisNotice] = useState<string | null>(null);
+    const [fraisError, setFraisError] = useState<string | null>(null);
 
     const fraisCatalogOptions: SelectOption[] = fraisCatalog.map((f) => ({ value: f.id, label: f.nom }));
     /**
@@ -551,9 +556,23 @@ export default function GroupsIndex({
             return;
         }
 
+        setFraisRemoveTarget(frais);
+    }
+
+    function executeRemoveFrais(frais: SelectOption) {
+        const fraisId = frais.value as number;
+
+        if (editingGroup === null) {
+            return;
+        }
+
+        setFraisRemoveTarget(null);
+        setFraisNotice(null);
+        setFraisError(null);
         setFraisProcessingId(fraisId);
         postGroupFrais(`/backoffice/groups/${editingGroup.id}/frais/${fraisId}`, 'DELETE')
-            .then(() => {
+            .then((result) => {
+                setFraisNotice(result.message ?? null);
                 setFraisActifs((previous) => {
                     const next = (previous ?? []).filter((id) => id !== fraisId);
 
@@ -569,6 +588,7 @@ export default function GroupsIndex({
                     previous.includes(fraisId) ? previous : [...previous, fraisId],
                 );
             })
+            .catch(() => setFraisError('Le retrait du frais a échoué. Rechargez la page et réessayez.'))
             .finally(() => setFraisProcessingId(null));
     }
 
@@ -1087,6 +1107,8 @@ export default function GroupsIndex({
                                         })}
                                     </tbody>
                                 </table>
+                                {fraisNotice && <div className="alert alert-success py-2 small mb-2">{fraisNotice}</div>}
+                                {fraisError && <div className="alert alert-danger py-2 small mb-2">{fraisError}</div>}
                                 <GroupFraisPagination
                                     total={fraisRowOptions.length}
                                     perPage={GROUP_FRAIS_PER_PAGE}
@@ -1210,6 +1232,16 @@ export default function GroupsIndex({
                 />
             </Modal>
 
+            <ConfirmDialog
+                show={fraisRemoveTarget !== null}
+                title="Retirer ce frais du groupe"
+                recordLabel={fraisRemoveTarget?.label ?? ''}
+                message="Le frais sera masqué sur toutes les inscriptions actives du groupe et l'argent déjà encaissé dessus sera converti en avances réutilisables. Continuer ?"
+                processing={fraisProcessingId !== null}
+                onConfirm={() => fraisRemoveTarget && executeRemoveFrais(fraisRemoveTarget)}
+                onCancel={() => setFraisRemoveTarget(null)}
+                confirmLabel="Retirer"
+            />
             <ConfirmDialog
                 show={lifecycleTarget !== null}
                 title={LIFECYCLE_CONFIRM_COPY[lifecycleTarget?.action ?? 'archive'].title}

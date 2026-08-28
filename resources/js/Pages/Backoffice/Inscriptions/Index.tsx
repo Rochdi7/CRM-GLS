@@ -930,7 +930,10 @@ export default function InscriptionsIndex({
      * stock for ones already given.
      */
     function saveEditingLivres(onDone?: () => void) {
-        if (!editingInscription) {
+        // The books endpoint needs registrations.manage-fees; a plain
+        // registrations.update user would get a 403 and never reach the
+        // base-fields PUT (audit F-02).
+        if (!editingInscription || !canManageFees) {
             onDone?.();
 
             return;
@@ -1620,6 +1623,9 @@ export default function InscriptionsIndex({
                             {!editingInscription && (
                                 <div className="border-top pt-3">
                                     <h6 className="mb-1">Frais disponibles</h6>
+                                    {form.errors.fee_lines && (
+                                        <div className="text-danger small mb-2">{form.errors.fee_lines}</div>
+                                    )}
                                     {form.data.group_id === '' ? (
                                         <p className="text-muted fs-13">Sélectionnez un groupe pour voir ses frais disponibles.</p>
                                     ) : loadingGroupFees ? (

@@ -8,6 +8,9 @@ use App\Domain\Audit\Queries\GetActivityLogList;
 use App\Http\Controllers\Controller;
 use App\Support\Audit\AuditLogRegistry;
 use Illuminate\Http\Request;
+use App\Services\Authorization\CenterAccessService;
+use App\Models\User;
+use App\Models\Employee;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -44,9 +47,13 @@ final class AuditLogController extends Controller
         $includeDeveloper = $request->boolean('includeDeveloper');
         $perPage = (int) $request->integer('perPage', GetActivityLogList::DEFAULT_PER_PAGE);
 
+        // « Centres affectés » governs the journal too (audit SEC-10): a
+        // centre-bound reader only sees what the staff of ITS centres did.
+        $causerIds = $this->causerScope($user);
+
         $list = $getActivityLogList(
             $search, $logName, $event, $causerId, $subjectType,
-            $dateFrom, $dateTo, $ip, $financeOnly, $caisseId, $includeDeveloper, $perPage,
+            $dateFrom, $dateTo, $ip, $financeOnly, $caisseId, $includeDeveloper, $perPage, $causerIds,
         );
 
         return Inertia::render('Backoffice/AuditLogs/Index', [
@@ -95,5 +102,38 @@ final class AuditLogController extends Controller
         return Inertia::render('Backoffice/AuditLogs/Show', [
             'entry' => $entry,
         ]);
+    }
+
+    /**
+     * @return list<int>|null null = unrestricted (global access)
+     */
+    private function causerScope(User $user): ?array
+    {
+        $centers = app(CenterAccessService::class);
+
+        if ($centers->hasGlobalAccess($user)) {
+            return null;
+        }
+
+        $centreIds = $centers->accessibleCenterIds($user);
+
+        // A login with no centre assignment (pure admin account, no employee
+        // profile) is not centre-bound — same convention as GetUsersList.
+        if ($centreIds === []) {
+            return null;
+        }
+
+        $ids = Employee::query()
+            ->whereNotNull('user_id')
+            ->where(fn ($q) => $q->whereIn('etablissement_id', $centreIds)
+                ->orWhereHas('etablissements', fn ($e) => $e->whereIn('etablissements.id', $centreIds)))
+            ->pluck('user_id')
+            ->map(fn ($id): int => (int) $id)
+            ->all();
+        // Accounts without an employee profile are global records everywhere.
+        $ids = array_merge($ids, User::query()->whereDoesntHave('employee')->pluck('id')->map(fn ($id): int => (int) $id)->all());
+        $ids[] = $user->id;
+
+        return array_values(array_unique($ids));
     }
 }

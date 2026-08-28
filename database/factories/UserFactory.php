@@ -29,6 +29,10 @@ class UserFactory extends Factory
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
+            // A factory user is an established login: the one-time-password
+            // gate (EnsurePasswordIsChanged) only applies to freshly issued ones.
+            'must_change_password' => false,
+            'is_active' => true,
             'remember_token' => Str::random(10),
         ];
     }

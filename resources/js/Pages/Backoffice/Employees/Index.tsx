@@ -445,6 +445,14 @@ export default function EmployeesIndex({
                                                     Voir le compte
                                                 </RowActionItem>
                                             )}
+                                            {canManageUsers && employee.userId && (
+                                                <RowActionItem
+                                                    icon="ti-shield-lock"
+                                                    onClick={() => router.visit(`/backoffice/users/${employee.userId}/authorization`)}
+                                                >
+                                                    Autorisations
+                                                </RowActionItem>
+                                            )}
                                             <RowActionItem icon="ti-trash" danger onClick={() => confirmDelete(employee)}>
                                                 Supprimer
                                             </RowActionItem>

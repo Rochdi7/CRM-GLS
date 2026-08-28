@@ -22,7 +22,7 @@ final class UpdateSalleRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'nom' => ['required', 'string', 'max:100'],
+            'nom' => ['required', 'string', 'max:100', Rule::unique('salles', 'nom')->where('etablissement_id', $this->input('etablissement_id'))->ignore($this->route('salle'))],
             // Restricted to centers the acting user may access (Phase 6 §Q3
             // fix) — not just "exists", since a forged id for an
             // inaccessible-but-real center would otherwise pass.

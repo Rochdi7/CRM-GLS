@@ -194,11 +194,13 @@ final class InscriptionController extends Controller
      * intact; only masque_le is set (BasculerVisibiliteFraisInscription).
      */
     public function hideFee(
+        Request $request,
         Inscription $inscription,
         InscriptionFee $fee,
         BasculerVisibiliteFraisInscription $action,
     ): JsonResponse {
         $this->authorize('view', $inscription);
+        $this->assertInscriptionInContextJson($request, $inscription);
 
         // Guarded here rather than letting the action throw a
         // ValidationException: bootstrap/app.php only renders JSON error
@@ -226,11 +228,13 @@ final class InscriptionController extends Controller
     }
 
     public function restoreFee(
+        Request $request,
         Inscription $inscription,
         InscriptionFee $fee,
         BasculerVisibiliteFraisInscription $action,
     ): JsonResponse {
         $this->authorize('view', $inscription);
+        $this->assertInscriptionInContextJson($request, $inscription);
 
         // Guarded here rather than letting the action throw a
         // ValidationException: bootstrap/app.php only renders JSON error
@@ -334,6 +338,19 @@ final class InscriptionController extends Controller
      *
      * @param  array<int, array<string, mixed>>  $feeLines
      */
+    /**
+     * assertInscriptionInContext() for JSON endpoints: a redirect-back would
+     * hand HTML to fetch(), so the context mismatch answers 422 JSON (SEC-11).
+     */
+    private function assertInscriptionInContextJson(Request $request, Inscription $inscription): void
+    {
+        try {
+            $this->assertInscriptionInContext($request, $inscription, 'fee');
+        } catch (ValidationException $e) {
+            abort(response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 422));
+        }
+    }
+
     private function assertFeeLinesBelongToGroup(Group $group, array $feeLines): void
     {
         $soumis = collect($feeLines)
@@ -522,6 +539,15 @@ final class InscriptionController extends Controller
             });
 
             $total = $lines->sum('montant');
+
+            // One live enrolment per (student, group): a second one would
+            // bill the same course twice (audit CRUD-F16).
+            if (Inscription::query()->where('student_id', $studentId)->where('group_id', $group->id)
+                ->where('statut', Inscription::STATUT_ACTIVE)->lockForUpdate()->exists()) {
+                throw ValidationException::withMessages([
+                    'group_id' => __('This student already has an active registration in this group.'),
+                ]);
+            }
 
             $inscription = Inscription::create([
                 'reference' => ReferenceGenerator::make('INS', 'inscriptions'),

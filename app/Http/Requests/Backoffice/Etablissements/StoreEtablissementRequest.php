@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Requests\Backoffice\Etablissements;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 final class StoreEtablissementRequest extends FormRequest
 {
@@ -19,7 +20,7 @@ final class StoreEtablissementRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'nom_centre' => ['required', 'string', 'max:150'],
+            'nom_centre' => ['required', 'string', 'max:150', Rule::unique('etablissements', 'nom_centre')],
             'ville' => ['required', 'string', 'max:100'],
             'adresse' => ['nullable', 'string', 'max:255'],
             'ice' => ['nullable', 'string', 'max:30'],

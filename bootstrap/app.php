@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsurePasswordIsChanged;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Console\Scheduling\Schedule;
@@ -37,6 +38,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // props on requests Inertia actually serves.
         $middleware->web(append: [
             EnsureUserIsActive::class,
+            EnsurePasswordIsChanged::class,
             HandleInertiaRequests::class,
         ]);
     })

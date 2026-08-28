@@ -17,6 +17,7 @@ use App\Services\Context\CurrentContext;
 use App\Support\Phone\Countries;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -141,7 +142,9 @@ final class StudentController extends Controller
 
         $student->loadCount(['inscriptions', 'encaissements', 'remboursements']);
 
-        if ($student->inscriptions_count || $student->encaissements_count || $student->remboursements_count) {
+        if ($student->inscriptions_count || $student->encaissements_count || $student->remboursements_count
+            || DB::table('cheques')->where('student_id', $student->id)->exists()
+            || DB::table('presences')->where('student_id', $student->id)->exists()) {
             throw ValidationException::withMessages([
                 'delete' => __('This student has activity history and cannot be deleted.'),
             ]);

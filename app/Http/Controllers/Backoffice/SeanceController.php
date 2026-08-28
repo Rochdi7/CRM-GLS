@@ -21,6 +21,7 @@ use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Http\Response as HttpResponse;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -310,8 +311,14 @@ final class SeanceController extends Controller
             __('This session belongs to another academic year than the active one.'),
         );
 
-        // Roll-call lines go with the séance (FK cascade) — attendance is
-        // operational data, not money; deletion is allowed by permission.
+        // A validated séance, or one with a roll-call, is attendance
+        // history: refused rather than cascaded away (audit CRUD-F15).
+        if ($seance->statut === Seance::STATUT_EFFECTUEE || $seance->presences()->exists()) {
+            throw ValidationException::withMessages([
+                'delete' => __('This session has been validated or has attendance recorded and cannot be deleted.'),
+            ]);
+        }
+
         $seance->delete();
 
         return redirect()->route('backoffice.seances.index')

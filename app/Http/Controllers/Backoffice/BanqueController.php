@@ -9,6 +9,7 @@ use App\Http\Requests\Backoffice\Banques\StoreBanqueRequest;
 use App\Http\Requests\Backoffice\Banques\UpdateBanqueRequest;
 use App\Models\Banque;
 use App\Models\Encaissement;
+use App\Models\Cheque;
 use Illuminate\Http\RedirectResponse;
 
 /**
@@ -51,7 +52,15 @@ final class BanqueController extends Controller
 
     public function update(UpdateBanqueRequest $request, Banque $banque): RedirectResponse
     {
-        $banque->update($request->validated());
+        $data = $request->validated();
+
+        // Payments and cheques store the bank NAME (free text): renaming a
+        // bank in use would orphan them (audit CRUD-F9).
+        if (($data['nom'] ?? $banque->nom) !== $banque->nom && $this->banqueEnUtilisation($banque)) {
+            return back()->withErrors(['nom' => __('This bank is used by existing payments or cheques and cannot be renamed.')]);
+        }
+
+        $banque->update($data);
 
         return redirect()->route('backoffice.settings', ['tab' => 'banques'])
             ->with('success', __('Banque mise à jour.'));
@@ -64,7 +73,7 @@ final class BanqueController extends Controller
      */
     public function destroy(Banque $banque): RedirectResponse
     {
-        if (Encaissement::where('banque', $banque->nom)->exists()) {
+        if ($this->banqueEnUtilisation($banque)) {
             return back()->withErrors(['delete' => __('This bank is used by existing payments and cannot be deleted.')]);
         }
 
@@ -72,5 +81,11 @@ final class BanqueController extends Controller
 
         return redirect()->route('backoffice.settings', ['tab' => 'banques'])
             ->with('success', __('Banque supprimée.'));
+    }
+
+    private function banqueEnUtilisation(Banque $banque): bool
+    {
+        return Encaissement::where('banque', $banque->nom)->exists()
+            || Cheque::where('banque', $banque->nom)->exists();
     }
 }

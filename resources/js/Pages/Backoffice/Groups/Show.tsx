@@ -1,9 +1,10 @@
-import { useForm, usePage } from '@inertiajs/react';
+import { router, useForm, usePage } from '@inertiajs/react';
 import { useState, type FormEvent } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import RelatedRecordsTable from '@/Components/Details/RelatedRecordsTable';
 import Modal from '@/Components/Modals/Modal';
+import ConfirmDialog from '@/Components/Modals/ConfirmDialog';
 import DateField from '@/Components/Forms/DateField';
 import SelectField from '@/Components/Forms/SelectField';
 import FormField from '@/Components/Forms/FormField';
@@ -133,14 +134,21 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
         });
     }
 
-    function getCsrfToken(): string {
-        return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
-    }
+    const [archiveOpen, setArchiveOpen] = useState(false);
+    const [archiveError, setArchiveError] = useState<string | undefined>(undefined);
+    const [archiveProcessing, setArchiveProcessing] = useState(false);
 
-    function handleArchiveSubmit(event: React.FormEvent<HTMLFormElement>) {
-        if (!window.confirm('Marquer ce groupe comme terminé (Fin de formation) ? Cette action est irréversible.')) {
-            event.preventDefault();
-        }
+    // Inertia visit instead of a native form: the 422 from the context guard
+    // is shown in the dialog, and a double click cannot post twice (F-006).
+    function archiveGroup() {
+        setArchiveProcessing(true);
+        setArchiveError(undefined);
+        router.post(group.archiveUrl, {}, {
+            preserveScroll: true,
+            onSuccess: () => setArchiveOpen(false),
+            onError: (errors) => setArchiveError(Object.values(errors)[0] ?? 'Action impossible.'),
+            onFinish: () => setArchiveProcessing(false),
+        });
     }
 
     return (
@@ -198,13 +206,14 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                                 </button>
                             )}
                             {group.canArchive && (
-                                <form method="POST" action={group.archiveUrl} onSubmit={handleArchiveSubmit}>
-                                    <input type="hidden" name="_token" value={getCsrfToken()} />
-                                    <button type="submit" className="btn btn-outline-secondary d-flex align-items-center">
-                                        <i className="ti ti-archive me-2" />
-                                        Terminer la formation
-                                    </button>
-                                </form>
+                                <button
+                                    type="button"
+                                    className="btn btn-outline-secondary d-flex align-items-center"
+                                    onClick={() => setArchiveOpen(true)}
+                                >
+                                    <i className="ti ti-archive me-2" />
+                                    Terminer la formation
+                                </button>
                             )}
                             <a href="/backoffice/groups" className="btn btn-primary d-flex align-items-center">
                                 <i className="ti ti-edit me-2" />
@@ -659,6 +668,19 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                     />
                 </form>
             </Modal>
+            <ConfirmDialog
+                show={archiveOpen}
+                title="Terminer la formation"
+                recordLabel={group.nom}
+                message="Marquer ce groupe comme terminé (Fin de formation) ? Cette action est irréversible."
+                error={archiveError}
+                processing={archiveProcessing}
+                onConfirm={archiveGroup}
+                onCancel={() => setArchiveOpen(false)}
+                variant="primary"
+                icon="ti-archive"
+                confirmLabel="Terminer"
+            />
         </BackofficeLayout>
     );
 }
