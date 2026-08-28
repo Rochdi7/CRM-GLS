@@ -520,13 +520,13 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame('0.00', (string) $avanceRows[0]['montantUtilise']);
         $this->assertSame('400.00', (string) $avanceRows[0]['montantRestant']);
 
-        // Default "Paiements" tab lists only fee-allocated rows: the avance is
-        // the parent of the apply rows that later credit each fee, so showing
-        // it here would display the same money twice. It has its own tab.
-        $allRows = $this->get(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => '']))
-            ->viewData('page')['props']['encaissements']['data'];
-        $this->assertCount(1, $allRows);
-        $this->assertSame('Chèque', $allRows[0]['methode']);
+        // Default "Encaissements" tab = money received: the fee payment AND
+        // the avance, the latter flagged so the Frais column reads « Avance ».
+        $allRows = collect($this->get(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => '']))
+            ->viewData('page')['props']['encaissements']['data']);
+        $this->assertCount(2, $allRows);
+        $this->assertSame([false, true], $allRows->sortBy('id')->pluck('isAvance')->values()->all());
+        $this->assertNull($allRows->firstWhere('isAvance', true)['feeNom']);
     }
 
     public function test_an_avance_can_be_applied_to_a_fee_without_touching_caisse_solde_again(): void
@@ -648,10 +648,11 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $rows = fn (array $extra) => collect($this->get(route('backoffice.encaissements.index', ['dateFrom' => '', 'dateTo' => ''] + $extra))
             ->viewData('page')['props']['encaissements']['data']);
 
-        $this->assertCount(2, $rows([]));
+        // Encaissements tab: 2 fee payments + 2 avances (money received).
+        $this->assertCount(4, $rows([]));
         $payments = $rows(['groupFilter' => $groupA]);
-        $this->assertCount(1, $payments);
-        $this->assertSame($studentA->id, $payments[0]['studentId']);
+        $this->assertCount(2, $payments);
+        $this->assertSame([$studentA->id], $payments->pluck('studentId')->unique()->values()->all());
 
         $this->assertCount(2, $rows(['view' => 'avance']));
         $avances = $rows(['view' => 'avance', 'groupFilter' => $groupA]);
@@ -888,6 +889,10 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertCount(1, $avanceRows);
         $this->assertSame('0.00', (string) $avanceRows[0]['montantUtilise']);
         $this->assertSame('1000.00', (string) $avanceRows[0]['montantRestant']);
+        // « Ancien frais »: the fee it was detached from, read back from the
+        // audit journal (the row itself no longer carries it).
+        $this->assertSame('Frais de Juillet', $avanceRows[0]['ancienFrais']);
+        $this->assertSame($inscription->group->nom, $avanceRows[0]['ancienFraisGroupe']);
 
         // Re-apply the freed amount onto a second inscription's fee.
         $group2 = Group::factory()->create(['etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id]);

@@ -1487,6 +1487,12 @@ export interface EncaissementRow {
     studentId: number | null;
     inscriptionId: number | null;
     feeNom: string | null;
+    /** True when the money is not allocated to any fee (feeNom is then null) — the Frais column reads « Avance ». */
+    isAvance: boolean;
+    /** Avances tab only — the fee this money sat on before it was detached (group change, cancellation, conversion); null for a fresh avance. */
+    ancienFrais: string | null;
+    /** Group of that former fee's inscription. */
+    ancienFraisGroupe: string | null;
     /** Full amount of the paid fee — read-only context in the edit modal. */
     feeMontantTotal: MoneyDisplay | null;
     /** Fee amount minus everything already paid on it. */

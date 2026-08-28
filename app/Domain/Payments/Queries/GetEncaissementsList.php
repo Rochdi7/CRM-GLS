@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Domain\Payments\Queries;
 
+use App\Models\Activity;
 use App\Models\Caisse;
 use App\Models\Encaissement;
 use App\Models\Group;
 use App\Models\Inscription;
+use App\Models\InscriptionFee;
 use App\Models\Student;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
@@ -150,13 +152,18 @@ final class GetEncaissementsList
             ->when($view === 'avance' && in_array($soldeFilter, ['restant', 'epuise'], true), fn ($q) => $q->whereRaw(
                 self::AVANCE_RESTANT_SQL.($soldeFilter === 'restant' ? ' > 0' : ' <= 0'),
             ))
-            // Default "Paiements" tab: only rows allocated to a fee. An avance
-            // is the PARENT of the "apply" rows that later credit each fee
-            // (applied_from_encaissement_id) — listing it alongside them would
-            // show the same money twice (1300 avance + 300 + 1000 applied).
-            // Avances live under their own tab; the Chèques tab keeps them
-            // because it tracks every cheque's échéance, allocated or not.
-            ->when($view === '', fn ($q) => $q->whereNotNull('inscription_fee_id'))
+            // Default "Encaissements" tab = money RECEIVED: every original
+            // row, whether allocated to a fee or still an avance (the Frais
+            // column then reads « Avance » so a cashier sees at a glance that
+            // this money is not on any fee, 29/08/2026). What is excluded is
+            // the "apply" rows (applied_from_encaissement_id set): they only
+            // re-allocate their parent avance's money to a fee, the till never
+            // moved for them — listing parent AND applications would show the
+            // same money twice (1300 avance + 300 + 1000 applied). Their
+            // allocation is visible on the Avances tab (montant utilisé) and
+            // on the inscription's fee lines. The Chèques tab keeps every
+            // cheque row because it tracks each échéance, allocated or not.
+            ->when($view === '', fn ($q) => $q->whereNull('applied_from_encaissement_id'))
             ->when($caisseFilter !== '', fn ($q) => $q->where('caisse_id', (int) $caisseFilter))
             ->when($methodeFilter !== '', fn ($q) => $q->where('methode', $methodeFilter))
             // `date_paiement` is a DATE column: a plain comparison keeps the
@@ -215,12 +222,20 @@ final class GetEncaissementsList
             // Per-fee paid total, computed by the DB (no N+1): feeds the
             // edit modal's read-only "Reste à payer" figure.
             ->with(['fee' => fn ($q) => $q->withSum('encaissements', 'montant')])
-            ->when($view === 'avance', fn ($q) => $q->withSum('applications', 'montant'))
+            // One correlated SUM, never a per-row accessor: feeds "Montant
+            // utilisé / restant" on the Avances tab and the « Avance » cell of
+            // the Encaissements tab (an avance there shows what is applied).
+            ->when($view !== 'cheque', fn ($q) => $q->withSum('applications', 'montant'))
             ->paginate($perPage)
             ->withQueryString();
 
-        $encaissements->through(function (Encaissement $e) use ($view): array {
-            $utilise = $view === 'avance' ? (float) ($e->applications_sum_montant ?? 0) : null;
+        $anciensFrais = $view === 'avance'
+            ? $this->anciensFrais($encaissements->getCollection()->pluck('id')->all())
+            : [];
+
+        $encaissements->through(function (Encaissement $e) use ($view, $anciensFrais): array {
+            $isAvance = $e->inscription_fee_id === null;
+            $utilise = $isAvance && $view !== 'cheque' ? (float) ($e->applications_sum_montant ?? 0) : null;
             $feeTotal = $e->fee !== null ? (float) $e->fee->montant : null;
             $feePaye = $e->fee !== null ? (float) ($e->fee->encaissements_sum_montant ?? 0) : null;
 
@@ -232,6 +247,12 @@ final class GetEncaissementsList
                 'studentId' => $e->student_id,
                 'inscriptionId' => $e->fee?->inscription_id,
                 'feeNom' => $e->fee?->nom,
+                'isAvance' => $isAvance,
+                // Avances tab only: the fee this money sat on before it was
+                // detached (changement de groupe, annulation, conversion) —
+                // null for an avance that was received as such.
+                'ancienFrais' => $anciensFrais[$e->id]['frais'] ?? null,
+                'ancienFraisGroupe' => $anciensFrais[$e->id]['groupe'] ?? null,
                 'feeMontantTotal' => $feeTotal !== null ? number_format($feeTotal, 2, '.', '') : null,
                 'feeReste' => $feeTotal !== null ? number_format(max(0.0, $feeTotal - $feePaye), 2, '.', '') : null,
                 'caisse' => $e->caisse?->nom,
@@ -258,6 +279,71 @@ final class GetEncaissementsList
             'data' => $encaissements,
             'montantTotal' => number_format((float) $montantTotal, 2, '.', ''),
         ];
+    }
+
+    /**
+     * « Ancien frais » of detached avances: the fee each row was allocated to
+     * before ConvertirEncaissementsEnAvance / ChangerGroupeInscription /
+     * AnnulerInscription set inscription_fee_id to NULL. The row itself no
+     * longer knows (money records are edited in place, never copied), but
+     * every one of those writes goes through Eloquent `update()` on an
+     * Auditable model, so the journal holds « inscription_fee_id : X → vide »
+     * for it (spatie v5 `attribute_changes` column). The LATEST such entry per row wins (a payment can be detached
+     * more than once across group changes).
+     *
+     * Two queries for the whole page, whatever its size — never one per row.
+     *
+     * @param  list<int>  $encaissementIds
+     * @return array<int, array{frais: string, groupe: string|null}>
+     */
+    private function anciensFrais(array $encaissementIds): array
+    {
+        if ($encaissementIds === []) {
+            return [];
+        }
+
+        $feeIdByEncaissement = Activity::query()
+            ->where('subject_type', Encaissement::class)
+            ->whereIn('subject_id', $encaissementIds)
+            // spatie v5 keeps the model diff in `attribute_changes`
+            // (`properties` is the free-form bag of custom events).
+            ->whereRaw("attribute_changes->'old'->>'inscription_fee_id' is not null")
+            ->whereRaw("attribute_changes->'attributes'->>'inscription_fee_id' is null")
+            ->orderByDesc('id')
+            ->get(['subject_id', 'attribute_changes'])
+            // Latest entry first, so the first one seen per row is kept.
+            ->reduce(function (array $carry, Activity $a): array {
+                $carry[(int) $a->subject_id] ??= (int) $a->attribute_changes['old']['inscription_fee_id'];
+
+                return $carry;
+            }, []);
+
+        if ($feeIdByEncaissement === []) {
+            return [];
+        }
+
+        $fees = InscriptionFee::query()
+            ->with('inscription.group')
+            ->whereIn('id', array_unique(array_values($feeIdByEncaissement)))
+            ->get()
+            ->keyBy('id');
+
+        $result = [];
+
+        foreach ($feeIdByEncaissement as $encaissementId => $feeId) {
+            $fee = $fees->get($feeId);
+
+            if ($fee === null) {
+                continue;
+            }
+
+            $result[$encaissementId] = [
+                'frais' => $fee->nom,
+                'groupe' => $fee->inscription?->group?->nom,
+            ];
+        }
+
+        return $result;
     }
 
     /**

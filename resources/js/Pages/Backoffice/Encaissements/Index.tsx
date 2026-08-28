@@ -773,6 +773,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                     <tr>
                                         <th>Référence</th>
                                         <th>Étudiant</th>
+                                        <th>Ancien frais</th>
                                         <th className="text-end">Montant</th>
                                         <th>Caisse</th>
                                         <th>Date</th>
@@ -788,6 +789,20 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                             <code>{row.reference}</code>
                                         </td>
                                         <td>{row.student ?? '—'}</td>
+                                        {/* The fee this money was detached from (read from the audit
+                                            journal server-side); a fresh avance never had one. */}
+                                        <td>
+                                            {row.ancienFrais ? (
+                                                <>
+                                                    {row.ancienFrais}
+                                                    {row.ancienFraisGroupe && (
+                                                        <div className="text-muted fs-12">{row.ancienFraisGroupe}</div>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <span className="text-muted">—</span>
+                                            )}
+                                        </td>
                                         <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} MAD</td>
                                         <td>{row.caisse ?? '—'}</td>
                                         <td>{row.datePaiement ?? '—'}</td>
@@ -843,7 +858,20 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                 <td>{row.dateEcheanceCheque ?? '—'}</td>
                                             </>
                                         )}
-                                        <td>{row.feeNom ?? '—'}</td>
+                                        <td>
+                                            {row.isAvance ? (
+                                                <>
+                                                    <span className="badge badge-soft-warning">Avance</span>
+                                                    <div className="text-muted fs-12">
+                                                        {Number(row.montantUtilise ?? 0) > 0
+                                                            ? `Appliquée : ${Number(row.montantUtilise).toFixed(2)} MAD`
+                                                            : 'Non affectée à un frais'}
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                row.feeNom ?? '—'
+                                            )}
+                                        </td>
                                         <td>{row.caisse ?? '—'}</td>
                                         <td className="text-end fw-medium">
                                             {Number(row.montant).toFixed(2)} MAD
