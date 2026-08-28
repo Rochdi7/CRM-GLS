@@ -259,9 +259,15 @@ final class AppliquerMatriceGroupe extends Command
      */
     private function avancesDe(Student $student, string $nomFrais, ?Group $groupeCourant): Collection
     {
+        // ⚠ Never an application row (applied_from_encaissement_id set): its
+        // money is already counted as USED on its parent avance. Detaching
+        // one leaves it re-allocatable by design, so treating it as a fresh
+        // avance would place the same dirhams twice — 137 rows / 135 522 DH
+        // of double-available money on 28/08/2026.
         $avances = Encaissement::query()
             ->where('student_id', $student->id)
             ->whereNull('inscription_fee_id')
+            ->whereNull('applied_from_encaissement_id')
             ->orderBy('date_paiement')
             ->get()
             ->filter(fn (Encaissement $e): bool => $e->montantRestant() > 0.0);
