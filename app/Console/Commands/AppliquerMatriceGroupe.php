@@ -155,7 +155,13 @@ final class AppliquerMatriceGroupe extends Command
                 ->whereHas('fee.inscription', fn ($i) => $i->where('group_id', $groupe->id))
                 ->with('fee.inscription')
                 ->get()
-                ->filter(fn (Encaissement $e): bool => ! isset($cellules[$e->student_id.'|'.$e->inscription_fee_id]));
+                // ⚠ Only IMPORTED money. A payment cashed in the CRM since
+                // the import (Rabat/Marrakech went live 2 days before this
+                // run) is newer than the matrix, so its absence from the
+                // file says nothing — releasing it would undo the cashier's
+                // work (28/08/2026).
+                ->filter(fn (Encaissement $e): bool => $this->estImporte($e)
+                    && ! isset($cellules[$e->student_id.'|'.$e->inscription_fee_id]));
 
             if ($aLiberer->isEmpty()) {
                 continue;
@@ -347,7 +353,10 @@ final class AppliquerMatriceGroupe extends Command
             ->whereNull('inscription_fee_id')
             ->orderBy('date_paiement')
             ->get()
-            ->filter(fn (Encaissement $e): bool => $e->montantRestant() > 0.0);
+            // Imported money only: an avance received in the CRM after the
+            // export must never be spent on a cell the old CRM had settled
+            // with money we never got (see estImporte()).
+            ->filter(fn (Encaissement $e): bool => $this->estImporte($e) && $e->montantRestant() > 0.0);
 
         if ($groupeCourant === null) {
             return $avances;
@@ -360,9 +369,32 @@ final class AppliquerMatriceGroupe extends Command
             ->with('fee')
             ->orderBy('date_paiement')
             ->get()
-            ->filter(fn (Encaissement $e): bool => $this->cleFrais((string) ($e->fee?->nom ?? '')) === $this->cleFrais($nomFrais));
+            ->filter(fn (Encaissement $e): bool => $this->estImporte($e)
+                && $this->cleFrais((string) ($e->fee?->nom ?? '')) === $this->cleFrais($nomFrais));
 
         return $avances->concat($encoreRattaches);
+    }
+
+    /**
+     * True when this money came from the legacy import: the row carries a
+     * legacy_ref, or it is an application row whose ROOT avance does. A
+     * payment cashed in the CRM itself has neither and is never touched.
+     */
+    private function estImporte(Encaissement $e): bool
+    {
+        for ($i = 0; $i < 10 && $e !== null; $i++) {
+            if ($e->legacy_ref !== null) {
+                return true;
+            }
+
+            if ($e->applied_from_encaissement_id === null) {
+                return false;
+            }
+
+            $e = Encaissement::find($e->applied_from_encaissement_id);
+        }
+
+        return false;
     }
 
     /**
