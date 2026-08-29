@@ -132,6 +132,10 @@ final class AppliquerMatriceGroupe extends Command
                     $listes[$student->id] = true;
                 }
 
+                if ($nomFrais === null) {
+                    continue; // presence marker only, no cell
+                }
+
                 $inscription = $student ? $this->inscriptionDans($groupe, $student) : null;
                 $fee = $inscription ? $this->fraisDe($inscription, $nomFrais, $dry) : null;
 
@@ -575,6 +579,17 @@ final class AppliquerMatriceGroupe extends Command
             ?? $candidats->first(fn (Group $g): bool => $this->cleNom($g->nom) === $this->cleNom($nom));
     }
 
+    /** @var array<int, Collection<int, Student>> */
+    private array $etudiantsParCentre = [];
+
+    /** @return Collection<int, Student> */
+    private function etudiantsDuCentre(int $centreId): Collection
+    {
+        return $this->etudiantsParCentre[$centreId] ??= Student::query()
+            ->where('etablissement_id', $centreId)
+            ->get(['id', 'prenom', 'nom', 'etablissement_id']);
+    }
+
     /** Letters and digits only, accents folded — for filename ↔ group matching. */
     private function cleNom(string $valeur): string
     {
@@ -603,6 +618,18 @@ final class AppliquerMatriceGroupe extends Command
             ->where('etablissement_id', $groupe->etablissement_id)
             ->whereRaw("lower(trim(prenom||' '||nom)) = ? or lower(trim(nom||' '||prenom)) = ?", [$cle, $cle])
             ->get();
+
+        // Exact SQL match failed (accent typed differently, double space,
+        // hyphen…): fall back to the letters-and-digits key the verifier
+        // uses, so both agree on who the file lists. A student seen as
+        // « unlisted » here was re-homed onto a matrix group by pass 3 in
+        // months wimschool shows empty (Herr abdollah +10 300, 29/08/2026).
+        if ($homonymes->isEmpty()) {
+            $k = $this->cleNom($nom);
+            $homonymes = $this->etudiantsDuCentre($groupe->etablissement_id)
+                ->filter(fn (Student $s): bool => $this->cleNom($s->prenom.$s->nom) === $k || $this->cleNom($s->nom.$s->prenom) === $k)
+                ->values();
+        }
 
         if ($homonymes->count() <= 1) {
             return $homonymes->first();
@@ -693,7 +720,7 @@ final class AppliquerMatriceGroupe extends Command
      * The matrix as (student, fee, amount) triples — zeros dropped, the
      * trailing « Total » row skipped.
      *
-     * @return list<array{0: string, 1: string, 2: float}>
+     * @return list<array{0: string, 1: ?string, 2: float}>
      */
     private function lireMatrice(string $chemin): array
     {
@@ -724,6 +751,13 @@ final class AppliquerMatriceGroupe extends Command
                     if ($etudiant === '' || ! str_starts_with($c[0] ?? '', '#')) {
                         continue;
                     }
+
+                    // The row itself is a fact: this student IS listed in the
+                    // group, even with every cell empty. Emitting only the
+                    // non-zero cells left such students « unlisted », so the
+                    // RELEASE pass protected money the matrix says is not
+                    // there (WASSIM AMHAOUCH, 6 700 DH, 29/08/2026).
+                    $cellules[] = [$etudiant, null, 0.0];
 
                     foreach ($entetes as $i => $entete) {
                         if (! str_starts_with($entete, 'Frais')) {

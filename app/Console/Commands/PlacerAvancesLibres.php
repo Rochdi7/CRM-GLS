@@ -128,7 +128,12 @@ final class PlacerAvancesLibres extends Command
                 ->orderBy('id')
                 ->get();
 
-            $cellules = $this->matrices[$inscription->group_id][$this->cle($avance->student->prenom.$avance->student->nom)] ?? null;
+            // The file may write « NOM PRÉNOM » as well as « PRÉNOM NOM »
+            // (AppliquerMatriceGroupe accepts both) — try both keys, or the
+            // cap is silently skipped and the matrix frees the money again.
+            $cellules = $this->matrices[$inscription->group_id][$this->cle($avance->student->prenom.$avance->student->nom)]
+                ?? $this->matrices[$inscription->group_id][$this->cle($avance->student->nom.$avance->student->prenom)]
+                ?? null;
 
             foreach ($fees as $fee) {
                 if ($reste <= 0.0) {
@@ -137,9 +142,15 @@ final class PlacerAvancesLibres extends Command
 
                 if ($cellules !== null) {
                     // Listed in this group's matrix: cap at what the matrix
-                    // shows for this cell, 0 when it shows nothing.
+                    // shows for this cell, 0 when it shows nothing. The
+                    // matrix cell is per STUDENT, so what is already paid is
+                    // summed over every inscription of theirs in the group —
+                    // a duplicate registration (SOFIYA TOUNSSI, Changement +
+                    // Annulée in Frau Zineb) otherwise looks unpaid and gets
+                    // filled a second time (29/08/2026).
                     $attendu = $cellules[$this->cleFrais($fee->nom)] ?? 0.0;
-                    $restantParFee[$fee->id] ??= round(min($attendu, (float) $fee->montant) - $fee->montantPaye(), 2);
+                    $dejaPaye = $this->payeDansGroupe($inscription->group_id, $avance->student_id, $fee->nom);
+                    $restantParFee[$fee->id] ??= round(min(min($attendu, (float) $fee->montant) - $dejaPaye, (float) $fee->montant - $fee->montantPaye()), 2);
                 } else {
                     $restantParFee[$fee->id] ??= round((float) $fee->montant - $fee->montantPaye(), 2);
                 }
@@ -209,6 +220,19 @@ final class PlacerAvancesLibres extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /** Paid on every same-named fee of this student's inscriptions in the group. */
+    private function payeDansGroupe(int $groupId, int $studentId, string $nomFrais): float
+    {
+        $k = $this->cleFrais($nomFrais);
+
+        return InscriptionFee::query()
+            ->whereIn('inscription_id', Inscription::where('group_id', $groupId)->where('student_id', $studentId)->pluck('id'))
+            ->withSum('encaissements', 'montant')
+            ->get()
+            ->filter(fn (InscriptionFee $f): bool => $this->cleFrais($f->nom) === $k)
+            ->sum(fn (InscriptionFee $f): float => (float) ($f->encaissements_sum_montant ?? 0));
     }
 
     private function chargerMatrices(string $dossier, int $centre): void
