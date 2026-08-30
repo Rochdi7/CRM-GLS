@@ -35,7 +35,8 @@ final class VerifierImportLegacy extends Command
     protected $signature = 'import:verifier
         {--dossier=data test local : Dossier contenant "active data/" (et "old data/")}
         {--centre= : Limiter à un centre (id)}
-        {--detail : Lister les références absentes de la base}';
+        {--detail : Lister les références absentes de la base}
+        {--depuis= : Ne compter que les lignes datées à partir de cette date (AAAA-MM-JJ)}';
 
     protected $description = 'Compare les exports de l\'ancien CRM avec la base : lignes et montants présents, manquants (lecture seule).';
 
@@ -44,8 +45,18 @@ final class VerifierImportLegacy extends Command
         'kenitra' => 'Kénitra', 'agadir' => 'Agadir', 'sale' => 'Salé', 'online' => 'Online',
     ];
 
+    /** Rows older than this date are ignored entirely (option --depuis). */
+    private ?string $depuis = null;
+
     public function handle(): int
     {
+        $this->depuis = $this->option('depuis') ? substr((string) $this->option('depuis'), 0, 10) : null;
+
+        if ($this->depuis !== null) {
+            $this->line('');
+            $this->comment('Seules les lignes datées à partir du '.$this->depuis.' sont comparées.');
+        }
+
         $racine = rtrim((string) $this->option('dossier'), '/\\');
 
         if (! is_dir($racine)) {
@@ -204,6 +215,14 @@ final class VerifierImportLegacy extends Command
                             continue;
                         }
 
+                        // A date filter (--depuis) drops everything the export
+                        // dates before it: the older rows were reconciled in a
+                        // previous pass and their known conflicts must not keep
+                        // showing up as gaps (30/08/2026).
+                        if ($this->depuis !== null && ! $this->apresDepuis($entetes, $c)) {
+                            continue;
+                        }
+
                         $refs[] = $ref;
                         $montant = 0.0;
 
@@ -229,4 +248,37 @@ final class VerifierImportLegacy extends Command
 
         return [$refs, $montants];
     }
+    /**
+     * True when the row's date column is on or after --depuis (a row with no
+     * readable date is kept: dropping it would hide a real gap).
+     *
+     * @param  list<string>  $entetes
+     * @param  list<string>  $c
+     */
+    private function apresDepuis(array $entetes, array $c): bool
+    {
+        foreach ($entetes as $j => $h) {
+            if (! str_contains($h, 'date')) {
+                continue;
+            }
+
+            $v = trim($c[$j] ?? '');
+
+            if ($v === '' || $v === '-') {
+                continue;
+            }
+
+            // The export writes JJ/MM/AAAA; OpenSpout may hand back a DateTime.
+            if (preg_match('#^(\d{2})/(\d{2})/(\d{4})#', $v, $m) === 1) {
+                return $m[3].'-'.$m[2].'-'.$m[1] >= $this->depuis;
+            }
+
+            if (preg_match('#^(\d{4})-(\d{2})-(\d{2})#', $v, $m) === 1) {
+                return $m[0] >= $this->depuis;
+            }
+        }
+
+        return true;
+    }
+
 }
