@@ -54,9 +54,11 @@ final class EtatAvances extends Command
         $totDispo = 0.0;
 
         foreach ($centres as $centre) {
+            // Qualified: `students` carries an etablissement_id too, so the
+            // --detail join makes a bare column name ambiguous.
             $base = DB::table('encaissements')
-                ->where('etablissement_id', $centre->id)
-                ->whereNull('inscription_fee_id');
+                ->where('encaissements.etablissement_id', $centre->id)
+                ->whereNull('encaissements.inscription_fee_id');
 
             $n = (clone $base)->count();
             $recu = (float) (clone $base)->sum('montant');
