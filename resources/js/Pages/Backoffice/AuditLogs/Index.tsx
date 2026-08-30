@@ -6,6 +6,7 @@ import EmptyState from '@/Components/Shared/EmptyState';
 import Pagination from '@/Components/Tables/Pagination';
 import SearchInput from '@/Components/Tables/SearchInput';
 import TableToolbar from '@/Components/Tables/TableToolbar';
+import { useFilterReset } from '@/Hooks/useFilterReset';
 import SelectField from '@/Components/Forms/SelectField';
 import DateField from '@/Components/Forms/DateField';
 import StatusBadge from '@/Components/Details/StatusBadge';
@@ -65,18 +66,13 @@ export default function AuditLogsIndex({
         );
     }
 
-    const hasFilters =
-        filters.search !== '' ||
-        filters.logName !== '' ||
-        filters.event !== '' ||
-        filters.causerId !== '' ||
-        filters.subjectType !== '' ||
-        filters.dateFrom !== '' ||
-        filters.dateTo !== '' ||
-        filters.ip !== '' ||
-        filters.caisseId !== '' ||
-        filters.includeDeveloper ||
-        filters.financeOnly;
+    // includeDeveloper / financeOnly are booleans, not text filters: a reset
+    // turns both OFF (the page's default view).
+    const filterReset = useFilterReset(filters, reload, {
+        includeDeveloper: false,
+        financeOnly: false,
+    });
+
 
     return (
         <BackofficeLayout
@@ -88,39 +84,13 @@ export default function AuditLogsIndex({
         >
             <Card title={t('Audit journal')} bodyClassName="p-0 py-3">
                 <div className="px-3">
-                    <TableToolbar
+                    <TableToolbar onReset={filterReset.reset} resetActive={filterReset.active}
                         search={
                             <SearchInput
                                 value={filters.search}
                                 onSearch={(value) => reload({ search: value })}
                                 placeholder={t('Reference, actor, IP, value…')}
                             />
-                        }
-                        actions={
-                            hasFilters ? (
-                                <button
-                                    type="button"
-                                    className="btn btn-outline-light"
-                                    onClick={() =>
-                                        reload({
-                                            search: '',
-                                            logName: '',
-                                            event: '',
-                                            causerId: '',
-                                            subjectType: '',
-                                            dateFrom: '',
-                                            dateTo: '',
-                                            ip: '',
-                                            caisseId: '',
-                                            includeDeveloper: false,
-                                            financeOnly: false,
-                                        })
-                                    }
-                                >
-                                    <i className="ti ti-filter-off me-1" aria-hidden="true" />
-                                    {t('Clear filters')}
-                                </button>
-                            ) : undefined
                         }
                     >
                         <div style={{ width: 200 }}>

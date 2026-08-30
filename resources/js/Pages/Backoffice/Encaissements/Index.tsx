@@ -6,6 +6,8 @@ import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
 import FilterTextInput from '@/Components/Tables/FilterTextInput';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
+import ResetFiltersButton from '@/Components/Tables/ResetFiltersButton';
+import { useFilterReset } from '@/Hooks/useFilterReset';
 import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
 import LocalPagination from '@/Components/Tables/LocalPagination';
@@ -170,6 +172,21 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
             only: RELOAD_ONLY,
         });
     }
+
+    // Resetting keeps the things that are NOT user filters: the open tab
+    // (`view`) and the page size. `soldeFilter` goes back to the controller's
+    // own default ('restant' = avances that still have money), and the date
+    // window back to today on the tabs that have one — clearing them to ''
+    // would show every payment ever recorded, which is not this page's
+    // default view.
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const filterReset = useFilterReset(filters, reload, {
+        view: filters.view,
+        perPage: filters.perPage,
+        soldeFilter: 'restant',
+        dateFrom: filters.view === 'avance' ? '' : todayIso,
+        dateTo: filters.view === 'avance' ? '' : todayIso,
+    });
 
     function openCreate() {
         setEditingRow(null);
@@ -744,11 +761,16 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
 
                 <TableLengthRow
                     search={
-                        <SearchInput
-                            value={filters.search}
-                            onSearch={(value) => reload({ search: value })}
-                            placeholder="Rechercher"
-                        />
+                        <div className="d-flex align-items-center gap-2">
+                            <div style={{ width: 260 }}>
+                                <SearchInput
+                                    value={filters.search}
+                                    onSearch={(value) => reload({ search: value })}
+                                    placeholder="Rechercher"
+                                />
+                            </div>
+                            <ResetFiltersButton onReset={filterReset.reset} active={filterReset.active} />
+                        </div>
                     }
                 />
 

@@ -22,6 +22,7 @@ import StatusBadge from '@/Components/Details/StatusBadge';
 import SexeIcon from '@/Components/Details/SexeIcon';
 import { splitPhone } from '@/Data/countries';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
+import { useFilterReset } from '@/Hooks/useFilterReset';
 import type { EmployeeRow, EmployeesPageProps, SelectOption } from '@/Types';
 
 interface EmployeeFormState {
@@ -134,6 +135,8 @@ export default function EmployeesIndex({
             { preserveState: true, preserveScroll: true, replace: true },
         );
     }
+
+    const filterReset = useFilterReset(filters, reload, { perPage: filters.perPage });
 
     function openCreate() {
         setEditingEmployee(null);
@@ -316,7 +319,7 @@ export default function EmployeesIndex({
         >
             <Card title="Employés" bodyClassName="p-0 py-3">
                 <div className="px-3 pt-2">
-                    <TableToolbar>
+                    <TableToolbar onReset={filterReset.reset} resetActive={filterReset.active}>
                         <div style={{ width: 200 }}>
                             <label className="form-label" htmlFor="emp-f-categorie">
                                 Catégorie

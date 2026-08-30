@@ -5,6 +5,7 @@ import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
 import TableToolbar from '@/Components/Tables/TableToolbar';
+import { useFilterReset } from '@/Hooks/useFilterReset';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
@@ -71,6 +72,18 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
             .finally(() => setLoading(false));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [typeFilter, dateFrom, dateTo, page]);
+
+    // Local state, not a server-echoed `filters` prop, so this panel wires the
+    // reset by hand — the defaults it restores are today's date window, not
+    // empty strings (an empty window would list every year of the till).
+    const journalFiltersActive = typeFilter !== '' || dateFrom !== todayIso() || dateTo !== todayIso();
+
+    function resetJournalFilters() {
+        setTypeFilter('');
+        setDateFrom(todayIso());
+        setDateTo(todayIso());
+        setPage(1);
+    }
 
     if (journal.caissesInScope.length === 0) {
         return (
@@ -139,7 +152,7 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
 
             <Card bodyClassName="p-0 py-3">
                 <div className="px-3 pt-2">
-                    <TableToolbar>
+                    <TableToolbar onReset={resetJournalFilters} resetActive={journalFiltersActive}>
                         <div style={{ width: 200 }}>
                             <label className="form-label" htmlFor={`cj-type-${scope}`}>
                                 Type
@@ -368,6 +381,8 @@ export default function CaissesIndex({
         });
     }
 
+    const transferReset = useFilterReset(transferFilters, reloadTransfers);
+
     function openCreateTransfer() {
         setEditingTransfer(null);
         transferForm.clearErrors();
@@ -505,7 +520,7 @@ export default function CaissesIndex({
             {tab === 'transferts' && canViewTransfers && transfers && (
                 <Card bodyClassName="p-0 py-3">
                     <div className="px-3 pt-2">
-                        <TableToolbar>
+                        <TableToolbar onReset={transferReset.reset} resetActive={transferReset.active}>
                             <div style={{ width: 200 }}>
                                 <label className="form-label" htmlFor="tr-f-type">
                                     Type

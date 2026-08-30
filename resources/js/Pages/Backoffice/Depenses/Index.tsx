@@ -19,6 +19,7 @@ import TextareaField from '@/Components/Forms/TextareaField';
 import TagsInput from '@/Components/Forms/TagsInput';
 import FormActions from '@/Components/Forms/FormActions';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
+import { useFilterReset } from '@/Hooks/useFilterReset';
 import type { DepenseRow, DepensesPageProps, EncaissementFormOption, RemboursementRow, SelectOption, SharedProps } from '@/Types';
 
 type Tab = 'depenses' | 'paiements-prof' | 'remboursements' | 'validation';
@@ -216,6 +217,8 @@ export default function DepensesIndex({
             replace: true,
         });
     }
+
+    const filterReset = useFilterReset(filters, reload, { perPage: filters.perPage });
 
     // --- Approval flow (Paramètres → Système « Validation des dépenses ») ---
     // A pending dépense has debited NOTHING: approving is what moves the
@@ -573,7 +576,7 @@ export default function DepensesIndex({
                     }
                 >
                     <div className="px-3 pt-2">
-                        <TableToolbar>
+                        <TableToolbar onReset={filterReset.reset} resetActive={filterReset.active}>
                             <div style={{ width: 220 }}>
                                 <label className="form-label" htmlFor="dep-f-type">
                                     Type
@@ -753,7 +756,7 @@ export default function DepensesIndex({
                     }
                 >
                     <div className="px-3 pt-2">
-                        <TableToolbar>
+                        <TableToolbar onReset={filterReset.reset} resetActive={filterReset.active}>
                             <div style={{ width: 170 }}>
                                 <label className="form-label" htmlFor="prof-f-du">
                                     Du
@@ -925,7 +928,7 @@ export default function DepensesIndex({
             {tab === 'validation' && canAudit && depenses && (
                 <Card title="Validation des dépenses" bodyClassName="p-0 py-3">
                     <div className="px-3 pt-2">
-                        <TableToolbar>
+                        <TableToolbar onReset={filterReset.reset} resetActive={filterReset.active}>
                             <div style={{ width: 220 }}>
                                 <label className="form-label" htmlFor="val-f-type">
                                     Type

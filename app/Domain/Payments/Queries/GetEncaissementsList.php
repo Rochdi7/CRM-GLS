@@ -108,15 +108,23 @@ final class GetEncaissementsList
             // 11/07/2025, invisible under 2025/2026 which opens on 01/09,
             // 26/08/2026).
             //
-            // The Avances tab is exempt entirely: an avance is money received
-            // and NOT yet allocated, so it stays outstanding until someone
-            // applies it — hiding one because it arrived before the current
-            // year opened makes real, unspent money unreachable. It is listed
-            // in full, like the transfer-validation inbox (CLAUDE.md §11
-            // "Deliberate exceptions").
+            // ⚠ AVANCES ARE EXEMPT FROM THE YEAR WINDOW — on EVERY tab, not
+            // just the Avances one. An avance is money received and NOT yet
+            // allocated, so it stays outstanding until someone applies it;
+            // hiding one because it arrived before the current year opened
+            // makes real, unspent money unreachable (CLAUDE.md §11
+            // "Deliberate exceptions", like the transfer-validation inbox).
+            //
+            // Keying that exemption on the TAB ($view !== 'avance') instead
+            // of on the ROW was a bug (30/08/2026): on the Encaissements tab
+            // an avance was still date-windowed, so clearing « Date de fin »
+            // — which must only ever WIDEN a result set — emptied the list.
+            // A student filtered to 5 200 MAD of payments showed 0.00 MAD the
+            // moment the date came off, because every remaining row was
+            // either an avance dated outside the active year or a fee of the
+            // previous one. A cleared filter must never REMOVE rows.
             ->when(
-                $view !== 'avance'
-                    && $this->context->anneeScolaire()
+                $this->context->anneeScolaire()
                     && ! self::isIsoDate($dateFrom)
                     && ! self::isIsoDate($dateTo),
                 function ($q): void {
@@ -124,12 +132,8 @@ final class GetEncaissementsList
 
                     $q->where(function ($sub) use ($annee): void {
                         $sub->whereHas('fee.inscription', fn ($i) => $i->where('annee_scolaire_id', $annee->id))
-                            ->orWhere(fn ($w) => $w
-                                ->whereNull('inscription_fee_id')
-                                ->whereBetween('date_paiement', [
-                                    $annee->date_debut->toDateString(),
-                                    $annee->date_fin->toDateString(),
-                                ]));
+                            // No fee = an avance: always listed, whatever its date.
+                            ->orWhereNull('inscription_fee_id');
                     });
                 }
             )

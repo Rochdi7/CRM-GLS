@@ -4,6 +4,7 @@ import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
 import TableToolbar from '@/Components/Tables/TableToolbar';
+import { useFilterReset } from '@/Hooks/useFilterReset';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
@@ -155,10 +156,14 @@ export default function ComptesPanel({
         });
     }
 
+    const filterReset = useFilterReset(filters, onFilter);
+
     return (
         <Card bodyClassName="p-0 py-3">
             <div className="px-3 pt-2">
                 <TableToolbar
+                    onReset={filterReset.reset}
+                    resetActive={filterReset.active}
                     actions={
                         permissions.create ? (
                             <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>

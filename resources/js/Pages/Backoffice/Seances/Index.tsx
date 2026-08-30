@@ -13,6 +13,7 @@ import StatusBadge from '@/Components/Details/StatusBadge';
 import Pagination from '@/Components/Tables/Pagination';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import TableToolbar from '@/Components/Tables/TableToolbar';
+import { useFilterReset } from '@/Hooks/useFilterReset';
 import SearchInput from '@/Components/Tables/SearchInput';
 import DateField from '@/Components/Forms/DateField';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
@@ -91,6 +92,8 @@ export default function SeancesIndex({
             { preserveState: true, preserveScroll: true, replace: true },
         );
     }
+
+    const filterReset = useFilterReset(filters, reload, { perPage: filters.perPage });
 
     function openCreate() {
         form.setData({ ...EMPTY_FORM, date_seance: new Date().toISOString().slice(0, 10) });
@@ -250,7 +253,7 @@ export default function SeancesIndex({
                 {/* Filter row (reference CRM's Séances filters): Groupe/
                     Statut/Enseignant/Date de début/Date de fin. */}
                 <div className="px-3 pt-2">
-                    <TableToolbar>
+                    <TableToolbar onReset={filterReset.reset} resetActive={filterReset.active}>
                         <div style={{ width: 220 }}>
                             <label className="form-label" htmlFor="seance-f-groupe">
                                 Groupe

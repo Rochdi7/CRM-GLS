@@ -19,6 +19,7 @@ import FormActions from '@/Components/Forms/FormActions';
 import SexeIcon from '@/Components/Details/SexeIcon';
 import { splitPhone } from '@/Data/countries';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
+import { useFilterReset } from '@/Hooks/useFilterReset';
 import type { SelectOption, StudentRow, StudentsPageProps } from '@/Types';
 
 interface StudentFormState {
@@ -131,6 +132,8 @@ export default function StudentsIndex({
             { preserveState: true, preserveScroll: true, replace: true },
         );
     }
+
+    const filterReset = useFilterReset(filters, reload, { perPage: filters.perPage });
 
     function toggleAgeSort() {
         reload({ ageSort: filters.ageSort === 'asc' ? 'desc' : 'asc' });
@@ -283,7 +286,7 @@ export default function StudentsIndex({
                     without Catégorie d'âge) — replaces the single search box
                     AND the "Filtrer" dropdown (Niveau/Centre moved in here). */}
                 <div className="px-3 pt-2">
-                    <TableToolbar>
+                    <TableToolbar onReset={filterReset.reset} resetActive={filterReset.active}>
                         <div style={{ width: 150 }}>
                             <label className="form-label" htmlFor="stu-f-reference">
                                 Référence

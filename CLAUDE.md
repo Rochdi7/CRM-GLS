@@ -141,6 +141,38 @@ Shared components (reuse these — do not re-invent per page):
   the old `<x-backoffice.ui.filter-bar>`. `Pagination` renders the same
   Bootstrap `.pagination` markup but navigates via `router.get(...)` instead
   of `<a href>`, so query-string filters persist across pages.
+- **Filters are NEVER reset as a side effect (every list page, current and
+  future).** They are cleared ONLY by the explicit « Réinitialiser les
+  filtres » button (`Components/Tables/ResetFiltersButton.tsx`, `ti-filter-off`),
+  wired through `TableToolbar`'s `onReset` / `resetActive` props from
+  `Hooks/useFilterReset.ts` — which rebuilds every filter key at its default
+  (pass `defaults` for keys whose default is not `''`: `perPage`, an open tab,
+  a date window, `soldeFilter='restant'`) and reports whether anything
+  deviates so the button disables when there is nothing to clear. The other
+  half is server-side: a mutation must NOT answer with
+  `redirect()->route('backoffice.x.index')` — that drops the whole query
+  string and dumps the user on an unfiltered page 1. Use
+  `Controllers\Backoffice\Concerns\RedirectsPreservingFilters::
+  backToListPreservingFilters($request, $route, $extra)`, which rebuilds the
+  redirect from the referer's query (falling back to the bare route when it is
+  absent or points off-host — never redirect to a client-supplied URL), drops
+  `page` (the row may have moved), and lets `$extra` override only what the
+  action itself decides (e.g. `view=avance`). Reported 30/08/2026: a cashier
+  who filtered the Avances tab to one student had to retype the filter after
+  every single application. Tests:
+  `tests/Feature/Backoffice/Finance/FilterPreservingRedirectTest.php`.
+- **⚠ Clearing a filter must only ever WIDEN a result set.** If removing a
+  value makes rows disappear, that is a bug, not scoping. In
+  `GetEncaissementsList` the active-année window applies only when BOTH date
+  fields are empty, and an **avance is exempt from it by ROW**
+  (`orWhereNull('inscription_fee_id')`) — NOT by which tab is open. Keying that
+  exemption on `$view !== 'avance'` meant an avance was still date-windowed on
+  the Encaissements tab, so clearing « Date de fin » emptied a student's list
+  (5 200 MAD → 0.00 MAD). An avance is money received and not yet allocated, so
+  it stays listed whatever its date (§11 « Deliberate exceptions »); a
+  fee-attached row of another year does correctly drop out. When adding any
+  année/date window to a list query, check what the user sees after CLEARING
+  the filter.
 - **Centre filter dropdown rule (every list page, current and future):** if a
   CRUD index page filters by `etablissement_id` (a "Centre" `SelectField` in
   the `TableToolbar`), that dropdown must be wrapped in `{!centerLocked && (

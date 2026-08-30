@@ -10,6 +10,7 @@ import DateField from '@/Components/Forms/DateField';
 import SelectField from '@/Components/Forms/SelectField';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
+import { useFilterReset } from '@/Hooks/useFilterReset';
 import { t } from '@/Lib/i18n';
 import type { RecouvrementPageProps, SelectOption } from '@/Types';
 
@@ -53,6 +54,8 @@ export default function RecouvrementIndex({
             { preserveState: true, preserveScroll: true, replace: true },
         );
     }
+
+    const filterReset = useFilterReset(filters, reload, { perPage: filters.perPage });
 
     function switchTab(next: Tab) {
         setTab(next);
@@ -121,7 +124,7 @@ export default function RecouvrementIndex({
                 )}
 
                 <div className="px-3 pt-2">
-                    <TableToolbar>
+                    <TableToolbar onReset={filterReset.reset} resetActive={filterReset.active}>
                         <div style={{ width: 220 }}>
                             <label className="form-label" htmlFor="rec-f-groupe">
                                 {t('Group')}

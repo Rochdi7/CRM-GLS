@@ -3,6 +3,7 @@ import { useMemo, useState, type FormEvent } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import TableToolbar from '@/Components/Tables/TableToolbar';
+import { useFilterReset } from '@/Hooks/useFilterReset';
 import Modal from '@/Components/Modals/Modal';
 import ConfirmDialog from '@/Components/Modals/ConfirmDialog';
 import SelectField from '@/Components/Forms/SelectField';
@@ -149,6 +150,8 @@ export default function EmploiDuTempsIndex({
         );
     }
 
+    const filterReset = useFilterReset(filters, reload);
+
     function openCreate() {
         setEditingId(null);
         createForm.reset();
@@ -252,7 +255,7 @@ export default function EmploiDuTempsIndex({
         >
             <Card title="Emploi du temps" bodyClassName="p-0 py-3">
                 <div className="px-3 pt-2">
-                    <TableToolbar>
+                    <TableToolbar onReset={filterReset.reset} resetActive={filterReset.active}>
                         <div style={{ width: 220 }}>
                             <label className="form-label" htmlFor="edt-f-groupe">
                                 Groupe

@@ -14,6 +14,7 @@ import Pagination from '@/Components/Tables/Pagination';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import SearchInput from '@/Components/Tables/SearchInput';
 import TableToolbar from '@/Components/Tables/TableToolbar';
+import { useFilterReset } from '@/Hooks/useFilterReset';
 import DateField from '@/Components/Forms/DateField';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import type {
@@ -149,6 +150,8 @@ export default function StockIndex({
             { preserveState: true, preserveScroll: true, replace: true },
         );
     }
+
+    const filterReset = useFilterReset(filters, reload, { perPage: filters.perPage });
 
     function switchTab(next: 'articles' | 'mouvements' | 'types') {
         router.get(
@@ -378,7 +381,7 @@ export default function StockIndex({
             {tab === 'articles' && (
                 <Card title="Articles" bodyClassName="p-0 py-3">
                     <div className="px-3 pt-2">
-                        <TableToolbar>
+                        <TableToolbar onReset={filterReset.reset} resetActive={filterReset.active}>
                             <div style={{ width: 200 }}>
                                 <label className="form-label" htmlFor="stk-f-type">
                                     Type
@@ -521,7 +524,7 @@ export default function StockIndex({
             {tab === 'mouvements' && (
                 <Card title="Mouvements" bodyClassName="p-0 py-3">
                     <div className="px-3 pt-2">
-                        <TableToolbar>
+                        <TableToolbar onReset={filterReset.reset} resetActive={filterReset.active}>
                             <div style={{ width: 220 }}>
                                 <label className="form-label" htmlFor="mvt-f-article">
                                     Article

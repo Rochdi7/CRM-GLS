@@ -18,6 +18,7 @@ import FormActions from '@/Components/Forms/FormActions';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import GroupPaymentMatrixTable from '@/Components/Groups/GroupPaymentMatrix';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
+import { useFilterReset } from '@/Hooks/useFilterReset';
 import { blockImplicitSubmit } from '@/Lib/forms';
 import type {
     GroupFraisCatalogOption,
@@ -332,6 +333,8 @@ export default function GroupsIndex({
             { preserveState: true, preserveScroll: true, replace: true },
         );
     }
+
+    const filterReset = useFilterReset(filters, reload, { perPage: filters.perPage });
 
     function setStatutTab(statut: string) {
         reload({ statutFilter: statut });
@@ -696,7 +699,7 @@ export default function GroupsIndex({
                 {/* Filter row (reference CRM's Groupes filters, without a
                     Formation column) — Groupe/Enseignant/dates. */}
                 <div className="px-3 pt-2">
-                    <TableToolbar>
+                    <TableToolbar onReset={filterReset.reset} resetActive={filterReset.active}>
                         <div style={{ width: 220 }}>
                             <label className="form-label" htmlFor="grp-f-nom">
                                 Groupe

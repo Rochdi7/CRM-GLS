@@ -17,6 +17,7 @@ import TextareaField from '@/Components/Forms/TextareaField';
 import FormActions from '@/Components/Forms/FormActions';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
+import { useFilterReset } from '@/Hooks/useFilterReset';
 import type { ChequeRow, ChequesPageProps, SelectOption } from '@/Types';
 
 interface ChequeFormState {
@@ -134,6 +135,8 @@ export default function ChequesIndex({
             { preserveState: true, preserveScroll: true, replace: true },
         );
     }
+
+    const filterReset = useFilterReset(filters, reload, { perPage: filters.perPage });
 
     function openCreate() {
         setEditingCheque(null);
@@ -334,7 +337,7 @@ export default function ChequesIndex({
 
             <Card title="Chèques" bodyClassName="p-0 py-3">
                 <div className="px-3 pt-2">
-                    <TableToolbar>
+                    <TableToolbar onReset={filterReset.reset} resetActive={filterReset.active}>
                         <div style={{ width: 160 }}>
                             <label className="form-label" htmlFor="chq-f-numero">
                                 Num Chèque

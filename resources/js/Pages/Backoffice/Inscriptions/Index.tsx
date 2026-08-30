@@ -6,6 +6,7 @@ import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
+import { useFilterReset } from '@/Hooks/useFilterReset';
 import { blockImplicitSubmit } from '@/Lib/forms';
 import TableToolbar from '@/Components/Tables/TableToolbar';
 import FilterTextInput from '@/Components/Tables/FilterTextInput';
@@ -540,6 +541,8 @@ export default function InscriptionsIndex({
             { preserveState: true, preserveScroll: true, replace: true },
         );
     }
+
+    const filterReset = useFilterReset(filters, reload, { perPage: filters.perPage });
 
     function openCreate() {
         setEditingInscription(null);
@@ -1189,7 +1192,7 @@ export default function InscriptionsIndex({
                 {/* Per-column filter row (reference CRM's Inscriptions filters,
                     without Offres) — replaces the dropdown + single search box. */}
                 <div className="px-3 pt-2">
-                    <TableToolbar>
+                    <TableToolbar onReset={filterReset.reset} resetActive={filterReset.active}>
                         <div style={{ width: 170 }}>
                             <label className="form-label" htmlFor="ins-f-reference">
                                 Référence

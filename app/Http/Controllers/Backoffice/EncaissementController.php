@@ -17,6 +17,7 @@ use App\Domain\Payments\Queries\GetInscriptionUnpaidFees;
 use App\Domain\Settings\Queries\GetBanquesList;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
+use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Http\Requests\Backoffice\Encaissements\ApplyAvanceRequest;
 use App\Http\Requests\Backoffice\Encaissements\ConvertAvanceRequest;
 use App\Http\Requests\Backoffice\Encaissements\SendRecuEmailRequest;
@@ -50,6 +51,7 @@ use Inertia\Response;
 final class EncaissementController extends Controller
 {
     use AssertsContextScope;
+    use RedirectsPreservingFilters;
 
     public function __construct()
     {
@@ -365,7 +367,7 @@ final class EncaissementController extends Controller
             }
         });
 
-        return redirect()->route('backoffice.encaissements.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.encaissements.index')
             ->with('success', __('Payment recorded.'));
     }
 
@@ -410,7 +412,7 @@ final class EncaissementController extends Controller
             'note' => $data['note'] ?? null,
         ], $agent);
 
-        return redirect()->route('backoffice.encaissements.index', ['view' => 'avance'])
+        return $this->backToListPreservingFilters($request, 'backoffice.encaissements.index', ['view' => 'avance'])
             ->with('success', __('Advance recorded.'));
     }
 
@@ -432,7 +434,7 @@ final class EncaissementController extends Controller
 
         $action->handle($inscription, array_map('intval', $data['encaissement_ids']));
 
-        return redirect()->route('backoffice.encaissements.index', ['view' => 'avance'])
+        return $this->backToListPreservingFilters($request, 'backoffice.encaissements.index', ['view' => 'avance'])
             ->with('success', __('Payments converted into advances.'));
     }
 
@@ -457,7 +459,7 @@ final class EncaissementController extends Controller
 
         $action->handle($encaissement, $fee, (float) $data['montant']);
 
-        return redirect()->route('backoffice.encaissements.index', ['view' => 'avance'])
+        return $this->backToListPreservingFilters($request, 'backoffice.encaissements.index', ['view' => 'avance'])
             ->with('success', __('Advance applied.'));
     }
 
@@ -542,7 +544,7 @@ final class EncaissementController extends Controller
      * a super-admin. SupprimerEncaissement reverses caisses.solde in the same
      * transaction and refuses entangled rows (applied avances, tracked chèques).
      */
-    public function destroy(Encaissement $encaissement, SupprimerEncaissement $action): RedirectResponse
+    public function destroy(Request $request, Encaissement $encaissement, SupprimerEncaissement $action): RedirectResponse
     {
         // Explicit, in addition to the route's `permission:payments.delete`
         // and `can:delete,encaissement`: every other mutation in this
@@ -551,7 +553,7 @@ final class EncaissementController extends Controller
 
         $action->handle($encaissement);
 
-        return redirect()->route('backoffice.encaissements.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.encaissements.index')
             ->with('success', __('Payment deleted.'));
     }
 
@@ -605,7 +607,7 @@ final class EncaissementController extends Controller
         // UpdateEncaissementRequest); this edit is audit-logged by LogsActivity.
         $encaissement->update($data);
 
-        return redirect()->route('backoffice.encaissements.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.encaissements.index')
             ->with('success', __('Payment updated.'));
     }
 
