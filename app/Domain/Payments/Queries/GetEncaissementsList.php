@@ -6,6 +6,7 @@ namespace App\Domain\Payments\Queries;
 
 use App\Models\Activity;
 use App\Models\Caisse;
+use App\Models\Employee;
 use App\Models\Encaissement;
 use App\Models\Group;
 use App\Models\Inscription;
@@ -379,12 +380,23 @@ final class GetEncaissementsList
      * Every accessible till — NOT restricted to Active status (matches the
      * original component's deliberate choice, see class docblock).
      *
+     * ⚠ The « Caisse » filter of the Encaissements / Avances page lists only
+     * the tills a cashier can actually collect money into (30/08/2026):
+     *
+     *  - PHYSICAL cash tills only (Caissière / Externe) — the centre-level
+     *    TPE / Chèque / Virement accounts are an accounting destination, not
+     *    a caisse a user picks between, so they are dropped from the list.
+     *  - a teacher's own till is dropped too: an Enseignant never cashes a
+     *    student in, so its till only bloated a dropdown of ~40 names.
+     *
      * @return Collection<int, array{id:int, nom:string}>
      */
     public function caisseOptions(User $user): Collection
     {
         return Caisse::query()
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+            ->whereIn('type', Caisse::TYPES_ESPECES)
+            ->whereDoesntHave('responsable', fn ($e) => $e->where('categorie', Employee::CATEGORIE_ENSEIGNANT))
             ->where(function ($q): void {
                 $this->scopeToActiveCenter($q);
 

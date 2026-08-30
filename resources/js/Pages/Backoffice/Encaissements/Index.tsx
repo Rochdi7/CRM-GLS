@@ -223,7 +223,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
     const bulkHint = selectedRows.length === 0
         ? 'Sélectionnez au moins un paiement.'
         : selectedInscriptionIds.length > 1
-            ? "Un reçu ne peut couvrir qu'une seule inscription — décochez les paiements des autres étudiants."
+            ? "Un reçu ne couvre qu'une seule inscription — décochez les paiements rattachés à une autre inscription."
             : '';
 
     function toggleRowSelection(id: number) {
@@ -882,13 +882,24 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                     <span className="badge bg-white text-dark ms-2">{selectedIds.length}</span>
                                 )}
                             </button>
+                            {/* Ancrage explicite à droite du bouton : « dropdown-menu-end »
+                                seul laissait le panneau (libellés longs + l'aide de 320px)
+                                déborder hors de l'écran à droite. On le pose donc à
+                                right:0 / left:auto avec une largeur bornée pour qu'il
+                                s'ouvre TOUJOURS vers la gauche du bouton. */}
                             <ul
                                 className={`dropdown-menu dropdown-menu-end p-3${bulkMenuOpen ? ' show' : ''}`}
-                                style={{ zIndex: 1000 }}
+                                style={{
+                                    zIndex: 1000,
+                                    right: 0,
+                                    left: 'auto',
+                                    maxWidth: 'calc(100vw - 2rem)',
+                                    width: 'max-content',
+                                }}
                             >
                                 {bulkHint && (
                                     <li>
-                                        <p className="text-muted fs-12 mb-2" style={{ maxWidth: 320 }}>
+                                        <p className="text-muted fs-12 mb-2" style={{ maxWidth: 320, whiteSpace: 'normal' }}>
                                             {bulkHint}
                                         </p>
                                     </li>

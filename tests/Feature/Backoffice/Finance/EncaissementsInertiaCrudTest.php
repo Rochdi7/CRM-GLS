@@ -1284,7 +1284,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
         ]))->assertOk();
 
         $response->assertSee('ENC-G1 / ENC-G2', false);
-        $response->assertSee("Frais d'inscription 1", false);
+        $response->assertSee('Frais d&#039;inscription 1', false);
         $response->assertSee('Frais de Juillet', false);
         // Le total est la somme des lignes sélectionnées, pas celle du dossier.
         $response->assertSee('500', false);

@@ -39,6 +39,10 @@ class DatabaseSeeder extends Seeder
             // ReferentialDataSeeder supersedes AnneeScolaireSeeder (years 24/25 +
             // 25/26) and adds the 7 GLS branches with their rooms.
             ReferentialDataSeeder::class,
+            // AFTER ReferentialDataSeeder : celui-ci crée les centres, celui-là
+            // remplit leurs coordonnées légales (ICE, adresse, tél, e-mail) que
+            // les reçus impriment. Ne comble que les champs vides, sauf l'ICE.
+            CentreCoordonneesSeeder::class,
             // AFTER the two above on purpose: AdminUserSeeder assigns the
             // super-admin role (needs the role) and attaches the admin
             // employee to every center (needs the établissements).
