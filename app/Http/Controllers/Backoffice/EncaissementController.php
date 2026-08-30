@@ -502,6 +502,85 @@ final class EncaissementController extends Controller
     }
 
     /**
+     * Reçu GROUPÉ — un seul reçu couvrant plusieurs encaissements de la MÊME
+     * inscription (?ids=12,13,14&format=a6|a5|a5x2). Sert le cas courant du
+     * guichet : l'étudiant règle deux ou trois frais en une seule fois et
+     * repart avec UN document, pas trois.
+     *
+     * ⚠ L'identité d'un reçu est celle d'UN étudiant : le lot est refusé
+     * (422) dès que les lignes ne partagent pas la même inscription — d'où
+     * le menu « Action » désactivé côté UI quand la sélection mélange deux
+     * étudiants. La vérification est ici, jamais seulement dans React.
+     * Chaque ligne est autorisée individuellement (`view`), donc un id hors
+     * périmètre du centre est refusé comme sur le reçu unitaire.
+     */
+    public function recuGroupe(Request $request): \Illuminate\Contracts\View\View
+    {
+        $format = (string) $request->string('format', 'a5');
+        if (! in_array($format, ['a6', 'a5', 'a5x2'], true)) {
+            $format = 'a5';
+        }
+
+        $ids = collect(explode(',', (string) $request->string('ids')))
+            ->map(fn ($id) => (int) trim($id))
+            ->filter()
+            ->unique()
+            ->values();
+
+        abort_if($ids->isEmpty(), 404);
+
+        $encaissements = Encaissement::query()
+            ->whereIn('id', $ids)
+            ->with([
+                'student.etablissement',
+                'fee.inscription.anneeScolaire',
+                'fee.inscription.group',
+                'fee.inscription.etablissement',
+            ])
+            ->orderBy('date_paiement')
+            ->orderBy('id')
+            ->get();
+
+        abort_if($encaissements->count() !== $ids->count(), 404);
+
+        foreach ($encaissements as $encaissement) {
+            $this->authorize('view', $encaissement);
+        }
+
+        // Même inscription pour toutes les lignes. Une avance n'a pas de fee
+        // — donc pas d'inscription — et ne peut pas être groupée : elle
+        // n'appartient encore à aucun dossier d'inscription.
+        $inscriptionIds = $encaissements->map(fn ($e) => $e->fee?->inscription_id)->unique();
+        abort_if($inscriptionIds->count() !== 1 || $inscriptionIds->first() === null, 422, __('A grouped receipt must cover payments of a single registration.'));
+
+        $first = $encaissements->first();
+        $inscription = $first->fee?->inscription;
+        $centre = $inscription?->etablissement ?? $first->student?->etablissement;
+
+        // Reste par frais, en UNE requête agrégée — jamais
+        // InscriptionFee::montantPaye() dans la boucle du reçu (CLAUDE.md §17,
+        // « read models never call a per-row money accessor in a loop »).
+        $feeIds = $encaissements->pluck('inscription_fee_id')->filter()->unique();
+        $payeParFee = \App\Models\Encaissement::query()
+            ->whereIn('inscription_fee_id', $feeIds)
+            ->groupBy('inscription_fee_id')
+            ->selectRaw('inscription_fee_id, sum(montant) as paye')
+            ->pluck('paye', 'inscription_fee_id');
+
+        return view('backoffice.encaissements.recu-groupe', [
+            'format' => $format,
+            'encaissements' => $encaissements,
+            'student' => $first->student,
+            'centre' => $centre,
+            'anneeScolaire' => $inscription?->anneeScolaire?->nom,
+            'niveau' => $inscription?->group?->nom ?? $first->student?->niveau,
+            'montantTotal' => (float) $encaissements->sum('montant'),
+            'reference' => $first->reference,
+            'payeParFee' => $payeParFee,
+        ]);
+    }
+
+    /**
      * Emails the same receipt (rendered as a PDF, A5) to a given address —
      * defaults to the student's own email in the UI prompt, but any address
      * can be typed since not every student has one on file. Reuses the

@@ -1051,5 +1051,6 @@
     "Vous ne pouvez pas attribuer de permissions directes.": "Vous ne pouvez pas attribuer de permissions directes.",
     "Établissement créé.": "Établissement créé.",
     "Établissement mis à jour.": "Établissement mis à jour.",
-    "Établissement supprimé.": "Établissement supprimé."
+    "Établissement supprimé.": "Établissement supprimé.",
+    "A grouped receipt must cover payments of a single registration.": "Un reçu groupé doit couvrir des paiements d'une seule inscription."
 }

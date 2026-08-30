@@ -1252,6 +1252,90 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame(0, Encaissement::count());
     }
 
+    // --- Reçu groupé (plusieurs paiements, une seule inscription) --------
+
+    /** Crée un paiement rattaché au frais donné. */
+    private function paiementSur(InscriptionFee $fee, Student $student, User $user, float $montant, string $reference): Encaissement
+    {
+        return Encaissement::create([
+            'reference' => $reference, 'student_id' => $student->id, 'inscription_fee_id' => $fee->id,
+            'caisse_id' => Caisse::factory()->create(['etablissement_id' => $this->centre->id])->id,
+            'agent_id' => $user->employee->id, 'montant' => $montant,
+            'methode' => Encaissement::METHODE_ESPECES, 'date_paiement' => '2025-09-20',
+        ]);
+    }
+
+    public function test_recu_groupe_renders_every_selected_payment_of_the_same_inscription(): void
+    {
+        $user = $this->userWith('payments.view');
+        $this->actingAs($user);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1500);
+        $autreFrais = InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => "Frais d'inscription 1",
+            'montant_initial' => 300, 'montant' => 300,
+            'date_echeance' => '2025-09-30', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+
+        $a = $this->paiementSur($fee, $student, $user, 200, 'ENC-G1');
+        $b = $this->paiementSur($autreFrais, $student, $user, 300, 'ENC-G2');
+
+        $response = $this->get(route('backoffice.encaissements.recu-groupe', [
+            'ids' => $a->id.','.$b->id, 'format' => 'a5',
+        ]))->assertOk();
+
+        $response->assertSee('ENC-G1 / ENC-G2', false);
+        $response->assertSee("Frais d'inscription 1", false);
+        $response->assertSee('Frais de Juillet', false);
+        // Le total est la somme des lignes sélectionnées, pas celle du dossier.
+        $response->assertSee('500', false);
+    }
+
+    public function test_recu_groupe_refuses_payments_of_two_different_registrations(): void
+    {
+        $user = $this->userWith('payments.view');
+        $this->actingAs($user);
+        [$studentA, , $feeA] = $this->enrolledStudentWithFee(1500);
+        [$studentB, , $feeB] = $this->enrolledStudentWithFee(1500);
+
+        $a = $this->paiementSur($feeA, $studentA, $user, 200, 'ENC-X1');
+        $b = $this->paiementSur($feeB, $studentB, $user, 300, 'ENC-X2');
+
+        // La règle vit sur le serveur : le menu grisé côté React n'est qu'un
+        // confort, une requête forgée doit être refusée ici.
+        $this->get(route('backoffice.encaissements.recu-groupe', [
+            'ids' => $a->id.','.$b->id,
+        ]))->assertStatus(422);
+    }
+
+    public function test_recu_groupe_refuses_an_avance_which_belongs_to_no_registration(): void
+    {
+        $user = $this->userWith('payments.view');
+        $this->actingAs($user);
+        [$student, , $fee] = $this->enrolledStudentWithFee(1500);
+
+        $paiement = $this->paiementSur($fee, $student, $user, 200, 'ENC-A1');
+        $avance = Encaissement::create([
+            'reference' => 'ENC-AV', 'student_id' => $student->id, 'inscription_fee_id' => null,
+            'caisse_id' => Caisse::factory()->create(['etablissement_id' => $this->centre->id])->id,
+            'agent_id' => $user->employee->id, 'montant' => 400,
+            'methode' => Encaissement::METHODE_ESPECES, 'date_paiement' => '2025-09-20',
+        ]);
+
+        $this->get(route('backoffice.encaissements.recu-groupe', [
+            'ids' => $paiement->id.','.$avance->id,
+        ]))->assertStatus(422);
+    }
+
+    public function test_recu_groupe_requires_payments_view(): void
+    {
+        $user = User::factory()->create();
+        Employee::factory()->create(['user_id' => $user->id, 'etablissement_id' => $this->centre->id]);
+
+        $this->actingAs($user->fresh())
+            ->get(route('backoffice.encaissements.recu-groupe', ['ids' => '1']))
+            ->assertForbidden();
+    }
+
     public function test_recu_can_be_emailed_to_a_given_address(): void
     {
         \Illuminate\Support\Facades\Mail::fake();

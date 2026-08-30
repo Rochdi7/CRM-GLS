@@ -1,11 +1,10 @@
 import { router, useForm } from '@inertiajs/react';
-import { Fragment, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
 import FilterTextInput from '@/Components/Tables/FilterTextInput';
-import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import ResetFiltersButton from '@/Components/Tables/ResetFiltersButton';
 import { useFilterReset } from '@/Hooks/useFilterReset';
 import SearchInput from '@/Components/Tables/SearchInput';
@@ -121,6 +120,15 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
     const [loadingApplyFees, setLoadingApplyFees] = useState(false);
     const [studentCheques, setStudentCheques] = useState<StudentChequeOption[]>([]);
     const [emailTarget, setEmailTarget] = useState<EncaissementRow | null>(null);
+    // Sélection multi-lignes pour le reçu GROUPÉ (onglets Encaissements /
+    // Chèques uniquement — une avance n'appartient à aucune inscription et ne
+    // peut donc pas figurer sur un reçu). Les ids sont mémorisés, pas les
+    // lignes : un rechargement partiel (filtre, page) renvoie de nouveaux
+    // objets, et on ne garde que ce qui est encore affiché — voir l'effet
+    // d'élagage plus bas.
+    const [selectedIds, setSelectedIds] = useState<number[]>([]);
+    const [bulkMenuOpen, setBulkMenuOpen] = useState(false);
+    const bulkMenuRef = useRef<HTMLDivElement>(null);
 
     const caisseOptions: SelectOption[] = caisses.map((c) => ({ value: c.id, label: c.nom }));
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.nom }));
@@ -187,6 +195,85 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
         dateFrom: filters.view === 'avance' ? '' : todayIso,
         dateTo: filters.view === 'avance' ? '' : todayIso,
     });
+
+    // ── Sélection multi-lignes / reçu groupé ─────────────────────────────
+    // Le reçu est refusé côté serveur si les lignes ne partagent pas la même
+    // inscription (EncaissementController@recuGroupe) ; ici on ne fait que
+    // désactiver le menu et l'expliquer, comme sur la maquette où « Action »
+    // apparaît grisé dès qu'un autre étudiant entre dans la sélection.
+    const selectableRows = filters.view === 'avance'
+        ? []
+        : encaissements.data.filter((row) => row.inscriptionId !== null);
+    const selectableIds = selectableRows.map((row) => row.id);
+
+    // Une ligne cochée puis filtrée hors de la page ne doit pas rester dans le
+    // lot invisible : on n'garde que ce qui est encore affiché.
+    useEffect(() => {
+        setSelectedIds((previous) => {
+            const kept = previous.filter((id) => selectableIds.includes(id));
+            return kept.length === previous.length ? previous : kept;
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [encaissements.data, filters.view]);
+
+    const selectedRows = selectableRows.filter((row) => selectedIds.includes(row.id));
+    const selectedInscriptionIds = Array.from(new Set(selectedRows.map((row) => row.inscriptionId)));
+    const sameInscription = selectedRows.length > 0 && selectedInscriptionIds.length === 1;
+    const bulkDisabled = !sameInscription;
+    const bulkHint = selectedRows.length === 0
+        ? 'Sélectionnez au moins un paiement.'
+        : selectedInscriptionIds.length > 1
+            ? "Un reçu ne peut couvrir qu'une seule inscription — décochez les paiements des autres étudiants."
+            : '';
+
+    function toggleRowSelection(id: number) {
+        setSelectedIds((previous) =>
+            previous.includes(id) ? previous.filter((value) => value !== id) : [...previous, id],
+        );
+    }
+
+    function toggleSelectAll() {
+        setSelectedIds((previous) => (previous.length === selectableIds.length ? [] : selectableIds));
+    }
+
+    function openRecuGroupe(format: 'a6' | 'a5' | 'a5x2') {
+        if (bulkDisabled) {
+            return;
+        }
+
+        const ids = selectedRows.map((row) => row.id).join(',');
+        window.open(`/backoffice/encaissements/recu-groupe?ids=${ids}&format=${format}`, '_blank');
+        setBulkMenuOpen(false);
+    }
+
+    // Le menu « Action » n'utilise pas le JS de Bootstrap (CLAUDE.md §3) :
+    // ouverture/fermeture, clic extérieur et Échap sont pilotés par React,
+    // comme dans RowActions.
+    useEffect(() => {
+        if (!bulkMenuOpen) {
+            return;
+        }
+
+        function handleClickOutside(event: MouseEvent) {
+            if (bulkMenuRef.current && !bulkMenuRef.current.contains(event.target as Node)) {
+                setBulkMenuOpen(false);
+            }
+        }
+
+        function handleEscape(event: KeyboardEvent) {
+            if (event.key === 'Escape') {
+                setBulkMenuOpen(false);
+            }
+        }
+
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleEscape);
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleEscape);
+        };
+    }, [bulkMenuOpen]);
 
     function openCreate() {
         setEditingRow(null);
@@ -756,13 +843,8 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                 </div>
                             </>
                         )}
-                    </div>
-                </div>
-
-                <TableLengthRow
-                    search={
-                        <div className="d-flex align-items-center gap-2">
-                            <div style={{ width: 260 }}>
+                        <div className="col-12 col-lg d-flex align-items-end justify-content-lg-end gap-2 ms-lg-auto">
+                            <div style={{ width: 260, maxWidth: '100%' }}>
                                 <SearchInput
                                     value={filters.search}
                                     onSearch={(value) => reload({ search: value })}
@@ -771,15 +853,83 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                             </div>
                             <ResetFiltersButton onReset={filterReset.reset} active={filterReset.active} />
                         </div>
-                    }
-                />
+                    </div>
+                </div>
 
-                <p className="fw-medium px-3 mb-3">
-                    {/* Avances total what is still AVAILABLE (montant − applied − refunded),
-                        so the label states that rather than claiming a plain sum. */}
-                    {filters.view === 'avance' ? t('Remaining total') : t('Total amount')} :{' '}
-                    {Number(montantTotal ?? 0).toFixed(2)} MAD
-                </p>
+                <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 px-3 mb-3">
+                    <p className="fw-medium mb-0">
+                        {/* Avances total what is still AVAILABLE (montant − applied − refunded),
+                            so the label states that rather than claiming a plain sum. */}
+                        {filters.view === 'avance' ? t('Remaining total') : t('Total amount')} :{' '}
+                        {Number(montantTotal ?? 0).toFixed(2)} MAD
+                    </p>
+
+                    {/* Reçu groupé : n'existe pas sur l'onglet Avances (une avance
+                        n'est rattachée à aucune inscription). Le menu reste visible
+                        mais grisé tant que la sélection n'est pas cohérente — c'est
+                        l'état montré sur la maquette. */}
+                    {filters.view !== 'avance' && (
+                        <div className="dropdown" ref={bulkMenuRef}>
+                            <button
+                                type="button"
+                                className="btn btn-dark d-inline-flex align-items-center"
+                                onClick={() => setBulkMenuOpen((open) => !open)}
+                                aria-expanded={bulkMenuOpen}
+                            >
+                                <i className="ti ti-menu-2 me-2" aria-hidden="true" />
+                                Action
+                                {selectedIds.length > 0 && (
+                                    <span className="badge bg-white text-dark ms-2">{selectedIds.length}</span>
+                                )}
+                            </button>
+                            <ul
+                                className={`dropdown-menu dropdown-menu-end p-3${bulkMenuOpen ? ' show' : ''}`}
+                                style={{ zIndex: 1000 }}
+                            >
+                                {bulkHint && (
+                                    <li>
+                                        <p className="text-muted fs-12 mb-2" style={{ maxWidth: 320 }}>
+                                            {bulkHint}
+                                        </p>
+                                    </li>
+                                )}
+                                <li>
+                                    <button
+                                        type="button"
+                                        className="dropdown-item rounded-1 w-100 text-start border-0 bg-transparent"
+                                        disabled={bulkDisabled}
+                                        onClick={() => openRecuGroupe('a6')}
+                                    >
+                                        <i className="ti ti-file-text me-2" aria-hidden="true" />
+                                        Générer le reçu pour une imprimante ticket (format A6)
+                                    </button>
+                                </li>
+                                <li>
+                                    <button
+                                        type="button"
+                                        className="dropdown-item rounded-1 w-100 text-start border-0 bg-transparent"
+                                        disabled={bulkDisabled}
+                                        onClick={() => openRecuGroupe('a5')}
+                                    >
+                                        <i className="ti ti-file-text me-2" aria-hidden="true" />
+                                        Générer le reçu format A5
+                                    </button>
+                                </li>
+                                <li>
+                                    <button
+                                        type="button"
+                                        className="dropdown-item rounded-1 w-100 text-start border-0 bg-transparent"
+                                        disabled={bulkDisabled}
+                                        onClick={() => openRecuGroupe('a5x2')}
+                                    >
+                                        <i className="ti ti-file-text me-2" aria-hidden="true" />
+                                        Générer deux copies du reçu (Paysage A5)
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
+                    )}
+                </div>
 
                 {encaissements.data.length === 0 ? (
                     <EmptyState
@@ -849,6 +999,19 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                 loading={isLoading}
                                 head={
                                     <tr>
+                                        <th style={{ width: '2.5rem' }}>
+                                            {/* Tout cocher : seules les lignes rattachées à une
+                                                inscription sont sélectionnables (une avance ne
+                                                peut pas figurer sur un reçu). */}
+                                            <input
+                                                type="checkbox"
+                                                className="form-check-input"
+                                                aria-label="Tout sélectionner"
+                                                disabled={selectableIds.length === 0}
+                                                checked={selectableIds.length > 0 && selectedIds.length === selectableIds.length}
+                                                onChange={toggleSelectAll}
+                                            />
+                                        </th>
                                         <th>Référence</th>
                                         <th>Étudiant</th>
                                         {filters.view === 'cheque' && (
@@ -869,6 +1032,16 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                             >
                                 {encaissements.data.map((row) => (
                                     <tr key={row.id}>
+                                        <td>
+                                            <input
+                                                type="checkbox"
+                                                className="form-check-input"
+                                                aria-label={`Sélectionner ${row.reference}`}
+                                                disabled={row.inscriptionId === null}
+                                                checked={selectedIds.includes(row.id)}
+                                                onChange={() => toggleRowSelection(row.id)}
+                                            />
+                                        </td>
                                         <td>
                                             <code>{row.reference}</code>
                                         </td>

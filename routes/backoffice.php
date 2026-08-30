@@ -445,6 +445,12 @@ Route::prefix('backoffice')
                 ->middleware('permission:payments.create')->name('encaissements.store');
             Route::put('encaissements/{encaissement}', [EncaissementController::class, 'update'])
                 ->middleware('permission:payments.update')->name('encaissements.update');
+            // Reçu GROUPÉ — plusieurs encaissements de la MÊME inscription sur
+            // un seul reçu (?ids=1,2,3&format=a6|a5|a5x2). Le contrôleur refuse
+            // un lot dont les lignes ne partagent pas la même inscription : un
+            // reçu porte l'identité d'un seul étudiant.
+            Route::get('encaissements/recu-groupe', [EncaissementController::class, 'recuGroupe'])
+                ->middleware('permission:payments.view')->name('encaissements.recu-groupe');
             Route::get('encaissements/{encaissement}/recu', [EncaissementController::class, 'recu'])
                 ->middleware('permission:payments.view')->name('encaissements.recu');
             Route::post('encaissements/{encaissement}/recu/email', [EncaissementController::class, 'sendRecuEmail'])
