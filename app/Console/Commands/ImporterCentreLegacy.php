@@ -11,6 +11,7 @@ use App\Models\Etablissement;
 use App\Models\Group;
 use App\Models\ImportBatch;
 use App\Models\ImportRow;
+use App\Models\InscriptionFee;
 use App\Services\Import\Contracts\Importer;
 use App\Services\Import\DTO\ImportContext;
 use App\Services\Import\EncaissementImporter;
@@ -257,6 +258,8 @@ final class ImporterCentreLegacy extends Command
             if ($requeued > 0) {
                 $this->line(sprintf('  %-42s %d ligne(s) en échec re-tentée(s)', '', $requeued));
             }
+
+            $this->oublierResolutionsPerimees($importer->module(), $context->etablissementId);
         }
 
         $ids = $batch->rows()->whereIn('status', ImportRow::SELECTABLE_STATUTS)->pluck('id')->all();
@@ -277,6 +280,50 @@ final class ImporterCentreLegacy extends Command
         $this->line(sprintf('  %-42s %s', '', $this->resume($batch->fresh())));
 
         return true;
+    }
+
+    /**
+     * Drops the stored resolution of a re-queued row whose chosen fee line is
+     * now MASKED, so the commit re-resolves it instead of replaying a stale
+     * choice.
+     *
+     * A retry keeps `resolution` on purpose — an operator's manual pick must
+     * survive. But a fee masked after the analysis (student changed group)
+     * makes that pick uncommittable forever: the row replayed fee #24069 and
+     * failed « Ce frais n'est plus actif. » on every retry (30/08/2026).
+     * Only rows pointing at a masked fee are cleared; a manual choice on a
+     * still-active fee is left untouched.
+     */
+    private function oublierResolutionsPerimees(string $module, ?int $etablissementId): void
+    {
+        $rows = ImportRow::query()
+            ->whereHas('batch', fn ($q) => $q
+                ->where('module', $module)
+                ->where('etablissement_id', $etablissementId))
+            ->where('status', ImportRow::STATUT_CONFLIT)
+            ->whereNotNull('resolution')
+            ->get(['id', 'resolution']);
+
+        $masques = InscriptionFee::query()
+            ->whereIn('id', $rows->pluck('resolution.inscription_fee_id')->filter()->unique()->all())
+            ->whereNotNull('masque_le')
+            ->pluck('id')
+            ->flip();
+
+        if ($masques->isEmpty()) {
+            return;
+        }
+
+        $aOublier = $rows
+            ->filter(fn (ImportRow $r): bool => $masques->has($r->resolution['inscription_fee_id'] ?? 0))
+            ->pluck('id');
+
+        if ($aOublier->isEmpty()) {
+            return;
+        }
+
+        ImportRow::whereIn('id', $aOublier)->update(['resolution' => null]);
+        $this->line(sprintf('  %-42s %d ligne(s) visant un frais masqué : frais à re-choisir', '', $aOublier->count()));
     }
 
     private function resume(ImportBatch $batch): string

@@ -14,6 +14,7 @@ use App\Models\ImportRow;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
 use App\Models\Student;
+use Illuminate\Support\Facades\Schema;
 use App\Domain\Finance\Support\CaisseResolver;
 use App\Services\Import\Concerns\TracksBatchProgress;
 use App\Services\Import\Contracts\Importer;
@@ -121,6 +122,9 @@ final class EncaissementImporter implements Importer
 
     /** @var array<int, Collection<int, InscriptionFee>>|null inscription_id => its fee lines, preloaded once */
     private ?array $feesByInscriptionId = null;
+
+    /** Fee lines re-opened during this commit because a payment names them. */
+    private int $fraisDemasques = 0;
 
     /** @var array<string, true>|null every legacy_ref already imported before this batch started, preloaded once */
     private ?array $existingEncaissementLegacyRefs = null;
@@ -303,6 +307,16 @@ final class EncaissementImporter implements Importer
                     $encaissement = null;
 
                     foreach ($allocations as $index => [$feeId, $montant]) {
+                        // The chosen line may have been MASKED since the
+                        // analysis (the student changed group, so the old
+                        // group's month was hidden and recreated on the new
+                        // inscription). Follow it to the active twin here, at
+                        // commit time — resolution is not recomputed on a
+                        // retry, so fixing only the analysis left these rows
+                        // failing « Ce frais n'est plus actif. » forever
+                        // (13 payments, 15 400 DH, 30/08/2026).
+                        $feeId = $this->redirigerFraisMasque($feeId, (int) $resolution['student_id']);
+
                         $this->backfillImportedFeeAmount($feeId, $montant);
 
                         $created = $action->handle([
@@ -1312,6 +1326,57 @@ final class EncaissementImporter implements Importer
         return null;
     }
 
+    /**
+     * A masked fee line redirected to the SAME-named active line of another
+     * inscription of the same student.
+     *
+     * Deliberately narrow: same student, same fee name, same montant, not
+     * masked, and not already settled. Nothing matching ⇒ the original id is
+     * returned unchanged and the commit fails as before — a payment is never
+     * moved onto a line it does not name.
+     */
+    private function redirigerFraisMasque(int $feeId, int $studentId): int
+    {
+        $fee = InscriptionFee::find($feeId);
+
+        if ($fee === null || ! $fee->estMasque()) {
+            return $feeId;
+        }
+
+        $candidats = InscriptionFee::query()
+            ->whereNull('masque_le')
+            ->where('nom', $fee->nom)
+            ->where('montant', $fee->montant)
+            ->whereIn('inscription_id', Inscription::query()
+                ->where('student_id', $studentId)
+                ->pluck('id'))
+            ->get()
+            ->filter(fn (InscriptionFee $f): bool => $f->montantPaye() + 0.005 < (float) $f->montant);
+
+        // An active twin is always the better home: the student moved groups
+        // and the month exists on the new inscription.
+        if ($candidats->count() === 1) {
+            return (int) $candidats->first()->id;
+        }
+
+        // No twin ⇒ the fee was REMOVED FROM THE GROUP (RetirerFraisGroupe
+        // masks every matching line and releases its money as an avance). The
+        // legacy CRM still bills that month, and refusing the row loses a real
+        // payment. So the line is brought back and the payment settles it —
+        // exactly what a human would do on the Inscription screen, and the
+        // same un-masking RetirerFraisGroupe performs when the fee returns to
+        // the group. Only ever reopens a line this import is about to pay.
+        // `masque_origine` only exists where its migration has run; writing
+        // it unconditionally would break the older schema.
+        $fee->update(Schema::hasColumn('inscription_fees', 'masque_origine')
+            ? ['masque_le' => null, 'masque_origine' => null]
+            : ['masque_le' => null]);
+
+        $this->fraisDemasques++;
+
+        return $feeId;
+    }
+
     private function resolveInscriptionFee(int $studentId, string $fraisLabel): array
     {
         $inscriptions = $this->activeInscriptionByStudentId[$studentId] ?? [];
@@ -1331,15 +1396,27 @@ final class EncaissementImporter implements Importer
         // operator picked — so every inscription is searched for one before
         // falling back. Ordered best-candidate-first by the preload, so the
         // batch's own année still wins a tie.
-        foreach ($inscriptions as $inscription) {
-            $fees = $this->feesByInscriptionId[$inscription->id] ?? collect();
+        // A HIDDEN fee line never wins over an active one carrying the same
+        // name. When a student changes group, the old group's month is masked
+        // (masque_le) and an identical line is created on the new inscription;
+        // the legacy export still names that month, so matching on the label
+        // alone picked the masked line and EnregistrerEncaissement refused the
+        // commit — « Ce frais n'est plus actif. » (13 payments, 15 400 DH,
+        // 30/08/2026). Two passes, active first; a masked line is still
+        // accepted when it is the only one, so nothing that used to import
+        // stops importing.
+        foreach ([false, true] as $accepterMasques) {
+            foreach ($inscriptions as $inscription) {
+                $fees = $this->feesByInscriptionId[$inscription->id] ?? collect();
 
-            $exact = $fees->first(
-                fn (InscriptionFee $fee) => mb_strtolower(CellNormalizer::text($fee->nom)) === $normalizedTarget
-            );
+                $exact = $fees->first(
+                    fn (InscriptionFee $fee) => mb_strtolower(CellNormalizer::text($fee->nom)) === $normalizedTarget
+                        && ($accepterMasques || ! $fee->estMasque())
+                );
 
-            if ($exact !== null) {
-                return ['inscription_fee_id' => $exact->id, 'candidates' => [], 'conflicts' => []];
+                if ($exact !== null) {
+                    return ['inscription_fee_id' => $exact->id, 'candidates' => [], 'conflicts' => []];
+                }
             }
         }
 
