@@ -1094,6 +1094,24 @@ JSONB data — don't add them speculatively.
 
 ### Migration rules
 
+- **⚠ Editing a `create_*` migration does NOT change any database that has
+  already run it — not production, and NOT the local `gls_crm` either.**
+  Every schema change lives in the `create_*` migration of its table (no alter
+  migrations, see §11), so after editing one you MUST also apply the same
+  change as idempotent SQL to every database that already exists:
+
+  ```powershell
+  # 1. the local dev DB you are about to click through — NEVER migrate:fresh it
+  C:\php84\php.exe artisan tinker --execute="DB::statement('ALTER TABLE t ADD COLUMN IF NOT EXISTS c varchar(20) NOT NULL DEFAULT ''x''');"
+  # 2. append the same statements to docs/production-schema-patches.sql
+  ```
+
+  Verifying only on a freshly migrated scratch DB proves nothing about the DB
+  the app actually serves: on 31/08/2026 `motifs_annulation.portee` was added
+  to the create migration and checked on `gls_crm_scratch`, while every page
+  reading that catalogue 500’d with « column "portee" does not exist ».
+  After any schema edit, load an affected page (or query the real DB) before
+  reporting the work done — `Schema::hasColumn()` on `gls_crm` is the check.
 - Before the first production deployment, existing project-owned migrations
   may still be corrected in place (this is what happened during the
   PostgreSQL migration — see `POSTGRES_MIGRATION_REPORT.md` §2 for the two

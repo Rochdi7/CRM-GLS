@@ -445,15 +445,6 @@ final class PermissionRegistry
             // method accounts are provisioned with the centre, never by hand
             // (CLAUDE.md §11).
             'cash-accounts.create', 'cash-accounts.update',
-            // Les salles sont creees et modifiees par un super-admin
-            // uniquement (31/08/2026, demande metier) : aucun preset ne les
-            // porte. Un super-admin peut toujours deleguer `rooms.create` /
-            // `rooms.update` a la main sur l'ecran Autorisations — et la
-            // portee reste alors celle des « Centres affectes » de
-            // l'employe : StoreSalleRequest / UpdateSalleRequest valident
-            // `etablissement_id` contre GetAccessibleCenterOptions, donc le
-            // titulaire ne cree une salle que dans SES centres.
-            'rooms.create', 'rooms.update',
             'expenses.approve',
             // Re-dating a recorded payment moves it between reconciled
             // periods — see payments.update-date in grouped() (30/08/2026).
@@ -558,7 +549,16 @@ final class PermissionRegistry
             'dashboard.view',
             'centers.view',
             'academic-years.view',
-            'rooms.view',
+            // Salles : creation ET modification ouvertes a TOUS les roles
+            // (31/08/2026, demande metier) — l'ecran Parametres > Salles est
+            // de la logistique quotidienne, pas un reglage sensible. La
+            // portee reste celle des « Centres affectes » de l'employe :
+            // Store/UpdateSalleRequest valident `etablissement_id` contre
+            // GetAccessibleCenterOptions, et SallePolicy passe par
+            // CenterAccessService — donc personne ne cree ou ne modifie une
+            // salle hors de SES centres. `rooms.delete` reste super-admin
+            // (aucun preset ne porte de `*.delete`, cf. superAdminOnly()).
+            'rooms.view', 'rooms.create', 'rooms.update',
             'fees.view',
             'students.view', 'students.create', 'students.update',
             'registrations.view', 'registrations.create', 'registrations.update',
@@ -615,6 +615,9 @@ final class PermissionRegistry
             'dashboard.view',
             'centers.view',
             'academic-years.view',
+            // Voir §$operations : les salles sont ouvertes a tous les roles,
+            // scopees aux centres affectes.
+            'rooms.view', 'rooms.create', 'rooms.update',
             'fees.view',
             'students.view',
             'registrations.view',
@@ -704,7 +707,6 @@ final class PermissionRegistry
             // audit journal, and changes nothing.
             'quality-director' => [
                 ...$financeReadOnly,
-                'rooms.view',
                 'employees.view',
                 'attendance.view',
                 'users.view',
@@ -763,6 +765,7 @@ final class PermissionRegistry
             'marketing-manager' => [
                 'dashboard.view',
                 'centers.view',
+                'rooms.view', 'rooms.create', 'rooms.update',
                 'students.view',
                 'registrations.view',
                 'registrations.delete',
@@ -775,6 +778,7 @@ final class PermissionRegistry
             // Academic scope only — no financial data.
             'teacher' => [
                 'dashboard.view',
+                'rooms.view', 'rooms.create', 'rooms.update',
                 'groups.view',
                 'groups.change-teacher',
                 'students.view',
