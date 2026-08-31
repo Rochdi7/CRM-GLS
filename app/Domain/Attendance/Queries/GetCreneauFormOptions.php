@@ -62,12 +62,23 @@ final class GetCreneauFormOptions
     }
 
     /**
+     * Rooms bookable on this screen: the ACTIVE centre only.
+     *
+     * On « Tous les centres » (super-admin, etablissementId() === null) there
+     * is no active centre to narrow to, so the list falls back to the centres
+     * the user actually reaches (CenterAccessService) instead of every room of
+     * every branch — a room is physical, and booking one belonging to another
+     * branch is never valid. CreneauController::assertSalleDuCentre() enforces
+     * the same rule server-side on save; this keeps the dropdown from offering
+     * what that guard would reject.
+     *
      * @return list<array{value: int, label: string}>
      */
-    public function salles(): array
+    public function salles(User $user): array
     {
         return Salle::query()
             ->where('statut', Salle::STATUT_ACTIVE)
+            ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(function ($q): void {
                 $id = $this->context->etablissementId();
                 if ($id !== null) {

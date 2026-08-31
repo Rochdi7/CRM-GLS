@@ -93,7 +93,10 @@ final class RecuWhatsAppLink
      */
     private function message(Encaissement $encaissement): string
     {
-        $inscription = $encaissement->fee?->inscription;
+        // Une avance appliquée tire son libellé de ses lignes d'application
+        // — même règle que le PDF (Encaissement::libelleFrais).
+        $inscription = $encaissement->fee?->inscription
+            ?? $encaissement->applications->sortBy('id')->first()?->fee?->inscription;
         $centre = $inscription?->etablissement ?? $encaissement->student?->etablissement;
 
         $lines = [
@@ -103,7 +106,7 @@ final class RecuWhatsAppLink
             '',
             __('Receipt').' : '.$encaissement->reference,
             __('Amount').' : '.number_format((float) $encaissement->montant, 2, ',', ' ').' MAD',
-            __('Fee').' : '.($encaissement->fee?->nom ?? __('Advance')),
+            __('Fee').' : '.$encaissement->libelleFrais(),
             __('Date').' : '.$encaissement->date_paiement?->format('d/m/Y'),
         ];
 

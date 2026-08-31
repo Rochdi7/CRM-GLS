@@ -71,6 +71,9 @@ function rowFromNouvelleInscription(nouvelle: NouvelleInscription): InscriptionR
         date: null,
         dateDebut: null,
         dateFin: null,
+        dateIso: null,
+        dateDebutIso: null,
+        dateFinIso: null,
         montantTotal: null,
         feesCount: 0,
         // A registration always starts Active (forced server-side in
@@ -132,8 +135,8 @@ function emptyForm(defaultCountry: string): InscriptionFormState {
         group_id: '',
         statut: 'Active',
         date_inscription: new Date().toISOString().slice(0, 10),
-        date_debut: '',
-        date_fin: '',
+        date_debut: new Date().toISOString().slice(0, 10),
+        date_fin: new Date().toISOString().slice(0, 10),
         note: '',
         fee_lines: [],
         livre_ids: [],
@@ -587,6 +590,12 @@ export default function InscriptionsIndex({
             student_id: inscription.studentId ?? '',
             group_id: inscription.groupId ?? '',
             statut: inscription.statut,
+            // Les dates de la ligne, pas les défauts « aujourd'hui » de
+            // emptyForm() — sinon un simple enregistrement écraserait la
+            // période réelle de l'inscription.
+            date_inscription: inscription.dateIso ?? '',
+            date_debut: inscription.dateDebutIso ?? '',
+            date_fin: inscription.dateFinIso ?? '',
         });
         setShowModal(true);
 
@@ -699,7 +708,9 @@ export default function InscriptionsIndex({
     }
 
     function handleGroupChange(groupId: number | '') {
-        form.setData((data) => ({ ...data, group_id: groupId, fee_lines: [], livre_ids: [], date_debut: '', date_fin: '' }));
+        // Les dates restent celles saisies par l'utilisateur (période propre
+        // à l'inscription) — changer de groupe ne les écrase plus.
+        form.setData((data) => ({ ...data, group_id: groupId, fee_lines: [], livre_ids: [] }));
         setAvailableFeesPage(1);
         setAvailableLivres([]);
 
@@ -715,8 +726,6 @@ export default function InscriptionsIndex({
             .then((data: InscriptionGroupFeesResponse) => {
                 form.setData((prev) => ({
                     ...prev,
-                    date_debut: data.dateDebut ?? '',
-                    date_fin: data.dateFin ?? '',
                     fee_lines: data.fees.map((fee) => ({
                         fraisId: fee.fraisId,
                         nom: fee.nom,
@@ -1629,23 +1638,26 @@ export default function InscriptionsIndex({
                                         />
                                     )}
                                 </div>
-                                {form.data.group_id !== '' && (
-                                    <>
-                                        <div className="col-md-4">
-                                            <DateField
-                                                id="ins-debut"
-                                                label="Date de début"
-                                                value={form.data.date_debut}
-                                                disabled
-                                            />
-                                            <div className="form-text">Provient du groupe</div>
-                                        </div>
-                                        <div className="col-md-4">
-                                            <DateField id="ins-fin" label="Date de fin" value={form.data.date_fin} disabled />
-                                            <div className="form-text">Provient du groupe</div>
-                                        </div>
-                                    </>
-                                )}
+                                <div className="col-md-4">
+                                    <DateField
+                                        id="ins-debut"
+                                        label="Date de début"
+                                        value={form.data.date_debut}
+                                        onChange={(event) => form.setData('date_debut', event.target.value)}
+                                        error={form.errors.date_debut}
+                                    />
+                                    <div className="form-text">Période de cette inscription</div>
+                                </div>
+                                <div className="col-md-4">
+                                    <DateField
+                                        id="ins-fin"
+                                        label="Date de fin"
+                                        value={form.data.date_fin}
+                                        onChange={(event) => form.setData('date_fin', event.target.value)}
+                                        error={form.errors.date_fin}
+                                    />
+                                    <div className="form-text">Période de cette inscription</div>
+                                </div>
                             </div>
 
                             {!editingInscription && (

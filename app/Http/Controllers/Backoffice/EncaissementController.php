@@ -10,6 +10,7 @@ use App\Domain\Finance\Support\CaisseResolver;
 use App\Domain\Payments\Actions\EnregistrerEncaissement;
 use App\Domain\Payments\Mail\EncaissementRecuMail;
 use App\Domain\Payments\Support\RecuPdfRenderer;
+use App\Domain\Payments\Support\RecuWhatsAppLink;
 use App\Domain\Payments\Actions\SupprimerEncaissement;
 use App\Domain\Payments\Queries\GetEncaissementDetails;
 use App\Domain\Payments\Queries\GetEncaissementsList;
@@ -622,6 +623,46 @@ final class EncaissementController extends Controller
      * worker (`crm-gls-queue.service`, docs/vps-deployment.md) does the work;
      * the UI gets an immediate "queued" confirmation.
      */
+    /**
+     * Construit le lien click-to-chat WhatsApp qui envoie le reçu à
+     * l'étudiant — la cible du bouton « Envoyer par WhatsApp » de la liste.
+     *
+     * Rend du JSON : le bouton ouvre l'URL retournée dans un nouvel onglet,
+     * rien sur la page ne change. Le lien est construit ICI et jamais dans
+     * React, parce qu'il porte une URL SIGNÉE du PDF — la signature dépend
+     * d'APP_KEY et ne peut pas quitter le serveur.
+     *
+     * Deux refus explicites (422) plutôt qu'un lien silencieusement inutile :
+     *  - l'étudiant n'a aucun numéro joignable ;
+     *  - APP_URL pointe sur la machine locale, donc le lien PDF serait mort
+     *    sur le téléphone du destinataire (RecuWhatsAppLink::
+     *    pdfUrlIsPubliclyReachable, constaté en situation réelle le
+     *    31/08/2026). Mieux vaut dire au caissier que l'envoi est impossible
+     *    que lui laisser croire que le reçu est parti.
+     */
+    public function recuWhatsApp(Encaissement $encaissement, RecuWhatsAppLink $link): JsonResponse
+    {
+        $this->authorize('view', $encaissement);
+
+        if (! $link->pdfUrlIsPubliclyReachable()) {
+            return response()->json([
+                'message' => __('The receipt link points to a local address (:url) that the student cannot open. Set APP_URL to the public CRM address.', ['url' => (string) config('app.url')]),
+            ], 422);
+        }
+
+        $encaissement->load(RecuPdfRenderer::RELATIONS);
+
+        $payload = $link->forEncaissement($encaissement);
+
+        if ($payload === null) {
+            return response()->json([
+                'message' => __('This student has no reachable phone number.'),
+            ], 422);
+        }
+
+        return response()->json($payload);
+    }
+
     public function sendRecuEmail(SendRecuEmailRequest $request, Encaissement $encaissement): RedirectResponse
     {
         $this->authorize('view', $encaissement);

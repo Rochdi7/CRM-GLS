@@ -39,6 +39,11 @@ final class StoreInscriptionRequest extends FormRequest
             'inscription_mode' => ['required', Rule::in(['new', 'existing'])],
             'group_id' => ['required', 'exists:groups,id'],
             'date_inscription' => ['required', 'date'],
+            // Période propre à CETTE inscription (l'étudiant peut rejoindre
+            // un groupe en cours de route) — pré-remplie à aujourd'hui côté
+            // formulaire, plus héritée en dur du groupe.
+            'date_debut' => ['nullable', 'date'],
+            'date_fin' => ['nullable', 'date', 'after_or_equal:date_debut'],
             'note' => ['nullable', 'string'],
             'fee_lines' => ['nullable', 'array'],
             'fee_lines.*.frais_id' => ['nullable', 'integer'],

@@ -243,7 +243,14 @@ final class GetEncaissementsList
             ? $this->anciensFrais($encaissements->getCollection()->pluck('id')->all())
             : [];
 
-        $encaissements->through(function (Encaissement $e) use ($view, $anciensFrais): array {
+        // Applied-to detail for every avance on the page, on BOTH tabs: an
+        // avance is listed on the Encaissements tab too (it is money
+        // received), and the question "applied to what?" is the same there.
+        $fraisAppliques = $view !== 'cheque'
+            ? $this->fraisAppliques($encaissements->getCollection()->pluck('id')->all())
+            : [];
+
+        $encaissements->through(function (Encaissement $e) use ($view, $anciensFrais, $fraisAppliques): array {
             $isAvance = $e->inscription_fee_id === null;
             $utilise = $isAvance && $view !== 'cheque' ? (float) ($e->applications_sum_montant ?? 0) : null;
 
@@ -277,6 +284,9 @@ final class GetEncaissementsList
                 // null for an avance that was received as such.
                 'ancienFrais' => $anciensFrais[$e->id]['frais'] ?? null,
                 'ancienFraisGroupe' => $anciensFrais[$e->id]['groupe'] ?? null,
+                // The fee lines this avance was applied to (empty when none),
+                // so the list can name them instead of only totalling them.
+                'fraisAppliques' => $isAvance ? ($fraisAppliques[$e->id] ?? []) : [],
                 'feeMontantTotal' => $feeTotal !== null ? number_format($feeTotal, 2, '.', '') : null,
                 'feeReste' => $feeTotal !== null ? number_format(max(0.0, $feeTotal - $feePaye), 2, '.', '') : null,
                 'caisse' => $e->caisse?->nom,
@@ -367,6 +377,45 @@ final class GetEncaissementsList
             $result[$encaissementId] = [
                 'frais' => $fee->nom,
                 'groupe' => $fee->inscription?->group?->nom,
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Per avance, the fee lines its money was actually applied to — what the
+     * « Appliquée : X MAD » caption on the list summarises in one number.
+     * Without it the cell says money left the avance but never where it went,
+     * which is the whole question a cashier is asking.
+     *
+     * ONE query for the whole page (same batching discipline as
+     * anciensFrais() above) — never a relation read per row, which is exactly
+     * the N+1 the read-model rule forbids (CLAUDE.md §17).
+     *
+     * @param  list<int>  $encaissementIds
+     * @return array<int, list<array{frais: string, groupe: ?string, montant: string, date: ?string}>>
+     */
+    private function fraisAppliques(array $encaissementIds): array
+    {
+        if ($encaissementIds === []) {
+            return [];
+        }
+
+        $applications = Encaissement::query()
+            ->whereIn('applied_from_encaissement_id', $encaissementIds)
+            ->with(['fee.inscription.group'])
+            ->orderBy('date_paiement')
+            ->get();
+
+        $result = [];
+
+        foreach ($applications as $application) {
+            $result[(int) $application->applied_from_encaissement_id][] = [
+                'frais' => $application->fee?->nom ?? __('Unlinked fee'),
+                'groupe' => $application->fee?->inscription?->group?->nom,
+                'montant' => number_format((float) $application->montant, 2, '.', ''),
+                'date' => $application->date_paiement?->toDateString(),
             ];
         }
 

@@ -1077,11 +1077,40 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                             {row.isAvance ? (
                                                 <>
                                                     <span className="badge badge-soft-warning">Avance</span>
-                                                    <div className="text-muted fs-12">
-                                                        {Number(row.montantUtilise ?? 0) > 0
-                                                            ? `Appliquée : ${Number(row.montantUtilise).toFixed(2)} MAD`
-                                                            : 'Non affectée à un frais'}
-                                                    </div>
+                                                    {Number(row.montantUtilise ?? 0) > 0 ? (
+                                                        // « Appliquée : X MAD » alone says money left the avance
+                                                        // but not where it went. The title attribute names every
+                                                        // fee it paid (frais, groupe, montant, date) so a cashier
+                                                        // can read the allocation without opening the row.
+                                                        <div
+                                                            className="text-muted fs-12"
+                                                            style={{ cursor: row.fraisAppliques.length > 0 ? 'help' : undefined }}
+                                                            title={
+                                                                row.fraisAppliques.length > 0
+                                                                    ? row.fraisAppliques
+                                                                          .map(
+                                                                              (a) =>
+                                                                                  `${a.frais}${a.groupe ? ` (${a.groupe})` : ''} : ${Number(a.montant).toFixed(2)} MAD${a.date ? ` — ${a.date}` : ''}`,
+                                                                          )
+                                                                          .join('\n')
+                                                                    : undefined
+                                                            }
+                                                        >
+                                                            Appliquée : {Number(row.montantUtilise).toFixed(2)} MAD
+                                                            {row.fraisAppliques.length > 0 && (
+                                                                <i className="ti ti-info-circle ms-1" aria-hidden="true" />
+                                                            )}
+                                                            {row.fraisAppliques.map((a, index) => (
+                                                                <div key={index} className="text-muted fs-12">
+                                                                    → {a.frais}
+                                                                    {a.groupe && ` (${a.groupe})`} :{' '}
+                                                                    {Number(a.montant).toFixed(2)} MAD
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-muted fs-12">Non affectée à un frais</div>
+                                                    )}
                                                 </>
                                             ) : (
                                                 row.feeNom ?? '—'

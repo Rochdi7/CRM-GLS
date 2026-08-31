@@ -73,6 +73,17 @@ export default function EncaissementShow({ encaissement }: EncaissementShowProps
                         <DetailRow label="Caisse" value={encaissement.caisse} />
                         <DetailRow label="Enregistré par" value={encaissement.agent} />
 
+                        {/* This row IS the application of an earlier avance — name it,
+                            otherwise the receipt looks like fresh money arriving twice. */}
+                        {encaissement.appliedFrom && (
+                            <div className="d-flex justify-content-between mb-2">
+                                <span className="text-muted">Provient de l&rsquo;avance</span>
+                                <a href={encaissement.appliedFrom.showUrl} className="fw-medium">
+                                    {encaissement.appliedFrom.reference}
+                                </a>
+                            </div>
+                        )}
+
                         {encaissement.cheque && (
                             <div className="border-top pt-2 mt-2">
                                 <DetailRow label="Numéro de chèque" value={encaissement.cheque.numero} />
@@ -91,8 +102,55 @@ export default function EncaissementShow({ encaissement }: EncaissementShowProps
                 </div>
 
                 <div className="col-xl-5">
-                    <Card title="Frais réglé">
-                        {fee === null ? (
+                    <Card title={fee === null && encaissement.isAvance ? 'Avance' : 'Frais réglé'}>
+                        {fee === null && encaissement.isAvance ? (
+                            // An avance settles no fee YET, so « Aucun frais lié » was the
+                            // whole page — true but useless. Show what the money is doing:
+                            // how much is used, how much is still available, and every fee
+                            // it was applied to.
+                            <>
+                                <div className="d-flex justify-content-between mb-2">
+                                    <span className="text-muted">Montant utilisé</span>
+                                    <span className="fw-semibold">
+                                        {Number(encaissement.montantUtilise).toFixed(2)} MAD
+                                    </span>
+                                </div>
+                                <div className="d-flex justify-content-between border-top pt-2 mb-3">
+                                    <span className="text-muted">Montant restant</span>
+                                    <span
+                                        className={`fw-semibold ${
+                                            Number(encaissement.montantRestant) > 0 ? 'text-success' : 'text-muted'
+                                        }`}
+                                    >
+                                        {Number(encaissement.montantRestant).toFixed(2)} MAD
+                                    </span>
+                                </div>
+
+                                {encaissement.applications.length === 0 ? (
+                                    <EmptyState title="Avance non encore appliquée" icon="ti ti-clock-dollar" />
+                                ) : (
+                                    <>
+                                        <span className="text-muted d-block mb-2">Frais réglés par cette avance</span>
+                                        {encaissement.applications.map((application) => (
+                                            <div key={application.reference} className="border-top pt-2 mb-2">
+                                                <div className="d-flex justify-content-between">
+                                                    <span className="fw-medium">{application.frais ?? '—'}</span>
+                                                    <span className="fw-semibold">
+                                                        {Number(application.montant).toFixed(2)} MAD
+                                                    </span>
+                                                </div>
+                                                <div className="text-muted fs-12">
+                                                    {application.groupe && `${application.groupe} — `}
+                                                    {application.date}
+                                                    {' · '}
+                                                    <a href={application.showUrl}>{application.reference}</a>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </>
+                                )}
+                            </>
+                        ) : fee === null ? (
                             <EmptyState title="Aucun frais lié" icon="ti ti-receipt" />
                         ) : (
                             <>

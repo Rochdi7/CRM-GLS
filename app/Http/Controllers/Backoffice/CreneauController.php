@@ -54,7 +54,7 @@ final class CreneauController extends Controller
             'jours' => Creneau::JOURS,
             'groupOptions' => $formOptions->groups($user),
             'enseignantOptions' => $formOptions->enseignants(),
-            'salleOptions' => $formOptions->salles(),
+            'salleOptions' => $formOptions->salles($user),
             'permissions' => [
                 'create' => $user->can('create', Creneau::class),
                 'update' => $user->can('attendance.update'),

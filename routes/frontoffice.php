@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Frontoffice\HomeController;
+use App\Http\Controllers\Frontoffice\RecuController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -27,4 +28,14 @@ Route::name('frontoffice.')
         Route::redirect('/', '/backoffice/login')->name('root');
 
         Route::get('/home', HomeController::class)->name('home');
+
+        // Reçu PDF envoyé à l'ÉTUDIANT par WhatsApp. Publique par nécessité
+        // (l'étudiant n'a pas de compte) et verrouillée par `signed` : l'URL
+        // est infalsifiable — on ne peut pas énumérer /recu/1, /recu/2 pour
+        // lire les reçus des autres — et elle EXPIRE au bout de 7 jours
+        // (RecuWhatsAppLink::TTL_DAYS), donc un message transféré ne reste
+        // pas une porte ouverte à vie. Voir Frontoffice\RecuController.
+        Route::get('/recu/{encaissement}', RecuController::class)
+            ->middleware('signed')
+            ->name('recu');
     });

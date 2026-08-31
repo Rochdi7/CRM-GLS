@@ -20,7 +20,15 @@ final class GetEncaissementDetails
      */
     public function __invoke(Encaissement $encaissement): array
     {
-        $encaissement->loadMissing(['student', 'fee.inscription.group', 'caisse', 'agent']);
+        $encaissement->loadMissing([
+            'student', 'fee.inscription.group', 'caisse', 'agent',
+            // An avance carries no fee of its own — what it PAID lives on its
+            // application rows, and the source avance is what an application
+            // row came from. Both directions are loaded so the page can
+            // explain either kind of row instead of showing « Aucun frais lié ».
+            'applications.fee.inscription.group',
+            'appliedFrom',
+        ]);
 
         $fee = $encaissement->fee;
         $inscription = $fee?->inscription;
@@ -47,6 +55,25 @@ final class GetEncaissementDetails
                 'banque' => $encaissement->banque,
                 'dateEcheance' => $encaissement->date_echeance_cheque?->format('d/m/Y'),
             ] : null,
+            // Where this avance’s money went (empty for a normal payment).
+            'applications' => $encaissement->applications->map(fn (Encaissement $a): array => [
+                'reference' => $a->reference,
+                'frais' => $a->fee?->nom,
+                'groupe' => $a->fee?->inscription?->group?->nom,
+                'montant' => number_format((float) $a->montant, 2, '.', ''),
+                'date' => $a->date_paiement?->format('d/m/Y'),
+                'showUrl' => route('backoffice.encaissements.show', $a),
+            ])->all(),
+            // Set when THIS row is itself an application of an earlier avance.
+            'appliedFrom' => $encaissement->appliedFrom === null ? null : [
+                'reference' => $encaissement->appliedFrom->reference,
+                'montant' => number_format((float) $encaissement->appliedFrom->montant, 2, '.', ''),
+                'date' => $encaissement->appliedFrom->date_paiement?->format('d/m/Y'),
+                'showUrl' => route('backoffice.encaissements.show', $encaissement->appliedFrom),
+            ],
+            'isAvance' => $encaissement->inscription_fee_id === null,
+            'montantUtilise' => number_format($encaissement->montantUtilise(), 2, '.', ''),
+            'montantRestant' => number_format($encaissement->montantRestant(), 2, '.', ''),
             'fee' => $fee === null ? null : [
                 'nom' => $fee->nom,
                 'dateEcheance' => $fee->date_echeance?->format('d/m/Y'),

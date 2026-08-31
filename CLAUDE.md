@@ -620,6 +620,28 @@ the database layer. Non-negotiable invariants already enforced in code:
   `InscriptionFee::computeMontant()` derives the final `montant`
   (pct first, else fixed DH). Starter catalog: `FraisSeeder`. Tests:
   `tests/Feature/Backoffice/Groups/`, `Inscriptions/`.
+- **⚠ Retirer un frais DÉJÀ PAYÉ libère toujours son argent en avance.**
+  Trois chemins retirent un frais d'une inscription et ils doivent se
+  comporter à l'identique, sinon celui que l'utilisateur emprunte change ce
+  qu'il advient de son argent : le retrait au niveau du GROUPE
+  (`Groups\Actions\RetirerFraisGroupe`), la suppression d'une ligne dans le
+  modal (`Registrations\Actions\MettreAJourFraisInscription`) et la corbeille
+  par ligne (`Registrations\Actions\BasculerVisibiliteFraisInscription::hide`
+  — le trou corrigé le 31/08/2026). Tous appellent
+  `Payments\Actions\ConvertirEncaissementsEnAvance` AVANT de masquer/supprimer :
+  l'encaissement n'est jamais supprimé (les enregistrements monétaires sont
+  append-only, §11) et `caisses.solde` ne bouge pas — seul
+  `inscription_fee_id` est détaché, ce qui refait du paiement une avance
+  réapplicable. Sans cela l'argent reste accroché à une ligne INVISIBLE :
+  compté ni dans le dû, ni dans l'onglet Avances, et irrécupérable alors que
+  l'étudiant a payé (signalé sur 500 DH de frais d'inscription). Un paiement
+  REMBOURSÉ est écarté du lot (son argent a déjà quitté la caisse, le
+  convertisseur le refuse) plutôt que de faire échouer tout le retrait, et
+  restaurer un frais ne « re-colle » jamais l'avance — entre-temps elle a pu
+  être appliquée ailleurs. Rattrapage des lignes masquées avant le correctif :
+  `php artisan inscriptions:liberer-paiements-frais-masques` (dry-run par
+  défaut, `--apply`). Tests :
+  `tests/Feature/Backoffice/Inscriptions/InscriptionFeeVisibilityTest.php`.
 - **Étudiants & Inscriptions CRUD** (same React modal pattern as Employees).
   Students: `backoffice.students.index` (`Backoffice\StudentController`) —
   modal with photo upload (media `photo` collection, `/media/<uuid8>/…`

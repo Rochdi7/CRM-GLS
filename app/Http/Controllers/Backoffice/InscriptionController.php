@@ -568,11 +568,12 @@ final class InscriptionController extends Controller
                 // field in StoreInscriptionRequest at all).
                 'statut' => Inscription::STATUT_ACTIVE,
                 'date_inscription' => $data['date_inscription'],
-                // Dates are the group's training period (read-only in the
-                // UI) — re-derived here so a tampered field can't override
-                // them (unlike update(), which trusts the submitted dates).
-                'date_debut' => $group->date_debut_formation?->toDateString(),
-                'date_fin' => $group->date_fin_formation?->toDateString(),
+                // Dates are the registration's OWN period (the student may
+                // join a running group), submitted by the form which
+                // pre-fills both at today — no longer inherited from the
+                // group. Same contract as update().
+                'date_debut' => $data['date_debut'] ?? null,
+                'date_fin' => $data['date_fin'] ?? null,
                 'montant_total' => $total > 0 ? $total : null,
                 'note' => $data['note'] ?? null,
                 'created_by' => $request->user()->employee?->id,

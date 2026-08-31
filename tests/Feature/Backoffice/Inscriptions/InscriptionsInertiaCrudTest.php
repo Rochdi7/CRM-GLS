@@ -412,7 +412,12 @@ final class InscriptionsInertiaCrudTest extends TestCase
         $this->assertSame('650.00', (string) $inscription->fees()->first()->montant);
     }
 
-    public function test_dates_are_derived_from_the_group_not_the_client(): void
+    /**
+     * The period belongs to the REGISTRATION, not to the group: a student may
+     * join a running group, so the form's (today-prefilled) dates are stored
+     * as submitted and never overwritten by the group's training period.
+     */
+    public function test_dates_come_from_the_form_not_the_group(): void
     {
         $this->actingAs($this->userWith('registrations.view', 'registrations.create'));
         $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
@@ -423,15 +428,30 @@ final class InscriptionsInertiaCrudTest extends TestCase
             'inscription_mode' => 'existing',
             'student_id' => $student->id,
             'group_id' => $group->id,
-            'date_inscription' => '2025-09-15',
-            // Tampered readonly fields — must be ignored on create.
-            'date_debut' => '2020-01-01',
-            'date_fin' => '2020-06-01',
+            'date_inscription' => '2025-11-15',
+            'date_debut' => '2025-11-15',
+            'date_fin' => '2026-03-15',
         ])->assertSessionDoesntHaveErrors();
 
         $inscription = Inscription::where('student_id', $student->id)->first();
-        $this->assertSame('2025-10-01', $inscription->date_debut->toDateString());
-        $this->assertSame('2026-06-30', $inscription->date_fin->toDateString());
+        $this->assertSame('2025-11-15', $inscription->date_debut->toDateString());
+        $this->assertSame('2026-03-15', $inscription->date_fin->toDateString());
+    }
+
+    public function test_end_date_cannot_precede_start_date(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.create'));
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $group = $this->groupWithFees();
+
+        $this->post(route('backoffice.inscriptions.store'), [
+            'inscription_mode' => 'existing',
+            'student_id' => $student->id,
+            'group_id' => $group->id,
+            'date_inscription' => '2025-11-15',
+            'date_debut' => '2025-11-15',
+            'date_fin' => '2025-11-01',
+        ])->assertSessionHasErrors('date_fin');
     }
 
     public function test_student_and_group_are_required_in_existing_mode(): void

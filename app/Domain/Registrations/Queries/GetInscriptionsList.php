@@ -81,6 +81,11 @@ final class GetInscriptionsList
             'date' => $inscription->date_inscription?->format('d/m/Y'),
             'dateDebut' => $inscription->date_debut?->format('d/m/Y'),
             'dateFin' => $inscription->date_fin?->format('d/m/Y'),
+            // ISO copies for the edit modal's <input type="date"> fields —
+            // the d/m/Y ones above are display-only (the table columns).
+            'dateIso' => $inscription->date_inscription?->toDateString(),
+            'dateDebutIso' => $inscription->date_debut?->toDateString(),
+            'dateFinIso' => $inscription->date_fin?->toDateString(),
             'montantTotal' => $inscription->montant_total !== null ? number_format((float) $inscription->montant_total, 2, '.', '') : null,
             'feesCount' => $inscription->fees_count,
             'statut' => $inscription->statut,

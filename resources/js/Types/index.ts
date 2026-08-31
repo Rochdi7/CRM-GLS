@@ -425,6 +425,26 @@ export interface EncaissementDetails {
         reste: MoneyDisplay;
         statut: string;
     } | null;
+    /** True when the row carries no fee — money received and not yet allocated. */
+    isAvance: boolean;
+    montantUtilise: MoneyDisplay;
+    montantRestant: MoneyDisplay;
+    /** Fee lines this avance paid for (empty for an ordinary payment). */
+    applications: Array<{
+        reference: string;
+        frais: string | null;
+        groupe: string | null;
+        montant: MoneyDisplay;
+        date: string | null;
+        showUrl: string;
+    }>;
+    /** Set when this row is itself the application of an earlier avance. */
+    appliedFrom: {
+        reference: string;
+        montant: MoneyDisplay;
+        date: string | null;
+        showUrl: string;
+    } | null;
 }
 
 export interface DepenseDetails {
@@ -1215,6 +1235,10 @@ export interface InscriptionRow {
     date: string | null;
     dateDebut: string | null;
     dateFin: string | null;
+    /** ISO (yyyy-mm-dd) copies of the three dates above, for the edit modal's date inputs. */
+    dateIso: string | null;
+    dateDebutIso: string | null;
+    dateFinIso: string | null;
     montantTotal: MoneyDisplay | null;
     feesCount: number;
     statut: string;
@@ -1493,6 +1517,8 @@ export interface EncaissementRow {
     ancienFrais: string | null;
     /** Group of that former fee's inscription. */
     ancienFraisGroupe: string | null;
+    /** Fee lines this avance was applied to (empty when none) — feeds the list cell’s hover detail. */
+    fraisAppliques: Array<{ frais: string; groupe: string | null; montant: MoneyDisplay; date: string | null }>;
     /** Full amount of the paid fee — read-only context in the edit modal. */
     feeMontantTotal: MoneyDisplay | null;
     /** Fee amount minus everything already paid on it. */
