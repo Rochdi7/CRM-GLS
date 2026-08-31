@@ -73,7 +73,7 @@ final class RolesAndPermissionsSeederTest extends TestCase
         $teacher = Role::findByName('teacher');
         $this->assertEqualsCanonicalizing(
             [
-                'dashboard.view', 'groups.view', 'students.view',
+                'dashboard.view', 'groups.view', 'groups.change-teacher', 'students.view',
                 'attendance.view', 'attendance.create', 'attendance.mark',
             ],
             $teacher->permissions()->pluck('name')->all(),
@@ -409,5 +409,26 @@ final class RolesAndPermissionsSeederTest extends TestCase
         $this->assertTrue($user->can('roles.delete'));
         $this->assertTrue($user->can('cash-transfers.validate'));
         $this->assertTrue($user->can('some.future-permission'));
+    }
+
+    /**
+     * Every role changes or clears a group's teacher (31/08/2026 business
+     * decision). It is a SEPARATE ability from `groups.update` on purpose:
+     * a comptable, un directeur qualité, le marketing ou un enseignant peut
+     * corriger l'enseignant d'un groupe sans pouvoir renommer le groupe,
+     * changer sa salle ou toucher ses frais.
+     */
+    public function test_every_role_can_change_a_group_teacher(): void
+    {
+        foreach (PermissionRegistry::roles() as $name => $label) {
+            if ($name === Role::SUPER_ADMIN) {
+                continue; // Gate::before bypass — holds no explicit permission.
+            }
+
+            $this->assertTrue(
+                Role::findByName($name)->hasPermissionTo('groups.change-teacher'),
+                "Le rôle {$name} doit pouvoir changer l'enseignant d'un groupe.",
+            );
+        }
     }
 }

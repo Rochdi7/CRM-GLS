@@ -288,14 +288,16 @@ final class GroupController extends Controller
      * outgoing assignment with its date_fin, opens the incoming one with its
      * date_debut, and STOPS the group's emploi du temps so a fresh schedule
      * is built for the new teacher (per-teacher séance separation → payroll).
-     * Gated by groups.update, like every other edit of a group.
+     * Gated by its OWN ability `groups.change-teacher`, which every role
+     * holds (31/08/2026) — fixing a wrong or departed enseignant must not
+     * require the full `groups.update` right.
      */
     public function changerEnseignant(
         ChangerEnseignantRequest $request,
         Group $group,
         ChangerEnseignantGroupe $changerEnseignant,
     ): RedirectResponse {
-        $this->authorize('update', $group);
+        $this->authorize('changeTeacher', $group);
         $this->assertGroupInContext($request, $group, 'enseignant_id');
 
         $data = $request->validated();
@@ -341,7 +343,10 @@ final class GroupController extends Controller
         Group $group,
         GroupEnseignant $affectation,
     ): RedirectResponse {
-        $this->authorize('update', $group);
+        // Same ability as the changeover itself: correcting the dates of an
+        // assignment period is part of managing a group's teacher, not of
+        // editing the group.
+        $this->authorize('changeTeacher', $group);
         $this->assertGroupInContext($request, $group, 'date_debut');
 
         abort_unless($affectation->group_id === $group->id, 404);

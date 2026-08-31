@@ -118,7 +118,7 @@ final class GroupEnseignantAffectationTest extends TestCase
         $group = $this->group($ancien);
         $this->assignmentActive($group, $ancien, '2025-09-01');
 
-        $this->actingAs($this->userWith('groups.view', 'groups.update'))
+        $this->actingAs($this->userWith('groups.view', 'groups.change-teacher'))
             ->post(route('backoffice.groups.changer-enseignant', $group), [
                 'enseignant_id' => $nouveau->id,
                 'date_debut' => '2025-10-01',
@@ -152,7 +152,7 @@ final class GroupEnseignantAffectationTest extends TestCase
         $group = $this->group($premier = $this->enseignant());
         $this->assignmentActive($group, $premier, '2025-09-01');
 
-        $this->actingAs($this->userWith('groups.view', 'groups.update'));
+        $this->actingAs($this->userWith('groups.view', 'groups.change-teacher'));
 
         foreach ([$this->enseignant(), $this->enseignant()] as $i => $prof) {
             $this->post(route('backoffice.groups.changer-enseignant', $group), [
@@ -195,7 +195,7 @@ final class GroupEnseignantAffectationTest extends TestCase
             'statut' => Seance::STATUT_PREVUE,
         ]);
 
-        $this->actingAs($this->userWith('groups.view', 'groups.update'))
+        $this->actingAs($this->userWith('groups.view', 'groups.change-teacher'))
             ->post(route('backoffice.groups.changer-enseignant', $group), [
                 'enseignant_id' => $this->enseignant()->id,
                 'date_debut' => '2025-10-15',
@@ -258,11 +258,16 @@ final class GroupEnseignantAffectationTest extends TestCase
         Carbon::setTestNow();
     }
 
-    public function test_changing_the_teacher_requires_the_groups_update_permission(): void
+    /**
+     * Since 31/08/2026 the changeover has its OWN ability, `groups.change-teacher`,
+     * which every role holds — holding `groups.update` is NOT enough on its own,
+     * and not holding it is no longer a reason to be refused.
+     */
+    public function test_changing_the_teacher_requires_the_change_teacher_permission(): void
     {
         $group = $this->group($this->enseignant());
 
-        $this->actingAs($this->userWith('groups.view'))
+        $this->actingAs($this->userWith('groups.view', 'groups.update'))
             ->post(route('backoffice.groups.changer-enseignant', $group), [
                 'enseignant_id' => $this->enseignant()->id,
                 'date_debut' => '2025-10-01',
@@ -444,7 +449,7 @@ final class GroupEnseignantAffectationTest extends TestCase
             'statut' => GroupEnseignant::STATUT_ARCHIVE,
         ]);
 
-        $this->actingAs($this->userWith('groups.view', 'groups.update'))
+        $this->actingAs($this->userWith('groups.view', 'groups.change-teacher'))
             ->put(route('backoffice.groups.affectations.update', [$group, $affectation]), [
                 'date_debut' => '2025-09-15',
                 'date_fin' => '2025-11-20',
@@ -465,7 +470,7 @@ final class GroupEnseignantAffectationTest extends TestCase
         $group = $this->group($prof);
         $affectation = $this->assignmentActive($group, $prof, '2025-09-01');
 
-        $this->actingAs($this->userWith('groups.view', 'groups.update'))
+        $this->actingAs($this->userWith('groups.view', 'groups.change-teacher'))
             ->put(route('backoffice.groups.affectations.update', [$group, $affectation]), [
                 'date_debut' => '2025-09-08',
                 // Even if a date_fin is posted, the running period stays open.
@@ -486,7 +491,7 @@ final class GroupEnseignantAffectationTest extends TestCase
         $affectation = $this->assignmentActive($group, $prof, '2025-09-01');
         $affectation->update(['date_fin' => '2025-10-01', 'statut' => GroupEnseignant::STATUT_ARCHIVE]);
 
-        $this->actingAs($this->userWith('groups.view', 'groups.update'))
+        $this->actingAs($this->userWith('groups.view', 'groups.change-teacher'))
             ->put(route('backoffice.groups.affectations.update', [$group, $affectation]), [
                 'date_debut' => '2025-10-01',
                 'date_fin' => '2025-09-01',
@@ -512,7 +517,7 @@ final class GroupEnseignantAffectationTest extends TestCase
         $autreGroup = $this->group($prof);
         $affectationAutre = $this->assignmentActive($autreGroup, $prof, '2025-09-01');
 
-        $this->actingAs($this->userWith('groups.view', 'groups.update'))
+        $this->actingAs($this->userWith('groups.view', 'groups.change-teacher'))
             ->put(route('backoffice.groups.affectations.update', [$group, $affectationAutre]), [
                 'date_debut' => '2025-09-08',
             ])->assertNotFound();

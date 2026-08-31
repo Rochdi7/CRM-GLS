@@ -30,6 +30,19 @@ final class GroupPolicy extends ResourcePolicy
     }
 
     /**
+     * Changing or clearing a group's teacher is its OWN ability, not part of
+     * `groups.update` (31/08/2026): every role holds `groups.change-teacher`
+     * so anyone can fix a wrong or departed enseignant, without that also
+     * granting the right to rename the group, move its salle or touch its
+     * frais. Centre reach still applies — a group you cannot reach is still
+     * out of bounds.
+     */
+    public function changeTeacher(User $user, Group $group): bool
+    {
+        return $user->can('groups.change-teacher') && $this->withinCenter($user, $group);
+    }
+
+    /**
      * `groups.move-year` sits in PermissionRegistry::superAdminOnly(): no
      * role preset carries it, so in practice only a super-admin (Gate::before)
      * or a hand-granted account reaches this.

@@ -709,12 +709,32 @@ final class InscriptionController extends Controller
             abort(422, __('Invalid status.'));
         }
 
-        // Only a CANCELLED registration comes back. A « Changement » one has
-        // a successor Active inscription created by changeGroup(): waking it
-        // up would leave the student enrolled twice at once (DB-08).
-        if ($inscription->statut !== Inscription::STATUT_ANNULEE) {
+        // Only a closed registration comes back — « Annulée » or
+        // « Changement ». The real invariant is DB-08: a student is never
+        // enrolled twice at once. A « Changement » row normally has a
+        // successor Active inscription created by changeGroup(), so waking it
+        // up would double-enroll — but once that successor is itself
+        // cancelled the student has no live enrollment any more, and the
+        // original row is the only thing left to bring back (reported
+        // 31/08/2026: INS-098 could not be reactivated even though its
+        // successor was gone). So the guard checks what is ACTUALLY live, not
+        // the historical status.
+        if (! in_array($inscription->statut, [Inscription::STATUT_ANNULEE, Inscription::STATUT_CHANGEMENT], true)) {
             throw ValidationException::withMessages([
                 'statut' => __('This status change is not allowed from the current status.'),
+            ]);
+        }
+
+        $hasActive = Inscription::query()
+            ->where('student_id', $inscription->student_id)
+            ->where('annee_scolaire_id', $inscription->annee_scolaire_id)
+            ->where('id', '!=', $inscription->id)
+            ->where('statut', Inscription::STATUT_ACTIVE)
+            ->exists();
+
+        if ($hasActive) {
+            throw ValidationException::withMessages([
+                'statut' => __('This student already has an active registration for this academic year.'),
             ]);
         }
 

@@ -49,7 +49,9 @@ final class GetGroupDetails
             'inscriptionsActivesCount' => $group->inscriptions->where('statut', Inscription::STATUT_ACTIVE)->count(),
             'inscriptionsChangementCount' => $group->inscriptions->where('statut', Inscription::STATUT_CHANGEMENT)->count(),
             'inscriptionsAnnuleesCount' => $group->inscriptions->where('statut', Inscription::STATUT_ANNULEE)->count(),
-            'canChangeEnseignant' => $user->can('update', $group) && ! $isFinished,
+            // Its own ability since 31/08/2026 — every role may fix a group's
+            // teacher without holding `groups.update` (GroupPolicy@changeTeacher).
+            'canChangeEnseignant' => $user->can('changeTeacher', $group) && ! $isFinished,
             'changerEnseignantUrl' => route('backoffice.groups.changer-enseignant', $group),
             'emploiDuTempsUrl' => route('backoffice.emploi-du-temps.index', ['group' => $group->id]),
             // Full assignment history — one row per teaching period, the

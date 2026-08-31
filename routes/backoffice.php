@@ -207,13 +207,13 @@ Route::prefix('backoffice')
             // Teacher changeover — archives the outgoing assignment, opens
             // the new one and stops the group's emploi du temps.
             Route::post('groups/{group}/changer-enseignant', [GroupController::class, 'changerEnseignant'])
-                ->middleware('permission:groups.update')->name('groups.changer-enseignant');
+                ->middleware('permission:groups.change-teacher')->name('groups.changer-enseignant');
             // Corrects the dates/motif of an already-recorded assignment
             // period (the changeover stamps "today"; the real handover may
             // have been another day). Never swaps the row's teacher, never
             // deletes the row — see the controller method.
             Route::put('groups/{group}/affectations/{affectation}', [GroupController::class, 'updateEnseignantAffectation'])
-                ->middleware('permission:groups.update')->name('groups.affectations.update');
+                ->middleware('permission:groups.change-teacher')->name('groups.affectations.update');
             // Removes ONE catalog fee from the group and cascades it to every
             // inscription of the group: the fee lines are HIDDEN (never
             // deleted) and the money already collected on them is released
@@ -457,6 +457,11 @@ Route::prefix('backoffice')
                 ->middleware('permission:payments.view')->name('encaissements.recu');
             Route::post('encaissements/{encaissement}/recu/email', [EncaissementController::class, 'sendRecuEmail'])
                 ->middleware('permission:payments.view')->name('encaissements.recu.email');
+            // Lien WhatsApp du reçu : renvoie l'URL click-to-chat construite
+            // côté serveur (le PDF y voyage comme URL signée — l'API
+            // click-to-chat ne sait pas joindre de fichier).
+            Route::get('encaissements/{encaissement}/recu/whatsapp', [EncaissementController::class, 'recuWhatsApp'])
+                ->middleware('permission:payments.view')->name('encaissements.recu.whatsapp');
             Route::delete('encaissements/{encaissement}', [EncaissementController::class, 'destroy'])
                 ->middleware('permission:payments.delete')->name('encaissements.destroy');
             Route::get('encaissements/{encaissement}', [EncaissementController::class, 'show'])

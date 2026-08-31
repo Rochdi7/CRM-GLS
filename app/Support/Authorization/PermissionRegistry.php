@@ -128,6 +128,11 @@ final class PermissionRegistry
                 'groups.view' => 'Consulter les groupes et leur historique',
                 'groups.create' => 'Créer un groupe',
                 'groups.update' => 'Modifier un groupe',
+                // Deliberately SEPARATE from groups.update: every role
+                // holds it (31/08/2026 business decision) so anyone can
+                // fix or clear a group's teacher without also gaining the
+                // right to rename it, move its salle or touch its frais.
+                'groups.change-teacher' => "Changer ou retirer l'enseignant d'un groupe",
                 'groups.archive' => 'Clôturer un groupe (Fin de formation)',
                 'groups.move-year' => 'Déplacer un groupe vers une autre année scolaire (avec ses inscriptions, séances et paiements)',
             ],
@@ -535,6 +540,7 @@ final class PermissionRegistry
             'registrations.view', 'registrations.create', 'registrations.update',
             'registrations.manage-fees', 'registrations.change-group',
             'groups.view', 'groups.create', 'groups.update', 'groups.archive',
+            'groups.change-teacher',
             'attendance.view', 'attendance.create', 'attendance.update', 'attendance.mark',
             'cash-registers.view',
             'payments.view', 'payments.create', 'payments.update',
@@ -586,6 +592,7 @@ final class PermissionRegistry
             'students.view',
             'registrations.view',
             'groups.view',
+            'groups.change-teacher',
             'cash-registers.view',
             'payments.view',
             'collections.view',
@@ -734,6 +741,7 @@ final class PermissionRegistry
                 'students.view',
                 'registrations.view',
                 'groups.view',
+                'groups.change-teacher',
                 'stock.view', 'stock.create', 'stock.update', 'stock.move',
                 'stock-types.view', 'stock-types.create', 'stock-types.update',
             ],
@@ -742,6 +750,7 @@ final class PermissionRegistry
             'teacher' => [
                 'dashboard.view',
                 'groups.view',
+                'groups.change-teacher',
                 'students.view',
                 'attendance.view', 'attendance.create', 'attendance.mark',
             ],
