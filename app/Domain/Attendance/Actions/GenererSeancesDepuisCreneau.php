@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Attendance\Actions;
 
 use App\Models\Creneau;
+use App\Models\Group;
 use App\Models\Seance;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +21,20 @@ use Illuminate\Support\Facades\DB;
  * update/delete: once attendance has been taken (Effectuée) or a séance was
  * detached/edited by hand, it is left alone (gls-crm CLAUDE.md-style
  * invariant — generation must never silently overwrite real activity).
+ *
+ * ⚠ Séances are created DAY BY DAY, never a whole period at once
+ * (31/08/2026). A single `generer()` run writes at most the CURRENT day's
+ * séance; the 08:00 scheduled job (`seances:generate`, bootstrap/app.php)
+ * then walks the calendar one morning at a time — each day it creates that
+ * day's séances for every active group. The bounds come from the GROUP:
+ * nothing is created before its `date_debut_formation` (the job simply
+ * produces nothing until that day arrives) and nothing after its
+ * `date_fin_formation` (falling back to the académic year's `date_fin`) —
+ * once that end date is behind, the job stops producing anything for the
+ * group until the date is extended. Generation is idempotent — a day whose
+ * séance already exists for this créneau (whatever its statut: flipped
+ * Effectuée or Annulée counts as existing) is skipped — which is what makes
+ * re-running it any number of times in a day safe.
  */
 final class GenererSeancesDepuisCreneau
 {
@@ -31,12 +46,36 @@ final class GenererSeancesDepuisCreneau
      */
     public bool $bloqueParFinFormation = false;
 
+    /**
+     * True when the last generer() call produced nothing because the group
+     * declares NO date_debut_formation: with no start date there is nothing
+     * to anchor "start creating from the group's date début" on, so rather
+     * than silently generating from today (séances possibly before the real
+     * start of the class), generation refuses until the date is filled in.
+     */
+    public bool $bloqueParDateDebutManquante = false;
+
     public function generer(Creneau $creneau): void
     {
         $this->bloqueParFinFormation = false;
+        $this->bloqueParDateDebutManquante = false;
 
         $creneau->loadMissing('group');
         $group = $creneau->group;
+
+        // A finished or cancelled group generates NOTHING, whatever path
+        // called us (the 08:00 job already filters on statut, but a créneau
+        // saved/edited on an archived group must not mint séances either).
+        if (in_array($group->statut, Group::STATUTS_HISTORIQUE, true)) {
+            return;
+        }
+
+        // No declared start date = no generation (see the flag's doc above).
+        if ($group->date_debut_formation === null) {
+            $this->bloqueParDateDebutManquante = true;
+
+            return;
+        }
 
         $anneeFin = $group->anneeScolaire?->date_fin;
 
@@ -52,7 +91,7 @@ final class GenererSeancesDepuisCreneau
         }
 
         $debut = Carbon::today();
-        if ($group->date_debut_formation !== null && $group->date_debut_formation->gt($debut)) {
+        if ($group->date_debut_formation->gt($debut)) {
             $debut = $group->date_debut_formation->copy();
         }
 
@@ -75,7 +114,9 @@ final class GenererSeancesDepuisCreneau
             $fin = $group->date_fin_formation->copy();
         }
 
-        // A créneau closed mid-period (teacher changeover) stops there too.
+        // A créneau closed mid-period (teacher changeover) stops there too,
+        // and a group whose date_fin_formation is already past generates
+        // nothing until that date is extended.
         if ($debut->gt($fin)) {
             $this->bloqueParFinFormation = $group->date_fin_formation !== null
                 && $group->date_fin_formation->lt(Carbon::today());
@@ -86,41 +127,44 @@ final class GenererSeancesDepuisCreneau
         // Séances previously generated beyond the group's (possibly shortened)
         // end of formation are removed — same "Prévue + still linked + future"
         // guard as everywhere else, so attendance already taken survives.
+        // Bounded by the group's PERIOD, independent of what this run creates.
         $this->purgerHorsPeriode($creneau, $fin);
 
-        DB::transaction(function () use ($creneau, $group, $debut, $fin): void {
-            // Existing future "Prévue" séances from THIS créneau are the
-            // sync target — anything the user turned "Effectuée"/"Annulée"
-            // or detached is left untouched, matching by date so a re-save
-            // doesn't create duplicates for dates already generated.
-            $existingDates = $creneau->seances()
-                ->where('statut', Seance::STATUT_PREVUE)
-                ->where('date_seance', '>=', $debut->toDateString())
-                ->pluck('date_seance')
-                ->map(fn ($date) => $date->toDateString())
-                ->all();
+        // Day-by-day: this run creates the CURRENT day's séance and nothing
+        // else. When the group (or this créneau) only starts later, today is
+        // before $debut and nothing is created — the 08:00 job produces the
+        // first séance on the morning date_debut_formation is reached, then
+        // one day at a time through date_fin_formation (class doc above).
+        $aujourdhui = Carbon::today();
 
-            for ($date = $debut->copy(); $date->lte($fin); $date->addDay()) {
-                if ($date->isoWeekday() !== $creneau->jour_semaine) {
-                    continue;
-                }
+        if ($aujourdhui->lt($debut) || $aujourdhui->isoWeekday() !== $creneau->jour_semaine) {
+            return;
+        }
 
-                if (in_array($date->toDateString(), $existingDates, true)) {
-                    continue;
-                }
+        DB::transaction(function () use ($creneau, $group, $aujourdhui): void {
+            // Whatever its statut: a séance already flipped Effectuée or
+            // Annulée today, or still Prévue, means the day exists — re-runs
+            // (créneau edit after attendance, the job firing twice) must
+            // neither duplicate nor resurrect it.
+            $dejaGeneree = $creneau->seances()
+                ->whereDate('date_seance', $aujourdhui->toDateString())
+                ->exists();
 
-                Seance::create([
-                    'group_id' => $group->id,
-                    'creneau_id' => $creneau->id,
-                    'date_seance' => $date->toDateString(),
-                    'heure_debut' => $creneau->heure_debut,
-                    'heure_fin' => $creneau->heure_fin,
-                    'enseignant_id' => $creneau->enseignant_id,
-                    'etablissement_id' => $group->etablissement_id,
-                    'annee_scolaire_id' => $group->annee_scolaire_id,
-                    'statut' => Seance::STATUT_PREVUE,
-                ]);
+            if ($dejaGeneree) {
+                return;
             }
+
+            Seance::create([
+                'group_id' => $group->id,
+                'creneau_id' => $creneau->id,
+                'date_seance' => $aujourdhui->toDateString(),
+                'heure_debut' => $creneau->heure_debut,
+                'heure_fin' => $creneau->heure_fin,
+                'enseignant_id' => $creneau->enseignant_id,
+                'etablissement_id' => $group->etablissement_id,
+                'annee_scolaire_id' => $group->annee_scolaire_id,
+                'statut' => Seance::STATUT_PREVUE,
+            ]);
         });
     }
 
@@ -155,6 +199,10 @@ final class GenererSeancesDepuisCreneau
     {
         $creneau->seances()
             ->where('statut', Seance::STATUT_PREVUE)
+            // A séance still "Prévue" can already carry présences
+            // (EnregistrerPresences never flips the statut) — deleting it
+            // would cascade-delete the roll call. Leave it alone.
+            ->whereDoesntHave('presences')
             ->where('date_seance', '>=', Carbon::today()->toDateString())
             ->where('date_seance', '>', $fin->toDateString())
             ->delete();
@@ -170,6 +218,9 @@ final class GenererSeancesDepuisCreneau
     {
         $creneau->seances()
             ->where('statut', Seance::STATUT_PREVUE)
+            // Same présences guard as purgerHorsPeriode() — a roll call
+            // already taken must never be cascade-deleted.
+            ->whereDoesntHave('presences')
             ->where('date_seance', '>=', Carbon::today()->toDateString())
             ->delete();
     }

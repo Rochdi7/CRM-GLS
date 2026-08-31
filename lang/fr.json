@@ -723,6 +723,8 @@
     "Save :name": "Sauvegarder :name",
     "Saved.": "Enregistré.",
     "Saving…": "Enregistrement…",
+    "Schedule slot created, but no session will be generated: the group has no start of training date. Set the group's start date to generate sessions.": "Créneau créé, mais aucune séance ne sera générée : le groupe n'a pas de date de début de formation. Renseignez la date de début du groupe pour générer les séances.",
+    "Schedule slot updated, but no session will be generated: the group has no start of training date. Set the group's start date to generate sessions.": "Créneau modifié, mais aucune séance ne sera générée : le groupe n'a pas de date de début de formation. Renseignez la date de début du groupe pour générer les séances.",
     "Schedule slot created, but no session was generated: the group's end of training date has passed. Extend the group's end date to generate sessions.": "Créneau créé, mais aucune séance n'a été générée : la date de fin de formation du groupe est dépassée. Prolongez la date de fin du groupe pour générer les séances.",
     "Schedule slot updated, but no session was generated: the group's end of training date has passed. Extend the group's end date to generate sessions.": "Créneau modifié, mais aucune séance n'a été générée : la date de fin de formation du groupe est dépassée. Prolongez la date de fin du groupe pour générer les séances.",
     "Scope": "Périmètre",

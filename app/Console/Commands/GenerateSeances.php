@@ -11,16 +11,18 @@ use Illuminate\Console\Command;
 
 /**
  * Runs the créneau → séances generator (GenererSeancesDepuisCreneau) for
- * every créneau of every active group, so séances are kept generated ahead
- * of time without staff manually creating them. Idempotent — generer()
- * already skips dates it has generated before, so this is safe to run daily
- * (see withSchedule() in bootstrap/app.php).
+ * every créneau of every active group, DAY BY DAY: each 08:00 run creates
+ * only the CURRENT day's séances — starting the morning a group's
+ * date_debut_formation arrives and stopping once its date_fin_formation is
+ * past. Idempotent — a day already generated (whatever its statut) is
+ * skipped, so re-running within the same day is safe (see withSchedule()
+ * in bootstrap/app.php).
  */
 final class GenerateSeances extends Command
 {
     protected $signature = 'seances:generate';
 
-    protected $description = 'Generate upcoming séances from every active group\'s emploi du temps (créneaux)';
+    protected $description = "Génère les séances du jour depuis l'emploi du temps de chaque groupe actif (jour par jour, de date_debut_formation à date_fin_formation)";
 
     public function handle(GenererSeancesDepuisCreneau $generateur): int
     {
