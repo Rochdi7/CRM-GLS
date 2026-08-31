@@ -17,6 +17,14 @@ return new class extends Migration
             // application flows (ChangerGroupeInscription) — locked from
             // edit/delete like types_depenses.is_system rows.
             $table->boolean('is_system')->default(false);
+            // What the reason may be used to cancel. A class session is not
+            // cancelled for the reasons an enrollment is: « Malade », « jour
+            // férié » or « Match maroc » explain why a séance did not take
+            // place and say nothing about why a student left, while
+            // « Non-paiement » or « Transfert d'établissement » are the
+            // reverse. One shared catalogue offered both lists on both forms.
+            // 'tous' keeps a reason valid everywhere (the seeded generic ones).
+            $table->string('portee', 20)->default('tous');
             $table->string('statut', 20)->default('Actif');
             $table->timestamps();
         });

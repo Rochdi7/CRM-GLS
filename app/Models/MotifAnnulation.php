@@ -35,10 +35,30 @@ class MotifAnnulation extends Model
         self::STATUT_INACTIF,
     ];
 
+    /**
+     * What a reason may be used to cancel.
+     *
+     * A séance and an inscription are cancelled for different reasons:
+     * « Malade » / « jour férié » explain why a class did not take place,
+     * « Non-paiement » / « Transfert d’établissement » why a student left.
+     * PORTEE_TOUS keeps a reason valid on both forms (« Autre »).
+     */
+    public const PORTEE_TOUS = 'tous';
+
+    public const PORTEE_INSCRIPTION = 'inscription';
+
+    public const PORTEE_SEANCE = 'seance';
+
+    public const PORTEES = [
+        self::PORTEE_TOUS,
+        self::PORTEE_INSCRIPTION,
+        self::PORTEE_SEANCE,
+    ];
+
     /** The system reason written by the "Changement de groupe" flow. */
     public const MOTIF_CHANGEMENT_GROUPE = 'Changement de groupe';
 
-    protected $fillable = ['nom', 'is_system', 'statut'];
+    protected $fillable = ['nom', 'is_system', 'portee', 'statut'];
 
     /**
      * Mirror of the column default, so a freshly created row and the model in
@@ -54,6 +74,7 @@ class MotifAnnulation extends Model
      */
     protected $attributes = [
         'statut' => self::STATUT_ACTIF,
+        'portee' => self::PORTEE_TOUS,
     ];
 
     protected function casts(): array

@@ -29,6 +29,8 @@ final class UpdateMotifAnnulationRequest extends FormRequest
                 'required', 'string', 'max:150',
                 Rule::unique('motifs_annulation', 'nom')->ignore($this->route('motifAnnulation')),
             ],
+            // Which cancellation form offers this reason (§ séance vs inscription).
+            'portee' => ['required', Rule::in(MotifAnnulation::PORTEES)],
             'statut' => ['required', Rule::in(MotifAnnulation::STATUTS)],
         ];
     }

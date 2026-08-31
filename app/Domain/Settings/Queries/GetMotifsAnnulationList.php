@@ -21,6 +21,7 @@ final class GetMotifsAnnulationList
             'id' => $m->id,
             'nom' => $m->nom,
             'isSystem' => $m->is_system,
+            'portee' => $m->portee,
             'statut' => $m->statut,
         ]);
 
@@ -28,16 +29,27 @@ final class GetMotifsAnnulationList
     }
 
     /**
-     * Active reason names for future annulation/archive forms (inscriptions,
-     * séances) — the columns that will consume this stay free-text (no FK),
-     * so callers just need the list of valid names, like Banque::activeNames.
+     * Active reason names for the annulation/archive forms — the columns
+     * that consume this stay free-text (no FK), so callers just need the list
+     * of valid names, like Banque::activeNames.
+     *
+     * $portee narrows the catalogue to the reasons that make sense on ONE
+     * form: a séance is cancelled because a teacher was ill or the day was a
+     * holiday, an inscription because the student did not pay or moved
+     * centre. Reasons marked PORTEE_TOUS (the generic « Autre ») are always
+     * included. Passing null returns the whole catalogue — what the Settings
+     * tab lists.
      *
      * @return list<string>
      */
-    public function activeNames(): array
+    public function activeNames(?string $portee = null): array
     {
         return MotifAnnulation::query()
             ->where('statut', MotifAnnulation::STATUT_ACTIF)
+            ->when($portee !== null, fn ($q) => $q->whereIn(
+                'portee',
+                [$portee, MotifAnnulation::PORTEE_TOUS],
+            ))
             ->orderBy('nom')
             ->pluck('nom')
             ->all();

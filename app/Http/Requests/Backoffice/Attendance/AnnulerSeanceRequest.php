@@ -46,7 +46,7 @@ final class AnnulerSeanceRequest extends FormRequest
     public static function motifs(): array
     {
         return array_values(array_filter(
-            app(GetMotifsAnnulationList::class)->activeNames(),
+            app(GetMotifsAnnulationList::class)->activeNames(MotifAnnulation::PORTEE_SEANCE),
             fn (string $nom): bool => $nom !== MotifAnnulation::MOTIF_CHANGEMENT_GROUPE,
         ));
     }

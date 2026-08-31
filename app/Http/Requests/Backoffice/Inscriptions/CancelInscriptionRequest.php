@@ -34,7 +34,7 @@ final class CancelInscriptionRequest extends FormRequest
     public function rules(): array
     {
         $motifs = array_values(array_filter(
-            app(GetMotifsAnnulationList::class)->activeNames(),
+            app(GetMotifsAnnulationList::class)->activeNames(MotifAnnulation::PORTEE_INSCRIPTION),
             fn (string $nom): bool => $nom !== MotifAnnulation::MOTIF_CHANGEMENT_GROUPE,
         ));
 

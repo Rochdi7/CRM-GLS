@@ -117,7 +117,7 @@ final class InscriptionController extends Controller
             // flow writes, and choosing it here would claim a group change
             // that never happened — CancelInscriptionRequest refuses it too.
             'motifsAnnulation' => fn (): array => array_values(array_filter(
-                $getMotifsAnnulationList->activeNames(),
+                $getMotifsAnnulationList->activeNames(MotifAnnulation::PORTEE_INSCRIPTION),
                 fn (string $nom): bool => $nom !== MotifAnnulation::MOTIF_CHANGEMENT_GROUPE,
             )),
         ]);

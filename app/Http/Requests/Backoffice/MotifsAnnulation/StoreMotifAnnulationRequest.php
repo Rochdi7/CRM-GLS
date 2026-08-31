@@ -26,6 +26,8 @@ final class StoreMotifAnnulationRequest extends FormRequest
     {
         return [
             'nom' => ['required', 'string', 'max:150', 'unique:motifs_annulation,nom'],
+            // Which cancellation form offers this reason (§ séance vs inscription).
+            'portee' => ['required', Rule::in(MotifAnnulation::PORTEES)],
             'statut' => ['required', Rule::in(MotifAnnulation::STATUTS)],
         ];
     }

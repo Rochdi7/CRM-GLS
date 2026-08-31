@@ -107,3 +107,39 @@ COMMIT;
 -- Touches group_frais.date_echeance and inscription_fees.date_echeance.
 -- Local run 27/08/2026: 1 016 group fees, 31 948 inscription lines.
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 31/08/2026 — motifs_annulation.portee : séparer les motifs de séance des
+-- motifs d'inscription.
+--
+-- Un même catalogue servait les deux formulaires : les raisons ajoutées pour
+-- les séances (« Malade », « jour férié », « Match maroc », « Fin de
+-- formation ») apparaissaient aussi à l'annulation d'une INSCRIPTION, et
+-- inversement (« Non-paiement » proposé pour annuler un cours). La colonne
+-- décide quel formulaire propose quelle raison ; 'tous' reste sur les deux.
+--
+-- Idempotent : la colonne est ajoutée si absente, puis chaque motif connu est
+-- classé. Les motifs saisis à la main NON listés ici gardent 'tous' — donc
+-- rien ne disparaît d'un formulaire tant qu'un admin ne les a pas classés
+-- dans Paramètres → Raisons d'annulation (nouvelle colonne « Portée »).
+ALTER TABLE motifs_annulation
+    ADD COLUMN IF NOT EXISTS portee varchar(20) NOT NULL DEFAULT 'tous';
+
+UPDATE motifs_annulation SET portee = 'seance'
+ WHERE portee = 'tous'
+   AND lower(nom) IN (
+        'malade', 'empêchement personnel', 'empechement personnel',
+        'congé', 'congee', 'congée', 'jour férié', 'jour ferie',
+        'match maroc', 'fin de formation'
+   );
+
+UPDATE motifs_annulation SET portee = 'inscription'
+ WHERE portee = 'tous'
+   AND lower(nom) IN (
+        'conflit d''horaires', 'inactivité prolongée', 'non-paiement',
+        'transfert d''établissement', 'problème du temps',
+        'changement de groupe'
+   );
+-- « Autre » reste délibérément 'tous' : c'est la raison générique des deux
+-- formulaires.
+-- ---------------------------------------------------------------------------

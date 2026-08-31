@@ -21,7 +21,20 @@ const STATUT_OPTIONS: SelectOption[] = [
     { value: 'Inactif', label: 'Inactif' },
 ];
 
-const EMPTY_FORM: MotifAnnulationForm = { nom: '', statut: 'Actif' };
+const EMPTY_FORM: MotifAnnulationForm = { nom: '', portee: 'tous', statut: 'Actif' };
+
+/** Which cancellation form a reason is offered on. A séance is cancelled for
+    different reasons than an enrollment, so one shared catalogue offered both
+    lists on both forms; « Tous » keeps a generic reason on both. */
+const PORTEE_OPTIONS = [
+    { value: 'tous', label: 'Tous' },
+    { value: 'inscription', label: 'Inscriptions' },
+    { value: 'seance', label: 'Séances' },
+];
+
+function porteeLabel(portee: string): string {
+    return PORTEE_OPTIONS.find((option) => option.value === portee)?.label ?? portee;
+}
 
 /**
  * Raisons d'annulation ou archivage CRUD panel — the managed reason list for
@@ -49,7 +62,7 @@ export default function MotifsAnnulationPanel({ motifsAnnulation, permissions }:
     }
 
     function openEdit(row: MotifAnnulationRow) {
-        form.setData({ nom: row.nom, statut: row.statut });
+        form.setData({ nom: row.nom, portee: row.portee, statut: row.statut });
         form.clearErrors();
         setEditingId(row.id);
         setShowModal(true);
@@ -115,6 +128,7 @@ export default function MotifsAnnulationPanel({ motifsAnnulation, permissions }:
                 head={
                     <tr>
                         <th>Nom</th>
+                        <th>Portée</th>
                         <th>Statut</th>
                         <th className="text-end">Action</th>
                     </tr>
@@ -130,6 +144,7 @@ export default function MotifsAnnulationPanel({ motifsAnnulation, permissions }:
                                 </span>
                             )}
                         </td>
+                        <td>{porteeLabel(row.portee)}</td>
                         <td>
                             <StatusBadge
                                 label={row.statut === 'Actif' ? 'Actif' : 'Inactif'}
@@ -175,6 +190,15 @@ export default function MotifsAnnulationPanel({ motifsAnnulation, permissions }:
                         onChange={(event) => form.setData('nom', event.target.value)}
                         error={form.errors.nom}
                         placeholder="ex : Conflit d'horaires"
+                    />
+                    <SelectField
+                        id="ma-portee"
+                        label="Portée"
+                        required
+                        options={PORTEE_OPTIONS}
+                        value={form.data.portee}
+                        onChange={(event) => form.setData('portee', event.target.value)}
+                        error={form.errors.portee}
                     />
                     <SelectField
                         id="ma-statut"

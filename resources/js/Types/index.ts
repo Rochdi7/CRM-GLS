@@ -764,11 +764,14 @@ export interface MotifAnnulationRow {
     id: number;
     nom: string;
     isSystem: boolean;
+    /** Which cancellation form offers it: 'tous' | 'inscription' | 'seance'. */
+    portee: string;
     statut: string;
 }
 
 export interface MotifAnnulationForm {
     nom: string;
+    portee: string;
     statut: string;
 }
 

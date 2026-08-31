@@ -445,6 +445,15 @@ final class PermissionRegistry
             // method accounts are provisioned with the centre, never by hand
             // (CLAUDE.md §11).
             'cash-accounts.create', 'cash-accounts.update',
+            // Les salles sont creees et modifiees par un super-admin
+            // uniquement (31/08/2026, demande metier) : aucun preset ne les
+            // porte. Un super-admin peut toujours deleguer `rooms.create` /
+            // `rooms.update` a la main sur l'ecran Autorisations — et la
+            // portee reste alors celle des « Centres affectes » de
+            // l'employe : StoreSalleRequest / UpdateSalleRequest valident
+            // `etablissement_id` contre GetAccessibleCenterOptions, donc le
+            // titulaire ne cree une salle que dans SES centres.
+            'rooms.create', 'rooms.update',
             'expenses.approve',
             // Re-dating a recorded payment moves it between reconciled
             // periods — see payments.update-date in grouped() (30/08/2026).
@@ -641,7 +650,6 @@ final class PermissionRegistry
                 ...$operations,
                 ...$managementEdits,
                 'academic-years.create', 'academic-years.update',
-                'rooms.create', 'rooms.update',
                 'fees.create', 'fees.update',
                 'employees.view', 'employees.update',
                 'users.view', 'users.assign-roles',
@@ -659,7 +667,6 @@ final class PermissionRegistry
             'operations-director' => [
                 ...$operations,
                 ...$managementEdits,
-                'rooms.create', 'rooms.update',
                 'fees.create', 'fees.update',
                 'employees.view', 'employees.update',
                 'users.view',
@@ -712,7 +719,6 @@ final class PermissionRegistry
             'pedagogical-director' => [
                 ...$operations,
                 ...$managementEdits,
-                'rooms.create', 'rooms.update',
                 'fees.create', 'fees.update',
                 'employees.view',
                 'audit-logs.view',
