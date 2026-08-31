@@ -148,7 +148,7 @@ final class P0RemediationTest extends TestCase
     public function test_director_cannot_commit_or_retry_a_batch_of_another_centre(): void
     {
         $director = $this->userIn($this->marrakech, 'director');
-        $director->givePermissionTo('import.create');
+        $director->givePermissionTo('import.view', 'import.create');
         $rabatBatch = $this->batch($this->rabat, $this->userIn($this->rabat, 'director')->employee);
         $this->actingAs($director->fresh());
 
@@ -159,7 +159,7 @@ final class P0RemediationTest extends TestCase
     public function test_director_can_retry_own_centre_batch_and_super_admin_any(): void
     {
         $director = $this->userIn($this->marrakech, 'director');
-        $director->givePermissionTo('import.create');
+        $director->givePermissionTo('import.view', 'import.create');
         $own = $this->batch($this->marrakech, $director->employee);
         $this->actingAs($director->fresh());
         $this->post(route('backoffice.import.students.retry-failed', $own))->assertRedirect();

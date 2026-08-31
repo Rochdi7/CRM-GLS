@@ -125,11 +125,20 @@ It covers two families:
    delete: it is the sanctioned "Fin de formation" path that writes a
    `groups_historique` snapshot (CLAUDE.md §11), so it stays with the roles
    that run groups. Money records already have no delete route at all.
-2. **The pre-existing super-admin-only abilities**: `system-settings.*`,
-   `banks.*`, `cancellation-reasons.*`, `cash-accounts.*` (the global
-   non-center-scoped view), `expenses.approve` — and `centers.access-all`,
-   so that « Centres affectés » on the employee form stays the one authority
-   on center reach (§5b).
+2. **The reserved abilities**: `system-settings.*`, `banks.*`,
+   `cancellation-reasons.*`, `cash-accounts.create/update/delete` (writing an
+   account by hand — the READ went to the five management roles on
+   31/08/2026, §5b), `expenses.approve`, `groups.move-year`,
+   `payments.reallocate`, **`payments.update-date`** (re-dating money —
+   30/08/2026, §5b) — and `centers.access-all`, so that « Centres affectés »
+   on the employee form stays the one authority on center reach (§5b).
+
+⚠ **`employees.create` is not in `superAdminOnly()` and does not need to be** —
+it was simply removed from every preset on 30/08/2026, because hiring mints a
+login (`EmployeeObserver`) and, for « Responsable de système », a super-admin.
+It stays *grantable* on the Autorisations screen for a deliberate case, unlike
+family 1 and 2 which are filtered out of presets by construction. A test
+(`test_no_role_may_create_an_employee`) keeps it out of the presets.
 
 A super-admin can still grant any single one of these to one user by hand on
 the Autorisations screen when a real case needs it — the filter constrains the
@@ -158,39 +167,87 @@ form.
 
 ## 5b. Default matrix (summary)
 
-Presets live in `PermissionRegistry::presets()`; two shared building blocks
+> **Révision du 30–31/08/2026** — le périmètre des rôles a été refondu à la
+> demande du métier. Les quatre règles nouvelles :
+>
+> 1. **Consultant = Assistante administrative**, à la permission près.
+> 2. **Ce qu'un front-office MODIFIE se limite aux quatre objets
+>    pédagogiques** : étudiants, inscriptions, groupes, séances (emploi du
+>    temps). Tout le reste de la finance est **création seule** — on corrige
+>    par une écriture compensatoire, jamais en réécrivant le document.
+> 3. **La date d'un encaissement est réservée au super-admin**
+>    (`payments.update-date`).
+> 4. **Le stock physique appartient au seul `marketing-manager`** ; les
+>    autres rôles gardent `stock.view`.
+
+Presets live in `PermissionRegistry::presets()`; three shared building blocks
 keep the roles from drifting apart:
 
-- **`$operations`** — the full center-scoped day-to-day scope: étudiants,
+- **`$operations`** — the center-scoped front-desk scope: étudiants,
   inscriptions (+frais, +changement de groupe), groupes (+archive), séances
-  et appel, caisse, encaissements, dépenses, remboursements, chèques,
-  demandes de transfert, mouvements de stock. **No** `centers.access-all`.
+  et appel, caisse, encaissements, avances, chèques, dépenses,
+  remboursements, demandes de transfert. Les opérations de paiement
+  essentielles (enregistrer une avance, la convertir/l'appliquer, saisir un
+  chèque) **restent dedans** : elles créent des lignes, elles n'en réécrivent
+  aucune. Stock en **lecture seule**. **No** `centers.access-all`.
+- **`$managementEdits`** — les corrections qu'un cadre arbitre :
+  `expenses.update`, `refunds.update`, `cheques.update`,
+  `cash-transfers.update`, plus la **lecture** de « Comptes de caisse »
+  (`cash-accounts.view`). Ajouté aux cinq rôles de direction.
 - **`$financeReadOnly`** — read access to every finance screen, the baseline
   the accounting/oversight roles build on.
 
 ⚠ **`centers.access-all` sits in `superAdminOnly()` — NO role preset may
 carry it.** « Centres affectés » on the employee form (the
 `employee_etablissement` pivot) is the ONE authority on which centers a user
-reaches, whatever their role. A cross-center job = more centers assigned on
-the employee form; a truly global non-super-admin account (rare) gets the
-permission hand-granted, one user at a time, on the Autorisations screen.
+reaches, whatever their role. Cela vaut aussi pour « Comptes de caisse » :
+l'onglet suit le sélecteur de centre de la barre du haut, et « Tous les
+centres » n'est offert qu'aux super-admins — un directeur y voit donc
+exactement ses centres affectés, jamais le réseau entier.
 Super-admins see everything via `Gate::before` regardless.
 
 | Role | Scope (always confined to the centers assigned on the employee form) |
 |---|---|
-| `super-admin` | Everything via `Gate::before` (zero synced rows, by design) — and the only role that deletes. |
-| `director` | `$operations` + catalogs (années, salles, frais, types), employés, `users.assign-roles`, `roles.view`, `cash-transfers.validate`, import, audit. |
-| `operations-director` | `$operations` + salles/frais, employés (view+update), stock catalog, import, audit. |
-| `financial-director` | `$financeReadOnly` + all money create/update, caisses, `cash-transfers.validate`, audit. |
-| `accountant` | Same money scope minus `cash-transfers.validate` and the caisse catalog — books entries, does not arbitrate them. |
+| `super-admin` | Everything via `Gate::before` (zero synced rows, by design) — the only role that deletes, re-dates a payment, approves a dépense, or writes a compte de caisse. |
+| `director` | `$operations` + `$managementEdits` + catalogs (années, salles, frais, types), employés (view+update), `users.assign-roles`, `roles.view`, `cash-transfers.validate`, import, audit. |
+| `operations-director` | `$operations` + `$managementEdits` + salles/frais, employés (view+update), import, audit. |
+| `financial-director` | `$operations` + `$managementEdits` + caisses, types de dépenses, `cash-transfers.validate`, audit. |
+| `pedagogical-director` | `$operations` + `$managementEdits` + salles/frais, `employees.view`, audit. |
+| `hr-manager` | `$operations` + `$managementEdits` + employés (view+update), `users.view`, audit. |
+| `accountant` | `$financeReadOnly` + toutes les écritures financières (create+update) — inchangé le 30/08/2026, sa fiche de poste correspondait déjà. |
 | `quality-director` | Read-only across every module, incl. `audit-logs.view`. Changes nothing. |
-| `pedagogical-director` | Academic authority: groupes, séances, salles, frais, étudiants, inscriptions. No money. |
 | `consultant` | `$operations` exactly. |
 | `administrative-assistant` | `$operations` exactly — identical to `consultant` (asserted by a test). |
-| `administrative-manager` | `$operations` + employés, `users.view`, audit. |
-| `hr-manager` | Staff file only — no student, academic or money data. |
-| `marketing-manager` | Dashboard + centres/étudiants/inscriptions/groupes, view-only. |
+| `administrative-manager` | `$operations` + employés (view+update), `users.view`, audit. |
+| `marketing-manager` | Dashboard + centres/étudiants/inscriptions/groupes en lecture, **+ la gestion complète du stock** (articles, mouvements, catalogue des types) — le seul rôle qui la porte. |
 | `teacher` | `dashboard.view`, `groups.view`, `students.view`, séances + appel. No finance. |
+
+Ce qu'**aucun** rôle ne porte (Gate::before uniquement) : n'importe quel
+`*.delete`, `employees.create`, `payments.update-date`, `expenses.approve`,
+`system-settings.*`, `banks.*`, `cancellation-reasons.*`,
+`cash-accounts.create/update/delete`, `groups.move-year`,
+`payments.reallocate`, `centers.access-all`.
+
+### La date d'un encaissement (`payments.update-date`)
+
+Déplacer `date_paiement` déplace la ligne dans le journal de caisse **et**
+dans le récapitulatif annuel — potentiellement vers un mois déjà rapproché.
+C'est le risque que l'audit du 27/08/2026 avait signalé sans le fermer ; il
+l'est depuis le 30/08/2026, comme règle métier :
+
+- `payments.update-date` est dans `superAdminOnly()` — aucun preset ne l'a.
+- `EncaissementController@update` retire le champ de la requête sans la
+  rejeter (le modal désactive l'input : une valeur qui arrive est un
+  formulaire périmé ou une requête forgée).
+- `UpdateEncaissementRequest` ne rend la date `required` que pour qui peut
+  l'écrire.
+- Tout titulaire de `payments.update` corrige toujours la note et l'identité
+  du chèque.
+
+⚠ `montant`, `caisse_id` et `methode` restent **gelés pour tout le monde,
+super-admin compris** : ce sont des invariants monétaires (CLAUDE.md §11 —
+la méthode a décidé quel compte a été crédité). Corriger une méthode = un
+remboursement + un nouvel encaissement, jamais une édition.
 
 Every non-super-admin role above holds **zero** delete permissions and cannot
 approve a dépense or validate a transfer unless the row says so.

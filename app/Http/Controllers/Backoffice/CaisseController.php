@@ -31,9 +31,13 @@ use Inertia\Response;
  * of the three view permissions; each tab's own data/actions are still gated
  * server-side by their own permission.
  *
- * ⚠ « Comptes de caisse » is super-admin only: `cash-accounts.*` is absent
- * from every role in PermissionRegistry::matrix(), so only the Gate::before
- * bypass reaches it. "Externe" is the ONLY type creatable there — employee
+ * ⚠ « Comptes de caisse » READS with `cash-accounts.view`, held by the five
+ * management roles since 31/08/2026 — scoped like every other screen (the tab
+ * follows the top-bar centre, and « Tous les centres » is super-admin only),
+ * so a manager sees exactly their affected centres. WRITING one
+ * (`cash-accounts.create/update/delete`) stays super-admin only: those sit in
+ * PermissionRegistry::superAdminOnly(), so only the Gate::before bypass
+ * reaches them. "Externe" is the ONLY type creatable there — employee
  * tills stay owned by CaisseProvisioner (EmployeeObserver), and the TPE /
  * Chèque / Virement accounts are provisioned per centre
  * (EtablissementObserver), not rows to create (see StoreCaisseRequest).

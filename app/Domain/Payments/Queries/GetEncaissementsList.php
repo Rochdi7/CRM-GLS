@@ -15,6 +15,7 @@ use App\Models\Student;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
+use App\Support\Access\HiddenAccount;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -396,6 +397,8 @@ final class GetEncaissementsList
         return Caisse::query()
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->whereIn('type', Caisse::TYPES_ESPECES)
+            // The maintainer's till is never an option (HiddenAccount).
+            ->tap(fn ($q) => HiddenAccount::hideCaisses($q))
             ->whereDoesntHave('responsable', fn ($e) => $e->where('categorie', Employee::CATEGORIE_ENSEIGNANT))
             ->where(function ($q): void {
                 $this->scopeToActiveCenter($q);

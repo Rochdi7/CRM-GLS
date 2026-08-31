@@ -211,14 +211,17 @@ export const backofficeNavigation: NavGroup[] = [
                 matchPaths: ['/backoffice/roles'],
                 inertia: true,
             },
-            {
-                label: t('Permissions'),
-                href: '/backoffice/permissions',
-                icon: 'ti ti-key',
-                permissions: ['permissions.view'],
-                matchPaths: ['/backoffice/permissions'],
-                inertia: true,
-            },
+            // Masque du menu a la demande (route backoffice.permissions.index
+            // reste active et protegee, accessible par URL directe) - la page
+            // « Roles et permissions » suffit dans la barre laterale.
+            // {
+            //     label: t('Permissions'),
+            //     href: '/backoffice/permissions',
+            //     icon: 'ti ti-key',
+            //     permissions: ['permissions.view'],
+            //     matchPaths: ['/backoffice/permissions'],
+            //     inertia: true,
+            // },
             // Masque du menu a la demande (route backoffice.import.index reste
             // active et protegee, accessible par URL directe) - retirer les
             // commentaires pour reafficher.

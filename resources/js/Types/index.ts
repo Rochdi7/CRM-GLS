@@ -1550,8 +1550,13 @@ export interface EncaissementsPageProps {
     /** Active bank names from the catalog (Paramètres → Banques) — the Chèque form's dropdown source. */
     banques: string[];
     filters: EncaissementsFilters;
-    /** UI convenience only — the destroy endpoint re-authorizes server-side. */
-    can?: { delete: boolean };
+    /**
+     * UI convenience only — the endpoints re-authorize server-side.
+     * `updateDate` is `payments.update-date` (super-admin only, 30/08/2026):
+     * without it the edit modal's Date field is disabled and the controller
+     * drops any posted value.
+     */
+    can?: { delete: boolean; updateDate?: boolean };
     [key: string]: unknown;
 }
 

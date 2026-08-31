@@ -1444,10 +1444,21 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                 />
                             </div>
                             <div className="col-md-6">
+                                {/*
+                                  * Re-dating a recorded payment is
+                                  * super-admin only (`payments.update-date`,
+                                  * 30/08/2026) — moving the date relocates
+                                  * the row in the caisse journal and the
+                                  * annual summary, possibly into a month
+                                  * already reconciled. Disabled here exactly
+                                  * like « Méthode » above; the real gate is
+                                  * EncaissementController@update.
+                                  */}
                                 <DateField
                                     id="e-edit-date"
                                     label="Date"
-                                    required
+                                    required={can?.updateDate ?? false}
+                                    disabled={!(can?.updateDate ?? false)}
                                     value={editForm.data.date_paiement}
                                     onChange={(e) => editForm.setData('date_paiement', e.target.value)}
                                     error={editForm.errors.date_paiement}

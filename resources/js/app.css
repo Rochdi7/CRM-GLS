@@ -32,6 +32,13 @@
 
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    /*
+     * PreSkool ships body { font-size: 14px }, which renders noticeably
+     * smaller than the old CRM (WimSchool, 16px) on high-resolution
+     * screens. 15px splits the difference: closer parity without pushing
+     * wide finance tables into horizontal scroll.
+     */
+    font-size: 15px;
     font-feature-settings: 'cv11', 'ss01', 'tnum';
     font-optical-sizing: auto;
 }

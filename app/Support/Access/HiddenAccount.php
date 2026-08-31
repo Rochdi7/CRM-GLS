@@ -72,6 +72,66 @@ final class HiddenAccount
     }
 
     /**
+     * Does this ability target one of the maintainer's own records, viewed
+     * by somebody else?
+     *
+     * Called from `Gate::before` ABOVE the super-admin bypass, so it holds
+     * for the CEO too. The list queries already filter these rows out, but
+     * a hand-typed URL goes straight to a controller's `authorize()` with
+     * the model resolved by route-model binding — without this, opening
+     * /backoffice/caisses/<his till> rendered his page in full.
+     *
+     * ⚠ Recognises the maintainer's OWN rows only (his user, his employee
+     * record, his till). It is NOT a rule about money: a real staff record
+     * that merely happens to reference him stays visible, and no business
+     * record of GLS's is ever hidden by this.
+     */
+    public static function denies(?Authenticatable $viewer, mixed $subject): bool
+    {
+        if (! $subject instanceof \Illuminate\Database\Eloquent\Model) {
+            return false;
+        }
+
+        // The maintainer always reaches his own records — otherwise his
+        // profile page and context resolution 403 on himself.
+        if (self::isViewer($viewer)) {
+            return false;
+        }
+
+        return match (true) {
+            $subject instanceof User => $subject->email === self::EMAIL,
+            $subject instanceof \App\Models\Employee => self::isMaintainerEmployee($subject),
+            $subject instanceof \App\Models\Caisse => self::isMaintainerCaisse($subject),
+            default => false,
+        };
+    }
+
+    private static function isMaintainerEmployee(\App\Models\Employee $employee): bool
+    {
+        // Through the `user` relation, not `employees.email`: that column is
+        // nullable, and the login address is the single identifying fact.
+        // withoutGlobalScopes() because Employee carries HiddenAccountScope —
+        // see hideCaisses() for what that blindness costs.
+        return User::query()
+            ->whereKey($employee->getAttribute('user_id'))
+            ->where('email', self::EMAIL)
+            ->exists();
+    }
+
+    private static function isMaintainerCaisse(\App\Models\Caisse $caisse): bool
+    {
+        $employeeId = $caisse->getAttribute('responsable_employee_id');
+
+        if ($employeeId === null) {
+            return false;
+        }
+
+        return \App\Models\Employee::withoutGlobalScopes()
+            ->whereKey($employeeId)
+            ->whereHas('user', fn ($q) => $q->where('email', self::EMAIL))
+            ->exists();
+    }
+    /**
      * Hide the maintainer from a query over `users`.
      *
      * Matched on the e-mail rather than a memoized id on purpose: no cache to
@@ -115,6 +175,18 @@ final class HiddenAccount
      * hang off are permanent — CLAUDE.md §11); it is only filtered out of
      * the finance screens.
      *
+     * ⚠ `withoutGlobalScopes()` on the `responsable` subquery is REQUIRED,
+     * not tidying. `Employee` is `#[ScopedBy(HiddenAccountScope::class)]`,
+     * and that scope applies inside a nested `whereDoesntHave` too — so the
+     * subquery would look for the maintainer's employee row in a set the
+     * scope has ALREADY removed him from, find nothing, and report "this
+     * caisse has no maintainer responsable" for the one caisse that does.
+     * The till then passed the filter and was listed on « Caisse globale » /
+     * « Comptes de caisse » with an empty Responsable column (the relation
+     * was scoped away at render time too), which is the leak reported on
+     * 30/08/2026. Any future filter that reaches the maintainer THROUGH
+     * `employees` must drop the scope the same way.
+     *
      * @param  Builder<\App\Models\Caisse>  $query
      */
     public static function hideCaisses(Builder $query): void
@@ -124,8 +196,9 @@ final class HiddenAccount
         }
 
         $query->whereDoesntHave(
-            'responsable.user',
-            fn ($q) => $q->where('email', self::EMAIL),
+            'responsable',
+            fn ($q) => $q->withoutGlobalScopes()
+                ->whereHas('user', fn ($u) => $u->where('email', self::EMAIL)),
         );
     }
 }

@@ -12,6 +12,7 @@ use App\Models\Remboursement;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\CaisseProvisioner;
 use App\Services\Context\CurrentContext;
+use App\Support\Access\HiddenAccount;
 use Illuminate\Support\Collection;
 
 /**
@@ -160,6 +161,13 @@ final class GetCaisseJournal
         }
 
         return Caisse::query()
+            // The maintainer's till is out of scope for everyone but himself
+            // (HiddenAccount): this is the single funnel feeding the journal's
+            // « Caisse » dropdown, its header totals and its rows, so filtering
+            // here keeps all three consistent. Nothing is lost — that till
+            // holds no money and no record; were it ever to hold one, the row
+            // would be missing from a total, so re-check before widening.
+            ->tap(fn ($q) => HiddenAccount::hideCaisses($q))
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
             ->pluck('id')

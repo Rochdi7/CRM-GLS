@@ -131,6 +131,165 @@ final class RolesAndPermissionsSeederTest extends TestCase
     }
 
     /**
+     * 30/08/2026 — the physical inventory belongs to ONE role.
+     *
+     * A book must leave the shelf in exactly one place, so `stock.create` /
+     * `stock.update` / `stock.move` (and the stock-types catalog) were pulled
+     * out of every other preset. Everyone else keeps `stock.view`: a front
+     * desk still needs to see whether a title is available.
+     */
+    public function test_only_the_marketing_manager_manages_stock(): void
+    {
+        $managing = ['stock.create', 'stock.update', 'stock.move',
+            'stock-types.create', 'stock-types.update'];
+
+        $marketing = Role::findByName('marketing-manager');
+
+        foreach ($managing as $permission) {
+            $this->assertTrue(
+                $marketing->hasPermissionTo($permission),
+                "marketing-manager should hold [$permission]",
+            );
+        }
+
+        foreach (Role::with('permissions')->get() as $role) {
+            if (in_array($role->name, ['marketing-manager', Role::SUPER_ADMIN], true)) {
+                continue;
+            }
+
+            $held = $role->permissions->pluck('name')->all();
+
+            $this->assertEmpty(
+                array_intersect($held, $managing),
+                "Role [{$role->name}] must not manage stock",
+            );
+        }
+
+        // …and a super-admin still does, via Gate::before.
+        $user = User::factory()->create();
+        $user->assignRole(Role::SUPER_ADMIN);
+        $this->assertTrue($user->can('stock.move'));
+    }
+
+    /**
+     * 30/08/2026 — re-dating a recorded payment is super-admin only.
+     *
+     * Moving `date_paiement` relocates the row in the caisse journal and in
+     * the annual summary, possibly into a month already reconciled. Every
+     * role keeps `payments.update` for the note / chèque identity fields.
+     */
+    public function test_no_role_may_change_a_payment_date(): void
+    {
+        foreach (Role::with('permissions')->get() as $role) {
+            $this->assertFalse(
+                $role->hasPermissionTo('payments.update-date'),
+                "Role [{$role->name}] must not re-date a payment",
+            );
+        }
+
+        // The roles that correct payments still hold the ordinary edit.
+        foreach (['consultant', 'administrative-assistant', 'accountant', 'director'] as $name) {
+            $this->assertTrue(Role::findByName($name)->hasPermissionTo('payments.update'), $name);
+        }
+
+        $user = User::factory()->create();
+        $user->assignRole(Role::SUPER_ADMIN);
+        $this->assertTrue($user->can('payments.update-date'));
+    }
+
+    /**
+     * 30/08/2026 — hiring is a super-admin act.
+     *
+     * `employees.create` mints a login (EmployeeObserver) and, for the
+     * « Responsable de système » catégorie, a super-admin — so no preset
+     * creates staff. Managing an existing file (`employees.update`) stays
+     * with the roles that run one.
+     */
+    public function test_no_role_may_create_an_employee(): void
+    {
+        foreach (Role::with('permissions')->get() as $role) {
+            $this->assertFalse(
+                $role->hasPermissionTo('employees.create'),
+                "Role [{$role->name}] must not create employees",
+            );
+        }
+
+        foreach (['director', 'hr-manager', 'administrative-manager'] as $name) {
+            $this->assertTrue(Role::findByName($name)->hasPermissionTo('employees.update'), $name);
+        }
+    }
+
+    /**
+     * The five management roles share the front-desk base and add back the
+     * finance EDITS a manager arbitrates — `expenses.update` above all.
+     * The front-desk roles themselves must NOT hold them.
+     */
+    public function test_management_roles_add_the_finance_edits_the_front_desk_lacks(): void
+    {
+        $edits = ['expenses.update', 'refunds.update', 'cheques.update', 'cash-transfers.update'];
+
+        foreach (['director', 'operations-director', 'financial-director',
+            'pedagogical-director', 'hr-manager'] as $name) {
+            $role = Role::findByName($name);
+
+            foreach ($edits as $permission) {
+                $this->assertTrue($role->hasPermissionTo($permission), "[$name] should hold [$permission]");
+            }
+
+            // They build on the same operational base.
+            $this->assertTrue($role->hasPermissionTo('registrations.update'), $name);
+            $this->assertTrue($role->hasPermissionTo('attendance.update'), $name);
+        }
+
+        foreach (['consultant', 'administrative-assistant'] as $name) {
+            $role = Role::findByName($name);
+
+            foreach ($edits as $permission) {
+                $this->assertFalse($role->hasPermissionTo($permission), "[$name] must not hold [$permission]");
+            }
+        }
+    }
+
+    /**
+     * 31/08/2026 — the five management roles READ « Comptes de caisse ».
+     *
+     * It is not a global view for them: GetComptesCaisse follows the top-bar
+     * centre like every other screen, and « Tous les centres » is
+     * super-admin-only by construction (GLOBAL_CENTER_ACCESS is un-grantable),
+     * so a manager sees exactly the centres assigned on their employee form.
+     * Creating or editing an account stays super-admin-only.
+     */
+    public function test_management_roles_read_the_cash_accounts_tab(): void
+    {
+        $readers = ['director', 'operations-director', 'financial-director',
+            'pedagogical-director', 'hr-manager'];
+
+        foreach ($readers as $name) {
+            $role = Role::findByName($name);
+
+            $this->assertTrue($role->hasPermissionTo('cash-accounts.view'), $name);
+
+            // …but never a global reach: centre scope comes from the
+            // employee form, never from a role.
+            $this->assertFalse($role->hasPermissionTo(PermissionRegistry::GLOBAL_CENTER_ACCESS), $name);
+        }
+
+        foreach (Role::with('permissions')->get() as $role) {
+            $held = $role->permissions->pluck('name')->all();
+
+            if (! in_array($role->name, $readers, true)) {
+                $this->assertNotContains('cash-accounts.view', $held, $role->name);
+            }
+
+            // Nobody creates or edits an account by hand.
+            $this->assertEmpty(
+                array_intersect($held, ['cash-accounts.create', 'cash-accounts.update']),
+                "Role [{$role->name}] must not write a cash account",
+            );
+        }
+    }
+
+    /**
      * The rule: only super-admin deletes. Enforced by
      * PermissionRegistry::superAdminOnly(), which every preset is filtered
      * through — so a future `*.delete` permission is locked down the moment
@@ -179,7 +338,12 @@ final class RolesAndPermissionsSeederTest extends TestCase
         $director = Role::findByName('director');
         $this->assertFalse($director->hasPermissionTo('expenses.approve'));
         $this->assertFalse($director->hasPermissionTo('system-settings.update'));
-        $this->assertFalse($director->hasPermissionTo('cash-accounts.view'));
+        // ⚠ `cash-accounts.view` is NOT asserted false here any more: the
+        // READ was released to the five management roles on 31/08/2026 (see
+        // test_management_roles_read_the_cash_accounts_tab). Writing one is
+        // still out of reach.
+        $this->assertFalse($director->hasPermissionTo('cash-accounts.create'));
+        $this->assertFalse($director->hasPermissionTo('cash-accounts.update'));
         $this->assertFalse($director->hasPermissionTo('banks.view'));
     }
 

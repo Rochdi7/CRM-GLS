@@ -406,9 +406,11 @@ Route::prefix('backoffice')
                 ->where('scope', 'mine|all')->name('caisses.journal');
 
             // « Comptes de caisse » mutations — super-admin only in practice:
-            // `cash-accounts.*` is deliberately absent from every role in
-            // PermissionRegistry::matrix(), so only the Gate::before bypass
-            // passes this middleware. Deliberately NOT a Route::resource:
+            // `cash-accounts.create/update/delete` sit in
+            // PermissionRegistry::superAdminOnly(), so no role preset holds
+            // them and only the Gate::before bypass passes this middleware.
+            // (Only `cash-accounts.view`, the READ, was released to the five
+            // management roles on 31/08/2026.) Deliberately NOT a Route::resource:
             // there is no create/edit page (modal) and no index of its own
             // (the tab lives on caisses.index).
             //

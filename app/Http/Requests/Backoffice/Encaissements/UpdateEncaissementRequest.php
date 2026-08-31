@@ -30,7 +30,10 @@ final class UpdateEncaissementRequest extends FormRequest
     {
         return [
             'methode' => ['nullable', Rule::in(Encaissement::METHODES)],
-            'date_paiement' => ['required', 'date'],
+            'date_paiement' => [
+                $this->user()?->can('payments.update-date') ? 'required' : 'nullable',
+                'date',
+            ],
             'numero_cheque' => ['nullable', 'string', 'max:50'],
             // Free text — the Banques catalog (Paramètres → Banques) only
             // feeds the form's autocomplete suggestions, never a hard

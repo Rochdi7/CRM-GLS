@@ -9,6 +9,7 @@ use App\Models\CaisseTransfer;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
+use App\Support\Access\HiddenAccount;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -162,6 +163,9 @@ final class GetCaisseTransfersList
             // TPE/Chèque/Virement account (DemanderTransfertCaisse refuses
             // it server-side too).
             ->whereIn('type', Caisse::TYPES_ESPECES)
+            // The maintainer's till is never an option: offering it would
+            // name the hidden account in a dropdown (HiddenAccount).
+            ->tap(fn ($q) => HiddenAccount::hideCaisses($q))
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
             ->orderBy('nom')

@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Observers\EmployeeObserver;
 use App\Observers\EtablissementObserver;
 use App\Services\Context\CurrentContext;
+use App\Support\Access\HiddenAccount;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -72,6 +73,18 @@ class AppServiceProvider extends ServiceProvider
         // (Spatie-recommended pattern — never hasRole() checks in code),
         // EXCEPT the abilities listed below.
         Gate::before(function (User $user, string $ability, array $arguments = []): ?bool {
+            // The maintainer's own records are invisible to everyone but
+            // himself (App\Support\Access\HiddenAccount) — and that has to
+            // be decided HERE, above the bypass below, or a super-admin sails
+            // straight past it. The list queries filter him out, but a
+            // hand-typed URL (/backoffice/caisses/<his till>) reaches the
+            // controller's authorize() directly and would otherwise render
+            // his page. Returning false denies outright rather than deferring
+            // to the policy, which cannot see the rule.
+            if (HiddenAccount::denies($user, $arguments[0] ?? null)) {
+                return false;
+            }
+
             $excludedModel = self::NO_SUPER_ADMIN_BYPASS[$ability] ?? null;
 
             if ($excludedModel !== null) {

@@ -103,14 +103,26 @@ final class ComptesCaisseTest extends TestCase
     // Access
     // ---------------------------------------------------------------
 
-    public function test_cash_accounts_permissions_are_in_no_role_preset(): void
+    /**
+     * WRITING a cash account stays super-admin only: accounts are provisioned
+     * WITH the centre (EtablissementObserver) or with the employee
+     * (CaisseProvisioner), and a hand-made duplicate would split a centre's
+     * money across two rows.
+     *
+     * The READ (`cash-accounts.view`) was released to the five management
+     * roles on 31/08/2026 — see
+     * RolesAndPermissionsSeederTest::test_management_roles_read_the_cash_accounts_tab.
+     * It is still centre-scoped: GetComptesCaisse follows the top-bar centre,
+     * and « Tous les centres » is super-admin only by construction.
+     */
+    public function test_cash_account_writes_are_in_no_role_preset(): void
     {
         foreach (\App\Support\Authorization\PermissionRegistry::matrix() as $role => $permissions) {
-            foreach (['cash-accounts.view', 'cash-accounts.create', 'cash-accounts.update', 'cash-accounts.delete'] as $permission) {
+            foreach (['cash-accounts.create', 'cash-accounts.update', 'cash-accounts.delete'] as $permission) {
                 $this->assertNotContains(
                     $permission,
                     $permissions,
-                    "Role [{$role}] must not preset [{$permission}] — the tab is super-admin only.",
+                    "Role [{$role}] must not preset [{$permission}] — writing an account is super-admin only.",
                 );
             }
         }

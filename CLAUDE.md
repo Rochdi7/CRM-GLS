@@ -534,6 +534,22 @@ the database layer. Non-negotiable invariants already enforced in code:
     « Inclure le compte technique » toggle to show them again. Never turn
     this into a write-time skip: an unrecorded privileged account is a
     permanent blind spot where money can move untraced.
+  - **⚠ A `HiddenAccount` filter that reaches the maintainer THROUGH
+    `employees` must call `withoutGlobalScopes()` on that subquery.**
+    `Employee` is `#[ScopedBy(HiddenAccountScope::class)]`, and a global
+    scope applies inside a nested `whereHas`/`whereDoesntHave` too — so the
+    subquery looks for the maintainer's employee row in a set the scope has
+    already removed him from, finds nothing, and reports "this record has no
+    maintainer owner" for the one record that does. Reported 30/08/2026: his
+    personal till was listed on « Caisse globale » / « Comptes de caisse »
+    with an empty Responsable column (the relation was scoped away at render
+    time as well, which is what drew the « — »), and was still offered in the
+    transfer and encaissement caisse dropdowns. `hideUsers()` is safe only
+    because it queries `users` directly — that is luck, not design. Filter at
+    the SINGLE funnel a screen uses (`GetCaisseJournal::caisseIds()` feeds the
+    dropdown, the header totals AND the rows) so the three cannot disagree,
+    and prove the fix with a query rather than by reading the code. Tests:
+    `tests/Feature/Backoffice/Access/HiddenAccountTest.php`.
   - **The journal is append-only.** `App\Models\Activity` throws on update
     and delete (model level, below every Gate — so it holds even for a
     super-admin), and `backoffice.audit-logs.index` is the ONLY route:
@@ -891,6 +907,36 @@ keeps the primary column stable when an edit merely adds a center. Enforcing
   `EmployeeObserver`, `GlsStaffSeeder` and `auth:sync-default-roles` — the
   idempotent bulk repair for role-less logins after a restore/import); keep
   it in sync when a category or role is added.
+- **⚠ Rôles refondus le 30–31/08/2026 — quatre règles à ne pas défaire.**
+  (1) **Consultant et Assistante administrative sont le MÊME poste** : ils
+  partagent `$operations` verbatim, et un test l'assère. (2) **Un front-office
+  ne MODIFIE que les quatre objets pédagogiques** — étudiants, inscriptions,
+  groupes, séances : toute la finance lui est **création seule** (une erreur
+  se corrige par une écriture compensatoire, jamais en réécrivant le
+  document). Les opérations de paiement essentielles restent à sa portée :
+  enregistrer une avance, la convertir/l'appliquer, saisir un chèque — ce
+  sont des créations. La seule édition financière qu'il garde est
+  `payments.update` (note + identité du chèque). (3) **`payments.update-date`
+  est super-admin uniquement** : re-dater un encaissement le déplace dans le
+  journal de caisse et le récapitulatif annuel, vers un mois peut-être déjà
+  rapproché — ferme le risque signalé par l'audit du 27/08/2026 (garde en
+  trois endroits : `superAdminOnly()`, `EncaissementController@update` qui
+  retire le champ, `UpdateEncaissementRequest` qui ne l'exige que du
+  titulaire). `montant`/`caisse_id`/`methode` restent gelés pour TOUT LE
+  MONDE, super-admin compris — invariants monétaires (§11), pas des
+  permissions. (4) **Le stock physique n'appartient qu'à
+  `marketing-manager`** (+ le bypass super-admin) : `stock.create/update/move`
+  et le catalogue des types ont été retirés de tous les autres presets, qui
+  gardent `stock.view`. Les cinq rôles de direction (directeur, dir. des
+  opérations, dir. financier, directrice pédagogique, responsable RH)
+  ajoutent `$managementEdits` à `$operations` : `expenses.update`,
+  `refunds.update`, `cheques.update`, `cash-transfers.update` et la LECTURE
+  de « Comptes de caisse » (`cash-accounts.view` — l'onglet suit le sélecteur
+  de centre, donc ils y voient leurs centres affectés, jamais le réseau ;
+  créer/modifier un compte reste super-admin). `employees.create` n'est plus
+  dans aucun preset (embaucher crée un login, et un « Responsable de
+  système » crée un super-admin). Détail complet et tableau :
+  `docs/roles-and-permissions.md` §5b.
 - **⚠ Only super-admin deletes.** `PermissionRegistry::superAdminOnly()`
   lists what no role preset may hold, and `matrix()` FILTERS every preset
   through it — so writing a `*.delete` into a preset has no effect, and a

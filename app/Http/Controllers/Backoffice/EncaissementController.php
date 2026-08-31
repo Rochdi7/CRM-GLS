@@ -177,6 +177,10 @@ final class EncaissementController extends Controller
                 // concrete row for its center check, which destroy() applies
                 // per-record. Super-admin passes via Gate::before.
                 'delete' => $request->user()?->can('payments.delete') ?? false,
+                // Re-dating a payment is super-admin only (30/08/2026) — the
+                // edit modal disables the Date field without it. UI
+                // convenience only: update() drops the field server-side.
+                'updateDate' => $request->user()?->can('payments.update-date') ?? false,
             ],
         ]);
     }
@@ -654,21 +658,22 @@ final class EncaissementController extends Controller
 
         unset($data['methode']);
 
-        // ⚠ `date_paiement` stays EDITABLE on purpose — unlike
-        // montant/caisse_id/methode, which are frozen because they decide how
-        // much moved and into which account. The Phase 10 mapping lists it
-        // among the four fields an edit may write
-        // (docs/phase-10-finance-audit.md §"Edit: only `methode`,
-        // `date_paiement`, cheque-conditional fields, `note`"), so a
-        // mis-keyed payment date can still be corrected in place.
+        // ⚠ `date_paiement` is SUPER-ADMIN ONLY (30/08/2026). Re-dating a
+        // recorded payment relocates the row in the caisse journal and in the
+        // annual summary — after a month may already have been reconciled —
+        // so the 27/08/2026 audit's reporting risk is now closed as a
+        // business rule: `payments.update-date` sits in
+        // PermissionRegistry::superAdminOnly(), so no role preset holds it
+        // and Gate::before answers it for super-admins alone.
         //
-        // The 27/08/2026 audit flagged this as a reporting risk (moving the
-        // date relocates the row in the caisse journal and in the annual
-        // summary, after a month may already have been reconciled). It is
-        // NOT closed here because it is a documented product decision, not
-        // an oversight: three tests assert the date is writable. Revisit it
-        // as a business rule — e.g. bound the new date to the active année,
-        // or require a reason — rather than by silently freezing the field.
+        // Everyone else keeps `payments.update` for the fields that genuinely
+        // need correcting (note, chèque identity). A posted date is silently
+        // dropped rather than rejected: the edit modal disables the field
+        // (see Encaissements/Index.tsx `canEditDate`), so a value arriving
+        // here is a stale form or a crafted request, never a real intent.
+        if (! $request->user()->can('payments.update-date')) {
+            unset($data['date_paiement']);
+        }
 
         if ($encaissement->cheque_id !== null) {
             // A payment funded by a tracked chèque (Chèques module) keeps its

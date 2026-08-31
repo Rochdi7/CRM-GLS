@@ -109,6 +109,9 @@ final class PermissionRegistry
                 'students.update' => 'Modifier un étudiant',
                 'students.delete' => 'Supprimer un étudiant',
             ],
+            // Deliberately absent from every role preset in matrix() below
+            // (superAdminOnly()) — a legacy import writes thousands of
+            // students / inscriptions / encaissements in one pass.
             'Import de données' => [
                 'import.view' => 'Consulter les imports de données',
                 'import.create' => "Importer des données depuis l'ancien CRM",
@@ -141,11 +144,21 @@ final class PermissionRegistry
                 'cash-registers.update' => 'Modifier une caisse',
                 'cash-registers.delete' => 'Supprimer une caisse',
             ],
-            // Deliberately absent from every role in matrix() below — the
-            // « Comptes de caisse » tab of Gestion de la caisse is a global,
-            // NON center-scoped view of every account the money sits in, so
-            // only the Gate::before super-admin bypass reaches it. Distinct
-            // from `cash-registers.*`, which stays the center-scoped
+            // The « Comptes de caisse » tab of Gestion de la caisse — where
+            // every dirham sits, one account per row.
+            //
+            // `cash-accounts.view` is held by the five management roles
+            // (31/08/2026). It is NOT a global view for them: GetComptesCaisse
+            // follows the top-bar context like every other screen, and
+            // « Tous les centres » is super-admin-only by construction
+            // (GLOBAL_CENTER_ACCESS), so a manager sees exactly the centres
+            // assigned on their employee form.
+            //
+            // create/update/delete stay super-admin-only (superAdminOnly()):
+            // method accounts are provisioned WITH the centre and a hand-made
+            // duplicate would split a centre's money across two rows.
+            //
+            // Distinct from `cash-registers.*`, which stays the center-scoped
             // "consult a till" permission every finance role keeps.
             'Comptes de caisse' => [
                 'cash-accounts.view' => 'Consulter les comptes de caisse',
@@ -157,6 +170,13 @@ final class PermissionRegistry
                 'payments.view' => 'Consulter les encaissements',
                 'payments.create' => 'Enregistrer un encaissement',
                 'payments.update' => 'Modifier un encaissement',
+                // Correcting the DATE of a recorded payment relocates the row
+                // in the caisse journal and in the annual summary — after a
+                // month may already have been reconciled. Deliberately in NO
+                // role preset (superAdminOnly() below): only a super-admin
+                // may re-date money. Every other role keeps `payments.update`
+                // for the note / cheque identity fields (30/08/2026).
+                'payments.update-date' => "Modifier la date de paiement d'un encaissement",
                 // Deliberately in NO role preset below. Money records are
                 // append-only by default (CLAUDE.md §11); a super-admin grants
                 // this one by hand when a real correction case needs it.
@@ -398,8 +418,17 @@ final class PermissionRegistry
             'system-settings.view', 'system-settings.update',
             'banks.view', 'banks.create', 'banks.update',
             'cancellation-reasons.view', 'cancellation-reasons.create', 'cancellation-reasons.update',
-            'cash-accounts.view', 'cash-accounts.create', 'cash-accounts.update',
+            // ⚠ `cash-accounts.view` is NOT here since 31/08/2026: the five
+            // management roles read the « Comptes de caisse » tab (see
+            // $comptesCaisse in presets()). CREATING or EDITING an account
+            // stays super-admin-only — one dirham is one row, and the
+            // method accounts are provisioned with the centre, never by hand
+            // (CLAUDE.md §11).
+            'cash-accounts.create', 'cash-accounts.update',
             'expenses.approve',
+            // Re-dating a recorded payment moves it between reconciled
+            // periods — see payments.update-date in grouped() (30/08/2026).
+            'payments.update-date',
             // Moving a group between années rewrites the year of every
             // inscription, séance (and therefore payment) hanging off it —
             // a history-altering act reserved to super-admins (24/08/2026).
@@ -416,6 +445,13 @@ final class PermissionRegistry
             // GLOBAL_CENTER_ACCESS / grantable()): ONLY super-admins, via
             // Gate::before, ever see « Tous les centres ».
             self::GLOBAL_CENTER_ACCESS,
+            // L'import de l'ancien CRM ecrit en masse des etudiants, des
+            // inscriptions et de l'argent (encaissements) : une seule passe
+            // peut creer des milliers de lignes qui ne se suppriment pas
+            // (CLAUDE.md §11, les enregistrements d'argent ne sont jamais
+            // supprimes). Reserve aux super-admins depuis le 31/08/2026 ;
+            // la route reste active et accessible par URL directe.
+            'import.view', 'import.create',
         ])));
     }
 
@@ -461,12 +497,34 @@ final class PermissionRegistry
      */
     private static function presets(): array
     {
-        // Full operational access to the school's day-to-day business:
-        // students, inscriptions, groups, séances and the whole cash desk,
-        // scoped to the employee's own centers (no centers.access-all).
-        // Shared verbatim by every role that runs a center front desk
-        // (consultant, assistante administrative, responsable
-        // administrative) so their access can never silently drift apart.
+        // Front-desk operational baseline (30/08/2026 rework).
+        //
+        // What this scope MAY MODIFY is deliberately limited to the four
+        // academic objects a front desk owns: étudiants, inscriptions,
+        // groupes and séances (emploi du temps). Everything financial is
+        // CREATE-ONLY: a cashier records an encaissement, an avance, un
+        // chèque, une dépense, un remboursement, un transfert — and corrects
+        // a mistake with a compensating entry, never by rewriting the
+        // document (CLAUDE.md §11: money records are append-only, and no
+        // role holds any `*.delete` — superAdminOnly() strips them all).
+        //
+        // `payments.update` is the ONE financial edit kept, because the note
+        // and the chèque identity of a payment genuinely need correcting;
+        // `payments.update-date` is NOT here (super-admin only), so a
+        // front-desk edit can never re-date money into a reconciled month.
+        //
+        // Converting / applying an avance and registering a chèque stay in
+        // scope: those are essential day-to-day payment operations, not
+        // corrections (they create rows, they never rewrite one).
+        //
+        // Stock is READ-ONLY here — since 30/08/2026 the physical inventory
+        // and its mouvements belong to the marketing manager alone (plus the
+        // super-admin bypass), so a book leaves the shelf in exactly one
+        // place.
+        //
+        // Shared verbatim by consultant + assistante administrative, which
+        // the business treats as the same job: their access can never
+        // silently drift apart.
         $operations = [
             'dashboard.view',
             'centers.view',
@@ -482,12 +540,40 @@ final class PermissionRegistry
             'payments.view', 'payments.create', 'payments.update',
             'collections.view',
             'expense-types.view',
-            'expenses.view', 'expenses.create', 'expenses.update',
-            'refunds.view', 'refunds.create', 'refunds.update',
-            'cheques.view', 'cheques.create', 'cheques.update',
-            'cash-transfers.view', 'cash-transfers.create', 'cash-transfers.update',
-            'stock.view', 'stock.move',
+            'expenses.view', 'expenses.create',
+            'refunds.view', 'refunds.create',
+            'cheques.view', 'cheques.create',
+            'cash-transfers.view', 'cash-transfers.create',
+            'stock.view',
             'stock-types.view',
+        ];
+
+        // The five management roles (directeur, directeur des opérations,
+        // directeur financier, directrice pédagogique, responsable RH) share
+        // the front-desk scope and add back the finance EDITS a manager
+        // arbitrates — `expenses.update` above all, the one the business
+        // named explicitly (30/08/2026).
+        //
+        // ⚠ `refunds.update` / `cheques.update` / `cash-transfers.update`
+        // are the other corrective edits on documents these roles own.
+        // `encaissements.methode` is NOT among them at any level: it is
+        // frozen with the row by a money invariant (CLAUDE.md §11 — it
+        // decided WHICH caisse account was credited, so changing the label
+        // without moving the money desynchronises the till). Correcting a
+        // wrong method is a remboursement + a new encaissement, and
+        // `EncaissementController@update` refuses a changed value for
+        // everyone, super-admin included.
+        $managementEdits = [
+            'expenses.update',
+            'refunds.update',
+            'cheques.update',
+            'cash-transfers.update',
+            // Read the « Comptes de caisse » tab — where every dirham sits
+            // (31/08/2026). Scoped like every other screen: the tab follows
+            // the top-bar centre, and « Tous les centres » is super-admin
+            // only, so a manager sees only their affected centres. Creating
+            // or editing an account stays super-admin-only.
+            'cash-accounts.view',
         ];
 
         // Read-only across every finance screen — the accounting/oversight
@@ -517,67 +603,60 @@ final class PermissionRegistry
 
             // Runs a center end to end, plus the catalogs and the staff file.
             // Validates cash transfers into their own till (the recipient
-            // rule still applies — CLAUDE.md 11) and reads the audit journal.
+            // rule still applies — CLAUDE.md §11) and reads the audit journal.
             //
             // ⚠ Deliberately NO centers.access-all — like EVERY role now
             // (it sits in superAdminOnly()): « Centres affectés » on the
             // employee form is the ONE authority on which centers a user
-            // reaches. With the grant, every branch director saw (and could
-            // edit) every other branch's students and money. Someone who
-            // needs wider reach gets more centers assigned, or a super-admin
-            // hand-grants the permission on the Autorisations screen.
+            // reaches. Someone who needs wider reach gets more centers
+            // assigned, or a super-admin hand-grants it on the Autorisations
+            // screen.
             'director' => [
                 ...$operations,
+                ...$managementEdits,
                 'academic-years.create', 'academic-years.update',
                 'rooms.create', 'rooms.update',
                 'fees.create', 'fees.update',
-                'employees.view', 'employees.create', 'employees.update',
+                'employees.view', 'employees.update',
                 'users.view', 'users.assign-roles',
                 'roles.view',
                 'permissions.view',
                 'cash-registers.create', 'cash-registers.update',
                 'expense-types.create', 'expense-types.update',
                 'cash-transfers.validate',
-                'stock.create', 'stock.update',
-                'stock-types.create', 'stock-types.update',
                 'audit-logs.view',
-                'import.view', 'import.create',
             ],
 
             // Cross-center operations: everything academic and logistic,
-            // plus the same front-desk money scope as the centers it runs.
+            // plus the front-desk money scope of the centers it runs and the
+            // management edits.
             'operations-director' => [
                 ...$operations,
+                ...$managementEdits,
                 'rooms.create', 'rooms.update',
                 'fees.create', 'fees.update',
                 'employees.view', 'employees.update',
                 'users.view',
-                'stock.create', 'stock.update',
-                'stock-types.create', 'stock-types.update',
                 'audit-logs.view',
-                'import.view', 'import.create',
             ],
 
-            // Owns the money across every center: records and corrects every
-            // finance document and validates transfers into their own till.
-            // Approving dépenses stays super-admin-only.
+            // Owns the money across every center: records the finance
+            // documents, corrects the ones a manager arbitrates, and
+            // validates transfers into their own till. Approving dépenses
+            // and re-dating a payment stay super-admin-only.
             'financial-director' => [
-                ...$financeReadOnly,
-                'rooms.view',
+                ...$operations,
+                ...$managementEdits,
                 'employees.view',
-                'payments.create', 'payments.update',
                 'cash-registers.create', 'cash-registers.update',
-                'expenses.create', 'expenses.update',
                 'expense-types.create', 'expense-types.update',
-                'refunds.create', 'refunds.update',
-                'cheques.create', 'cheques.update',
-                'cash-transfers.create', 'cash-transfers.update', 'cash-transfers.validate',
+                'cash-transfers.validate',
                 'audit-logs.view',
             ],
 
-            // Same money scope as the financial director, minus the transfer
-            // validation and the caisse catalog — books the entries, does
-            // not arbitrate them.
+            // Same money scope as before: books the finance entries, does
+            // not arbitrate them. Deliberately UNCHANGED by the 30/08/2026
+            // rework — the accountant's job description already matched.
             'accountant' => [
                 ...$financeReadOnly,
                 'payments.create', 'payments.update',
@@ -601,58 +680,62 @@ final class PermissionRegistry
                 'audit-logs.view',
             ],
 
-            // Academic authority: groups, séances, teachers and the fee
-            // catalog that prices them. No money movement.
+            // Academic authority — groups, séances, teachers and the fee
+            // catalog that prices them — on the shared front-desk base, plus
+            // the management edits.
             'pedagogical-director' => [
-                'dashboard.view',
-                'centers.view',
-                'academic-years.view',
-                'rooms.view', 'rooms.create', 'rooms.update',
-                'fees.view', 'fees.create', 'fees.update',
+                ...$operations,
+                ...$managementEdits,
+                'rooms.create', 'rooms.update',
+                'fees.create', 'fees.update',
                 'employees.view',
-                'students.view', 'students.create', 'students.update',
-                'registrations.view', 'registrations.create', 'registrations.update',
-                'registrations.manage-fees', 'registrations.change-group',
-                'groups.view', 'groups.create', 'groups.update', 'groups.archive',
-                'attendance.view', 'attendance.create', 'attendance.update', 'attendance.mark',
-                'stock.view', 'stock.move', 'stock-types.view',
+                'audit-logs.view',
             ],
 
             // Front desk / sales: the full operational scope — inscriptions,
-            // groupes, étudiants, encaissements, caisse — in their OWN
-            // center only, with no delete anywhere.
+            // groupes, étudiants, séances, encaissements, avances, chèques —
+            // in their OWN center only. No delete anywhere, no finance edit
+            // beyond a payment's note, no stock movement.
             'consultant' => $operations,
 
-            // Same operational scope as the consultant.
+            // The business treats this as the SAME job as the consultant:
+            // identical scope, on purpose (30/08/2026).
             'administrative-assistant' => $operations,
 
             // The assistante's scope plus the staff file and the audit
             // journal for their center.
             'administrative-manager' => [
                 ...$operations,
-                'employees.view', 'employees.create', 'employees.update',
+                'employees.view', 'employees.update',
                 'users.view',
                 'audit-logs.view',
             ],
 
-            // Staff file across every center — no student, academic or money
-            // data at all.
+            // Staff file plus the shared front-desk scope and the management
+            // edits (30/08/2026 — the business asked for the same base as
+            // the other management roles).
             'hr-manager' => [
-                'dashboard.view',
-                'centers.view',
-                'employees.view', 'employees.create', 'employees.update',
+                ...$operations,
+                ...$managementEdits,
+                'employees.view', 'employees.update',
                 'users.view',
                 'audit-logs.view',
             ],
 
+            // ⚠ The ONE role that runs the physical inventory (30/08/2026).
+            // Stock articles and their mouvements were removed from every
+            // other preset so a book leaves the shelf in exactly one place;
+            // only this role and the super-admin bypass manage them.
             // Prospects/marketing-reports permissions will be added with
-            // those modules; until then, read-only funnel-relevant data.
+            // those modules.
             'marketing-manager' => [
                 'dashboard.view',
                 'centers.view',
                 'students.view',
                 'registrations.view',
                 'groups.view',
+                'stock.view', 'stock.create', 'stock.update', 'stock.move',
+                'stock-types.view', 'stock-types.create', 'stock-types.update',
             ],
 
             // Academic scope only — no financial data.

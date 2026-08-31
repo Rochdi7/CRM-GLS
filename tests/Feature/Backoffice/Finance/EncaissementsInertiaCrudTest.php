@@ -1125,9 +1125,59 @@ final class EncaissementsInertiaCrudTest extends TestCase
 
         $fresh = $encaissement->fresh();
         $this->assertSame('Espèces', $fresh->methode);
-        $this->assertSame('2025-09-21', $fresh->date_paiement->toDateString());
+        // The date is frozen too for this user: re-dating a payment needs
+        // `payments.update-date` (super-admin only, 30/08/2026) — see
+        // test_the_payment_date_is_only_editable_by_a_super_admin below.
+        $this->assertSame('2025-09-20', $fresh->date_paiement->toDateString());
         $this->assertSame('1500.00', (string) $fresh->montant);
         $this->assertSame($caisse->id, $fresh->caisse_id);
+    }
+
+    /**
+     * 30/08/2026 — `date_paiement` is SUPER-ADMIN ONLY.
+     *
+     * Moving the date relocates the row in the caisse journal and in the
+     * annual summary, possibly into a month already reconciled. A holder of
+     * `payments.update` may still correct the note and the chèque identity;
+     * a posted date is dropped silently (the modal disables the field, so a
+     * value arriving here is a stale form or a crafted request).
+     */
+    public function test_the_payment_date_is_only_editable_by_a_super_admin(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update');
+        $this->actingAs($user);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1500);
+        $caisse = $user->employee->caisses()->first();
+
+        $encaissement = Encaissement::create([
+            'reference' => 'ENC-DATE', 'student_id' => $student->id, 'inscription_fee_id' => $fee->id,
+            'caisse_id' => $caisse->id, 'agent_id' => $user->employee->id,
+            'montant' => 1500, 'methode' => 'Espèces', 'date_paiement' => '2025-09-20',
+        ]);
+
+        $this->put(route('backoffice.encaissements.update', $encaissement), [
+            'methode' => 'Espèces',
+            'date_paiement' => '2025-10-05',
+            'note' => 'Corrigé',
+        ])->assertSessionDoesntHaveErrors();
+
+        $fresh = $encaissement->fresh();
+        // Date untouched…
+        $this->assertSame('2025-09-20', $fresh->date_paiement->toDateString());
+        // …while the fields this role MAY correct went through.
+        $this->assertSame('Corrigé', $fresh->note);
+
+        // A super-admin re-dates it, via Gate::before.
+        $admin = User::factory()->create();
+        $admin->assignRole(\App\Models\Role::SUPER_ADMIN);
+        $this->actingAs($admin);
+
+        $this->put(route('backoffice.encaissements.update', $encaissement), [
+            'methode' => 'Espèces',
+            'date_paiement' => '2025-10-05',
+        ])->assertSessionDoesntHaveErrors();
+
+        $this->assertSame('2025-10-05', $encaissement->fresh()->date_paiement->toDateString());
     }
 
     /**
@@ -1617,7 +1667,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
                 'methode' => 'Espèces', 'date_paiement' => '2025-09-21',
             ])->assertSessionHasErrors('methode');
 
-        // Retyped cheque identity is ignored; note/date still editable.
+        // Retyped cheque identity is ignored; the note is still editable.
         $this->put(route('backoffice.encaissements.update', $encaissement), [
             'methode' => 'Chèque', 'numero_cheque' => 'OTHER', 'banque' => 'CIH',
             'date_echeance_cheque' => '2025-12-01', 'date_paiement' => '2025-09-21', 'note' => 'ok',
@@ -1627,7 +1677,9 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame('CHQ-EDIT-1', $fresh->numero_cheque);
         $this->assertSame('BMCE', $fresh->banque);
         $this->assertSame('ok', $fresh->note);
-        $this->assertSame('2025-09-21', $fresh->date_paiement->toDateString());
+        // The date needs `payments.update-date` (super-admin only) since
+        // 30/08/2026 — this user holds `payments.update` alone.
+        $this->assertSame('2025-09-20', $fresh->date_paiement->toDateString());
     }
 
     public function test_show_requires_payments_view(): void
