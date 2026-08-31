@@ -93,6 +93,18 @@
         .centre-fr .nom { font-weight: 400; }
         .logo { align-self: center; }
         .logo img { height: {{ $format === 'a6' ? '9mm' : '13mm' }}; }
+        /* ⚠ Un numéro de téléphone dans un bloc RTL est réordonné par
+           l'algorithme bidi : « +212 80-86 639 83 » s'affiche « 83 639 86-80
+           212+ », car chaque groupe de chiffres est un run neutre placé de
+           droite à gauche. `direction: ltr` + `unicode-bidi: embed` isole le
+           numéro dans son propre contexte LTR, à l'intérieur du bloc arabe.
+           Le libellé arabe reste, lui, en RTL. */
+        .tel-ltr {
+            direction: ltr;
+            unicode-bidi: embed;
+            display: inline-block;
+        }
+
         .centre-ar {
             direction: rtl;
             text-align: right;
@@ -201,7 +213,7 @@
                             <div>{{ $centre->ville }}</div>
                         @endif
                         @if ($centre?->telephone)
-                            <div>الهاتف : {{ $centre->telephone }}</div>
+                            <div>الهاتف : <span class="tel-ltr">{{ $centre->telephone }}</span></div>
                         @endif
                     </div>
                 </div>

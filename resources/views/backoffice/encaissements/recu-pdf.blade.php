@@ -36,6 +36,15 @@
         .logo-cell { width: 24%; text-align: center; vertical-align: middle; }
         .centre-ar { width: 38%; text-align: right; }
 
+        /* ⚠ Même correctif que les reçus HTML : un numéro de téléphone posé
+           après un libellé arabe est réordonné par l'algorithme bidi
+           (« +212 80-86 639 83 » → « 83 639 86-80 212+ »). Ici le moteur est
+           DomPDF, qui ignore `unicode-bidi` — c'est le caractère U+200E
+           (LEFT-TO-RIGHT MARK) inséré dans le gabarit qui force le sens de
+           lecture du numéro. Ne pas le retirer en « nettoyant » le template :
+           il est invisible mais porteur de sens. */
+        .tel-ltr { direction: ltr; }
+
         .ice-line {
             text-align: center;
             font-weight: bold;
@@ -88,7 +97,7 @@
                     {{ $centre->ville }}<br>
                 @endif
                 @if ($centre?->telephone)
-                    الهاتف : {{ $centre->telephone }}
+                    الهاتف : <span class="tel-ltr">&#8206;{{ $centre->telephone }}&#8206;</span>
                 @endif
             </td>
         </tr>

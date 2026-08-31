@@ -875,6 +875,7 @@
     "This registration belongs to another academic year than the active one.": "Cette inscription appartient à une autre année scolaire que celle sélectionnée.",
     "This registration belongs to another centre than the active one.": "Cette inscription appartient à un autre centre que celui sélectionné.",
     "This registration does not belong to the selected student.": "Cette inscription n'appartient pas à l'étudiant sélectionné.",
+    "This registration is no longer active — record the money as an advance instead.": "Cette inscription n'est plus active — enregistrez le montant en avance.",
     "This registration has no fee lines.": "Cette inscription n'a aucune ligne de frais.",
     "This registration has payments and cannot be deleted.": "Cette inscription a des paiements et ne peut pas être supprimée.",
     "This role is protected and cannot be deleted.": "Ce rôle est protégé et ne peut pas être supprimé.",

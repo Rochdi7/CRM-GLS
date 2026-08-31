@@ -1323,12 +1323,12 @@ export default function InscriptionsIndex({
 
                                             {/* Active only: settling frais from here on a
                                                 cancelled/archived registration would book money
-                                                against one the student no longer holds. (The
-                                                Encaissements page's own dropdown is wider — it
-                                                lists every inscription of the active year — so a
-                                                deliberate correction on a closed registration
-                                                stays possible there, where the cashier picks it
-                                                explicitly.) */}
+                                                against one the student no longer holds. Depuis le
+                                                31/08/2026 la page Encaissements applique la même
+                                                règle (dropdown filtré + garde serveur
+                                                assertInscriptionPayable) — l'argent reçu pour un
+                                                dossier clos s'enregistre en avance, puis
+                                                s'applique à une inscription active. */}
                                             {canCreatePayment && inscription.statut === 'Active' && (
                                                 <RowActionItem icon="ti-credit-card" onClick={() => openPaiement(inscription)}>
                                                     Ajouter un paiement

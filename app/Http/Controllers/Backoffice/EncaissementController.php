@@ -186,6 +186,31 @@ final class EncaissementController extends Controller
     }
 
     /**
+     * Seule une inscription ACTIVE peut recevoir un encaissement.
+     *
+     * Une inscription Annulée / Archivée / Expirée / Changement n'a plus de
+     * frais dus : encaisser dessus rouvrirait un dossier clos et ferait
+     * réapparaître son reliquat dans les impayés et le récapitulatif annuel.
+     * L'argent reçu pour un tel dossier s'enregistre en AVANCE, puis
+     * s'applique à une inscription active (AppliquerAvance) — la correction
+     * par écriture compensatoire, jamais par réécriture (§11).
+     *
+     * Le dropdown est déjà filtré par GetEncaissementsList::studentInscriptions(),
+     * mais un id forgé ou une liste chargée avant l'annulation doit être
+     * refusée ici : le filtre client n'est qu'un confort d'interface (§5).
+     */
+    private function assertInscriptionPayable(Inscription $inscription, string $field = 'inscription_id'): void
+    {
+        if ($inscription->statut === Inscription::STATUT_ACTIVE) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            $field => __('This registration is no longer active — record the money as an advance instead.'),
+        ]);
+    }
+
+    /**
      * Cascade step 1→2 lookup: a student's registrations, then (via
      * inscriptionFees()) one row per unpaid fee — mirrors
      * EncaissementsIndex::updatedStudentId()/updatedInscriptionId().
@@ -256,6 +281,7 @@ final class EncaissementController extends Controller
         // registration of another year/centre from here would file the
         // money where the current screen never shows it (AssertsContextScope).
         $this->assertInscriptionInContext($request, $inscription);
+        $this->assertInscriptionPayable($inscription);
 
         $touchedLines = collect($data['payment_lines'])->filter(fn ($l) => ($l['montant'] ?? '') !== '');
 
@@ -436,6 +462,11 @@ final class EncaissementController extends Controller
         $inscription = Inscription::findOrFail((int) $data['inscription_id']);
         $this->assertInscriptionInContext($request, $inscription);
 
+        // Pas d'assertInscriptionPayable() ici, volontairement : convertir
+        // libère l'argent D'UNE inscription close (changement de groupe,
+        // annulation) vers des avances réutilisables. L'exiger active
+        // emprisonnerait le versement sur le dossier qu'on vient de fermer —
+        // c'est le sens inverse d'un encaissement.
         $action->handle($inscription, array_map('intval', $data['encaissement_ids']));
 
         return $this->backToListPreservingFilters($request, 'backoffice.encaissements.index', ['view' => 'avance'])
@@ -459,6 +490,7 @@ final class EncaissementController extends Controller
         // the cashier is not working in.
         if ($fee->inscription !== null) {
             $this->assertInscriptionInContext($request, $fee->inscription, 'fee_id');
+            $this->assertInscriptionPayable($fee->inscription, 'fee_id');
         }
 
         $action->handle($encaissement, $fee, (float) $data['montant']);

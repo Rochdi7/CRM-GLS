@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Reports\Actions;
 
+use App\Models\Inscription;
 use App\Services\Context\CurrentContext;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
@@ -76,7 +77,7 @@ final class GetAnnualFraisSummary
                 ->whereNull('masque_le')
                 ->whereNotNull('date_echeance')
                 ->whereBetween('date_echeance', $range)
-                ->when($centreId || $anneeId, fn (Builder $q) => $this->scopeFeesToContext($q, 'inscription_fees', $centreId, $anneeId)),
+                ->tap(fn (Builder $q) => $this->scopeFeesToContext($q, 'inscription_fees', $centreId, $anneeId)),
             'date_echeance',
         );
 
@@ -89,7 +90,7 @@ final class GetAnnualFraisSummary
                 ->whereNull('inscription_fees.masque_le')
                 ->whereNotNull('inscription_fees.date_echeance')
                 ->whereBetween('inscription_fees.date_echeance', $range)
-                ->when($centreId || $anneeId, fn (Builder $q) => $this->scopeFeesToContext($q, 'inscription_fees', $centreId, $anneeId)),
+                ->tap(fn (Builder $q) => $this->scopeFeesToContext($q, 'inscription_fees', $centreId, $anneeId)),
             'inscription_fees.date_echeance',
             'encaissements.montant',
         );
@@ -119,6 +120,15 @@ final class GetAnnualFraisSummary
         $encaissements = $this->byMonth(
             DB::table('encaissements')
                 ->whereBetween('date_paiement', $range)
+                // "Money received" excludes avance APPLICATION rows: applying
+                // an avance to a fee writes a second encaissement pointing
+                // back at the funding one, so counting both here counted the
+                // same dirham twice — once when it entered as an avance, once
+                // when it was allocated (31/08/2026, chart showed 504 350
+                // where 384 050 was actually received). Same rule as every
+                // other money-received total (see application-row convention
+                // in GetEncaissementsList).
+                ->whereNull('applied_from_encaissement_id')
                 ->when($centreId, fn (Builder $q) => $q->whereIn(
                     'student_id',
                     DB::table('students')->select('id')->where('etablissement_id', $centreId),
@@ -217,6 +227,17 @@ final class GetAnnualFraisSummary
      * centre (NULL-centre inscriptions are global — same rule as before) AND
      * the active année scolaire (hard filter — an inscription always carries
      * its année).
+     *
+     * Cancelled inscriptions are excluded from the billed series entirely
+     * (31/08/2026, aligned on the reference WimSchool calculation
+     * `REGISTRATION_STATUS_ID <> 10`): a fee of an « Annulée » inscription no
+     * longer counts as chiffre d'affaire (nor as collecté — reste à payer is
+     * CA − collecté, so the pair must move together). Deliberately
+     * `<> Annulée`, NOT `= Active`: « Changement » keeps the earned fees of
+     * the pre-change enrollment, and the legacy « Expirée »/« Archivée » rows
+     * are completed formations whose revenue is real. The « Encaissements »
+     * series is untouched — money received is money received, whatever became
+     * of the inscription.
      */
     private function scopeFeesToContext(Builder $query, string $feesTable, ?int $centreId, ?int $anneeId): Builder
     {
@@ -224,6 +245,7 @@ final class GetAnnualFraisSummary
             $sub->selectRaw('1')
                 ->from('inscriptions')
                 ->whereColumn('inscriptions.id', "{$feesTable}.inscription_id")
+                ->where('inscriptions.statut', '!=', Inscription::STATUT_ANNULEE)
                 ->when($centreId, fn (Builder $q) => $q->where(fn (Builder $w) => $w
                     ->whereNull('inscriptions.etablissement_id')
                     ->orWhere('inscriptions.etablissement_id', $centreId)))

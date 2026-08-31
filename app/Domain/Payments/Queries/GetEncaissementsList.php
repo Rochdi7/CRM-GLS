@@ -463,6 +463,13 @@ final class GetEncaissementsList
         return Inscription::query()
             ->with('group')
             ->where('student_id', $studentId)
+            // Seule une inscription ACTIVE se paie. Une inscription annulée,
+            // archivée, expirée ou remplacée par un changement de groupe n'a
+            // plus de frais dus : l'argent reçu pour un tel dossier est une
+            // avance (elle sera appliquée à une inscription active), jamais un
+            // encaissement sur ses frais. Le garde serveur correspondant est
+            // EncaissementController::assertInscriptionPayable().
+            ->where('statut', Inscription::STATUT_ACTIVE)
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
             ->get()
             ->map(fn (Inscription $i): array => [

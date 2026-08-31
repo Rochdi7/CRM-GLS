@@ -1692,4 +1692,100 @@ final class EncaissementsInertiaCrudTest extends TestCase
             ->get(route('backoffice.encaissements.show', $avance))
             ->assertForbidden();
     }
+
+    // --- Une inscription non ACTIVE ne se paie pas ----------------------
+    // Annulée / Archivée / Expirée / Changement : le dossier est clos, ses
+    // frais ne sont plus dus. L'argent reçu s'enregistre en avance, puis
+    // s'applique à une inscription active. Le dropdown filtre, le serveur
+    // refuse (le filtre client n'est qu'un confort d'interface, §5).
+
+    public function test_the_registration_lookup_lists_only_active_registrations(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        $this->actingAs($user);
+
+        [$student, $active] = $this->enrolledStudentWithFee(1000);
+        [, $archivee] = $this->enrolledStudentWithFee(1000);
+        $archivee->update(['student_id' => $student->id, 'statut' => Inscription::STATUT_ARCHIVEE]);
+
+        $ids = collect($this->get(route('backoffice.students.inscriptions-for-payment', $student))->json('inscriptions'))
+            ->pluck('id');
+
+        $this->assertTrue($ids->contains($active->id));
+        $this->assertFalse($ids->contains($archivee->id));
+    }
+
+    public function test_a_payment_on_a_non_active_registration_is_refused(): void
+    {
+        foreach ([Inscription::STATUT_ARCHIVEE, Inscription::STATUT_ANNULEE, Inscription::STATUT_EXPIREE] as $statut) {
+            $user = $this->userWith('payments.view', 'payments.create');
+            $this->actingAs($user);
+            [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1500);
+            $inscription->update(['statut' => $statut]);
+            $caisse = $user->employee->caisses()->first();
+
+            $this->from(route('backoffice.encaissements.index'))
+                ->post(route('backoffice.encaissements.store'), [
+                    'student_id' => $student->id,
+                    'inscription_id' => $inscription->id,
+                    'caisse_id' => $caisse->id,
+                    'date_paiement' => '2025-09-20',
+                    'payment_lines' => [
+                        ['fee_id' => $fee->id, 'montant' => '1500', 'methode' => 'Espèces', 'date_paiement' => '2025-09-20'],
+                    ],
+                ])->assertSessionHasErrors('inscription_id');
+
+            // Rien n'a bougé : ni encaissement, ni solde de caisse.
+            $this->assertSame(0, Encaissement::where('student_id', $student->id)->count(), $statut);
+            $this->assertSame('0.00', (string) $caisse->fresh()->solde, $statut);
+        }
+    }
+
+    public function test_an_advance_cannot_be_applied_to_a_non_active_registrations_fee(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update');
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
+        $avance = $this->avanceFor($student, $user, 600);
+        $inscription->update(['statut' => Inscription::STATUT_ANNULEE]);
+
+        $this->from(route('backoffice.encaissements.index'))
+            ->post(route('backoffice.avances.apply', $avance), ['fee_id' => $fee->id, 'montant' => '600'])
+            ->assertSessionHasErrors('fee_id');
+
+        $this->assertSame(600.0, (float) $avance->fresh()->montantRestant());
+    }
+
+    /**
+     * Le sens INVERSE reste ouvert : convertir en avance libère l'argent
+     * d'un dossier qu'on vient justement de fermer (changement de groupe,
+     * annulation). L'exiger actif emprisonnerait le versement.
+     */
+    public function test_payments_of_a_cancelled_registration_can_still_be_converted_into_an_advance(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update');
+        $this->actingAs($user);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
+        $caisse = $user->employee->caisses()->first();
+
+        $this->post(route('backoffice.encaissements.store'), [
+            'student_id' => $student->id,
+            'inscription_id' => $inscription->id,
+            'caisse_id' => $caisse->id,
+            'date_paiement' => '2025-09-20',
+            'payment_lines' => [
+                ['fee_id' => $fee->id, 'montant' => '1000', 'methode' => 'Espèces', 'date_paiement' => '2025-09-20'],
+            ],
+        ])->assertSessionDoesntHaveErrors();
+
+        $encaissement = Encaissement::where('inscription_fee_id', $fee->id)->firstOrFail();
+        $inscription->update(['statut' => Inscription::STATUT_ANNULEE]);
+
+        $this->from(route('backoffice.encaissements.index'))
+            ->post(route('backoffice.avances.convert'), [
+                'inscription_id' => $inscription->id,
+                'encaissement_ids' => [$encaissement->id],
+            ])->assertSessionDoesntHaveErrors();
+
+        $this->assertNull($encaissement->fresh()->inscription_fee_id);
+    }
 }

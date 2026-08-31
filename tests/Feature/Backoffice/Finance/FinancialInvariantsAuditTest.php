@@ -395,6 +395,36 @@ final class FinancialInvariantsAuditTest extends TestCase
         $this->assertSame('0.00', $summary['encaissements'][0]);
     }
 
+    public function test_the_annual_chart_excludes_cancelled_inscriptions_from_chiffre_daffaire(): void
+    {
+        // WimSchool reference rule (REGISTRATION_STATUS_ID <> 10): a fee kept
+        // on an « Annulée » inscription counts neither as chiffre d'affaire
+        // nor as collecté — but the money actually received stays in the
+        // « Encaissements » series.
+        $user = $this->userWith(['payments.view', 'payments.create']);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
+        $this->actingAs($user);
+        app(CurrentContext::class)->setEtablissement($this->centre->id);
+        $this->payLine($user, $student, $inscription, $fee, '400', Encaissement::METHODE_ESPECES);
+
+        // Fee due 2025-10-31 → October = index 1; payment 2025-09-20 → index 0.
+        $summary = app(GetAnnualFraisSummary::class)();
+        $this->assertSame('1000.00', $summary['chiffreAffaire'][1]);
+        $this->assertSame('400.00', $summary['collecte'][1]);
+        $this->assertSame('600.00', $summary['resteAPayer'][1]);
+        $this->assertSame('400.00', $summary['encaissements'][0]);
+
+        // Cancel WITHOUT removing the fee line — the row survives, its
+        // inscription's statut alone must pull it out of the billed series.
+        $inscription->update(['statut' => Inscription::STATUT_ANNULEE]);
+
+        $summary = app(GetAnnualFraisSummary::class)();
+        $this->assertSame('0.00', $summary['chiffreAffaire'][1]);
+        $this->assertSame('0.00', $summary['collecte'][1]);
+        $this->assertSame('0.00', $summary['resteAPayer'][1]);
+        $this->assertSame('400.00', $summary['encaissements'][0]);
+    }
+
     // ── Ledger invariant: solde = Σ credits − Σ debits, entries chain ───
 
     public function test_every_balance_equals_the_sum_of_its_journaled_movements(): void
