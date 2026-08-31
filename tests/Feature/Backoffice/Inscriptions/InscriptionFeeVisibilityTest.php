@@ -22,8 +22,12 @@ use Tests\TestCase;
  * "Hide" a fee line instead of deleting it — the edit modal's trash icon
  * (BasculerVisibiliteFraisInscription) now sets masque_le instead of
  * hard-deleting via MettreAJourFraisInscription's old "omitted from the
- * payload = delete" sweep. A hidden fee keeps its row and payment history
- * intact and can be restored.
+ * payload = delete" sweep. A hidden fee keeps its row and can be restored.
+ *
+ * ⚠ Masquer un frais DÉJÀ PAYÉ libère son argent en avance (31/08/2026) :
+ * l'encaissement n'est jamais supprimé, mais il est DÉTACHÉ du frais, sinon
+ * l'argent reste accroché à une ligne invisible et l'étudiant ne peut plus
+ * le réutiliser.
  */
 final class InscriptionFeeVisibilityTest extends TestCase
 {
@@ -139,8 +143,87 @@ final class InscriptionFeeVisibilityTest extends TestCase
         $fresh = $fee->fresh();
         $this->assertNotNull($fresh->masque_le);
         $this->assertNotNull(InscriptionFee::find($fee->id));
-        // Payment history untouched.
-        $this->assertSame(1, Encaissement::where('inscription_fee_id', $fee->id)->count());
+
+        // ⚠ L'argent est LIBÉRÉ en avance, il ne reste pas accroché à une
+        // ligne invisible (31/08/2026). L'encaissement lui-même n'est jamais
+        // supprimé — les enregistrements monétaires sont append-only (§11) —
+        // seul son rattachement au frais disparaît.
+        $this->assertSame(0, Encaissement::where('inscription_fee_id', $fee->id)->count());
+        $this->assertSame(1, Encaissement::where('student_id', $inscription->student_id)
+            ->whereNull('inscription_fee_id')->count());
+    }
+
+    /**
+     * LE bug signalé : masquer un frais déjà payé laissait 500 DH accrochés à
+     * une ligne invisible — absents du dû, absents de l'onglet Avances,
+     * impossibles à réutiliser. Le retrait au niveau du GROUPE
+     * (RetirerFraisGroupe) et le retrait d'une ligne
+     * (MettreAJourFraisInscription) libéraient déjà l'argent : les trois
+     * chemins doivent se comporter pareil.
+     */
+    public function test_hiding_a_paid_fee_releases_its_money_as_a_reusable_advance(): void
+    {
+        [$inscription, $fee] = $this->inscriptionWithFee(300.0);
+        $caisse = Caisse::factory()->create(['etablissement_id' => $this->centre->id]);
+        $agent = Employee::factory()->create(['etablissement_id' => $this->centre->id]);
+        $encaissement = Encaissement::create([
+            'reference' => 'ENC-VIS2', 'student_id' => $inscription->student_id,
+            'inscription_fee_id' => $fee->id, 'caisse_id' => $caisse->id, 'agent_id' => $agent->id,
+            'montant' => 300, 'methode' => 'Espèces', 'date_paiement' => '2025-10-01',
+        ]);
+        $fee->update(['statut' => InscriptionFee::STATUT_PAYE]);
+
+        $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
+            ->postJson(route('backoffice.inscriptions.fees.hide', [$inscription, $fee]))
+            ->assertOk()
+            // Le modal ANNONCE le montant libéré : sinon l'utilisateur voit
+            // 300 DH disparaître de l'écran sans savoir où ils sont partis.
+            ->assertJson(['ok' => true, 'montantLibere' => 300.0]);
+
+        $encaissement->refresh();
+        $this->assertNull($encaissement->inscription_fee_id);
+        // C'est désormais une avance : montant restant réapplicable.
+        $this->assertTrue($encaissement->isAvance());
+        $this->assertSame(300.0, $encaissement->montantRestant());
+        // Et le frais masqué n'est plus compté comme payé.
+        $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $fee->fresh()->statut);
+    }
+
+    public function test_hiding_an_unpaid_fee_releases_nothing(): void
+    {
+        [$inscription, $fee] = $this->inscriptionWithFee();
+
+        $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
+            ->postJson(route('backoffice.inscriptions.fees.hide', [$inscription, $fee]))
+            ->assertOk()
+            ->assertJson(['ok' => true, 'montantLibere' => 0]);
+    }
+
+    /**
+     * Restaurer ne « re-colle » PAS l'avance au frais — même règle que
+     * RetirerFraisGroupe::restore. Entre-temps l'argent a pu être appliqué
+     * ailleurs ; le frais revient donc dû, et l'avance reste disponible.
+     */
+    public function test_restoring_leaves_the_released_money_as_an_advance(): void
+    {
+        [$inscription, $fee] = $this->inscriptionWithFee(300.0);
+        $caisse = Caisse::factory()->create(['etablissement_id' => $this->centre->id]);
+        $agent = Employee::factory()->create(['etablissement_id' => $this->centre->id]);
+        $encaissement = Encaissement::create([
+            'reference' => 'ENC-VIS3', 'student_id' => $inscription->student_id,
+            'inscription_fee_id' => $fee->id, 'caisse_id' => $caisse->id, 'agent_id' => $agent->id,
+            'montant' => 300, 'methode' => 'Espèces', 'date_paiement' => '2025-10-01',
+        ]);
+
+        $user = $this->userWith('registrations.view', 'registrations.manage-fees');
+        $this->actingAs($user)
+            ->postJson(route('backoffice.inscriptions.fees.hide', [$inscription, $fee]))->assertOk();
+        $this->actingAs($user)
+            ->postJson(route('backoffice.inscriptions.fees.restore', [$inscription, $fee]))->assertOk();
+
+        $this->assertNull($fee->fresh()->masque_le);
+        $this->assertNull($encaissement->fresh()->inscription_fee_id);
+        $this->assertSame('300.00', (string) $inscription->fresh()->montant_total);
     }
 
     public function test_restoring_a_hidden_fee_brings_it_back_to_the_visible_list(): void

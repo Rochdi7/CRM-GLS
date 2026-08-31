@@ -122,7 +122,8 @@ class Encaissement extends Model
 
     /**
      * Le libelle des frais que cet argent a payes — la SEULE definition,
-     * partagee par le recu PDF et le recu email.
+     * partagee par les QUATRE recus : imprime (recu.blade), groupe
+     * (recu-groupe.blade), PDF/WhatsApp et email.
      *
      * Un encaissement attache a un frais le nomme directement. Une AVANCE n'a
      * pas de frais au moment de l'encaissement, mais des qu'elle est appliquee

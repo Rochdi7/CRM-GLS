@@ -518,14 +518,12 @@ final class EncaissementController extends Controller
             $format = 'a5';
         }
 
-        $encaissement->load([
-            'student.etablissement',
-            'fee.inscription.anneeScolaire',
-            'fee.inscription.group',
-            'fee.inscription.etablissement',
-        ]);
+        // La MEME liste que le PDF : le recu imprime au guichet et le recu
+        // envoye doivent nommer les memes frais (Encaissement::libelleFrais).
+        $encaissement->load(RecuPdfRenderer::RELATIONS);
 
-        $inscription = $encaissement->fee?->inscription;
+        $inscription = $encaissement->fee?->inscription
+            ?? $encaissement->applications->sortBy('id')->first()?->fee?->inscription;
         $centre = $inscription?->etablissement ?? $encaissement->student?->etablissement;
 
         return view('backoffice.encaissements.recu', [
@@ -534,7 +532,7 @@ final class EncaissementController extends Controller
             'centre' => $centre,
             'anneeScolaire' => $inscription?->anneeScolaire?->nom,
             'niveau' => $inscription?->group?->nom ?? $encaissement->student?->niveau,
-            'fraisNom' => $encaissement->fee?->nom ?? 'Avance',
+            'fraisNom' => $encaissement->libelleFrais(),
         ]);
     }
 
@@ -568,12 +566,7 @@ final class EncaissementController extends Controller
 
         $encaissements = Encaissement::query()
             ->whereIn('id', $ids)
-            ->with([
-                'student.etablissement',
-                'fee.inscription.anneeScolaire',
-                'fee.inscription.group',
-                'fee.inscription.etablissement',
-            ])
+            ->with(RecuPdfRenderer::RELATIONS)
             ->orderBy('date_paiement')
             ->orderBy('id')
             ->get();

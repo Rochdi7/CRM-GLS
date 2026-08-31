@@ -284,7 +284,7 @@
                                         : 0;
                                 @endphp
                                 <tr>
-                                    <td>{{ $fee?->nom ?? 'Avance' }}</td>
+                                    <td>{{ $e->libelleFrais() }}</td>
                                     <td class="num">{{ $fmt($e->montant) }}</td>
                                     <td class="num">{{ $fmt($reste) }}</td>
                                     <td class="num">{{ $e->date_paiement?->format('d/m/Y') ?? '—' }}</td>

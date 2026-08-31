@@ -10,6 +10,7 @@ import SelectField from '@/Components/Forms/SelectField';
 import MultiSelectField from '@/Components/Forms/MultiSelectField';
 import FormField from '@/Components/Forms/FormField';
 import FormActions from '@/Components/Forms/FormActions';
+import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
 import type { CreneauCreateForm, CreneauForm, CreneauRow, SelectOption } from '@/Types';
 
 interface EmploiDuTempsIndexProps {
@@ -72,6 +73,16 @@ export default function EmploiDuTempsIndex({
     const [deleteTarget, setDeleteTarget] = useState<CreneauRow | null>(null);
     const [deleteError, setDeleteError] = useState<string>();
     const [deleting, setDeleting] = useState(false);
+    // Which of the two views of the SAME créneaux is showing. Purely client
+    // side: both read the identical server-filtered `creneaux` prop, so
+    // switching tabs never refetches and never touches the filters (§5 —
+    // filters are only ever cleared by the explicit reset button).
+    const [vue, setVue] = useState<'grille' | 'parametrage'>('grille');
+    // Table-view sort — client-side over the already-filtered rows, which is
+    // safe here because the emploi du temps of one centre+année is a weekly
+    // template of a few dozen rows, not a paginated dataset (§7).
+    const [sortField, setSortField] = useState<'groupe' | 'jour' | 'heure' | 'salle' | 'enseignant'>('jour');
+    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
     const createForm = useForm<CreneauCreateForm>(EMPTY_CREATE_FORM);
     const editForm = useForm<CreneauForm>(EMPTY_EDIT_FORM);
@@ -142,6 +153,43 @@ export default function EmploiDuTempsIndex({
         return { anchors, skipped };
     }, [heuresGrille, jourOptions, parRang]);
 
+    // Rows for the « Paramétrage » table — same créneaux as the grid, flat
+    // and sorted. Default order (jour, then heure) reads like the week.
+    const lignes = useMemo(() => {
+        const dir = sortDir === "asc" ? 1 : -1;
+        const value = (row: CreneauRow): string | number => {
+            switch (sortField) {
+                case "groupe":
+                    return row.groupNom.toLocaleLowerCase("fr");
+                case "heure":
+                    return toMinutes(row.heureDebut);
+                case "salle":
+                    return (row.salle ?? "").toLocaleLowerCase("fr");
+                case "enseignant":
+                    return (row.enseignant ?? "").toLocaleLowerCase("fr");
+                default:
+                    return row.jourSemaine;
+            }
+        };
+
+        return [...creneaux].sort((a, b) => {
+            const va = value(a);
+            const vb = value(b);
+            if (va < vb) return -1 * dir;
+            if (va > vb) return 1 * dir;
+            // Stable secondary key so equal cells keep a predictable order.
+            return (a.jourSemaine - b.jourSemaine) || (toMinutes(a.heureDebut) - toMinutes(b.heureDebut));
+        });
+    }, [creneaux, sortField, sortDir]);
+
+    function toggleSort(field: typeof sortField) {
+        if (sortField === field) {
+            setSortDir((current) => (current === "asc" ? "desc" : "asc"));
+            return;
+        }
+        setSortField(field);
+        setSortDir('asc');
+    }
     function reload(nextFilters: Partial<typeof filters>) {
         router.get(
             '/backoffice/emploi-du-temps',
@@ -253,6 +301,27 @@ export default function EmploiDuTempsIndex({
                 )
             }
         >
+            {/* Two views of the same weekly template: the calendar grid, and
+                « Paramétrage » — a flat sortable table where each créneau is
+                edited row by row. Client-side only, no reload, filters shared. */}
+            <ul className="nav nav-tabs p-0 border-bottom rounded-0 mb-4" role="tablist">
+                {([
+                    { key: 'grille' as const, label: "Emploi du temps", icon: 'ti ti-calendar-time' },
+                    { key: 'parametrage' as const, label: "Paramétrage d'emploi du temps", icon: 'ti ti-list-details' },
+                ]).map((tab) => (
+                    <li className="nav-item" key={tab.key} role="presentation">
+                        <button
+                            type="button"
+                            className={`nav-link d-inline-flex align-items-center${vue === tab.key ? ' active' : ''}`}
+                            aria-current={vue === tab.key ? 'page' : undefined}
+                            onClick={() => setVue(tab.key)}
+                        >
+                            <i className={`${tab.icon} me-2`} aria-hidden="true" />
+                            {tab.label}
+                        </button>
+                    </li>
+                ))}
+            </ul>
             <Card title="Emploi du temps" bodyClassName="p-0 py-3">
                 <div className="px-3 pt-2">
                     <TableToolbar onReset={filterReset.reset} resetActive={filterReset.active}>
@@ -307,87 +376,180 @@ export default function EmploiDuTempsIndex({
                     </TableToolbar>
                 </div>
 
-                <div className="table-responsive px-3">
-                    <table className="table table-bordered align-middle mb-0">
-                        <thead className="table-light">
-                            <tr>
-                                <th style={{ width: 90 }} />
-                                {jourOptions.map((jour) => (
-                                    <th key={jour.value} className="text-uppercase text-center">
-                                        {jour.label}
-                                    </th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {heuresGrille.map((heure, rowIdx) => {
-                                const heureFin = `${String(Number(heure.slice(0, 2)) + 1).padStart(2, '0')}:00`;
+                {vue === 'grille' && (
+                    <div className="table-responsive px-3">
+                        <table className="table table-bordered align-middle mb-0">
+                            <thead className="table-light">
+                                <tr>
+                                    <th style={{ width: 90 }} />
+                                    {jourOptions.map((jour) => (
+                                        <th key={jour.value} className="text-uppercase text-center">
+                                            {jour.label}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {heuresGrille.map((heure, rowIdx) => {
+                                    const heureFin = `${String(Number(heure.slice(0, 2)) + 1).padStart(2, '0')}:00`;
 
-                                return (
-                                    <tr key={heure}>
-                                        <td className="fw-medium text-nowrap">
-                                            {heure.slice(0, 5)} - {heureFin}
-                                        </td>
-                                        {jourOptions.map((jour) => {
-                                            const key = `${jour.value}|${rowIdx}`;
-                                            if (cellules.skipped.has(key)) {
-                                                return null;
-                                            }
-                                            const cell = cellules.anchors.get(key);
-                                            const rows = cell?.rows ?? [];
+                                    return (
+                                        <tr key={heure}>
+                                            <td className="fw-medium text-nowrap">
+                                                {heure.slice(0, 5)} - {heureFin}
+                                            </td>
+                                            {jourOptions.map((jour) => {
+                                                const key = `${jour.value}|${rowIdx}`;
+                                                if (cellules.skipped.has(key)) {
+                                                    return null;
+                                                }
+                                                const cell = cellules.anchors.get(key);
+                                                const rows = cell?.rows ?? [];
 
-                                            return (
-                                                <td
-                                                    key={jour.value}
-                                                    rowSpan={cell?.rowSpan ?? 1}
-                                                    style={{ minWidth: 160, verticalAlign: 'top' }}
-                                                >
-                                                    {rows.map((row) => (
-                                                        <div
-                                                            key={row.id}
-                                                            className="bg-primary-transparent rounded p-2 mb-1"
-                                                            style={{ cursor: permissions.update ? 'pointer' : 'default' }}
-                                                            onClick={() => permissions.update && openEdit(row)}
-                                                        >
-                                                            <div className="fw-medium fs-13">
-                                                                {row.groupNom}
-                                                                {row.groupNiveau && (
-                                                                    <span className="badge badge-soft-secondary ms-1">
-                                                                        {row.groupNiveau}
-                                                                    </span>
+                                                return (
+                                                    <td
+                                                        key={jour.value}
+                                                        rowSpan={cell?.rowSpan ?? 1}
+                                                        style={{ minWidth: 160, verticalAlign: 'top' }}
+                                                    >
+                                                        {rows.map((row) => (
+                                                            <div
+                                                                key={row.id}
+                                                                className="bg-primary-transparent rounded p-2 mb-1"
+                                                                style={{ cursor: permissions.update ? 'pointer' : 'default' }}
+                                                                onClick={() => permissions.update && openEdit(row)}
+                                                            >
+                                                                <div className="fw-medium fs-13">
+                                                                    {row.groupNom}
+                                                                    {row.groupNiveau && (
+                                                                        <span className="badge badge-soft-secondary ms-1">
+                                                                            {row.groupNiveau}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="text-muted fs-12">
+                                                                    {row.heureDebut} – {row.heureFin}
+                                                                </div>
+                                                                {row.enseignant && (
+                                                                    <div className="text-muted fs-12">{row.enseignant}</div>
+                                                                )}
+                                                                {row.salle && <div className="text-muted fs-12">{row.salle}</div>}
+                                                                {permissions.delete && (
+                                                                    <button
+                                                                        type="button"
+                                                                        className="btn btn-link btn-sm text-danger p-0 mt-1"
+                                                                        onClick={(event) => {
+                                                                            event.stopPropagation();
+                                                                            setDeleteTarget(row);
+                                                                            setDeleteError(undefined);
+                                                                        }}
+                                                                    >
+                                                                        Supprimer
+                                                                    </button>
                                                                 )}
                                                             </div>
-                                                            <div className="text-muted fs-12">
-                                                                {row.heureDebut} – {row.heureFin}
-                                                            </div>
-                                                            {row.enseignant && (
-                                                                <div className="text-muted fs-12">{row.enseignant}</div>
-                                                            )}
-                                                            {row.salle && <div className="text-muted fs-12">{row.salle}</div>}
-                                                            {permissions.delete && (
-                                                                <button
-                                                                    type="button"
-                                                                    className="btn btn-link btn-sm text-danger p-0 mt-1"
-                                                                    onClick={(event) => {
-                                                                        event.stopPropagation();
-                                                                        setDeleteTarget(row);
-                                                                        setDeleteError(undefined);
-                                                                    }}
-                                                                >
-                                                                    Supprimer
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    ))}
-                                                </td>
-                                            );
-                                        })}
+                                                        ))}
+                                                    </td>
+                                                );
+                                            })}
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+
+                {/* « Paramétrage d’emploi du temps » -- the same créneaux as a flat, sortable list,
+                    one row per slot, edited through the same modal as the grid so
+                    both views stay in sync with one form and one endpoint. */}
+                {vue === 'parametrage' && (
+                    <div className="table-responsive px-3">
+                        <table className="table align-middle mb-0">
+                            <thead className="thead-light">
+                                <tr>
+                                    {([
+                                        { field: 'groupe' as const, label: 'Groupe' },
+                                        { field: 'jour' as const, label: 'Jour' },
+                                        { field: 'heure' as const, label: 'Heure' },
+                                        { field: 'salle' as const, label: 'Salle' },
+                                        { field: 'enseignant' as const, label: 'Enseignant' },
+                                    ]).map((col) => (
+                                        <th key={col.field}>
+                                            <button
+                                                type="button"
+                                                className="btn btn-link p-0 text-reset text-decoration-none fw-semibold d-inline-flex align-items-center"
+                                                onClick={() => toggleSort(col.field)}
+                                            >
+                                                {col.label}
+                                                <i
+                                                    className={`ti ms-1 ${
+                                                        sortField === col.field
+                                                            ? sortDir === 'asc'
+                                                                ? 'ti-caret-up-filled'
+                                                                : 'ti-caret-down-filled'
+                                                            : 'ti-selector opacity-50'
+                                                    }`}
+                                                    aria-hidden="true"
+                                                />
+                                            </button>
+                                        </th>
+                                    ))}
+                                    <th className="text-end">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {lignes.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={6} className="text-center text-muted py-4">
+                                            Aucun créneau pour ces filtres.
+                                        </td>
                                     </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
+                                ) : (
+                                    lignes.map((row) => (
+                                        <tr key={row.id}>
+                                            <td>
+                                                {row.groupNom}
+                                                {row.groupNiveau && (
+                                                    <span className="badge badge-soft-secondary ms-1">
+                                                        {row.groupNiveau}
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td>{jours[String(row.jourSemaine)] ?? '—'}</td>
+                                            <td className="text-nowrap">
+                                                de {row.heureDebut} à {row.heureFin}
+                                            </td>
+                                            <td>{row.salle ?? '—'}</td>
+                                            <td>{row.enseignant ?? '—'}</td>
+                                            <td className="text-end">
+                                                <RowActions>
+                                                    {permissions.update && (
+                                                        <RowActionItem icon="ti ti-edit" onClick={() => openEdit(row)}>
+                                                            Modifier
+                                                        </RowActionItem>
+                                                    )}
+                                                    {permissions.delete && (
+                                                        <RowActionItem
+                                                            icon="ti ti-trash"
+                                                            danger
+                                                            onClick={() => {
+                                                                setDeleteTarget(row);
+                                                                setDeleteError(undefined);
+                                                            }}
+                                                        >
+                                                            Supprimer
+                                                        </RowActionItem>
+                                                    )}
+                                                </RowActions>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </Card>
 
             <Modal

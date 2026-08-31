@@ -208,7 +208,7 @@ const AVAILABLE_FEES_PER_PAGE = 5;
  * Throws on a non-2xx response so the caller's `.finally()` still clears its
  * spinner and the optimistic UI update is skipped.
  */
-async function postFeeVisibility(url: string): Promise<{ fee?: InscriptionFeeLine }> {
+async function postFeeVisibility(url: string): Promise<{ fee?: InscriptionFeeLine; montantLibere?: number }> {
     const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
     const response = await fetch(url, {
         method: 'POST',
@@ -267,6 +267,9 @@ export default function InscriptionsIndex({
     // that carry several of them.
     const [showHiddenFees, setShowHiddenFees] = useState(false);
     const [hideProcessingId, setHideProcessingId] = useState<number | null>(null);
+    // Montant qu'un masquage vient de libérer en avance — null tant qu'aucun
+    // frais payé n'a été retiré. Voir removeEditingLine().
+    const [montantLibere, setMontantLibere] = useState<number | null>(null);
     const [restoreProcessingId, setRestoreProcessingId] = useState<number | null>(null);
     const [availableFeesPage, setAvailableFeesPage] = useState(1);
     const [newFeeToAdd, setNewFeeToAdd] = useState<number | ''>('');
@@ -515,15 +518,29 @@ export default function InscriptionsIndex({
 
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.label }));
     const groupOptions: SelectOption[] = groups.map((g) => ({ value: g.id, label: g.label }));
-    // Catalog fees already fully "Payé" on this inscription are excluded —
-    // nothing to gain from re-adding a settled fee; unpaid/partial/not-yet-
-    // added ones (incl. re-adding the same name as a second charge) stay
-    // selectable.
-    const paidFeeNames = new Set(
-        feesForm.data.fee_lines.filter((line) => line.statut === 'Payé').map((line) => line.nom),
+    // A catalog fee already present on this inscription disappears from the
+    // « Ajouter un frais du catalogue… » dropdown — the same fee is never
+    // charged twice on one inscription, so once it is added (or restored) the
+    // list must stop offering it. Matched on fraisId, with the name as a
+    // fallback for a legacy line saved without a catalog reference.
+    const usedFraisIds = new Set(
+        feesForm.data.fee_lines
+            .map((line) => line.fraisId)
+            .filter((id): id is number => id !== null && id !== undefined),
     );
+    const usedFeeNames = new Set(
+        feesForm.data.fee_lines
+            .filter((line) => line.fraisId === null || line.fraisId === undefined)
+            .map((line) => line.nom),
+    );
+    // A fee currently masqué is excluded too (by name — the hidden row carries
+    // no fraisId): re-adding it would charge the student a second time next to
+    // its hidden twin instead of going through « Restaurer ».
+    const hiddenFeeNames = new Set(hiddenFees.map((fee) => fee.nom));
     const fraisOptions: SelectOption[] = frais
-        .filter((f) => !paidFeeNames.has(f.label))
+        .filter(
+            (f) => !usedFraisIds.has(f.id) && !usedFeeNames.has(f.label) && !hiddenFeeNames.has(f.label),
+        )
         .map((f) => ({ value: f.id, label: f.label }));
     const niveauOptions: SelectOption[] = niveauxInteret.map((n) => ({ value: n, label: n }));
     const domaineOptions: SelectOption[] = domaines.map((d) => ({ value: d, label: d }));
@@ -579,6 +596,7 @@ export default function InscriptionsIndex({
         feesForm.clearErrors();
         setHiddenFees([]);
         setShowHiddenFees(false);
+        setMontantLibere(null);
         setNewFeeToAdd('');
         setLoadingEditingFees(true);
         fetch(`/backoffice/inscriptions/${inscription.id}/fees`, { headers: { Accept: 'application/json' } })
@@ -633,6 +651,7 @@ export default function InscriptionsIndex({
         feesForm.clearErrors();
         setHiddenFees([]);
         setShowHiddenFees(false);
+        setMontantLibere(null);
         setNewFeeToAdd('');
         setAvailableLivres([]);
         setEditingLivreIds([]);
@@ -893,12 +912,18 @@ export default function InscriptionsIndex({
         // below is updated from local state.
         setHideProcessingId(line.id);
         postFeeVisibility(`/backoffice/inscriptions/${editingInscription.id}/fees/${line.id}/hide`)
-            .then(() => {
+            .then((data) => {
                 feesForm.setData('fee_lines', feesForm.data.fee_lines.filter((_, i) => i !== index));
                 setHiddenFees((previous) => [
                     ...previous,
                     { id: line.id as number, nom: line.nom, montant: line.montantInitial, dateEcheance: line.dateEcheance },
                 ]);
+
+                // Le frais était payé : son argent vient d'être libéré en
+                // avance (BasculerVisibiliteFraisInscription). Sans ce
+                // message, l'utilisateur voit le montant disparaître de
+                // l'écran sans savoir qu'il l'attend dans l'onglet Avances.
+                setMontantLibere(data.montantLibere && data.montantLibere > 0 ? data.montantLibere : null);
             })
             .finally(() => setHideProcessingId(null));
     }
@@ -1981,6 +2006,20 @@ export default function InscriptionsIndex({
                                     )}
                                     {canManageFees && feesForm.processing && (
                                         <div className="text-muted small mb-2">Enregistrement…</div>
+                                    )}
+
+                                    {montantLibere !== null && (
+                                        <div className="alert alert-info d-flex align-items-start gap-2 mt-3 mb-0" role="status">
+                                            <i className="ti ti-info-circle mt-1" aria-hidden="true" />
+                                            <div>
+                                                Ce frais était déjà payé : {montantLibere.toFixed(2)} DH ont été
+                                                libérés en avance pour cet étudiant.
+                                                <br />
+                                                <span className="fs-13">
+                                                    Retrouvez-les dans Encaissements → Avances pour les appliquer à un autre frais.
+                                                </span>
+                                            </div>
+                                        </div>
                                     )}
 
                                     {hiddenFees.length > 0 && (

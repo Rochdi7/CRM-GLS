@@ -211,7 +211,11 @@ final class InscriptionController extends Controller
         // honest answer.
         abort_unless($fee->inscription_id === $inscription->id, 404);
 
-        $action->hide($inscription, $fee);
+        // Un frais deja paye rend son argent a l'etudiant sous forme d'avance
+        // (voir l'action) : on renvoie le montant libere pour que le modal le
+        // DISE, sinon l'utilisateur voit 500 DH disparaitre de l'ecran sans
+        // savoir qu'ils l'attendent dans l'onglet Avances.
+        $montantLibere = $action->hide($inscription, $fee);
 
         // JSON, not back(): this fires from INSIDE the open edit modal, whose
         // React state already reflects the change optimistically. An Inertia
@@ -224,6 +228,7 @@ final class InscriptionController extends Controller
         return response()->json([
             'ok' => true,
             'montantTotal' => $inscription->fresh()->montant_total,
+            'montantLibere' => $montantLibere,
         ]);
     }
 
