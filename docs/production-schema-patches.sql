@@ -143,3 +143,12 @@ UPDATE motifs_annulation SET portee = 'inscription'
 -- « Autre » reste délibérément 'tous' : c'est la raison générique des deux
 -- formulaires.
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 31/08/2026 — Type de dépense manquant : « Produits consommables »
+-- Ajouté au catalogue de départ de TypeDepenseSeeder (is_system = false).
+-- Équivalent SQL idempotent si le seeder n'est pas relancé en production.
+INSERT INTO types_depenses (nom, is_system, statut, created_at, updated_at)
+SELECT 'Produits consommables', false, 'Actif', now(), now()
+ WHERE NOT EXISTS (SELECT 1 FROM types_depenses WHERE nom = 'Produits consommables');
+-- ---------------------------------------------------------------------------

@@ -39,6 +39,7 @@ final class TypeDepenseSeeder extends Seeder
             'Logistiques',
             'Externalisation ou sous-traitance',
             'Femme de ménage',
+            'Produits consommables',
         ];
 
         foreach ($starterTypes as $nom) {
