@@ -651,13 +651,13 @@ final class SettingsTest extends TestCase
     {
         $this->userWith('cancellation-reasons.view', 'cancellation-reasons.create', 'cancellation-reasons.update');
 
-        $this->post(route('backoffice.motifs-annulation.store'), ['nom' => 'Non-paiement', 'statut' => MotifAnnulation::STATUT_ACTIF])
+        $this->post(route('backoffice.motifs-annulation.store'), ['nom' => 'Non-paiement', 'portee' => MotifAnnulation::PORTEE_INSCRIPTION, 'statut' => MotifAnnulation::STATUT_ACTIF])
             ->assertRedirect();
 
         $this->assertDatabaseHas('motifs_annulation', ['nom' => 'Non-paiement', 'is_system' => false]);
 
         $motif = MotifAnnulation::first();
-        $this->put(route('backoffice.motifs-annulation.update', $motif), ['nom' => 'Non-paiement prolongé', 'statut' => MotifAnnulation::STATUT_INACTIF])
+        $this->put(route('backoffice.motifs-annulation.update', $motif), ['nom' => 'Non-paiement prolongé', 'portee' => MotifAnnulation::PORTEE_INSCRIPTION, 'statut' => MotifAnnulation::STATUT_INACTIF])
             ->assertRedirect();
 
         $this->assertSame('Non-paiement prolongé', $motif->fresh()->nom);
@@ -681,7 +681,7 @@ final class SettingsTest extends TestCase
             'statut' => MotifAnnulation::STATUT_ACTIF,
         ]);
 
-        $this->put(route('backoffice.motifs-annulation.update', $motif), ['nom' => 'X', 'statut' => MotifAnnulation::STATUT_ACTIF])
+        $this->put(route('backoffice.motifs-annulation.update', $motif), ['nom' => 'X', 'portee' => MotifAnnulation::PORTEE_TOUS, 'statut' => MotifAnnulation::STATUT_ACTIF])
             ->assertForbidden();
         $this->delete(route('backoffice.motifs-annulation.destroy', $motif))->assertForbidden();
 
@@ -731,7 +731,7 @@ final class SettingsTest extends TestCase
     {
         $this->admin();
 
-        $this->post(route('backoffice.motifs-annulation.store'), ['nom' => 'Déménagement', 'statut' => MotifAnnulation::STATUT_ACTIF])
+        $this->post(route('backoffice.motifs-annulation.store'), ['nom' => 'Déménagement', 'portee' => MotifAnnulation::PORTEE_INSCRIPTION, 'statut' => MotifAnnulation::STATUT_ACTIF])
             ->assertRedirect();
 
         $this->assertDatabaseHas('motifs_annulation', ['nom' => 'Déménagement', 'is_system' => false]);

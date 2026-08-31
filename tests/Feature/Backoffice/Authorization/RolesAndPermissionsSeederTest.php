@@ -76,6 +76,11 @@ final class RolesAndPermissionsSeederTest extends TestCase
                 'dashboard.view', 'groups.view', 'groups.change-teacher', 'students.view',
                 'registrations.view', 'registrations.delete',
                 'attendance.view', 'attendance.create', 'attendance.mark',
+                // Les salles sont ouvertes a TOUS les roles depuis le
+                // 31/08/2026 (Parametres > Salles), scopees aux centres
+                // affectes par Store/UpdateSalleRequest. `rooms.delete`
+                // reste super-admin.
+                'rooms.view', 'rooms.create', 'rooms.update',
             ],
             $teacher->permissions()->pluck('name')->all(),
         );

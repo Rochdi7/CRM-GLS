@@ -151,6 +151,35 @@ function defaultEcheance(moisEcheance: number | null, dateDebutFormation: string
 }
 
 /**
+ * Same échéance with its DAY moved to the group's start day, month and year
+ * untouched. Used when the start date changes on an EXISTING group: those
+ * dates are saved data spread over the group's own school year (see
+ * FraisEcheanceResolver — Sept-Déc and Jan-Août do not share a year), so
+ * re-deriving them from the fee's month like the create form does would
+ * silently drag every line into the current calendar year. Only the day —
+ * the part the start date actually dictates — is rewritten, clamped to the
+ * month's real length so "31" in February lands on the 28th/29th.
+ */
+function replaceJour(dateEcheance: string, dateDebutFormation: string): string {
+    if (dateEcheance === '' || dateDebutFormation === '') {
+        return dateEcheance;
+    }
+
+    const annee = Number(dateEcheance.slice(0, 4));
+    const mois = Number(dateEcheance.slice(5, 7));
+    const jourDebut = Number(dateDebutFormation.slice(8, 10));
+
+    if (!Number.isFinite(annee) || !Number.isFinite(mois) || !Number.isFinite(jourDebut) || jourDebut <= 0) {
+        return dateEcheance;
+    }
+
+    const dernierJour = new Date(annee, mois, 0).getDate();
+    const jour = Math.min(jourDebut, dernierJour);
+
+    return `${dateEcheance.slice(0, 8)}${String(jour).padStart(2, '0')}`;
+}
+
+/**
  * Fee lines for a NEW group: every active catalog fee pre-filled with its
  * own catalog default amount and derived due date. These are defaults, not
  * locks — each row stays editable, and the edited value is what is saved.
@@ -502,12 +531,25 @@ export default function GroupsIndex({
      * Re-derives the monthly due dates when the group's start date changes,
      * since the derived day comes from that date. Only rows still holding
      * the previously derived value are rewritten — once the user types a
-     * date of their own it is never overwritten. Edit mode is left alone
-     * entirely: those dates are the group's saved data, not defaults.
+     * date of their own it is never overwritten. On an EXISTING group the
+     * month and year are the group's saved data and stay put — only the day
+     * is re-applied to every line (see replaceJour).
      */
     function setDateDebut(value: string) {
+        // Editing: the saved échéances carry the group's own school year, so
+        // only their DAY follows the new start date (replaceJour). Every row
+        // moves — an échéance the user typed by hand still names a day the
+        // start date dictates, and leaving half the lines on the old day is
+        // exactly the manual re-typing this replaces.
         if (editingGroup) {
-            form.setData('date_debut_formation', value);
+            const lignesEdit = { ...form.data.fraisLignes };
+
+            Object.keys(lignesEdit).forEach((fraisId) => {
+                const ligne = lignesEdit[Number(fraisId)];
+                lignesEdit[Number(fraisId)] = { ...ligne, date_echeance: replaceJour(ligne.date_echeance, value) };
+            });
+
+            form.setData({ ...form.data, date_debut_formation: value, fraisLignes: lignesEdit });
 
             return;
         }
