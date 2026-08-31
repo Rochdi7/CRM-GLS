@@ -1466,3 +1466,30 @@ html[data-theme='dark'] .gls-payment-matrix > :not(caption) > * > * {
 .fee-remise-group .input-group-text {
     flex: 0 0 auto;
 }
+
+/*
+ * Avatars: the theme's `.avatar img` has no object-fit, so a portrait photo
+ * (student/staff uploads are usually 3:4 or taller) is squashed into the
+ * square box. Crop to fill instead of distorting the face.
+ */
+.avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center top;
+}
+
+/* ---------------------------------------------------------------------------
+ * Roles form — sticky permission toolbar
+ *
+ * The permission catalog (Components/Roles/RolePermissionsForm.tsx) is a long
+ * full-width grid; its search box, bulk check/uncheck and Save/Cancel must
+ * stay reachable while scrolling it. `bg-white` would be wrong in dark mode,
+ * so the header inherits the card's own background variable instead.
+ * ------------------------------------------------------------------------- */
+.gls-sticky-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background-color: var(--bs-card-bg, var(--bs-body-bg, #fff));
+}

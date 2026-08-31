@@ -20,9 +20,11 @@
     écran retina) pour rester léger en pièce jointe.
 --}}
 @php
-    $centre = $encaissement->fee?->inscription?->etablissement ?? $encaissement->student?->etablissement;
+    $inscription = $encaissement->fee?->inscription
+        ?? $encaissement->applications->sortBy('id')->first()?->fee?->inscription;
+    $centre = $inscription?->etablissement ?? $encaissement->student?->etablissement;
     $montantAffiche = rtrim(rtrim(number_format((float) $encaissement->montant, 2, '.', ' '), '0'), '.').' DH';
-    $fraisNom = $encaissement->fee?->nom ?? 'Avance';
+    $fraisNom = $encaissement->libelleFrais();
     // Logo blanc sur fond bleu, embarqué en cid — voir l'en-tête du fichier.
     $logoPath = public_path('assets/images/logo/gls-blanc-email.png');
 @endphp

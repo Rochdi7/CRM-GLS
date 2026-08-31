@@ -120,6 +120,32 @@ class Encaissement extends Model
         );
     }
 
+    /**
+     * Le libelle des frais que cet argent a payes — la SEULE definition,
+     * partagee par le recu PDF et le recu email.
+     *
+     * Un encaissement attache a un frais le nomme directement. Une AVANCE n'a
+     * pas de frais au moment de l'encaissement, mais des qu'elle est appliquee
+     * l'argent a paye des frais precis : c'est cela que l'etudiant doit lire
+     * sur son recu, « Avance » ne lui apprend rien (signale 31/08/2026). On ne
+     * retombe sur « Avance » que tant que l'argent reste non alloue.
+     */
+    public function libelleFrais(): string
+    {
+        if ($this->fee?->nom) {
+            return $this->fee->nom;
+        }
+
+        $noms = $this->applications
+            ->sortBy('id')
+            ->map(fn (self $application): ?string => $application->fee?->nom)
+            ->filter()
+            ->unique()
+            ->values();
+
+        return $noms->isEmpty() ? 'Avance' : $noms->implode(' + ');
+    }
+
     /** Rounded to the cent so the exact last cents can always be applied. */
     public function montantRestant(): float
     {

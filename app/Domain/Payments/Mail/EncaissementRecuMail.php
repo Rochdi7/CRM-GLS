@@ -55,7 +55,8 @@ final class EncaissementRecuMail extends Mailable
 
     public function attachments(): array
     {
-        $inscription = $this->encaissement->fee?->inscription;
+        $inscription = $this->encaissement->fee?->inscription
+            ?? $this->encaissement->applications->sortBy('id')->first()?->fee?->inscription;
         $centre = $inscription?->etablissement ?? $this->encaissement->student?->etablissement;
 
         $html = view('backoffice.encaissements.recu-pdf', [
@@ -63,7 +64,7 @@ final class EncaissementRecuMail extends Mailable
             'centre' => $centre,
             'anneeScolaire' => $inscription?->anneeScolaire?->nom,
             'niveau' => $inscription?->group?->nom ?? $this->encaissement->student?->niveau,
-            'fraisNom' => $this->encaissement->fee?->nom ?? 'Avance',
+            'fraisNom' => $this->encaissement->libelleFrais(),
         ])->render();
 
         $tempDir = storage_path('app/mpdf');

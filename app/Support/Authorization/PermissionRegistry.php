@@ -414,9 +414,24 @@ final class PermissionRegistry
      */
     public static function superAdminOnly(): array
     {
+        // ⚠ The ONE deliberately delegated delete (31/08/2026, business
+        // decision): every role may delete an inscription. It is the only
+        // record in the app that can be created by mistake with nothing
+        // attached to it yet — a wrong student, a wrong group, caught the
+        // same minute — and the front desk that created it must be able to
+        // undo it without calling a super-admin. It stays safe because a
+        // registration that received ANY money is refused outright
+        // (InscriptionController@destroy checks the payments first, and the
+        // FK restrict on encaissements.inscription_fee_id backs it up), and
+        // the deletion is journaled like every other change. Cancelling
+        // (with a reason, keeping the history) remains the right move for a
+        // registration that actually happened.
+        $delegatedDeletes = ['registrations.delete'];
+
         $deletes = array_values(array_filter(
             self::names(),
-            static fn (string $name): bool => str_ends_with($name, '.delete'),
+            static fn (string $name): bool => str_ends_with($name, '.delete')
+                && ! in_array($name, $delegatedDeletes, true),
         ));
 
         return array_values(array_unique(array_merge($deletes, [
@@ -538,6 +553,9 @@ final class PermissionRegistry
             'fees.view',
             'students.view', 'students.create', 'students.update',
             'registrations.view', 'registrations.create', 'registrations.update',
+            // Delegated to every role (31/08/2026) — only a registration with
+            // no payment at all can actually be deleted, see superAdminOnly().
+            'registrations.delete',
             'registrations.manage-fees', 'registrations.change-group',
             'groups.view', 'groups.create', 'groups.update', 'groups.archive',
             'groups.change-teacher',
@@ -591,6 +609,7 @@ final class PermissionRegistry
             'fees.view',
             'students.view',
             'registrations.view',
+            'registrations.delete',
             'groups.view',
             'groups.change-teacher',
             'cash-registers.view',
@@ -740,6 +759,7 @@ final class PermissionRegistry
                 'centers.view',
                 'students.view',
                 'registrations.view',
+                'registrations.delete',
                 'groups.view',
                 'groups.change-teacher',
                 'stock.view', 'stock.create', 'stock.update', 'stock.move',
@@ -752,6 +772,7 @@ final class PermissionRegistry
                 'groups.view',
                 'groups.change-teacher',
                 'students.view',
+                'registrations.view', 'registrations.delete',
                 'attendance.view', 'attendance.create', 'attendance.mark',
             ],
         ];

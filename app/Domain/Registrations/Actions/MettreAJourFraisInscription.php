@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domain\Registrations\Actions;
 
+use App\Domain\Payments\Actions\ConvertirEncaissementsEnAvance;
+use App\Models\Encaissement;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
 use Illuminate\Database\QueryException;
@@ -26,13 +28,19 @@ use Illuminate\Validation\ValidationException;
  * delete" comparison — hiding/restoring a fee is MasquerFraisInscription/
  * RestaurerFraisInscription's job, never a hard delete). Deliberately
  * unrestricted on visible rows — a fee already fully or partially paid can
- * still have its montant changed or be removed (per product decision);
- * removing a line that has payments hits the same encaissements FK-restrict
- * the standalone destroy() already relies on, surfaced here as a field
- * error instead of a 500.
+ * still have its montant changed or be removed (per product decision).
+ * Removing a PAID line releases its payments into unallocated avances first
+ * (ConvertirEncaissementsEnAvance, the same release RetirerFraisGroupe
+ * performs), so the money stays on the student and re-applicable instead of
+ * blocking the edit — until 31/08/2026 the delete simply hit the
+ * encaissements FK-restrict and the whole edit was refused.
  */
 final class MettreAJourFraisInscription
 {
+    public function __construct(
+        private readonly ConvertirEncaissementsEnAvance $convertirEnAvance,
+    ) {}
+
     /**
      * @param  list<array{id?: int, frais_id?: ?int, nom: string, montant_initial?: ?float, remise_pct?: ?float, remise_montant?: ?float, date_echeance?: ?string, note?: ?string}>  $lines
      */
@@ -101,11 +109,36 @@ final class MettreAJourFraisInscription
                     $keptIds[] = $fee->id;
                 }
 
-                $inscription->fees()
+                $supprimees = $inscription->fees()
                     ->whereNull('masque_le')
                     ->whereNotIn('id', $keptIds)
-                    ->get()
-                    ->each(fn (InscriptionFee $fee) => $fee->delete());
+                    ->get();
+
+                // ⚠ Money on a removed line becomes an AVANCE, it is never
+                // lost and never blocks the edit (31/08/2026). Before this,
+                // the delete below hit the encaissements FK-restrict and the
+                // whole edit was refused with « ce frais a des paiements » —
+                // so a fee added by mistake on a student who had already paid
+                // could not be removed at all, and the money had no way back
+                // into the avance pool. This is the SAME release the group
+                // flow performs (RetirerFraisGroupe): detach the payments,
+                // leaving them re-applicable, THEN drop the line. A refunded
+                // payment is refused by the converter — its money already
+                // left the till — so it is filtered out here rather than
+                // aborting the edit.
+                if ($supprimees->isNotEmpty()) {
+                    $encaissements = Encaissement::query()
+                        ->whereIn('inscription_fee_id', $supprimees->pluck('id'))
+                        ->whereDoesntHave('remboursements')
+                        ->pluck('id')
+                        ->all();
+
+                    if ($encaissements !== []) {
+                        $this->convertirEnAvance->handle($inscription, $encaissements);
+                    }
+                }
+
+                $supprimees->each(fn (InscriptionFee $fee) => $fee->delete());
 
                 $inscription->update([
                     'montant_total' => $inscription->fees()->whereNull('masque_le')->sum('montant') ?: null,

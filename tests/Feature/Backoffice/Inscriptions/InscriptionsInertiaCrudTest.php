@@ -315,7 +315,15 @@ final class InscriptionsInertiaCrudTest extends TestCase
         $this->assertSame(1, $inscription->fees()->count());
     }
 
-    public function test_removing_a_fee_line_that_has_payments_is_refused(): void
+    /**
+     * Since 31/08/2026 removing a PAID fee line no longer fails: its payments
+     * are released as unallocated avances first (the same release
+     * RetirerFraisGroupe performs), so the line goes and the money stays on
+     * the student, visible on the Avances tab and re-applicable to another
+     * fee. Before that the delete hit the encaissements FK-restrict and the
+     * whole edit was refused, leaving a wrongly-added fee stuck forever.
+     */
+    public function test_removing_a_paid_fee_line_releases_its_money_as_an_avance(): void
     {
         [$inscription, $fee] = $this->inscriptionWithFee();
         $caisse = \App\Models\Caisse::factory()->create(['etablissement_id' => $this->centre->id]);
@@ -328,9 +336,17 @@ final class InscriptionsInertiaCrudTest extends TestCase
 
         $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
             ->put(route('backoffice.inscriptions.fees.update', $inscription), ['fee_lines' => []])
-            ->assertSessionHasErrors('fee_lines');
+            ->assertRedirect(route('backoffice.inscriptions.index'));
 
-        $this->assertNotNull(InscriptionFee::find($fee->id));
+        // The line is gone…
+        $this->assertNull(InscriptionFee::find($fee->id));
+
+        // …but the money record is never deleted: it is now an unallocated,
+        // re-applicable avance sitting on the student.
+        $paiement = \App\Models\Encaissement::query()->where('reference', 'ENC-EDIT-FEES')->firstOrFail();
+        $this->assertNull($paiement->inscription_fee_id);
+        $this->assertTrue($paiement->isAvance());
+        $this->assertSame(500.0, $paiement->montantRestant());
     }
 
     public function test_editing_a_partially_paid_fees_amount_recomputes_its_statut(): void
@@ -723,9 +739,11 @@ final class InscriptionsInertiaCrudTest extends TestCase
     }
 
     /**
-     * "Réactiver" — Annulée -> Active only. A « Changement » registration
-     * has a successor created by changeGroup(); reactivating it would enrol
-     * the student twice (audit DB-08).
+     * "Réactiver" — Annulée OR Changement -> Active. The invariant is DB-08
+     * (never enrolled twice), so since 31/08/2026 the guard checks what is
+     * ACTUALLY live rather than the historical statut: a « Changement » row
+     * whose successor is still Active stays refused, but once that successor
+     * is gone the original row is the only thing left to bring back.
      */
     public function test_reactiver_sets_statut_back_to_active(): void
     {
@@ -738,11 +756,28 @@ final class InscriptionsInertiaCrudTest extends TestCase
             'statut' => 'Changement', 'date_inscription' => '2025-09-15',
         ]);
 
+        // A live successor (what changeGroup() creates) still blocks it.
+        $successeur = Inscription::create([
+            'reference' => 'INS-REACTIVATE-2', 'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => 'Active', 'date_inscription' => '2025-09-16',
+        ]);
+
         $this->from(route('backoffice.inscriptions.index'))
             ->patch(route('backoffice.inscriptions.update-statut', $inscription), ['statut' => 'Active'])
             ->assertSessionHasErrors('statut');
         $this->assertSame('Changement', $inscription->fresh()->statut);
 
+        // Once the successor is no longer active, the original comes back.
+        $successeur->update(['statut' => 'Annulée']);
+
+        $this->patch(route('backoffice.inscriptions.update-statut', $inscription), [
+            'statut' => 'Active',
+        ])->assertRedirect(route('backoffice.inscriptions.index'));
+        $this->assertSame('Active', $inscription->fresh()->statut);
+
+        // And a cancelled registration reactivates as it always did.
+        $successeur->delete();
         $inscription->update(['statut' => 'Annulée']);
 
         $this->patch(route('backoffice.inscriptions.update-statut', $inscription), [

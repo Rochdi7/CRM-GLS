@@ -6,6 +6,7 @@ namespace App\Domain\Payments\Queries;
 
 use App\Models\Activity;
 use App\Models\Caisse;
+use App\Models\Cheque;
 use App\Models\Employee;
 use App\Models\Encaissement;
 use App\Models\Group;
@@ -224,7 +225,10 @@ final class GetEncaissementsList
             : (clone $base)->sum('montant');
 
         $encaissements = (clone $base)
-            ->with(['student', 'fee.inscription', 'caisse', 'agent'])
+            // `cheque` feeds the per-row `applicable` flag below — a bounced
+            // cheque's money cannot be applied, and the UI must know that
+            // without asking the DB once per row.
+            ->with(['student', 'fee.inscription', 'caisse', 'agent', 'cheque:id,statut'])
             // Per-fee paid total, computed by the DB (no N+1): feeds the
             // edit modal's read-only "Reste à payer" figure.
             ->with(['fee' => fn ($q) => $q->withSum('encaissements', 'montant')])
@@ -242,6 +246,20 @@ final class GetEncaissementsList
         $encaissements->through(function (Encaissement $e) use ($view, $anciensFrais): array {
             $isAvance = $e->inscription_fee_id === null;
             $utilise = $isAvance && $view !== 'cheque' ? (float) ($e->applications_sum_montant ?? 0) : null;
+
+            // ⚠ Having a remaining balance is NOT the same as being
+            // applicable. AppliquerAvance refuses an avance funded by a
+            // cheque the bank REJECTED (audit DB-05: the Chèque account was
+            // reversed, so that money never existed) — but montantRestant()
+            // knows nothing about the cheque, so the row still reported its
+            // full amount and « Appliquer à un frais » was offered on money
+            // that could only ever fail. The flag carries the ACTION's own
+            // rule to the UI instead of letting it re-derive one from the
+            // amount. Refunding such a row stays allowed — that reversal is
+            // the intended remedy, and it debits the Chèque account, not the
+            // till (CaisseResolver::forRemboursement).
+            $chequeRejete = $e->cheque_id !== null
+                && $e->cheque?->statut === Cheque::STATUT_REJETE;
             $feeTotal = $e->fee !== null ? (float) $e->fee->montant : null;
             $feePaye = $e->fee !== null ? (float) ($e->fee->encaissements_sum_montant ?? 0) : null;
 
@@ -274,6 +292,9 @@ final class GetEncaissementsList
                 'agent' => $e->agent?->nomComplet(),
                 'montantUtilise' => $utilise !== null ? number_format($utilise, 2, '.', '') : null,
                 'montantRestant' => $utilise !== null ? number_format(max(0.0, (float) $e->montant - $utilise), 2, '.', '') : null,
+                // Whether AppliquerAvance would accept this row at all.
+                'applicable' => $isAvance && ! $chequeRejete,
+                'chequeRejete' => $chequeRejete,
                 'studentEmail' => $e->student?->email,
                 'showUrl' => route('backoffice.encaissements.show', $e),
                 'recuUrl' => route('backoffice.encaissements.recu', $e),

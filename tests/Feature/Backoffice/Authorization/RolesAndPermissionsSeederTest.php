@@ -74,6 +74,7 @@ final class RolesAndPermissionsSeederTest extends TestCase
         $this->assertEqualsCanonicalizing(
             [
                 'dashboard.view', 'groups.view', 'groups.change-teacher', 'students.view',
+                'registrations.view', 'registrations.delete',
                 'attendance.view', 'attendance.create', 'attendance.mark',
             ],
             $teacher->permissions()->pluck('name')->all(),
@@ -290,16 +291,19 @@ final class RolesAndPermissionsSeederTest extends TestCase
     }
 
     /**
-     * The rule: only super-admin deletes. Enforced by
-     * PermissionRegistry::superAdminOnly(), which every preset is filtered
-     * through — so a future `*.delete` permission is locked down the moment
-     * it is registered, without touching a single role.
+     * The rule: only super-admin deletes, with ONE deliberately delegated
+     * exception — `registrations.delete` (31/08/2026, see
+     * test_registration_delete_is_delegated_to_every_role). Everything else
+     * is enforced by PermissionRegistry::superAdminOnly(), which every
+     * preset is filtered through — so a future `*.delete` permission is
+     * locked down the moment it is registered, without touching a role.
      */
-    public function test_no_role_may_delete_anything(): void
+    public function test_no_role_may_delete_anything_except_registrations(): void
     {
         $deletes = array_values(array_filter(
             PermissionRegistry::names(),
-            static fn (string $name): bool => str_ends_with($name, '.delete'),
+            static fn (string $name): bool => str_ends_with($name, '.delete')
+                && $name !== 'registrations.delete',
         ));
 
         $this->assertNotEmpty($deletes);
@@ -428,6 +432,44 @@ final class RolesAndPermissionsSeederTest extends TestCase
             $this->assertTrue(
                 Role::findByName($name)->hasPermissionTo('groups.change-teacher'),
                 "Le rôle {$name} doit pouvoir changer l'enseignant d'un groupe.",
+            );
+        }
+    }
+
+    /**
+     * `registrations.delete` is the ONE delete deliberately delegated to
+     * every role (31/08/2026 business decision) — every OTHER `*.delete`
+     * must stay super-admin-only, which is what makes this an exception and
+     * not a hole. What keeps it safe is enforced elsewhere: an inscription
+     * that received any money is refused
+     * (InscriptionsInertiaCrudTest::test_a_registration_with_payments_cannot_be_deleted).
+     */
+    public function test_registration_delete_is_delegated_to_every_role(): void
+    {
+        foreach (PermissionRegistry::roles() as $name => $label) {
+            if ($name === Role::SUPER_ADMIN) {
+                continue; // Gate::before bypass — holds no explicit permission.
+            }
+
+            $this->assertTrue(
+                Role::findByName($name)->hasPermissionTo('registrations.delete'),
+                "Le rôle {$name} doit pouvoir supprimer une inscription.",
+            );
+        }
+
+        // Every other delete stays locked.
+        $autresDeletes = array_filter(
+            PermissionRegistry::names(),
+            static fn (string $n): bool => str_ends_with($n, '.delete') && $n !== 'registrations.delete',
+        );
+
+        $this->assertNotEmpty($autresDeletes);
+
+        foreach ($autresDeletes as $permission) {
+            $this->assertContains(
+                $permission,
+                PermissionRegistry::superAdminOnly(),
+                "{$permission} doit rester reserve aux super-admins.",
             );
         }
     }

@@ -800,6 +800,24 @@ final class InscriptionController extends Controller
     {
         $this->authorize('delete', $inscription);
 
+        // ⚠ Explicit money guard. Since 31/08/2026 EVERY role may delete an
+        // inscription (PermissionRegistry::superAdminOnly()), so the rule
+        // that makes that safe must be stated here and not left to a caught
+        // FK violation: a registration that received ANY money is never
+        // deleted — it is cancelled, with a reason, keeping its history.
+        // The try/catch below stays as the second line of defence (the DB
+        // restrict on encaissements.inscription_fee_id), because a payment
+        // may land between this check and the delete.
+        $aDesPaiements = Encaissement::query()
+            ->whereIn('inscription_fee_id', $inscription->fees()->select('id'))
+            ->exists();
+
+        if ($aDesPaiements) {
+            throw ValidationException::withMessages([
+                'delete' => __('This registration has payments and cannot be deleted.'),
+            ]);
+        }
+
         try {
             DB::transaction(function () use ($inscription, $assignerLivres, $request): void {
                 // Books handed out with this registration go back to the

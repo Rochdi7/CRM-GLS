@@ -456,13 +456,15 @@ export default function DepensesIndex({
     }
 
     function selectPaymentToRefund(payment: EncaissementFormOption) {
-        const dejaRembourse = Number(payment.dejaRembourse);
-        const resteRemboursable = Math.max(0, Number(payment.montant) - dejaRembourse);
-
+        // montantRemboursable comes from the server: an avance is capped at
+        // what is still unallocated, a fee payment at what it brought in
+        // less prior refunds. Subtracting dejaRembourse from montant here
+        // would pre-fill a partly-applied avance with money it no longer
+        // holds, and the action would reject the submit.
         remboursementForm.setData((previous) => ({
             ...previous,
             encaissement_id: payment.id,
-            montant: resteRemboursable.toFixed(2),
+            montant: Number(payment.montantRemboursable).toFixed(2),
         }));
     }
 
@@ -1448,6 +1450,7 @@ export default function DepensesIndex({
                                             <th>Méthode</th>
                                             <th>Date</th>
                                             <th className="text-end">Montant</th>
+                                            <th className="text-end">Remboursable</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -1469,10 +1472,19 @@ export default function DepensesIndex({
                                                 <td>
                                                     <code>{payment.reference}</code>
                                                 </td>
-                                                <td>{payment.feeNom ?? '—'}</td>
+                                                <td>
+                                                    {payment.isAvance ? (
+                                                        <span className="badge bg-info-transparent">Avance</span>
+                                                    ) : (
+                                                        (payment.feeNom ?? '—')
+                                                    )}
+                                                </td>
                                                 <td>{payment.methode}</td>
                                                 <td>{payment.date ?? '—'}</td>
-                                                <td className="text-end fw-medium">{Number(payment.montant).toFixed(2)} MAD</td>
+                                                <td className="text-end">{Number(payment.montant).toFixed(2)} MAD</td>
+                                                <td className="text-end fw-medium">
+                                                    {Number(payment.montantRemboursable).toFixed(2)} MAD
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>

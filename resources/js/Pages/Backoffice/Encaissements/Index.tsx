@@ -992,10 +992,19 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                         <td className="text-end">{Number(row.montantUtilise ?? 0).toFixed(2)} MAD</td>
                                         <td className="text-end fw-medium">
                                             {Number(row.montantRestant ?? row.montant).toFixed(2)} MAD
+                                            {row.chequeRejete && (
+                                                <div className="mt-1">
+                                                    <span className="badge bg-danger-transparent">Chèque rejeté</span>
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="text-end">
                                             <RowActions view={row.showUrl}>
-                                                {Number(row.montantRestant ?? row.montant) > 0 && (
+                                                {/* `applicable` carries AppliquerAvance's OWN rule (a
+                                                    bounced-cheque avance is refused there). Gating on the
+                                                    remaining amount alone offered the action on money that
+                                                    could only ever fail. */}
+                                                {row.applicable && Number(row.montantRestant ?? row.montant) > 0 && (
                                                     <RowActionItem icon="ti-arrow-forward" onClick={() => openApplyAvance(row)}>
                                                         Appliquer à un frais
                                                     </RowActionItem>

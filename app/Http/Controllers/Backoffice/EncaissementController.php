@@ -9,6 +9,7 @@ use App\Domain\Payments\Actions\ConvertirEncaissementsEnAvance;
 use App\Domain\Finance\Support\CaisseResolver;
 use App\Domain\Payments\Actions\EnregistrerEncaissement;
 use App\Domain\Payments\Mail\EncaissementRecuMail;
+use App\Domain\Payments\Support\RecuPdfRenderer;
 use App\Domain\Payments\Actions\SupprimerEncaissement;
 use App\Domain\Payments\Queries\GetEncaissementDetails;
 use App\Domain\Payments\Queries\GetEncaissementsList;
@@ -632,12 +633,9 @@ final class EncaissementController extends Controller
     {
         $this->authorize('view', $encaissement);
 
-        $encaissement->load([
-            'student.etablissement',
-            'fee.inscription.anneeScolaire',
-            'fee.inscription.group',
-            'fee.inscription.etablissement',
-        ]);
+        // La MEME liste que le lien WhatsApp : le recu par email et le recu
+        // telecharge doivent etre le meme document (RecuPdfRenderer).
+        $encaissement->load(RecuPdfRenderer::RELATIONS);
 
         Mail::to($request->validated('email'))->queue(new EncaissementRecuMail($encaissement));
 

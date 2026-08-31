@@ -1511,6 +1511,15 @@ export interface EncaissementRow {
     montantUtilise: MoneyDisplay | null;
     /** Only populated on the Avances tab — montant minus montantUtilise. */
     montantRestant: MoneyDisplay | null;
+    /**
+     * Whether AppliquerAvance would accept this row — an avance funded by a
+     * REJECTED cheque has a remaining balance but can never be applied. Gate
+     * the "Appliquer à un frais" action on this, never on montantRestant
+     * alone.
+     */
+    applicable?: boolean;
+    /** The funding cheque bounced: the money was reversed off the Chèque account. */
+    chequeRejete?: boolean;
     studentEmail: string | null;
     showUrl: string;
     /** Printable receipt page — append ?format=a6|a5|a5x2. */
@@ -1752,8 +1761,18 @@ export interface EncaissementFormOption {
     montant: MoneyDisplay;
     methode: string;
     date: string | null;
+    /** null on an avance — the money is not attached to a fee (yet). */
     feeNom: string | null;
+    /** True when the payment is an unallocated avance (inscription_fee_id null). */
+    isAvance: boolean;
     dejaRembourse: MoneyDisplay;
+    /**
+     * What this row can still give back, computed SERVER-side (an avance is
+     * capped at its unallocated remainder, a fee payment at what it brought
+     * in less prior refunds). Never re-derive it from `montant` on the
+     * client — that overstates a partly-applied avance.
+     */
+    montantRemboursable: MoneyDisplay;
 }
 
 export interface DepensesPageProps {

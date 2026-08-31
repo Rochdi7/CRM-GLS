@@ -223,27 +223,39 @@ final class RemboursementsInertiaCrudTest extends TestCase
 
     /**
      * Covers the create form's "which payment are we refunding?" cascade
-     * (GetStudentPaymentsForRefund) — selecting a student lists their
-     * fee-targeted payments, excluding unallocated avances.
+     * (GetStudentPaymentsForRefund) — selecting a student lists everything of
+     * theirs that can still be given back.
+     *
+     * ⚠ Avances ARE listed (31/08/2026). This test previously asserted the
+     * opposite ("excluding unallocated avances"), which is what shipped the
+     * bug: an avance is money the school holds and has not earned, so it is
+     * the most refundable thing there is, and EnregistrerRemboursement has a
+     * dedicated branch for it. Excluding it here made that branch unreachable
+     * from the UI. See RefundAvanceVisibilityTest for the full flow.
      */
-    public function test_student_payments_lists_only_fee_targeted_payments_not_avances(): void
+    public function test_student_payments_lists_fee_payments_and_avances_alike(): void
     {
         $this->actingAs($this->userWith('refunds.view', 'refunds.create'));
         [$student, $encaissement] = $this->studentWithPayment(500);
 
-        // A genuine avance for the same student — must NOT appear.
-        Encaissement::create([
+        $avance = Encaissement::create([
             'reference' => 'ENC-AVANCE', 'student_id' => $student->id, 'inscription_fee_id' => null,
             'caisse_id' => $encaissement->caisse_id, 'agent_id' => $encaissement->agent_id,
             'montant' => 200, 'methode' => 'Espèces', 'date_paiement' => '2025-09-21',
         ]);
 
         $response = $this->get(route('backoffice.students.payments-for-refund', $student))->json();
+        $rows = collect($response['payments'])->keyBy('id');
 
-        $this->assertCount(1, $response['payments']);
-        $this->assertSame($encaissement->id, $response['payments'][0]['id']);
-        $this->assertSame('500.00', $response['payments'][0]['montant']);
-        $this->assertSame('0.00', $response['payments'][0]['dejaRembourse']);
+        $this->assertCount(2, $response['payments']);
+
+        $this->assertFalse($rows[$encaissement->id]['isAvance']);
+        $this->assertSame('500.00', $rows[$encaissement->id]['montant']);
+        $this->assertSame('0.00', $rows[$encaissement->id]['dejaRembourse']);
+        $this->assertSame('500.00', $rows[$encaissement->id]['montantRemboursable']);
+
+        $this->assertTrue($rows[$avance->id]['isAvance']);
+        $this->assertSame('200.00', $rows[$avance->id]['montantRemboursable']);
     }
 
     /**
@@ -269,9 +281,37 @@ final class RemboursementsInertiaCrudTest extends TestCase
         $remboursement = Remboursement::where('beneficiaire_id', $student->id)->firstOrFail();
         $this->assertSame($encaissement->id, $remboursement->encaissement_id);
 
-        // "déjà remboursé" now reflects this linked refund for future lookups.
+        // The whole 500 came back, so the row has nothing left to give and
+        // drops out of the picker entirely — offering it again would only
+        // produce a submit the action rejects.
         $response = $this->get(route('backoffice.students.payments-for-refund', $student))->json();
-        $this->assertSame('500.00', $response['payments'][0]['dejaRembourse']);
+        $this->assertSame([], $response['payments']);
+    }
+
+    /**
+     * The partial case the assertion above no longer covers: a payment only
+     * half given back stays in the picker, reporting what it already refunded
+     * and what is still refundable.
+     */
+    public function test_a_partly_refunded_payment_reports_what_is_left(): void
+    {
+        $user = $this->userWith('refunds.view', 'refunds.create');
+        $this->actingAs($user);
+        $user->employee->caisses()->first()->update(['solde' => 1000]);
+        [$student, $encaissement] = $this->studentWithPayment(500);
+
+        $this->post(route('backoffice.remboursements.store'), [
+            'beneficiaire_id' => $student->id,
+            'encaissement_id' => $encaissement->id,
+            'montant' => '200',
+            'date_remboursement' => '2025-09-22',
+        ])->assertSessionDoesntHaveErrors();
+
+        $response = $this->get(route('backoffice.students.payments-for-refund', $student))->json();
+
+        $this->assertCount(1, $response['payments']);
+        $this->assertSame('200.00', $response['payments'][0]['dejaRembourse']);
+        $this->assertSame('300.00', $response['payments'][0]['montantRemboursable']);
     }
 
     public function test_a_remboursement_without_a_linked_payment_is_still_allowed(): void
