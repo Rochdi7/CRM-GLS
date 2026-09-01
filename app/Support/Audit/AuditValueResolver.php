@@ -221,6 +221,26 @@ final class AuditValueResolver
     ];
 
     /**
+     * Relations to eager-load when resolving a model, so displayName() can
+     * name the STUDENT behind a record without firing a query per row.
+     *
+     * A journal reader looking at a deleted payment must be able to tell whose
+     * money it was. `Frais d'inscription A1/A2/B1` alone is the same label on
+     * hundreds of registrations — useless for tracing. The student's name is
+     * appended to every record that hangs off one (fee line, registration,
+     * payment, cheque), so the entry reads "Frais d'inscription A1/A2/B1 —
+     * ADAM ZARTANI" whatever the surrounding columns happen to carry.
+     *
+     * @var array<class-string<Model>, list<string>>
+     */
+    private const EAGER = [
+        InscriptionFee::class => ['inscription.student'],
+        Inscription::class => ['student'],
+        Encaissement::class => ['student'],
+        Cheque::class => ['student'],
+    ];
+
+    /**
      * Columns that are pure plumbing — hidden from the "champs modifiés" table
      * by default because they say nothing about what a user actually did.
      * `id`/`created_at` on a creation are the clearest case: they are noise
@@ -259,7 +279,10 @@ final class AuditValueResolver
 
         foreach ($wanted as $class => $ids) {
             /** @var class-string<Model> $class */
-            $models = $class::query()->whereIn('id', array_unique($ids))->get();
+            $models = $class::query()
+                ->with(self::EAGER[$class] ?? [])
+                ->whereIn('id', array_unique($ids))
+                ->get();
 
             foreach ($models as $model) {
                 $this->cache[$class.'|'.$model->getKey()] = $this->displayName($model);
@@ -291,7 +314,7 @@ final class AuditValueResolver
             return $this->cache[$key];
         }
 
-        $model = $class::query()->find((int) $value);
+        $model = $class::query()->with(self::EAGER[$class] ?? [])->find((int) $value);
 
         return $this->cache[$key] = $model === null ? null : $this->displayName($model);
     }
@@ -313,9 +336,19 @@ final class AuditValueResolver
     }
 
     /**
-     * The best human handle a model can offer.
+     * The best human handle a model can offer, suffixed with the student it
+     * belongs to when there is one.
      */
     private function displayName(Model $model): string
+    {
+        $base = $this->baseName($model);
+        $student = $this->studentNameOf($model);
+
+        return $student === null ? $base : $base.' — '.$student;
+    }
+
+    /** The record's own label, before any student suffix. */
+    private function baseName(Model $model): string
     {
         // Employee/Student expose a first+last name helper.
         if (method_exists($model, 'nomComplet')) {
@@ -335,5 +368,36 @@ final class AuditValueResolver
         }
 
         return '#'.$model->getKey();
+    }
+
+    /**
+     * Name of the student a record hangs off, or null when it has none (or IS
+     * a student — no point repeating the name twice).
+     *
+     * Relations are already eager-loaded by warm()/resolve() via self::EAGER,
+     * so this costs no extra query; a record whose student row was deleted
+     * since simply yields null and the label stays as it was.
+     */
+    private function studentNameOf(Model $model): ?string
+    {
+        if ($model instanceof Student) {
+            return null;
+        }
+
+        $student = match (true) {
+            $model instanceof InscriptionFee => $model->inscription?->student,
+            $model instanceof Inscription => $model->student,
+            $model instanceof Encaissement => $model->student,
+            $model instanceof Cheque => $model->student,
+            default => null,
+        };
+
+        if ($student === null) {
+            return null;
+        }
+
+        $name = trim((string) $student->nomComplet());
+
+        return $name === '' ? null : $name;
     }
 }

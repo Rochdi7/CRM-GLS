@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { Link, router } from '@inertiajs/react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
+import Modal from '@/Components/Modals/Modal';
 import SelectField from '@/Components/Forms/SelectField';
 import DateField from '@/Components/Forms/DateField';
 import TableToolbar from '@/Components/Tables/TableToolbar';
@@ -85,6 +87,14 @@ export default function AbsenceParGroupe({
         );
     }
 
+    // « Fonctionnalité en test » — shown on EVERY arrival on this tab (no
+    // localStorage, no dismissal memory): the matrix is still being verified
+    // against the real registers, so every user must be told each time they
+    // open it that what they read here is not yet authoritative. Plain React
+    // state initialised to true, so an Inertia partial reload (a filter
+    // change, which keeps the component mounted) does NOT re-open it — only
+    // a real navigation to the tab does.
+    const [showTestNotice, setShowTestNotice] = useState(true);
     const filterReset = useFilterReset(filters, reload);
     const hasGroup = filters.groupFilter !== '';
     const exportUrl = `/backoffice/seances/absence-par-groupe/export?${new URLSearchParams(filters).toString()}`;
@@ -98,6 +108,43 @@ export default function AbsenceParGroupe({
                 { label: 'Absence par groupe' },
             ]}
         >
+            <Modal
+                show={showTestNotice}
+                title="Fonctionnalité en cours de test"
+                onClose={() => setShowTestNotice(false)}
+                footer={
+                    <button type="button" className="btn btn-primary" onClick={() => setShowTestNotice(false)}>
+                        J'ai compris
+                    </button>
+                }
+            >
+                <div className="text-center mb-3">
+                    <span className="avatar avatar-xl bg-warning-transparent text-warning rounded-circle">
+                        <i className="ti ti-flask fs-24" />
+                    </span>
+                </div>
+                <p>
+                    L'onglet <strong>« Absence par groupe »</strong> est encore en <strong>phase de test</strong>. La
+                    matrice affichée est calculée à partir des présences déjà saisies, mais elle n'a pas encore été
+                    validée comme document de référence.
+                </p>
+                <ul className="mb-0 ps-3">
+                    <li>
+                        Une case <strong>vide</strong> signifie que la séance n'a pas encore été pointée — ce n'est pas
+                        une absence.
+                    </li>
+                    <li>
+                        <strong>P</strong> = présent, <strong>Q</strong> = absent, d'après la saisie faite dans
+                        « Saisir l'absence ».
+                    </li>
+                    <li>
+                        Avant toute décision (relance, facturation, attestation), vérifiez la séance concernée dans son
+                        détail.
+                    </li>
+                    <li>Si un chiffre vous semble faux, signalez-le plutôt que de le corriger à la main.</li>
+                </ul>
+            </Modal>
+
             <ul className="nav nav-tabs mb-3" role="tablist">
                 <li className="nav-item" role="presentation">
                     <Link href="/backoffice/seances" className="nav-link fw-medium" role="tab" aria-selected="false">
@@ -123,6 +170,16 @@ export default function AbsenceParGroupe({
                     </button>
                 </li>
             </ul>
+
+            {/* Permanent reminder once the modal is closed — the popup is
+                seen on arrival, this line keeps the caveat on screen while
+                the user actually reads the matrix. */}
+            <div className="alert alert-warning d-flex align-items-center gap-2 mb-3" role="status">
+                <i className="ti ti-flask fs-18" />
+                <span>
+                    Fonctionnalité en cours de test — une case vide signifie « séance non pointée », pas une absence.
+                </span>
+            </div>
 
             <Card bodyClassName="p-0 py-3">
                 <div className="px-3 pt-2">

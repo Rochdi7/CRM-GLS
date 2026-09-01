@@ -81,7 +81,14 @@ final class ValiderTransfertCaisse
                 (float) $transfer->montant,
                 "Transfert {$transfer->reference} vers {$destination->nom}",
                 $transfer,
-                ['caisse_destination' => $destination->nom, 'valide_par' => $validatedBy->nomComplet()],
+                [
+                    'caisse_destination' => $destination->nom,
+                    'valide_par' => $validatedBy->nomComplet(),
+                    // Centre dimension (01/09/2026): each leg carries its own
+                    // account's centre, so a cross-centre transfer is an
+                    // EXPLICIT, journaled centre movement — never a hidden one.
+                    'etablissement_id' => $source->etablissement_id,
+                ],
             );
 
             $this->ledger->credit(
@@ -89,7 +96,11 @@ final class ValiderTransfertCaisse
                 (float) $transfer->montant,
                 "Transfert {$transfer->reference} depuis {$source->nom}",
                 $transfer,
-                ['caisse_source' => $source->nom, 'valide_par' => $validatedBy->nomComplet()],
+                [
+                    'caisse_source' => $source->nom,
+                    'valide_par' => $validatedBy->nomComplet(),
+                    'etablissement_id' => $destination->etablissement_id,
+                ],
             );
 
             $source->refresh();

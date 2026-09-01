@@ -120,6 +120,7 @@ final class EmployeeController extends Controller
 
         $data = $request->validated();
         $payload = $this->buildPayload($data, $request, $employee);
+        $ancienCentrePrincipal = (int) $employee->etablissement_id;
 
         DB::transaction(function () use ($employee, $payload, $data, $request): void {
             $employee->update($payload);
@@ -134,8 +135,27 @@ final class EmployeeController extends Controller
             }
         });
 
-        return redirect()->route('backoffice.employees.index')
+        $redirect = redirect()->route('backoffice.employees.index')
             ->with('success', __('Employee updated.'));
+
+        // A profile edit NEVER moves a caisse (production-safety rule,
+        // 01/09/2026): when the primary centre changed and the employee's
+        // till is still attached to another centre, say so out loud instead
+        // of silently relocating money. Re-homing an (empty, movement-free)
+        // till stays an explicit super-admin action on Comptes de caisse.
+        $employee->refresh();
+        $till = $employee->till()->with('etablissement')->first();
+
+        if ((int) $employee->etablissement_id !== $ancienCentrePrincipal
+            && $till !== null
+            && (int) $till->etablissement_id !== (int) $employee->etablissement_id) {
+            $redirect->with('warning', __("The employee's till stays attached to :centre (balance: :solde DH). A profile edit never moves money.", [
+                'centre' => $till->etablissement?->nom_centre ?? __('its current centre'),
+                'solde' => number_format((float) $till->solde, 2, ',', ' '),
+            ]));
+        }
+
+        return $redirect;
     }
 
     public function destroy(Employee $employee): RedirectResponse

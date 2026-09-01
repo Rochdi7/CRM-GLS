@@ -180,7 +180,15 @@ final class RecalculerSoldesCaisses extends Command
         /** @var Caisse $from */
         $from = $move['from'];
         $model = $move['model'];
-        $extra = ['reclassement' => true, 'methode' => $move['methode'], 'caisse_origine' => $from->nom, 'caisse_cible' => $target->nom];
+        $extra = [
+            'reclassement' => true,
+            'methode' => $move['methode'],
+            'caisse_origine' => $from->nom,
+            'caisse_cible' => $target->nom,
+            // Centre dimension: the re-homed payment's own centre (both legs
+            // reverse/apply the same underlying operation).
+            'etablissement_id' => $model->etablissement_id,
+        ];
 
         if ($move['table'] !== 'encaissements') {
             // Defensive: only payments are ever re-homed (see class docblock).

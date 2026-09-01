@@ -508,6 +508,11 @@ export default function InscriptionsIndex({
         note: '',
         transfer_fee_ids: [],
     });
+    // « Modification du groupe » — the in-place sibling of « Changement de
+    // groupe » : corrects group_id on the SAME inscription (no archival, no
+    // new row), so every fee line and payment follows automatically.
+    const [modifyGroupTarget, setModifyGroupTarget] = useState<InscriptionRow | null>(null);
+    const modifyGroupForm = useForm<{ new_group_id: number | '' }>({ new_group_id: '' });
     // "Transférer des frais" — the current inscription's paid / partially
     // paid lines the user may carry over (with their payments) to the new
     // inscription instead of leaving them in the archived one.
@@ -521,6 +526,14 @@ export default function InscriptionsIndex({
 
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.label }));
     const groupOptions: SelectOption[] = groups.map((g) => ({ value: g.id, label: g.label }));
+    // « Modification du groupe » is STRICTLY limited to inscriptions whose
+    // CURRENT group is still « En inscription »: the in-place move is for a
+    // student who paid and switches before classes start. Once the current
+    // group is « En formation » the flow is « Changement de groupe »
+    // (archive + successor). The TARGET group is not restricted — joining a
+    // running group is a normal enrollment. Server re-checks in
+    // ModifierGroupeInscription.
+    const enInscriptionGroupIds = new Set(groups.filter((g) => g.statut === 'En inscription').map((g) => g.id));
     // A catalog fee already present on this inscription disappears from the
     // « Ajouter un frais du catalogue… » dropdown — the same fee is never
     // charged twice on one inscription, so once it is added (or restored) the
@@ -1211,6 +1224,29 @@ export default function InscriptionsIndex({
         });
     }
 
+    function openModifyGroup(inscription: InscriptionRow) {
+        setModifyGroupTarget(inscription);
+        modifyGroupForm.clearErrors();
+        modifyGroupForm.setData({ new_group_id: '' });
+    }
+
+    function closeModifyGroup() {
+        setModifyGroupTarget(null);
+        modifyGroupForm.clearErrors();
+    }
+
+    function submitModifyGroup(event: FormEvent) {
+        event.preventDefault();
+        if (!modifyGroupTarget) {
+            return;
+        }
+
+        modifyGroupForm.post(`/backoffice/inscriptions/${modifyGroupTarget.id}/modify-group`, {
+            preserveScroll: true,
+            onSuccess: () => closeModifyGroup(),
+        });
+    }
+
     return (
         <BackofficeLayout
             title="Inscriptions"
@@ -1343,6 +1379,16 @@ export default function InscriptionsIndex({
                                             {canChangeGroup && inscription.statut === 'Active' && (
                                                 <>
                                                     <RowActionDivider />
+                                                    {/* In-place correction: same inscription, only the
+                                                        group changes — fees and payments follow. Only
+                                                        while the CURRENT group is still « En
+                                                        inscription » (before classes start); after
+                                                        that, « Changement de groupe » is the flow. */}
+                                                    {inscription.groupId !== null && enInscriptionGroupIds.has(inscription.groupId) && (
+                                                        <RowActionItem icon="ti-pencil" onClick={() => openModifyGroup(inscription)}>
+                                                            Modification du groupe
+                                                        </RowActionItem>
+                                                    )}
                                                     <RowActionItem icon="ti-replace" onClick={() => openChangeGroup(inscription)}>
                                                         Changement de groupe
                                                     </RowActionItem>
@@ -2992,6 +3038,55 @@ export default function InscriptionsIndex({
 
                         <div className="d-flex justify-content-end gap-2 mt-4">
                             <FormActions onCancel={closeChangeGroup} processing={changeGroupForm.processing} submitLabel="Confirmer" />
+                        </div>
+                    </form>
+                )}
+            </Modal>
+
+            <Modal
+                show={modifyGroupTarget !== null}
+                title={`Modification du groupe : ${modifyGroupTarget?.student ?? ''}`}
+                onClose={closeModifyGroup}
+                processing={modifyGroupForm.processing}
+            >
+                {modifyGroupTarget && (
+                    <form onSubmit={submitModifyGroup} onKeyDown={blockImplicitSubmit}>
+                        <div className="alert alert-info">
+                            L'inscription est simplement déplacée vers le groupe choisi — aucune nouvelle
+                            inscription n'est créée et l'ancienne n'est pas archivée. Tous les frais (payés
+                            inclus) et leurs paiements suivent automatiquement. Possible uniquement tant que
+                            le groupe actuel est encore « En inscription » : dès que sa formation a commencé,
+                            utilisez « Changement de groupe ».
+                        </div>
+
+                        <div className="row">
+                            <div className="col-12">
+                                <FormField
+                                    id="mg-groupe-actuel"
+                                    label="Groupe actuel"
+                                    value={modifyGroupTarget.groupe ?? '—'}
+                                    readOnly
+                                    disabled
+                                />
+                            </div>
+                            <div className="col-12">
+                                <SelectField
+                                    id="mg-groupe"
+                                    label="Nouveau groupe"
+                                    required
+                                    options={groupOptions.filter((g) => g.value !== modifyGroupTarget.groupId)}
+                                    placeholder="Choisir une formation"
+                                    value={modifyGroupForm.data.new_group_id}
+                                    onChange={(event) =>
+                                        modifyGroupForm.setData('new_group_id', event.target.value ? Number(event.target.value) : '')
+                                    }
+                                    error={modifyGroupForm.errors.new_group_id}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="d-flex justify-content-end gap-2 mt-4">
+                            <FormActions onCancel={closeModifyGroup} processing={modifyGroupForm.processing} submitLabel="Confirmer" />
                         </div>
                     </form>
                 )}

@@ -10,6 +10,7 @@ use App\Models\Employee;
 use App\Models\Encaissement;
 use App\Models\Remboursement;
 use App\Domain\Finance\Support\CaisseLedger;
+use App\Services\Context\CurrentContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -19,7 +20,10 @@ use Illuminate\Validation\ValidationException;
  */
 final class EnregistrerRemboursement
 {
-    public function __construct(private readonly CaisseLedger $ledger) {}
+    public function __construct(
+        private readonly CaisseLedger $ledger,
+        private readonly CurrentContext $context,
+    ) {}
 
     /**
      * @param array<string, mixed> $data validated StoreRemboursementRequest data
@@ -27,6 +31,8 @@ final class EnregistrerRemboursement
     public function handle(array $data, Employee $agent): Remboursement
     {
         return DB::transaction(function () use ($data, $agent): Remboursement {
+            $encaissement = null;
+
             if (! empty($data['encaissement_id'])) {
                 // Locked: the same row's remaining balance is what
                 // AppliquerAvance spends, so a refund and an application
@@ -89,7 +95,18 @@ final class EnregistrerRemboursement
                 (float) $data['montant'],
                 "Remboursement {$remboursement->reference}",
                 $remboursement,
-                ['beneficiaire_id' => $remboursement->beneficiaire_id],
+                [
+                    'beneficiaire_id' => $remboursement->beneficiaire_id,
+                    // Centre dimension (01/09/2026): a refund REVERSES a
+                    // financial context, so a linked refund carries the
+                    // ORIGINAL payment's centre — never the student's
+                    // current one (they may have moved centre since). An
+                    // unlinked refund has no original context: the active
+                    // context centre, falling back to the agent's primary.
+                    'etablissement_id' => $encaissement?->etablissement_id
+                        ?? $this->context->etablissementId()
+                        ?? $agent->etablissement_id,
+                ],
             );
 
             return $remboursement;

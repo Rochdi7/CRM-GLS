@@ -67,6 +67,12 @@ final class EnregistrerEncaissement
                     'methode' => $encaissement->methode,
                     'etudiant_id' => $encaissement->student_id,
                     'agent' => $agent->nomComplet(),
+                    // Centre dimension of the movement (01/09/2026): the
+                    // payment's own centre, stamped at write time so a
+                    // multi-centre cashier's single till can be broken down
+                    // per centre from the ledger alone. Historical entries
+                    // lack the key — read-time fallback, never a backfill.
+                    'etablissement_id' => $encaissement->etablissement_id,
                 ],
             );
 

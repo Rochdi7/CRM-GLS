@@ -57,7 +57,12 @@ final class SupprimerEncaissement
                     (float) $locked->montant,
                     "Annulation de l'encaissement {$locked->reference}",
                     $locked,
-                    ['motif_detail' => 'Suppression du paiement'],
+                    [
+                        'motif_detail' => 'Suppression du paiement',
+                        // Reversal carries the ORIGINAL payment's centre —
+                        // the same context it credits back out of.
+                        'etablissement_id' => $locked->etablissement_id,
+                    ],
                 );
             }
 

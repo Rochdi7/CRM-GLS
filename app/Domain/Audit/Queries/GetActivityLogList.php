@@ -6,6 +6,7 @@ namespace App\Domain\Audit\Queries;
 
 use App\Models\Activity;
 use App\Models\Caisse;
+use App\Models\Student;
 use App\Models\User;
 use App\Support\Audit\AuditLogRegistry;
 use App\Support\Audit\AuditValueResolver;
@@ -412,19 +413,59 @@ final class GetActivityLogList
 
         if ($subject === null) {
             // The record may have been deleted — the entry still stands, and
-            // the id is what remains to identify it.
-            return $a->subject_id !== null ? '#'.$a->subject_id : null;
+            // the id is what remains to identify it. That is precisely when a
+            // name matters most (a deleted payment is what someone comes to
+            // the journal to trace), so fall back to the student recorded IN
+            // the entry rather than showing a bare "#23983".
+            $reference = $a->subject_id !== null ? '#'.$a->subject_id : null;
+            $student = $this->recordedStudentName($a);
+
+            return match (true) {
+                $student === null => $reference,
+                $reference === null => $student,
+                default => $reference.' — '.$student,
+            };
         }
 
         foreach (['reference', 'nom_centre', 'nom'] as $attribute) {
             $value = $subject->getAttribute($attribute);
 
             if (is_string($value) && $value !== '') {
-                return $value;
+                $student = $this->recordedStudentName($a);
+
+                return $student === null ? $value : $value.' — '.$student;
             }
         }
 
         return '#'.$a->subject_id;
+    }
+
+    /**
+     * Student named by the entry's own recorded values — read from the frozen
+     * `student_id` the log holds, never from the (possibly deleted) subject.
+     *
+     * The journal stays the literal record of what was written; this only
+     * looks up how that stored id reads today, exactly like AuditValueResolver
+     * does for every other foreign key.
+     */
+    private function recordedStudentName(Activity $a): ?string
+    {
+        $changes = $a->attribute_changes?->toArray() ?? [];
+        $id = $changes['old']['student_id'] ?? $changes['attributes']['student_id'] ?? null;
+
+        if (! is_numeric($id)) {
+            return null;
+        }
+
+        $student = Student::query()->find((int) $id);
+
+        if ($student === null) {
+            return null;
+        }
+
+        $name = trim($student->nomComplet());
+
+        return $name === '' ? null : $name;
     }
 
     private function eventLabel(?string $event): ?string

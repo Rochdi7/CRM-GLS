@@ -670,6 +670,7 @@
     "Registration created.": "Inscription créée.",
     "Registration date": "Date d’inscription",
     "Registration deleted.": "Inscription supprimée.",
+    "Registration group updated.": "Groupe de l'inscription modifié.",
     "Registration moved to the new group.": "Inscription déplacée vers le nouveau groupe.",
     "Registration updated.": "Inscription mise à jour.",
     "Registrations": "Inscriptions",
@@ -842,6 +843,8 @@
     "The selected till is invalid.": "La caisse sélectionnée est invalide.",
     "The selected till is not accessible from your center.": "La caisse sélectionnée n'est pas accessible depuis votre centre.",
     "The student import stopped making progress — check the batch in Recent imports.": "L'import des étudiants n'avance plus — consultez le lot dans « Imports récents ».",
+    "The registration is already in this group.": "L'inscription est déjà dans ce groupe.",
+    "The current group has already started — use \"Changement de groupe\" instead.": "Le groupe actuel a déjà commencé — utilisez « Changement de groupe » à la place.",
     "The student of a registration with recorded payments cannot be changed.": "L'étudiant d'une inscription ayant des paiements enregistrés ne peut pas être modifié.",
     "The technical account is always recorded; this only shows it.": "Le compte technique est toujours enregistré ; ceci l'affiche seulement.",
     "Theme Colors": "Couleurs du thème",
@@ -1100,5 +1103,7 @@
     "This group has séances and cannot be deleted. Cancel or close it instead.": "Ce groupe porte des séances et ne peut pas être supprimé. Annulez-le ou clôturez-le à la place.",
     "This group has :count payment(s) attached and cannot be deleted. Handle the payments first.": "Ce groupe a reçu :count paiement(s) et ne peut pas être supprimé. Traitez d'abord les paiements.",
     "Type the exact group name to confirm the deletion.": "Retapez le nom exact du groupe pour confirmer la suppression.",
-    "Group :name and its :count registrations were permanently deleted.": "Le groupe :name et ses :count inscription(s) ont été supprimés définitivement."
+    "Group :name and its :count registrations were permanently deleted.": "Le groupe :name et ses :count inscription(s) ont été supprimés définitivement.",
+    "The employee's till stays attached to :centre (balance: :solde DH). A profile edit never moves money.": "La caisse de l'employé reste rattachée à :centre (solde : :solde DH). La modification du profil ne déplace jamais d'argent.",
+    "its current centre": "son centre actuel"
 }

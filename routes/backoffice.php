@@ -378,6 +378,11 @@ Route::prefix('backoffice')
                 ->middleware('permission:registrations.manage-fees')->name('inscriptions.fees.restore');
             Route::post('inscriptions/{inscription}/change-group', [InscriptionController::class, 'changeGroup'])
                 ->middleware('permission:registrations.change-group')->name('inscriptions.change-group');
+            // In-place variant: edits group_id on the SAME inscription (no
+            // archival, no successor row) — fees and payments follow. Same
+            // gate as change-group: both move a student between groups.
+            Route::post('inscriptions/{inscription}/modify-group', [InscriptionController::class, 'modifyGroup'])
+                ->middleware('permission:registrations.change-group')->name('inscriptions.modify-group');
             // Books (Chèques-module-style "Livre" stock) assigned to a
             // registration — see AssignerLivresInscription; the same
             // registrations.manage-fees gate as fee-line editing, since both

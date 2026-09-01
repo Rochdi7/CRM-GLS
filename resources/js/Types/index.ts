@@ -1270,6 +1270,11 @@ export interface InscriptionFormOption {
     label: string;
 }
 
+/** Group option with its statut — « Modification du groupe » only offers groups still « En inscription » (server re-checks in ModifierGroupeInscription). */
+export interface InscriptionGroupOption extends InscriptionFormOption {
+    statut: string;
+}
+
 /** One "Frais disponible" line loaded from the selected group (GetGroupInscriptionFees). */
 /** Catalog fee for the edit modal's "Ajouter un frais" select; montantDefaut is the fallback amount when the group assigns no own amount. */
 export interface InscriptionFraisOption extends InscriptionFormOption {
@@ -1343,7 +1348,7 @@ export interface InscriptionsPageProps {
     niveauStudium: string;
     defaultCountry: string;
     students: InscriptionFormOption[];
-    groups: InscriptionFormOption[];
+    groups: InscriptionGroupOption[];
     /** Active fee catalog — feeds the edit modal's "Ajouter un frais" picker. */
     frais: InscriptionFraisOption[];
     /** UI convenience only — hides the edit-modal fee controls; real enforcement is registrations.manage-fees on the server (InscriptionController::updateFees). */

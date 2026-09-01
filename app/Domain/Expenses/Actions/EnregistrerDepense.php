@@ -7,7 +7,9 @@ namespace App\Domain\Expenses\Actions;
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Models\Depense;
 use App\Models\Employee;
+use App\Models\Group;
 use App\Domain\Finance\Support\CaisseLedger;
+use App\Services\Context\CurrentContext;
 use App\Support\Settings\AppSettings;
 use Illuminate\Support\Facades\DB;
 
@@ -28,7 +30,10 @@ use Illuminate\Support\Facades\DB;
  */
 final class EnregistrerDepense
 {
-    public function __construct(private readonly CaisseLedger $ledger) {}
+    public function __construct(
+        private readonly CaisseLedger $ledger,
+        private readonly CurrentContext $context,
+    ) {}
 
     /**
      * @param array<string, mixed> $data validated StoreDepenseRequest data
@@ -60,6 +65,15 @@ final class EnregistrerDepense
                     [
                         'type_depense_id' => $depense->type_depense_id,
                         'methode' => $depense->methode_paiement,
+                        // Centre dimension (01/09/2026): a « Paiement prof »
+                        // belongs to its GROUP's centre; an ordinary dépense
+                        // to the centre the cashier is working in (active
+                        // context), falling back to their primary centre.
+                        'etablissement_id' => ($depense->group_id !== null
+                                ? Group::query()->whereKey($depense->group_id)->value('etablissement_id')
+                                : null)
+                            ?? $this->context->etablissementId()
+                            ?? $agent->etablissement_id,
                     ],
                 );
             }

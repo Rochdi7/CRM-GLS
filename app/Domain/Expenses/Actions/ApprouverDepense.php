@@ -7,6 +7,7 @@ namespace App\Domain\Expenses\Actions;
 use App\Domain\Finance\Support\CaisseLedger;
 use App\Models\Depense;
 use App\Models\Employee;
+use App\Models\Group;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -47,6 +48,18 @@ final class ApprouverDepense
                     'type_depense_id' => $locked->type_depense_id,
                     'methode' => $locked->methode_paiement,
                     'approuve_par' => $approvedBy->nomComplet(),
+                    // Centre dimension (01/09/2026): the group's centre for
+                    // a « Paiement prof », else the CREATOR's primary centre
+                    // — never the approver's context: the approver is a
+                    // super-admin possibly working from « Tous les centres »,
+                    // and the expense belongs to where it was incurred, not
+                    // where it was approved. (The creation-time context is
+                    // not persisted — depenses has no centre column — so the
+                    // creator's primary is the best stable derivation.)
+                    'etablissement_id' => ($locked->group_id !== null
+                            ? Group::query()->whereKey($locked->group_id)->value('etablissement_id')
+                            : null)
+                        ?? Employee::query()->whereKey($locked->agent_id)->value('etablissement_id'),
                 ],
             );
 

@@ -42,7 +42,11 @@ final class GetInscriptionFormOptions
     }
 
     /**
-     * @return Collection<int, array{id: int, label: string}>
+     * `statut` rides along for the « Modification du groupe » modal, whose
+     * dropdown (and row action) is limited to groups still « En inscription »
+     * — UI convenience only, ModifierGroupeInscription re-checks it.
+     *
+     * @return Collection<int, array{id: int, label: string, statut: string}>
      */
     public function groups($user): Collection
     {
@@ -56,7 +60,7 @@ final class GetInscriptionFormOptions
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
             ->orderBy('nom')
             ->get()
-            ->map(fn (Group $g): array => ['id' => $g->id, 'label' => "{$g->nom} — {$g->niveau}"]);
+            ->map(fn (Group $g): array => ['id' => $g->id, 'label' => "{$g->nom} — {$g->niveau}", 'statut' => $g->statut]);
     }
 
     /**

@@ -9,6 +9,7 @@ use App\Domain\Registrations\Actions\AssignerLivresInscription;
 use App\Domain\Registrations\Actions\BasculerVisibiliteFraisInscription;
 use App\Domain\Registrations\Actions\ChangerGroupeInscription;
 use App\Domain\Registrations\Actions\MettreAJourFraisInscription;
+use App\Domain\Registrations\Actions\ModifierGroupeInscription;
 use App\Domain\Registrations\Queries\GetGroupInscriptionFees;
 use App\Domain\Registrations\Queries\GetInscriptionDetails;
 use App\Domain\Registrations\Queries\GetInscriptionFormOptions;
@@ -19,6 +20,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Requests\Backoffice\Inscriptions\CancelInscriptionRequest;
 use App\Http\Requests\Backoffice\Inscriptions\ChangeGroupInscriptionRequest;
+use App\Http\Requests\Backoffice\Inscriptions\ModifyGroupInscriptionRequest;
 use App\Http\Requests\Backoffice\Inscriptions\StoreInscriptionRequest;
 use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionFeesRequest;
 use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionLivresRequest;
@@ -644,6 +646,33 @@ final class InscriptionController extends Controller
             ->with('success', __('Registration moved to the new group.'));
     }
 
+    /**
+     * "Modification du groupe" — corrects group_id IN PLACE on this
+     * inscription (ModifierGroupeInscription), the lightweight sibling of
+     * changeGroup(): no historique snapshot, no successor row. Every fee
+     * line — paid included — and every Encaissement stays attached to the
+     * same inscription, so the money follows the student into the new group
+     * with nothing rewritten. Same gate as changeGroup()
+     * (registrations.change-group): both actions move a student between
+     * groups, only the record-keeping differs.
+     */
+    public function modifyGroup(
+        ModifyGroupInscriptionRequest $request,
+        Inscription $inscription,
+        ModifierGroupeInscription $action,
+    ): RedirectResponse {
+        $this->authorize('changeGroup', $inscription);
+        $this->assertInscriptionInContext($request, $inscription, 'new_group_id');
+
+        $newGroup = Group::findOrFail((int) $request->validated()['new_group_id']);
+        $this->assertGroupInContext($request, $newGroup, 'new_group_id');
+
+        $action->handle($inscription, $newGroup);
+
+        return redirect()->route('backoffice.inscriptions.index')
+            ->with('success', __('Registration group updated.'));
+    }
+
     public function update(UpdateInscriptionRequest $request, Inscription $inscription): RedirectResponse
     {
         $this->authorize('update', $inscription);
@@ -672,8 +701,10 @@ final class InscriptionController extends Controller
         // confirmed asymmetry, see docs/phase-9-inscriptions-audit.md §12).
         // group_id is deliberately never accepted here — moving a student to
         // another group only ever happens through changeGroup()
-        // (ChangerGroupeInscription: fee migration + archival snapshot +
-        // registrations.change-group gate), never a silent field swap.
+        // (ChangerGroupeInscription: fee migration + archival snapshot) or
+        // modifyGroup() (ModifierGroupeInscription: in-place correction),
+        // both behind the registrations.change-group gate, never a silent
+        // field swap.
         $inscription->update([
             'student_id' => $data['student_id'],
             'date_inscription' => $data['date_inscription'],

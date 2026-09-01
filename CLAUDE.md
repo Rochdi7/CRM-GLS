@@ -328,6 +328,37 @@ the database layer. Non-negotiable invariants already enforced in code:
   replaced. The ledger records solde avant → montant → solde après plus the
   source record, and transfers must journal BOTH legs. See
   `docs/audit-journal.md` §5b.
+- **Centre dimension on the ledger — ONE till per employee, forever**
+  (01/09/2026, after Fatine Barnicha's till sat in GLS Online with 2 200 DH
+  while she cashed in Rabat). The multi-caisse-per-centre model was proposed
+  and REJECTED: an employee keeps exactly ONE « Caissière » till
+  (`caisses_une_caissiere_par_employe` — never drop it). Instead, EVERY
+  `CaisseLedger` entry stamps `etablissement_id` in its jsonb properties (no
+  schema change), so one till breaks down per centre from the ledger alone:
+  - **encaissement** → the payment's own `etablissement_id`; **suppression**
+    → the reversed payment's centre;
+  - **remboursement lié** → the ORIGINAL payment's centre (a refund reverses
+    a financial context — never the student's CURRENT centre, they may have
+    moved); **non lié** → active context, fallback agent primary;
+  - **dépense** → group centre (Paiement prof) else active context else
+    creator primary; at APPROVAL → group centre else CREATOR's primary,
+    never the approver's context (approvers work from « Tous les centres »);
+  - **transfert** → each leg stamps its own caisse's centre (a cross-centre
+    transfer is an explicit, journaled centre movement).
+  Query the entries with `event = 'solde_movement'` — the Caisse model's own
+  Auditable entries share `log_name = 'caisse'`. Historical entries lack the
+  key: read-time fallback (« Centre du compte »), NEVER a backfill.
+  `caisses.solde` stays the only authoritative total; per-centre figures are
+  always derived. Three companion rules: (1) **a profile edit never moves a
+  caisse** — `Employee::syncEtablissements()` re-points only
+  `employees.etablissement_id`, and `EmployeeController@update` flashes a
+  `warning` when the till's centre now diverges; (2) re-homing a caisse goes
+  ONLY through the existing `CaisseController@update` path, which refuses
+  once the caisse carries any movement (`hasMovements`, stricter than
+  solde = 0) — never add a weaker action; (3) **`caisses.etablissement_id`
+  keeps its stored meaning** — never reinterpret it at read time (e.g. via
+  the responsable's primary centre) to make a screen look right. Tests:
+  `tests/Feature/Backoffice/Finance/CentreDimensionLedgerTest.php`.
 - **One dirham = one `caisses` row — payment-method accounts per centre**
   (24/08/2026, `docs/caisse-comptes-methode-architecture.md`). `Caisse::TYPES`
   = Caissière / Externe (physical CASH) + TPE / Chèque / Virement (ONE account
