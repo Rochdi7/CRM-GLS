@@ -48,6 +48,6 @@ final class RecuController extends Controller
             return $this->landingResponse($request, collect([$encaissement]));
         }
 
-        return $this->pdfResponse($renderer->render($encaissement), $renderer->filename($encaissement));
+        return $this->pdfResponse($request, $renderer->render($encaissement), $renderer->filename($encaissement));
     }
 }

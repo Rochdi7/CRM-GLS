@@ -12,6 +12,18 @@
 
     Aucune donnée d'un autre dossier, aucun lien vers le CRM : cette page est
     publique par nécessité et un message WhatsApp se transfère.
+
+    ⚠ Deux comportements selon l'appareil (01/09/2026, vérifié sources WebKit) :
+    - HORS iOS : le téléchargement démarre TOUT SEUL (navigation vers
+      `?download=1`, servi en `attachment` — la page reste affichée) ; le
+      bouton reste le plan B.
+    - iOS (iPhone/iPad) : un téléchargement forcé N'EXISTE PAS — WebKit
+      ignore `attachment` pour les types qu'il sait afficher, et la webview
+      WhatsApp avale même le clic (bugs WebKit 216918/167341). Le bouton
+      ouvre donc le PDF DANS la visionneuse (`inline`, décidé côté serveur
+      sur le User-Agent) et le texte sous le bouton explique le seul chemin
+      d'enregistrement qui marche : Partager → « Enregistrer dans Fichiers ».
+    Ne pas « unifier » les deux : c'est la plateforme qui impose l'écart.
 --}}
 <!DOCTYPE html>
 <html lang="fr">
@@ -138,12 +150,35 @@
             </div>
         </dl>
 
-        {{-- `download` : sur un navigateur de bureau le fichier part
-             directement ; sur mobile c'est la feuille de partage iOS/Android
-             qui s'ouvre, avec « Enregistrer dans Fichiers ». --}}
-        <a class="btn" href="{{ $downloadUrl }}" download>Télécharger le reçu en PDF</a>
+        <a class="btn" id="dl" href="{{ $downloadUrl }}" @unless ($isIos) download @endunless>
+            {{ $isIos ? 'Ouvrir le reçu en PDF' : 'Télécharger le reçu en PDF' }}
+        </a>
+
+        @if ($isIos)
+            {{-- Le seul chemin d'enregistrement qui fonctionne sur iOS. --}}
+            <p class="note">
+                Le reçu s'ouvre à l'écran : touchez ensuite
+                <strong>Partager&nbsp;<span aria-hidden="true">⬆︎</span></strong>
+                puis «&nbsp;Enregistrer dans Fichiers&nbsp;» pour le garder.
+            </p>
+        @else
+            <p class="note" id="auto-note">Le téléchargement démarre automatiquement…</p>
+        @endif
 
         <p class="note">Lien valable {{ $ttlJours }} jours.</p>
     </div>
+
+    @unless ($isIos)
+        <script>
+            // Démarrage automatique HORS iOS uniquement : la réponse est en
+            // `attachment`, donc la navigation dépose le fichier sans quitter
+            // la page. Sur iOS la même navigation REMPLACERAIT la page par la
+            // visionneuse avant que l'étudiant ait lu comment enregistrer —
+            // et un téléchargement forcé n'y existe de toute façon pas.
+            setTimeout(function () {
+                window.location.href = document.getElementById('dl').href;
+            }, 600);
+        </script>
+    @endunless
 </body>
 </html>

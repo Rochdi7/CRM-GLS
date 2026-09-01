@@ -35,14 +35,39 @@ trait ServesRecuDownload
         return $request->boolean('download');
     }
 
-    /** Réponse PDF — pièce jointe, jamais mise en cache par un proxy partagé. */
-    private function pdfResponse(string $pdf, string $filename): Response
+    /**
+     * Réponse PDF — jamais mise en cache par un proxy partagé.
+     *
+     * ⚠ La disposition dépend de l'appareil, et ce n'est pas du zèle :
+     * `attachment` déclenche un vrai téléchargement sur ordinateur et sur
+     * Android, mais DANS la webview WhatsApp d'iOS le tap est avalé sans
+     * rien afficher — pas de gestionnaire de téléchargements là-dedans
+     * (constaté le 01/09/2026, « even click not download started »). Sur
+     * iOS on sert donc `inline` : le PDF s'ouvre dans la visionneuse
+     * native, dont la feuille de partage (« Enregistrer dans Fichiers »)
+     * est le SEUL chemin d'enregistrement qui fonctionne. Un téléchargement
+     * forcé n'existe pas sur iOS — ne pas re-tenter `attachment` partout.
+     */
+    private function pdfResponse(Request $request, string $pdf, string $filename): Response
     {
+        $disposition = $this->isIos($request) ? 'inline' : 'attachment';
+
         return response($pdf, 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            'Content-Disposition' => $disposition.'; filename="'.$filename.'"',
             'Cache-Control' => 'private, max-age=0, no-store',
         ]);
+    }
+
+    /**
+     * iPhone/iPad — y compris la webview WhatsApp, qui garde « iPhone OS »
+     * dans son User-Agent. Un iPad récent se présente comme macOS mais
+     * reste tactile ; on s'en tient aux marqueurs sûrs, le pire cas étant
+     * un iPad qui télécharge comme un Mac — ce qui fonctionne.
+     */
+    private function isIos(Request $request): bool
+    {
+        return (bool) preg_match('/iPhone|iPad|iPod/i', (string) $request->userAgent());
     }
 
     /**
@@ -82,10 +107,34 @@ trait ServesRecuDownload
                 'montant' => number_format((float) $e->montant, 2, ',', ' ').' MAD',
             ])->all(),
             'montantTotal' => number_format((float) $encaissements->sum('montant'), 2, ',', ' ').' MAD',
-            'downloadUrl' => $request->fullUrlWithQuery(['download' => 1]),
+            'downloadUrl' => $this->downloadUrl($request),
+            'isIos' => $this->isIos($request),
             'ttlJours' => RecuWhatsAppLink::TTL_DAYS,
         ], 200, [
             'Cache-Control' => 'private, max-age=0, no-store',
         ]);
+    }
+
+    /**
+     * URL du bouton = le chemin courant + la query reçue + `download=1`,
+     * en RELATIF.
+     *
+     * ⚠ Relatif volontairement, et surtout pas `URL::current()` ni
+     * `$request->fullUrlWithQuery()`. Les deux reconstruisent une URL
+     * ABSOLUE dont le schéma vient de la requête entrante : derrière le
+     * reverse proxy du VPS, Laravel voit `http` là où l'étudiant a reçu un
+     * lien `https`. Or la signature est calculée sur l'URL complète, schéma
+     * compris (UrlGenerator::hasCorrectSignature) — un bouton reconstruit en
+     * `http` porterait donc une signature invalide. Un lien relatif est
+     * résolu par le navigateur contre l'URL réellement visitée, celle-là
+     * même dont la signature vient d'être validée. Ne pas « corriger » en
+     * URL absolue.
+     */
+    private function downloadUrl(Request $request): string
+    {
+        $query = $request->query();
+        $query['download'] = 1;
+
+        return '/'.ltrim($request->path(), '/').'?'.http_build_query($query);
     }
 }

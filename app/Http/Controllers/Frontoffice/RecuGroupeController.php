@@ -77,6 +77,7 @@ final class RecuGroupeController extends Controller
             ->pluck('paye', 'inscription_fee_id');
 
         return $this->pdfResponse(
+            $request,
             $renderer->renderGroupe($encaissements, $payeParFee),
             $renderer->filenameGroupe($encaissements),
         );

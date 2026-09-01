@@ -247,6 +247,29 @@ final class RecuWhatsAppTest extends TestCase
         $response->assertSee('download=1', false);
     }
 
+    /**
+     * Le bouton doit être RELATIF.
+     *
+     * ⚠ La signature est calculée sur l'URL complète, schéma compris. Une URL
+     * absolue reconstruite à partir de la requête prend le schéma que voit
+     * Laravel — `http` derrière le reverse proxy du VPS, là où l'étudiant a
+     * reçu un lien `https` — et le bouton porterait alors une signature
+     * invalide. Un lien relatif est résolu contre l'URL réellement visitée.
+     */
+    public function test_the_download_button_is_relative_so_no_scheme_can_break_its_signature(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        $encaissement = $this->paymentFor($user, ['telephone' => '+212648430612']);
+
+        $url = (new RecuWhatsAppLink())->pdfUrl($encaissement);
+        auth()->logout();
+
+        $html = $this->get($url)->assertOk()->getContent();
+
+        $this->assertMatchesRegularExpression('#href="/recu/'.$encaissement->id.'\?[^"]*download=1"#', $html);
+        $this->assertStringNotContainsString('href="http', $html);
+    }
+
     public function test_the_download_flag_serves_the_pdf_without_any_login(): void
     {
         $user = $this->userWith('payments.view', 'payments.create');
@@ -271,6 +294,53 @@ final class RecuWhatsAppTest extends TestCase
      * FORME servie. Tout le reste doit rester couvert : un id réécrit avec le
      * drapeau ajouté ne doit pas passer.
      */
+    /**
+     * iOS ne SAIT PAS forcer un téléchargement : WebKit ignore `attachment`
+     * pour les types qu'il affiche, et la webview WhatsApp avale le clic
+     * (01/09/2026, bugs WebKit 216918/167341). Sur iPhone le PDF est donc
+     * servi `inline` — la visionneuse s'ouvre et sa feuille de partage
+     * (« Enregistrer dans Fichiers ») est le seul chemin d'enregistrement.
+     * Ne pas « unifier » vers attachment : c'est la plateforme qui impose ça.
+     */
+    public function test_an_iphone_gets_the_pdf_inline_because_ios_cannot_force_a_download(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        $encaissement = $this->paymentFor($user, ['telephone' => '+212648430612']);
+
+        $url = (new RecuWhatsAppLink())->pdfUrl($encaissement).'&download=1';
+        auth()->logout();
+
+        $response = $this->get($url, [
+            'User-Agent' => 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15',
+        ]);
+
+        $response->assertOk();
+        $this->assertStringStartsWith('inline;', (string) $response->headers->get('content-disposition'));
+        $this->assertStringStartsWith('%PDF-', $response->getContent());
+    }
+
+    public function test_the_landing_page_adapts_to_the_device(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        $encaissement = $this->paymentFor($user, ['telephone' => '+212648430612']);
+
+        $url = (new RecuWhatsAppLink())->pdfUrl($encaissement);
+        auth()->logout();
+
+        // iPhone : pas d'auto-démarrage (il remplacerait la page par la
+        // visionneuse), mais la marche à suivre pour enregistrer.
+        $ios = $this->get($url, [
+            'User-Agent' => 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15',
+        ])->assertOk();
+        $ios->assertSee('Enregistrer dans Fichiers');
+        $ios->assertDontSee('Le téléchargement démarre automatiquement');
+
+        // Ailleurs : le téléchargement part tout seul.
+        $desktop = $this->get($url)->assertOk();
+        $desktop->assertSee('Le téléchargement démarre automatiquement');
+        $desktop->assertDontSee('Enregistrer dans Fichiers');
+    }
+
     public function test_the_download_flag_does_not_weaken_the_signature(): void
     {
         $user = $this->userWith('payments.view', 'payments.create');
