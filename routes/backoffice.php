@@ -227,6 +227,12 @@ Route::prefix('backoffice')
             Route::post('groups/{group}/frais/{frai}/restore', [GroupController::class, 'restoreFee'])
                 ->middleware('permission:groups.update')->name('groups.frais.restore');
             Route::post('groups/{group}/archive', [GroupController::class, 'archive'])->name('groups.archive');
+            // ⚠ Super-admin only (groups.reopen est dans superAdminOnly()) :
+            // rouvre un groupe « Fin de formation » ou « Annulée ». Ne touche
+            // QUE le statut — paiements, inscriptions, séances et snapshot
+            // groups_historique sont laissés intacts (01/09/2026).
+            Route::post('groups/{group}/rouvrir', [GroupController::class, 'rouvrir'])
+                ->middleware('permission:groups.reopen')->name('groups.rouvrir');
             // Super-admin only (groups.move-year is in superAdminOnly()):
             // re-homes the group + inscriptions + séances + payments to
             // another année scolaire, same counts before and after.
@@ -476,6 +482,8 @@ Route::prefix('backoffice')
             // reçu porte l'identité d'un seul étudiant.
             Route::get('encaissements/recu-groupe', [EncaissementController::class, 'recuGroupe'])
                 ->middleware('permission:payments.view')->name('encaissements.recu-groupe');
+            Route::get('encaissements/recu-groupe/whatsapp', [EncaissementController::class, 'recuGroupeWhatsApp'])
+                ->middleware('permission:payments.view')->name('encaissements.recu-groupe.whatsapp');
             Route::get('encaissements/{encaissement}/recu', [EncaissementController::class, 'recu'])
                 ->middleware('permission:payments.view')->name('encaissements.recu');
             Route::post('encaissements/{encaissement}/recu/email', [EncaissementController::class, 'sendRecuEmail'])

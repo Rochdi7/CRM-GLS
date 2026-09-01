@@ -123,26 +123,9 @@ export default function AbsenceParGroupe({
                         <i className="ti ti-flask fs-24" />
                     </span>
                 </div>
-                <p>
-                    L'onglet <strong>« Absence par groupe »</strong> est encore en <strong>phase de test</strong>. La
-                    matrice affichée est calculée à partir des présences déjà saisies, mais elle n'a pas encore été
-                    validée comme document de référence.
+                <p className="mb-0 text-center">
+                    L'onglet <strong>« Absence par groupe »</strong> est encore en <strong>phase de test</strong>.
                 </p>
-                <ul className="mb-0 ps-3">
-                    <li>
-                        Une case <strong>vide</strong> signifie que la séance n'a pas encore été pointée — ce n'est pas
-                        une absence.
-                    </li>
-                    <li>
-                        <strong>P</strong> = présent, <strong>Q</strong> = absent, d'après la saisie faite dans
-                        « Saisir l'absence ».
-                    </li>
-                    <li>
-                        Avant toute décision (relance, facturation, attestation), vérifiez la séance concernée dans son
-                        détail.
-                    </li>
-                    <li>Si un chiffre vous semble faux, signalez-le plutôt que de le corriger à la main.</li>
-                </ul>
             </Modal>
 
             <ul className="nav nav-tabs mb-3" role="tablist">

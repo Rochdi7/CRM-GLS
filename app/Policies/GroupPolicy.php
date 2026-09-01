@@ -54,6 +54,23 @@ final class GroupPolicy extends ResourcePolicy
     }
 
     /**
+     * Rouvrir un groupe « Fin de formation » ou « Annulée »
+     * (Group::rouvrir). `groups.reopen` est dans
+     * PermissionRegistry::superAdminOnly() : aucun preset de rôle ne le
+     * porte, donc seul un super-admin (Gate::before) — ou un compte à qui
+     * la permission a été accordée à la main — l'atteint.
+     *
+     * Sortir d'un statut terminal remet le groupe dans les listes actives
+     * et le rend de nouveau inscriptible ; l'action ne détruit rien (ni
+     * paiement, ni inscription, ni séance), mais elle réécrit ce que
+     * l'établissement considérait comme un dossier clos.
+     */
+    public function reopen(User $user, Group $group): bool
+    {
+        return $user->can('groups.reopen') && $this->withinCenter($user, $group);
+    }
+
+    /**
      * `groups.move-year` sits in PermissionRegistry::superAdminOnly(): no
      * role preset carries it, so in practice only a super-admin (Gate::before)
      * or a hand-granted account reaches this.

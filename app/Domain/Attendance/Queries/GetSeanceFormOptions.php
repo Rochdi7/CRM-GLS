@@ -44,20 +44,67 @@ final class GetSeanceFormOptions
     }
 
     /**
+     * Teachers selectable on this screen: the ACTIVE centre only.
+     *
+     * Reach follows the `employee_etablissement` pivot, not only
+     * `employees.etablissement_id` (CLAUDE.md §16) — a teacher whose PRIMARY
+     * centre is elsewhere but who is assigned to this one must stay
+     * selectable, which is why this cannot use
+     * CenterAccessService::scopeAccessibleCenters() (it matches the column
+     * alone). Same rule the Groups form already applies
+     * (GetGroupFormOptions::enseignants()).
+     *
+     * On « Tous les centres » (super-admin, etablissementId() === null) there
+     * is no active centre to narrow to, so the list falls back to the centres
+     * the user actually reaches, exactly like salles() below — never every
+     * teacher of every branch.
+     *
+     * Reported 01/09/2026: « Saisir l'absence » in GLS Marrakech offered the
+     * teachers of all seven branches in its Employé dropdown.
+     *
      * @return list<array{value: int, label: string}>
      */
-    public function enseignants(): array
+    public function enseignants(User $user): array
     {
         return Employee::query()
             ->where('categorie', Employee::CATEGORIE_ENSEIGNANT)
             ->where('statut', Employee::STATUT_ACTIF)
+            ->tap(fn ($q) => $this->scopeEnseignantsToCenters($q, $user))
             ->orderBy('nom')
-            ->get(['id', 'nom', 'prenom'])
+            ->get(['id', 'nom', 'prenom', 'etablissement_id'])
             ->map(fn (Employee $employee): array => [
                 'value' => $employee->id,
                 'label' => $employee->nomComplet(),
             ])
             ->all();
+    }
+
+    /**
+     * Narrows a teacher query to the active centre, or — on « Tous les
+     * centres » — to the centres the user reaches. Matches the primary
+     * column OR the pivot; NULL-centre staff stay listed as global.
+     */
+    private function scopeEnseignantsToCenters($query, User $user): void
+    {
+        $active = $this->context->etablissementId();
+
+        if ($active !== null) {
+            $query->where(fn ($q) => $q->whereNull('etablissement_id')
+                ->orWhere('etablissement_id', $active)
+                ->orWhereHas('etablissements', fn ($e) => $e->where('etablissements.id', $active)));
+
+            return;
+        }
+
+        if ($this->centerAccess->hasGlobalAccess($user)) {
+            return;
+        }
+
+        $ids = $this->centerAccess->accessibleCenterIds($user);
+
+        $query->where(fn ($q) => $q->whereNull('etablissement_id')
+            ->orWhereIn('etablissement_id', $ids)
+            ->orWhereHas('etablissements', fn ($e) => $e->whereIn('etablissements.id', $ids)));
     }
 
     /**

@@ -130,7 +130,8 @@ It covers two families:
    account by hand — the READ went to the five management roles on
    31/08/2026, §5b), `expenses.approve`, `groups.move-year`,
    `payments.reallocate`, **`payments.update-date`** (re-dating money —
-   30/08/2026, §5b) — and `centers.access-all`, so that « Centres affectés »
+   30/08/2026, §5b), **`groups.reopen`** (rouvrir un groupe terminé/annulé —
+   01/09/2026, §5c) — and `centers.access-all`, so that « Centres affectés »
    on the employee form stays the one authority on center reach (§5b).
 
 ⚠ **`employees.create` is not in `superAdminOnly()` and does not need to be** —
@@ -225,8 +226,46 @@ Super-admins see everything via `Gate::before` regardless.
 Ce qu'**aucun** rôle ne porte (Gate::before uniquement) : n'importe quel
 `*.delete`, `employees.create`, `payments.update-date`, `expenses.approve`,
 `system-settings.*`, `banks.*`, `cancellation-reasons.*`,
-`cash-accounts.create/update/delete`, `groups.move-year`,
+`cash-accounts.create/update/delete`, `groups.move-year`, `groups.reopen`,
 `payments.reallocate`, `centers.access-all`.
+
+### Rouvrir un groupe terminé ou annulé (`groups.reopen`)
+
+Jusqu'au 01/09/2026 « Fin de formation » était **strictement irréversible** :
+ni l'écran de détail, ni le formulaire d'édition, ni `transitionnerStatut()`
+ne laissaient sortir de ce statut. Un « Terminer la formation » cliqué par
+erreur sur un groupe de 26 étudiants n'avait donc qu'une seule issue — un
+`UPDATE groups SET statut = …` en production, c'est-à-dire une modification
+qui **échappe au journal d'audit** (raw SQL, aucun événement Eloquent).
+Une correction intraçable est un plus mauvais compromis que la réouverture
+elle-même : d'où `groups.reopen`.
+
+La réouverture **ne touche que `statut`** (`Group::rouvrir()`), et la cible
+ne peut être qu'un statut actif (« En formation » / « En inscription ») —
+jamais l'autre statut terminal. Sont explicitement préservés :
+
+- **l'argent** : aucun encaissement, aucune avance, aucun frais d'inscription
+  n'est lu ni écrit (les enregistrements monétaires restent append-only,
+  CLAUDE.md §11) ;
+- les **inscriptions** et les **séances**, historique de présence compris ;
+- `date_fin_formation`, qui reste la date de fin **prévue** du groupe : elle
+  ne dépend pas du statut, et l'effacer réécrirait une donnée pédagogique ;
+- le snapshot **`groups_historique`**, conservé tel quel — c'est la trace que
+  la clôture a bien eu lieu, et `writeHistoriqueSnapshot()` le rafraîchira
+  (`updateOrCreate`) à la prochaine clôture réelle.
+
+« Annulée » se rouvre par le même chemin. Deux gardes en cohérence :
+`GroupPolicy@reopen` et `GroupController@rouvrir`, qui refuse un groupe non
+terminal.
+
+⚠ La réouverture ne passe **que** par sa propre route. `transitionnerStatut()`
+— le changement de statut incident de « Déplacer vers une autre année » —
+continue de refuser toute sortie de « Fin de formation », pour tout le monde
+y compris le super-admin : ce formulaire déplace des inscriptions, des séances
+et des paiements, et rouvrir un groupe au passage serait une décision majeure
+prise dans un écran qui parle d'autre chose. Rouvrir d'abord, déplacer
+ensuite. Tests : `tests/Feature/Backoffice/Groups/GroupReopenTest.php` et
+`GroupMoveYearTest::test_a_finished_group_never_leaves_fin_de_formation`.
 
 ### La date d'un encaissement (`payments.update-date`)
 

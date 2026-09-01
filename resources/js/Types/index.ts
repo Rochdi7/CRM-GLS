@@ -294,6 +294,9 @@ export interface GroupDetails {
     canArchive: boolean;
     isFinished: boolean;
     archiveUrl: string;
+    /** Super-admin only, and only on a terminal group: reopen it. */
+    canReopen: boolean;
+    reopenUrl: string;
     anneeScolaireId: number | null;
     /** Super-admin only (groups.move-year): move the group + its inscriptions/séances/payments to another année. */
     canMoveYear: boolean;

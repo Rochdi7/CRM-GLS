@@ -151,6 +151,22 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
         });
     }
 
+    // « Rouvrir le groupe » — super-admin only, et uniquement sur un groupe
+    // terminal (Fin de formation / Annulée). Ne modifie QUE le statut :
+    // paiements, inscriptions et séances sont laissés intacts côté serveur
+    // (Group::rouvrir), le snapshot d'historique est conservé.
+    const [reopenOpen, setReopenOpen] = useState(false);
+    const reopenForm = useForm({ statut: 'En formation' });
+    const reopenOptions: SelectOption[] = ['En formation', 'En inscription'].map((s) => ({ value: s, label: s }));
+
+    function submitReopen(event: FormEvent) {
+        event.preventDefault();
+        reopenForm.post(group.reopenUrl, {
+            preserveScroll: true,
+            onSuccess: () => setReopenOpen(false),
+        });
+    }
+
     return (
         <BackofficeLayout
             title={group.nom}
@@ -213,6 +229,20 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                                 >
                                     <i className="ti ti-archive me-2" />
                                     Terminer la formation
+                                </button>
+                            )}
+                            {group.canReopen && (
+                                <button
+                                    type="button"
+                                    className="btn btn-outline-primary d-flex align-items-center"
+                                    onClick={() => {
+                                        reopenForm.clearErrors();
+                                        reopenForm.setData('statut', 'En formation');
+                                        setReopenOpen(true);
+                                    }}
+                                >
+                                    <i className="ti ti-rotate-clockwise me-2" />
+                                    Rouvrir le groupe
                                 </button>
                             )}
                             <a href="/backoffice/groups" className="btn btn-primary d-flex align-items-center">
@@ -665,6 +695,42 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                         processing={affectationForm.processing}
                         onCancel={() => setAffectationEnCours(null)}
                         submitLabel="Enregistrer"
+                    />
+                </form>
+            </Modal>
+            <Modal
+                show={reopenOpen}
+                title="Rouvrir le groupe"
+                onClose={() => setReopenOpen(false)}
+                processing={reopenForm.processing}
+            >
+                <form onSubmit={submitReopen}>
+                    <div className="alert alert-info d-flex gap-2" role="alert">
+                        <i className="ti ti-info-circle fs-20" aria-hidden="true" />
+                        <span>
+                            Seul le <strong>statut</strong> du groupe est modifié. Les paiements, les inscriptions,
+                            les séances et l&apos;historique de présence ne sont pas touchés.
+                        </span>
+                    </div>
+
+                    <p className="mb-3">
+                        Le groupe <strong>{group.nom}</strong> est actuellement «&nbsp;{group.statut}&nbsp;». Il va
+                        ressortir de l&apos;onglet Historique et redevenir inscriptible.
+                    </p>
+
+                    <SelectField
+                        id="reopen-statut"
+                        label="Rouvrir avec le statut"
+                        value={reopenForm.data.statut}
+                        onChange={(event) => reopenForm.setData('statut', event.target.value)}
+                        options={reopenOptions}
+                        error={reopenForm.errors.statut}
+                    />
+
+                    <FormActions
+                        processing={reopenForm.processing}
+                        onCancel={() => setReopenOpen(false)}
+                        submitLabel="Rouvrir"
                     />
                 </form>
             </Modal>

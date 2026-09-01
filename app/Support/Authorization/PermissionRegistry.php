@@ -135,6 +135,18 @@ final class PermissionRegistry
                 'groups.change-teacher' => "Changer ou retirer l'enseignant d'un groupe",
                 'groups.archive' => 'Clôturer un groupe (Fin de formation)',
                 'groups.move-year' => 'Déplacer un groupe vers une autre année scolaire (avec ses inscriptions, séances et paiements)',
+                // ⚠ Réouverture d'un groupe TERMINÉ ou ANNULÉ — la seule
+                // sortie d'un statut jusque-là définitif (01/09/2026, après
+                // un « Terminer la formation » cliqué par erreur sur un
+                // groupe de 26 étudiants). Ne touche QUE `statut` : aucun
+                // paiement, aucune inscription, aucune séance, aucun frais
+                // n'est modifié, et le snapshot groups_historique est
+                // conservé tel quel (il sera rafraîchi par la prochaine
+                // clôture réelle). Réservée au super-admin
+                // (superAdminOnly() ci-dessous) : rouvrir un groupe le
+                // remet dans les listes actives et le rend de nouveau
+                // inscriptible.
+                'groups.reopen' => 'Rouvrir un groupe terminé ou annulé (super-admin)',
                 // ⚠ L'EXCEPTION à « un groupe ne se supprime jamais »
                 // (CLAUDE.md §11) : suppression DÉFINITIVE d'un groupe
                 // et de ses inscriptions, réservée au super-admin
@@ -460,6 +472,9 @@ final class PermissionRegistry
             // inscription, séance (and therefore payment) hanging off it —
             // a history-altering act reserved to super-admins (24/08/2026).
             'groups.move-year',
+            // Rouvrir un groupe terminé/annulé : sortie d'un statut
+            // terminal, donc même classe que groups.move-year (01/09/2026).
+            'groups.reopen',
             // Suppression définitive d'un groupe + ses inscriptions.
             // Aucun preset ne peut la porter (matrix() filtre par
             // superAdminOnly()) : c'est une destruction de données

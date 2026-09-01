@@ -208,6 +208,47 @@ class Group extends Model
     }
 
     /**
+     * Rouvre un groupe TERMINAL — « Fin de formation » ou « Annulée » —
+     * en le ramenant à un statut actif (01/09/2026).
+     *
+     * ⚠ C'est la seule sortie de « Fin de formation », qui était jusqu'ici
+     * strictement irréversible (archiverCommeTermine + le garde de
+     * GroupController::transitionnerStatut). Ajoutée après un « Terminer la
+     * formation » cliqué par erreur sur un groupe de 26 étudiants, qu'aucun
+     * écran ne permettait de corriger : la seule issue était un UPDATE SQL
+     * en production, c'est-à-dire une modification hors journal d'audit.
+     * Mieux vaut une action tracée et réservée au super-admin
+     * (`groups.reopen` est dans PermissionRegistry::superAdminOnly()).
+     *
+     * NE TOUCHE QUE `statut`. Explicitement préservés :
+     *  - l'argent : aucun encaissement, aucune avance, aucun frais
+     *    d'inscription n'est lu ni écrit ici (les enregistrements monétaires
+     *    restent append-only, CLAUDE.md §11) ;
+     *  - les inscriptions et les séances, y compris l'historique de présence ;
+     *  - `date_fin_formation`, qui reste la date de fin PRÉVUE du groupe et
+     *    n'a rien à voir avec le statut — l'effacer réécrirait une donnée
+     *    pédagogique que personne n'a demandé de changer ;
+     *  - le snapshot `groups_historique`, conservé tel quel : c'est la trace
+     *    que la clôture a bien eu lieu, et writeHistoriqueSnapshot() le
+     *    rafraîchira (updateOrCreate) à la prochaine clôture réelle.
+     *
+     * Le groupe redevient donc simplement actif, avec exactement les mêmes
+     * données qu'avant la clôture.
+     */
+    public function rouvrir(string $cible = self::STATUT_EN_FORMATION): void
+    {
+        if (! in_array($this->statut, self::STATUTS_HISTORIQUE, true)) {
+            return;
+        }
+
+        if (! in_array($cible, [self::STATUT_EN_INSCRIPTION, self::STATUT_EN_FORMATION], true)) {
+            $cible = self::STATUT_EN_FORMATION;
+        }
+
+        $this->update(['statut' => $cible]);
+    }
+
+    /**
      * Starts the training — moves a group from "En inscription" to
      * "En formation" (enrollment closes, the class is now actually running).
      * Only valid from En inscription; refused otherwise by the caller's own

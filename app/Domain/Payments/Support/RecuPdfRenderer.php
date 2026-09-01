@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Payments\Support;
 
 use App\Models\Encaissement;
+use Illuminate\Support\Collection;
 
 /**
  * Rendu PDF du reçu — la SEULE fabrique du document, partagée par l'envoi
@@ -54,12 +55,70 @@ final class RecuPdfRenderer
             'fraisNom' => $encaissement->libelleFrais(),
         ])->render();
 
+        $mpdf = $this->mpdf();
+        $mpdf->WriteHTML($html);
+
+        return $mpdf->Output('', \Mpdf\Output\Destination::STRING_RETURN);
+    }
+
+    /**
+     * Même document, version GROUPÉE : plusieurs encaissements de la MÊME
+     * inscription sur un seul reçu (une ligne par frais + total). C'est le
+     * PDF que porte le lien WhatsApp d'un envoi groupé.
+     *
+     * ⚠ L'appelant a déjà vérifié l'appartenance à une seule inscription et
+     * autorisé chaque ligne : ce renderer ne fait que dessiner. Il ne
+     * recalcule NI le reste par frais (agrégat passé en paramètre, jamais
+     * InscriptionFee::montantPaye() dans la boucle — CLAUDE.md §17) ni le
+     * périmètre du lot.
+     *
+     * @param  \Illuminate\Support\Collection<int, Encaissement>  $encaissements
+     * @param  \Illuminate\Support\Collection<int, mixed>|array<int, mixed>  $payeParFee
+     */
+    public function renderGroupe(Collection $encaissements, $payeParFee): string
+    {
+        $first = $encaissements->first();
+        $inscription = $first?->fee?->inscription;
+        $centre = $inscription?->etablissement ?? $first?->student?->etablissement;
+
+        $html = view('backoffice.encaissements.recu-groupe-pdf', [
+            'encaissements' => $encaissements,
+            'student' => $first?->student,
+            'centre' => $centre,
+            'anneeScolaire' => $inscription?->anneeScolaire?->nom,
+            'niveau' => $inscription?->group?->nom ?? $first?->student?->niveau,
+            'montantTotal' => (float) $encaissements->sum('montant'),
+            'reference' => $first?->reference,
+            'payeParFee' => $payeParFee,
+        ])->render();
+
+        $mpdf = $this->mpdf();
+        $mpdf->WriteHTML($html);
+
+        return $mpdf->Output('', \Mpdf\Output\Destination::STRING_RETURN);
+    }
+
+    /** Nom de fichier stable, réutilisé par la pièce jointe et le téléchargement. */
+    public function filename(Encaissement $encaissement): string
+    {
+        return 'recu-'.$encaissement->reference.'.pdf';
+    }
+
+    /** Nom de fichier du reçu groupé — la référence de la première ligne suffit à l'identifier. */
+    public function filenameGroupe(Collection $encaissements): string
+    {
+        return 'recu-'.($encaissements->first()?->reference ?? 'groupe').'.pdf';
+    }
+
+    /** UNE seule configuration mPDF, partagée par les deux rendus. */
+    private function mpdf(): \Mpdf\Mpdf
+    {
         $tempDir = storage_path('app/mpdf');
         if (! is_dir($tempDir)) {
             mkdir($tempDir, 0755, true);
         }
 
-        $mpdf = new \Mpdf\Mpdf([
+        return new \Mpdf\Mpdf([
             'mode' => 'utf-8',
             'format' => 'A5-L',
             'margin_left' => 8,
@@ -70,14 +129,5 @@ final class RecuPdfRenderer
             'autoLangToFont' => true,
             'tempDir' => $tempDir,
         ]);
-        $mpdf->WriteHTML($html);
-
-        return $mpdf->Output('', \Mpdf\Output\Destination::STRING_RETURN);
-    }
-
-    /** Nom de fichier stable, réutilisé par la pièce jointe et le téléchargement. */
-    public function filename(Encaissement $encaissement): string
-    {
-        return 'recu-'.$encaissement->reference.'.pdf';
     }
 }

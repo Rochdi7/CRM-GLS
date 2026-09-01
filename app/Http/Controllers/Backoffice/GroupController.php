@@ -436,6 +436,16 @@ final class GroupController extends Controller
      */
     private function transitionnerStatut(Group $group, string $cible, ?\App\Models\Employee $par): void
     {
+        // « Fin de formation » reste fermé ICI, pour tout le monde.
+        //
+        // La réouverture existe depuis le 01/09/2026, mais elle a son propre
+        // chemin — GroupController@rouvrir, gardé par `groups.reopen`
+        // (super-admin). Elle ne se glisse volontairement PAS dans les
+        // changements de statut incidents comme celui-ci : « Déplacer vers
+        // une autre année » déplace des inscriptions, des séances et des
+        // paiements, et rouvrir un groupe au passage serait une décision
+        // majeure prise dans un formulaire qui parle d'autre chose.
+        // Rouvrir d'abord, déplacer ensuite — deux actes explicites.
         if ($group->statut === Group::STATUT_FIN_FORMATION) {
             throw ValidationException::withMessages([
                 'statut' => __('This group is "Fin de formation" — that status is final and cannot be changed.'),
@@ -471,6 +481,43 @@ final class GroupController extends Controller
 
         return redirect()->route('backoffice.groups.show', $group)
             ->with('success', __('Group archived (Fin de formation).'));
+    }
+
+    /**
+     * « Rouvrir le groupe » — la seule sortie d'un statut terminal
+     * (« Fin de formation » ou « Annulée »), ajoutée le 01/09/2026.
+     *
+     * Réservée au super-admin (`groups.reopen` est dans
+     * PermissionRegistry::superAdminOnly()), parce qu'elle rouvre un dossier
+     * que l'établissement considérait comme clos : le groupe ressort de
+     * l'onglet Historique, revient dans les listes actives et redevient
+     * inscriptible.
+     *
+     * ⚠ Ne touche QUE `statut` (Group::rouvrir) : aucun encaissement,
+     * aucune inscription, aucune séance, aucun frais n'est modifié, et le
+     * snapshot groups_historique est conservé. Une clôture faite par erreur
+     * se corrige donc sans rien détruire — et surtout sans UPDATE SQL
+     * direct en production, qui échapperait au journal d'audit.
+     */
+    public function rouvrir(Request $request, Group $group): RedirectResponse
+    {
+        $this->authorize('reopen', $group);
+        $this->assertGroupInContext($request, $group, 'statut');
+
+        if (! in_array($group->statut, Group::STATUTS_HISTORIQUE, true)) {
+            return back();
+        }
+
+        $cible = (string) $request->string('statut');
+
+        if (! in_array($cible, [Group::STATUT_EN_INSCRIPTION, Group::STATUT_EN_FORMATION], true)) {
+            $cible = Group::STATUT_EN_FORMATION;
+        }
+
+        $group->rouvrir($cible);
+
+        return redirect()->route('backoffice.groups.show', $group)
+            ->with('success', __('Group reopened.'));
     }
 
     /**

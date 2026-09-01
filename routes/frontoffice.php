@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Frontoffice\HomeController;
 use App\Http\Controllers\Frontoffice\RecuController;
+use App\Http\Controllers\Frontoffice\RecuGroupeController;
+use Illuminate\Routing\Middleware\ValidateSignature;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -35,7 +37,17 @@ Route::name('frontoffice.')
         // lire les reçus des autres — et elle EXPIRE au bout de 7 jours
         // (RecuWhatsAppLink::TTL_DAYS), donc un message transféré ne reste
         // pas une porte ouverte à vie. Voir Frontoffice\RecuController.
+        // `download` est exclu de la signature : ce drapeau choisit la FORME
+        // servie (page d'atterrissage ou octets du PDF), jamais QUEL reçu.
+        // L'id et l'expiration restent signés. Voir ServesRecuDownload.
         Route::get('/recu/{encaissement}', RecuController::class)
-            ->middleware('signed')
+            ->middleware(ValidateSignature::absolute(['download']))
             ->name('recu');
+
+        // Variante GROUPÉE du même reçu : les ids voyagent dans la query
+        // string, donc la signature les couvre — ajouter ou remplacer un id
+        // invalide le lien. Voir Frontoffice\RecuGroupeController.
+        Route::get('/recu-groupe', RecuGroupeController::class)
+            ->middleware(ValidateSignature::absolute(['download']))
+            ->name('recu-groupe');
     });

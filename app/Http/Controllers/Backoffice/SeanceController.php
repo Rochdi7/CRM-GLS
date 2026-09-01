@@ -70,7 +70,7 @@ final class SeanceController extends Controller
             ],
             'perPageOptions' => GetSeancesList::PER_PAGE_OPTIONS,
             'groupOptions' => $formOptions->groups($user),
-            'enseignants' => $formOptions->enseignants(),
+            'enseignants' => $formOptions->enseignants($user),
             'statuts' => Seance::STATUTS,
             // Cancellation reasons for the "Annuler la séance" form, read from
             // the managed catalog (Paramètres → Raisons d'annulation ou
@@ -308,7 +308,7 @@ final class SeanceController extends Controller
                 'date' => $filterDate,
                 'enseignant' => $filterEnseignant,
             ],
-            'enseignantOptions' => $formOptions->enseignants(),
+            'enseignantOptions' => $formOptions->enseignants($user),
             'seanceOptions' => $formOptions->seancesFor($user, $filterDate, $filterEnseignant),
             'seances' => $getSeancesList($user, $listFilters, $perPage),
             'listFilters' => $listFilters + [

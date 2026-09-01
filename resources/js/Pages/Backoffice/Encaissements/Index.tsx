@@ -132,6 +132,9 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
     // objets, et on ne garde que ce qui est encore affiché — voir l'effet
     // d'élagage plus bas.
     const [selectedIds, setSelectedIds] = useState<number[]>([]);
+    // Envoi WhatsApp GROUPÉ en cours — distinct de `whatsAppSending`, qui
+    // porte l'id d'une ligne unique.
+    const [whatsAppBulkSending, setWhatsAppBulkSending] = useState(false);
     const [bulkMenuOpen, setBulkMenuOpen] = useState(false);
     const bulkMenuRef = useRef<HTMLDivElement>(null);
 
@@ -249,6 +252,48 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
         const ids = selectedRows.map((row) => row.id).join(',');
         window.open(`/backoffice/encaissements/recu-groupe?ids=${ids}&format=${format}`, '_blank');
         setBulkMenuOpen(false);
+    }
+
+    /**
+     * Envoi WhatsApp GROUPÉ : un seul message pour toute la sélection, avec
+     * un seul lien — celui du reçu groupé, le document que l'étudiant a reçu
+     * au guichet. Envoyer un lien par ligne donnerait trois PDF pour un
+     * règlement unique.
+     *
+     * Comme pour l'envoi unitaire, le lien est fabriqué SERVEUR
+     * (RecuWhatsAppLink) : il porte une URL signée du PDF, et la signature
+     * dépend d'APP_KEY — elle ne peut pas quitter le serveur. Le serveur
+     * ré-autorise chaque ligne et refuse un lot mélangeant deux inscriptions ;
+     * le menu grisé n'est qu'un confort d'interface.
+     */
+    async function openWhatsAppRecuGroupe() {
+        if (bulkDisabled || whatsAppBulkSending) {
+            return;
+        }
+
+        setBulkMenuOpen(false);
+        setWhatsAppBulkSending(true);
+
+        const ids = selectedRows.map((row) => row.id).join(',');
+
+        try {
+            const response = await fetch(
+                `/backoffice/encaissements/recu-groupe/whatsapp?ids=${ids}`,
+                { headers: { Accept: 'application/json' } },
+            );
+            const payload = await response.json();
+
+            if (!response.ok) {
+                setWhatsAppError(payload?.message ?? t('Unable to open WhatsApp for this payment.'));
+                return;
+            }
+
+            window.open(payload.url, '_blank', 'noopener');
+        } catch {
+            setWhatsAppError(t('Unable to open WhatsApp for this payment.'));
+        } finally {
+            setWhatsAppBulkSending(false);
+        }
     }
 
     // Le menu « Action » n'utilise pas le JS de Bootstrap (CLAUDE.md §3) :
@@ -976,6 +1021,20 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                     >
                                         <i className="ti ti-file-text me-2" aria-hidden="true" />
                                         Générer deux copies du reçu (Paysage A5)
+                                    </button>
+                                </li>
+                                <li><hr className="dropdown-divider" /></li>
+                                <li>
+                                    <button
+                                        type="button"
+                                        className="dropdown-item rounded-1 w-100 text-start border-0 bg-transparent"
+                                        disabled={bulkDisabled || whatsAppBulkSending}
+                                        onClick={openWhatsAppRecuGroupe}
+                                    >
+                                        <i className="ti ti-brand-whatsapp me-2" aria-hidden="true" />
+                                        {whatsAppBulkSending
+                                            ? 'Ouverture de WhatsApp…'
+                                            : 'Envoyer le reçu par WhatsApp'}
                                     </button>
                                 </li>
                             </ul>

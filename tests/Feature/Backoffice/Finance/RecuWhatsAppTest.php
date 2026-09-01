@@ -97,6 +97,51 @@ final class RecuWhatsAppTest extends TestCase
         return Encaissement::where('inscription_fee_id', $fee->id)->firstOrFail();
     }
 
+    /**
+     * Deux paiements de la MÊME inscription — le cas que sert l'envoi groupé :
+     * l'étudiant règle deux frais en une fois et doit recevoir UN document.
+     *
+     * @return array{0: Encaissement, 1: Encaissement}
+     */
+    private function twoPaymentsOfOneInscription(User $user, array $studentAttributes = []): array
+    {
+        $student = Student::factory()->create($studentAttributes + [
+            'etablissement_id' => $this->centre->id,
+        ]);
+
+        $group = Group::factory()->create(['etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id]);
+        $inscription = Inscription::create([
+            'reference' => 'INS-'.fake()->unique()->numerify('#####'),
+            'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => Inscription::STATUT_ACTIVE, 'date_inscription' => '2025-09-15',
+            'montant_total' => 1300,
+        ]);
+
+        $fees = collect(["Frais d'inscription" => 300, 'Frais de Septembre' => 1000])
+            ->map(fn (int $montant, string $nom) => InscriptionFee::create([
+                'inscription_id' => $inscription->id, 'nom' => $nom,
+                'montant_initial' => $montant, 'montant' => $montant,
+                'date_echeance' => '2025-09-30', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+            ]));
+
+        $this->actingAs($user)->post(route('backoffice.encaissements.store'), [
+            'student_id' => $student->id,
+            'inscription_id' => $inscription->id,
+            'caisse_id' => $user->employee->caisses()->first()->id,
+            'date_paiement' => '2025-09-20',
+            'payment_lines' => $fees->map(fn (InscriptionFee $fee) => [
+                'fee_id' => $fee->id, 'montant' => (string) $fee->montant,
+                'methode' => 'Espèces', 'date_paiement' => '2025-09-20',
+            ])->values()->all(),
+        ])->assertSessionDoesntHaveErrors();
+
+        $payments = Encaissement::whereIn('inscription_fee_id', $fees->pluck('id'))->orderBy('id')->get();
+        $this->assertCount(2, $payments);
+
+        return [$payments[0], $payments[1]];
+    }
+
     // --- Normalisation du numéro -------------------------------------------
 
     public function test_phone_numbers_are_normalised_to_digits_with_a_country_code(): void
@@ -174,7 +219,16 @@ final class RecuWhatsAppTest extends TestCase
 
     // --- L'URL publique du PDF (la surface exposée) ------------------------
 
-    public function test_the_signed_link_serves_the_pdf_without_any_login(): void
+    /**
+     * Le lien ouvre une PAGE portant un bouton, pas le PDF brut.
+     *
+     * ⚠ La raison est mobile, et c'est le seul appareil concerné : iOS Safari
+     * affiche un PDF servi en `attachment` dans une visionneuse en lecture
+     * seule, sans bouton d'enregistrement visible — l'étudiant voyait son
+     * reçu sans pouvoir le garder (01/09/2026). Ne pas « simplifier » ce test
+     * en revenant au PDF direct.
+     */
+    public function test_the_signed_link_serves_a_page_carrying_a_download_button(): void
     {
         $user = $this->userWith('payments.view', 'payments.create');
         $encaissement = $this->paymentFor($user, ['telephone' => '+212648430612']);
@@ -186,14 +240,52 @@ final class RecuWhatsAppTest extends TestCase
         $response = $this->get($url);
 
         $response->assertOk();
+        $this->assertStringContainsString('text/html', (string) $response->headers->get('content-type'));
+        $response->assertSee('Télécharger le reçu en PDF');
+        $response->assertSee($encaissement->reference);
+        // Le bouton pointe sur la MÊME URL signée, drapeau en plus.
+        $response->assertSee('download=1', false);
+    }
+
+    public function test_the_download_flag_serves_the_pdf_without_any_login(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        $encaissement = $this->paymentFor($user, ['telephone' => '+212648430612']);
+
+        $url = (new RecuWhatsAppLink())->pdfUrl($encaissement).'&download=1';
+
+        auth()->logout();
+        $response = $this->get($url);
+
+        $response->assertOk();
         $this->assertStringContainsString('application/pdf', (string) $response->headers->get('content-type'));
-        // `attachment` : le clic doit TELECHARGER le recu, pas l'afficher dans
-        // la webview de WhatsApp (demande explicite du 31/08/2026).
         $this->assertStringContainsString(
             'attachment; filename="recu-'.$encaissement->reference.'.pdf"',
             (string) $response->headers->get('content-disposition'),
         );
         $this->assertStringStartsWith('%PDF-', $response->getContent());
+    }
+
+    /**
+     * `download` est le SEUL paramètre hors signature, et il ne choisit que la
+     * FORME servie. Tout le reste doit rester couvert : un id réécrit avec le
+     * drapeau ajouté ne doit pas passer.
+     */
+    public function test_the_download_flag_does_not_weaken_the_signature(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        $mine = $this->paymentFor($user, ['telephone' => '+212648430612']);
+        $someoneElses = $this->paymentFor($user, ['telephone' => '+212648430613']);
+        auth()->logout();
+
+        $tampered = str_replace(
+            '/recu/'.$mine->id.'?',
+            '/recu/'.$someoneElses->id.'?',
+            (new RecuWhatsAppLink())->pdfUrl($mine),
+        );
+
+        $this->get($tampered.'&download=1')->assertForbidden();
+        $this->get('/recu/'.$mine->id.'?download=1')->assertForbidden();
     }
 
     public function test_an_unsigned_or_tampered_link_is_refused(): void
@@ -246,5 +338,105 @@ final class RecuWhatsAppTest extends TestCase
         );
 
         $this->get($expired)->assertForbidden();
+    }
+
+    // --- Envoi GROUPÉ (menu « Action », 01/09/2026) ------------------------
+
+    public function test_a_grouped_send_returns_one_link_covering_every_selected_payment(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        [$first, $second] = $this->twoPaymentsOfOneInscription($user, ['telephone' => '+212648430612']);
+
+        $body = $this->actingAs($user)
+            ->getJson(route('backoffice.encaissements.recu-groupe.whatsapp', ['ids' => $first->id.','.$second->id]))
+            ->assertOk()
+            ->json();
+
+        parse_str(parse_url($body['url'], PHP_URL_QUERY) ?: '', $query);
+
+        // UN seul lien PDF, celui du reçu groupé — pas un par paiement.
+        $this->assertSame(1, substr_count($query['text'], '/recu-groupe?'));
+        $this->assertStringNotContainsString('/recu/'.$first->id, $query['text']);
+
+        // Le détail réglé est lisible dans le message lui-même.
+        $this->assertStringContainsString($first->libelleFrais(), $query['text']);
+        $this->assertStringContainsString($second->libelleFrais(), $query['text']);
+        $this->assertStringContainsString('1 300,00 MAD', $query['text']);
+    }
+
+    public function test_a_grouped_send_refuses_a_batch_mixing_two_registrations(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        $mine = $this->paymentFor($user, ['telephone' => '+212648430612']);
+        $someoneElses = $this->paymentFor($user, ['telephone' => '+212648430613']);
+
+        // Le menu grisé n'est qu'un confort d'interface : le refus est ici.
+        $this->actingAs($user)
+            ->getJson(route('backoffice.encaissements.recu-groupe.whatsapp', ['ids' => $mine->id.','.$someoneElses->id]))
+            ->assertStatus(422);
+    }
+
+    public function test_a_grouped_send_authorizes_every_row_not_just_the_first(): void
+    {
+        $owner = $this->userWith('payments.view', 'payments.create');
+        [$first, $second] = $this->twoPaymentsOfOneInscription($owner, ['telephone' => '+212648430612']);
+
+        $this->actingAs($this->userWith('dashboard.view'))
+            ->getJson(route('backoffice.encaissements.recu-groupe.whatsapp', ['ids' => $first->id.','.$second->id]))
+            ->assertForbidden();
+    }
+
+    public function test_the_grouped_link_lists_every_fee_on_its_download_page(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        [$first, $second] = $this->twoPaymentsOfOneInscription($user, ['telephone' => '+212648430612']);
+
+        $url = (new RecuWhatsAppLink())->pdfUrlGroupe(collect([$first, $second]));
+
+        auth()->logout();
+        $response = $this->get($url);
+
+        $response->assertOk();
+        $response->assertSee('Télécharger le reçu en PDF');
+        $response->assertSee($first->libelleFrais());
+        $response->assertSee($second->libelleFrais());
+        $response->assertSee('1 300,00 MAD');
+    }
+
+    public function test_the_grouped_download_flag_serves_one_pdf_without_any_login(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        [$first, $second] = $this->twoPaymentsOfOneInscription($user, ['telephone' => '+212648430612']);
+
+        $url = (new RecuWhatsAppLink())->pdfUrlGroupe(collect([$first, $second])).'&download=1';
+
+        auth()->logout();
+        $response = $this->get($url);
+
+        $response->assertOk();
+        $this->assertStringContainsString('application/pdf', (string) $response->headers->get('content-type'));
+        $this->assertStringStartsWith('%PDF-', $response->getContent());
+    }
+
+    /**
+     * La garantie qui remplace l'authentification : les ids sont DANS la
+     * query string, donc dans la signature. Remplacer un id par celui d'un
+     * autre étudiant doit casser le lien — sinon l'URL envoyée à un étudiant
+     * deviendrait une porte d'entrée vers le reçu de n'importe qui.
+     */
+    public function test_rewriting_the_ids_of_a_grouped_link_breaks_its_signature(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        [$first, $second] = $this->twoPaymentsOfOneInscription($user, ['telephone' => '+212648430612']);
+        $someoneElses = $this->paymentFor($user, ['telephone' => '+212648430613']);
+
+        $url = (new RecuWhatsAppLink())->pdfUrlGroupe(collect([$first, $second]));
+        auth()->logout();
+
+        // Un id échangé contre celui d'un autre dossier.
+        $this->get(str_replace((string) $second->id, (string) $someoneElses->id, $url))->assertForbidden();
+
+        // Sans signature du tout.
+        $this->get('/recu-groupe?ids='.$first->id.','.$second->id)->assertForbidden();
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Payments\Support;
 
 use App\Models\Encaissement;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\URL;
 
 /**
@@ -50,6 +51,46 @@ final class RecuWhatsAppLink
         ];
     }
 
+    /**
+     * Variante GROUPÉE : un seul message couvrant plusieurs encaissements de
+     * la MÊME inscription — ce que le menu « Action » envoie quand le
+     * caissier a coché deux ou trois paiements.
+     *
+     * Un seul lien, vers le reçu groupé (frontoffice.recu-groupe) : c'est le
+     * document que l'étudiant a reçu au guichet. Envoyer un lien par ligne
+     * donnerait trois PDF pour un règlement unique.
+     *
+     * ⚠ L'homogénéité du lot (même inscription, mêmes autorisations) est
+     * vérifiée par l'appelant, jamais ici.
+     *
+     * @param  \Illuminate\Support\Collection<int, Encaissement>  $encaissements
+     * @return array{url:string, phone:string}|null
+     */
+    public function forEncaissements(Collection $encaissements): ?array
+    {
+        $first = $encaissements->first();
+
+        if ($first === null) {
+            return null;
+        }
+
+        $phone = WhatsAppNumber::forStudent($first->student);
+
+        if ($phone === null) {
+            return null;
+        }
+
+        return [
+            'phone' => $phone,
+            'url' => 'https://api.whatsapp.com/send/?'.http_build_query([
+                'phone' => $phone,
+                'text' => $this->messageGroupe($encaissements),
+                'type' => 'phone_number',
+                'app_absent' => '0',
+            ], '', '&', PHP_QUERY_RFC3986),
+        ];
+    }
+
     /** URL signée et expirante du PDF — la seule façon de le publier. */
     public function pdfUrl(Encaissement $encaissement): string
     {
@@ -57,6 +98,22 @@ final class RecuWhatsAppLink
             'frontoffice.recu',
             now()->addDays(self::TTL_DAYS),
             ['encaissement' => $encaissement->id],
+        );
+    }
+
+    /**
+     * URL signée du reçu GROUPÉ. Les ids sont un paramètre de la query
+     * string, donc ils entrent dans la signature : le lien ne peut pas être
+     * réécrit pour pointer sur d'autres paiements.
+     *
+     * @param  \Illuminate\Support\Collection<int, Encaissement>  $encaissements
+     */
+    public function pdfUrlGroupe(Collection $encaissements): string
+    {
+        return URL::temporarySignedRoute(
+            'frontoffice.recu-groupe',
+            now()->addDays(self::TTL_DAYS),
+            ['ids' => $encaissements->pluck('id')->implode(',')],
         );
     }
 
@@ -121,5 +178,49 @@ final class RecuWhatsAppLink
         $lines[] = __('Thank you for your trust.');
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * Corps du message groupé. Une ligne par frais réglé, puis le total :
+     * l'étudiant retrouve dans le message le détail imprimé sur son reçu,
+     * sans avoir à ouvrir le PDF pour savoir ce qu'il a payé.
+     *
+     * @param  \Illuminate\Support\Collection<int, Encaissement>  $encaissements
+     */
+    private function messageGroupe(Collection $encaissements): string
+    {
+        $first = $encaissements->first();
+        $inscription = $first->fee?->inscription;
+        $centre = $inscription?->etablissement ?? $first->student?->etablissement;
+        $total = (float) $encaissements->sum('montant');
+
+        $lines = [
+            __('Hello :name,', ['name' => $first->student?->nomComplet() ?? '']),
+            '',
+            __('We confirm receipt of your payment.'),
+            '',
+            __('Receipt').' : '.$encaissements->pluck('reference')->implode(' / '),
+        ];
+
+        foreach ($encaissements as $encaissement) {
+            $lines[] = '• '.$encaissement->libelleFrais()
+                .' : '.number_format((float) $encaissement->montant, 2, ',', ' ').' MAD'
+                .' ('.($encaissement->date_paiement?->format('d/m/Y') ?? '').')';
+        }
+
+        $lines[] = __('Total').' : '.number_format($total, 2, ',', ' ').' MAD';
+
+        if ($centre?->nom_centre !== null) {
+            $lines[] = $centre->nom_centre;
+        }
+
+        $lines[] = '';
+        $lines[] = __('Download your receipt in PDF (link valid for :days days):', ['days' => self::TTL_DAYS]);
+        $lines[] = $this->pdfUrlGroupe($encaissements);
+        $lines[] = '';
+        $lines[] = __('Thank you for your trust.');
+
+        return implode("
+", $lines);
     }
 }

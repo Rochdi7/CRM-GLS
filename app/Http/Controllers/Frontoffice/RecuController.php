@@ -6,7 +6,9 @@ namespace App\Http\Controllers\Frontoffice;
 
 use App\Domain\Payments\Support\RecuPdfRenderer;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\Frontoffice\Concerns\ServesRecuDownload;
 use App\Models\Encaissement;
+use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -33,22 +35,19 @@ use Symfony\Component\HttpFoundation\Response;
  */
 final class RecuController extends Controller
 {
-    public function __invoke(Encaissement $encaissement, RecuPdfRenderer $renderer): Response
+    use ServesRecuDownload;
+
+    public function __invoke(Request $request, Encaissement $encaissement, RecuPdfRenderer $renderer): Response
     {
         $encaissement->load(RecuPdfRenderer::RELATIONS);
 
-        // `attachment` : le clic TELECHARGE le fichier au lieu de l'afficher
-        // dans la webview de WhatsApp. C'est ce que l'utilisateur attend d'un
-        // « reçu en PDF » — un document qu'il garde, pas une page qu'il perd
-        // en fermant l'onglet. Le lien click-to-chat ne pouvant pas joindre de
-        // fichier (aucun paramètre d'attachement chez WhatsApp), ce
-        // téléchargement en un clic est le plus proche équivalent.
-        return response($renderer->render($encaissement), 200, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'attachment; filename="'.$renderer->filename($encaissement).'"',
-            // Un reçu est un document personnel : jamais mis en cache par un
-            // proxy partagé.
-            'Cache-Control' => 'private, max-age=0, no-store',
-        ]);
+        // Par défaut : la page qui porte le bouton. Le PDF n'est rendu qu'au
+        // clic — mPDF coûte quelques secondes, inutile de le payer pour un
+        // étudiant qui ouvre simplement le lien.
+        if (! $this->wantsDownload($request)) {
+            return $this->landingResponse($request, collect([$encaissement]));
+        }
+
+        return $this->pdfResponse($renderer->render($encaissement), $renderer->filename($encaissement));
     }
 }

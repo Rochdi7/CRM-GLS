@@ -32,6 +32,10 @@ final class GetGroupDetails
         ]);
 
         $isFinished = $group->statut === Group::STATUT_FIN_FORMATION;
+        // Terminal = « Fin de formation » OU « Annulée » : les deux se
+        // rouvrent (01/09/2026), alors que $isFinished ci-dessus ne vise
+        // que la clôture normale et pilote d'autres verrous (enseignant…).
+        $isTerminal = in_array($group->statut, Group::STATUTS_HISTORIQUE, true);
 
         return [
             'id' => $group->id,
@@ -74,6 +78,10 @@ final class GetGroupDetails
             ])->values()->all(),
             'canArchive' => ! $isFinished && $user->can('groups.archive') && $this->centerAccess->canAccessCenter($user, $group->etablissement_id),
             'archiveUrl' => route('backoffice.groups.archive', $group),
+            // Rouvrir : proposé UNIQUEMENT sur un groupe déjà terminal,
+            // et seulement au titulaire de groups.reopen (super-admin).
+            'canReopen' => $isTerminal && $user->can('groups.reopen') && $this->centerAccess->canAccessCenter($user, $group->etablissement_id),
+            'reopenUrl' => route('backoffice.groups.rouvrir', $group),
             'anneeScolaireId' => $group->annee_scolaire_id,
             'canMoveYear' => $user->can('groups.move-year') && $this->centerAccess->canAccessCenter($user, $group->etablissement_id),
             'moveYearUrl' => route('backoffice.groups.move-year', $group),

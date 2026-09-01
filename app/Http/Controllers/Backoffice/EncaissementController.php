@@ -681,6 +681,68 @@ final class EncaissementController extends Controller
         return response()->json($payload);
     }
 
+    /**
+     * Lien click-to-chat WhatsApp pour un lot d'encaissements — la version
+     * groupée de recuWhatsApp(), cible de l'action « Envoyer par WhatsApp »
+     * du menu « Action » (?ids=12,13,14).
+     *
+     * Un seul message, un seul lien PDF (le reçu GROUPÉ) : le caissier a
+     * encaissé une fois, l'étudiant reçoit un document.
+     *
+     * Mêmes gardes que le reçu groupé imprimé, dans le même ordre : chaque
+     * ligne autorisée individuellement (un id hors périmètre du centre est
+     * refusé), puis lot refusé s'il mélange deux inscriptions. La
+     * vérification est ICI, jamais seulement dans React — le menu grisé
+     * n'est qu'un confort d'interface.
+     */
+    public function recuGroupeWhatsApp(Request $request, RecuWhatsAppLink $link): JsonResponse
+    {
+        if (! $link->pdfUrlIsPubliclyReachable()) {
+            return response()->json([
+                'message' => __('The receipt link points to a local address (:url) that the student cannot open. Set APP_URL to the public CRM address.', ['url' => (string) config('app.url')]),
+            ], 422);
+        }
+
+        $ids = collect(explode(',', (string) $request->string('ids')))
+            ->map(fn ($id) => (int) trim($id))
+            ->filter()
+            ->unique()
+            ->values();
+
+        abort_if($ids->isEmpty(), 404);
+
+        $encaissements = Encaissement::query()
+            ->whereIn('id', $ids)
+            ->with(RecuPdfRenderer::RELATIONS)
+            ->orderBy('date_paiement')
+            ->orderBy('id')
+            ->get();
+
+        abort_if($encaissements->count() !== $ids->count(), 404);
+
+        foreach ($encaissements as $encaissement) {
+            $this->authorize('view', $encaissement);
+        }
+
+        $inscriptionIds = $encaissements->map(fn ($e) => $e->fee?->inscription_id)->unique();
+
+        if ($inscriptionIds->count() !== 1 || $inscriptionIds->first() === null) {
+            return response()->json([
+                'message' => __('A grouped receipt must cover payments of a single registration.'),
+            ], 422);
+        }
+
+        $payload = $link->forEncaissements($encaissements);
+
+        if ($payload === null) {
+            return response()->json([
+                'message' => __('This student has no reachable phone number.'),
+            ], 422);
+        }
+
+        return response()->json($payload);
+    }
+
     public function sendRecuEmail(SendRecuEmailRequest $request, Encaissement $encaissement): RedirectResponse
     {
         $this->authorize('view', $encaissement);
