@@ -91,6 +91,15 @@
             background: #f6f6f6;
         }
 
+        /* Mention légale : les frais réglés ne sont pas remboursables. */
+        .mention-nr {
+            margin-top: 10pt;
+            font-size: 8.5pt;
+            font-weight: bold;
+        }
+        .mention-nr .nr-fr { text-align: left; }
+        .mention-nr .nr-ar { text-align: right; }
+
         .signature {
             border-top: 1px solid #333;
             margin-top: 14pt;
@@ -204,6 +213,13 @@
             <td class="row-fr">Date de paiement</td>
             <td class="row-val">{{ $dateAffichee ?: '—' }}</td>
             <td class="row-ar">تاريخ الأداء</td>
+        </tr>
+    </table>
+
+    <table class="mention-nr">
+        <tr>
+            <td class="nr-fr">Les frais versés ne sont pas remboursables.</td>
+            <td class="nr-ar">المبالغ المدفوعة غير قابلة للاسترجاع.</td>
         </tr>
     </table>
 

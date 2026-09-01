@@ -3051,14 +3051,6 @@ export default function InscriptionsIndex({
             >
                 {modifyGroupTarget && (
                     <form onSubmit={submitModifyGroup} onKeyDown={blockImplicitSubmit}>
-                        <div className="alert alert-info">
-                            L'inscription est simplement déplacée vers le groupe choisi — aucune nouvelle
-                            inscription n'est créée et l'ancienne n'est pas archivée. Tous les frais (payés
-                            inclus) et leurs paiements suivent automatiquement. Possible uniquement tant que
-                            le groupe actuel est encore « En inscription » : dès que sa formation a commencé,
-                            utilisez « Changement de groupe ».
-                        </div>
-
                         <div className="row">
                             <div className="col-12">
                                 <FormField

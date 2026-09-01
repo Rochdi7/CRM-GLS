@@ -152,6 +152,23 @@
         .row-line .val { flex: 1; text-align: center; font-weight: 700; }
         .row-line .ar { width: 30%; direction: rtl; text-align: right; }
 
+        /* Mention légale : les frais réglés ne sont pas remboursables. */
+        .mention-nr {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 3mm;
+            margin-top: {{ $format === 'a6' ? '2mm' : '3mm' }};
+            font-size: {{ $format === 'a6' ? '6.5pt' : '8.5pt' }};
+            font-weight: 700;
+        }
+        .mention-nr .ar {
+            direction: rtl;
+            text-align: right;
+            font-family: 'Traditional Arabic', 'Amiri', 'Noto Naskh Arabic', 'Sakkal Majalla', 'Times New Roman', serif;
+            font-size: 1.18em;
+        }
+
         .signature {
             border-top: 1px solid #333;
             margin-top: {{ $format === 'a6' ? '3mm' : '5mm' }};
@@ -267,6 +284,11 @@
                         <span class="val">{{ $encaissement->date_paiement?->format('d/m/Y') ?? '—' }}</span>
                         <span class="ar">تاريخ الأداء</span>
                     </div>
+                </div>
+
+                <div class="mention-nr">
+                    <span class="fr">Les frais versés ne sont pas remboursables.</span>
+                    <span class="ar">المبالغ المدفوعة غير قابلة للاسترجاع.</span>
                 </div>
 
                 <div class="signature">

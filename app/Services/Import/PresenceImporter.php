@@ -31,10 +31,14 @@ use Illuminate\Support\Facades\DB;
  * database (created by hand or generated from a créneau) is reused as-is and
  * never duplicated — only its roll call is filled in.
  *
- * Resolution is scoped to the batch's Centre+Année exactly like every other
- * module: élèves are matched by normalized full name within the centre,
- * groupes only through the operator's explicit mapping (never by label
- * alone), and the "Enseignant" column is advisory — an unmatched teacher
+ * Resolution is scoped to the batch's CENTRE (like the payments importer —
+ * a register spans groups living in two années, since a still-running group
+ * was imported into the current année while its terminated siblings stayed
+ * in the previous one): élèves are matched by normalized full name within
+ * the centre, groupes only through the operator's explicit mapping (never by
+ * label alone) — and a derived séance always carries its GROUP's année, not
+ * the batch's, so the register never files a séance into a year its group
+ * does not live in. The "Enseignant" column is advisory — an unmatched teacher
  * never blocks a line, it just leaves the séance falling back to the
  * group's own teacher rather than inventing an employee.
  */
@@ -86,7 +90,7 @@ final class PresenceImporter implements Importer
      */
     private ?array $enseignantsByNormalizedName = null;
 
-    /** @var array<int, true>|null every mapped group_id verified to belong to the batch's centre+année */
+    /** @var array<int, true>|null every mapped group_id verified to belong to the batch's centre (whatever its année — see the class doc) */
     private ?array $validMappedGroupIds = null;
 
     /**
@@ -192,9 +196,8 @@ final class PresenceImporter implements Importer
 
                     $group = Group::findOrFail($resolution['group_id'] ?? $data['group_id']);
 
-                    if ((int) $group->etablissement_id !== (int) $batch->etablissement_id
-                        || (int) $group->annee_scolaire_id !== (int) $batch->annee_scolaire_id) {
-                        throw new \RuntimeException('Le groupe résolu ne correspond pas au centre/année du lot.');
+                    if ((int) $group->etablissement_id !== (int) $batch->etablissement_id) {
+                        throw new \RuntimeException('Le groupe résolu ne correspond pas au centre du lot.');
                     }
 
                     // The séance is derived, not imported: created by the
@@ -315,7 +318,10 @@ final class PresenceImporter implements Importer
             // otherwise the group's own current teacher.
             'enseignant_id' => $resolution['enseignant_id'] ?? $group->enseignant_id,
             'etablissement_id' => $batch->etablissement_id,
-            'annee_scolaire_id' => $batch->annee_scolaire_id,
+            // The GROUP's année, not the batch's: the register spans groups
+            // of two années, and a séance filed into a year its group does
+            // not live in would be invisible to every année-scoped screen.
+            'annee_scolaire_id' => $group->annee_scolaire_id,
             'statut' => Seance::STATUT_EFFECTUEE,
             'created_by' => $importingAdmin->id,
         ]);
@@ -596,7 +602,7 @@ final class PresenceImporter implements Importer
         if (! isset($this->validMappedGroupIds[$groupId])) {
             return ['group_id' => null, 'candidates' => [], 'conflicts' => [
                 ['field' => 'group_id', 'code' => 'group_out_of_scope', 'message' => sprintf(
-                    'Le groupe associé à "%s" ne correspond pas au centre/année sélectionné.',
+                    'Le groupe associé à "%s" ne correspond pas au centre sélectionné.',
                     $groupe
                 )],
             ]];
@@ -730,7 +736,9 @@ final class PresenceImporter implements Importer
 
     /**
      * Verifies once (not per row) that every mapped group_id actually
-     * belongs to the batch's centre+année.
+     * belongs to the batch's CENTRE — deliberately not its année: the
+     * register spans both (see the class doc), and the derived séance takes
+     * the group's own année at commit time.
      *
      * @return array<int, true>
      */
@@ -751,7 +759,6 @@ final class PresenceImporter implements Importer
         return Group::query()
             ->whereIn('id', $mappedIds)
             ->where('etablissement_id', $context->etablissementId)
-            ->where('annee_scolaire_id', $context->anneeScolaireId)
             ->pluck('id')
             ->flip()
             ->map(fn () => true)
@@ -767,7 +774,6 @@ final class PresenceImporter implements Importer
 
         Seance::query()
             ->where('etablissement_id', $context->etablissementId)
-            ->where('annee_scolaire_id', $context->anneeScolaireId)
             ->get(['id', 'group_id', 'date_seance', 'heure_debut'])
             ->each(function (Seance $seance) use (&$index): void {
                 $index[$this->seanceKey(
