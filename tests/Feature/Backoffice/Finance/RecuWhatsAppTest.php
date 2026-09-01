@@ -218,17 +218,17 @@ final class RecuWhatsAppTest extends TestCase
     }
 
     // --- L'URL publique du PDF (la surface exposée) ------------------------
-
     /**
-     * Le lien ouvre une PAGE portant un bouton, pas le PDF brut.
+     * Le lien signé sert le PDF DIRECTEMENT.
      *
-     * ⚠ La raison est mobile, et c'est le seul appareil concerné : iOS Safari
-     * affiche un PDF servi en `attachment` dans une visionneuse en lecture
-     * seule, sans bouton d'enregistrement visible — l'étudiant voyait son
-     * reçu sans pouvoir le garder (01/09/2026). Ne pas « simplifier » ce test
-     * en revenant au PDF direct.
+     * ⚠ Sur iOS l'en-tête `attachment` ne force rien : WebKit affiche le PDF
+     * dans sa visionneuse (il ignore la disposition pour les types qu'il sait
+     * rendre), et l'étudiant l'enregistre par Partager → « Enregistrer dans
+     * Fichiers ». Un téléchargement forcé n'existe pas sur iPhone. Une page
+     * intermédiaire portant un bouton a été essayée puis RETIRÉE le
+     * 01/09/2026 : une étape de plus, le même comportement iOS au bout.
      */
-    public function test_the_signed_link_serves_a_page_carrying_a_download_button(): void
+    public function test_the_signed_link_serves_the_pdf_without_any_login(): void
     {
         $user = $this->userWith('payments.view', 'payments.create');
         $encaissement = $this->paymentFor($user, ['telephone' => '+212648430612']);
@@ -240,122 +240,12 @@ final class RecuWhatsAppTest extends TestCase
         $response = $this->get($url);
 
         $response->assertOk();
-        $this->assertStringContainsString('text/html', (string) $response->headers->get('content-type'));
-        $response->assertSee('Télécharger le reçu en PDF');
-        $response->assertSee($encaissement->reference);
-        // Le bouton pointe sur la MÊME URL signée, drapeau en plus.
-        $response->assertSee('download=1', false);
-    }
-
-    /**
-     * Le bouton doit être RELATIF.
-     *
-     * ⚠ La signature est calculée sur l'URL complète, schéma compris. Une URL
-     * absolue reconstruite à partir de la requête prend le schéma que voit
-     * Laravel — `http` derrière le reverse proxy du VPS, là où l'étudiant a
-     * reçu un lien `https` — et le bouton porterait alors une signature
-     * invalide. Un lien relatif est résolu contre l'URL réellement visitée.
-     */
-    public function test_the_download_button_is_relative_so_no_scheme_can_break_its_signature(): void
-    {
-        $user = $this->userWith('payments.view', 'payments.create');
-        $encaissement = $this->paymentFor($user, ['telephone' => '+212648430612']);
-
-        $url = (new RecuWhatsAppLink())->pdfUrl($encaissement);
-        auth()->logout();
-
-        $html = $this->get($url)->assertOk()->getContent();
-
-        $this->assertMatchesRegularExpression('#href="/recu/'.$encaissement->id.'\?[^"]*download=1"#', $html);
-        $this->assertStringNotContainsString('href="http', $html);
-    }
-
-    public function test_the_download_flag_serves_the_pdf_without_any_login(): void
-    {
-        $user = $this->userWith('payments.view', 'payments.create');
-        $encaissement = $this->paymentFor($user, ['telephone' => '+212648430612']);
-
-        $url = (new RecuWhatsAppLink())->pdfUrl($encaissement).'&download=1';
-
-        auth()->logout();
-        $response = $this->get($url);
-
-        $response->assertOk();
         $this->assertStringContainsString('application/pdf', (string) $response->headers->get('content-type'));
         $this->assertStringContainsString(
             'attachment; filename="recu-'.$encaissement->reference.'.pdf"',
             (string) $response->headers->get('content-disposition'),
         );
         $this->assertStringStartsWith('%PDF-', $response->getContent());
-    }
-
-    /**
-     * `download` est le SEUL paramètre hors signature, et il ne choisit que la
-     * FORME servie. Tout le reste doit rester couvert : un id réécrit avec le
-     * drapeau ajouté ne doit pas passer.
-     */
-    /**
-     * iOS ne SAIT PAS forcer un téléchargement : WebKit ignore `attachment`
-     * pour les types qu'il affiche, et la webview WhatsApp avale le clic
-     * (01/09/2026, bugs WebKit 216918/167341). Sur iPhone le PDF est donc
-     * servi `inline` — la visionneuse s'ouvre et sa feuille de partage
-     * (« Enregistrer dans Fichiers ») est le seul chemin d'enregistrement.
-     * Ne pas « unifier » vers attachment : c'est la plateforme qui impose ça.
-     */
-    public function test_an_iphone_gets_the_pdf_inline_because_ios_cannot_force_a_download(): void
-    {
-        $user = $this->userWith('payments.view', 'payments.create');
-        $encaissement = $this->paymentFor($user, ['telephone' => '+212648430612']);
-
-        $url = (new RecuWhatsAppLink())->pdfUrl($encaissement).'&download=1';
-        auth()->logout();
-
-        $response = $this->get($url, [
-            'User-Agent' => 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15',
-        ]);
-
-        $response->assertOk();
-        $this->assertStringStartsWith('inline;', (string) $response->headers->get('content-disposition'));
-        $this->assertStringStartsWith('%PDF-', $response->getContent());
-    }
-
-    public function test_the_landing_page_adapts_to_the_device(): void
-    {
-        $user = $this->userWith('payments.view', 'payments.create');
-        $encaissement = $this->paymentFor($user, ['telephone' => '+212648430612']);
-
-        $url = (new RecuWhatsAppLink())->pdfUrl($encaissement);
-        auth()->logout();
-
-        // iPhone : pas d'auto-démarrage (il remplacerait la page par la
-        // visionneuse), mais la marche à suivre pour enregistrer.
-        $ios = $this->get($url, [
-            'User-Agent' => 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15',
-        ])->assertOk();
-        $ios->assertSee('Enregistrer dans Fichiers');
-        $ios->assertDontSee('Le téléchargement démarre automatiquement');
-
-        // Ailleurs : le téléchargement part tout seul.
-        $desktop = $this->get($url)->assertOk();
-        $desktop->assertSee('Le téléchargement démarre automatiquement');
-        $desktop->assertDontSee('Enregistrer dans Fichiers');
-    }
-
-    public function test_the_download_flag_does_not_weaken_the_signature(): void
-    {
-        $user = $this->userWith('payments.view', 'payments.create');
-        $mine = $this->paymentFor($user, ['telephone' => '+212648430612']);
-        $someoneElses = $this->paymentFor($user, ['telephone' => '+212648430613']);
-        auth()->logout();
-
-        $tampered = str_replace(
-            '/recu/'.$mine->id.'?',
-            '/recu/'.$someoneElses->id.'?',
-            (new RecuWhatsAppLink())->pdfUrl($mine),
-        );
-
-        $this->get($tampered.'&download=1')->assertForbidden();
-        $this->get('/recu/'.$mine->id.'?download=1')->assertForbidden();
     }
 
     public function test_an_unsigned_or_tampered_link_is_refused(): void
@@ -456,29 +346,12 @@ final class RecuWhatsAppTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_the_grouped_link_lists_every_fee_on_its_download_page(): void
+    public function test_the_grouped_signed_link_serves_one_pdf_without_any_login(): void
     {
         $user = $this->userWith('payments.view', 'payments.create');
         [$first, $second] = $this->twoPaymentsOfOneInscription($user, ['telephone' => '+212648430612']);
 
         $url = (new RecuWhatsAppLink())->pdfUrlGroupe(collect([$first, $second]));
-
-        auth()->logout();
-        $response = $this->get($url);
-
-        $response->assertOk();
-        $response->assertSee('Télécharger le reçu en PDF');
-        $response->assertSee($first->libelleFrais());
-        $response->assertSee($second->libelleFrais());
-        $response->assertSee('1 300,00 MAD');
-    }
-
-    public function test_the_grouped_download_flag_serves_one_pdf_without_any_login(): void
-    {
-        $user = $this->userWith('payments.view', 'payments.create');
-        [$first, $second] = $this->twoPaymentsOfOneInscription($user, ['telephone' => '+212648430612']);
-
-        $url = (new RecuWhatsAppLink())->pdfUrlGroupe(collect([$first, $second])).'&download=1';
 
         auth()->logout();
         $response = $this->get($url);

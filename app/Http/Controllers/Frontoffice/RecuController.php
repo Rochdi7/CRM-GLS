@@ -6,9 +6,7 @@ namespace App\Http\Controllers\Frontoffice;
 
 use App\Domain\Payments\Support\RecuPdfRenderer;
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\Frontoffice\Concerns\ServesRecuDownload;
 use App\Models\Encaissement;
-use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -35,19 +33,28 @@ use Symfony\Component\HttpFoundation\Response;
  */
 final class RecuController extends Controller
 {
-    use ServesRecuDownload;
-
-    public function __invoke(Request $request, Encaissement $encaissement, RecuPdfRenderer $renderer): Response
+    public function __invoke(Encaissement $encaissement, RecuPdfRenderer $renderer): Response
     {
         $encaissement->load(RecuPdfRenderer::RELATIONS);
 
-        // Par défaut : la page qui porte le bouton. Le PDF n'est rendu qu'au
-        // clic — mPDF coûte quelques secondes, inutile de le payer pour un
-        // étudiant qui ouvre simplement le lien.
-        if (! $this->wantsDownload($request)) {
-            return $this->landingResponse($request, collect([$encaissement]));
-        }
-
-        return $this->pdfResponse($request, $renderer->render($encaissement), $renderer->filename($encaissement));
+        // `attachment` : le clic TELECHARGE le fichier au lieu de l'afficher
+        // dans la webview de WhatsApp. C'est ce que l'utilisateur attend d'un
+        // « reçu en PDF » — un document qu'il garde, pas une page qu'il perd
+        // en fermant l'onglet.
+        //
+        // ⚠ Sur iOS cet en-tête ne fait rien : WebKit affiche quand même le
+        // PDF dans sa visionneuse (il ignore `attachment` pour les types
+        // qu'il sait rendre), d'où « Partager → Enregistrer dans Fichiers »
+        // comme seul chemin d'enregistrement. Un téléchargement forcé
+        // n'existe pas sur iPhone — inutile de retenter, une page
+        // intermédiaire portant un bouton a été essayée puis retirée le
+        // 01/09/2026 : elle ajoutait une étape sans rien résoudre.
+        return response($renderer->render($encaissement), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$renderer->filename($encaissement).'"',
+            // Un reçu est un document personnel : jamais mis en cache par un
+            // proxy partagé.
+            'Cache-Control' => 'private, max-age=0, no-store',
+        ]);
     }
 }

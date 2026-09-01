@@ -6,7 +6,6 @@ namespace App\Http\Controllers\Frontoffice;
 
 use App\Domain\Payments\Support\RecuPdfRenderer;
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\Frontoffice\Concerns\ServesRecuDownload;
 use App\Models\Encaissement;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -31,8 +30,6 @@ use Symfony\Component\HttpFoundation\Response;
  */
 final class RecuGroupeController extends Controller
 {
-    use ServesRecuDownload;
-
     public function __invoke(Request $request, RecuPdfRenderer $renderer): Response
     {
         $ids = collect(explode(',', (string) $request->string('ids')))
@@ -59,14 +56,6 @@ final class RecuGroupeController extends Controller
         $inscriptionIds = $encaissements->map(fn ($e) => $e->fee?->inscription_id)->unique();
         abort_if($inscriptionIds->count() !== 1 || $inscriptionIds->first() === null, 404);
 
-        // Par défaut : la page qui porte le bouton de téléchargement, jamais
-        // le PDF brut (voir ServesRecuDownload — sur mobile il n'y a aucun
-        // moyen visible de l'enregistrer). Rendu AVANT l'agrégat et mPDF :
-        // ni l'un ni l'autre ne sert à dessiner la page.
-        if (! $this->wantsDownload($request)) {
-            return $this->landingResponse($request, $encaissements);
-        }
-
         // Reste par frais en UNE requête agrégée — jamais un accesseur money
         // par ligne dans la boucle du reçu (CLAUDE.md §17).
         $feeIds = $encaissements->pluck('inscription_fee_id')->filter()->unique();
@@ -76,10 +65,12 @@ final class RecuGroupeController extends Controller
             ->selectRaw('inscription_fee_id, sum(montant) as paye')
             ->pluck('paye', 'inscription_fee_id');
 
-        return $this->pdfResponse(
-            $request,
-            $renderer->renderGroupe($encaissements, $payeParFee),
-            $renderer->filenameGroupe($encaissements),
-        );
+        // Même disposition que le reçu unitaire — voir RecuController pour
+        // pourquoi iOS l'ignore et ce qu'on a renoncé à contourner.
+        return response($renderer->renderGroupe($encaissements, $payeParFee), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$renderer->filenameGroupe($encaissements).'"',
+            'Cache-Control' => 'private, max-age=0, no-store',
+        ]);
     }
 }
