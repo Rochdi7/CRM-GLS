@@ -1493,3 +1493,64 @@ html[data-theme='dark'] .gls-payment-matrix > :not(caption) > * > * {
     z-index: 5;
     background-color: var(--bs-card-bg, var(--bs-body-bg, #fff));
 }
+
+/* ---------------------------------------------------------------------------
+ * « Absence par groupe » — presence matrix
+ *
+ * One row per student, one narrow column per séance. The colored cell IS the
+ * data here (green = présent, red = absent, grey = séance not marked for that
+ * student), so the colors are set on the cell rather than on a badge inside
+ * it — exactly like the reference CRM screen. The student column is sticky so
+ * a wide period can be scrolled horizontally without losing the name; the
+ * scroll lives inside `.table-responsive`, never on the page body.
+ * ------------------------------------------------------------------------- */
+.gls-absence-matrix {
+    max-height: 70vh;
+    overflow: auto;
+}
+.gls-absence-matrix table {
+    table-layout: fixed;
+}
+.gls-absence-matrix thead th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background-color: var(--bs-card-bg, var(--bs-body-bg, #fff));
+}
+.gls-absence-matrix .gls-absence-student {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    width: 260px;
+    min-width: 260px;
+    background-color: var(--bs-card-bg, var(--bs-body-bg, #fff));
+}
+.gls-absence-matrix thead .gls-absence-student {
+    z-index: 4;
+}
+.gls-absence-matrix .gls-absence-cell {
+    width: 46px;
+    min-width: 46px;
+    font-weight: 600;
+    vertical-align: middle;
+}
+.gls-absence-matrix .gls-absence-present {
+    background-color: #4cd964;
+    color: #10321a;
+}
+.gls-absence-matrix .gls-absence-absent {
+    background-color: #e74c3c;
+    color: #fff;
+}
+.gls-absence-matrix .gls-absence-vide {
+    background-color: #c8ccd0;
+}
+/* A student whose inscription is no longer Active: kept in the matrix (past
+   attendance is history) but flagged, like the red rows of the reference CRM. */
+.gls-absence-matrix .gls-absence-inactif .gls-absence-student {
+    background-color: #e74c3c;
+    color: #fff;
+}
+.gls-absence-matrix .gls-absence-inactif .gls-absence-student a {
+    color: #fff;
+}

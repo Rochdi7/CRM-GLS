@@ -120,6 +120,11 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
     const [loadingApplyFees, setLoadingApplyFees] = useState(false);
     const [studentCheques, setStudentCheques] = useState<StudentChequeOption[]>([]);
     const [emailTarget, setEmailTarget] = useState<EncaissementRow | null>(null);
+    // Why the WhatsApp send could not happen (no reachable number, or an
+    // APP_URL the student's phone cannot open) — the server owns that
+    // verdict, we only display its message.
+    const [whatsAppError, setWhatsAppError] = useState<string | null>(null);
+    const [whatsAppSending, setWhatsAppSending] = useState<number | null>(null);
     // Sélection multi-lignes pour le reçu GROUPÉ (onglets Encaissements /
     // Chèques uniquement — une avance n'appartient à aucune inscription et ne
     // peut donc pas figurer sur un reçu). Les ids sont mémorisés, pas les
@@ -362,6 +367,38 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
         setEmailTarget(row);
     }
 
+    /**
+     * Opens WhatsApp click-to-chat with the receipt message pre-written.
+     *
+     * The link is built SERVER-side (RecuWhatsAppLink) because the PDF
+     * travels as a signed URL — a secret of the application (APP_KEY) that
+     * React must never sign. Click-to-chat accepts no attachment parameter,
+     * so the signed link inside the text is the only way to publish the PDF.
+     */
+    async function openWhatsAppRecu(row: EncaissementRow) {
+        if (whatsAppSending !== null) {
+            return;
+        }
+
+        setWhatsAppSending(row.id);
+
+        try {
+            const response = await fetch(row.recuWhatsAppUrl, { headers: { Accept: 'application/json' } });
+            const payload = await response.json();
+
+            if (!response.ok) {
+                setWhatsAppError(payload?.message ?? t('Unable to open WhatsApp for this payment.'));
+                return;
+            }
+
+            window.open(payload.url, '_blank', 'noopener');
+        } catch {
+            setWhatsAppError(t('Unable to open WhatsApp for this payment.'));
+        } finally {
+            setWhatsAppSending(null);
+        }
+    }
+
     function closeEmailModal() {
         setEmailTarget(null);
     }
@@ -400,7 +437,11 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
 
         setLoadingAvanceInscriptions(true);
         try {
-            const response = await fetch(`/backoffice/students/${studentId}/inscriptions-for-payment`);
+            // Statut-unfiltered lookup: a closed dossier (annulée, archivée,
+            // changement de groupe, année terminée) is exactly what gets
+            // converted, so it must be listed here — unlike the payable
+            // cascade, which only offers Active inscriptions.
+            const response = await fetch(`/backoffice/students/${studentId}/inscriptions-for-conversion`);
             const data: { inscriptions: Array<{ id: number; label: string }> } = await response.json();
             setAvanceInscriptionOptions(data.inscriptions.map((i) => ({ value: i.id, label: i.label })));
         } finally {
@@ -1155,6 +1196,12 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                 <RowActionItem icon="ti-mail" onClick={() => openEmailRecu(row)}>
                                                     Envoyer le reçu par email
                                                 </RowActionItem>
+                                                <RowActionItem
+                                                    icon="ti-brand-whatsapp"
+                                                    onClick={() => openWhatsAppRecu(row)}
+                                                >
+                                                    Envoyer le reçu par WhatsApp
+                                                </RowActionItem>
                                                 {can?.delete && (
                                                     <>
                                                         <RowActionDivider />
@@ -1585,6 +1632,22 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                 )}
             </Modal>
 
+            {/* WhatsApp failure notice — the send is refused when the student
+                has no reachable number or when APP_URL is a local address the
+                student's phone would resolve to itself (a dead PDF link). */}
+            <Modal
+                show={whatsAppError !== null}
+                title="Envoi par WhatsApp impossible"
+                onClose={() => setWhatsAppError(null)}
+                footer={
+                    <button type="button" className="btn btn-light" onClick={() => setWhatsAppError(null)}>
+                        Fermer
+                    </button>
+                }
+            >
+                <p className="mb-0">{whatsAppError}</p>
+            </Modal>
+
             {/* Convert-to-avance modal — no montant input: select a student,
                 one of their inscriptions, then tick the payments to detach
                 from their frais (avances.convert). The frais drop back to
@@ -1635,6 +1698,11 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                             />
                         </div>
                     </div>
+
+                    <p className="text-muted fs-13">
+                        Les inscriptions clôturées (annulée, archivée, changement de groupe) de l'année active sont listées —
+                        pour convertir les paiements d'une autre année, basculez d'abord le sélecteur d'année en haut de page.
+                    </p>
 
                     {avanceForm.data.inscription_id !== '' && (
                         loadingAvancePayments ? (

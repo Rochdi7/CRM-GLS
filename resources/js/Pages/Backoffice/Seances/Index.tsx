@@ -247,6 +247,17 @@ export default function SeancesIndex({
                         Saisir l'absence
                     </Link>
                 </li>
+                <li className="nav-item" role="presentation">
+                    <Link
+                        href="/backoffice/seances/absence-par-groupe"
+                        className="nav-link fw-medium"
+                        role="tab"
+                        aria-selected="false"
+                    >
+                        <i className="ti ti-table me-2" />
+                        Absence par groupe
+                    </Link>
+                </li>
             </ul>
 
             <Card title="Séances" bodyClassName="p-0 py-3">

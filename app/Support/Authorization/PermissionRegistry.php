@@ -135,6 +135,13 @@ final class PermissionRegistry
                 'groups.change-teacher' => "Changer ou retirer l'enseignant d'un groupe",
                 'groups.archive' => 'Clôturer un groupe (Fin de formation)',
                 'groups.move-year' => 'Déplacer un groupe vers une autre année scolaire (avec ses inscriptions, séances et paiements)',
+                // ⚠ L'EXCEPTION à « un groupe ne se supprime jamais »
+                // (CLAUDE.md §11) : suppression DÉFINITIVE d'un groupe
+                // et de ses inscriptions, réservée au super-admin
+                // (superAdminOnly() ci-dessous). L'argent n'est JAMAIS
+                // supprimé — les encaissements rattachés sont d'abord
+                // reconvertis en avances (SupprimerGroupe).
+                'groups.delete' => 'Supprimer définitivement un groupe et ses inscriptions (super-admin)',
             ],
             'Présences' => [
                 'attendance.view' => 'Consulter les séances et présences',
@@ -453,6 +460,11 @@ final class PermissionRegistry
             // inscription, séance (and therefore payment) hanging off it —
             // a history-altering act reserved to super-admins (24/08/2026).
             'groups.move-year',
+            // Suppression définitive d'un groupe + ses inscriptions.
+            // Aucun preset ne peut la porter (matrix() filtre par
+            // superAdminOnly()) : c'est une destruction de données
+            // pédagogiques, cf. GroupPolicy@delete (31/08/2026).
+            'groups.delete',
             // Re-allocating a payment changes the inscription — and therefore
             // the année — the money is booked against. Same history-altering
             // class as groups.move-year (26/08/2026).

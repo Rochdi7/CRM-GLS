@@ -14,11 +14,22 @@ final class GroupPolicy extends ResourcePolicy
     protected string $module = 'groups';
 
     /**
-     * Groups are NEVER deleted (schema §6) — no permission grants this.
+     * ⚠ L'EXCEPTION à « un groupe ne se supprime jamais » (CLAUDE.md §11,
+     * schema §6). Depuis le 31/08/2026 un groupe créé par erreur (import
+     * raté, doublon, groupe de test) peut être détruit DÉFINITIVEMENT avec
+     * ses inscriptions — mais `groups.delete` est dans
+     * PermissionRegistry::superAdminOnly() : aucun preset de rôle ne le
+     * porte, donc en pratique seul un super-admin (Gate::before) l'atteint.
+     *
+     * L'argent n'est JAMAIS supprimé : Domain\Groups\Actions\SupprimerGroupe
+     * reconvertit d'abord les encaissements rattachés en avances (les
+     * enregistrements monétaires restent append-only, caisses.solde ne bouge
+     * pas). Un groupe qui porte des séances est refusé — l'historique de
+     * présence n'est pas destructible par ce chemin.
      */
     public function delete(User $user, Model $model): bool
     {
-        return false;
+        return $user->can('groups.delete') && $this->withinCenter($user, $model);
     }
 
     /**

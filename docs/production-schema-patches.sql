@@ -152,3 +152,13 @@ INSERT INTO types_depenses (nom, is_system, statut, created_at, updated_at)
 SELECT 'Produits consommables', false, 'Actif', now(), now()
  WHERE NOT EXISTS (SELECT 1 FROM types_depenses WHERE nom = 'Produits consommables');
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 31/08/2026 — Permission « groups.delete » (suppression définitive d'un
+-- groupe, super-admin uniquement). Aucune modification de schéma : la
+-- permission est créée par le seeder idempotent, à lancer en production :
+--     php artisan db:seed --class=RolesAndPermissionsSeeder --force
+-- Elle est dans PermissionRegistry::superAdminOnly(), donc matrix() la retire
+-- de tous les presets : aucun rôle ne la porte, seul Gate::before (super-admin)
+-- l'accorde. Rien à exécuter en SQL ici.
+-- ---------------------------------------------------------------------------

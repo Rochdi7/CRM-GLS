@@ -614,6 +614,7 @@
     "Photo removed.": "Photo supprimée.",
     "Photo updated.": "Photo mise à jour.",
     "Pick the fee this payment settles — the amount defaults to what is still owed on it.": "Choisissez le frais réglé par ce paiement — le montant est pré-rempli avec le reste à payer.",
+    "Please choose a group first.": "Veuillez d'abord choisir un groupe.",
     "Please click the button below to verify your email address.": "Veuillez cliquer sur le bouton ci-dessous pour vérifier votre adresse e-mail :",
     "Please enter your details to sign in": "Veuillez saisir vos identifiants pour vous connecter",
     "Please select the center this stock belongs to.": "Veuillez sélectionner le centre auquel appartient ce stock.",
@@ -1095,5 +1096,9 @@
     "Établissement créé.": "Établissement créé.",
     "Établissement mis à jour.": "Établissement mis à jour.",
     "Établissement supprimé.": "Établissement supprimé.",
-    "A grouped receipt must cover payments of a single registration.": "Un reçu groupé doit couvrir des paiements d'une seule inscription."
+    "A grouped receipt must cover payments of a single registration.": "Un reçu groupé doit couvrir des paiements d'une seule inscription.",
+    "This group has séances and cannot be deleted. Cancel or close it instead.": "Ce groupe porte des séances et ne peut pas être supprimé. Annulez-le ou clôturez-le à la place.",
+    "This group has :count payment(s) attached and cannot be deleted. Handle the payments first.": "Ce groupe a reçu :count paiement(s) et ne peut pas être supprimé. Traitez d'abord les paiements.",
+    "Type the exact group name to confirm the deletion.": "Retapez le nom exact du groupe pour confirmer la suppression.",
+    "Group :name and its :count registrations were permanently deleted.": "Le groupe :name et ses :count inscription(s) ont été supprimés définitivement."
 }

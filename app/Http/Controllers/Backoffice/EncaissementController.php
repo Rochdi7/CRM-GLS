@@ -227,6 +227,24 @@ final class EncaissementController extends Controller
         return response()->json(['inscriptions' => $getEncaissementsList->studentInscriptions($student)]);
     }
 
+    /**
+     * "Convertir en avance" cascade step 1 — like studentInscriptions() but
+     * WITHOUT the statut=Active filter: converting frees the money of a
+     * closed dossier (changement de groupe, annulation, année terminée), so
+     * the closed inscriptions are exactly the ones this modal must list.
+     * Still scoped to the active year: to convert last year's payments the
+     * cashier switches the top-bar to that year (which convertAvance()'s
+     * assertInscriptionInContext() requires anyway), then applies the
+     * resulting avance after switching back to the new year.
+     */
+    public function studentInscriptionsForConversion(Request $request, int $student, GetEncaissementsList $getEncaissementsList): JsonResponse
+    {
+        $this->authorize('create', Encaissement::class);
+        $this->assertCenterAccess($request, Student::query()->findOrFail($student)->etablissement_id);
+
+        return response()->json(['inscriptions' => $getEncaissementsList->studentInscriptionsForConversion($student)]);
+    }
+
     public function inscriptionFees(Request $request, Inscription $inscription, GetInscriptionUnpaidFees $getInscriptionUnpaidFees): JsonResponse
     {
         $this->authorize('create', Encaissement::class);

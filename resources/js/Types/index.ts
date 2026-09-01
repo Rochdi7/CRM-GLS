@@ -1079,6 +1079,23 @@ export interface StudentsPageProps {
 // --- Phase 8: Groups (Inertia/React list + modal CRUD with fee lines) ------
 
 /** One row of the Groups list — mirrors GetGroupsList's ->through() mapping exactly. */
+/**
+ * Impact réel d'une suppression définitive de groupe, calculé côté serveur
+ * (GroupController@deletionImpact) et affiché dans l'avertissement : jamais
+ * recompté côté client, pour que l'utilisateur voie les vrais chiffres.
+ */
+export interface GroupDeletionImpact {
+    nom: string;
+    inscriptions: number;
+    etudiants: number;
+    frais: number;
+    encaissements: number;
+    /** Montant déjà encaissé ; > 0 ⇒ suppression refusée par le serveur. */
+    montantEncaisse: number;
+    /** > 0 ⇒ suppression refusée par le serveur. */
+    seances: number;
+}
+
 export interface GroupRow {
     id: number;
     nom: string;
@@ -1555,6 +1572,13 @@ export interface EncaissementRow {
     recuUrl: string;
     /** POST target to email the A5 receipt (SendRecuEmailRequest: { email }). */
     recuEmailUrl: string;
+    /**
+     * GET endpoint returning { url, phone } — the WhatsApp click-to-chat link
+     * built server-side (RecuWhatsAppLink): the PDF travels as a SIGNED URL
+     * inside the message text, since click-to-chat cannot attach a file.
+     * Answers 422 when the student has no reachable number or APP_URL is local.
+     */
+    recuWhatsAppUrl: string;
 }
 
 export interface EncaissementsFilters {

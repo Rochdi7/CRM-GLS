@@ -55,6 +55,38 @@ final class ChangerEnseignantGroupe
             return ['assignment' => $courant, 'creneauxFermes' => 0, 'seancesSupprimees' => 0, 'changed' => false];
         }
 
+        // The Actif row already names the requested teacher — only the
+        // mirror column drifted. Resync it; nothing changed for the user.
+        if ($courant !== null && $courant->enseignant_id === $enseignantId) {
+            $group->update(['enseignant_id' => $enseignantId]);
+
+            return ['assignment' => $courant, 'creneauxFermes' => 0, 'seancesSupprimees' => 0, 'changed' => false];
+        }
+
+        // The EFFECTIVE teacher (groups.enseignant_id — what séances,
+        // créneaux and every list read) is not changing: this is a plain
+        // group edit, not a changeover. A back-filled group
+        // (groupes:mettre-a-jour writes the mirror column only) has no
+        // Actif assignment row, so the guard above saw a "change" and every
+        // ordinary save archived nothing, wiped nothing, yet flashed
+        // « L'emploi du temps du groupe a été arrêté (0/0) » (01/09/2026).
+        // Repair the missing chain row silently instead — never stop the
+        // emploi du temps for a teacher who is staying.
+        if ($group->enseignant_id === $enseignantId) {
+            $nouvelle = DB::transaction(function () use ($group, $enseignantId, $par, $courant): ?GroupEnseignant {
+                if ($courant !== null) {
+                    $courant->update([
+                        'date_fin' => Carbon::today()->lt($courant->date_debut) ? $courant->date_debut : Carbon::today(),
+                        'statut' => GroupEnseignant::STATUT_ARCHIVE,
+                    ]);
+                }
+
+                return $this->ouvrirInitiale($group, $enseignantId, $par);
+            });
+
+            return ['assignment' => $nouvelle ?? $courant, 'creneauxFermes' => 0, 'seancesSupprimees' => 0, 'changed' => false];
+        }
+
         $date = $dateDebut !== null && $dateDebut !== ''
             ? Carbon::parse($dateDebut)
             : Carbon::today();

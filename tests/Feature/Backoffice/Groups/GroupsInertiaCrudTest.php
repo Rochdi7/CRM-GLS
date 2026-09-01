@@ -238,9 +238,24 @@ final class GroupsInertiaCrudTest extends TestCase
         $this->assertNull($group->fresh()->historique);
     }
 
-    public function test_groups_cannot_be_deleted_and_have_no_destroy_route(): void
+    /**
+     * Depuis le 31/08/2026 une route destroy EXISTE, mais elle est
+     * l'exception super-admin (groups.delete ∈ superAdminOnly()) : aucun
+     * rôle opérationnel ne supprime un groupe. Cf. GroupDeleteTest pour le
+     * comportement complet.
+     */
+    public function test_groups_cannot_be_deleted_by_an_operational_role(): void
     {
-        $this->assertFalse(\Illuminate\Support\Facades\Route::has('backoffice.groups.destroy'));
+        $group = Group::factory()->create([
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $this->actingAs($this->userWith('groups.view', 'groups.update', 'groups.archive'));
+
+        $this->delete(route('backoffice.groups.destroy', $group), ['confirmation' => $group->nom])
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('groups', ['id' => $group->id]);
     }
 
     public function test_user_without_create_permission_cannot_store(): void

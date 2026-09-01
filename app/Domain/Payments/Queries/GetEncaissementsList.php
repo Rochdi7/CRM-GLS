@@ -309,6 +309,7 @@ final class GetEncaissementsList
                 'showUrl' => route('backoffice.encaissements.show', $e),
                 'recuUrl' => route('backoffice.encaissements.recu', $e),
                 'recuEmailUrl' => route('backoffice.encaissements.recu.email', $e),
+                'recuWhatsAppUrl' => route('backoffice.encaissements.recu.whatsapp', $e),
             ];
         });
 
@@ -545,6 +546,33 @@ final class GetEncaissementsList
             ->map(fn (Inscription $i): array => [
                 'id' => $i->id,
                 'label' => $i->reference.' — '.($i->group?->nom ?? '—'),
+            ]);
+    }
+
+    /**
+     * A student's registrations for the "Convertir en avance" modal — the
+     * ACTIVE-YEAR filter is kept (the switcher decides which year's dossiers
+     * are on screen, so converting an old year's payments means switching to
+     * that year first), but the statut filter is deliberately DROPPED:
+     * converting frees the money of a CLOSED dossier (annulée, archivée,
+     * expirée, changement de groupe) into reusable avances — the exact
+     * opposite of studentInscriptions(), which lists only payable (Active)
+     * dossiers. The statut is appended to the label so the cashier can tell
+     * a closed dossier from the live one.
+     *
+     * @return Collection<int, array{id:int, label:string}>
+     */
+    public function studentInscriptionsForConversion(int $studentId): Collection
+    {
+        return Inscription::query()
+            ->with('group')
+            ->where('student_id', $studentId)
+            ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
+            ->get()
+            ->map(fn (Inscription $i): array => [
+                'id' => $i->id,
+                'label' => $i->reference.' — '.($i->group?->nom ?? '—')
+                    .($i->statut === Inscription::STATUT_ACTIVE ? '' : ' ('.$i->statut.')'),
             ]);
     }
 

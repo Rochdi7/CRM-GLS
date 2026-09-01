@@ -422,6 +422,51 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame($inscription->id, $response['inscriptions'][0]['id']);
     }
 
+    public function test_conversion_lookup_lists_closed_inscriptions_the_payment_lookup_hides(): void
+    {
+        $this->actingAs($this->userWith('payments.view', 'payments.create'));
+        [$student, $inscription] = $this->enrolledStudentWithFee();
+
+        // Dossier clos (changement de groupe / annulation) : c'est exactement
+        // celui dont on convertit les paiements en avances.
+        $inscription->update(['statut' => Inscription::STATUT_ANNULEE]);
+
+        // Le cascade « payer » ne l'offre plus…
+        $payable = $this->get(route('backoffice.students.inscriptions-for-payment', $student))->json();
+        $this->assertCount(0, $payable['inscriptions']);
+
+        // …mais le cascade « convertir en avance » le liste, statut visible.
+        $convertible = $this->get(route('backoffice.students.inscriptions-for-conversion', $student))->json();
+        $this->assertCount(1, $convertible['inscriptions']);
+        $this->assertSame($inscription->id, $convertible['inscriptions'][0]['id']);
+        $this->assertStringContainsString('(Annulée)', $convertible['inscriptions'][0]['label']);
+    }
+
+    public function test_conversion_lookup_follows_the_active_year_switcher(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create');
+        $this->actingAs($user);
+        [$student, $inscription] = $this->enrolledStudentWithFee();
+
+        // Une autre année scolaire devient l'année active : l'inscription de
+        // l'année précédente ne doit plus apparaître — pour la convertir on
+        // rebascule le sélecteur sur son année.
+        $autreAnnee = AnneeScolaire::create([
+            'nom' => '2026/2027', 'date_debut' => '2026-09-01', 'date_fin' => '2027-08-31',
+            'par_defaut' => false, 'inscription_ouverte' => true,
+        ]);
+        app(CurrentContext::class)->setAnneeScolaire($autreAnnee->id);
+
+        $convertible = $this->get(route('backoffice.students.inscriptions-for-conversion', $student))->json();
+        $this->assertCount(0, $convertible['inscriptions']);
+
+        // Retour sur l'année du dossier : il est listé.
+        app(CurrentContext::class)->setAnneeScolaire($this->annee->id);
+        $convertible = $this->get(route('backoffice.students.inscriptions-for-conversion', $student))->json();
+        $this->assertCount(1, $convertible['inscriptions']);
+        $this->assertSame($inscription->id, $convertible['inscriptions'][0]['id']);
+    }
+
     public function test_inscription_fees_lookup_returns_only_unpaid_fees(): void
     {
         $this->actingAs($this->userWith('payments.view', 'payments.create'));

@@ -319,6 +319,17 @@ export default function SeanceShow({
                         Saisir l'absence
                     </button>
                 </li>
+                <li className="nav-item" role="presentation">
+                    <Link
+                        href="/backoffice/seances/absence-par-groupe"
+                        className="nav-link fw-medium"
+                        role="tab"
+                        aria-selected="false"
+                    >
+                        <i className="ti ti-table me-2" />
+                        Absence par groupe
+                    </Link>
+                </li>
             </ul>
 
             {activeTab === 'seances' && (

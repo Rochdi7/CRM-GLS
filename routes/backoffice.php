@@ -190,7 +190,8 @@ Route::prefix('backoffice')
             Route::get('students/{student}', [StudentController::class, 'show'])
                 ->name('students.show');
 
-            // Academic — groups are NEVER deleted (schema §6)
+            // Academic — groups are never deleted by ordinary roles
+            // (schema §6) ; groups.destroy est l'exception super-admin.
             // Groups — Inertia/React list + modal add/edit with per-group fee
             // assignment (Phase 8). Migrated exactly as the current Livewire
             // form exists — no room/capacity/schedule fields (confirmed
@@ -231,6 +232,14 @@ Route::prefix('backoffice')
             // another année scolaire, same counts before and after.
             Route::post('groups/{group}/move-year', [GroupController::class, 'moveYear'])
                 ->middleware('permission:groups.move-year')->name('groups.move-year');
+            // ⚠ Super-admin only (groups.delete est dans superAdminOnly()) :
+            // l'exception à « un groupe ne se supprime jamais » (§11), pour
+            // les groupes créés par erreur. Détruit le groupe ET ses
+            // inscriptions ; l'argent survit en avances (SupprimerGroupe).
+            Route::get('groups/{group}/deletion-impact', [GroupController::class, 'deletionImpact'])
+                ->middleware('permission:groups.delete')->name('groups.deletion-impact');
+            Route::delete('groups/{group}', [GroupController::class, 'destroy'])
+                ->middleware('permission:groups.delete')->name('groups.destroy');
             // Quick lifecycle actions from the list's row menu — "Annuler"
             // (-> Annulée, terminal, same groups.archive gate as Fin de
             // formation), "Réactiver" (Annulée -> En inscription), "Activer"
@@ -273,6 +282,15 @@ Route::prefix('backoffice')
             // another day right there.
             Route::get('seances/saisir-absence', [SeanceController::class, 'presences'])
                 ->middleware('permission:attendance.view')->name('seances.presences');
+            // « Absence par groupe » tab — the presence matrix of ONE group
+            // over a date window (students in rows, séances in columns) plus
+            // its .xlsx export. Read-only: same attendance.view permission,
+            // no dedicated export permission. Static segments, so they stay
+            // above seances/{seance} like the one right before.
+            Route::get('seances/absence-par-groupe', [SeanceController::class, 'absenceParGroupe'])
+                ->middleware('permission:attendance.view')->name('seances.absence-par-groupe');
+            Route::get('seances/absence-par-groupe/export', [SeanceController::class, 'absenceParGroupeExport'])
+                ->middleware('permission:attendance.view')->name('seances.absence-par-groupe.export');
             Route::get('seances/{seance}', [SeanceController::class, 'show'])
                 ->name('seances.show');
             Route::put('seances/{seance}/presences', [SeanceController::class, 'savePresences'])
@@ -468,6 +486,12 @@ Route::prefix('backoffice')
                 ->middleware('permission:payments.view')->name('encaissements.show');
             Route::get('students/{student}/inscriptions-for-payment', [EncaissementController::class, 'studentInscriptions'])
                 ->name('students.inscriptions-for-payment');
+            // Convert-to-avance cascade: same lookup but statut-unfiltered —
+            // a closed dossier (annulée/archivée/changement) is exactly what
+            // gets converted, so it must appear here while it never appears
+            // in the payable list above.
+            Route::get('students/{student}/inscriptions-for-conversion', [EncaissementController::class, 'studentInscriptionsForConversion'])
+                ->name('students.inscriptions-for-conversion');
             Route::get('inscriptions/{inscription}/unpaid-fees', [EncaissementController::class, 'inscriptionFees'])
                 ->name('inscriptions.unpaid-fees');
             Route::get('inscriptions/{inscription}/payments', [EncaissementController::class, 'inscriptionPayments'])

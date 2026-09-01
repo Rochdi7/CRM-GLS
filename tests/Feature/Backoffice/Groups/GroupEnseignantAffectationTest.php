@@ -258,6 +258,70 @@ final class GroupEnseignantAffectationTest extends TestCase
         Carbon::setTestNow();
     }
 
+    public function test_saving_a_backfilled_group_with_the_same_teacher_never_fakes_a_changeover(): void
+    {
+        // groupes:mettre-a-jour writes groups.enseignant_id directly, with no
+        // group_enseignants row. Saving the plain edit modal on such a group
+        // (teacher untouched) used to be read as a changeover — archiving
+        // nothing, wiping nothing, yet flashing « L'emploi du temps du groupe
+        // a été arrêté (0/0) » on every save (01/09/2026). It must repair the
+        // missing Actif row silently and leave the timetable alone.
+        Carbon::setTestNow('2025-10-01');
+
+        $prof = $this->enseignant();
+        $group = $this->group($prof); // mirror set, NO group_enseignants row
+
+        $creneau = Creneau::create([
+            'group_id' => $group->id, 'jour_semaine' => 1,
+            'heure_debut' => '10:00', 'heure_fin' => '12:00',
+            'enseignant_id' => $prof->id,
+        ]);
+        $future = Seance::create([
+            'group_id' => $group->id, 'creneau_id' => $creneau->id,
+            'date_seance' => '2025-10-27', 'enseignant_id' => $prof->id,
+            'statut' => Seance::STATUT_PREVUE,
+        ]);
+
+        $this->actingAs($this->userWith('groups.view', 'groups.update'))
+            ->put(route('backoffice.groups.update', $group), [
+                'nom' => 'Nom modifié',
+                'niveau' => $group->niveau,
+                'enseignant_id' => $prof->id,
+                'statut' => $group->statut,
+                'date_debut_formation' => '2025-09-01',
+                'date_fin_formation' => '2026-06-30',
+            ])
+            ->assertRedirect()
+            ->assertSessionMissing('emploiDuTempsArrete');
+
+        // Timetable untouched.
+        $this->assertNull($creneau->fresh()->date_fin);
+        $this->assertModelExists($future);
+
+        // The missing chain row is back-filled so the group is healthy from
+        // now on.
+        $this->assertDatabaseHas('group_enseignants', [
+            'group_id' => $group->id,
+            'enseignant_id' => $prof->id,
+            'statut' => GroupEnseignant::STATUT_ACTIF,
+            'date_fin' => null,
+        ]);
+        $this->assertSame(1, GroupEnseignant::where('group_id', $group->id)->count());
+
+        // Saving again is now a plain no-op — still no banner, no new row.
+        $this->put(route('backoffice.groups.update', $group), [
+            'nom' => 'Nom modifié encore',
+            'niveau' => $group->niveau,
+            'enseignant_id' => $prof->id,
+            'statut' => $group->statut,
+            'date_debut_formation' => '2025-09-01',
+            'date_fin_formation' => '2026-06-30',
+        ])->assertSessionMissing('emploiDuTempsArrete');
+        $this->assertSame(1, GroupEnseignant::where('group_id', $group->id)->count());
+
+        Carbon::setTestNow();
+    }
+
     /**
      * Since 31/08/2026 the changeover has its OWN ability, `groups.change-teacher`,
      * which every role holds — holding `groups.update` is NOT enough on its own,

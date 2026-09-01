@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Attendance\Actions\EnregistrerPresences;
+use App\Domain\Attendance\Exports\ExporterMatriceAbsences;
+use App\Domain\Attendance\Queries\GetAbsencesParGroupe;
 use App\Domain\Attendance\Queries\GetSeanceDetails;
 use App\Domain\Attendance\Queries\GetSeanceFormOptions;
 use App\Domain\Attendance\Queries\GetSeancesList;
@@ -25,6 +27,7 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\Http\Response as HttpResponse;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Attendance (Présences) — séances list + modal add/edit, and the per-séance
@@ -160,6 +163,90 @@ final class SeanceController extends Controller
             fallbackDate: $hasExplicitDate ? $requestedDate : now()->toDateString(),
             pageUrl: route('backoffice.seances.presences'),
         );
+    }
+
+    /**
+     * « Absence par groupe » tab — the presence MATRIX of one group: students
+     * in rows, the séances of the date window in columns, P/Q in the cells.
+     * Read-only, so no pagination and no context WRITE guard; the group is
+     * still scoped by centre reach + active context inside the query.
+     */
+    public function absenceParGroupe(
+        Request $request,
+        GetAbsencesParGroupe $getAbsencesParGroupe,
+        GetSeanceFormOptions $formOptions,
+    ): Response {
+        $this->authorize('viewAny', Seance::class);
+
+        $user = $request->user();
+        $filters = $this->absenceFilters($request);
+
+        return Inertia::render('Backoffice/Seances/AbsenceParGroupe', [
+            'matrice' => $getAbsencesParGroupe($user, $filters),
+            'filters' => $filters,
+            'groupOptions' => $formOptions->groups($user),
+            'statuts' => Seance::STATUTS,
+            'presenceStatuts' => Presence::STATUTS,
+        ]);
+    }
+
+    /**
+     * Same matrix as a downloadable .xlsx — one column per séance, exactly
+     * what the page shows for the CURRENT filters (they travel in the query
+     * string), so the file can never disagree with the screen.
+     */
+    public function absenceParGroupeExport(
+        Request $request,
+        GetAbsencesParGroupe $getAbsencesParGroupe,
+        ExporterMatriceAbsences $exporter,
+    ): StreamedResponse {
+        $this->authorize('viewAny', Seance::class);
+
+        $filters = $this->absenceFilters($request);
+
+        if ($filters['groupFilter'] === '') {
+            throw ValidationException::withMessages([
+                'groupFilter' => __('Please choose a group first.'),
+            ]);
+        }
+
+        // Centre reach, not `groups.view`: this is an attendance screen, and
+        // its reader holds attendance.* — the group is only the axis of the
+        // matrix. assertGroupInContext also refuses a group belonging to a
+        // year/centre the current screen does not show (AssertsContextScope).
+        $group = Group::findOrFail((int) $filters['groupFilter']);
+        $this->assertGroupInContext($request, $group);
+
+        return $exporter(
+            $getAbsencesParGroupe($request->user(), $filters),
+            $group,
+            $filters,
+        );
+    }
+
+    /**
+     * @return array{groupFilter: string, dateFrom: string, dateTo: string, statutFilter: string}
+     */
+    private function absenceFilters(Request $request): array
+    {
+        $filters = [
+            'groupFilter' => (string) $request->string('groupFilter'),
+            'dateFrom' => (string) $request->string('dateFrom'),
+            'dateTo' => (string) $request->string('dateTo'),
+            'statutFilter' => (string) $request->string('statutFilter'),
+        ];
+
+        if (! in_array($filters['statutFilter'], Seance::STATUTS, true)) {
+            $filters['statutFilter'] = '';
+        }
+
+        foreach (['dateFrom', 'dateTo'] as $key) {
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters[$key]) !== 1) {
+                $filters[$key] = '';
+            }
+        }
+
+        return $filters;
     }
 
     /**

@@ -23,6 +23,7 @@ import { blockImplicitSubmit } from '@/Lib/forms';
 import type {
     GroupFraisCatalogOption,
     GroupFraisLigne,
+    GroupDeletionImpact,
     GroupPaymentMatrix,
     GroupPaymentSort,
     GroupRow,
@@ -278,6 +279,9 @@ export default function GroupsIndex({
     // UI convenience only — backoffice.groups.payment-matrix carries the real
     // permission:payments.view gate (CLAUDE.md §5).
     const canViewPayments = auth.isSuperAdmin || auth.permissions.includes('payments.view');
+    // `groups.delete` est dans superAdminOnly() : aucun rôle ne le porte,
+    // donc en pratique seul un super-admin voit l'entrée de menu.
+    const canDeleteGroups = auth.isSuperAdmin || auth.permissions.includes('groups.delete');
     const [showModal, setShowModal] = useState(false);
     const [editingGroup, setEditingGroup] = useState<GroupRow | null>(null);
     const [studentsModal, setStudentsModal] = useState<{ group: GroupRow; segment: StatsSegment } | null>(null);
@@ -291,6 +295,16 @@ export default function GroupsIndex({
     const [lifecycleTarget, setLifecycleTarget] = useState<{ group: GroupRow; action: LifecycleAction } | null>(null);
     const [lifecycleError, setLifecycleError] = useState<string | undefined>(undefined);
     const [lifecycleProcessing, setLifecycleProcessing] = useState(false);
+    // ⚠ Suppression DÉFINITIVE d'un groupe — super-admin uniquement, confort
+    // d'UI seulement : la vraie garde est `permission:groups.delete` +
+    // GroupPolicy@delete côté serveur (CLAUDE.md §5). L'impact affiché est
+    // demandé au serveur pour que l'avertissement montre de VRAIS chiffres.
+    const [deleteTarget, setDeleteTarget] = useState<GroupRow | null>(null);
+    const [deleteImpact, setDeleteImpact] = useState<GroupDeletionImpact | null>(null);
+    const [loadingImpact, setLoadingImpact] = useState(false);
+    const [deleteConfirmation, setDeleteConfirmation] = useState('');
+    const [deleteError, setDeleteError] = useState<string | undefined>(undefined);
+    const [deleteProcessing, setDeleteProcessing] = useState(false);
     // « Frais du groupe » removal — the LIVE working copy of which fees the
     // group carries and which it has dropped, mirroring the Inscriptions edit
     // modal (removeEditingLine/restoreHiddenFee). They start from the server
@@ -446,6 +460,50 @@ export default function GroupsIndex({
     function confirmRetournerEnInscription(group: GroupRow) {
         setLifecycleTarget({ group, action: 'retourner-en-inscription' });
         setLifecycleError(undefined);
+    }
+
+    // Le serveur REFUSE la suppression d'un groupe qui a encaissé ou qui porte
+    // des séances (SupprimerGroupe) ; l'UI reflète ce refus plutôt que de
+    // laisser l'utilisateur retaper le nom pour rien. Confort d'affichage
+    // seulement — la garde réelle est côté serveur (CLAUDE.md §5).
+    const deletionBlocked =
+        deleteImpact !== null && (deleteImpact.seances > 0 || deleteImpact.encaissements > 0);
+
+    function confirmDelete(group: GroupRow) {
+        setDeleteTarget(group);
+        setDeleteImpact(null);
+        setDeleteConfirmation('');
+        setDeleteError(undefined);
+        setLoadingImpact(true);
+
+        fetch(`/backoffice/groups/${group.id}/deletion-impact`, {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+        })
+            .then((response) => (response.ok ? response.json() : Promise.reject(response)))
+            .then((data: GroupDeletionImpact) => setDeleteImpact(data))
+            .catch(() => setDeleteError("Impossible de charger l'impact de la suppression."))
+            .finally(() => setLoadingImpact(false));
+    }
+
+    function handleDeleteConfirm() {
+        if (!deleteTarget || deleteConfirmation.trim() !== deleteTarget.nom.trim()) {
+            return;
+        }
+
+        setDeleteProcessing(true);
+        router.delete(`/backoffice/groups/${deleteTarget.id}`, {
+            data: { confirmation: deleteConfirmation },
+            preserveScroll: true,
+            onSuccess: () => {
+                setDeleteTarget(null);
+                setDeleteError(undefined);
+            },
+            onError: (errors) => {
+                setDeleteError(errors.confirmation ?? errors.group ?? 'Suppression impossible.');
+            },
+            onFinish: () => setDeleteProcessing(false),
+        });
     }
 
     function handleLifecycleConfirm() {
@@ -916,6 +974,14 @@ export default function GroupsIndex({
                                                     </RowActionItem>
                                                 </>
                                             )}
+                                            {canDeleteGroups && (
+                                                <>
+                                                    <RowActionDivider />
+                                                    <RowActionItem icon="ti-trash" danger onClick={() => confirmDelete(group)}>
+                                                        Supprimer définitivement
+                                                    </RowActionItem>
+                                                </>
+                                            )}
                                         </RowActions>
                                     </td>
                                 </tr>
@@ -1275,6 +1341,121 @@ export default function GroupsIndex({
                     sort={paymentsSort}
                     onSortChange={changePaymentsSort}
                 />
+            </Modal>
+
+            {/*
+              * ⚠ Suppression DÉFINITIVE — volontairement PAS un ConfirmDialog
+              * ordinaire : l'acte est irréversible, donc l'avertissement
+              * montre l'impact réel (chiffres venus du serveur) et exige de
+              * retaper le nom exact du groupe. Le serveur revérifie ce nom
+              * (GroupController@destroy) — l'UI ne fait que le rendre lisible.
+              */}
+            <Modal
+                show={deleteTarget !== null}
+                title="Supprimer définitivement ce groupe"
+                onClose={() => setDeleteTarget(null)}
+                processing={deleteProcessing}
+                size="lg"
+                footer={
+                    <>
+                        <button
+                            type="button"
+                            className="btn btn-light"
+                            onClick={() => setDeleteTarget(null)}
+                            disabled={deleteProcessing}
+                        >
+                            Annuler
+                        </button>
+                        <button
+                            type="button"
+                            className="btn btn-danger"
+                            onClick={handleDeleteConfirm}
+                            disabled={
+                                deleteProcessing ||
+                                loadingImpact ||
+                                (deleteImpact?.seances ?? 0) > 0 ||
+                                deleteConfirmation.trim() !== (deleteTarget?.nom.trim() ?? ' ')
+                            }
+                        >
+                            {deleteProcessing ? 'Suppression…' : 'Supprimer définitivement'}
+                        </button>
+                    </>
+                }
+            >
+                <div className="alert alert-danger d-flex align-items-start gap-2" role="alert">
+                    <i className="ti ti-alert-triangle fs-20 mt-1" />
+                    <div>
+                        <p className="fw-semibold mb-1">Cette action est irréversible.</p>
+                        <p className="mb-0 fs-13">
+                            Le groupe <strong>{deleteTarget?.nom}</strong> et toutes ses inscriptions seront
+                            supprimés définitivement de la base. Il n'existe aucun moyen de les restaurer
+                            depuis l'application.
+                        </p>
+                    </div>
+                </div>
+
+                {loadingImpact && <p className="text-muted fs-13">Calcul de l'impact…</p>}
+
+                {deleteImpact && (
+                    <>
+                        <p className="fw-semibold mb-2">Ce qui va être supprimé :</p>
+                        <ul className="mb-3 fs-13">
+                            <li>
+                                <strong>{deleteImpact.inscriptions}</strong> inscription(s), concernant{' '}
+                                <strong>{deleteImpact.etudiants}</strong> étudiant(s)
+                            </li>
+                            <li>
+                                <strong>{deleteImpact.frais}</strong> ligne(s) de frais
+                            </li>
+                        </ul>
+
+                        {deleteImpact.encaissements > 0 && (
+                            <div className="alert alert-danger fs-13" role="alert">
+                                <i className="ti ti-lock me-1" />
+                                Ce groupe a reçu <strong>{deleteImpact.encaissements}</strong> paiement(s) —{' '}
+                                <strong>
+                                    {deleteImpact.montantEncaisse.toLocaleString('fr-MA', {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                    })}{' '}
+                                    MAD
+                                </strong>
+                                . La suppression est refusée : un groupe qui a encaissé n'est pas un groupe
+                                créé par erreur. Traitez d'abord les paiements (remboursement, ou changement
+                                de groupe des étudiants), puis utilisez « Annuler » ou « Terminer ».
+                            </div>
+                        )}
+
+                        {deleteImpact.seances > 0 && (
+                            <div className="alert alert-danger fs-13" role="alert">
+                                <i className="ti ti-lock me-1" />
+                                Ce groupe porte <strong>{deleteImpact.seances}</strong> séance(s). La
+                                suppression est refusée : l'historique de présence n'est pas destructible.
+                                Utilisez plutôt « Annuler » ou « Terminer ».
+                            </div>
+                        )}
+                    </>
+                )}
+
+                {deleteImpact !== null && !deletionBlocked && (
+                    <div className="mt-3">
+                        <label className="form-label fs-13" htmlFor="group-delete-confirmation">
+                            Pour confirmer, retapez le nom exact du groupe :{' '}
+                            <strong className="text-normal-case">{deleteTarget?.nom}</strong>
+                        </label>
+                        <input
+                            id="group-delete-confirmation"
+                            type="text"
+                            className="form-control"
+                            value={deleteConfirmation}
+                            onChange={(event) => setDeleteConfirmation(event.target.value)}
+                            disabled={deleteProcessing}
+                            autoComplete="off"
+                        />
+                    </div>
+                )}
+
+                {deleteError && <p className="text-danger fs-13 mt-2 mb-0">{deleteError}</p>}
             </Modal>
 
             <ConfirmDialog

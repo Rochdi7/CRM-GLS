@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Backoffice;
 use App\Domain\Groups\Actions\ChangerEnseignantGroupe;
 use App\Domain\Groups\Actions\ReaffecterGroupeVersAnnee;
 use App\Domain\Groups\Actions\RetirerFraisGroupe;
+use App\Domain\Groups\Actions\SupprimerGroupe;
 use App\Domain\Groups\Queries\GetGroupDetails;
 use App\Domain\Groups\Queries\GetGroupFormOptions;
 use App\Domain\Groups\Queries\GetGroupPaymentMatrix;
@@ -23,7 +24,11 @@ use App\Http\Requests\Backoffice\Groups\UpdateGroupRequest;
 use App\Models\AnneeScolaire;
 use App\Models\Frais;
 use App\Models\Group;
+use App\Models\Encaissement;
 use App\Models\GroupEnseignant;
+use App\Models\Inscription;
+use App\Models\InscriptionFee;
+use App\Models\Seance;
 use App\Services\Context\CurrentContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -39,8 +44,9 @@ use Inertia\Response;
  * action (Phase 5, unchanged). The list + create/update mutations mirror
  * App\Livewire\Backoffice\Groups\GroupsIndex one-for-one — migrated exactly
  * as the current Livewire form exists, no room/capacity/schedule fields
- * (confirmed absent from the live UI). Groups are NEVER deleted (schema §6)
- * — no destroy route exists, by design.
+ * (confirmed absent from the live UI). Groups sont normalement JAMAIS
+ * supprimés (schema §6) : destroy() est l'exception super-admin ajoutée le
+ * 31/08/2026 pour les groupes créés par erreur — voir SupprimerGroupe.
  */
 final class GroupController extends Controller
 {
@@ -717,5 +723,65 @@ final class GroupController extends Controller
         }
 
         return $sync;
+    }
+
+    /**
+     * Chiffres réels affichés dans l'avertissement de suppression (ce que la
+     * destruction va emporter). Lecture seule, même garde que destroy() : un
+     * non-super-admin ne doit même pas pouvoir sonder le groupe.
+     */
+    public function deletionImpact(Request $request, Group $group): JsonResponse
+    {
+        $this->authorize('delete', $group);
+
+        $inscriptionIds = Inscription::query()->where('group_id', $group->id)->pluck('id');
+        $feeIds = InscriptionFee::query()->whereIn('inscription_id', $inscriptionIds)->pluck('id');
+        $encaissements = Encaissement::query()->whereIn('inscription_fee_id', $feeIds);
+
+        return response()->json([
+            'nom' => $group->nom,
+            'inscriptions' => $inscriptionIds->count(),
+            'etudiants' => Inscription::query()->where('group_id', $group->id)
+                ->distinct()->count('student_id'),
+            'frais' => $feeIds->count(),
+            // > 0 ⇒ suppression refusée (invariant monétaire, SupprimerGroupe).
+            'encaissements' => (clone $encaissements)->count(),
+            'montantEncaisse' => (float) (clone $encaissements)->sum('montant'),
+            'seances' => Seance::query()->where('group_id', $group->id)->count(),
+        ]);
+    }
+
+    /**
+     * ⚠ Suppression DÉFINITIVE du groupe et de ses inscriptions — super-admin
+     * uniquement (`groups.delete` ∈ superAdminOnly()). REFUSÉE si le groupe
+     * porte le moindre encaissement ou la moindre séance : ce chemin ne sert
+     * qu'aux groupes créés par erreur (SupprimerGroupe).
+     */
+    public function destroy(Request $request, Group $group, SupprimerGroupe $supprimer): RedirectResponse
+    {
+        $this->authorize('delete', $group);
+        $this->assertGroupInContext($request, $group, 'group');
+
+        // Double confirmation serveur : le nom exact du groupe doit être
+        // retapé, pour qu'un POST forgé ou un double-clic ne détruise rien.
+        $data = $request->validate([
+            'confirmation' => ['required', 'string'],
+        ]);
+
+        if (trim((string) $data['confirmation']) !== trim((string) $group->nom)) {
+            throw ValidationException::withMessages([
+                'confirmation' => __('Type the exact group name to confirm the deletion.'),
+            ]);
+        }
+
+        $nom = (string) $group->nom;
+        $resultat = $supprimer->handle($group);
+
+        $message = __('Group :name and its :count registrations were permanently deleted.', [
+            'name' => $nom,
+            'count' => (string) $resultat['inscriptions'],
+        ]);
+
+        return redirect()->route('backoffice.groups.index')->with('success', $message);
     }
 }
