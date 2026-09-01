@@ -382,8 +382,23 @@ the database layer. Non-negotiable invariants already enforced in code:
     account; `caisseOptions()` never offers one).
   `caisse_id` is stored on the row and immutable, so cancellation / approval /
   avance application reverse or follow the SAME account with no re-derivation.
-  **`encaissements.methode` is frozen after creation** like `montant`/
-  `caisse_id` (`EncaissementController@update` refuses a different value).
+  **`encaissements.methode` is CORRECTABLE, but only as a money movement**
+  (01/09/2026). It is not a label: it decided which account was credited, so
+  the ONLY way to change it is
+  `Domain\Payments\Actions\RequalifierMethodeEncaissement`, which in ONE
+  transaction debits the old caisse, credits the one `CaisseResolver` returns
+  for the new method, and updates `caisse_id` — **both legs journaled through
+  `CaisseLedger`**. Never write the column directly: that leaves the money in
+  one account and the label on another, with nothing in the journal to explain
+  it. `montant` and `caisse_id` stay non-editable by hand. The permission is
+  `payments.update-method`, held by the five management roles + super-admin
+  (`$managementEdits`) — the front office keeps `payments.update` for the note
+  and cheque identity but never moves money (§16). The new caisse's centre is
+  the ENCAISSEMENT's, never the corrector's active context. Refused on an
+  avance-application row (it credited no caisse), a tracked-cheque payment,
+  and an already-refunded payment; `GetEncaissementsList` carries the same
+  rule to the UI as `methodeRequalifiable` rather than letting the page
+  re-derive it.
   Nothing is derived on top of stored balances any more (the old
   `GetComptesCaisse::DERIVED_TYPES` counted a TPE payment twice) — never
   reintroduce a live-aggregated "account". Historical non-cash PAYMENTS still

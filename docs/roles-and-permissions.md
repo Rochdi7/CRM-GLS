@@ -177,7 +177,9 @@ form.
 >    temps). Tout le reste de la finance est **création seule** — on corrige
 >    par une écriture compensatoire, jamais en réécrivant le document.
 > 3. **La date d'un encaissement est réservée au super-admin**
->    (`payments.update-date`).
+>    (`payments.update-date`). Sa **méthode** est corrigeable par les cinq
+>    rôles de direction (`payments.update-method`, 01/09/2026) — et cette
+>    correction déplace l'argent entre les deux caisses concernées.
 > 4. **Le stock physique appartient au seul `marketing-manager`** ; les
 >    autres rôles gardent `stock.view`.
 
@@ -193,8 +195,32 @@ keep the roles from drifting apart:
   aucune. Stock en **lecture seule**. **No** `centers.access-all`.
 - **`$managementEdits`** — les corrections qu'un cadre arbitre :
   `expenses.update`, `refunds.update`, `cheques.update`,
-  `cash-transfers.update`, plus la **lecture** de « Comptes de caisse »
-  (`cash-accounts.view`). Ajouté aux cinq rôles de direction.
+  `cash-transfers.update`, **`payments.update-method`**, plus la **lecture**
+  de « Comptes de caisse » (`cash-accounts.view`). Ajouté aux cinq rôles de
+  direction.
+
+  ⚠ **`payments.update-method` (01/09/2026) n'est pas une correction
+  d'étiquette.** La méthode a décidé dans quelle `caisses` l'argent est tombé
+  (`CaisseResolver` : Espèces → la caisse physique de l'agent ; TPE / Chèque /
+  Virement → le compte du CENTRE pour cette méthode), donc la corriger
+  **déplace l'argent** : `RequalifierMethodeEncaissement` débite l'ancienne
+  caisse, crédite la nouvelle et met à jour `caisse_id` sur la ligne, le tout
+  dans UNE transaction avec les **deux jambes journalisées** par
+  `CaisseLedger` (jamais une écriture directe sur la colonne, qui laisserait
+  l'argent dans un compte et le libellé sur un autre). `montant` ne bouge
+  jamais : on range l'argent ailleurs, on n'en crée pas.
+
+  Le centre de la nouvelle caisse est celui de l'ENCAISSEMENT, pas le contexte
+  actif de celui qui corrige — même raisonnement que pour un remboursement lié
+  (CLAUDE.md §11, dimension centre du journal). L'action refuse trois cas, et
+  le read-model porte la même règle jusqu'à l'UI via
+  `GetEncaissementsList` → `methodeRequalifiable` : une ligne « application »
+  d'avance (elle n'a crédité aucune caisse), un paiement lié à un chèque suivi
+  (cycle de vie possédé par le module Chèques), un paiement déjà remboursé
+  (l'argent est déjà sorti). Le front-office reste en **création seule** : il
+  garde `payments.update` pour la note et l'identité du chèque, mais ne
+  déplace pas d'argent. Tests :
+  `tests/Feature/Backoffice/Finance/EncaissementsInertiaCrudTest.php`.
 - **`$financeReadOnly`** — read access to every finance screen, the baseline
   the accounting/oversight roles build on.
 

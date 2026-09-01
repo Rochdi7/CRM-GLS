@@ -201,6 +201,15 @@ final class PermissionRegistry
                 // may re-date money. Every other role keeps `payments.update`
                 // for the note / cheque identity fields (30/08/2026).
                 'payments.update-date' => "Modifier la date de paiement d'un encaissement",
+                // Requalifier la MÉTHODE d'un encaissement enregistré. Ce
+                // n'est pas une étiquette : la méthode a décidé dans quelle
+                // caisse l'argent est tombé, donc la corriger DÉPLACE l'argent
+                // (débit de l'ancienne caisse + crédit de la nouvelle, les
+                // deux jambes journalisées — RequalifierMethodeEncaissement).
+                // Réservée aux rôles de direction ($managementEdits) : le
+                // front-office reste en création seule sur la finance et
+                // corrige par écriture compensatoire (01/09/2026).
+                'payments.update-method' => "Modifier la méthode de paiement d'un encaissement",
                 // Deliberately in NO role preset below. Money records are
                 // append-only by default (CLAUDE.md §11); a super-admin grants
                 // this one by hand when a real correction case needs it.
@@ -604,6 +613,19 @@ final class PermissionRegistry
             'refunds.view', 'refunds.create',
             'cheques.view', 'cheques.create',
             'cash-transfers.view', 'cash-transfers.create',
+            // Accepter un transfert ENTRANT est un droit du DESTINATAIRE,
+            // pas un privilege de direction (01/09/2026). Le garde-fou
+            // anti-fraude n'est PAS cette permission mais le controle de
+            // propriete de la caisse de destination, applique deux fois
+            // (CaisseTransferPolicy@validate + ValiderTransfertCaisse) :
+            // il ne laisse passer QUE l'employe dont la propre caisse est
+            // creditee, et jamais le demandeur. Quiconque detient la
+            // permission ne peut donc rien valider chez autrui.
+            // La reserver aux directeurs bloquait la caissiere qui recoit
+            // reellement l'argent : le bouton « Accepter la reception »
+            // s'affichait mais le serveur refusait, et le transfert
+            // restait « En attente » indefiniment.
+            'cash-transfers.validate',
             'stock.view',
             'stock-types.view',
         ];
@@ -625,6 +647,12 @@ final class PermissionRegistry
         // everyone, super-admin included.
         $managementEdits = [
             'expenses.update',
+            // Requalifier la méthode d'un encaissement déplace l'argent entre
+            // la caisse physique et le compte TPE/Chèque/Virement du centre.
+            // Même classe que les autres corrections arbitrées ici : un
+            // responsable tranche, le front-office ne réécrit pas un
+            // document monétaire (01/09/2026).
+            'payments.update-method',
             'refunds.update',
             'cheques.update',
             'cash-transfers.update',
@@ -687,7 +715,6 @@ final class PermissionRegistry
                 'permissions.view',
                 'cash-registers.create', 'cash-registers.update',
                 'expense-types.create', 'expense-types.update',
-                'cash-transfers.validate',
                 'audit-logs.view',
             ],
 
@@ -713,7 +740,6 @@ final class PermissionRegistry
                 'employees.view',
                 'cash-registers.create', 'cash-registers.update',
                 'expense-types.create', 'expense-types.update',
-                'cash-transfers.validate',
                 'audit-logs.view',
             ],
 
@@ -727,6 +753,10 @@ final class PermissionRegistry
                 'refunds.create', 'refunds.update',
                 'cheques.create', 'cheques.update',
                 'cash-transfers.create', 'cash-transfers.update',
+                // Le comptable tient une caisse : il doit pouvoir accepter
+                // un transfert entrant vers SA propre caisse (regle
+                // destinataire, cf. $operations).
+                'cash-transfers.validate',
                 'audit-logs.view',
             ],
 

@@ -44,6 +44,9 @@ function eventVariant(event: string | null) {
     }
 }
 
+/** Mirrors GetActivityLogList::DEFAULT_PER_PAGE — what a reset restores. */
+const DEFAULT_PER_PAGE = 10;
+
 export default function AuditLogsIndex({
     entries,
     logNames,
@@ -51,7 +54,7 @@ export default function AuditLogsIndex({
     causers,
     subjectTypes,
     caisses,
-    hasDeveloperAccount,
+    etablissements,
     filters,
 }: AuditLogPageProps) {
     const loading = useInertiaLoading();
@@ -66,11 +69,14 @@ export default function AuditLogsIndex({
         );
     }
 
-    // includeDeveloper / financeOnly are booleans, not text filters: a reset
-    // turns both OFF (the page's default view).
+    // `financeOnly` / `includeDeveloper` / `perPage` are no longer on the bar,
+    // but they are still part of the server-echoed `filters` prop — so they
+    // still need their real defaults here, or the reset would send them back
+    // as '' and the button would report itself permanently "active".
     const filterReset = useFilterReset(filters, reload, {
-        includeDeveloper: false,
         financeOnly: false,
+        includeDeveloper: false,
+        perPage: DEFAULT_PER_PAGE,
     });
 
 
@@ -101,6 +107,21 @@ export default function AuditLogsIndex({
                                 placeholder={t('All modules')}
                                 options={logNames.map((o) => ({ value: o.value, label: o.label }))}
                                 onChange={(event) => reload({ logName: event.target.value })}
+                            />
+                        </div>
+
+                        {/* Centre of the RECORD touched, not of the actor:
+                            « ce qui s'est passé à Rabat » includes a Casablanca
+                            agent editing a Rabat group. Options are limited
+                            server-side to the centres this reader may see. */}
+                        <div style={{ width: 200 }}>
+                            <SelectField
+                                id="audit-etablissement"
+                                label={t('Center')}
+                                value={filters.etablissementId}
+                                placeholder={t('All centers')}
+                                options={etablissements.map((o) => ({ value: o.value, label: o.label }))}
+                                onChange={(event) => reload({ etablissementId: event.target.value })}
                             />
                         </div>
 
@@ -181,39 +202,6 @@ export default function AuditLogsIndex({
                             />
                         </div>
 
-                        <div>
-                            <label className="form-label d-block">{t('Scope')}</label>
-                            <button
-                                type="button"
-                                className={`btn ${filters.financeOnly ? 'btn-primary' : 'btn-outline-primary'}`}
-                                onClick={() => reload({ financeOnly: !filters.financeOnly })}
-                                aria-pressed={filters.financeOnly}
-                            >
-                                <i className="ti ti-coins me-1" aria-hidden="true" />
-                                {t('Money only')}
-                            </button>
-                        </div>
-
-                        {/* The maintainer's entries are recorded like anyone
-                            else's — this only brings them back into view. */}
-                        {hasDeveloperAccount && (
-                            <div>
-                                <label className="form-label d-block">{t('Technical account')}</label>
-                                <button
-                                    type="button"
-                                    className={`btn ${filters.includeDeveloper ? 'btn-secondary' : 'btn-outline-secondary'}`}
-                                    onClick={() => reload({ includeDeveloper: !filters.includeDeveloper })}
-                                    aria-pressed={filters.includeDeveloper}
-                                    title={t('The technical account is always recorded; this only shows it.')}
-                                >
-                                    <i
-                                        className={`ti ${filters.includeDeveloper ? 'ti-eye' : 'ti-eye-off'} me-1`}
-                                        aria-hidden="true"
-                                    />
-                                    {t('Include technical account')}
-                                </button>
-                            </div>
-                        )}
                     </TableToolbar>
                 </div>
 

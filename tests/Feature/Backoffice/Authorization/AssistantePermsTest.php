@@ -89,6 +89,12 @@ final class AssistantePermsTest extends TestCase
                 // Re-dating a payment moves it in the caisse journal and the
                 // annual summary — super-admin only since 30/08/2026.
                 'payments.update-date',
+                // Requalifier la méthode DÉPLACE l'argent entre la caisse
+                // physique et le compte de méthode du centre
+                // (RequalifierMethodeEncaissement) : réservé aux rôles de
+                // direction depuis le 01/09/2026. Le front-office garde
+                // `payments.update` pour la note et l'identité du chèque.
+                'payments.update-method',
             ] as $permission) {
                 $this->assertFalse(
                     $user->can($permission),

@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Payments\Actions\AppliquerAvance;
 use App\Domain\Payments\Actions\ConvertirEncaissementsEnAvance;
+use App\Domain\Payments\Actions\RequalifierMethodeEncaissement;
 use App\Domain\Finance\Support\CaisseResolver;
 use App\Domain\Payments\Actions\EnregistrerEncaissement;
 use App\Domain\Payments\Mail\EncaissementRecuMail;
@@ -183,6 +184,12 @@ final class EncaissementController extends Controller
                 // edit modal disables the Date field without it. UI
                 // convenience only: update() drops the field server-side.
                 'updateDate' => $request->user()?->can('payments.update-date') ?? false,
+                // Requalifier la méthode déplace l'argent entre la caisse
+                // physique et le compte de méthode du centre : rôles de
+                // direction + super-admin (01/09/2026). Confort d'interface
+                // seulement — update() refuse une méthode différente sans la
+                // permission.
+                'updateMethode' => $request->user()?->can('payments.update-method') ?? false,
             ],
         ]);
     }
@@ -784,23 +791,57 @@ final class EncaissementController extends Controller
             ->with('success', __('Payment deleted.'));
     }
 
-    public function update(UpdateEncaissementRequest $request, Encaissement $encaissement): RedirectResponse
-    {
+    public function update(
+        UpdateEncaissementRequest $request,
+        Encaissement $encaissement,
+        RequalifierMethodeEncaissement $requalifierMethode,
+    ): RedirectResponse {
         $this->authorize('update', $encaissement);
 
         $data = $request->validated();
 
-        // `methode` is FROZEN with the row, exactly like montant/caisse_id:
-        // it decided which account was credited, so an edit would leave the
-        // money in one account and the label on another. A posted value is
-        // accepted only when it repeats the stored one (UI convenience).
-        if (($data['methode'] ?? $encaissement->methode) !== $encaissement->methode) {
-            throw ValidationException::withMessages([
-                'methode' => __('The payment method of a recorded payment cannot be changed.'),
-            ]);
-        }
-
+        // ⚠ `methode` n'est PAS une étiquette : elle a décidé dans quelle
+        // caisse l'argent est tombé (CaisseResolver). La corriger DÉPLACE
+        // donc l'argent — débit de l'ancienne caisse, crédit de la nouvelle,
+        // les deux jambes journalisées — ce que fait
+        // RequalifierMethodeEncaissement dans une seule transaction. Jamais
+        // une écriture directe sur la colonne : elle laisserait l'argent
+        // dans un compte et le libellé sur un autre (CLAUDE.md §11).
+        //
+        // Réservée à `payments.update-method` (rôles de direction +
+        // super-admin, 01/09/2026). Sans la permission le champ est désactivé
+        // dans le modal, donc une valeur DIFFÉRENTE qui arrive ici est un
+        // formulaire périmé ou une requête forgée : on la refuse
+        // explicitement plutôt que de la laisser passer en silence, parce
+        // qu'accepter à moitié une correction monétaire est pire que la
+        // rejeter. Une valeur identique reste acceptée (le modal la renvoie).
+        $methodePostee = $data['methode'] ?? $encaissement->methode;
         unset($data['methode']);
+
+        if ($methodePostee !== $encaissement->methode) {
+            if (! $request->user()->can('payments.update-method')) {
+                throw ValidationException::withMessages([
+                    'methode' => __('You are not allowed to change the payment method of a recorded payment.'),
+                ]);
+            }
+
+            $agent = $request->user()->employee;
+
+            if ($agent === null) {
+                // La nouvelle caisse d'un paiement en espèces est la caisse
+                // physique de l'agent : sans fiche employé il n'y en a pas.
+                throw ValidationException::withMessages([
+                    'methode' => __('Your account is not linked to an employee record, so no cash account can be resolved.'),
+                ]);
+            }
+
+            $requalifierMethode->handle($encaissement, $methodePostee, $agent);
+
+            // La ligne vient de changer de caisse : on repart de l'état
+            // fraîchement écrit pour que les règles chèque ci-dessous lisent
+            // la NOUVELLE méthode, pas celle d'avant la requalification.
+            $encaissement->refresh();
+        }
 
         // ⚠ `date_paiement` is SUPER-ADMIN ONLY (30/08/2026). Re-dating a
         // recorded payment relocates the row in the caisse journal and in the
@@ -831,7 +872,9 @@ final class EncaissementController extends Controller
             $data['date_echeance_cheque'] = null;
         }
 
-        // montant / caisse_id / methode are not editable (see
+        // montant / caisse_id ne sont jamais éditables à la main ; `methode`
+        // l'est uniquement via RequalifierMethodeEncaissement ci-dessus, qui
+        // déplace aussi l'argent et met `caisse_id` à jour (voir
         // UpdateEncaissementRequest); this edit is audit-logged by LogsActivity.
         $encaissement->update($data);
 

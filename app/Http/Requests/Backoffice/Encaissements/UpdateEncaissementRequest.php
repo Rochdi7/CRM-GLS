@@ -10,11 +10,17 @@ use Illuminate\Validation\Rule;
 
 /**
  * ⚠ Editing a payment is audit-logged (LogsActivity on the model).
- * `montant`, `caisse_id` AND `methode` are deliberately NOT editable after
- * creation — the method decided which account was credited, so correcting
- * any of the three must go through a remboursement + new encaissement so
- * the money trail stays intact. `methode` is still accepted here only so
- * the edit modal can echo it back; the controller refuses a different value.
+ * `montant` and `caisse_id` are deliberately NOT editable after creation —
+ * correcting either must go through a remboursement + new encaissement so
+ * the money trail stays intact.
+ *
+ * `methode` IS correctable since le 01/09/2026, but only by a holder of
+ * `payments.update-method` (les rôles de direction + super-admin), and never
+ * as a bare column write: the controller hands it to
+ * RequalifierMethodeEncaissement, which moves the money between the two
+ * caisses and journals both legs. Without the permission the field is still
+ * accepted here so the edit modal can echo the stored value back — the
+ * controller refuses a DIFFERENT value.
  */
 final class UpdateEncaissementRequest extends FormRequest
 {

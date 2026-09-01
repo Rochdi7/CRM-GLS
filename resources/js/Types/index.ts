@@ -1574,6 +1574,14 @@ export interface EncaissementRow {
     applicable?: boolean;
     /** The funding cheque bounced: the money was reversed off the Chèque account. */
     chequeRejete?: boolean;
+    /**
+     * Whether RequalifierMethodeEncaissement would accept this row — false
+     * for an advance allocation (it credited no caisse), a payment linked to
+     * a tracked cheque, and an already-refunded payment. Gate the « Méthode »
+     * select on this AND on `can.updateMethode`; the action refuses again
+     * server-side.
+     */
+    methodeRequalifiable?: boolean;
     studentEmail: string | null;
     showUrl: string;
     /** Printable receipt page — append ?format=a6|a5|a5x2. */
@@ -1625,8 +1633,15 @@ export interface EncaissementsPageProps {
      * `updateDate` is `payments.update-date` (super-admin only, 30/08/2026):
      * without it the edit modal's Date field is disabled and the controller
      * drops any posted value.
+     *
+     * `updateMethode` is `payments.update-method` (rôles de direction +
+     * super-admin, 01/09/2026): without it the edit modal's « Méthode de
+     * paiement » select is disabled. Changing it is not a label edit — the
+     * server moves the money between the two caisses and journals both legs
+     * (RequalifierMethodeEncaissement), and refuses a different value posted
+     * without the permission.
      */
-    can?: { delete: boolean; updateDate?: boolean };
+    can?: { delete: boolean; updateDate?: boolean; updateMethode?: boolean };
     [key: string]: unknown;
 }
 
@@ -1998,8 +2013,11 @@ export interface AuditLogFilters {
     dateFrom: string;
     dateTo: string;
     ip: string;
+    /** Money-only scope — no longer on the filter bar, still honoured by URL. */
     financeOnly: boolean;
     caisseId: string;
+    /** Centre of the RECORD touched, not of the actor who touched it. */
+    etablissementId: string;
     /** Show the maintainer account's entries (hidden by default, never unrecorded). */
     includeDeveloper: boolean;
     perPage: number;
@@ -2012,8 +2030,8 @@ export interface AuditLogPageProps {
     causers: { id: number; nom: string }[];
     subjectTypes: { value: string; label: string }[];
     caisses: { value: string; label: string }[];
-    /** False when no maintainer login exists — the toggle is then pointless. */
-    hasDeveloperAccount: boolean;
+    /** Centres this reader may narrow the journal to (« Centres affectés »). */
+    etablissements: { value: string; label: string }[];
     filters: AuditLogFilters;
     [key: string]: unknown;
 }

@@ -725,6 +725,15 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
         });
     }
 
+    // Requalifier la méthode d'un encaissement déplace réellement l'argent
+    // entre deux caisses (RequalifierMethodeEncaissement), donc le champ
+    // s'ouvre seulement quand les DEUX conditions serveur sont réunies : la
+    // permission `payments.update-method` et une ligne que l'action
+    // accepterait. `methodeRequalifiable` vient du read-model pour que l'UI
+    // ne redérive pas la règle (CLAUDE.md §11).
+    const canEditMethode =
+        (can?.updateMethode ?? false) && (editingRow?.methodeRequalifiable ?? false);
+
     return (
         <BackofficeLayout
             title={filters.view === 'avance' ? 'Avances' : 'Encaissements'}
@@ -1480,7 +1489,13 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
             {/* Edit modal — wimschool-style layout: read-only context fields
                 (étudiant / frais / montant total / reste à payer / montant de
                 paiement — money records are append-only, CLAUDE.md §11) with
-                only méthode/date/chèque/note as live inputs. */}
+                only méthode/date/chèque/note as live inputs.
+
+                « Méthode » demande DEUX conditions : la permission
+                `payments.update-method` (rôles de direction + super-admin) et
+                une ligne que RequalifierMethodeEncaissement accepterait
+                (`methodeRequalifiable`, calculé côté serveur). Les deux sont
+                du confort d'interface — update() revérifie. */}
             <Modal
                 show={showModal && editingRow !== null}
                 title={editingRow ? `Modifier paiement : ${editingRow.reference}` : ''}
@@ -1574,18 +1589,41 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                 </div>
                             </div>
                             <div className="col-md-6">
-                                {/* Frozen with the row: the method decided which
-                                    account was credited (UpdateEncaissementRequest). */}
+                                {/*
+                                  * Changer la méthode n'est pas une
+                                  * correction d'étiquette : elle a décidé
+                                  * dans quelle caisse l'argent est tombé, donc
+                                  * le serveur DÉPLACE l'argent (débit de
+                                  * l'ancienne caisse, crédit de la nouvelle,
+                                  * les deux jambes journalisées —
+                                  * RequalifierMethodeEncaissement).
+                                  *
+                                  * Ouvert aux rôles de direction +
+                                  * super-admin (`payments.update-method`,
+                                  * 01/09/2026) et seulement sur une ligne que
+                                  * l'action accepterait
+                                  * (`methodeRequalifiable` : ni application
+                                  * d'avance, ni chèque suivi, ni paiement
+                                  * remboursé). Confort d'interface : le vrai
+                                  * verrou est EncaissementController@update.
+                                  */}
                                 <SelectField
                                     id="e-edit-methode"
                                     label="Méthode de paiement"
                                     options={methodeOptions}
                                     required
-                                    disabled
+                                    disabled={!canEditMethode}
                                     value={editForm.data.methode}
                                     onChange={(e) => editForm.setData('methode', e.target.value)}
                                     error={editForm.errors.methode}
                                 />
+                                {canEditMethode && editForm.data.methode !== editingRow.methode && (
+                                    <p className="text-warning fs-12 mt-1 mb-0">
+                                        <i className="ti ti-alert-triangle me-1" />
+                                        Le montant sera déplacé de « {editingRow.caisse ?? '—'} » vers la
+                                        caisse correspondant à « {editForm.data.methode} ».
+                                    </p>
+                                )}
                             </div>
                             <div className="col-md-6">
                                 {/*

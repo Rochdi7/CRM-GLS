@@ -88,7 +88,10 @@ final class RolesAndPermissionsSeederTest extends TestCase
         $assistant = Role::findByName('administrative-assistant');
         $this->assertTrue($assistant->hasPermissionTo('payments.create'));
         $this->assertFalse($assistant->hasPermissionTo('centers.access-all'));
-        $this->assertFalse($assistant->hasPermissionTo('cash-transfers.validate'));
+        // Peut accepter un transfert vers SA PROPRE caisse (01/09/2026) :
+        // la regle destinataire (CaisseTransferPolicy@validate +
+        // ValiderTransfertCaisse) l'empeche de valider chez autrui.
+        $this->assertTrue($assistant->hasPermissionTo('cash-transfers.validate'));
         $this->assertFalse($assistant->hasPermissionTo('roles.view'));
     }
 
@@ -110,6 +113,8 @@ final class RolesAndPermissionsSeederTest extends TestCase
             'expenses.view', 'expenses.create',
             'cheques.view', 'cheques.create',
             'cash-transfers.view', 'cash-transfers.create',
+            // Accepter un transfert ENTRANT vers sa propre caisse.
+            'cash-transfers.validate',
             'collections.view',
         ];
 
@@ -126,7 +131,10 @@ final class RolesAndPermissionsSeederTest extends TestCase
             // Center-scoped: they never see other centers…
             $this->assertFalse($role->hasPermissionTo('centers.access-all'), $name);
             // …and never arbitrate their own money.
-            $this->assertFalse($role->hasPermissionTo('cash-transfers.validate'), $name);
+            // `cash-transfers.validate` n'est PAS un droit d'arbitrage : il
+            // ne permet que d'accepter l'argent arrivant dans SA PROPRE
+            // caisse (regle destinataire), donc il fait partie de
+            // $operations depuis le 01/09/2026 — voir $expected ci-dessus.
             $this->assertFalse($role->hasPermissionTo('expenses.approve'), $name);
         }
 

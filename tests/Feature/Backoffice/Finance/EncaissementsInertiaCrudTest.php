@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Backoffice\Finance;
 
 use App\Models\AnneeScolaire;
+use App\Models\Activity;
 use App\Models\Caisse;
 use App\Models\Employee;
 use App\Models\Encaissement;
@@ -12,6 +13,7 @@ use App\Models\Etablissement;
 use App\Models\Group;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
+use App\Models\Remboursement;
 use App\Models\Student;
 use App\Models\User;
 use App\Services\Context\CurrentContext;
@@ -1832,5 +1834,228 @@ final class EncaissementsInertiaCrudTest extends TestCase
             ])->assertSessionDoesntHaveErrors();
 
         $this->assertNull($encaissement->fresh()->inscription_fee_id);
+    }
+
+    /**
+     * 01/09/2026 — requalifier la MÉTHODE déplace réellement l'argent.
+     *
+     * `methode` a décidé dans quelle caisse l'encaissement est tombé
+     * (CaisseResolver) : Espèces dans la caisse physique de l'agent, TPE dans
+     * le compte TPE du centre. La corriger doit donc débiter l'ancienne
+     * caisse et créditer la nouvelle — sinon l'argent reste dans un compte et
+     * le libellé part sur un autre.
+     */
+    public function test_a_manager_requalifying_the_method_moves_the_money_between_caisses(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update', 'payments.update-method');
+        $this->actingAs($user);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1500);
+        $till = $user->employee->till()->first();
+
+        $encaissement = Encaissement::create([
+            'reference' => 'ENC-REQ-1', 'student_id' => $student->id, 'inscription_fee_id' => $fee->id,
+            'etablissement_id' => $this->centre->id,
+            'caisse_id' => $till->id, 'agent_id' => $user->employee->id,
+            'montant' => 1500, 'methode' => 'Espèces', 'date_paiement' => '2025-09-20',
+        ]);
+
+        $till->update(['solde' => 1500]);
+        $soldeTillAvant = (float) $till->fresh()->solde;
+
+        $this->put(route('backoffice.encaissements.update', $encaissement), [
+            'methode' => 'TPE',
+            'date_paiement' => '2025-09-20',
+        ])->assertSessionDoesntHaveErrors();
+
+        $fresh = $encaissement->fresh();
+        $this->assertSame('TPE', $fresh->methode);
+
+        // La ligne suit son argent : elle pointe désormais le compte TPE du
+        // centre, pas la caisse physique.
+        $compteTpe = Caisse::query()
+            ->where('etablissement_id', $this->centre->id)
+            ->where('type', 'TPE')
+            ->firstOrFail();
+        $this->assertSame($compteTpe->id, $fresh->caisse_id);
+
+        // Les deux jambes ont bougé, pour le montant exact et rien de plus.
+        $this->assertSame(
+            round($soldeTillAvant - 1500, 2),
+            round((float) $till->fresh()->solde, 2),
+        );
+        $this->assertSame(1500.0, round((float) $compteTpe->fresh()->solde, 2));
+
+        // Le montant lui-même ne bouge jamais : requalifier range l'argent
+        // ailleurs, ça n'en crée ni n'en détruit.
+        $this->assertSame('1500.00', (string) $fresh->montant);
+    }
+
+    /**
+     * Les deux jambes doivent être JOURNALISÉES — un mouvement de solde que
+     * l'audit ne voit pas est exactement le trou que CaisseLedger a bouché
+     * (docs/audit-journal.md §5b).
+     */
+    public function test_requalifying_the_method_journals_both_ledger_legs(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update', 'payments.update-method');
+        $this->actingAs($user);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(800);
+        $till = $user->employee->till()->first();
+
+        $encaissement = Encaissement::create([
+            'reference' => 'ENC-REQ-2', 'student_id' => $student->id, 'inscription_fee_id' => $fee->id,
+            'etablissement_id' => $this->centre->id,
+            'caisse_id' => $till->id, 'agent_id' => $user->employee->id,
+            'montant' => 800, 'methode' => 'Espèces', 'date_paiement' => '2025-09-20',
+        ]);
+        $till->update(['solde' => 800]);
+
+        $this->put(route('backoffice.encaissements.update', $encaissement), [
+            'methode' => 'Virement',
+            'date_paiement' => '2025-09-20',
+        ])->assertSessionDoesntHaveErrors();
+
+        $entries = Activity::query()
+            ->where('log_name', 'caisse')
+            ->where('event', 'solde_movement')
+            ->get()
+            ->filter(fn ($a) => ($a->properties['origine_id'] ?? null) === $encaissement->id);
+
+        $this->assertCount(2, $entries, 'Une requalification journalise ses DEUX jambes.');
+        $this->assertEqualsCanonicalizing(
+            ['Entrée', 'Sortie'],
+            $entries->map(fn ($a) => $a->properties['sens'])->values()->all(),
+        );
+
+        // La dimension centre est celle de l'ENCAISSEMENT, pas du contexte
+        // de celui qui corrige (CLAUDE.md §11).
+        foreach ($entries as $entry) {
+            $this->assertSame($this->centre->id, $entry->properties['etablissement_id']);
+            $this->assertSame('Espèces', $entry->properties['methode_avant']);
+            $this->assertSame('Virement', $entry->properties['methode_apres']);
+        }
+    }
+
+    /**
+     * Sans `payments.update-method`, un détenteur de `payments.update` garde
+     * la note et l'identité du chèque, mais ne déplace pas d'argent : le
+     * front-office reste en création seule sur la finance (refonte des rôles
+     * du 30/08/2026).
+     */
+    public function test_changing_the_method_without_the_permission_is_refused(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update');
+        $this->actingAs($user);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1500);
+        $till = $user->employee->till()->first();
+
+        $encaissement = Encaissement::create([
+            'reference' => 'ENC-REQ-3', 'student_id' => $student->id, 'inscription_fee_id' => $fee->id,
+            'etablissement_id' => $this->centre->id,
+            'caisse_id' => $till->id, 'agent_id' => $user->employee->id,
+            'montant' => 1500, 'methode' => 'Espèces', 'date_paiement' => '2025-09-20',
+        ]);
+        $till->update(['solde' => 1500]);
+
+        $this->from(route('backoffice.encaissements.index'))
+            ->put(route('backoffice.encaissements.update', $encaissement), [
+                'methode' => 'TPE',
+                'date_paiement' => '2025-09-20',
+            ])->assertSessionHasErrors('methode');
+
+        $fresh = $encaissement->fresh();
+        $this->assertSame('Espèces', $fresh->methode);
+        $this->assertSame($till->id, $fresh->caisse_id);
+        $this->assertSame(1500.0, round((float) $till->fresh()->solde, 2));
+    }
+
+    /**
+     * Un paiement déjà remboursé a fait sortir l'argent : déplacer sa jambe
+     * d'entrée rendrait la sortie inexplicable. Même garde que
+     * SupprimerEncaissement.
+     */
+    public function test_a_refunded_payment_cannot_be_requalified(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update', 'payments.update-method');
+        $this->actingAs($user);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1500);
+        $till = $user->employee->till()->first();
+
+        $encaissement = Encaissement::create([
+            'reference' => 'ENC-REQ-4', 'student_id' => $student->id, 'inscription_fee_id' => $fee->id,
+            'etablissement_id' => $this->centre->id,
+            'caisse_id' => $till->id, 'agent_id' => $user->employee->id,
+            'montant' => 1500, 'methode' => 'Espèces', 'date_paiement' => '2025-09-20',
+        ]);
+        $till->update(['solde' => 1500]);
+
+        Remboursement::create([
+            'reference' => 'RMB-REQ-1',
+            'beneficiaire_id' => $student->id,
+            'encaissement_id' => $encaissement->id,
+            'caisse_id' => $till->id,
+            'agent_id' => $user->employee->id,
+            'montant' => 500,
+            'date_remboursement' => '2025-09-21',
+            'motif' => 'Test',
+        ]);
+
+        $this->from(route('backoffice.encaissements.index'))
+            ->put(route('backoffice.encaissements.update', $encaissement), [
+                'methode' => 'TPE',
+                'date_paiement' => '2025-09-20',
+            ])->assertSessionHasErrors('methode');
+
+        $this->assertSame('Espèces', $encaissement->fresh()->methode);
+    }
+
+    /**
+     * Requalifier Chèque → Espèces doit AUSSI nettoyer les colonnes de chèque
+     * (numéro / banque / échéance) : elles ne veulent plus rien dire sur une
+     * ligne en espèces. La branche de nettoyage lit `methode` APRÈS la
+     * requalification (le contrôleur rafraîchit le modèle), pas avant.
+     *
+     * ⚠ Il s'agit d'un chèque saisi à la main (`cheque_id` NULL) : un chèque
+     * SUIVI par le module Chèques est refusé, cf.
+     * test_a_refunded_payment_cannot_be_requalified et le garde-fou de
+     * RequalifierMethodeEncaissement.
+     */
+    public function test_requalifying_a_manual_cheque_to_cash_clears_the_cheque_columns(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update', 'payments.update-method');
+        $this->actingAs($user);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1200);
+        $till = $user->employee->till()->first();
+
+        $compteCheque = app(\App\Services\CaisseProvisioner::class)
+            ->compteMethodeFor($this->centre->id, 'Chèque');
+
+        $encaissement = Encaissement::create([
+            'reference' => 'ENC-REQ-5', 'student_id' => $student->id, 'inscription_fee_id' => $fee->id,
+            'etablissement_id' => $this->centre->id,
+            'caisse_id' => $compteCheque->id, 'agent_id' => $user->employee->id,
+            'montant' => 1200, 'methode' => 'Chèque', 'date_paiement' => '2025-09-20',
+            'numero_cheque' => '123456', 'banque' => 'Attijariwafa Bank',
+            'date_echeance_cheque' => '2025-10-20',
+        ]);
+        $compteCheque->update(['solde' => 1200]);
+
+        $this->put(route('backoffice.encaissements.update', $encaissement), [
+            'methode' => 'Espèces',
+            'date_paiement' => '2025-09-20',
+        ])->assertSessionDoesntHaveErrors();
+
+        $fresh = $encaissement->fresh();
+        $this->assertSame('Espèces', $fresh->methode);
+        $this->assertSame($till->id, $fresh->caisse_id);
+
+        // Les colonnes de chèque ne survivent pas à la requalification.
+        $this->assertNull($fresh->numero_cheque);
+        $this->assertNull($fresh->banque);
+        $this->assertNull($fresh->date_echeance_cheque);
+
+        // L'argent a bien quitté le compte Chèque pour la caisse physique.
+        $this->assertSame(0.0, round((float) $compteCheque->fresh()->solde, 2));
+        $this->assertSame(1200.0, round((float) $till->fresh()->solde, 2));
     }
 }

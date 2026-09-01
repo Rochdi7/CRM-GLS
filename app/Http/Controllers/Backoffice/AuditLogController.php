@@ -44,6 +44,7 @@ final class AuditLogController extends Controller
         $ip = (string) $request->string('ip');
         $financeOnly = $request->boolean('financeOnly');
         $caisseId = (string) $request->string('caisseId');
+        $etablissementId = (string) $request->string('etablissementId');
         $includeDeveloper = $request->boolean('includeDeveloper');
         $perPage = (int) $request->integer('perPage', GetActivityLogList::DEFAULT_PER_PAGE);
 
@@ -53,7 +54,7 @@ final class AuditLogController extends Controller
 
         $list = $getActivityLogList(
             $search, $logName, $event, $causerId, $subjectType,
-            $dateFrom, $dateTo, $ip, $financeOnly, $caisseId, $includeDeveloper, $perPage, $causerIds,
+            $dateFrom, $dateTo, $ip, $financeOnly, $caisseId, $etablissementId, $includeDeveloper, $perPage, $causerIds,
         );
 
         return Inertia::render('Backoffice/AuditLogs/Index', [
@@ -63,9 +64,15 @@ final class AuditLogController extends Controller
             'causers' => $getActivityLogList->causerOptions($includeDeveloper),
             'subjectTypes' => AuditLogRegistry::subjectTypeOptions(),
             'caisses' => $getActivityLogList->caisseOptions(),
-            // Only offer the toggle when that login actually exists, so the
-            // filter bar stays clean on installations without it.
-            'hasDeveloperAccount' => $getActivityLogList->developerAccountExists(),
+            // The « Centre » filter offers exactly the centres this reader may
+            // see — « Centres affectés » is the one authority (CLAUDE.md §16).
+            //
+            // Unlike a CRUD list, this dropdown is NOT hidden behind a
+            // `centerLocked` prop: the journal is deliberately not scoped to
+            // the top-bar context (see GetActivityLogList's class docblock),
+            // so the filter is the readers only way to narrow by centre —
+            // never a redundant repeat of a scope the server already applied.
+            'etablissements' => $getActivityLogList->etablissementOptions($this->readableCentreIds($user)),
             'filters' => [
                 'search' => $search,
                 'logName' => $logName,
@@ -77,6 +84,7 @@ final class AuditLogController extends Controller
                 'ip' => $ip,
                 'financeOnly' => $financeOnly,
                 'caisseId' => $caisseId,
+                'etablissementId' => $etablissementId,
                 'includeDeveloper' => $includeDeveloper,
                 'perPage' => $perPage,
             ],
@@ -102,6 +110,29 @@ final class AuditLogController extends Controller
         return Inertia::render('Backoffice/AuditLogs/Show', [
             'entry' => $entry,
         ]);
+    }
+
+    /**
+     * Centres this reader may see, for the « Centre » dropdown.
+     *
+     * Same authority as everywhere else — « Centres affectés », never a role
+     * (CLAUDE.md §16). Returning null means unrestricted, so the filter lists
+     * the whole network for a super-admin and nothing more than their own
+     * centres for anybody else.
+     *
+     * @return list<int>|null null = every centre
+     */
+    private function readableCentreIds(User $user): ?array
+    {
+        $centers = app(CenterAccessService::class);
+
+        if ($centers->hasGlobalAccess($user)) {
+            return null;
+        }
+
+        $ids = $centers->accessibleCenterIds($user);
+
+        return $ids === [] ? null : $ids;
     }
 
     /**

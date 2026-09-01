@@ -305,6 +305,17 @@ final class GetEncaissementsList
                 // Whether AppliquerAvance would accept this row at all.
                 'applicable' => $isAvance && ! $chequeRejete,
                 'chequeRejete' => $chequeRejete,
+                // Porte la règle de RequalifierMethodeEncaissement jusqu'à
+                // l'UI plutôt que de la laisser la redériver (CLAUDE.md §11
+                // « un read-model ne redérive jamais une règle métier ») :
+                // une ligne « application » d'avance n'a crédité aucune
+                // caisse, un chèque suivi appartient au module Chèques, et
+                // un paiement déjà remboursé a fait sortir l'argent. Dans
+                // ces trois cas l'action refuse, donc le select reste
+                // désactivé au lieu d'offrir une correction qui échouerait.
+                'methodeRequalifiable' => $e->applied_from_encaissement_id === null
+                    && $e->cheque_id === null
+                    && (float) ($e->remboursements_total ?? 0) <= 0.0,
                 'studentEmail' => $e->student?->email,
                 'showUrl' => route('backoffice.encaissements.show', $e),
                 'recuUrl' => route('backoffice.encaissements.recu', $e),

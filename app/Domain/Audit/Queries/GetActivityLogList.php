@@ -6,6 +6,18 @@ namespace App\Domain\Audit\Queries;
 
 use App\Models\Activity;
 use App\Models\Caisse;
+use App\Models\Cheque;
+use App\Models\Depense;
+use App\Models\Encaissement;
+use App\Models\Etablissement;
+use App\Models\Group;
+use App\Models\GroupHistorique;
+use App\Models\ImportBatch;
+use App\Models\Inscription;
+use App\Models\InscriptionFee;
+use App\Models\Presence;
+use App\Models\Remboursement;
+use App\Models\Seance;
 use App\Models\Student;
 use App\Models\User;
 use App\Support\Audit\AuditLogRegistry;
@@ -45,6 +57,7 @@ final class GetActivityLogList
         string $ip = '',
         bool $financeOnly = false,
         string $caisseId = '',
+        string $etablissementId = '',
         bool $includeDeveloper = false,
         int $perPage = self::DEFAULT_PER_PAGE,
         ?array $causerIds = null,
@@ -69,6 +82,13 @@ final class GetActivityLogList
             ->when($caisseId !== '', fn (Builder $q) => $q
                 ->where('subject_type', (new Caisse)->getMorphClass())
                 ->where('subject_id', (int) $caisseId))
+            // Centre of the RECORD that was touched, not of the person who
+            // touched it: « qu'est-ce qui s'est passé à Rabat » is the question
+            // an investigation asks, and a Casablanca agent editing a Rabat
+            // group is a Rabat event. Each subject type reaches its centre by
+            // one EXISTS on the indexed (subject_type, subject_id) pair, so the
+            // filter never joins the whole journal to anything.
+            ->when($etablissementId !== '', fn (Builder $q) => $this->scopeToCentre($q, (int) $etablissementId))
             // Date filters are inclusive of the whole end day: the journal is
             // read by date, not by timestamp, and "au 19/08" must include
             // everything that happened during the 19th.
@@ -597,6 +617,102 @@ final class GetActivityLogList
     public function developerAccountExists(): bool
     {
         return $this->developerUserId() !== null;
+    }
+
+
+
+    /**
+     * How each audited record reaches its centre.
+     *
+     * `[table, column]` when the row carries `etablissement_id` itself, or
+     * `[table, column, parentTable, parentKey]` when it inherits it from its
+     * parent (a présence has no centre of its own — its séance does). Every
+     * chain is at most one hop; anything deeper would make this filter a
+     * performance trap on a table with half a million rows.
+     *
+     * A subject type absent from this map has no centre at all — staff,
+     * référentiel, authentication — and is therefore excluded by the filter
+     * rather than silently kept, which is what « filtrer par centre » means.
+     *
+     * @var array<class-string, array{0:string,1:string,2?:string,3?:string}>
+     */
+    private const SUBJECT_CENTRE_SOURCES = [
+        \App\Models\Inscription::class => ['inscriptions', 'etablissement_id'],
+        \App\Models\Encaissement::class => ['encaissements', 'etablissement_id'],
+        \App\Models\Student::class => ['students', 'etablissement_id'],
+        \App\Models\Group::class => ['groups', 'etablissement_id'],
+        \App\Models\Seance::class => ['seances', 'etablissement_id'],
+        \App\Models\Caisse::class => ['caisses', 'etablissement_id'],
+        \App\Models\Cheque::class => ['cheques', 'etablissement_id'],
+        \App\Models\GroupHistorique::class => ['groups_historique', 'etablissement_id'],
+        \App\Models\ImportBatch::class => ['import_batches', 'etablissement_id'],
+        \App\Models\Etablissement::class => ['etablissements', 'id'],
+        // Inherited from the parent record.
+        \App\Models\InscriptionFee::class => ['inscription_fees', 'inscription_id', 'inscriptions', 'id'],
+        \App\Models\Presence::class => ['presences', 'seance_id', 'seances', 'id'],
+        \App\Models\Depense::class => ['depenses', 'caisse_id', 'caisses', 'id'],
+        \App\Models\Remboursement::class => ['remboursements', 'caisse_id', 'caisses', 'id'],
+    ];
+
+    /**
+     * Restrict the journal to the records belonging to one centre.
+     *
+     * Written as one OR of per-type EXISTS rather than a join: `subject_type`
+     * is polymorphic, so there is no single table to join to, and each branch
+     * is anchored on the `(subject_type, subject_id)` index.
+     *
+     * @param  Builder<Activity>  $query
+     */
+    private function scopeToCentre(Builder $query, int $etablissementId): void
+    {
+        $query->where(function (Builder $outer) use ($etablissementId): void {
+            foreach (self::SUBJECT_CENTRE_SOURCES as $model => $source) {
+                $morph = (new $model)->getMorphClass();
+
+                $outer->orWhere(function (Builder $branch) use ($morph, $source, $etablissementId): void {
+                    $branch->where('subject_type', $morph);
+
+                    if (count($source) === 2) {
+                        [$table, $column] = $source;
+
+                        $branch->whereRaw(
+                            "exists (select 1 from {$table} t where t.id = activity_log.subject_id and t.{$column} = ?)",
+                            [$etablissementId],
+                        );
+
+                        return;
+                    }
+
+                    [$table, $foreignKey, $parentTable, $parentKey] = $source;
+
+                    $branch->whereRaw(
+                        "exists (select 1 from {$table} t join {$parentTable} p on p.{$parentKey} = t.{$foreignKey}"
+                        ." where t.id = activity_log.subject_id and p.etablissement_id = ?)",
+                        [$etablissementId],
+                    );
+                });
+            }
+        });
+    }
+
+    /**
+     * Centres offered by the « Centre » filter — every centre the reader may
+     * see, so the dropdown can never point somewhere they are not allowed.
+     *
+     * @param  list<int>|null  $centreIds  null = global access
+     * @return list<array{value:string, label:string}>
+     */
+    public function etablissementOptions(?array $centreIds = null): array
+    {
+        return Etablissement::query()
+            ->when($centreIds !== null, fn ($q) => $q->whereIn('id', $centreIds))
+            ->orderBy('nom_centre')
+            ->get(['id', 'nom_centre'])
+            ->map(fn (Etablissement $e): array => [
+                'value' => (string) $e->id,
+                'label' => (string) $e->nom_centre,
+            ])
+            ->all();
     }
 
     /**
