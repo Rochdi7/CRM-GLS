@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Payments\Actions\AppliquerAvance;
 use App\Domain\Payments\Actions\ConvertirEncaissementsEnAvance;
+use App\Domain\Payments\Actions\CorrigerMontantEncaissement;
 use App\Domain\Payments\Actions\RequalifierMethodeEncaissement;
 use App\Domain\Finance\Support\CaisseResolver;
 use App\Domain\Payments\Actions\EnregistrerEncaissement;
@@ -190,6 +191,12 @@ final class EncaissementController extends Controller
                 // seulement — update() refuse une méthode différente sans la
                 // permission.
                 'updateMethode' => $request->user()?->can('payments.update-method') ?? false,
+                // Corriger le montant deplace l'ecart sur la caisse D'ORIGINE
+                // de la ligne (celle de l'employe qui a encaisse, jamais celle
+                // du correcteur) : super-admin uniquement (02/09/2026).
+                // Confort d'interface seulement — update() refuse un montant
+                // different sans la permission.
+                'updateAmount' => $request->user()?->can('payments.update-amount') ?? false,
             ],
         ]);
     }
@@ -529,7 +536,8 @@ final class EncaissementController extends Controller
     /**
      * Printable payment receipt (reçu) — a standalone Blade print page, NOT
      * an Inertia page: it opens in a new tab sized for paper (A6 ticket, A5,
-     * or two A5-landscape copies) and auto-opens the browser print dialog,
+     * or two copies sharing ONE half-A4 sheet, i.e. an A5 landscape split in
+     * two) and auto-opens the browser print dialog,
      * where "Enregistrer en PDF" doubles as the download. Rendered in the
      * browser (not a PDF lib) so the Arabic labels keep correct glyph
      * shaping. Header identity (nom/adresse/tél) comes from the payment's
@@ -795,6 +803,7 @@ final class EncaissementController extends Controller
         UpdateEncaissementRequest $request,
         Encaissement $encaissement,
         RequalifierMethodeEncaissement $requalifierMethode,
+        CorrigerMontantEncaissement $corrigerMontant,
     ): RedirectResponse {
         $this->authorize('update', $encaissement);
 
@@ -860,6 +869,40 @@ final class EncaissementController extends Controller
             unset($data['date_paiement']);
         }
 
+        // Meme raisonnement pour le MONTANT, et meme classe de risque
+        // (02/09/2026) : `montant` n'est pas une etiquette, c'est la somme
+        // tombee dans la caisse. La corriger DEPLACE donc de l'argent —
+        // l'ecart est credite ou debite sur la caisse D'ORIGINE de la ligne,
+        // journalise — ce que fait CorrigerMontantEncaissement dans une seule
+        // transaction. Jamais une ecriture directe sur la colonne : elle
+        // laisserait `caisses.solde` sur l'ancien chiffre, sans rien dans le
+        // journal pour expliquer l'ecart (CLAUDE.md §11).
+        //
+        // `payments.update-amount` est super-admin uniquement
+        // (PermissionRegistry::superAdminOnly()) : reecrire une somme deja
+        // encaissee court-circuite la correction normale (remboursement +
+        // nouvel encaissement). Sans la permission le champ est desactive
+        // dans le modal, donc une valeur DIFFERENTE qui arrive ici est un
+        // formulaire perime ou une requete forgee : on la refuse
+        // explicitement, comme pour `methode`. Une valeur identique reste
+        // acceptee (le modal la renvoie).
+        $montantPoste = $data['montant'] ?? null;
+        unset($data['montant']);
+
+        if ($montantPoste !== null && abs((float) $montantPoste - (float) $encaissement->montant) >= 0.005) {
+            if (! $request->user()->can('payments.update-amount')) {
+                throw ValidationException::withMessages([
+                    'montant' => __('You are not allowed to change the amount of a recorded payment.'),
+                ]);
+            }
+
+            $corrigerMontant->handle($encaissement, (float) $montantPoste);
+
+            // Le solde et la ligne viennent de bouger : on repart de l'etat
+            // fraichement ecrit pour la suite de la mise a jour.
+            $encaissement->refresh();
+        }
+
         if ($encaissement->cheque_id !== null) {
             // A payment funded by a tracked chèque (Chèques module) keeps its
             // cheque identity: numéro/banque/échéance are read off the Cheque
@@ -872,9 +915,11 @@ final class EncaissementController extends Controller
             $data['date_echeance_cheque'] = null;
         }
 
-        // montant / caisse_id ne sont jamais éditables à la main ; `methode`
-        // l'est uniquement via RequalifierMethodeEncaissement ci-dessus, qui
-        // déplace aussi l'argent et met `caisse_id` à jour (voir
+        // `caisse_id` n'est JAMAIS editable a la main. `montant` et `methode`
+        // le sont, mais uniquement via les deux actions ci-dessus
+        // (CorrigerMontantEncaissement / RequalifierMethodeEncaissement), qui
+        // deplacent aussi l'argent et journalisent chaque jambe — jamais par
+        // cet `update()`, d'ou le `unset()` des deux cles (voir
         // UpdateEncaissementRequest); this edit is audit-logged by LogsActivity.
         $encaissement->update($data);
 

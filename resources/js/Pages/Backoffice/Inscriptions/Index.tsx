@@ -239,6 +239,8 @@ export default function InscriptionsIndex({
     defaultCountry,
     students,
     groups,
+    changeGroupGroups,
+    changeGroupAnnees,
     frais,
     canManageFees,
     canChangeGroup,
@@ -280,6 +282,12 @@ export default function InscriptionsIndex({
     const [deleteError, setDeleteError] = useState<string | undefined>(undefined);
     const [deleteProcessing, setDeleteProcessing] = useState(false);
     const [changeGroupTarget, setChangeGroupTarget] = useState<InscriptionRow | null>(null);
+    // « Changement de groupe » is the one flow that may cross academic years
+    // (02/09/2026): its target-group list is not year-filtered server-side,
+    // so this selector narrows it down. Defaults to the inscription's OWN
+    // année — the common case is still a move inside the same year, and the
+    // user opts into next year explicitly.
+    const [changeGroupAnnee, setChangeGroupAnnee] = useState<number | ''>('');
     // « Suivi des paiements » (row menu): read-only view of the inscription's
     // fee lines with paid/remaining per line. Loads from the same
     // inscriptions.fees JSON endpoint the edit modal uses.
@@ -526,6 +534,27 @@ export default function InscriptionsIndex({
 
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.label }));
     const groupOptions: SelectOption[] = groups.map((g) => ({ value: g.id, label: g.label }));
+    // « Changement de groupe » target list: every reachable group of every
+    // academic year, narrowed by the modal's own « Année scolaire » selector
+    // (empty = all years). The current group is always excluded — moving a
+    // student into the group they are already in is not a change.
+    const changeGroupAnneeOptions: SelectOption[] = changeGroupAnnees.map((a) => ({ value: a.id, label: a.label }));
+    const changeGroupOptions: SelectOption[] = changeGroupGroups
+        .filter((g) => changeGroupAnnee === '' || g.anneeScolaireId === changeGroupAnnee)
+        .filter((g) => g.id !== changeGroupTarget?.groupId)
+        .map((g) => ({
+            value: g.id,
+            // With « Toutes les années » selected the year is the only thing
+            // telling two same-named groups apart, so it is spelled out.
+            label: changeGroupAnnee === '' && g.anneeLabel ? `${g.label} (${g.anneeLabel})` : g.label,
+        }));
+    // The picked target group and the inscription's current year, so the
+    // modal can warn when the successor row will land in ANOTHER year (it
+    // inherits the target group's année — ChangerGroupeInscription — and so
+    // disappears from the list until the top-bar year switcher follows).
+    const selectedChangeGroup = changeGroupGroups.find((g) => g.id === changeGroupForm.data.new_group_id);
+    const currentChangeGroupAnneeId =
+        changeGroupGroups.find((g) => g.id === changeGroupTarget?.groupId)?.anneeScolaireId ?? null;
     // « Modification du groupe » is STRICTLY limited to inscriptions whose
     // CURRENT group is still « En inscription »: the in-place move is for a
     // student who paid and switches before classes start. Once the current
@@ -1170,6 +1199,13 @@ export default function InscriptionsIndex({
     function openChangeGroup(inscription: InscriptionRow) {
         setChangeGroupTarget(inscription);
         setShowFeesDetails(false);
+        // Start on the inscription's OWN année (read off its current group,
+        // which is always present in the unfiltered changeGroupGroups list),
+        // so the dropdown opens on the same year as today and crossing into
+        // the next one is a deliberate choice.
+        setChangeGroupAnnee(
+            changeGroupGroups.find((g) => g.id === inscription.groupId)?.anneeScolaireId ?? '',
+        );
         changeGroupForm.clearErrors();
         changeGroupForm.setData({
             new_group_id: '',
@@ -3022,10 +3058,29 @@ export default function InscriptionsIndex({
                             </div>
                             <div className="col-md-6">
                                 <SelectField
+                                    id="cg-annee"
+                                    label="Année scolaire"
+                                    options={changeGroupAnneeOptions}
+                                    placeholder="Toutes les années"
+                                    value={changeGroupAnnee}
+                                    onChange={(event) => {
+                                        setChangeGroupAnnee(event.target.value ? Number(event.target.value) : '');
+                                        // The chosen group may not belong to
+                                        // the newly selected year — never
+                                        // leave a hidden id in the form.
+                                        changeGroupForm.setData('new_group_id', '');
+                                    }}
+                                />
+                                <div className="form-text">
+                                    L'inscription peut être déplacée vers un groupe d'une autre année scolaire.
+                                </div>
+                            </div>
+                            <div className="col-12 mt-3">
+                                <SelectField
                                     id="cg-groupe"
                                     label="Groupe"
                                     required
-                                    options={groupOptions.filter((g) => g.value !== changeGroupTarget.groupId)}
+                                    options={changeGroupOptions}
                                     placeholder="Choisir une formation"
                                     value={changeGroupForm.data.new_group_id}
                                     onChange={(event) =>
@@ -3033,6 +3088,14 @@ export default function InscriptionsIndex({
                                     }
                                     error={changeGroupForm.errors.new_group_id}
                                 />
+                                {selectedChangeGroup !== undefined
+                                    && selectedChangeGroup.anneeScolaireId !== currentChangeGroupAnneeId && (
+                                    <div className="alert alert-warning mt-2 mb-0 py-2 fs-13">
+                                        La nouvelle inscription sera créée dans l'année scolaire
+                                        {' '}<strong>{selectedChangeGroup.anneeLabel ?? '—'}</strong>. Elle n'apparaîtra
+                                        dans la liste qu'après avoir basculé le sélecteur d'année en haut de page.
+                                    </div>
+                                )}
                             </div>
                         </div>
 

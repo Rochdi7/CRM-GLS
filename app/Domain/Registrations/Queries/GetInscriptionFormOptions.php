@@ -64,6 +64,65 @@ final class GetInscriptionFormOptions
     }
 
     /**
+     * Target groups for the « Changement de groupe » modal ONLY — the same
+     * centre scoping as groups(), but WITHOUT the active-year filter, so a
+     * student can be moved from a 2025/2026 group into a 2026/2027 one
+     * (asked for on 02/09/2026: a mid-year switch that lands in the next
+     * academic year is a normal re-enrollment, not a data error).
+     *
+     * Every other group dropdown on the page (the list filter, the
+     * create/edit form, « Modification du groupe ») keeps groups() and its
+     * year window — only this one flow deliberately crosses years, and
+     * ChangerGroupeInscription inherits the TARGET group's année on the new
+     * inscription, so the successor row is filed under the year the student
+     * actually joins.
+     *
+     * `anneeScolaireId` + `anneeLabel` ride along so the modal can group the
+     * options behind an « Année scolaire » selector.
+     *
+     * @return Collection<int, array{id: int, label: string, statut: string, anneeScolaireId: int|null, anneeLabel: string|null}>
+     */
+    public function changeGroupGroups($user): Collection
+    {
+        return Group::query()
+            ->with('anneeScolaire:id,nom')
+            ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+            ->tap(function ($q): void {
+                if (! $this->context->isAllCenters()) {
+                    $q->where(fn ($sub) => $sub->whereNull('etablissement_id')->orWhere('etablissement_id', $this->context->etablissementId()));
+                }
+            })
+            ->orderBy('nom')
+            ->get()
+            ->map(fn (Group $g): array => [
+                'id' => $g->id,
+                'label' => "{$g->nom} — {$g->niveau}",
+                'statut' => $g->statut,
+                'anneeScolaireId' => $g->annee_scolaire_id,
+                'anneeLabel' => $g->anneeScolaire?->nom,
+            ]);
+    }
+
+    /**
+     * Academic years that actually carry a reachable group — the « Année
+     * scolaire » selector of the change-group modal. Derived from
+     * changeGroupGroups() rather than queried on its own so the selector can
+     * never offer a year whose groups the user cannot pick.
+     *
+     * @param  Collection<int, array{anneeScolaireId: int|null, anneeLabel: string|null}>  $groups
+     * @return Collection<int, array{id: int, label: string}>
+     */
+    public function anneesScolairesFromGroups(Collection $groups): Collection
+    {
+        return $groups
+            ->filter(fn (array $g): bool => $g['anneeScolaireId'] !== null)
+            ->unique('anneeScolaireId')
+            ->sortByDesc('anneeLabel')
+            ->values()
+            ->map(fn (array $g): array => ['id' => (int) $g['anneeScolaireId'], 'label' => (string) $g['anneeLabel']]);
+    }
+
+    /**
      * Active catalog fees — feeds the edit modal's "Ajouter un frais"
      * picker, so a fee not originally assigned to the group can still be
      * added to a single inscription after the fact.

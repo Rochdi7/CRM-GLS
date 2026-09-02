@@ -316,6 +316,17 @@ final class GetEncaissementsList
                 'methodeRequalifiable' => $e->applied_from_encaissement_id === null
                     && $e->cheque_id === null
                     && (float) ($e->remboursements_total ?? 0) <= 0.0,
+                // Meme principe pour CorrigerMontantEncaissement : le
+                // read-model porte la regle de l'action au lieu de laisser
+                // l'UI la redecouvrir. Aux trois cas ci-dessus s'ajoute
+                // l'avance DEJA APPLIQUEE a un frais — baisser son montant
+                // rendrait les applications superieures a l'avance elle-meme.
+                // `applications_sum_montant` est deja charge (withSum plus
+                // haut), donc aucune requete par ligne ici (CLAUDE.md §17).
+                'montantCorrigible' => $e->applied_from_encaissement_id === null
+                    && $e->cheque_id === null
+                    && (float) ($e->remboursements_total ?? 0) <= 0.0
+                    && (float) ($e->applications_sum_montant ?? 0) <= 0.0,
                 'studentEmail' => $e->student?->email,
                 'showUrl' => route('backoffice.encaissements.show', $e),
                 'recuUrl' => route('backoffice.encaissements.recu', $e),

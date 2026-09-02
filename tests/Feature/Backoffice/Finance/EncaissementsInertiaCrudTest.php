@@ -1147,6 +1147,12 @@ final class EncaissementsInertiaCrudTest extends TestCase
      * frozen too: it decided which account was credited. The tampered value
      * is refused outright (see ComptesMethodeTest for the refusal itself);
      * here the stored method is echoed back, as the edit modal does.
+     *
+     * `caisse_id` is frozen for EVERYONE and is dropped silently (it is not
+     * an input at all). `montant` became correctable on 02/09/2026 but by a
+     * SUPER-ADMIN only (`payments.update-amount`); this user is not one, so
+     * a tampered amount is now REFUSED rather than ignored — same treatment
+     * as a tampered `methode`, and the row is left untouched either way.
      */
     public function test_edit_never_touches_montant_or_caisse_even_when_tampered(): void
     {
@@ -1165,19 +1171,26 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->put(route('backoffice.encaissements.update', $encaissement), [
             'methode' => 'Espèces',
             'date_paiement' => '2025-09-21',
-            // Tampered — must have zero effect.
+            // Tampered — must have zero effect. The amount is refused
+            // explicitly (this user is not a super-admin); caisse_id is not
+            // an input and is ignored.
             'montant' => '9999',
             'caisse_id' => $otherCaisse->id,
-        ])->assertSessionDoesntHaveErrors();
+        ])->assertSessionHasErrors('montant');
 
         $fresh = $encaissement->fresh();
         $this->assertSame('Espèces', $fresh->methode);
-        // The date is frozen too for this user: re-dating a payment needs
-        // `payments.update-date` (super-admin only, 30/08/2026) — see
+        // Nothing moved: the refusal aborts the whole edit, and the date is
+        // frozen for this user anyway — re-dating needs `payments.update-date`
+        // (super-admin only, 30/08/2026), see
         // test_the_payment_date_is_only_editable_by_a_super_admin below.
         $this->assertSame('2025-09-20', $fresh->date_paiement->toDateString());
         $this->assertSame('1500.00', (string) $fresh->montant);
         $this->assertSame($caisse->id, $fresh->caisse_id);
+        // La caisse n'a pas bouge non plus (la ligne a ete creee directement
+        // ici, donc son solde est reste a 0 : ce qui compte est qu'un montant
+        // trafique n'ecrive AUCUN mouvement).
+        $this->assertSame('0.00', (string) $caisse->fresh()->solde);
     }
 
     /**

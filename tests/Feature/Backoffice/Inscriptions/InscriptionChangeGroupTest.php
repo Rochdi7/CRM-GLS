@@ -113,6 +113,103 @@ final class InscriptionChangeGroupTest extends TestCase
         $this->assertSame($newInscription->id, $historique->fresh()->new_inscription_id);
     }
 
+    /**
+     * The one flow allowed to cross academic years (02/09/2026): a student
+     * whose 2025/2026 course is interrupted is moved into a 2026/2027 group.
+     * The successor inscription must inherit the TARGET group's année — not
+     * the active context's — or it would be filed under a year whose group
+     * it does not belong to.
+     */
+    public function test_it_moves_an_inscription_into_a_group_of_another_academic_year(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.change-group'));
+        $nextYear = AnneeScolaire::create([
+            'nom' => '2026/2027', 'date_debut' => '2026-09-01', 'date_fin' => '2027-08-31',
+            'par_defaut' => false, 'inscription_ouverte' => true,
+        ]);
+        $oldGroup = $this->makeGroup();
+        $newGroup = Group::factory()->create([
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $nextYear->id,
+        ]);
+        $inscription = $this->activeInscription($oldGroup);
+
+        $this->post(route('backoffice.inscriptions.change-group', $inscription), [
+            'new_group_id' => $newGroup->id,
+            'date_fin' => '2026-06-30',
+            'date_debut' => '2026-09-15',
+        ])->assertRedirect(route('backoffice.inscriptions.index'))->assertSessionHasNoErrors();
+
+        $this->assertSame(Inscription::STATUT_CHANGEMENT, $inscription->fresh()->statut);
+
+        $newInscription = Inscription::where('group_id', $newGroup->id)->first();
+        $this->assertNotNull($newInscription);
+        $this->assertSame($nextYear->id, $newInscription->annee_scolaire_id);
+        $this->assertSame($this->annee->id, $inscription->fresh()->annee_scolaire_id);
+    }
+
+    /**
+     * Crossing an année is allowed; crossing a CENTRE is not — the centre
+     * half of the context guard stays in force on the target group.
+     */
+    public function test_the_target_group_must_still_belong_to_the_active_centre(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.change-group'));
+        $oldGroup = $this->makeGroup();
+        $inscription = $this->activeInscription($oldGroup);
+        $autreCentre = Etablissement::factory()->create();
+        $newGroup = Group::factory()->create([
+            'etablissement_id' => $autreCentre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        session(['context.etablissement_id' => $this->centre->id]);
+
+        $this->post(route('backoffice.inscriptions.change-group', $inscription), [
+            'new_group_id' => $newGroup->id,
+            'date_fin' => '2026-01-10',
+            'date_debut' => '2026-01-11',
+        ])->assertSessionHasErrors('new_group_id');
+
+        $this->assertSame(Inscription::STATUT_ACTIVE, $inscription->fresh()->statut);
+    }
+
+    /**
+     * The modal's target list is NOT year-filtered — a group of the next
+     * année must be offered, while every other group dropdown on the page
+     * (create/edit, « Modification du groupe », the list filter) keeps its
+     * active-year window.
+     */
+    public function test_the_change_group_options_list_every_academic_year(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.change-group'));
+        $nextYear = AnneeScolaire::create([
+            'nom' => '2026/2027', 'date_debut' => '2026-09-01', 'date_fin' => '2027-08-31',
+            'par_defaut' => false, 'inscription_ouverte' => true,
+        ]);
+        $thisYearGroup = $this->makeGroup();
+        $nextYearGroup = Group::factory()->create([
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $nextYear->id,
+        ]);
+
+        $response = $this->get(route('backoffice.inscriptions.index'));
+        $response->assertOk();
+
+        $props = $response->viewData('page')['props'];
+        $changeGroupIds = collect($props['changeGroupGroups'])->pluck('id')->all();
+        $this->assertContains($nextYearGroup->id, $changeGroupIds);
+        $this->assertContains($thisYearGroup->id, $changeGroupIds);
+
+        // The ordinary list keeps the active-year window.
+        $this->assertNotContains($nextYearGroup->id, collect($props['groups'])->pluck('id')->all());
+
+        $this->assertEqualsCanonicalizing(
+            [$this->annee->id, $nextYear->id],
+            collect($props['changeGroupAnnees'])->pluck('id')->all(),
+        );
+    }
+
     public function test_only_an_active_inscription_can_change_group(): void
     {
         $this->actingAs($this->userWith('registrations.view', 'registrations.change-group'));

@@ -49,22 +49,8 @@ final class GetCaisseTransfersList
     ): array {
         $myCaisseIds = $user->employee?->caisses()->pluck('id')->all() ?? [];
 
-        // ⚠ NOT narrowed to the active centre — CLAUDE.md §11 names the
-        // transfer-validation inbox a deliberate exception to context
-        // scoping: only the employee owning the DESTINATION till may
-        // validate (ValiderTransfertCaisse), so a pending transfer that
-        // hid behind a centre switch could never be cleared by anyone and
-        // the money would stay « En attente » forever. Centre REACH still
-        // applies (scopeAccessibleCenters) — this widens the window to the
-        // centres the user may already see, never beyond them.
         $base = CaisseTransfer::query()
-            ->where(function (Builder $q) use ($user): void {
-                $q->whereHas('caisseSource', function (Builder $sq) use ($user): void {
-                    $this->centerAccess->scopeAccessibleCenters($sq, $user);
-                })->orWhereHas('caisseDestination', function (Builder $dq) use ($user): void {
-                    $this->centerAccess->scopeAccessibleCenters($dq, $user);
-                });
-            })
+            ->tap(fn ($q) => $this->scopeReachableEnds($q, $user, $myCaisseIds))
             ->when($statutFilter !== '', fn ($q) => $q->where('statut', $statutFilter))
             ->when(
                 $typeFilter === self::TYPE_ENVOYE,
@@ -140,14 +126,10 @@ final class GetCaisseTransfersList
      */
     public function statutCounts(User $user): Collection
     {
+        $myCaisseIds = $user->employee?->caisses()->pluck('id')->all() ?? [];
+
         return CaisseTransfer::query()
-            ->where(function (Builder $q) use ($user): void {
-                $q->whereHas('caisseSource', function (Builder $sq) use ($user): void {
-                    $this->centerAccess->scopeAccessibleCenters($sq, $user);
-                })->orWhereHas('caisseDestination', function (Builder $dq) use ($user): void {
-                    $this->centerAccess->scopeAccessibleCenters($dq, $user);
-                });
-            })
+            ->tap(fn ($q) => $this->scopeReachableEnds($q, $user, $myCaisseIds))
             ->selectRaw('statut, COUNT(*) as total')
             ->groupBy('statut')
             ->pluck('total', 'statut');
@@ -175,6 +157,61 @@ final class GetCaisseTransfersList
                 'nom' => $c->nom,
                 'solde' => number_format((float) $c->solde, 2, '.', ''),
             ]);
+    }
+
+    /**
+     * Constrains the inbox to transfers the viewer may see: at least one leg
+     * in a centre they can REACH, and — when the top-bar switcher names a
+     * single centre — at least one leg in THAT centre.
+     *
+     * CLAUDE.md §11 names this inbox a deliberate exception to context
+     * scoping, and it still is: a transfer with one of the viewer's OWN
+     * tills at either end is always listed, whatever the active centre. That
+     * is the whole point of the exception — only the employee owning the
+     * DESTINATION till may validate (ValiderTransfertCaisse), so a pending
+     * row that hid behind a centre switch could never be cleared by anyone
+     * and the money would stay « En attente » forever.
+     *
+     * What the exception never meant is « ignore the switcher entirely ».
+     * For a super-admin `scopeAccessibleCenters()` is a no-op (global
+     * access), so keying the whole inbox on reach alone showed the ENTIRE
+     * network's transfers while the switcher read « GLS Salé » — reported
+     * 02/09/2026, with Marrakech and Rabat tills listed on a Salé screen.
+     * Someone else's transfer between two other centres is not the viewer's
+     * to validate, so the switcher governs it like every other screen.
+     */
+    private function scopeReachableEnds($query, User $user, array $myCaisseIds): void
+    {
+        $activeCenterId = $this->context->etablissementId();
+
+        $query->where(function (Builder $outer) use ($user, $myCaisseIds, $activeCenterId): void {
+            // Always visible: a transfer touching one of my own tills — the
+            // row I may have to validate, or the one I sent.
+            if ($myCaisseIds !== []) {
+                $outer->whereIn('caisse_source_id', $myCaisseIds)
+                    ->orWhereIn('caisse_destination_id', $myCaisseIds);
+            }
+
+            $outer->orWhere(function (Builder $q) use ($user, $activeCenterId): void {
+                $q->whereHas('caisseSource', function (Builder $sq) use ($user, $activeCenterId): void {
+                    $this->centerAccess->scopeAccessibleCenters($sq, $user);
+                    $this->restrictToCenter($sq, $activeCenterId);
+                })->orWhereHas('caisseDestination', function (Builder $dq) use ($user, $activeCenterId): void {
+                    $this->centerAccess->scopeAccessibleCenters($dq, $user);
+                    $this->restrictToCenter($dq, $activeCenterId);
+                });
+            });
+        });
+    }
+
+    /** No-op on « Tous les centres » (null) — otherwise that centre only. */
+    private function restrictToCenter(Builder $query, ?int $centerId): void
+    {
+        if ($centerId === null) {
+            return;
+        }
+
+        $query->where('etablissement_id', $centerId);
     }
 
     private function scopeToActiveCenter($query): void

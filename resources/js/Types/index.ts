@@ -1278,6 +1278,17 @@ export interface InscriptionGroupOption extends InscriptionFormOption {
     statut: string;
 }
 
+/**
+ * Target-group option for the « Changement de groupe » modal — the only
+ * group dropdown NOT limited to the active academic year, so a student can
+ * be moved into next year's group. Carries the year so the modal can filter
+ * the list behind its « Année scolaire » selector.
+ */
+export interface InscriptionChangeGroupOption extends InscriptionGroupOption {
+    anneeScolaireId: number | null;
+    anneeLabel: string | null;
+}
+
 /** One "Frais disponible" line loaded from the selected group (GetGroupInscriptionFees). */
 /** Catalog fee for the edit modal's "Ajouter un frais" select; montantDefaut is the fallback amount when the group assigns no own amount. */
 export interface InscriptionFraisOption extends InscriptionFormOption {
@@ -1352,6 +1363,10 @@ export interface InscriptionsPageProps {
     defaultCountry: string;
     students: InscriptionFormOption[];
     groups: InscriptionGroupOption[];
+    /** Target groups for « Changement de groupe » — all reachable academic years, not just the active one. */
+    changeGroupGroups: InscriptionChangeGroupOption[];
+    /** Academic years present in changeGroupGroups — the modal's « Année scolaire » selector. */
+    changeGroupAnnees: InscriptionFormOption[];
     /** Active fee catalog — feeds the edit modal's "Ajouter un frais" picker. */
     frais: InscriptionFraisOption[];
     /** UI convenience only — hides the edit-modal fee controls; real enforcement is registrations.manage-fees on the server (InscriptionController::updateFees). */
@@ -1582,6 +1597,14 @@ export interface EncaissementRow {
      * server-side.
      */
     methodeRequalifiable?: boolean;
+    /**
+     * Whether CorrigerMontantEncaissement would accept this row — false for
+     * an advance allocation, a payment linked to a tracked cheque, an
+     * already-refunded payment, and an advance already applied to a fee.
+     * Gate the « Montant » input on this AND on `can.updateAmount`
+     * (super-admin only); the action refuses again server-side.
+     */
+    montantCorrigible?: boolean;
     studentEmail: string | null;
     showUrl: string;
     /** Printable receipt page — append ?format=a6|a5|a5x2. */
@@ -1641,7 +1664,7 @@ export interface EncaissementsPageProps {
      * (RequalifierMethodeEncaissement), and refuses a different value posted
      * without the permission.
      */
-    can?: { delete: boolean; updateDate?: boolean; updateMethode?: boolean };
+    can?: { delete: boolean; updateDate?: boolean; updateMethode?: boolean; updateAmount?: boolean };
     [key: string]: unknown;
 }
 

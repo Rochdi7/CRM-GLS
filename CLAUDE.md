@@ -765,10 +765,32 @@ the database layer. Non-negotiable invariants already enforced in code:
     call. Tests: `tests/Feature/Backoffice/Context/ContextScopeWriteGuardTest.php`.
   - **Deliberate exceptions** (do not "fix"): employees/users (staff has no
     year), stock (physical inventory), the transfer-validation inbox (a
-    pending transfer must never hide behind a year switch), and the caisse
+    pending transfer must never hide behind a year switch), the caisse
     journal's header totals + `solde` (they reconcile with the till's
     running balance, which spans years — only the journal ROWS follow the
-    year window).
+    year window), and the TARGET group of « Changement de groupe » (below).
+  - **⚠ « Changement de groupe » may cross an ANNÉE — never a CENTRE**
+    (02/09/2026). It is the only write allowed past the année half of the
+    guard: a student whose course is interrupted mid-year is moved into
+    NEXT year's group, so `InscriptionController@changeGroup` calls
+    `assertRecordInContext(..., $anneeId: null, ...)` instead of
+    `assertGroupInContext()` — centre reach + active centre still enforced,
+    année deliberately not. Its dropdown is fed by
+    `GetInscriptionFormOptions::changeGroupGroups()` (centre-scoped, NOT
+    year-scoped) plus `anneesScolairesFromGroups()` for the modal's
+    « Année scolaire » selector; **every OTHER group dropdown on the page
+    keeps `groups()` and its active-year window** (the list filter, the
+    create/edit form, « Modification du groupe » — that one corrects a
+    group IN PLACE and must never silently re-file an inscription into
+    another year). The successor row inherits the TARGET group's année
+    (`ChangerGroupeInscription::createNewInscription`), so it is filed
+    where the student actually joins and only becomes visible once the
+    top-bar year switcher follows — the modal warns about that before
+    submitting. Paid fees carried over are still chosen per line by
+    `transfer_fee_ids` (the money moves with the fee row, nothing is
+    rewritten). Tests:
+    `tests/Feature/Backoffice/Inscriptions/InscriptionChangeGroupTest.php`,
+    `tests/Feature/Backoffice/Context/ContextScopeWriteGuardTest.php`.
 - **Referential data (établissements, années scolaires, salles) is managed via
   the tabbed Paramètres page** — route `backoffice.settings`
   (`SettingController`), one React panel per tab under

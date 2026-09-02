@@ -18,6 +18,14 @@ return new class extends Migration
             $table->date('date_fin');
             $table->boolean('par_defaut')->default(false);
             $table->boolean('inscription_ouverte')->default(true);
+            // Année CLÔTURÉE : plus aucune écriture (création ou
+            // modification) n'est acceptée dans cette année — ni par un
+            // super-admin. Le verrou se lève uniquement en décochant la case
+            // dans Paramètres → Années scolaires (geste explicite, audité).
+            // Ajouté le 02/09/2026 après qu'une dépense a été saisie par
+            // erreur sur une année passée restée sélectionnée dans le
+            // sélecteur du haut.
+            $table->boolean('cloturee')->default(false);
             $table->timestamps();
         });
     }

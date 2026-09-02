@@ -31,6 +31,7 @@ interface CreateFormState {
 }
 
 interface EditFormState {
+    montant: string;
     methode: string;
     date_paiement: string;
     numero_cheque: string;
@@ -145,6 +146,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
 
     const createForm = useForm<CreateFormState>(emptyCreateForm());
     const editForm = useForm<EditFormState>({
+        montant: '',
         methode: '',
         date_paiement: '',
         numero_cheque: '',
@@ -339,6 +341,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
         setEditingRow(row);
         editForm.clearErrors();
         editForm.setData({
+            montant: Number(row.montant).toFixed(2),
             methode: row.methode,
             date_paiement: row.datePaiement ?? '',
             numero_cheque: row.numeroCheque ?? '',
@@ -733,6 +736,11 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
     // ne redérive pas la règle (CLAUDE.md §11).
     const canEditMethode =
         (can?.updateMethode ?? false) && (editingRow?.methodeRequalifiable ?? false);
+    // Super-admin uniquement, et seulement sur une ligne que
+    // CorrigerMontantEncaissement accepterait. Confort d'interface : le vrai
+    // verrou est EncaissementController@update.
+    const canEditMontant =
+        (can?.updateAmount ?? false) && (editingRow?.montantCorrigible ?? false);
 
     return (
         <BackofficeLayout
@@ -1004,6 +1012,17 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                         type="button"
                                         className="dropdown-item rounded-1 w-100 text-start border-0 bg-transparent"
                                         disabled={bulkDisabled}
+                                        onClick={() => openRecuGroupe('a5x2')}
+                                    >
+                                        <i className="ti ti-file-text me-2" aria-hidden="true" />
+                                        Générer deux copies du reçu (demi-feuille A4)
+                                    </button>
+                                </li>
+                                <li>
+                                    <button
+                                        type="button"
+                                        className="dropdown-item rounded-1 w-100 text-start border-0 bg-transparent"
+                                        disabled={bulkDisabled}
                                         onClick={() => openRecuGroupe('a6')}
                                     >
                                         <i className="ti ti-file-text me-2" aria-hidden="true" />
@@ -1019,17 +1038,6 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                     >
                                         <i className="ti ti-file-text me-2" aria-hidden="true" />
                                         Générer le reçu format A5
-                                    </button>
-                                </li>
-                                <li>
-                                    <button
-                                        type="button"
-                                        className="dropdown-item rounded-1 w-100 text-start border-0 bg-transparent"
-                                        disabled={bulkDisabled}
-                                        onClick={() => openRecuGroupe('a5x2')}
-                                    >
-                                        <i className="ti ti-file-text me-2" aria-hidden="true" />
-                                        Générer deux copies du reçu (Paysage A5)
                                     </button>
                                 </li>
                                 <li><hr className="dropdown-divider" /></li>
@@ -1068,6 +1076,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                         <th>Ancien frais</th>
                                         <th className="text-end">Montant</th>
                                         <th>Caisse</th>
+                                        <th>{t('Agent')}</th>
                                         <th>Date</th>
                                         <th className="text-end">Montant utilisé</th>
                                         <th className="text-end">Montant restant</th>
@@ -1097,6 +1106,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                         </td>
                                         <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} MAD</td>
                                         <td>{row.caisse ?? '—'}</td>
+                                        <td>{row.agent ?? '—'}</td>
                                         <td>{row.datePaiement ?? '—'}</td>
                                         <td className="text-end">{Number(row.montantUtilise ?? 0).toFixed(2)} MAD</td>
                                         <td className="text-end fw-medium">
@@ -1155,6 +1165,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                         <th className="text-end">Montant</th>
                                         <th>Méthode</th>
                                         <th>Date</th>
+                                        <th>{t('Agent')}</th>
                                         <th className="text-end">Action</th>
                                     </tr>
                                 }
@@ -1236,12 +1247,19 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                             <span className="badge badge-soft-info">{row.methode}</span>
                                         </td>
                                         <td>{row.datePaiement ?? '—'}</td>
+                                        <td>{row.agent ?? '—'}</td>
                                         <td>
                                             <RowActions view={row.showUrl}>
                                                 <RowActionItem icon="ti-edit" onClick={() => openEdit(row)}>
                                                     Modifier
                                                 </RowActionItem>
                                                 <RowActionDivider />
+                                                <RowActionItem
+                                                    icon="ti-file-text"
+                                                    onClick={() => window.open(`${row.recuUrl}?format=a5x2`, '_blank')}
+                                                >
+                                                    Générer deux copies du reçu (demi-feuille A4)
+                                                </RowActionItem>
                                                 <RowActionItem
                                                     icon="ti-file-text"
                                                     onClick={() => window.open(`${row.recuUrl}?format=a6`, '_blank')}
@@ -1253,12 +1271,6 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                     onClick={() => window.open(`${row.recuUrl}?format=a5`, '_blank')}
                                                 >
                                                     Générer le reçu format A5
-                                                </RowActionItem>
-                                                <RowActionItem
-                                                    icon="ti-file-text"
-                                                    onClick={() => window.open(`${row.recuUrl}?format=a5x2`, '_blank')}
-                                                >
-                                                    Générer deux copies du reçu (Paysage A5)
                                                 </RowActionItem>
                                                 <RowActionDivider />
                                                 <RowActionItem icon="ti-mail" onClick={() => openEmailRecu(row)}>
@@ -1569,23 +1581,44 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                     <span className="input-group-text">DH</span>
                                 </div>
                             </div>
-                            {/* Montant read-only by design: money records are
-                                append-only (corrections = remboursement + new
-                                paiement), and caisse.solde would silently
-                                desync otherwise. */}
+                            {/*
+                              * Corriger le montant n'est pas une correction
+                              * d'etiquette : `montant` EST la somme tombee
+                              * dans la caisse, donc le serveur DEPLACE l'ecart
+                              * (credit si on augmente, debit si on baisse) sur
+                              * la caisse D'ORIGINE de la ligne — le till de
+                              * l'employe qui a encaisse, jamais celui du
+                              * correcteur — et le journalise
+                              * (CorrigerMontantEncaissement).
+                              *
+                              * Super-admin uniquement
+                              * (`payments.update-amount`, 02/09/2026) et
+                              * seulement sur une ligne que l'action
+                              * accepterait (`montantCorrigible`). Pour tous
+                              * les autres le champ reste en lecture seule :
+                              * une correction passe par un remboursement +
+                              * un nouvel encaissement.
+                              */}
                             <div className="col-md-6 mb-3">
                                 <label className="form-label" htmlFor="e-edit-montant">
-                                    Montant de paiement
+                                    Montant de paiement {canEditMontant && <span className="text-danger">*</span>}
                                 </label>
                                 <div className="input-group">
                                     <input
                                         id="e-edit-montant"
-                                        type="text"
-                                        className="form-control"
-                                        value={Number(editingRow.montant).toFixed(2)}
-                                        disabled
+                                        type={canEditMontant ? 'number' : 'text'}
+                                        step="0.01"
+                                        min="0.01"
+                                        className={`form-control${editForm.errors.montant ? ' is-invalid' : ''}`}
+                                        value={canEditMontant ? editForm.data.montant : Number(editingRow.montant).toFixed(2)}
+                                        onChange={(e) => editForm.setData('montant', e.target.value)}
+                                        disabled={!canEditMontant}
+                                        required={canEditMontant}
                                     />
                                     <span className="input-group-text">DH</span>
+                                    {editForm.errors.montant && (
+                                        <div className="invalid-feedback">{editForm.errors.montant}</div>
+                                    )}
                                 </div>
                             </div>
                             <div className="col-md-6">

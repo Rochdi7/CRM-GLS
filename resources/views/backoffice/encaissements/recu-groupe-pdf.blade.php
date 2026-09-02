@@ -162,9 +162,9 @@
             <td class="row-ar">رقــم التسجيل</td>
         </tr>
         <tr>
-            <td class="row-fr">Niveau</td>
+            <td class="row-fr">Groupe</td>
             <td class="row-val">{{ $niveau ?? '—' }}</td>
-            <td class="row-ar">المستوى</td>
+            <td class="row-ar">المجموعة</td>
         </tr>
     </table>
 

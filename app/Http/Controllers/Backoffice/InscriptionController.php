@@ -103,6 +103,14 @@ final class InscriptionController extends Controller
             'defaultCountry' => Countries::DEFAULT,
             'students' => $getInscriptionFormOptions->students($request->user()),
             'groups' => $getInscriptionFormOptions->groups($request->user()),
+            // « Changement de groupe » is the ONE flow allowed to cross
+            // academic years, so it gets its own unfiltered-by-year option
+            // list (closures: a partial reload that doesn't ask for them
+            // skips both queries — CLAUDE.md §17).
+            'changeGroupGroups' => fn () => $getInscriptionFormOptions->changeGroupGroups($request->user()),
+            'changeGroupAnnees' => fn () => $getInscriptionFormOptions->anneesScolairesFromGroups(
+                $getInscriptionFormOptions->changeGroupGroups($request->user()),
+            ),
             'frais' => $getInscriptionFormOptions->frais(),
             'canManageFees' => $request->user()->can('registrations.manage-fees'),
             'canChangeGroup' => $request->user()->can('registrations.change-group'),
@@ -629,7 +637,21 @@ final class InscriptionController extends Controller
 
         $data = $request->validated();
         $newGroup = Group::findOrFail($data['new_group_id']);
-        $this->assertGroupInContext($request, $newGroup, 'new_group_id');
+        // Centre reach + active centre are asserted as everywhere else, but
+        // the ANNÉE check is deliberately skipped for the TARGET group:
+        // moving a student into next year's group is the point of this flow
+        // (02/09/2026). The successor inscription inherits the target
+        // group's année (ChangerGroupeInscription::createNewInscription), so
+        // nothing is filed into the active year by accident — it simply may
+        // not be visible under the current year switcher afterwards.
+        $this->assertRecordInContext(
+            $request,
+            'new_group_id',
+            $newGroup->etablissement_id,
+            null,
+            __('This group belongs to another centre than the active one.'),
+            '',
+        );
 
         $action->handle(
             $inscription,

@@ -210,6 +210,16 @@ final class PermissionRegistry
                 // front-office reste en création seule sur la finance et
                 // corrige par écriture compensatoire (01/09/2026).
                 'payments.update-method' => "Modifier la méthode de paiement d'un encaissement",
+                // Corriger le MONTANT d'un encaissement enregistré. Comme la
+                // méthode, ce n'est pas une étiquette : le montant EST la
+                // somme tombée dans la caisse, donc le corriger DÉPLACE de
+                // l'argent (l'écart est crédité ou débité sur la caisse
+                // d'ORIGINE, journalisé — CorrigerMontantEncaissement).
+                // Deliberately in NO role preset (superAdminOnly() ci-dessous) :
+                // réécrire une somme déjà encaissée court-circuite la
+                // correction normale (remboursement + nouvel encaissement),
+                // donc seul un super-admin peut le faire (02/09/2026).
+                'payments.update-amount' => "Modifier le montant d'un encaissement",
                 // Deliberately in NO role preset below. Money records are
                 // append-only by default (CLAUDE.md §11); a super-admin grants
                 // this one by hand when a real correction case needs it.
@@ -477,6 +487,11 @@ final class PermissionRegistry
             // Re-dating a recorded payment moves it between reconciled
             // periods — see payments.update-date in grouped() (30/08/2026).
             'payments.update-date',
+            // Corriger un MONTANT déjà encaissé réécrit une somme que la
+            // caisse a réellement reçue : c'est le court-circuit de la
+            // correction normale (remboursement + nouvel encaissement), donc
+            // même classe que payments.update-date (02/09/2026).
+            'payments.update-amount',
             // Moving a group between années rewrites the year of every
             // inscription, séance (and therefore payment) hanging off it —
             // a history-altering act reserved to super-admins (24/08/2026).

@@ -170,12 +170,41 @@ final class ContextScopeWriteGuardTest extends TestCase
         $this->assertSame($this->centreActif->id, $inscription->etablissement_id);
     }
 
-    public function test_changing_group_towards_another_year_is_refused(): void
+    /**
+     * « Changement de groupe » is the ONE deliberate exception to the année
+     * half of the guard (02/09/2026, CLAUDE.md §11 « Deliberate exceptions »):
+     * a student whose course is interrupted must be movable into NEXT year's
+     * group. The successor row inherits the TARGET group's année, so nothing
+     * is filed into the active year by accident — it simply becomes visible
+     * only once the top-bar year switcher follows.
+     *
+     * The CENTRE half stays enforced — see the next test.
+     */
+    public function test_changing_group_towards_another_year_is_allowed(): void
     {
         $this->actingAs($this->userWith('registrations.view', 'registrations.change-group'));
         $this->activateContext();
         [, $inscription] = $this->enrolled($this->group($this->anneeActive, $this->centreActif));
         $target = $this->group($this->anneeAutre, $this->centreActif);
+
+        $this->post(route('backoffice.inscriptions.change-group', $inscription), [
+            'new_group_id' => $target->id,
+            'date_fin' => '2026-10-01',
+            'date_debut' => '2026-10-02',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame(Inscription::STATUT_CHANGEMENT, $inscription->fresh()->statut);
+
+        $successor = Inscription::where('group_id', $target->id)->sole();
+        $this->assertSame($this->anneeAutre->id, $successor->annee_scolaire_id);
+    }
+
+    public function test_changing_group_towards_another_centre_is_still_refused(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.change-group'));
+        $this->activateContext();
+        [, $inscription] = $this->enrolled($this->group($this->anneeActive, $this->centreActif));
+        $target = $this->group($this->anneeActive, $this->centreAutre);
 
         $this->post(route('backoffice.inscriptions.change-group', $inscription), [
             'new_group_id' => $target->id,
