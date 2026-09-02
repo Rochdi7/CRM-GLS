@@ -25,6 +25,7 @@ final class GetAnneesScolairesList
             'dateFin' => $a->date_fin->format('d/m/Y'),
             'parDefaut' => (bool) $a->par_defaut,
             'inscriptionOuverte' => (bool) $a->inscription_ouverte,
+            'cloturee' => (bool) $a->cloturee,
         ]);
 
         return $annees;

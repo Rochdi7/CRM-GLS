@@ -486,4 +486,42 @@ final class RolesAndPermissionsSeederTest extends TestCase
             );
         }
     }
+
+    /**
+     * 02/09/2026 — every role may ACCEPT a transfer arriving in its OWN till.
+     *
+     * Accepter une réception n'est pas un privilège de direction : c'est la
+     * confirmation, par la personne dont la caisse est créditée, qu'elle a
+     * bien reçu l'argent. Réserver `cash-transfers.validate` à certains
+     * postes n'ajoute aucune sécurité — le vrai garde-fou est le contrôle de
+     * PROPRIÉTÉ de la caisse de destination, appliqué deux fois
+     * (CaisseTransferPolicy@validate + ValiderTransfertCaisse) — mais bloque
+     * définitivement le destinataire réel : le transfert reste « En attente »
+     * pour toujours, puisque personne ne peut valider à sa place, super-admin
+     * compris (NO_SUPER_ADMIN_BYPASS sur CaisseTransfer@validate).
+     *
+     * Seul `teacher` est exempté : un enseignant ne tient aucune caisse.
+     */
+    public function test_every_role_that_can_hold_a_till_can_accept_its_own_reception(): void
+    {
+        foreach (PermissionRegistry::roles() as $name => $label) {
+            // super-admin porte ZERO permission synchronisee (Gate::before) ;
+            // teacher ne tient aucune caisse.
+            if (in_array($name, [Role::SUPER_ADMIN, 'teacher'], true)) {
+                continue;
+            }
+
+            $role = Role::findByName($name);
+
+            $this->assertTrue(
+                $role->hasPermissionTo('cash-transfers.view'),
+                "[{$name}] doit voir sa boite de reception de transferts.",
+            );
+
+            $this->assertTrue(
+                $role->hasPermissionTo('cash-transfers.validate'),
+                "[{$name}] doit pouvoir accepter un transfert arrivant dans SA caisse.",
+            );
+        }
+    }
 }

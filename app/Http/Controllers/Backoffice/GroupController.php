@@ -147,6 +147,8 @@ final class GroupController extends Controller
     public function store(StoreGroupRequest $request): RedirectResponse
     {
         $this->authorize('create', Group::class);
+        // A new group inherits the ACTIVE year, so a closed one must refuse it.
+        $this->assertContextAnneeOuverte('nom');
 
         $data = $request->validated();
         // A new group starts with the WHOLE active catalog, minus the fees

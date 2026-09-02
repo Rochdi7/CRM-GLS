@@ -9,6 +9,8 @@ use App\Http\Requests\Backoffice\AnneesScolaires\StoreAnneeScolaireRequest;
 use App\Http\Requests\Backoffice\AnneesScolaires\UpdateAnneeScolaireRequest;
 use App\Models\AnneeScolaire;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -34,7 +36,7 @@ final class AnneeScolaireController extends Controller
 
     public function store(StoreAnneeScolaireRequest $request): RedirectResponse
     {
-        $this->persist($request->validated());
+        $this->persist($this->guardCloture($request, $request->validated()));
 
         return redirect()->route('backoffice.settings', ['tab' => 'annees-scolaires'])
             ->with('success', __('Année scolaire créée.'));
@@ -47,7 +49,7 @@ final class AnneeScolaireController extends Controller
 
     public function update(UpdateAnneeScolaireRequest $request, AnneeScolaire $annees_scolaire): RedirectResponse
     {
-        $this->persist($request->validated(), $annees_scolaire);
+        $this->persist($this->guardCloture($request, $request->validated(), $annees_scolaire), $annees_scolaire);
 
         return redirect()->route('backoffice.settings', ['tab' => 'annees-scolaires'])
             ->with('success', __('Année scolaire mise à jour.'));
@@ -61,6 +63,14 @@ final class AnneeScolaireController extends Controller
     public function setDefault(AnneeScolaire $annees_scolaire): RedirectResponse
     {
         $this->authorize('update', $annees_scolaire);
+
+        // Mirror of guardCloture()'s rule, from the other side: the default
+        // year is the one every new session opens on, so a CLOSED year must
+        // never become it — that would drop everyone into a context which
+        // accepts no input.
+        if ($annees_scolaire->estCloturee()) {
+            return back()->withErrors(['default' => __('A closed academic year cannot be made the default. Reopen it first.')]);
+        }
 
         if (! $annees_scolaire->par_defaut) {
             $this->persist(['par_defaut' => true], $annees_scolaire);
@@ -94,6 +104,55 @@ final class AnneeScolaireController extends Controller
 
         return redirect()->route('backoffice.settings', ['tab' => 'annees-scolaires'])
             ->with('success', __('Année scolaire supprimée.'));
+    }
+
+    /**
+     * ⚠ « Année clôturée » is a WRITE LOCK, not a label (02/09/2026): a
+     * ticked year refuses every creation and modification across the whole
+     * app, super-admin included (AssertsContextScope). Two guards therefore
+     * sit on the switch itself:
+     *
+     *  1. only a super-admin may tick or untick it. Un-ticking is the ONLY
+     *     way to write in a closed year again, so it is the real override —
+     *     if any role could flip it, the lock would be advisory;
+     *  2. the DEFAULT year can never be closed. It is the year every new
+     *     session opens on (CurrentContext falls back to it), so closing it
+     *     would drop every user into a context that accepts no input, with
+     *     no obvious way out. Make another year the default first.
+     *
+     * The change is audited like every other column (AnneeScolaire uses
+     * Auditable), so who reopened a year, and when, is on the record.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function guardCloture(Request $request, array $data, ?AnneeScolaire $annee = null): array
+    {
+        if (! array_key_exists('cloturee', $data)) {
+            return $data;
+        }
+
+        $demandee = (bool) $data['cloturee'];
+
+        if ($demandee === (bool) ($annee->cloturee ?? false)) {
+            return $data;
+        }
+
+        if (! $request->user()?->hasRole('super-admin')) {
+            throw ValidationException::withMessages([
+                'cloturee' => __('Only a super-admin can close or reopen an academic year.'),
+            ]);
+        }
+
+        $deviendraDefaut = (bool) ($data['par_defaut'] ?? $annee->par_defaut ?? false);
+
+        if ($demandee && $deviendraDefaut) {
+            throw ValidationException::withMessages([
+                'cloturee' => __('The default academic year cannot be closed. Make another year the default first.'),
+            ]);
+        }
+
+        return $data;
     }
 
     /**

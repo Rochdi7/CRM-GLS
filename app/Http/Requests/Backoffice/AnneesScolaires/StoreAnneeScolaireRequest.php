@@ -24,6 +24,7 @@ final class StoreAnneeScolaireRequest extends FormRequest
             'date_fin' => ['required', 'date', 'after:date_debut'],
             'par_defaut' => ['sometimes', 'boolean'],
             'inscription_ouverte' => ['sometimes', 'boolean'],
+            'cloturee' => ['sometimes', 'boolean'],
         ];
     }
 }

@@ -6,6 +6,7 @@ import Footer from '@/Components/Theme/Footer';
 import MobileSidebarOverlay from '@/Components/Theme/MobileSidebarOverlay';
 import PageHeader from '@/Components/Theme/PageHeader';
 import ToastContainer from '@/Components/Feedback/ToastContainer';
+import AnneeClotureeBanner from '@/Components/Context/AnneeClotureeBanner';
 import type { Breadcrumb, SharedProps } from '@/Types';
 
 interface BackofficeLayoutProps extends PropsWithChildren {
@@ -74,6 +75,11 @@ export default function BackofficeLayout({ title, breadcrumbs = [], actions, chi
                     <PageHeader title={title} breadcrumbs={breadcrumbs}>
                         {actions}
                     </PageHeader>
+                    {/* Rendered by the SHELL, so no page can forget it: while
+                        the active year is closed every write is refused
+                        server-side and the user must be told why before
+                        keying anything (AssertsContextScope, 02/09/2026). */}
+                    <AnneeClotureeBanner />
                     {children}
                 </div>
                 <Footer />

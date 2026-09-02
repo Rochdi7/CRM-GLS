@@ -653,6 +653,12 @@ final class InscriptionController extends Controller
             '',
         );
 
+        // Crossing an année is allowed here — landing in a CLOSED one is not.
+        // The successor inscription inherits the target group's année, so a
+        // clôturée target would file a brand-new record into a year that
+        // accepts no writes (02/09/2026).
+        $this->assertAnneeNotCloturee('new_group_id', $newGroup->annee_scolaire_id);
+
         $action->handle(
             $inscription,
             $newGroup,

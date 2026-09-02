@@ -62,13 +62,22 @@ final class HandleInertiaRequests extends Middleware
                     'currentAcademicYear' => $context->anneeScolaire() === null ? null : [
                         'id' => $context->anneeScolaire()->id,
                         'name' => $context->anneeScolaire()->nom,
+                        'cloturee' => $context->anneeScolaire()->estCloturee(),
                     ],
                     'availableCenters' => $context->availableCentres()
                         ->map(fn ($centre) => ['id' => $centre->id, 'name' => $centre->nom_centre])
                         ->values(),
                     'availableAcademicYears' => $context->availableAnnees()
-                        ->map(fn ($annee) => ['id' => $annee->id, 'name' => $annee->nom])
+                        ->map(fn ($annee) => [
+                            'id' => $annee->id,
+                            'name' => $annee->nom,
+                            'cloturee' => $annee->estCloturee(),
+                        ])
                         ->values(),
+                    // The active year is CLOSED: every page disables its
+                    // create/edit affordances and shows a banner. UI shaping
+                    // only — AssertsContextScope refuses the write anyway.
+                    'anneeCloturee' => $context->anneeScolaire()?->estCloturee() ?? false,
                 ];
             })(),
             'flash' => [

@@ -175,7 +175,7 @@ export default function ContextSwitcher({ context }: ContextSwitcherProps) {
                     aria-expanded={yearMenuOpen}
                     disabled={processing}
                 >
-                    <i className="ti ti-calendar me-2" />
+                    <i className={`ti me-2 ${context.anneeCloturee ? 'ti-lock text-warning' : 'ti-calendar'}`} />
                     <span className="fw-semibold">{context.currentAcademicYear?.name ?? 'Année scolaire'}</span>
                 </button>
                 <div
@@ -190,6 +190,13 @@ export default function ContextSwitcher({ context }: ContextSwitcherProps) {
                             onClick={() => submitContext({ annee_scolaire_id: annee.id })}
                         >
                             <span>{annee.name}</span>
+                            {/* A closed year stays SELECTABLE — its data must
+                                remain readable, exportable and printable; only
+                                writing is locked (server-side). The padlock
+                                says so before the user starts keying. */}
+                            {annee.cloturee && (
+                                <i className="ti ti-lock ms-2 text-warning" title="Année clôturée — aucune saisie possible" />
+                            )}
                         </button>
                     ))}
                 </div>

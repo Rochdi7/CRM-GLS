@@ -142,6 +142,13 @@ final class DepenseController extends Controller
             ]);
         }
 
+        // ⚠ An ordinary dépense carries no group and no annee_scolaire_id, so
+        // NOTHING below would have checked the year — this is exactly the
+        // record that was keyed by mistake into a past year left selected in
+        // the top-bar switcher (02/09/2026). The closed-year lock is asserted
+        // on the ACTIVE year here, for every type.
+        $this->assertContextAnneeOuverte('type_depense_id');
+
         // A "Paiement prof" attribution must point at a group the user can
         // reach inside the active context — otherwise per-group expense
         // reporting silently crosses centres (AssertsContextScope). It is
@@ -294,6 +301,7 @@ final class DepenseController extends Controller
     {
         $this->authorize('update', $depense);
         $this->assertDepenseInContext($request, $depense);
+        $this->assertContextAnneeOuverte('type_depense_id');
 
         if (($request->validated('group_id') ?? null) !== null) {
             $this->assertGroupInContext($request, Group::findOrFail((int) $request->validated('group_id')));

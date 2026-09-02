@@ -22,6 +22,7 @@ const EMPTY_FORM: AnneeScolaireForm = {
     date_fin: '',
     par_defaut: false,
     inscription_ouverte: true,
+    cloturee: false,
 };
 
 /**
@@ -59,6 +60,7 @@ export default function AnneesScolairesPanel({ anneesScolaires, permissions }: A
             date_fin: toInputDate(row.dateFin),
             par_defaut: row.parDefaut,
             inscription_ouverte: row.inscriptionOuverte,
+            cloturee: row.cloturee,
         });
         form.clearErrors();
         setEditingId(row.id);
@@ -135,6 +137,7 @@ export default function AnneesScolairesPanel({ anneesScolaires, permissions }: A
                         <th>Date de fin</th>
                         <th>Année par défaut</th>
                         <th>Inscriptions</th>
+                        <th>Saisie</th>
                         <th className="text-end">Action</th>
                     </tr>
                 }
@@ -158,6 +161,16 @@ export default function AnneesScolairesPanel({ anneesScolaires, permissions }: A
                             <span className={`badge badge-soft-${row.inscriptionOuverte ? 'info' : 'secondary'}`}>
                                 {row.inscriptionOuverte ? 'Ouvertes' : 'Fermées'}
                             </span>
+                        </td>
+                        <td>
+                            {row.cloturee ? (
+                                <span className="badge badge-soft-warning">
+                                    <i className="ti ti-lock me-1" />
+                                    Clôturée
+                                </span>
+                            ) : (
+                                <span className="badge badge-soft-success">Ouverte</span>
+                            )}
                         </td>
                         <td className="text-end">
                             <RowActions>
@@ -245,6 +258,28 @@ export default function AnneesScolairesPanel({ anneesScolaires, permissions }: A
                                 checked={form.data.inscription_ouverte}
                                 onChange={(event) => form.setData('inscription_ouverte', event.target.checked)}
                             />
+                        </div>
+                        {/* The write lock. Only a super-admin may tick or
+                            untick it, and the default year can never be
+                            closed — both refused server-side
+                            (AnneeScolaireController::guardCloture), this is
+                            just the affordance. */}
+                        <div className="col-12">
+                            <CheckboxField
+                                id="a-cloturee"
+                                label="Année clôturée — bloquer toute saisie"
+                                checked={form.data.cloturee}
+                                onChange={(event) => form.setData('cloturee', event.target.checked)}
+                            />
+                            {form.errors.cloturee && (
+                                <div className="text-danger fs-12 mb-1">{form.errors.cloturee}</div>
+                            )}
+                            <div className="form-text">
+                                Une année clôturée reste consultable, mais n’accepte plus aucune création ni
+                                modification — encaissements, dépenses, remboursements, inscriptions, groupes,
+                                séances — pour tout le monde, super-administrateur compris. Décochez cette case
+                                pour rouvrir l’année.
+                            </div>
                         </div>
                     </div>
                     <div className="d-flex justify-content-end gap-2 mt-3">

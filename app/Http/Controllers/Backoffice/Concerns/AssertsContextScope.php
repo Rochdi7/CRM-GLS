@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice\Concerns;
 
+use App\Models\AnneeScolaire;
 use App\Models\Group;
 use App\Models\Inscription;
 use App\Models\Student;
@@ -99,6 +100,82 @@ trait AssertsContextScope
         $contextAnnee = $context->anneeScolaireId();
         if ($contextAnnee !== null && $anneeId !== null && (int) $anneeId !== $contextAnnee) {
             throw ValidationException::withMessages([$field => $anneeMessage]);
+        }
+
+        $this->assertAnneeNotCloturee($field, $anneeId);
+    }
+
+    /**
+     * ⚠ « Année clôturée » — the absolute write lock (02/09/2026).
+     *
+     * A year ticked « clôturée » in Paramètres → Années scolaires accepts NO
+     * write at all: no creation, no modification, in any module, by anyone —
+     * a super-admin included. It is a business invariant like the money rules
+     * of CLAUDE.md §11, NOT a permission, so there is deliberately no bypass:
+     * to correct something in a closed year a super-admin must first un-tick
+     * the box, which is an explicit and audited gesture (AnneeScolaire is
+     * Auditable) rather than a silent override nobody can see afterwards.
+     *
+     * TWO years are checked, and both matter:
+     *
+     *  1. the record's OWN year ($anneeId) — a stale dropdown or a forged id
+     *     pointing at a closed year;
+     *  2. the ACTIVE context year — because the reported incident had no
+     *     year FK at all. Dépenses, remboursements, chèques and caisse
+     *     journal rows carry NO annee_scolaire_id (they are date-windowed
+     *     instead, §11), so $anneeId is null for them and check 1 can never
+     *     fire. An employee left the top-bar switcher on 2025/2026 and keyed
+     *     dépenses there; only the ACTIVE year identifies that mistake.
+     *
+     * Placed here rather than in each controller because every guarded write
+     * already funnels through assertRecordInContext() — so a future module
+     * inherits the lock by calling the guard it must call anyway, and cannot
+     * forget it.
+     */
+    /**
+     * Public entry point for a write that carries NO centre/année parent to
+     * check — an ordinary dépense, a remboursement edit, a caisse transfer.
+     * Those never reach assertRecordInContext(), yet they are precisely the
+     * date-windowed money records that landed in the wrong year (§11), so
+     * they must assert the ACTIVE year on their own.
+     *
+     * $field is the form field the refusal is attached to, so the message
+     * shows up under a real input in the modal.
+     */
+    private function assertContextAnneeOuverte(string $field): void
+    {
+        $this->assertAnneeNotCloturee($field, null);
+    }
+
+    private function assertAnneeNotCloturee(string $field, ?int $anneeId): void
+    {
+        $context = app(CurrentContext::class);
+
+        // The active year first: it is what the user is actually working in,
+        // so its name is the one that makes the refusal understandable.
+        $active = $context->anneeScolaire();
+
+        if ($active !== null && $active->estCloturee()) {
+            throw ValidationException::withMessages([$field => __(
+                'The academic year :name is closed: no record can be created or modified in it. A super-admin must reopen it in Paramètres → Années scolaires.',
+                ['name' => $active->nom],
+            )]);
+        }
+
+        // Then the record's own year, when it carries one and differs (a
+        // « Changement de groupe » legitimately crosses years, §11 — but
+        // never INTO a closed one).
+        if ($anneeId === null || $anneeId === $active?->id) {
+            return;
+        }
+
+        $annee = AnneeScolaire::find($anneeId);
+
+        if ($annee !== null && $annee->estCloturee()) {
+            throw ValidationException::withMessages([$field => __(
+                'The academic year :name is closed: no record can be created or modified in it. A super-admin must reopen it in Paramètres → Années scolaires.',
+                ['name' => $annee->nom],
+            )]);
         }
     }
 }

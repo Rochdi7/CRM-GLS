@@ -8,6 +8,7 @@ use App\Domain\Finance\Actions\DemanderTransfertCaisse;
 use App\Domain\Finance\Actions\ValiderTransfertCaisse;
 use App\Domain\Finance\Support\CaisseResolver;
 use App\Domain\Finance\Queries\GetCaisseTransferDetails;
+use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\CaisseTransfers\StoreCaisseTransferRequest;
 use App\Http\Requests\Backoffice\CaisseTransfers\UpdateCaisseTransferRequest;
@@ -40,9 +41,15 @@ use Inertia\Response;
  */
 final class CaisseTransferController extends Controller
 {
+    use AssertsContextScope;
+
     public function store(StoreCaisseTransferRequest $request, DemanderTransfertCaisse $action): RedirectResponse
     {
         $this->authorize('create', CaisseTransfer::class);
+
+        // A transfer carries no annee_scolaire_id (it moves cash, §11), so
+        // the closed-year lock is asserted on the ACTIVE year.
+        $this->assertContextAnneeOuverte('caisse_destination_id');
 
         $requester = $request->user()->employee;
 
@@ -86,6 +93,7 @@ final class CaisseTransferController extends Controller
     public function update(UpdateCaisseTransferRequest $request, CaisseTransfer $caisse_transfer): RedirectResponse
     {
         $this->authorize('update', $caisse_transfer);
+        $this->assertContextAnneeOuverte('statut');
 
         $data = $request->validated();
 

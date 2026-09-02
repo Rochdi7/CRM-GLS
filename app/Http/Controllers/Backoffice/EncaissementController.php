@@ -515,6 +515,7 @@ final class EncaissementController extends Controller
     public function applyAvance(ApplyAvanceRequest $request, Encaissement $encaissement, AppliquerAvance $action): RedirectResponse
     {
         $this->authorize('update', $encaissement);
+        $this->assertContextAnneeOuverte('note');
 
         $data = $request->validated();
         $fee = InscriptionFee::with('inscription')->findOrFail($data['fee_id']);
@@ -792,6 +793,7 @@ final class EncaissementController extends Controller
         // and `can:delete,encaissement`: every other mutation in this
         // controller authorizes on its own too (defense in depth, §16).
         $this->authorize('delete', $encaissement);
+        $this->assertContextAnneeOuverte('id');
 
         $action->handle($encaissement);
 

@@ -785,6 +785,17 @@ final class PermissionRegistry
                 'roles.view',
                 'permissions.view',
                 'audit-logs.view',
+                // Accepter un transfert ENTRANT n'est pas un privilège : c'est
+                // le droit du DESTINATAIRE de confirmer qu'il a bien reçu
+                // l'argent (02/09/2026). Ce rôle ne change toujours rien à la
+                // finance d'autrui — le contrôle de propriété de la caisse de
+                // destination (CaisseTransferPolicy@validate +
+                // ValiderTransfertCaisse) ne laisse passer QUE l'employé dont
+                // la propre caisse est créditée. Sans cette ligne, quiconque
+                // porte ce rôle et tient une caisse voit sa réception rester
+                // « En attente » pour toujours : personne d'autre ne peut la
+                // valider à sa place, super-admin compris (NO_SUPER_ADMIN_BYPASS).
+                'cash-transfers.validate',
             ],
 
             // Academic authority — groups, séances, teachers and the fee
@@ -845,6 +856,15 @@ final class PermissionRegistry
                 'groups.change-teacher',
                 'stock.view', 'stock.create', 'stock.update', 'stock.move',
                 'stock-types.view', 'stock-types.create', 'stock-types.update',
+                // Ce rôle n'a aucune autre permission financière, et c'est
+                // voulu. Les deux lignes ci-dessous ne lui donnent PAS accès à
+                // la finance : elles lui donnent l'accès à SA propre boîte de
+                // réception de transferts. S'il tient une caisse, il doit
+                // pouvoir voir et accepter l'argent qu'on lui remet — sinon le
+                // transfert reste « En attente » indéfiniment, personne ne
+                // pouvant valider à sa place (règle destinataire, cf. $operations).
+                'cash-transfers.view',
+                'cash-transfers.validate',
             ],
 
             // Academic scope only — no financial data.

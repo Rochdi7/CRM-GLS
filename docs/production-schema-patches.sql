@@ -162,3 +162,14 @@ SELECT 'Produits consommables', false, 'Actif', now(), now()
 -- de tous les presets : aucun rôle ne la porte, seul Gate::before (super-admin)
 -- l'accorde. Rien à exécuter en SQL ici.
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 02/09/2026 — Verrou « Année clôturée » (annees_scolaires.cloturee)
+-- Ajouté au create_annees_scolaires_table ; à appliquer tel quel sur toute
+-- base déjà migrée. Une année cochée « clôturée » n'accepte plus AUCUNE
+-- écriture (création ou modification) — super-admin compris ; le verrou se
+-- lève uniquement en décochant la case dans Paramètres → Années scolaires.
+-- Motif : une dépense a été saisie par erreur sur une année passée restée
+-- sélectionnée dans le sélecteur du haut.
+ALTER TABLE annees_scolaires ADD COLUMN IF NOT EXISTS cloturee boolean NOT NULL DEFAULT false;
+-- ---------------------------------------------------------------------------

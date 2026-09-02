@@ -103,6 +103,8 @@ final class ChequeController extends Controller
     public function store(StoreChequeRequest $request): RedirectResponse
     {
         $this->authorize('create', Cheque::class);
+        // A cheque carries no annee_scolaire_id (date-windowed, §11).
+        $this->assertContextAnneeOuverte('montant');
 
         $agent = $request->user()->employee;
 
@@ -150,6 +152,7 @@ final class ChequeController extends Controller
     public function update(UpdateChequeRequest $request, Cheque $cheque): RedirectResponse
     {
         $this->authorize('update', $cheque);
+        $this->assertContextAnneeOuverte('montant');
 
         $data = $request->validated();
 

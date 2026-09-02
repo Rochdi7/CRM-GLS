@@ -10,6 +10,13 @@ export interface AuthUser {
 export interface ContextOption {
     id: number;
     name: string;
+    /**
+     * Année clôturée — a hard server-side write lock (CLAUDE.md §11): the
+     * year accepts NO creation or modification, super-admin included. Used
+     * here only to draw the padlock/badge and disable « Ajouter » buttons;
+     * the refusal itself always comes from AssertsContextScope.
+     */
+    cloturee?: boolean;
 }
 
 export interface Context {
@@ -23,6 +30,12 @@ export interface Context {
     currentAcademicYear: ContextOption | null;
     availableCenters: ContextOption[];
     availableAcademicYears: ContextOption[];
+    /**
+     * True when the ACTIVE year is closed — every create/edit button on
+     * every page is disabled and a banner explains why. UI convenience
+     * only: the server refuses the write regardless.
+     */
+    anneeCloturee: boolean;
 }
 
 export interface FlashMessages {
@@ -696,6 +709,7 @@ export interface AnneeScolaireRow {
     dateFin: string;
     parDefaut: boolean;
     inscriptionOuverte: boolean;
+    cloturee: boolean;
 }
 
 export interface AnneeScolaireForm {
@@ -704,6 +718,7 @@ export interface AnneeScolaireForm {
     date_fin: string;
     par_defaut: boolean;
     inscription_ouverte: boolean;
+    cloturee: boolean;
 }
 
 export interface SalleRow {

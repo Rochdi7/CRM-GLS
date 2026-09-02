@@ -97,6 +97,10 @@ final class RemboursementController extends Controller
     {
         $this->authorize('update', $remboursement);
 
+        // A remboursement carries no annee_scolaire_id (date-windowed, §11),
+        // so the ACTIVE year is what the closed-year lock checks here.
+        $this->assertContextAnneeOuverte('note');
+
         // montant / caisse_id / beneficiaire_id are not editable — the till
         // balance already moved (UpdateRemboursementRequest excludes them).
         $remboursement->update($request->validated());
