@@ -118,6 +118,10 @@ final class DepenseController extends Controller
             'justificatifMaxKb' => self::JUSTIFICATIF_MAX_KB,
             'remboursements' => $user->can('refunds.view') ? $getRemboursementsList($user) : null,
             'students' => $user->can('refunds.view') ? $getRemboursementsList->studentOptions($user) : [],
+            // Cash tills of the active centre — the refund form now names the
+            // till (and therefore the employee) the money leaves, instead of
+            // silently draining the acting cashier's own (03/09/2026).
+            'remboursementCaisses' => $user->can('refunds.view') ? $getRemboursementsList->caisseOptions($user) : [],
             'filters' => [
                 'search' => $search,
                 'typeFilter' => $typeFilter,

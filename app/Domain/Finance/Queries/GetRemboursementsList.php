@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Domain\Finance\Queries;
 
+use App\Models\Caisse;
 use App\Models\Remboursement;
 use App\Models\Student;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
+use App\Support\Access\HiddenAccount;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -38,7 +40,14 @@ final class GetRemboursementsList
     ): LengthAwarePaginator {
         $remboursements = Remboursement::query()
             ->with(['beneficiaire', 'caisse', 'agent'])
-            ->whereHas('caisse', function (Builder $q) use ($user): void {
+            // Centre scoping reads the refund's OWN etablissement_id — the
+            // centre it belongs to — never the caisse's (03/09/2026). The
+            // till paying out may be homed to another centre entirely: a
+            // centre-4 student refunded from a centre-1 cashier's till was
+            // then listed on NEITHER centre, and the cashier, seeing nothing
+            // saved, refunded the same 300 DH a second time. Reach is still
+            // checked, on the same column.
+            ->where(function (Builder $q) use ($user): void {
                 $this->centerAccess->scopeAccessibleCenters($q, $user);
                 $this->scopeToActiveCenter($q);
             })
@@ -93,6 +102,48 @@ final class GetRemboursementsList
             ->orderBy('nom')
             ->get()
             ->map(fn (Student $s): array => ['id' => $s->id, 'nom' => $s->nomComplet()]);
+    }
+
+    /**
+     * The tills a refund may be paid out of: cash accounts (« Caissière » /
+     * « Externe ») of the centres the user can reach, narrowed to the active
+     * centre by the top-bar switcher.
+     *
+     * Added 03/09/2026 — the till used to be derived silently from the
+     * ACTING employee (CaisseResolver::tillOf), which is why a Salé-homed
+     * cashier refunding a Rabat student drained a Salé till with nothing on
+     * screen to say so. The cashier now names the till, and therefore the
+     * employee, the money actually leaves.
+     *
+     * Never a TPE/Chèque/Virement account: a refund is cash handed back
+     * (CLAUDE.md §11). The one exception — reversing a bounced-cheque
+     * payment — is still resolved server-side by CaisseResolver and needs no
+     * dropdown entry.
+     *
+     * @return Collection<int, array{id:int, nom:string, solde:string}>
+     */
+    public function caisseOptions(User $user): Collection
+    {
+        return Caisse::query()
+            ->whereIn('type', Caisse::TYPES_ESPECES)
+            ->with('responsable')
+            // The maintainer's till is never offered (HiddenAccount) — the
+            // subquery drops global scopes, see CLAUDE.md §11.
+            ->tap(fn ($q) => HiddenAccount::hideCaisses($q))
+            ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+            ->tap(fn ($q) => $this->scopeToActiveCenter($q))
+            ->orderBy('nom')
+            ->get()
+            ->map(fn (Caisse $c): array => [
+                'id' => $c->id,
+                // The responsable is what the cashier actually recognises;
+                // the caisse's own nom is already the employee name for a
+                // « Caissière » till, but an « Externe » safe is not.
+                'nom' => $c->responsable !== null && $c->responsable->nomComplet() !== $c->nom
+                    ? "{$c->nom} — {$c->responsable->nomComplet()}"
+                    : $c->nom,
+                'solde' => number_format((float) $c->solde, 2, '.', ''),
+            ]);
     }
 
     private function scopeToActiveCenter($query): void

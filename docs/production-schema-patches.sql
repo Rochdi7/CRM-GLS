@@ -173,3 +173,34 @@ SELECT 'Produits consommables', false, 'Actif', now(), now()
 -- sélectionnée dans le sélecteur du haut.
 ALTER TABLE annees_scolaires ADD COLUMN IF NOT EXISTS cloturee boolean NOT NULL DEFAULT false;
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 03/09/2026 — Centre propre au remboursement (remboursements.etablissement_id)
+-- Ajouté au create_remboursements_table ; à appliquer tel quel sur toute base
+-- déjà migrée.
+--
+-- Motif : la liste des remboursements déduisait le centre de la CAISSE
+-- débitée. Or la caisse d'une caissière est rattachée à son centre primaire,
+-- qui n'est pas forcément celui de l'étudiant remboursé. Un étudiant du
+-- centre 4 remboursé depuis une caisse du centre 1 n'apparaissait donc sur
+-- AUCUN des deux centres : la caissière, ne voyant rien enregistré, a saisi
+-- le même remboursement de 300 DH une seconde fois (RMB-001 et RMB-002).
+--
+-- Le centre stocké suit la règle du ledger (CLAUDE.md §11 « Centre
+-- dimension ») : celui du paiement d'origine, sinon celui de l'étudiant.
+ALTER TABLE remboursements ADD COLUMN IF NOT EXISTS etablissement_id bigint NULL
+    REFERENCES etablissements(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS remboursements_centre_date_idx
+    ON remboursements (etablissement_id, date_remboursement);
+
+-- Rattrapage des lignes existantes : centre du paiement d'origine, sinon
+-- centre de l'étudiant bénéficiaire. Sans cela les remboursements déjà
+-- enregistrés restent invisibles (etablissement_id NULL est traité comme
+-- « global » par le scoping, donc ils s'afficheraient partout).
+UPDATE remboursements r
+SET etablissement_id = COALESCE(
+        (SELECT e.etablissement_id FROM encaissements e WHERE e.id = r.encaissement_id),
+        (SELECT s.etablissement_id FROM students s WHERE s.id = r.beneficiaire_id)
+    )
+WHERE r.etablissement_id IS NULL;
+-- ---------------------------------------------------------------------------

@@ -61,12 +61,6 @@ final class RemboursementController extends Controller
             ]);
         }
 
-        // A refund is paid out of the acting employee's own physical till —
-        // never chosen client-side, never routed by the original payment's
-        // method (accounting rule confirmed 24/08/2026) — EXCEPT the reversal
-        // of a payment funded by a chèque that bounced: that money never
-        // reached the till, so it comes back out of the centre's Chèque
-        // account (CaisseResolver::forRemboursement).
         $data = $request->validated();
 
         // Centre isolation (same rule as studentPayments() above and as
@@ -80,13 +74,32 @@ final class RemboursementController extends Controller
         $encaissement = ! empty($data['encaissement_id'])
             ? Encaissement::query()->with(['cheque', 'caisse'])->find((int) $data['encaissement_id'])
             : null;
-        $caisse = app(CaisseResolver::class)->forRemboursement($agent, $encaissement);
 
-        // Domain action: creates the refund AND decrements caisses.solde in
-        // ONE transaction.
+        // Which till the money leaves is now the CASHIER's choice
+        // (03/09/2026): deriving it from the acting employee meant a
+        // Salé-homed cashier refunding a Rabat student drained a Salé till,
+        // and the row was then invisible on both centres — so the same
+        // 300 DH went out twice. The choice is validated for centre reach
+        // and cash-only in StoreRemboursementRequest.
+        //
+        // ONE case still overrides it: reversing a payment funded by a
+        // chèque that has since been REJECTED. That money never reached any
+        // till, so it must come back out of the centre's Chèque account —
+        // an accounting invariant, not a preference, so it wins over the
+        // submitted value rather than being offered in the dropdown.
+        $resolved = app(CaisseResolver::class)->forRemboursement($agent, $encaissement);
+        $chequeReversal = $resolved->isCompteMethode();
+
+        // No caisse_id submitted ⇒ the acting employee's own till, exactly as
+        // before this change. Keeping that fallback is what stops an omitted
+        // field from failing the whole submission silently.
+        $caisseId = $chequeReversal || empty($data['caisse_id'])
+            ? $resolved->id
+            : (int) $data['caisse_id'];
+
         $action->handle([
             ...$data,
-            'caisse_id' => $caisse->id,
+            'caisse_id' => $caisseId,
         ], $agent);
 
         return redirect()->route('backoffice.depenses.index', ['tab' => 'remboursements'])

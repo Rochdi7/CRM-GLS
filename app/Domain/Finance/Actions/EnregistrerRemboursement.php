@@ -9,6 +9,7 @@ use App\Models\Caisse;
 use App\Models\Employee;
 use App\Models\Encaissement;
 use App\Models\Remboursement;
+use App\Models\Student;
 use App\Domain\Finance\Support\CaisseLedger;
 use App\Services\Context\CurrentContext;
 use Illuminate\Support\Facades\DB;
@@ -84,8 +85,20 @@ final class EnregistrerRemboursement
                 }
             }
 
+            // The centre the refund BELONGS to, resolved ONCE and stored on
+            // the row so the list can filter on it directly instead of
+            // inferring it from the till (03/09/2026 bug: a centre-4 student
+            // refunded from a centre-1 till was invisible on both centres,
+            // and was refunded twice as a result). Identical precedence to
+            // the ledger stamp below — they must never disagree.
+            $etablissementId = $encaissement?->etablissement_id
+                ?? Student::query()->whereKey((int) $data['beneficiaire_id'])->value('etablissement_id')
+                ?? $this->context->etablissementId()
+                ?? $agent->etablissement_id;
+
             $remboursement = Remboursement::create([
                 ...$data,
+                'etablissement_id' => $etablissementId,
                 'reference' => ReferenceGenerator::make('RMB', 'remboursements'),
                 'agent_id' => $agent->id,
             ]);
@@ -103,9 +116,7 @@ final class EnregistrerRemboursement
                     // current one (they may have moved centre since). An
                     // unlinked refund has no original context: the active
                     // context centre, falling back to the agent's primary.
-                    'etablissement_id' => $encaissement?->etablissement_id
-                        ?? $this->context->etablissementId()
-                        ?? $agent->etablissement_id,
+                    'etablissement_id' => $etablissementId,
                 ],
             );
 

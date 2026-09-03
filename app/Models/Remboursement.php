@@ -19,8 +19,8 @@ class Remboursement extends Model
     use Auditable;
 
     protected $fillable = [
-        'reference', 'beneficiaire_id', 'encaissement_id', 'caisse_id', 'montant',
-        'date_remboursement', 'motif', 'note', 'agent_id',
+        'reference', 'beneficiaire_id', 'encaissement_id', 'caisse_id', 'etablissement_id',
+        'montant', 'date_remboursement', 'motif', 'note', 'agent_id',
     ];
 
     protected function casts(): array
@@ -51,5 +51,15 @@ class Remboursement extends Model
     public function agent(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'agent_id');
+    }
+
+    /**
+     * The centre this refund belongs to — the ORIGINAL payment's centre, or
+     * the beneficiary's when nothing is linked. Deliberately NOT the caisse's
+     * centre: the till that pays out may be homed anywhere (CLAUDE.md §11).
+     */
+    public function etablissement(): BelongsTo
+    {
+        return $this->belongsTo(Etablissement::class);
     }
 }

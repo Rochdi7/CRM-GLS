@@ -20,7 +20,7 @@ import TagsInput from '@/Components/Forms/TagsInput';
 import FormActions from '@/Components/Forms/FormActions';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { useFilterReset } from '@/Hooks/useFilterReset';
-import type { DepenseRow, DepensesPageProps, EncaissementFormOption, RemboursementRow, SelectOption, SharedProps } from '@/Types';
+import type { DepenseRow, DepensesPageProps, EncaissementFormOption, RemboursementCaisseOption, RemboursementRow, SelectOption, SharedProps } from '@/Types';
 
 type Tab = 'depenses' | 'paiements-prof' | 'remboursements' | 'validation';
 
@@ -42,6 +42,7 @@ interface DepenseFormState {
 interface RemboursementFormState {
     beneficiaire_id: number | '';
     encaissement_id: number | '';
+    caisse_id: number | '';
     montant: string;
     date_remboursement: string;
     motif: string;
@@ -121,6 +122,7 @@ function emptyRemboursementForm(): RemboursementFormState {
     return {
         beneficiaire_id: '',
         encaissement_id: '',
+        caisse_id: '',
         montant: '',
         date_remboursement: new Date().toISOString().slice(0, 10),
         motif: '',
@@ -151,6 +153,7 @@ export default function DepensesIndex({
     justificatifMimes,
     justificatifMaxKb,
     remboursements,
+    remboursementCaisses,
     students,
     approvalEnabled,
     canApprove,
@@ -206,6 +209,11 @@ export default function DepensesIndex({
     const groupOptions: SelectOption[] = groups.map((g) => ({ value: g.id, label: g.nom }));
     const methodeOptions: SelectOption[] = methodes.map((m) => ({ value: m, label: m }));
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.nom }));
+    // Balance in the label: the cashier picks the till knowing what is in it.
+    const caisseSelectOptions: SelectOption[] = remboursementCaisses.map((c: RemboursementCaisseOption) => ({
+        value: c.id,
+        label: `${c.nom} (${Number(c.solde).toFixed(2)} MAD)`,
+    }));
 
     const depenseForm = useForm<DepenseFormState>(emptyDepenseForm());
     const remboursementForm = useForm<RemboursementFormState>(emptyRemboursementForm());
@@ -373,10 +381,16 @@ export default function DepensesIndex({
 
     // --- Remboursements ---
 
+    // With a single till in the active centre there is nothing to choose —
+    // preselect it so the common case stays one click. With several, the
+    // cashier must pick: guessing is what silently drained the wrong centre's
+    // till before (03/09/2026).
+    const defaultCaisseId = remboursementCaisses.length === 1 ? remboursementCaisses[0].id : '';
+
     function openCreateRemboursement() {
         setEditingRemboursement(null);
         remboursementForm.clearErrors();
-        remboursementForm.setData(emptyRemboursementForm());
+        remboursementForm.setData({ ...emptyRemboursementForm(), caisse_id: defaultCaisseId });
         setStudentPayments([]);
         setShowRemboursementModal(true);
     }
@@ -387,6 +401,7 @@ export default function DepensesIndex({
         remboursementForm.setData({
             beneficiaire_id: row.beneficiaireId ?? '',
             encaissement_id: '',
+            caisse_id: row.caisseId ?? '',
             montant: row.montant,
             date_remboursement: row.dateRemboursement ?? '',
             motif: row.motif ?? '',
@@ -423,6 +438,7 @@ export default function DepensesIndex({
         remboursementForm.setData({
             beneficiaire_id: Number(prefillBeneficiaire),
             encaissement_id: prefillEncaissement !== null ? Number(prefillEncaissement) : '',
+            caisse_id: remboursementCaisses.length === 1 ? remboursementCaisses[0].id : '',
             montant: prefillMontant ?? '',
             date_remboursement: new Date().toISOString().slice(0, 10),
             motif: prefillMotif ?? '',
@@ -1426,6 +1442,35 @@ export default function DepensesIndex({
                             />
                         </div>
                     </div>
+
+                    {/* Which till the cash actually leaves. Read-only once
+                        recorded — the balance has already moved. */}
+                    {editingRemboursement ? (
+                        <div className="d-flex justify-content-between mb-3">
+                            <span className="text-muted">Caisse débitée</span>
+                            <span className="fw-medium">{editingRemboursement.caisse ?? '—'}</span>
+                        </div>
+                    ) : (
+                        <div className="row">
+                            <div className="col-md-8">
+                                <SelectField
+                                    id="r-caisse"
+                                    label="Caisse à débiter"
+                                    options={caisseSelectOptions}
+                                    placeholder="Sélectionner une caisse"
+                                    required
+                                    value={remboursementForm.data.caisse_id}
+                                    onChange={(e) =>
+                                        remboursementForm.setData('caisse_id', e.target.value === '' ? '' : Number(e.target.value))
+                                    }
+                                    error={remboursementForm.errors.caisse_id}
+                                />
+                                <div className="form-text mt-n2 mb-3">
+                                    L&apos;argent sort de cette caisse. Seules les caisses espèces du centre actif sont proposées.
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {!editingRemboursement && loadingStudentPayments && (
                         <p className="text-muted mb-3">Chargement des paiements…</p>

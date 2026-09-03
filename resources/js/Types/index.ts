@@ -1936,6 +1936,13 @@ export interface RemboursementRow {
     agent: string | null;
 }
 
+/** A cash till the refund form may draw from, with its responsable's name and current balance. */
+export interface RemboursementCaisseOption {
+    id: number;
+    nom: string;
+    solde: MoneyDisplay;
+}
+
 /** One of a student's fee-targeted payments — the Remboursement form's "which payment?" picker (GetStudentPaymentsForRefund). */
 export interface EncaissementFormOption {
     id: number;
@@ -1980,6 +1987,8 @@ export interface DepensesPageProps {
     justificatifMaxKb: number;
     remboursements: PaginatedData<RemboursementRow> | null;
     students: FinanceOption[];
+    /** Cash tills the refund may be paid out of — active centre, reachable centres only. */
+    remboursementCaisses: RemboursementCaisseOption[];
     /** Paramètres → Système « Validation des dépenses » — drives the whole approval UI. */
     approvalEnabled: boolean;
     /** UI convenience only (`expenses.approve`); the policy is the real gate. */
