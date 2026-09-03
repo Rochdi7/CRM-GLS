@@ -578,6 +578,15 @@ export interface CreneauRow {
     enseignantId: number | null;
     salle: string | null;
     salleId: number | null;
+    /**
+     * Créneau CLÔTURÉ : il ne génère plus aucune séance. La grille l'affichait
+     * comme un créneau vivant, donnant un emploi du temps d'apparence complète
+     * sur un groupe qui ne produisait plus rien — il est donc grisé et marqué,
+     * jamais masqué (sinon il n'y aurait plus rien à corriger à l'écran).
+     */
+    clos: boolean;
+    /** Date de clôture (d/m/Y), pour l'afficher sur la case grisée. */
+    dateFin: string | null;
 }
 
 /** Edit form — one créneau, one day. */

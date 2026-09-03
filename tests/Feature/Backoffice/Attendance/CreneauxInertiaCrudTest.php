@@ -90,6 +90,57 @@ final class CreneauxInertiaCrudTest extends TestCase
             );
     }
 
+    /**
+     * ⚠ Régression 03/09/2026 — la grille affichait un créneau CLÔTURÉ
+     * exactement comme un créneau vivant. Sur B2 Mehdi Kouay17h (Salé), cinq
+     * cases bien remplies laissaient croire à un emploi du temps en place
+     * alors que les cinq créneaux étaient fermés au 31/08 et ne généraient
+     * plus rien — la fiche du groupe disait l'inverse, et on cherchait le
+     * problème du mauvais côté. Une case morte doit se voir.
+     */
+    public function test_the_grid_marks_a_closed_creneau_instead_of_passing_it_off_as_live(): void
+    {
+        Creneau::create([
+            'group_id' => $this->group->id,
+            'jour_semaine' => 1,
+            'heure_debut' => '10:00',
+            'heure_fin' => '12:00',
+            'date_fin' => '2026-08-31',
+        ]);
+
+        $this->actingAs($this->userWith('attendance.view'))
+            ->get(route('backoffice.emploi-du-temps.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/EmploiDuTemps/Index', false)
+                // Jamais masqué : sinon l'écran serait vide et il n'y aurait
+                // plus rien à corriger.
+                ->has('creneaux', 1)
+                ->where('creneaux.0.clos', true)
+                ->where('creneaux.0.dateFin', '31/08/2026')
+            );
+    }
+
+    /** Le pendant : un créneau ouvert n'est jamais marqué comme clôturé. */
+    public function test_the_grid_does_not_mark_an_open_creneau(): void
+    {
+        Creneau::create([
+            'group_id' => $this->group->id,
+            'jour_semaine' => 1,
+            'heure_debut' => '10:00',
+            'heure_fin' => '12:00',
+        ]);
+
+        $this->actingAs($this->userWith('attendance.view'))
+            ->get(route('backoffice.emploi-du-temps.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/EmploiDuTemps/Index', false)
+                ->where('creneaux.0.clos', false)
+                ->where('creneaux.0.dateFin', null)
+            );
+    }
+
     public function test_creating_a_creneau_generates_only_the_current_day_seance(): void
     {
         $this->actingAs($this->userWith('attendance.view', 'attendance.create'));

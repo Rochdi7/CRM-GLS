@@ -6,8 +6,10 @@ namespace Tests\Feature\Backoffice\Groups;
 
 use App\Domain\Attendance\Support\DiagnostiquerEmploiDuTemps;
 use App\Models\AnneeScolaire;
+use App\Models\Employee;
 use App\Models\Etablissement;
 use App\Models\Group;
+use App\Models\GroupEnseignant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -89,6 +91,52 @@ final class EmploiDuTempsDiagnosticTest extends TestCase
         $probleme = $this->diagnostiquer($this->group(), 5, 0);
 
         $this->assertSame(DiagnostiquerEmploiDuTemps::CRENEAUX_FERMES, $probleme['code']);
+    }
+
+    /**
+     * Le message ne doit JAMAIS annoncer un changement d'enseignant qui n'a
+     * pas eu lieu : sur ces groupes l'historique n'affiche qu'une seule
+     * période, et parler de changement enverrait l'utilisateur chercher
+     * quelque chose d'inexistant.
+     */
+    public function test_closed_creneaux_without_a_real_change_do_not_mention_one(): void
+    {
+        $group = $this->group();
+        GroupEnseignant::create([
+            'group_id' => $group->id,
+            'enseignant_id' => Employee::factory()->create([
+                'categorie' => Employee::CATEGORIE_ENSEIGNANT,
+                'etablissement_id' => $this->centre->id,
+            ])->id,
+            'date_debut' => '2025-09-01',
+            'statut' => GroupEnseignant::STATUT_ACTIF,
+        ]);
+
+        $probleme = $this->diagnostiquer($group->fresh(), 5, 0);
+
+        $this->assertSame(DiagnostiquerEmploiDuTemps::CRENEAUX_FERMES, $probleme['code']);
+        $this->assertStringContainsString("aucun changement d'enseignant n'a", $probleme['message']);
+    }
+
+    /** Le pendant : deux périodes = un vrai changement, le message le dit. */
+    public function test_closed_creneaux_after_a_real_change_mention_it(): void
+    {
+        $group = $this->group();
+        foreach ([['2025-09-01', GroupEnseignant::STATUT_ARCHIVE], ['2025-10-01', GroupEnseignant::STATUT_ACTIF]] as [$debut, $statut]) {
+            GroupEnseignant::create([
+                'group_id' => $group->id,
+                'enseignant_id' => Employee::factory()->create([
+                    'categorie' => Employee::CATEGORIE_ENSEIGNANT,
+                    'etablissement_id' => $this->centre->id,
+                ])->id,
+                'date_debut' => $debut,
+                'statut' => $statut,
+            ]);
+        }
+
+        $probleme = $this->diagnostiquer($group->fresh(), 5, 0);
+
+        $this->assertStringContainsString("lors d'un changement d'enseignant", $probleme['message']);
     }
 
     /**

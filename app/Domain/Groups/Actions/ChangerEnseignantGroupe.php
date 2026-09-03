@@ -99,6 +99,18 @@ final class ChangerEnseignantGroupe
         // une seule période enseignant, sans date de fin ; 7 autres groupes
         // dans le même état à Agadir, Marrakech et Salé). On ouvre donc
         // simplement la période initiale, en laissant l'emploi du temps vivre.
+        // La règle est : PERSONNE NE PART ⇒ ce n'est pas un changement. Le
+        // groupe n'avait aucun enseignant sortant — ni dans la colonne miroir
+        // `groups.enseignant_id`, ni comme période Actif — donc il n'y a
+        // aucune paie à séparer et aucun créneau à clôturer. On ouvre
+        // simplement la période initiale.
+        //
+        // Les deux moitiés du test comptent : un groupe importé par
+        // `groupes:mettre-a-jour` reçoit `enseignant_id` SANS période Actif,
+        // et un groupe saisi à la main peut avoir l'inverse. Ne tester que
+        // `$courant === null` clôturerait l'emploi du temps d'un enseignant
+        // réellement en poste ; ne tester que la colonne raterait le cas
+        // importé.
         if ($group->enseignant_id === null && $courant === null && $enseignantId !== null) {
             $nouvelle = DB::transaction(function () use ($group, $enseignantId, $par): ?GroupEnseignant {
                 $group->update(['enseignant_id' => $enseignantId]);

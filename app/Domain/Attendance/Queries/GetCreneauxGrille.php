@@ -15,6 +15,17 @@ use Illuminate\Support\Collection;
  * the filters, scoped to the active center/year the same way Séances/Groups
  * are. The React page buckets rows by (jour_semaine, heure_debut) itself;
  * this query just returns the flat, already-authorized list.
+ *
+ * ⚠ Un créneau CLÔTURÉ (date_fin renseignée) ne génère plus aucune séance
+ * (GenererSeancesDepuisCreneau s'arrête net dessus). La grille les affichait
+ * pourtant à l'identique des créneaux vivants : l'écran montrait un emploi du
+ * temps complet — cinq cases bien remplies — pendant que le groupe ne
+ * produisait plus rien et que sa fiche affichait « plus d'emploi du temps
+ * actif » (signalé le 03/09/2026 sur B2 Mehdi Kouay17h). Une case morte est
+ * donc désormais RENVOYÉE AVEC SON ÉTAT (`clos`, `dateFin`) pour que la
+ * grille la distingue, jamais masquée en silence : la faire disparaître
+ * laisserait l'utilisateur devant un planning vide, sans rien à corriger ni
+ * comprendre.
  */
 final class GetCreneauxGrille
 {
@@ -29,6 +40,7 @@ final class GetCreneauxGrille
      *     id: int, groupId: int, groupNom: string, groupNiveau: ?string,
      *     jourSemaine: int, heureDebut: string, heureFin: string,
      *     enseignant: ?string, enseignantId: ?int, salle: ?string, salleId: ?int,
+     *     clos: bool, dateFin: ?string,
      * }>
      */
     public function __invoke(User $user, array $filters = []): Collection
@@ -66,6 +78,10 @@ final class GetCreneauxGrille
                 'enseignantId' => $creneau->enseignant_id,
                 'salle' => $creneau->salle?->nom,
                 'salleId' => $creneau->salle_id,
+                // Voir l'avertissement en tête de classe : une case clôturée
+                // ne produit plus de séance et doit se voir comme telle.
+                'clos' => $creneau->date_fin !== null,
+                'dateFin' => $creneau->date_fin?->format('d/m/Y'),
             ]);
     }
 

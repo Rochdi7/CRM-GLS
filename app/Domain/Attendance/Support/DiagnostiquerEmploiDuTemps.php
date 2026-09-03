@@ -88,13 +88,30 @@ final class DiagnostiquerEmploiDuTemps
         //    ChangerEnseignantGroupe) et, légitimement, un changement
         //    d'enseignant dont le nouvel emploi du temps n'a pas encore été saisi.
         if ($creneauxOuverts === 0) {
+            // ⚠ Ne PAS annoncer un changement d'enseignant qui n'a pas eu lieu.
+            // Le groupe n'a qu'une seule période d'affectation : personne n'est
+            // parti, ses créneaux ont été clôturés à tort par l'ancienne
+            // version de ChangerEnseignantGroupe, qui traitait la PREMIÈRE
+            // affectation comme un changement (corrigé le 03/09/2026). Écrire
+            // « lors d'un changement d'enseignant » sur cette fiche
+            // contredirait l'historique affiché juste en dessous et enverrait
+            // l'utilisateur chercher un changement inexistant.
+            $plusieursPeriodes = $group->enseignants()->count() > 1;
+
             return [
                 'code' => self::CRENEAUX_FERMES,
                 'titre' => "Ce groupe n'a plus d'emploi du temps actif.",
-                'message' => "Tous ses créneaux ont été clôturés lors d'un changement d'enseignant. "
-                    . "Tant qu'un nouvel emploi du temps n'a pas été saisi, aucune séance n'est générée "
-                    . "automatiquement.",
-                'action' => "Supprimez les anciens créneaux et saisissez ceux de l'enseignant actuel.",
+                'message' => $plusieursPeriodes
+                    ? "Tous ses créneaux ont été clôturés lors d'un changement d'enseignant. "
+                        . "Tant qu'un nouvel emploi du temps n'a pas été saisi, aucune séance n'est "
+                        . "générée automatiquement."
+                    : "Tous ses créneaux ont été clôturés alors qu'aucun changement d'enseignant n'a "
+                        . "eu lieu — un défaut corrigé depuis. Tant que l'emploi du temps n'a pas été "
+                        . "rouvert, aucune séance n'est générée automatiquement.",
+                'action' => $plusieursPeriodes
+                    ? "Supprimez les anciens créneaux et saisissez ceux de l'enseignant actuel."
+                    : "Rouvrez les créneaux existants, ou faites-les rouvrir en masse avec la commande "
+                        . "« groupes:reouvrir-emploi-du-temps ».",
             ];
         }
 

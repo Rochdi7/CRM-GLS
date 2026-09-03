@@ -415,7 +415,7 @@ export default function EmploiDuTempsIndex({
                                                         {rows.map((row) => (
                                                             <div
                                                                 key={row.id}
-                                                                className="bg-primary-transparent rounded p-2 mb-1"
+                                                                className={`rounded p-2 mb-1 ${row.clos ? 'bg-light border border-danger-subtle opacity-75' : 'bg-primary-transparent'}`}
                                                                 style={{ cursor: permissions.update ? 'pointer' : 'default' }}
                                                                 onClick={() => permissions.update && openEdit(row)}
                                                             >
@@ -424,6 +424,19 @@ export default function EmploiDuTempsIndex({
                                                                     {row.groupNiveau && (
                                                                         <span className="badge badge-soft-secondary ms-1">
                                                                             {row.groupNiveau}
+                                                                        </span>
+                                                                    )}
+                                                                    {/*
+                                                                      Case morte : ce créneau ne génère plus de
+                                                                      séance. Sans ce repère, la grille donnait
+                                                                      l'illusion d'un emploi du temps en place.
+                                                                    */}
+                                                                    {row.clos && (
+                                                                        <span
+                                                                            className="badge badge-soft-danger ms-1"
+                                                                            title={`Créneau clôturé${row.dateFin ? ` le ${row.dateFin}` : ''} — il ne génère plus de séance.`}
+                                                                        >
+                                                                            Clôturé
                                                                         </span>
                                                                     )}
                                                                 </div>
