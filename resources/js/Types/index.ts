@@ -275,6 +275,20 @@ export interface StudentDetails {
     paiements: StudentPaymentRow[];
 }
 
+/**
+ * Pourquoi un groupe ne génère plus de séances automatiques — `null` quand
+ * tout va bien. Produit côté serveur par DiagnostiquerEmploiDuTemps, qui
+ * REFLÈTE les refus de `seances:generate` sans les redériver : quatre causes
+ * (aucune date de début, formation terminée, aucun créneau, tous les créneaux
+ * clôturés), chacune avec sa marche à suivre.
+ */
+export interface EmploiDuTempsProbleme {
+    code: 'aucun_creneau' | 'creneaux_fermes' | 'date_debut_manquante' | 'formation_terminee';
+    titre: string;
+    message: string;
+    action: string;
+}
+
 export interface GroupFeeRow {
     nom: string;
     classification: string | null;
@@ -325,6 +339,12 @@ export interface GroupDetails {
     canChangeEnseignant: boolean;
     changerEnseignantUrl: string;
     emploiDuTempsUrl: string;
+    /**
+     * Pourquoi ce groupe ne génère plus de séances — `null` quand tout va
+     * bien. Dérivé côté serveur de l'état réel du groupe et de ses créneaux :
+     * c'est une bannière permanente, pas un flash.
+     */
+    emploiDuTempsProbleme: EmploiDuTempsProbleme | null;
 }
 
 /**
@@ -1129,6 +1149,11 @@ export interface GroupRow {
     inscriptionsChangementCount: number;
     etudiantsDistinctsCount: number;
     fraisCount: number;
+    /**
+     * Pourquoi ce groupe ne génère plus de séances — `null` quand tout va
+     * bien. Signalé dans la liste, détaillé sur la fiche.
+     */
+    emploiDuTempsProbleme: EmploiDuTempsProbleme | null;
     showUrl: string;
     /** Keyed by frais_id — prefills the edit modal's fee-lines table without a second request. */
     fraisLignes: Record<number, { montant: string; dateEcheance: string; classification: string }>;
@@ -1187,6 +1212,12 @@ export interface GroupPaymentRow {
     reference: string;
     /** Active | Changement | Annulée — drives the row colour. */
     statut: string;
+    /** Cancellation/departure reason — null while the inscription is Active. */
+    motifAnnulation: string | null;
+    /** End date recorded with that reason, when there is one. */
+    dateFin: string | null;
+    /** Enrollment note (a cancellation appends its comment to it). */
+    note: string | null;
     dateInscription: string | null;
     dateInscriptionIso: string | null;
     total: string;

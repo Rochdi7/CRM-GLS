@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Groups\Queries;
 
+use App\Domain\Attendance\Support\DiagnostiquerEmploiDuTemps;
 use App\Models\Group;
 use App\Models\Inscription;
 use App\Models\User;
@@ -19,7 +20,10 @@ use Illuminate\Support\Carbon;
  */
 final class GetGroupDetails
 {
-    public function __construct(private readonly CenterAccessService $centerAccess) {}
+    public function __construct(
+        private readonly CenterAccessService $centerAccess,
+        private readonly DiagnostiquerEmploiDuTemps $diagnostic,
+    ) {}
 
     /**
      * @return array<string, mixed>
@@ -36,6 +40,11 @@ final class GetGroupDetails
         // rouvrent (01/09/2026), alors que $isFinished ci-dessus ne vise
         // que la clôture normale et pilote d'autres verrous (enseignant…).
         $isTerminal = in_array($group->statut, Group::STATUTS_HISTORIQUE, true);
+
+        // Deux agrégats, pas une requête par créneau — voir le diagnostic
+        // plus bas et le withCount() jumeau dans GetGroupsList.
+        $creneauxTotal = $group->creneaux()->count();
+        $creneauxOuverts = $group->creneaux()->whereNull('date_fin')->count();
 
         return [
             'id' => $group->id,
@@ -55,6 +64,21 @@ final class GetGroupDetails
             'inscriptionsAnnuleesCount' => $group->inscriptions->where('statut', Inscription::STATUT_ANNULEE)->count(),
             // Its own ability since 31/08/2026 — every role may fix a group's
             // teacher without holding `groups.update` (GroupPolicy@changeTeacher).
+            // ⚠ Pourquoi ce groupe ne génère plus de séances — les quatre
+            // causes de refus de `seances:generate` rendues visibles, avec la
+            // marche à suivre (DiagnostiquerEmploiDuTemps). L'avertissement
+            // n'était qu'un flash après un changement d'enseignant, perdu dès
+            // la redirection : le groupe restait sans emploi vivant et le
+            // personnel saisissait chaque séance à la main sans savoir
+            // pourquoi (signalé 03/09/2026 à Rabat — Yassmina 10H et
+            // ABDELLATIF 17H fermés au 31/08, plus 7 groupes sur
+            // Agadir/Marrakech/Salé). C'est donc un état DÉRIVÉ, affiché en
+            // permanence tant que la cause n'est pas levée.
+            'emploiDuTempsProbleme' => ($this->diagnostic)(
+                $group,
+                $creneauxTotal,
+                $creneauxOuverts,
+            ),
             'canChangeEnseignant' => $user->can('changeTeacher', $group) && ! $isFinished,
             'changerEnseignantUrl' => route('backoffice.groups.changer-enseignant', $group),
             'emploiDuTempsUrl' => route('backoffice.emploi-du-temps.index', ['group' => $group->id]),

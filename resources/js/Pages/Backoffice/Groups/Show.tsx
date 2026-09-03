@@ -191,6 +191,38 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                 </div>
             )}
 
+            {/*
+              Bannière PERMANENTE expliquant POURQUOI aucune séance n'est
+              générée. Le flash ci-dessus ne s'affiche qu'une fois, juste après
+              le changement d'enseignant, et disparaît à la navigation suivante :
+              le personnel se retrouvait ensuite devant un emploi du temps vide
+              sans savoir ce qui bloquait, et ressaisissait tout à la main.
+              La cause vient du serveur (DiagnostiquerEmploiDuTemps) — quatre
+              motifs possibles, chacun avec sa marche à suivre.
+            */}
+            {!emploiDuTempsArrete && group.emploiDuTempsProbleme && (
+                <div className="alert alert-danger d-flex flex-wrap align-items-start gap-2" role="alert">
+                    <i className="ti ti-calendar-off fs-20" aria-hidden="true" />
+                    <div className="flex-grow-1">
+                        <div className="fw-semibold mb-1">{group.emploiDuTempsProbleme.titre}</div>
+                        <div>{group.emploiDuTempsProbleme.message}</div>
+                        <div className="mt-1">
+                            <strong>À faire :</strong> {group.emploiDuTempsProbleme.action}
+                        </div>
+                    </div>
+                    {group.emploiDuTempsProbleme.code === 'date_debut_manquante'
+                    || group.emploiDuTempsProbleme.code === 'formation_terminee' ? null : (
+                        <a
+                            href={group.emploiDuTempsUrl}
+                            className="btn btn-danger btn-sm d-inline-flex align-items-center flex-shrink-0"
+                        >
+                            <i className="ti ti-calendar-plus me-1" />
+                            Emploi du temps
+                        </a>
+                    )}
+                </div>
+            )}
+
             <div className="card">
                 <div className="bg-primary-transparent rounded-top px-4 py-3">
                     <h4 className="mb-0 text-primary">{group.statutLabel}</h4>

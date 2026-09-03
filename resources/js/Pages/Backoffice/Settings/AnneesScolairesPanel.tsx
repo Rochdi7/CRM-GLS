@@ -274,12 +274,6 @@ export default function AnneesScolairesPanel({ anneesScolaires, permissions }: A
                             {form.errors.cloturee && (
                                 <div className="text-danger fs-12 mb-1">{form.errors.cloturee}</div>
                             )}
-                            <div className="form-text">
-                                Une année clôturée reste consultable, mais n’accepte plus aucune création ni
-                                modification — encaissements, dépenses, remboursements, inscriptions, groupes,
-                                séances — pour tout le monde, super-administrateur compris. Décochez cette case
-                                pour rouvrir l’année.
-                            </div>
                         </div>
                     </div>
                     <div className="d-flex justify-content-end gap-2 mt-3">

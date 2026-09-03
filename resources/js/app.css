@@ -1447,15 +1447,52 @@ html[data-theme='dark'] .gls-payment-matrix > :not(caption) > * > * {
     position: fixed;
     z-index: 1100;
     pointer-events: none;
-    padding: 0.35rem 0.6rem;
-    border-radius: 0.25rem;
-    background: rgba(33, 37, 41, 0.95);
+    padding: 0.5rem 0.75rem 0.6rem;
+    border-radius: 0.35rem;
+    background: rgba(17, 17, 17, 0.95);
     color: #fff;
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.45;
+    /* The cancellation sentence (« Annulé le : … pour la raison : … ») is
+       meant to WRAP across lines the way the legacy screen wrapped it, so
+       this box is width-capped and centred instead of nowrap — a long reason
+       would otherwise stretch a single line past the viewport. */
+    max-width: 20rem;
+    text-align: center;
+    text-transform: none;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+/* Heading of a row tooltip (« Annulé » / « Archivé ») — left-aligned over a
+   rule, the body centred under it, exactly as the legacy CRM drew it. */
+.gls-matrix-tooltip__title {
+    padding-bottom: 0.3rem;
+    margin-bottom: 0.3rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.55);
+    text-align: left;
     font-weight: 600;
-    line-height: 1.35;
-    white-space: nowrap;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+/* Speech-bubble arrow. Positioned by the component (it tracks the hovered
+   cell's centre, not the box's, since the box can be pushed sideways to stay
+   on screen) and flipped to the top edge when the box sits above the cell. */
+.gls-matrix-tooltip__arrow {
+    position: absolute;
+    top: 100%;
+    width: 0;
+    height: 0;
+    margin-left: -7px;
+    border-left: 7px solid transparent;
+    border-right: 7px solid transparent;
+    border-top: 7px solid rgba(17, 17, 17, 0.95);
+}
+
+.gls-matrix-tooltip__arrow--up {
+    top: auto;
+    bottom: 100%;
+    border-top: 0;
+    border-bottom: 7px solid rgba(17, 17, 17, 0.95);
 }
 
 /* Inscription fee lines — Remise cell: keep "% | DH" inputs readable side by side */

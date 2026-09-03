@@ -87,6 +87,28 @@ final class ChangerEnseignantGroupe
             return ['assignment' => $nouvelle ?? $courant, 'creneauxFermes' => 0, 'seancesSupprimees' => 0, 'changed' => false];
         }
 
+        // ⚠ PREMIÈRE AFFECTATION — ce n'est PAS un changement d'enseignant.
+        // Le groupe n'avait aucun enseignant (colonne miroir vide ET aucune
+        // période Actif) : personne ne part, il n'y a donc aucun emploi du
+        // temps à séparer pour la paie. Les gardes ci-dessus comparent toutes
+        // à un enseignant EXISTANT, si bien qu'un groupe vide tombait dans la
+        // branche « changement » et voyait ses créneaux clôturés le jour de
+        // l'affectation — le groupe ne générait alors plus AUCUNE séance et
+        // le personnel les saisissait à la main (signalé 03/09/2026 : Yassmina
+        // 10H et ABDELLATIF 17H à Rabat, tous créneaux fermés au 31/08 avec
+        // une seule période enseignant, sans date de fin ; 7 autres groupes
+        // dans le même état à Agadir, Marrakech et Salé). On ouvre donc
+        // simplement la période initiale, en laissant l'emploi du temps vivre.
+        if ($group->enseignant_id === null && $courant === null && $enseignantId !== null) {
+            $nouvelle = DB::transaction(function () use ($group, $enseignantId, $par): ?GroupEnseignant {
+                $group->update(['enseignant_id' => $enseignantId]);
+
+                return $this->ouvrirInitiale($group, $enseignantId, $par);
+            });
+
+            return ['assignment' => $nouvelle, 'creneauxFermes' => 0, 'seancesSupprimees' => 0, 'changed' => false];
+        }
+
         $date = $dateDebut !== null && $dateDebut !== ''
             ? Carbon::parse($dateDebut)
             : Carbon::today();

@@ -381,6 +381,98 @@ final class GroupPaymentMatrixTest extends TestCase
         $this->assertSame('300.00', $row['reste']);
     }
 
+    /**
+     * The row tooltip of the matrix answers « annulée pourquoi ? » on the
+     * spot. It is built from these three fields, so the query must carry all
+     * of them — the reason, the end date, and the note the cancellation
+     * recorded.
+     */
+    public function test_a_cancelled_row_carries_its_reason_end_date_and_note(): void
+    {
+        $inscription = $this->enrol('Imane', 'Agouni');
+
+        app(\App\Domain\Registrations\Actions\AnnulerInscription::class)
+            ->handle($inscription, 'Non-paiement', '2026-07-22', null, 'quitté pour moi 9');
+
+        $row = $this->matrix()['rows'][0];
+
+        $this->assertSame(Inscription::STATUT_ANNULEE, $row['statut']);
+        $this->assertSame('Non-paiement', $row['motifAnnulation']);
+        $this->assertSame('22/07/2026', $row['dateFin']);
+        $this->assertSame('quitté pour moi 9', $row['note']);
+    }
+
+    /**
+     * The tooltip shows the note only when there IS one, so an empty note
+     * must arrive as null rather than as an empty string — an empty string
+     * would draw a bare « Note : » line under the reason.
+     */
+    public function test_a_cancellation_without_a_note_carries_no_note(): void
+    {
+        $inscription = $this->enrol('Imane', 'Agouni');
+
+        app(\App\Domain\Registrations\Actions\AnnulerInscription::class)
+            ->handle($inscription, 'Non-paiement', '2026-07-22', null, null);
+
+        $row = $this->matrix()['rows'][0];
+
+        $this->assertSame('Non-paiement', $row['motifAnnulation']);
+        $this->assertNull($row['note'], 'An empty note must not reach the tooltip as an empty line.');
+    }
+
+    /**
+     * ⚠ AnnulerInscription APPENDS its comment to the note the enrollment
+     * already carried (it never overwrites it — that note is the
+     * enrollment's own and losing it would destroy information). The tooltip
+     * therefore shows both, and this test pins that: reading only the
+     * cancellation half would mean re-parsing the column, which is exactly
+     * what the append was designed to avoid.
+     */
+    public function test_an_existing_enrollment_note_survives_and_is_shown_with_the_cancellation_note(): void
+    {
+        $inscription = $this->enrol('Imane', 'Agouni');
+        $inscription->update(['note' => 'Étudiante transférée depuis Rabat']);
+
+        app(\App\Domain\Registrations\Actions\AnnulerInscription::class)
+            ->handle($inscription, 'Non-paiement', '2026-07-22', null, 'quitté pour moi 9');
+
+        $row = $this->matrix()['rows'][0];
+
+        $this->assertSame(
+            "Étudiante transférée depuis Rabat
+quitté pour moi 9",
+            $row['note'],
+        );
+    }
+
+    /**
+     * A « Changement » stores no reason at all — ChangerGroupeInscription
+     * never writes one, the statut IS the reason — so the row falls back to
+     * the catalogue's own name for that move. Without it the tooltip would
+     * head a grey row « Archivé » and then explain nothing.
+     */
+    public function test_a_changement_row_falls_back_to_the_group_change_reason(): void
+    {
+        $inscription = $this->enrol('Bachar', 'Elmaghouss', Inscription::STATUT_CHANGEMENT);
+        $inscription->update(['date_fin' => '2026-02-20']);
+
+        $row = $this->matrix()['rows'][0];
+
+        $this->assertSame(\App\Models\MotifAnnulation::MOTIF_CHANGEMENT_GROUPE, $row['motifAnnulation']);
+        $this->assertSame('20/02/2026', $row['dateFin']);
+    }
+
+    /** An active row has nothing to explain — no reason, no note. */
+    public function test_an_active_row_carries_no_cancellation_reason(): void
+    {
+        $this->enrol('Aya', 'Active');
+
+        $row = $this->matrix()['rows'][0];
+
+        $this->assertNull($row['motifAnnulation']);
+        $this->assertNull($row['note']);
+    }
+
     public function test_the_endpoint_is_gated_by_payments_view(): void
     {
         $user = User::factory()->create();

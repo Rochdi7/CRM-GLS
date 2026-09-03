@@ -111,6 +111,75 @@ final class GroupEnseignantAffectationTest extends TestCase
         ]);
     }
 
+    /**
+     * ⚠ Régression 03/09/2026 — affecter un enseignant à un groupe QUI N'EN
+     * AVAIT AUCUN clôturait tout son emploi du temps, comme s'il s'agissait
+     * d'un changement. Le groupe ne générait plus aucune séance et le
+     * personnel les saisissait à la main (Yassmina 10H et ABDELLATIF 17H à
+     * Rabat, + 7 groupes sur Agadir/Marrakech/Salé). Personne ne part lors
+     * d'une première affectation : il n'y a aucune période à séparer pour la
+     * paie, donc aucun créneau à fermer.
+     */
+    public function test_first_teacher_assignment_keeps_the_timetable_open(): void
+    {
+        $prof = $this->enseignant();
+        $group = $this->group(); // aucun enseignant, aucune période Actif
+
+        $creneau = Creneau::create([
+            'group_id' => $group->id,
+            'jour_semaine' => 1,
+            'heure_debut' => '10:00',
+            'heure_fin' => '12:00',
+        ]);
+
+        $this->actingAs($this->userWith('groups.view', 'groups.change-teacher'))
+            ->post(route('backoffice.groups.changer-enseignant', $group), [
+                'enseignant_id' => $prof->id,
+                'date_debut' => '2025-10-01',
+            ])->assertSessionHasNoErrors();
+
+        // Le créneau reste OUVERT : c'est lui qui alimente seances:generate.
+        $this->assertNull($creneau->fresh()->date_fin);
+
+        // La période initiale est ouverte, sans date de fin.
+        $this->assertDatabaseHas('group_enseignants', [
+            'group_id' => $group->id,
+            'enseignant_id' => $prof->id,
+            'statut' => GroupEnseignant::STATUT_ACTIF,
+            'date_fin' => null,
+        ]);
+
+        $this->assertSame($prof->id, $group->fresh()->enseignant_id);
+    }
+
+    /**
+     * Le pendant du test ci-dessus : un VRAI changement doit continuer de
+     * fermer l'emploi du temps (séparation des séances par enseignant pour la
+     * paie). Le correctif ne doit pas désarmer cette règle.
+     */
+    public function test_a_real_teacher_change_still_closes_the_timetable(): void
+    {
+        $ancien = $this->enseignant();
+        $nouveau = $this->enseignant();
+        $group = $this->group($ancien);
+        $this->assignmentActive($group, $ancien, '2025-09-01');
+
+        $creneau = Creneau::create([
+            'group_id' => $group->id,
+            'jour_semaine' => 1,
+            'heure_debut' => '10:00',
+            'heure_fin' => '12:00',
+        ]);
+
+        $this->actingAs($this->userWith('groups.view', 'groups.change-teacher'))
+            ->post(route('backoffice.groups.changer-enseignant', $group), [
+                'enseignant_id' => $nouveau->id,
+                'date_debut' => '2025-10-01',
+            ])->assertRedirect(route('backoffice.groups.show', $group));
+
+        $this->assertSame('2025-10-01', $creneau->fresh()->date_fin?->toDateString());
+    }
+
     public function test_changing_the_teacher_archives_the_previous_period_and_opens_a_new_one(): void
     {
         $ancien = $this->enseignant();

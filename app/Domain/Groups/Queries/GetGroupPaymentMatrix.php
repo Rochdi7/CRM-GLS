@@ -7,6 +7,7 @@ namespace App\Domain\Groups\Queries;
 use App\Models\Group;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
+use App\Models\MotifAnnulation;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
@@ -206,6 +207,25 @@ final class GetGroupPaymentMatrix
                         : null,
                     'reference' => $inscription->reference,
                     'statut' => $inscription->statut,
+                    // Why the enrollment ended, so the row's own tooltip
+                    // answers it: a red or grey line raises the question
+                    // « annulée / partie pourquoi ? » and the answer was only
+                    // reachable by leaving the matrix for the inscription
+                    // page. NULL on an Active row (nothing to explain).
+                    //
+                    // A « Changement » carries no stored motif — the statut IS
+                    // the reason, and ChangerGroupeInscription never writes
+                    // one — so it falls back to the catalogue's own name for
+                    // that move rather than leaving the line unexplained.
+                    'motifAnnulation' => $inscription->statut === Inscription::STATUT_CHANGEMENT
+                        ? ($inscription->motif_annulation ?? MotifAnnulation::MOTIF_CHANGEMENT_GROUPE)
+                        : $inscription->motif_annulation,
+                    'dateFin' => $inscription->date_fin?->format('d/m/Y'),
+                    // The note the cancellation appended to the enrollment.
+                    // AnnulerInscription APPENDS it to whatever note the row
+                    // already had, so this is the enrollment note as a whole —
+                    // shown as-is, never parsed apart.
+                    'note' => $inscription->note,
                     'dateInscription' => $inscription->date_inscription?->format('d/m/Y'),
                     'dateInscriptionIso' => $inscription->date_inscription?->format('Y-m-d'),
                     'total' => $this->money($total),

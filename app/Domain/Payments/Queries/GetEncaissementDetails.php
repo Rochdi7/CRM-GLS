@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Payments\Queries;
 
+use App\Domain\Payments\Support\ResoudreAllocationsAvance;
 use App\Models\Encaissement;
 
 /**
@@ -55,15 +56,28 @@ final class GetEncaissementDetails
                 'banque' => $encaissement->banque,
                 'dateEcheance' => $encaissement->date_echeance_cheque?->format('d/m/Y'),
             ] : null,
-            // Where this avance’s money went (empty for a normal payment).
-            'applications' => $encaissement->applications->map(fn (Encaissement $a): array => [
-                'reference' => $a->reference,
-                'frais' => $a->fee?->nom,
-                'groupe' => $a->fee?->inscription?->group?->nom,
-                'montant' => number_format((float) $a->montant, 2, '.', ''),
-                'date' => $a->date_paiement?->format('d/m/Y'),
-                'showUrl' => route('backoffice.encaissements.show', $a),
-            ])->all(),
+            // Where this avance’s money FINALLY went (empty for a normal
+            // payment): the whole chain, so an application that was
+            // reconverted and re-applied names the fee its child row paid
+            // rather than reading as an unlinked line (02/09/2026).
+            'applications' => $encaissement->inscription_fee_id !== null ? [] : array_map(
+                function (array $allocation): array {
+                    /** @var Encaissement $row */
+                    $row = $allocation['row'];
+
+                    return [
+                        'reference' => $row->reference,
+                        'frais' => ResoudreAllocationsAvance::libelle($allocation),
+                        'groupe' => $allocation['kind'] === ResoudreAllocationsAvance::KIND_FRAIS
+                            ? $row->fee?->inscription?->group?->nom
+                            : null,
+                        'montant' => number_format($allocation['montant'], 2, '.', ''),
+                        'date' => $row->date_paiement?->format('d/m/Y'),
+                        'showUrl' => route('backoffice.encaissements.show', $row),
+                    ];
+                },
+                ResoudreAllocationsAvance::terminales([$encaissement->id])[$encaissement->id] ?? [],
+            ),
             // Set when THIS row is itself an application of an earlier avance.
             'appliedFrom' => $encaissement->appliedFrom === null ? null : [
                 'reference' => $encaissement->appliedFrom->reference,

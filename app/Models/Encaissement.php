@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Domain\Payments\Support\ResoudreAllocationsAvance;
 use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -130,6 +131,13 @@ class Encaissement extends Model
      * l'argent a paye des frais precis : c'est cela que l'etudiant doit lire
      * sur son recu, « Avance » ne lui apprend rien (signale 31/08/2026). On ne
      * retombe sur « Avance » que tant que l'argent reste non alloue.
+     *
+     * Les relations chargees (`applications.fee`) suffisent tant qu'aucune
+     * application n'a ete RECONVERTIE : une application detachee (fee NULL)
+     * peut avoir ete re-appliquee via sa propre ligne fille, et seule
+     * `ResoudreAllocationsAvance` (la definition unique de la chaine, partagee
+     * avec la liste et la page detail) sait ou cet argent est finalement alle.
+     * Ce cas rare paie une requete par niveau ; le cas courant n'en fait aucune.
      */
     public function libelleFrais(): string
     {
@@ -137,12 +145,15 @@ class Encaissement extends Model
             return $this->fee->nom;
         }
 
-        $noms = $this->applications
-            ->sortBy('id')
-            ->map(fn (self $application): ?string => $application->fee?->nom)
-            ->filter()
-            ->unique()
-            ->values();
+        $applications = $this->applications->sortBy('id');
+
+        $noms = $applications->contains(fn (self $application): bool => $application->inscription_fee_id === null)
+            ? collect(ResoudreAllocationsAvance::terminales([$this->id])[$this->id] ?? [])
+                ->filter(fn (array $allocation): bool => $allocation['kind'] === ResoudreAllocationsAvance::KIND_FRAIS)
+                ->map(fn (array $allocation): ?string => $allocation['row']->fee?->nom)
+            : $applications->map(fn (self $application): ?string => $application->fee?->nom);
+
+        $noms = $noms->filter()->unique()->values();
 
         return $noms->isEmpty() ? 'Avance' : $noms->implode(' + ');
     }

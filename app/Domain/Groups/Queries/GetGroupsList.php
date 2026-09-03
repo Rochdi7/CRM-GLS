@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Groups\Queries;
 
+use App\Domain\Attendance\Support\DiagnostiquerEmploiDuTemps;
 use App\Models\Frais;
 use App\Models\Group;
 use App\Models\Inscription;
@@ -31,6 +32,7 @@ final class GetGroupsList
     public function __construct(
         private readonly CenterAccessService $centerAccess,
         private readonly CurrentContext $context,
+        private readonly DiagnostiquerEmploiDuTemps $diagnostic,
     ) {}
 
     public function __invoke(
@@ -54,6 +56,13 @@ final class GetGroupsList
                 'inscriptions as inscriptions_annulees_count' => fn ($q) => $q->where('statut', Inscription::STATUT_ANNULEE),
                 'inscriptions as inscriptions_changement_count' => fn ($q) => $q->where('statut', Inscription::STATUT_CHANGEMENT),
                 'inscriptions as etudiants_distincts_count' => fn ($q) => $q->select(DB::raw('COUNT(DISTINCT student_id)')),
+                // Emploi du temps : total des créneaux vs ceux encore OUVERTS.
+                // Des créneaux existants mais aucun ouvert = emploi du temps
+                // arrêté par un changement d'enseignant et jamais refait, donc
+                // plus aucune séance générée (voir GetGroupDetails). Deux
+                // withCount agrégés — jamais une requête par ligne (§ perf).
+                'creneaux',
+                'creneaux as creneaux_ouverts_count' => fn ($q) => $q->whereNull('date_fin'),
             ])
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
@@ -98,6 +107,14 @@ final class GetGroupsList
             'inscriptionsChangementCount' => $group->inscriptions_changement_count,
             'etudiantsDistinctsCount' => $group->etudiants_distincts_count,
             'fraisCount' => $group->frais_count,
+            // Voir le commentaire du withCount ci-dessus : la cause exacte est
+            // signalée dès la liste, pour que le problème se voie sans ouvrir
+            // chaque fiche une par une.
+            'emploiDuTempsProbleme' => ($this->diagnostic)(
+                $group,
+                (int) $group->creneaux_count,
+                (int) $group->creneaux_ouverts_count,
+            ),
             'showUrl' => route('backoffice.groups.show', $group),
             // Keyed by frais_id so the edit modal can prefill the fee-lines
             // table without a second request — same data Group::with('frais')

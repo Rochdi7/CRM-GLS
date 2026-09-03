@@ -1,5 +1,11 @@
 import { useCallback, useRef } from 'react';
-import type { GroupPaymentCell, GroupPaymentColumn, GroupPaymentMatrix, GroupPaymentSort } from '@/Types';
+import type {
+    GroupPaymentCell,
+    GroupPaymentColumn,
+    GroupPaymentMatrix,
+    GroupPaymentRow,
+    GroupPaymentSort,
+} from '@/Types';
 
 interface GroupPaymentMatrixProps {
     matrix: GroupPaymentMatrix | null;
@@ -63,8 +69,18 @@ function echeanceLine(column: GroupPaymentColumn): string | null {
     return column.dateEcheance ? `Échéance ${column.dateEcheance}` : null;
 }
 
-/** Lines of the hover tooltip of a money cell (null = nothing to show). */
-function cellTip(cell: GroupPaymentCell, column: GroupPaymentColumn): string[] | null {
+/**
+ * What a tooltip shows: an optional heading (drawn over a rule) and the body
+ * lines under it. A money cell has no heading — only the row tooltips, which
+ * mirror the legacy CRM's « Annulé » / « Archivé » block, use one.
+ */
+interface MatrixTip {
+    titre?: string;
+    lines: string[];
+}
+
+/** Hover tooltip of a money cell (null = nothing to show). */
+function cellTip(cell: GroupPaymentCell, column: GroupPaymentColumn): MatrixTip | null {
     const lines: string[] = [];
 
     if (cell.state !== 'paye') {
@@ -76,7 +92,64 @@ function cellTip(cell: GroupPaymentCell, column: GroupPaymentColumn): string[] |
         lines.push(echeance);
     }
 
-    return lines.length > 0 ? lines : null;
+    return lines.length > 0 ? { lines } : null;
+}
+
+/**
+ * Heading of a row tooltip, and the verb its first line reads with — the
+ * legacy CRM said « Annulé » / « Archivé » above the block rather than
+ * repeating the statut in a sentence, and a cashier reading the two screens
+ * side by side expects the same word.
+ */
+const STATUT_TITRE: Record<string, { titre: string; verbe: string }> = {
+    Annulée: { titre: 'Annulé', verbe: 'Annulé' },
+    Changement: { titre: 'Archivé', verbe: 'Archivé' },
+    Archivée: { titre: 'Archivé', verbe: 'Archivé' },
+    Expirée: { titre: 'Expiré', verbe: 'Expiré' },
+};
+
+/**
+ * The hover tooltip of a student row, in the legacy CRM's own shape: a
+ * heading (« Annulé » / « Archivé ») over a rule, then the date and the
+ * reason as ONE sentence — « Annulé le : 22/07/2026 pour la raison :
+ * Non-paiement » — and the note underneath when there is one.
+ *
+ * Only a row that actually ended gets it. An Active row keeps the plain
+ * reference + statut line: there is nothing to explain, and a heading over
+ * it would imply otherwise.
+ */
+function rowTip(row: GroupPaymentRow): MatrixTip {
+    const entete = STATUT_TITRE[row.statut];
+
+    if (!entete) {
+        return { lines: [`${row.reference} — ${row.statut}`] };
+    }
+
+    const lines: string[] = [];
+
+    // Date and reason read as one sentence, wrapped across two lines exactly
+    // as the legacy screen wrapped it — never as two labelled fields, which
+    // is what made the first version read as a debug dump.
+    if (row.dateFin) {
+        lines.push(`${entete.verbe} le : ${row.dateFin}`);
+    }
+
+    if (row.motifAnnulation) {
+        lines.push(`pour la raison : ${row.motifAnnulation}`);
+    }
+
+    if (row.note) {
+        lines.push(`Note : ${row.note}`);
+    }
+
+    // A legacy row may carry neither a date nor a reason (the old CRM never
+    // exported them). The heading alone would then be a bare word, so the
+    // reference stands in as the body rather than showing an empty box.
+    if (lines.length === 0) {
+        lines.push(row.reference);
+    }
+
+    return { titre: entete.titre, lines };
 }
 
 /**
@@ -101,39 +174,62 @@ function useMatrixTooltip() {
         }
     }, []);
 
-    const showFor = useCallback((lines: string[], target: HTMLElement) => {
+    const showFor = useCallback((tip: MatrixTip, target: HTMLElement) => {
         const el = ref.current;
         if (!el) {
             return;
         }
 
         el.textContent = '';
-        for (const line of lines) {
+
+        if (tip.titre) {
+            const titre = document.createElement('div');
+            titre.className = 'gls-matrix-tooltip__title';
+            titre.textContent = tip.titre;
+            el.appendChild(titre);
+        }
+
+        for (const line of tip.lines) {
             const div = document.createElement('div');
             div.textContent = line;
             el.appendChild(div);
         }
+
+        // The arrow is part of the box, so it has to be re-appended after the
+        // content is rebuilt — and flipped when the box moves above the cell.
+        const arrow = document.createElement('span');
+        arrow.className = 'gls-matrix-tooltip__arrow';
+        el.appendChild(arrow);
 
         const rect = target.getBoundingClientRect();
         el.style.display = 'block';
 
         const width = el.offsetWidth;
         const height = el.offsetHeight;
-        let left = rect.left + rect.width / 2 - width / 2;
+        const centre = rect.left + rect.width / 2;
+        let left = centre - width / 2;
         left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
-        let top = rect.bottom + 6;
+
+        let top = rect.bottom + 10;
+        let dessus = false;
         if (top + height > window.innerHeight - 8) {
-            top = rect.top - height - 6;
+            top = rect.top - height - 10;
+            dessus = true;
         }
 
         el.style.left = `${left}px`;
         el.style.top = `${top}px`;
+
+        // Point at the hovered cell even when the box was pushed sideways to
+        // stay on screen: the arrow tracks the cell's centre, not the box's.
+        arrow.classList.toggle('gls-matrix-tooltip__arrow--up', !dessus);
+        arrow.style.left = `${Math.max(10, Math.min(centre - left, width - 10))}px`;
     }, []);
 
-    const bind = (lines: string[] | null) =>
-        lines
+    const bind = (tip: MatrixTip | null) =>
+        tip
             ? {
-                  onMouseEnter: (event: React.MouseEvent<HTMLElement>) => showFor(lines, event.currentTarget),
+                  onMouseEnter: (event: React.MouseEvent<HTMLElement>) => showFor(tip, event.currentTarget),
                   onMouseLeave: hide,
               }
             : { onMouseEnter: hide };
@@ -239,7 +335,7 @@ function MatrixBody({ matrix, loading }: { matrix: GroupPaymentMatrix | null; lo
                                     key={column.key}
                                     className="h6 border-top-0"
                                     style={CELL_STYLE}
-                                    {...bind(column.dateEcheance ? [echeanceLine(column) as string] : null)}
+                                    {...bind(column.dateEcheance ? { lines: [echeanceLine(column) as string] } : null)}
                                 >
                                     {column.nom}
                                 </th>
@@ -252,10 +348,16 @@ function MatrixBody({ matrix, loading }: { matrix: GroupPaymentMatrix | null; lo
 
                             return (
                                 <tr key={row.key}>
-                                    <td style={{ ...CELL_STYLE, background: rowFill }}>{row.numero}</td>
+                                    {/* The N° cell carries the same tooltip as
+                                        the name: both halves are one coloured
+                                        block to the eye, so hovering either
+                                        must explain it. */}
+                                    <td style={{ ...CELL_STYLE, background: rowFill }} {...bind(rowTip(row))}>
+                                        {row.numero}
+                                    </td>
                                     <td
                                         style={{ ...CELL_STYLE, background: rowFill }}
-                                        {...bind([`${row.reference} — ${row.statut}`])}
+                                        {...bind(rowTip(row))}
                                     >
                                         {row.studentShowUrl ? (
                                             <a href={row.studentShowUrl} className="text-reset">
@@ -276,7 +378,7 @@ function MatrixBody({ matrix, loading }: { matrix: GroupPaymentMatrix | null; lo
                                                 <td
                                                     key={column.key}
                                                     style={{ ...MONEY_CELL_STYLE, background: ABSENT_FILL }}
-                                                    {...bind(['Frais non affecté à cet étudiant'])}
+                                                    {...bind({ lines: ['Frais non affecté à cet étudiant'] })}
                                                 />
                                             );
                                         }

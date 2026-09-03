@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Payments\Queries;
 
+use App\Domain\Payments\Support\ResoudreAllocationsAvance;
 use App\Models\Activity;
 use App\Models\Caisse;
 use App\Models\Cheque;
@@ -425,21 +426,27 @@ final class GetEncaissementsList
             return [];
         }
 
-        $applications = Encaissement::query()
-            ->whereIn('applied_from_encaissement_id', $encaissementIds)
-            ->with(['fee.inscription.group'])
-            ->orderBy('date_paiement')
-            ->get();
-
+        // ⚠ Follows the WHOLE chain, not one hop: an application row that
+        // was reconverted (fee detached) and re-applied carries the money on
+        // its OWN child row. Reading one level showed « Frais non lié » for
+        // money that did reach a fee (ENC-1586, 02/09/2026). The chain has a
+        // single definition shared with the detail page and the receipt.
         $result = [];
 
-        foreach ($applications as $application) {
-            $result[(int) $application->applied_from_encaissement_id][] = [
-                'frais' => $application->fee?->nom ?? __('Unlinked fee'),
-                'groupe' => $application->fee?->inscription?->group?->nom,
-                'montant' => number_format((float) $application->montant, 2, '.', ''),
-                'date' => $application->date_paiement?->toDateString(),
-            ];
+        foreach (ResoudreAllocationsAvance::terminales($encaissementIds) as $avanceId => $allocations) {
+            foreach ($allocations as $allocation) {
+                /** @var Encaissement $row */
+                $row = $allocation['row'];
+
+                $result[$avanceId][] = [
+                    'frais' => ResoudreAllocationsAvance::libelle($allocation),
+                    'groupe' => $allocation['kind'] === ResoudreAllocationsAvance::KIND_FRAIS
+                        ? $row->fee?->inscription?->group?->nom
+                        : null,
+                    'montant' => number_format($allocation['montant'], 2, '.', ''),
+                    'date' => $row->date_paiement?->toDateString(),
+                ];
+            }
         }
 
         return $result;

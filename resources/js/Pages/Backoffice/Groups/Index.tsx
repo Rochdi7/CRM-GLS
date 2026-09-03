@@ -867,7 +867,22 @@ export default function GroupsIndex({
                         >
                             {groups.data.map((group) => (
                                 <tr key={group.id}>
-                                    <td className="fw-medium">{group.nom}</td>
+                                    <td className="fw-medium">
+                                        {group.nom}
+                                        {/*
+                                          Ce groupe ne génère plus de séances :
+                                          la cause exacte est visible dès la
+                                          liste (au survol), pour ne pas avoir à
+                                          ouvrir les fiches une par une.
+                                        */}
+                                        {group.emploiDuTempsProbleme && (
+                                            <i
+                                                className="ti ti-calendar-off text-danger ms-2"
+                                                title={`${group.emploiDuTempsProbleme.titre} ${group.emploiDuTempsProbleme.message} À faire : ${group.emploiDuTempsProbleme.action}`}
+                                                aria-label={group.emploiDuTempsProbleme.titre}
+                                            />
+                                        )}
+                                    </td>
                                     <td>
                                         <span className="badge badge-soft-info">{group.niveau}</span>
                                     </td>
