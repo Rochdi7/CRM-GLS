@@ -355,7 +355,7 @@ final class CaisseAuditTrailTest extends TestCase
         app(CaisseLedger::class)->credit($other->id, 100, 'Sur une autre caisse');
 
         $this->actingAs($viewer->fresh())
-            ->get(route('backoffice.audit-logs.index', ['caisseId' => $watched->id]))
+            ->get(route('backoffice.9wiwid.index', ['caisseId' => $watched->id]))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->where('entries.data', fn ($rows) => collect($rows)->isNotEmpty()
@@ -372,7 +372,7 @@ final class CaisseAuditTrailTest extends TestCase
         app(CaisseLedger::class)->credit($this->caisse()->id, 100, 'Mouvement argent');
 
         $this->actingAs($viewer->fresh())
-            ->get(route('backoffice.audit-logs.index', ['financeOnly' => 1]))
+            ->get(route('backoffice.9wiwid.index', ['financeOnly' => 1]))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->where('entries.data', fn ($rows) => collect($rows)

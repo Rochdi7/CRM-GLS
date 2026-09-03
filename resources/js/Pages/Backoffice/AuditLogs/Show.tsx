@@ -85,7 +85,7 @@ function ValueCell({ raw, label, tone, author, authorAt, entryId }: ValueCellPro
                 {author ?? t('unknown (predates the journal)')}
                 {authorAt && <span className="text-normal-case"> · {authorAt}</span>}
                 {entryId && (
-                    <Link href={`/backoffice/audit-logs/${entryId}`} className="ms-1 text-normal-case">
+                    <Link href={`/backoffice/9wiwid/${entryId}`} className="ms-1 text-normal-case">
                         #{entryId}
                     </Link>
                 )}
@@ -103,12 +103,12 @@ export default function AuditLogShow({ entry }: AuditLogShowPageProps) {
             title={t('Audit entry')}
             breadcrumbs={[
                 { label: t('Dashboard'), href: '/backoffice/dashboard' },
-                { label: t('Audit journal'), href: '/backoffice/audit-logs' },
+                { label: t('Audit journal'), href: '/backoffice/9wiwid' },
                 { label: `#${entry.id}` },
             ]}
         >
             <div className="d-flex justify-content-end mb-3">
-                <Link href="/backoffice/audit-logs" className="btn btn-outline-light">
+                <Link href="/backoffice/9wiwid" className="btn btn-outline-light">
                     <i className="ti ti-arrow-left me-1" aria-hidden="true" />
                     {t('Back to the journal')}
                 </Link>

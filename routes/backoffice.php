@@ -748,9 +748,9 @@ Route::prefix('backoffice')
             // are evidence and the application must offer no way to alter
             // them (App\Models\Activity refuses writes at the model level
             // too, so the guarantee survives a super-admin).
-            Route::get('audit-logs', [AuditLogController::class, 'index'])
-                ->middleware('permission:audit-logs.view')->name('audit-logs.index');
-            Route::get('audit-logs/{activity}', [AuditLogController::class, 'show'])
-                ->middleware('permission:audit-logs.view')->name('audit-logs.show');
+            Route::get('9wiwid', [AuditLogController::class, 'index'])
+                ->middleware('permission:audit-logs.view')->name('9wiwid.index');
+            Route::get('9wiwid/{activity}', [AuditLogController::class, 'show'])
+                ->middleware('permission:audit-logs.view')->name('9wiwid.show');
         });
     });

@@ -56,14 +56,14 @@ final class AuditLogTest extends TestCase
     {
         $this->actingAs(User::factory()->create());
 
-        $this->get(route('backoffice.audit-logs.index'))->assertForbidden();
+        $this->get(route('backoffice.9wiwid.index'))->assertForbidden();
     }
 
     public function test_a_user_with_the_permission_can_open_the_journal(): void
     {
         $this->actingAs($this->userWith('audit-logs.view'));
 
-        $this->get(route('backoffice.audit-logs.index'))
+        $this->get(route('backoffice.9wiwid.index'))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->component('Backoffice/AuditLogs/Index'));
     }
@@ -75,12 +75,12 @@ final class AuditLogTest extends TestCase
 
         $this->actingAs($user->fresh());
 
-        $this->get(route('backoffice.audit-logs.index'))->assertOk();
+        $this->get(route('backoffice.9wiwid.index'))->assertOk();
     }
 
     public function test_guests_are_redirected_to_the_login(): void
     {
-        $this->get(route('backoffice.audit-logs.index'))
+        $this->get(route('backoffice.9wiwid.index'))
             ->assertRedirect(route('backoffice.login'));
     }
 
@@ -235,12 +235,12 @@ final class AuditLogTest extends TestCase
         // exact code matters: asserting merely "not 2xx" would still pass if a
         // store/update/destroy route were added later, which is precisely the
         // regression this guards against.
-        $this->post('/backoffice/audit-logs')->assertStatus(405);
-        $this->put('/backoffice/audit-logs')->assertStatus(405);
-        $this->delete('/backoffice/audit-logs')->assertStatus(405);
-        $this->post('/backoffice/audit-logs/1')->assertStatus(405);
-        $this->put('/backoffice/audit-logs/1')->assertStatus(405);
-        $this->delete('/backoffice/audit-logs/1')->assertStatus(405);
+        $this->post('/backoffice/9wiwid')->assertStatus(405);
+        $this->put('/backoffice/9wiwid')->assertStatus(405);
+        $this->delete('/backoffice/9wiwid')->assertStatus(405);
+        $this->post('/backoffice/9wiwid/1')->assertStatus(405);
+        $this->put('/backoffice/9wiwid/1')->assertStatus(405);
+        $this->delete('/backoffice/9wiwid/1')->assertStatus(405);
     }
 
     // ── Authentication trail ────────────────────────────────────────────
@@ -319,7 +319,7 @@ final class AuditLogTest extends TestCase
         Frais::create(['nom' => 'Frais détail', 'montant_defaut' => '75.00', 'statut' => 'Actif']);
         $entry = Activity::query()->latest('id')->firstOrFail();
 
-        $this->get(route('backoffice.audit-logs.show', $entry->id))
+        $this->get(route('backoffice.9wiwid.show', $entry->id))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Backoffice/AuditLogs/Show')
@@ -333,14 +333,14 @@ final class AuditLogTest extends TestCase
         Frais::create(['nom' => 'Frais', 'montant_defaut' => '10.00', 'statut' => 'Actif']);
         $entry = Activity::query()->latest('id')->firstOrFail();
 
-        $this->get(route('backoffice.audit-logs.show', $entry->id))->assertForbidden();
+        $this->get(route('backoffice.9wiwid.show', $entry->id))->assertForbidden();
     }
 
     public function test_an_unknown_entry_is_a_404(): void
     {
         $this->actingAs($this->userWith('audit-logs.view'));
 
-        $this->get(route('backoffice.audit-logs.show', 999999))->assertNotFound();
+        $this->get(route('backoffice.9wiwid.show', 999999))->assertNotFound();
     }
 
     public function test_foreign_keys_are_shown_as_names_not_raw_ids(): void
@@ -453,7 +453,7 @@ final class AuditLogTest extends TestCase
 
         $this->actingAs($this->userWith('audit-logs.view'));
 
-        $this->get(route('backoffice.audit-logs.index'))
+        $this->get(route('backoffice.9wiwid.index'))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('entries.data', fn ($rows) => collect($rows)->every(
@@ -469,7 +469,7 @@ final class AuditLogTest extends TestCase
 
         $this->actingAs($this->userWith('audit-logs.view'));
 
-        $this->get(route('backoffice.audit-logs.index', ['includeDeveloper' => 1]))
+        $this->get(route('backoffice.9wiwid.index', ['includeDeveloper' => 1]))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('entries.data', fn ($rows) => collect($rows)->contains(
@@ -485,7 +485,7 @@ final class AuditLogTest extends TestCase
 
         activity('frais')->event('created')->log('Entree systeme sans causer');
 
-        $this->get(route('backoffice.audit-logs.index'))
+        $this->get(route('backoffice.9wiwid.index'))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('entries.data', fn ($rows) => collect($rows)->contains(
@@ -504,9 +504,9 @@ final class AuditLogTest extends TestCase
 
         $this->actingAs($this->userWith('audit-logs.view'));
 
-        $this->get(route('backoffice.audit-logs.show', $entry->id))->assertNotFound();
+        $this->get(route('backoffice.9wiwid.show', $entry->id))->assertNotFound();
 
-        $this->get(route('backoffice.audit-logs.show', [$entry->id, 'includeDeveloper' => 1]))
+        $this->get(route('backoffice.9wiwid.show', [$entry->id, 'includeDeveloper' => 1]))
             ->assertOk();
     }
 
@@ -754,7 +754,7 @@ final class AuditLogTest extends TestCase
 
         Frais::create(['nom' => 'Frais catalogue', 'montant_defaut' => '10.00', 'statut' => 'Actif']);
 
-        $this->get(route('backoffice.audit-logs.index', ['financeOnly' => 1]))
+        $this->get(route('backoffice.9wiwid.index', ['financeOnly' => 1]))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Backoffice/AuditLogs/Index')
@@ -776,7 +776,7 @@ final class AuditLogTest extends TestCase
 
         $this->actingAs($viewer);
 
-        $this->get(route('backoffice.audit-logs.index', ['causerId' => $other->id]))
+        $this->get(route('backoffice.9wiwid.index', ['causerId' => $other->id]))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->where('entries.data', fn ($rows) => collect($rows)->every(

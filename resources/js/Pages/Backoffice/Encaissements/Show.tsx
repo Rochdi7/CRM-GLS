@@ -154,7 +154,17 @@ export default function EncaissementShow({ encaissement, canDetach = false }: En
                                 </div>
 
                                 {encaissement.applications.length === 0 ? (
-                                    <EmptyState title="Avance non encore appliquée" icon="ti ti-clock-dollar" />
+                                    // Detached lines are filtered out server-side, so an
+                                    // avance whose applications were all detached lands
+                                    // here too — « pas encore appliquée » would be wrong.
+                                    <EmptyState
+                                        title={
+                                            Number(encaissement.montantUtilise) > 0
+                                                ? 'Aucun frais réglé par cette avance'
+                                                : 'Avance non encore appliquée'
+                                        }
+                                        icon="ti ti-clock-dollar"
+                                    />
                                 ) : (
                                     <>
                                         <span className="text-muted d-block mb-2">Frais réglés par cette avance</span>

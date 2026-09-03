@@ -250,14 +250,14 @@ export const backofficeNavigation: NavGroup[] = [
             //     matchPaths: ['/backoffice/import'],
             //     inertia: true,
             // },
-            // Masque du menu a la demande (route backoffice.audit-logs.index
+            // Masque du menu a la demande (route backoffice.9wiwid.index
             // reste active et protegee) - retirer les commentaires pour reafficher.
             // {
             //     label: t('Audit journal'),
-            //     href: '/backoffice/audit-logs',
+            //     href: '/backoffice/9wiwid',
             //     icon: 'ti ti-history',
             //     permissions: ['audit-logs.view'],
-            //     matchPaths: ['/backoffice/audit-logs'],
+            //     matchPaths: ['/backoffice/9wiwid'],
             //     inertia: true,
             // },
         ],

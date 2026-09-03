@@ -83,7 +83,16 @@ final class GetEncaissementDetails
                         'showUrl' => route('backoffice.encaissements.show', $row),
                     ];
                 },
-                ResoudreAllocationsAvance::terminales([$encaissement->id])[$encaissement->id] ?? [],
+                // « Frais non lié » is money that came BACK to the avance
+                // (detached, or never allocated): it settles nothing, so it
+                // has no place under « Frais réglés par cette avance » — it
+                // is already counted in « Montant restant » just above.
+                // Listing it made a detached line linger as a phantom row
+                // (03/09/2026).
+                array_values(array_filter(
+                    ResoudreAllocationsAvance::terminales([$encaissement->id])[$encaissement->id] ?? [],
+                    static fn (array $allocation): bool => $allocation['kind'] !== ResoudreAllocationsAvance::KIND_NON_LIE,
+                )),
             ),
             // Set when THIS row is itself an application of an earlier avance.
             'appliedFrom' => $encaissement->appliedFrom === null ? null : [

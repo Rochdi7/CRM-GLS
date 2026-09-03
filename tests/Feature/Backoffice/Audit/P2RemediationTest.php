@@ -99,7 +99,7 @@ final class P2RemediationTest extends TestCase
         activity('test')->causedBy($stranger)->log('rabat action');
 
         $this->actingAs($director->fresh())
-            ->get(route('backoffice.audit-logs.index', ['logName' => 'test']))
+            ->get(route('backoffice.9wiwid.index', ['logName' => 'test']))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->where('entries.data', function ($rows) {
                 $descriptions = collect($rows)->pluck('description');
@@ -108,7 +108,7 @@ final class P2RemediationTest extends TestCase
             }));
 
         $this->actingAs($this->userIn($this->rabat, super: true))
-            ->get(route('backoffice.audit-logs.index', ['logName' => 'test']))
+            ->get(route('backoffice.9wiwid.index', ['logName' => 'test']))
             ->assertInertia(fn (Assert $page) => $page->where('entries.data', fn ($rows) => collect($rows)->pluck('description')->contains('rabat action')));
     }
 

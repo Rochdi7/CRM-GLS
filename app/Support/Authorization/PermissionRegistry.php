@@ -299,8 +299,8 @@ final class PermissionRegistry
                 'stock-types.update' => 'Modifier un type de stock',
                 'stock-types.delete' => 'Supprimer un type de stock',
             ],
-            'Journal d\'audit' => [
-                'audit-logs.view' => 'Consulter le journal d\'audit',
+            '9wiwid' => [
+                'audit-logs.view' => 'Consulter 9wiwid',
             ],
         ];
     }

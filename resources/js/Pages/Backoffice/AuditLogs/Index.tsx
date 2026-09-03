@@ -63,7 +63,7 @@ export default function AuditLogsIndex({
     // result set silently shows nothing and reads as "no activity".
     function reload(next: Partial<AuditLogFilters>) {
         router.get(
-            '/backoffice/audit-logs',
+            '/backoffice/9wiwid',
             { ...filters, ...next, page: 1 },
             { preserveState: true, preserveScroll: true, replace: true },
         );
@@ -256,7 +256,7 @@ function AuditRow({ row }: AuditRowProps) {
         <tr>
             <td>
                 <Link
-                    href={`/backoffice/audit-logs/${row.id}`}
+                    href={`/backoffice/9wiwid/${row.id}`}
                     className="btn btn-sm btn-icon btn-outline-light"
                     aria-label={t('Show details')}
                     title={t('Show details')}
