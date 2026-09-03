@@ -1335,8 +1335,15 @@ final class EncaissementImporter implements Importer
      * returned unchanged and the commit fails as before — a payment is never
      * moved onto a line it does not name.
      */
-    private function redirigerFraisMasque(int $feeId, int $studentId): int
+    private function redirigerFraisMasque(?int $feeId, int $studentId): ?int
     {
+        // An AVANCE carries no fee at all — it must stay null, never be
+        // coerced to 0 by an int type hint (that made every fee-less import
+        // row fail to insert, 03/09/2026).
+        if ($feeId === null) {
+            return null;
+        }
+
         $fee = InscriptionFee::find($feeId);
 
         if ($fee === null || ! $fee->estMasque()) {
