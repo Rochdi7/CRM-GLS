@@ -113,6 +113,13 @@ final class ReparerRemboursementElwardiTest extends TestCase
         $this->assertTrue($parReference['RMB-001']['annule'], 'RMB-001 doit être marqué annulé.');
         $this->assertFalse($parReference['RMB-002']['annule'], 'RMB-002 est le remboursement réel.');
 
+        // Le total affiché ne compte QUE l'argent réellement sorti : 300 DH,
+        // pas 600. C'est ce que l'écran annonçait avant le correctif.
+        $totaux = app(GetRemboursementsList::class)->totaux($lecteur->fresh());
+        $this->assertSame('300.00', $totaux['montant']);
+        $this->assertSame(1, $totaux['count']);
+        $this->assertSame(1, $totaux['annules']);
+
         // Idempotence : relancer ne redéplace rien.
         $this->artisan('remboursements:reparer-elwardi --apply')->assertSuccessful();
         $this->assertSame('17443691.00', (string) $caisseRafik->fresh()->solde);

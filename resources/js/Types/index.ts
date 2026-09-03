@@ -1988,6 +1988,8 @@ export interface DepensesPageProps {
     justificatifMimes: string[];
     justificatifMaxKb: number;
     remboursements: PaginatedData<RemboursementRow> | null;
+    /** Totaux serveur sur l'ensemble filtre, remboursements annules exclus. */
+    remboursementsTotaux: { montant: MoneyDisplay; count: number; annules: number } | null;
     students: FinanceOption[];
     /** Cash tills the refund may be paid out of — active centre, reachable centres only. */
     remboursementCaisses: RemboursementCaisseOption[];

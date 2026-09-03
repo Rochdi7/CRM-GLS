@@ -116,7 +116,18 @@ final class DepenseController extends Controller
             'methodes' => Depense::METHODES,
             'justificatifMimes' => self::JUSTIFICATIF_MIMES,
             'justificatifMaxKb' => self::JUSTIFICATIF_MAX_KB,
-            'remboursements' => $user->can('refunds.view') ? $getRemboursementsList($user) : null,
+            // Les memes filtres que les totaux ci-dessous : sans cela le
+            // total porterait sur un ensemble different de ce qui est
+            // affiche (et la recherche restait sans effet sur cet onglet).
+            'remboursements' => $user->can('refunds.view')
+                ? $getRemboursementsList($user, $search, $caisseFilter, $dateFrom, $dateTo, $perPage)
+                : null,
+            // Le total vient du SERVEUR sur l'ensemble filtre — jamais d'un
+            // reduce() sur les lignes de la page — et il exclut les
+            // remboursements annules (leur caisse a ete recreditee).
+            'remboursementsTotaux' => $user->can('refunds.view')
+                ? $getRemboursementsList->totaux($user, $search, $caisseFilter, $dateFrom, $dateTo)
+                : null,
             'students' => $user->can('refunds.view') ? $getRemboursementsList->studentOptions($user) : [],
             // Cash tills of the active centre — the refund form now names the
             // till (and therefore the employee) the money leaves, instead of

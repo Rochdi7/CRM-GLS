@@ -153,6 +153,7 @@ export default function DepensesIndex({
     justificatifMimes,
     justificatifMaxKb,
     remboursements,
+    remboursementsTotaux,
     remboursementCaisses,
     students,
     approvalEnabled,
@@ -893,6 +894,30 @@ export default function DepensesIndex({
                     <TableLengthRow
                         search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} />}
                     />
+
+                    {/* Ce qui est REELLEMENT sorti des caisses. Le compteur de
+                        pagination ci-dessous compte les LIGNES (annulees
+                        comprises, elles restent affichees pour la trace) — ce
+                        total, lui, ne compte que l'argent parti. */}
+                    {remboursementsTotaux && (
+                        <div className="px-3 pb-3 d-flex flex-wrap align-items-center gap-3">
+                            <span className="text-muted">Total rembourse :</span>
+                            <span className="fw-semibold text-danger fs-16">
+                                -{Number(remboursementsTotaux.montant).toFixed(2)} MAD
+                            </span>
+                            <span className="text-muted">
+                                ({remboursementsTotaux.count}
+                                {remboursementsTotaux.count > 1 ? ' remboursements' : ' remboursement'})
+                            </span>
+                            {remboursementsTotaux.annules > 0 && (
+                                <span className="badge bg-secondary-transparent">
+                                    {remboursementsTotaux.annules} annule
+                                    {remboursementsTotaux.annules > 1 ? 's' : ''} (non compte
+                                    {remboursementsTotaux.annules > 1 ? 's' : ''})
+                                </span>
+                            )}
+                        </div>
+                    )}
 
                     {remboursements.data.length === 0 ? (
                         <EmptyState title="Aucun remboursement" icon="ti ti-arrow-back-up" />

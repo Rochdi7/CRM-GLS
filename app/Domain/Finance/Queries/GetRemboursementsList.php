@@ -38,8 +38,50 @@ final class GetRemboursementsList
         string $dateTo = '',
         int $perPage = self::DEFAULT_PER_PAGE,
     ): LengthAwarePaginator {
-        $remboursements = Remboursement::query()
+        $remboursements = $this->filtered($user, $search, $caisseFilter, $dateFrom, $dateTo)
             ->with(['beneficiaire', 'caisse', 'agent'])
+            ->latest()
+            ->paginate($perPage)
+            ->withQueryString();
+
+        $remboursements->through(fn (Remboursement $r): array => [
+            'id' => $r->id,
+            'reference' => $r->reference,
+            'beneficiaire' => $r->beneficiaire?->nomComplet(),
+            'beneficiaireId' => $r->beneficiaire_id,
+            'caisse' => $r->caisse?->nom,
+            'caisseId' => $r->caisse_id,
+            'montant' => number_format((float) $r->montant, 2, '.', ''),
+            'dateRemboursement' => $r->date_remboursement?->toDateString(),
+            'motif' => $r->motif,
+            'note' => $r->note,
+            'agent' => $r->agent?->nomComplet(),
+            // Un remboursement annulé par écriture compensatoire reste dans
+            // la table (les enregistrements monétaires sont append-only, §11)
+            // mais il ne pèse plus rien : sa caisse a été recréditée. Sans ce
+            // drapeau la liste affichait deux fois -300 DH pour un seul
+            // remboursement de 300 DH réellement sorti — l'écran mentait sur
+            // l'argent (signalé 03/09/2026). Calculé ICI, jamais redérivé
+            // dans le composant.
+            'annule' => Remboursement::estAnnule($r),
+        ]);
+
+        return $remboursements;
+    }
+
+    /**
+     * Le peri&#768;metre commun a&#768; la liste ET aux totaux — une seule definition des
+     * filtres, pour que le total ne puisse jamais porter sur un autre
+     * ensemble que les lignes affichees.
+     */
+    private function filtered(
+        User $user,
+        string $search,
+        string $caisseFilter,
+        string $dateFrom,
+        string $dateTo,
+    ): Builder {
+        return Remboursement::query()
             // Centre scoping reads the refund's OWN etablissement_id — the
             // centre it belongs to — never the caisse's (03/09/2026). The
             // till paying out may be homed to another centre entirely: a
@@ -70,33 +112,45 @@ final class GetRemboursementsList
                             ->orWhere('prenom', 'ilike', $term));
                 });
             })
-            ->latest()
-            ->paginate($perPage)
-            ->withQueryString();
+            ;
+    }
 
-        $remboursements->through(fn (Remboursement $r): array => [
-            'id' => $r->id,
-            'reference' => $r->reference,
-            'beneficiaire' => $r->beneficiaire?->nomComplet(),
-            'beneficiaireId' => $r->beneficiaire_id,
-            'caisse' => $r->caisse?->nom,
-            'caisseId' => $r->caisse_id,
-            'montant' => number_format((float) $r->montant, 2, '.', ''),
-            'dateRemboursement' => $r->date_remboursement?->toDateString(),
-            'motif' => $r->motif,
-            'note' => $r->note,
-            'agent' => $r->agent?->nomComplet(),
-            // Un remboursement annulé par écriture compensatoire reste dans
-            // la table (les enregistrements monétaires sont append-only, §11)
-            // mais il ne pèse plus rien : sa caisse a été recréditée. Sans ce
-            // drapeau la liste affichait deux fois -300 DH pour un seul
-            // remboursement de 300 DH réellement sorti — l'écran mentait sur
-            // l'argent (signalé 03/09/2026). Calculé ICI, jamais redérivé
-            // dans le composant.
-            'annule' => Remboursement::estAnnule($r),
-        ]);
+    /**
+     * Ce qui est REELLEMENT sorti des caisses sur le peri&#768;metre filtre&#769;,
+     * remboursements annules exclus.
+     *
+     * La liste garde les lignes annulees affichees (barrees) parce que la
+     * trace compte : voir DEUX lignes explique pourquoi il y a eu un doublon.
+     * Mais le total, lui, ne doit compter que l'argent parti — sinon l'ecran
+     * annonce 600 DH la ou 300 DH ont ete remis (03/09/2026).
+     *
+     * @return array{montant:string, count:int, annules:int}
+     */
+    public function totaux(
+        User $user,
+        string $search = '',
+        string $caisseFilter = '',
+        string $dateFrom = '',
+        string $dateTo = '',
+    ): array {
+        $base = fn () => $this->filtered($user, $search, $caisseFilter, $dateFrom, $dateTo);
 
-        return $remboursements;
+        $reels = $base()->where(fn ($q) => $this->exclureAnnules($q));
+
+        return [
+            'montant' => number_format((float) $reels->sum('montant'), 2, '.', ''),
+            'count' => (clone $reels)->count(),
+            'annules' => $base()->whereNotNull('note')
+                ->where('note', 'ilike', '%'.Remboursement::MARQUEUR_ANNULE.'%')
+                ->count(),
+        ];
+    }
+
+    /** Un remboursement annule a vu sa caisse recreditee : plus aucune sortie. */
+    private function exclureAnnules($query): void
+    {
+        $query->whereNull('note')
+            ->orWhere('note', 'not ilike', '%'.Remboursement::MARQUEUR_ANNULE.'%');
     }
 
     /**
