@@ -86,6 +86,14 @@ final class GetRemboursementsList
             'motif' => $r->motif,
             'note' => $r->note,
             'agent' => $r->agent?->nomComplet(),
+            // Un remboursement annulé par écriture compensatoire reste dans
+            // la table (les enregistrements monétaires sont append-only, §11)
+            // mais il ne pèse plus rien : sa caisse a été recréditée. Sans ce
+            // drapeau la liste affichait deux fois -300 DH pour un seul
+            // remboursement de 300 DH réellement sorti — l'écran mentait sur
+            // l'argent (signalé 03/09/2026). Calculé ICI, jamais redérivé
+            // dans le composant.
+            'annule' => Remboursement::estAnnule($r),
         ]);
 
         return $remboursements;

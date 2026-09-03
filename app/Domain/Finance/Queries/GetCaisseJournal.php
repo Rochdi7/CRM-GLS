@@ -121,7 +121,15 @@ final class GetCaisseJournal
         // not be folded into the "Dépenses" KPI — without this total the page
         // contradicts itself: the solde drops while every displayed total
         // stays put, which reads as "the caisse didn't record the refund".
-        $totalRemboursements = (float) Remboursement::query()->whereIn('caisse_id', $ids)->sum('montant');
+        // ⚠ Les remboursements ANNULÉS sont exclus : leur caisse a été
+        // recréditée par une écriture compensatoire, donc aucun argent n'est
+        // sorti. Les compter faisait afficher 600 DH pour un remboursement de
+        // 300 DH réellement remis (03/09/2026) — et le total contredisait
+        // alors le solde, qui lui est juste.
+        $totalRemboursements = (float) Remboursement::query()
+            ->whereIn('caisse_id', $ids)
+            ->where(fn ($q) => $this->exclureAnnules($q))
+            ->sum('montant');
         $solde = (float) Caisse::query()->whereIn('id', $ids)->sum('solde');
 
         $rows = $this->rows($ids, $typeFilter, $dateFrom, $dateTo);
@@ -177,6 +185,20 @@ final class GetCaisseJournal
     /**
      * @param  array<int, int>  $ids
      */
+    /**
+     * Écarte les remboursements annulés par écriture compensatoire.
+     *
+     * Le marqueur vit sur le modèle (Remboursement::MARQUEUR_ANNULE), partagé
+     * avec la commande de correction et avec GetRemboursementsList, pour que
+     * les trois ne puissent pas diverger : un écran qui compte un
+     * remboursement annulé affiche de l'argent qui n'est jamais sorti.
+     */
+    private function exclureAnnules($query): void
+    {
+        $query->whereNull('note')
+            ->orWhere('note', 'not ilike', '%'.Remboursement::MARQUEUR_ANNULE.'%');
+    }
+
     private function rows(array $ids, string $typeFilter, string $dateFrom, string $dateTo): Collection
     {
         $rows = collect();
@@ -232,6 +254,10 @@ final class GetCaisseJournal
             $rows = $rows->concat(
                 Remboursement::query()->with(['beneficiaire', 'agent'])
                     ->whereIn('caisse_id', $ids)
+                    // Même règle que le total ci-dessus : un remboursement
+                    // annulé n'a pas bougé la caisse, il n'a rien à faire
+                    // dans le journal des mouvements.
+                    ->where(fn ($q) => $this->exclureAnnules($q))
                     ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_remboursement', '>=', $dateFrom))
                     ->when($dateTo !== '', fn ($q) => $q->whereDate('date_remboursement', '<=', $dateTo))
                     ->get()

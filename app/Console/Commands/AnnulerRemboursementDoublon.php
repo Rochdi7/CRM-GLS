@@ -138,5 +138,5 @@ final class AnnulerRemboursementDoublon extends Command
     }
 
     /** Written into the duplicate's note — also what makes the command idempotent. */
-    private const MARKER = '[ANNULÉ]';
+    private const MARKER = Remboursement::MARQUEUR_ANNULE;
 }

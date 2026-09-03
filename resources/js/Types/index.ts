@@ -1934,6 +1934,8 @@ export interface RemboursementRow {
     motif: string | null;
     note: string | null;
     agent: string | null;
+    /** Annulé par écriture compensatoire : la caisse a été recréditée, donc plus aucune sortie d'argent. */
+    annule: boolean;
 }
 
 /** A cash till the refund form may draw from, with its responsable's name and current balance. */

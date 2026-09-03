@@ -912,14 +912,31 @@ export default function DepensesIndex({
                                 }
                             >
                                 {remboursements.data.map((row) => (
-                                    <tr key={row.id}>
+                                    // Un remboursement annulé reste listé (les
+                                    // enregistrements monétaires ne sont jamais
+                                    // supprimés) mais ne doit PAS se lire comme
+                                    // de l'argent sorti : sans ce traitement la
+                                    // page affichait deux fois -300 MAD pour un
+                                    // seul remboursement réel.
+                                    <tr key={row.id} className={row.annule ? 'opacity-50' : undefined}>
                                         <td>
                                             <code>{row.reference}</code>
                                         </td>
                                         <td>{row.beneficiaire ?? '—'}</td>
                                         <td>{row.caisse ?? '—'}</td>
-                                        <td className="text-end fw-medium text-danger">
-                                            -{Number(row.montant).toFixed(2)} MAD
+                                        <td className="text-end">
+                                            {row.annule ? (
+                                                <>
+                                                    <span className="text-decoration-line-through text-muted">
+                                                        -{Number(row.montant).toFixed(2)} MAD
+                                                    </span>
+                                                    <span className="badge bg-secondary-transparent ms-2">Annulé</span>
+                                                </>
+                                            ) : (
+                                                <span className="fw-medium text-danger">
+                                                    -{Number(row.montant).toFixed(2)} MAD
+                                                </span>
+                                            )}
                                         </td>
                                         <td>{row.dateRemboursement ?? '—'}</td>
                                         <td>

@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Backoffice\Finance;
 
+use App\Domain\Finance\Queries\GetRemboursementsList;
 use App\Models\Caisse;
 use App\Models\Employee;
 use App\Models\Encaissement;
 use App\Models\Etablissement;
 use App\Models\Remboursement;
 use App\Models\Student;
+use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -98,6 +100,18 @@ final class ReparerRemboursementElwardiTest extends TestCase
         $rmb1->refresh();
         $this->assertStringContainsString('[ANNULÉ]', (string) $rmb1->note);
         $this->assertSame($kenitra->id, $rmb1->etablissement_id);
+
+        // La liste ne doit PAS lire comme 600 DH : le doublon annulé est
+        // marqué comme tel, et le journal ne le compte plus du tout.
+        $lecteur = User::factory()->create();
+        $lecteur->givePermissionTo('refunds.view');
+        $lecteur->givePermissionTo('centers.access-all');
+
+        $rows = app(GetRemboursementsList::class)($lecteur->fresh());
+        $parReference = collect($rows->items())->keyBy('reference');
+
+        $this->assertTrue($parReference['RMB-001']['annule'], 'RMB-001 doit être marqué annulé.');
+        $this->assertFalse($parReference['RMB-002']['annule'], 'RMB-002 est le remboursement réel.');
 
         // Idempotence : relancer ne redéplace rien.
         $this->artisan('remboursements:reparer-elwardi --apply')->assertSuccessful();

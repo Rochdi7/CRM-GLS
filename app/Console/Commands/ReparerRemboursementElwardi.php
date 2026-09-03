@@ -53,7 +53,7 @@ final class ReparerRemboursementElwardi extends Command
 
     protected $description = 'Corrige le double remboursement ELWARDI (03/09/2026) : annule RMB-001, déplace RMB-002 sur la caisse Rafik et le rattache à Kénitra';
 
-    private const MARKER = '[ANNULÉ]';
+    private const MARKER = Remboursement::MARQUEUR_ANNULE;
 
     public function handle(CaisseLedger $ledger): int
     {

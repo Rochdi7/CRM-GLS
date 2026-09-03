@@ -32,6 +32,25 @@ class Remboursement extends Model
     }
 
 
+    /**
+     * Le marqueur écrit dans `note` quand un remboursement est annulé par
+     * écriture compensatoire. UNE seule définition, partagée par la commande
+     * de correction et par le read-model : si les deux divergent, un
+     * remboursement annulé continue d'être compté comme de l'argent sorti.
+     */
+    public const MARQUEUR_ANNULE = '[ANNULÉ]';
+
+    /**
+     * Ce remboursement a-t-il été annulé ? Un remboursement annulé n'est
+     * jamais supprimé (§11) : sa caisse a simplement été recréditée, donc il
+     * ne représente plus aucune sortie d'argent et doit être affiché comme
+     * tel — sinon l'écran additionne des montants qui ne sont jamais sortis.
+     */
+    public static function estAnnule(self $remboursement): bool
+    {
+        return str_contains((string) $remboursement->note, self::MARQUEUR_ANNULE);
+    }
+
     public function beneficiaire(): BelongsTo
     {
         return $this->belongsTo(Student::class, 'beneficiaire_id');
