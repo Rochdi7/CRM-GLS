@@ -757,8 +757,10 @@ export default function InscriptionsIndex({
     }
 
     function handleGroupChange(groupId: number | '') {
-        // Les dates restent celles saisies par l'utilisateur (période propre
-        // à l'inscription) — changer de groupe ne les écrase plus.
+        // Le groupe est la source : ses dates de formation et ses frais (avec
+        // l'échéance saisie sur le groupe) pré-remplissent le formulaire dès
+        // qu'il est choisi. Les dates restent modifiables ensuite — la
+        // période d'une inscription peut différer de celle du groupe.
         form.setData((data) => ({ ...data, group_id: groupId, fee_lines: [], livre_ids: [] }));
         setAvailableFeesPage(1);
         setAvailableLivres([]);
@@ -775,6 +777,10 @@ export default function InscriptionsIndex({
             .then((data: InscriptionGroupFeesResponse) => {
                 form.setData((prev) => ({
                     ...prev,
+                    // Dates de formation du groupe ; un groupe sans dates
+                    // laisse celles déjà saisies.
+                    date_debut: data.dateDebut ?? prev.date_debut,
+                    date_fin: data.dateFin ?? prev.date_fin,
                     fee_lines: data.fees.map((fee) => ({
                         fraisId: fee.fraisId,
                         nom: fee.nom,
@@ -1766,7 +1772,11 @@ export default function InscriptionsIndex({
                                         onChange={(event) => form.setData('date_debut', event.target.value)}
                                         error={form.errors.date_debut}
                                     />
-                                    <div className="form-text">Période de cette inscription</div>
+                                    <div className="form-text">
+                                        {!editingInscription && form.data.group_id !== ''
+                                            ? 'Pré-remplie depuis le groupe — modifiable'
+                                            : 'Période de cette inscription'}
+                                    </div>
                                 </div>
                                 <div className="col-md-4">
                                     <DateField
@@ -1776,7 +1786,11 @@ export default function InscriptionsIndex({
                                         onChange={(event) => form.setData('date_fin', event.target.value)}
                                         error={form.errors.date_fin}
                                     />
-                                    <div className="form-text">Période de cette inscription</div>
+                                    <div className="form-text">
+                                        {!editingInscription && form.data.group_id !== ''
+                                            ? 'Pré-remplie depuis le groupe — modifiable'
+                                            : 'Période de cette inscription'}
+                                    </div>
                                 </div>
                             </div>
 

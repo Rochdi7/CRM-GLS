@@ -94,8 +94,25 @@ export default function RapportsIndex({
             ]}
         >
             <Card title={t('Reports management')}>
-                <div className="row">
-                    <div className="col-md-6 col-lg-4">
+                {/* Les cinq filtres tiennent sur UNE ligne en grand écran : la
+                    grille précédente les empilait 2 par 2 en `col-lg-4` et
+                    laissait tout le tiers droit de la carte vide. Les colonnes
+                    sont dimensionnées selon ce que chaque champ doit afficher —
+                    un nom de groupe est long, une date fait dix caractères —
+                    plutôt qu'en douzièmes égaux.
+
+                    ⚠ Les cinq champs totalisent 11 colonnes, pas 12 : la
+                    douzième est laissée au bouton Actualiser (`col-xl-auto`).
+                    À 12 il ne restait plus rien et le bouton retombait seul sur
+                    la ligne suivante.
+
+                    `align-items-end` l'aligne sur le bas des champs, sinon il
+                    remonterait au niveau des libellés ; gouttière HORIZONTALE
+                    seule (`gx-3`) car chaque champ porte déjà son `mb-3` — un
+                    `g-3` complet doublait l'espace vertical au retour à la
+                    ligne. */}
+                <div className="row gx-3 align-items-end">
+                    <div className="col-12 col-md-6 col-xl-3">
                         <SelectField
                             id="rapport"
                             label={t('Report')}
@@ -105,12 +122,9 @@ export default function RapportsIndex({
                             onChange={(e) => reload({ rapport: e.target.value })}
                         />
                     </div>
-                </div>
-
-                <div className="row">
                     {/* Le groupe est OPTIONNEL : vide, le rapport sort
                         toutes les inscriptions de la période. */}
-                    <div className="col-md-6 col-lg-4">
+                    <div className="col-12 col-md-6 col-xl-2">
                         <SelectField
                             id="groupFilter"
                             label={t('Group')}
@@ -120,7 +134,7 @@ export default function RapportsIndex({
                             onChange={(e) => reload({ groupFilter: e.target.value })}
                         />
                     </div>
-                    <div className="col-md-6 col-lg-4">
+                    <div className="col-12 col-md-6 col-xl-2">
                         <SelectField
                             id="statutFilter"
                             label={t('Status')}
@@ -130,10 +144,7 @@ export default function RapportsIndex({
                             onChange={(e) => reload({ statutFilter: e.target.value })}
                         />
                     </div>
-                </div>
-
-                <div className="row align-items-end">
-                    <div className="col-md-6 col-lg-4">
+                    <div className="col-6 col-md-3 col-xl-2">
                         <DateField
                             id="dateFrom"
                             label={t('Start date')}
@@ -141,18 +152,25 @@ export default function RapportsIndex({
                             onChange={(e) => reload({ dateFrom: e.target.value })}
                         />
                     </div>
-                    <div className="col-md-6 col-lg-4">
+                    <div className="col-6 col-md-3 col-xl-2">
                         <DateField
                             id="dateTo"
                             label={t('End date')}
                             value={filters.dateTo}
                             onChange={(e) => reload({ dateTo: e.target.value })}
+                            panelAlign="right"
                         />
                     </div>
-                    <div className="col-md-6 col-lg-4 mb-3">
+                    {/* `d-grid` en dessous de xl étire le bouton sur toute la
+                        largeur (il est alors seul sur sa ligne, comme les
+                        champs) ; `d-xl-block` le rend à sa taille naturelle dès
+                        qu'il rejoint la ligne des filtres. C'est l'idiome
+                        Bootstrap pour ça — `w-xl-auto` n'existe pas, les
+                        utilitaires de largeur ne sont pas responsive. */}
+                    <div className="col-12 col-xl-auto mb-3 d-grid d-xl-block">
                         <button
                             type="button"
-                            className="btn btn-dark me-2"
+                            className="btn btn-dark"
                             title={t('Refresh')}
                             onClick={() => reload({})}
                             disabled={isLoading}

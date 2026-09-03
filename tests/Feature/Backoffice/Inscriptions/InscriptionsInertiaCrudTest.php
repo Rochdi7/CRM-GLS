@@ -132,6 +132,35 @@ final class InscriptionsInertiaCrudTest extends TestCase
         $this->assertSame('2026-06-30', $response['dateFin']);
     }
 
+    /**
+     * A monthly fee whose group never stored an échéance still mirrors the
+     * group: same month-derived date the Groups form derives (day from the
+     * group's start date, year from its school year) — never « today ».
+     * A fee with no month in its name and no stored date is due at enrolment.
+     */
+    public function test_group_fees_endpoint_derives_missing_due_dates_from_the_group(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.create'));
+        $this->annee->update(['date_debut' => '2026-09-01', 'date_fin' => '2027-08-31']);
+        $group = $this->makeGroup();
+        $group->update(['date_debut_formation' => '2026-09-07', 'date_fin_formation' => '2027-06-30']);
+        $octobre = Frais::create(['nom' => "Frais d'Octobre", 'statut' => 'Actif']);
+        $janvier = Frais::create(['nom' => 'Frais de Janvier', 'statut' => 'Actif']);
+        $inscription = Frais::create(['nom' => "Frais d'inscription", 'statut' => 'Actif']);
+        $group->frais()->attach([
+            $octobre->id => ['montant' => 1300, 'date_echeance' => null],
+            $janvier->id => ['montant' => 1300, 'date_echeance' => null],
+            $inscription->id => ['montant' => 300, 'date_echeance' => null],
+        ]);
+
+        $fees = collect($this->get(route('backoffice.groups.inscription-fees', $group))->assertOk()->json('fees'))
+            ->keyBy('nom');
+
+        $this->assertSame('2026-10-07', $fees["Frais d'Octobre"]['dateEcheance']);
+        $this->assertSame('2027-01-07', $fees['Frais de Janvier']['dateEcheance']);
+        $this->assertSame(now()->toDateString(), $fees["Frais d'inscription"]['dateEcheance']);
+    }
+
     public function test_group_fees_endpoint_requires_registrations_create(): void
     {
         $group = $this->makeGroup();
