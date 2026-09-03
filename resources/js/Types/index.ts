@@ -472,6 +472,9 @@ export interface EncaissementDetails {
     montantRestant: MoneyDisplay;
     /** Fee lines this avance paid for (empty for an ordinary payment). */
     applications: Array<{
+        id: number;
+        /** False for a refunded row, or one already detached from its fee. */
+        detachable: boolean;
         reference: string;
         frais: string | null;
         groupe: string | null;

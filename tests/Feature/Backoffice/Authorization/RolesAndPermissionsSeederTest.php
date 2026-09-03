@@ -447,10 +447,9 @@ final class RolesAndPermissionsSeederTest extends TestCase
      * Domain applique les deux (RapportInscriptionsTest couvre la portée).
      *
      * La garantie est structurelle, pas recopiée : `matrix()` ajoute
-     * `defaultForEveryRole()` à chaque preset. Deux rôles écrits à la main
-     * (marketing-manager, teacher) n'héritent d'aucune base commune et
-     * l'avaient donc manquée — d'où ce test, qui vaut aussi pour le prochain
-     * rôle ajouté.
+     * `defaultForEveryRole()` à chaque preset. Un rôle écrit à la main
+     * (`teacher`) n'hérite d'aucune base commune et l'avait donc manquée —
+     * d'où ce test, qui vaut aussi pour le prochain rôle ajouté.
      */
     public function test_every_role_can_open_the_reports_screen(): void
     {

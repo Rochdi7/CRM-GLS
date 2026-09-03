@@ -542,6 +542,11 @@ Route::prefix('backoffice')
                 ->middleware('permission:payments.create')->name('avances.convert');
             Route::post('avances/{encaissement}/apply', [EncaissementController::class, 'applyAvance'])
                 ->middleware('permission:payments.create')->name('avances.apply');
+            // Détacher UN paiement de son frais depuis sa page de détail :
+            // le frais redevient dû et l'argent repart en avance. Réservé au
+            // super-admin (payments.detach ∈ superAdminOnly).
+            Route::post('encaissements/{encaissement}/detach', [EncaissementController::class, 'detach'])
+                ->middleware('permission:payments.detach')->name('encaissements.detach');
 
 
             // Chèques — off-ledger inventory of physical checks in hand

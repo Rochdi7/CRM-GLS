@@ -1134,5 +1134,7 @@
     "Type the exact group name to confirm the deletion.": "Retapez le nom exact du groupe pour confirmer la suppression.",
     "Group :name and its :count registrations were permanently deleted.": "Le groupe :name et ses :count inscription(s) ont été supprimés définitivement.",
     "The employee's till stays attached to :centre (balance: :solde DH). A profile edit never moves money.": "La caisse de l'employé reste rattachée à :centre (solde : :solde DH). La modification du profil ne déplace jamais d'argent.",
-    "its current centre": "son centre actuel"
+    "its current centre": "son centre actuel",
+    "This payment is not attached to any fee.": "Ce paiement n'est rattaché à aucun frais.",
+    "Payment detached from its fee — the amount is available as an advance again.": "Paiement détaché de son frais — le montant est de nouveau disponible en avance."
 }

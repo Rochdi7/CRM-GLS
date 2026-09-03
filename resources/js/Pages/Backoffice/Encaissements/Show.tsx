@@ -1,4 +1,7 @@
+import { useState } from 'react';
+import { router } from '@inertiajs/react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
+import ConfirmDialog from '@/Components/Modals/ConfirmDialog';
 import Card from '@/Components/Shared/Card';
 import DetailRow from '@/Components/Details/DetailRow';
 import EmptyState from '@/Components/Shared/EmptyState';
@@ -6,6 +9,8 @@ import type { EncaissementDetails } from '@/Types';
 
 interface EncaissementShowProps {
     encaissement: EncaissementDetails;
+    /** UI convenience only — the route + policy are the real gate (§5). */
+    canDetach?: boolean;
 }
 
 function feeStatusVariant(statut: string): 'success' | 'warning' | 'danger' {
@@ -19,9 +24,31 @@ function feeStatusVariant(statut: string): 'success' | 'warning' | 'danger' {
  * — receipt card + fee-settled card. A payment is never deleted and its
  * amount/till are frozen — no destructive action anywhere on this page.
  */
-export default function EncaissementShow({ encaissement }: EncaissementShowProps) {
+export default function EncaissementShow({ encaissement, canDetach = false }: EncaissementShowProps) {
     const fee = encaissement.fee;
     const reste = fee ? Number(fee.reste) : 0;
+
+    // Detaching makes a settled fee owed again, so it is confirmed rather
+    // than fired on a single click.
+    const [aDetacher, setADetacher] = useState<EncaissementDetails['applications'][number] | null>(null);
+    const [processing, setProcessing] = useState(false);
+
+    const detacher = () => {
+        if (aDetacher === null) return;
+
+        setProcessing(true);
+        router.post(
+            `/backoffice/encaissements/${aDetacher.id}/detach`,
+            {},
+            {
+                preserveScroll: true,
+                onFinish: () => {
+                    setProcessing(false);
+                    setADetacher(null);
+                },
+            },
+        );
+    };
 
     return (
         <BackofficeLayout
@@ -139,11 +166,23 @@ export default function EncaissementShow({ encaissement }: EncaissementShowProps
                                                         {Number(application.montant).toFixed(2)} MAD
                                                     </span>
                                                 </div>
-                                                <div className="text-muted fs-12">
-                                                    {application.groupe && `${application.groupe} — `}
-                                                    {application.date}
-                                                    {' · '}
-                                                    <a href={application.showUrl}>{application.reference}</a>
+                                                <div className="d-flex justify-content-between align-items-center">
+                                                    <div className="text-muted fs-12">
+                                                        {application.groupe && `${application.groupe} — `}
+                                                        {application.date}
+                                                        {' · '}
+                                                        <a href={application.showUrl}>{application.reference}</a>
+                                                    </div>
+                                                    {canDetach && application.detachable && (
+                                                        <button
+                                                            type="button"
+                                                            className="btn btn-sm btn-outline-danger py-0 px-2 fs-12"
+                                                            onClick={() => setADetacher(application)}
+                                                        >
+                                                            <i className="ti ti-unlink me-1" />
+                                                            Détacher
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))}
@@ -183,6 +222,22 @@ export default function EncaissementShow({ encaissement }: EncaissementShowProps
                     </Card>
                 </div>
             </div>
+            <ConfirmDialog
+                show={aDetacher !== null}
+                title="Détacher ce paiement de son frais"
+                recordLabel={
+                    aDetacher === null
+                        ? ''
+                        : `${aDetacher.frais ?? 'Frais'} — ${Number(aDetacher.montant).toFixed(2)} MAD`
+                }
+                message="Le frais redeviendra dû et le montant retournera en avance réapplicable. Aucun montant ne quitte la caisse et rien n'est supprimé."
+                icon="ti-unlink"
+                confirmLabel="Détacher"
+                processingLabel="Détachement…"
+                processing={processing}
+                onConfirm={detacher}
+                onCancel={() => setADetacher(null)}
+            />
         </BackofficeLayout>
     );
 }

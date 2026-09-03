@@ -229,6 +229,12 @@ final class PermissionRegistry
                 // registration (and therefore which year) money belongs to,
                 // so it is super-admin only — see superAdminOnly() below.
                 'payments.reallocate' => 'Déplacer des encaissements vers un autre groupe / une autre année',
+                // Détacher une ligne d'application d'un frais : son argent
+                // retourne au pool réapplicable de l'avance parente. Rien
+                // n'est supprimé et la caisse ne bouge pas (§11), mais le
+                // frais redevient dû, donc l'écran de l'étudiant change.
+                // Deliberately in NO role preset (superAdminOnly() ci-dessous).
+                'payments.detach' => "Détacher un paiement de son frais (retour en avance)",
             ],
             'Recouvrement' => [
                 'collections.view' => 'Consulter la gestion des recouvrements',
@@ -496,6 +502,10 @@ final class PermissionRegistry
             // Re-dating a recorded payment moves it between reconciled
             // periods — see payments.update-date in grouped() (30/08/2026).
             'payments.update-date',
+            // Détacher un paiement de son frais rend le frais dû à nouveau
+            // et renvoie l'argent au pool de l'avance : une réallocation
+            // silencieuse si elle est ouverte à tous (03/09/2026).
+            'payments.detach',
             // Corriger un MONTANT déjà encaissé réécrit une somme que la
             // caisse a réellement reçue : c'est le court-circuit de la
             // correction normale (remboursement + nouvel encaissement), donc
@@ -889,28 +899,22 @@ final class PermissionRegistry
             // Stock articles and their mouvements were removed from every
             // other preset so a book leaves the shelf in exactly one place;
             // only this role and the super-admin bypass manage them.
+            //
+            // Its BASE scope is the assistante administrative's ($operations,
+            // 03/09/2026, demande métier) — le responsable marketing tient
+            // aussi un poste de front-office. Il n'a donc PAS $managementEdits :
+            // la finance lui reste en création seule, comme au front-office.
             // Prospects/marketing-reports permissions will be added with
             // those modules.
             'marketing-manager' => [
-                'dashboard.view',
-                'centers.view',
-                'rooms.view', 'rooms.create', 'rooms.update',
-                'students.view',
-                'registrations.view',
-                'registrations.delete',
-                'groups.view',
-                'groups.change-teacher',
-                'stock.view', 'stock.create', 'stock.update', 'stock.move',
-                'stock-types.view', 'stock-types.create', 'stock-types.update',
-                // Ce rôle n'a aucune autre permission financière, et c'est
-                // voulu. Les deux lignes ci-dessous ne lui donnent PAS accès à
-                // la finance : elles lui donnent l'accès à SA propre boîte de
-                // réception de transferts. S'il tient une caisse, il doit
-                // pouvoir voir et accepter l'argent qu'on lui remet — sinon le
-                // transfert reste « En attente » indéfiniment, personne ne
-                // pouvant valider à sa place (règle destinataire, cf. $operations).
-                'cash-transfers.view',
-                'cash-transfers.validate',
+                ...$operations,
+                // La SEULE différence avec l'assistante administrative
+                // (03/09/2026, demande métier) : le stock physique. Le reste
+                // du périmètre est celui du front-office, $operations — dont
+                // la finance en CRÉATION SEULE et la boîte de réception des
+                // transferts (règle destinataire).
+                'stock.create', 'stock.update', 'stock.move',
+                'stock-types.create', 'stock-types.update',
             ],
 
             // Academic scope only — no financial data.

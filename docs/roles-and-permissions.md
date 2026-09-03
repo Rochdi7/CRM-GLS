@@ -246,7 +246,7 @@ Super-admins see everything via `Gate::before` regardless.
 | `consultant` | `$operations` exactly. |
 | `administrative-assistant` | `$operations` exactly — identical to `consultant` (asserted by a test). |
 | `administrative-manager` | `$operations` + employés (view+update), `users.view`, audit. |
-| `marketing-manager` | Dashboard + centres/étudiants/inscriptions/groupes en lecture, **+ la gestion complète du stock** (articles, mouvements, catalogue des types) — le seul rôle qui la porte. |
+| `marketing-manager` | `$operations` **+ la gestion complète du stock** (articles, mouvements, catalogue des types) — le seul rôle qui la porte. Depuis le 03/09/2026 son périmètre de base est celui de l'assistante administrative : le stock est sa SEULE différence. Pas de `$managementEdits` — la finance reste en création seule. |
 | `teacher` | `dashboard.view`, `groups.view`, `students.view`, séances + appel. No finance. |
 
 Ce qu'**aucun** rôle ne porte (Gate::before uniquement) : n'importe quel

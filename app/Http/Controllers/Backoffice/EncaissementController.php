@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Payments\Actions\AppliquerAvance;
 use App\Domain\Payments\Actions\ConvertirEncaissementsEnAvance;
+use App\Domain\Payments\Actions\DetacherEncaissementDuFrais;
 use App\Domain\Payments\Actions\CorrigerMontantEncaissement;
 use App\Domain\Payments\Actions\RequalifierMethodeEncaissement;
 use App\Domain\Finance\Support\CaisseResolver;
@@ -772,13 +773,36 @@ final class EncaissementController extends Controller
         return back()->with('success', __('Receipt queued for sending to :email.', ['email' => $request->validated('email')]));
     }
 
-    public function show(Encaissement $encaissement, GetEncaissementDetails $getEncaissementDetails): Response
+    public function show(Request $request, Encaissement $encaissement, GetEncaissementDetails $getEncaissementDetails): Response
     {
         $this->authorize('view', $encaissement);
 
         return Inertia::render('Backoffice/Encaissements/Show', [
             'encaissement' => $getEncaissementDetails($encaissement),
+            // UI convenience only — the real gate is the route's
+            // `permission:payments.detach` plus authorize() in detach() (§5).
+            'canDetach' => $request->user()?->can('payments.detach') ?? false,
         ]);
+    }
+
+    /**
+     * Detaches ONE payment from its fee, from that payment's Show page — the
+     * per-row counterpart of convertAvance(). Nothing is deleted and no till
+     * moves; the fee simply becomes owed again and the money re-applicable.
+     *
+     * Super-admin only (`payments.detach`, superAdminOnly): it rewrites what
+     * a student is billed without any money changing hands.
+     */
+    public function detach(Request $request, Encaissement $encaissement, DetacherEncaissementDuFrais $action): RedirectResponse
+    {
+        // Explicit, on top of the route's `permission:payments.detach`
+        // (defense in depth, §16).
+        $this->authorize('update', $encaissement);
+        $this->assertContextAnneeOuverte('id');
+
+        $action->handle($encaissement);
+
+        return back()->with('success', __('Payment detached from its fee — the amount is available as an advance again.'));
     }
 
     /**

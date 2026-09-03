@@ -66,7 +66,14 @@ final class GetEncaissementDetails
                     $row = $allocation['row'];
 
                     return [
+                        // The row's own id — the Show page posts it to
+                        // encaissements.detach to unlink that single line.
+                        'id' => $row->id,
                         'reference' => $row->reference,
+                        // Only a row still attached to a fee can be detached;
+                        // a refunded one never (its money already left).
+                        'detachable' => $row->inscription_fee_id !== null
+                            && ! $row->remboursements()->exists(),
                         'frais' => ResoudreAllocationsAvance::libelle($allocation),
                         'groupe' => $allocation['kind'] === ResoudreAllocationsAvance::KIND_FRAIS
                             ? $row->fee?->inscription?->group?->nom
