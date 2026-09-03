@@ -88,7 +88,6 @@ export default function RolesIndex({ roles, search }: RolesIndexPageProps) {
                                     <th>Libellé</th>
                                     <th>Nom technique</th>
                                     <th>Permissions</th>
-                                    <th>Utilisateurs</th>
                                     <th className="text-end">Action</th>
                                 </tr>
                             }
@@ -105,9 +104,6 @@ export default function RolesIndex({ roles, search }: RolesIndexPageProps) {
                                         ) : (
                                             <span className="badge badge-soft-info">{role.permissionsCount}</span>
                                         )}
-                                    </td>
-                                    <td>
-                                        <span className="badge badge-soft-secondary">{role.usersCount}</span>
                                     </td>
                                     <td className="text-end">
                                         {role.isProtected ? (

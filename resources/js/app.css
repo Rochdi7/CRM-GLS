@@ -1582,12 +1582,36 @@ html[data-theme='dark'] .gls-payment-matrix > :not(caption) > * > * {
 .gls-absence-matrix .gls-absence-vide {
     background-color: #c8ccd0;
 }
+/* A séance with NO roll-call at all: the whole column (header included) goes
+   grey, darker than the per-cell « non pointé » grey above so the two never
+   read as the same thing — one is « this séance was never saisie », the other
+   « this student was not marked on a séance that WAS saisie ». */
+.gls-absence-matrix th.gls-absence-non-saisie,
+.gls-absence-matrix td.gls-absence-non-saisie {
+    background-color: #9aa1a9;
+    color: #f2f4f6;
+}
 /* A student whose inscription is no longer Active: kept in the matrix (past
-   attendance is history) but flagged, like the red rows of the reference CRM. */
-.gls-absence-matrix .gls-absence-inactif .gls-absence-student {
-    background-color: #e74c3c;
+   attendance is history) but flagged on the NAME cell only.
+
+   The two fills are the SAME ones « Détails paiement » uses for its own rows
+   (Components/Groups/GroupPaymentMatrix.tsx ROW_FILL), so a group reads
+   identically on both screens: grey = the enrollment moved on (Changement,
+   Expirée, Archivée), red = it was cancelled. Before 03/09/2026 every closed
+   statut was painted red here, which both disagreed with Détails paiement and
+   made a whole column of archived names look like a wall of absences next to
+   the red « A » cells. */
+.gls-absence-matrix .gls-absence-clos .gls-absence-student {
+    background-color: rgb(170, 170, 170);
+    color: #1a1a1a;
+}
+.gls-absence-matrix .gls-absence-clos .gls-absence-student a {
+    color: #1a1a1a;
+}
+.gls-absence-matrix .gls-absence-annulee .gls-absence-student {
+    background-color: rgb(246, 45, 81);
     color: #fff;
 }
-.gls-absence-matrix .gls-absence-inactif .gls-absence-student a {
+.gls-absence-matrix .gls-absence-annulee .gls-absence-student a {
     color: #fff;
 }

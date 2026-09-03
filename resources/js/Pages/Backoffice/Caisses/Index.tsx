@@ -291,6 +291,7 @@ export default function CaissesIndex({
     compteEtablissements,
     comptePermissions,
     compteFilters: initialCompteFilters,
+    globaleFilters: initialGlobaleFilters,
 }: CaissesPageProps) {
     const isLoading = useInertiaLoading();
     const availableTabs: Tab[] = [
@@ -307,6 +308,9 @@ export default function CaissesIndex({
     );
     const [compteFilters, setCompteFilters] = useState(
         initialCompteFilters ?? { compteSearch: '', compteTypeFilter: '' },
+    );
+    const [globaleFilters, setGlobaleFilters] = useState(
+        initialGlobaleFilters ?? { globaleDateFrom: '', globaleDateTo: '' },
     );
 
     // Client-side permission checks — UI convenience only (hide affordances
@@ -381,7 +385,18 @@ export default function CaissesIndex({
         });
     }
 
+    function reloadGlobale(next: Partial<typeof globaleFilters>) {
+        const merged = { ...globaleFilters, ...next };
+        setGlobaleFilters(merged);
+        router.get('/backoffice/caisses', { tab: 'globale', ...merged }, {
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+        });
+    }
+
     const transferReset = useFilterReset(transferFilters, reloadTransfers);
+    const globaleReset = useFilterReset(globaleFilters, reloadGlobale);
 
     function openCreateTransfer() {
         setEditingTransfer(null);
@@ -515,7 +530,15 @@ export default function CaissesIndex({
 
             {tab === 'ma-caisse' && canViewCaisses && journalMine && <JournalPanel scope="mine" data={journalMine} />}
 
-            {tab === 'globale' && canViewCaisses && globale && <GlobalePanel data={globale} />}
+            {tab === 'globale' && canViewCaisses && globale && (
+                <GlobalePanel
+                    data={globale}
+                    filters={globaleFilters}
+                    onFilter={reloadGlobale}
+                    onReset={globaleReset.reset}
+                    resetActive={globaleReset.active}
+                />
+            )}
 
             {tab === 'transferts' && canViewTransfers && transfers && (
                 <Card bodyClassName="p-0 py-3">

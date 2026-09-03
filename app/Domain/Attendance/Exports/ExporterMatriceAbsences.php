@@ -8,7 +8,11 @@ use App\Domain\Attendance\Queries\GetAbsencesParGroupe;
 use App\Models\Group;
 use OpenSpout\Common\Entity\Cell;
 use OpenSpout\Common\Entity\Row;
-use OpenSpout\Common\Entity\Style\Color;
+use OpenSpout\Common\Entity\Style\Border;
+use OpenSpout\Common\Entity\Style\BorderName;
+use OpenSpout\Common\Entity\Style\BorderPart;
+use OpenSpout\Common\Entity\Style\BorderStyle;
+use OpenSpout\Common\Entity\Style\BorderWidth;
 use OpenSpout\Common\Entity\Style\Style;
 use OpenSpout\Writer\XLSX\Options;
 use OpenSpout\Writer\XLSX\Writer;
@@ -16,7 +20,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * « Absence par groupe » → .xlsx. Writes the SAME matrix the page renders
- * (one row per student, one column per séance, P/Q cells) so the file can
+ * (one row per student, one column per séance, P/A cells) so the file can
  * never disagree with the screen.
  *
  * OpenSpout is already a dependency (used read-side by the legacy importer);
@@ -27,6 +31,16 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 final class ExporterMatriceAbsences
 {
+    /**
+     * Width of the « Étudiant » column, in Excel's character unit — 34.06 is
+     * the 554 px of the reference workbook. Changing it changes how the file
+     * opens for everyone, so it is a constant rather than a magic number.
+     */
+    private const float LARGEUR_NOM = 34.06;
+
+    /** A séance column holds one letter; the reference keeps them narrow. */
+    private const float LARGEUR_SEANCE = 11.0;
+
     /**
      * @param  array{seances: list<array<string, mixed>>, students: list<array<string, mixed>>, totals: array<string, int>}  $matrice
      * @param  array{dateFrom: string, dateTo: string, statutFilter: string}  $filters
@@ -47,71 +61,114 @@ final class ExporterMatriceAbsences
         $path = $temp.DIRECTORY_SEPARATOR.'absences_'.bin2hex(random_bytes(8)).'.xlsx';
 
         // OpenSpout styles are immutable — every with*() returns a new Style.
+        // The fills are the reference workbook's, which are also the screen's
+        // (app.css « Absence par groupe »): the sheet and the page must never
+        // read differently.
         $header = (new Style())
             ->withFontBold(true)
-            ->withBackgroundColor('E9ECEF');
+            ->withBackgroundColor('D9E1F2')
+            ->withBorder($this->border());
 
         $present = (new Style())
             ->withFontBold(true)
-            ->withFontColor(Color::WHITE)
-            ->withBackgroundColor('4CD964');
+            ->withBackgroundColor('4CD964')
+            ->withBorder($this->border());
 
         $absent = (new Style())
             ->withFontBold(true)
-            ->withFontColor(Color::WHITE)
-            ->withBackgroundColor('E74C3C');
+            ->withBackgroundColor('E74C3C')
+            ->withBorder($this->border());
 
-        $writer = new Writer(new Options(tempFolder: $temp));
-        $writer->openToFile($path);
+        // An empty cell is FILLED grey, never left blank: on the reference
+        // sheet a grey box means there is nothing at that spot (séance not
+        // marked, or student not enrolled yet), which a white gap would not
+        // say.
+        $vide = (new Style())
+            ->withBackgroundColor('A6A6A6')
+            ->withBorder($this->border());
 
-        // Column header: Étudiant + one numbered column per séance, then the
-        // per-student counters the page also shows.
-        $headings = ['Étudiant', 'Référence'];
+        // Name cells carry the row's statut colour, same split as the page
+        // and « Détails paiement »: grey once the enrollment moved on, red
+        // for a cancellation.
+        $nomActif = (new Style())
+            ->withBackgroundColor('BFBFBF')
+            ->withBorder($this->border());
 
-        foreach ($matrice['seances'] as $seance) {
-            $headings[] = (string) $seance['numero'];
+        $nomClos = (new Style())
+            ->withBackgroundColor('AAAAAA')
+            ->withBorder($this->border());
+
+        $nomAnnule = (new Style())
+            ->withFontBold(true)
+            ->withBackgroundColor('F62D51')
+            ->withBorder($this->border());
+
+        $options = new Options(tempFolder: $temp);
+
+        // Column widths of the reference workbook: the name column is 34.06
+        // (554 px in Excel), wide enough for a full « PRENOM NOM » without
+        // wrapping, and every séance column is narrow — they hold a single
+        // letter. Columns are 1-indexed here (A = 1), so the séance columns
+        // are 2 … n+1.
+        $options->setColumnWidth(self::LARGEUR_NOM, 1);
+
+        if ($matrice['seances'] !== []) {
+            $options->setColumnWidthForRange(
+                self::LARGEUR_SEANCE,
+                2,
+                count($matrice['seances']) + 1,
+            );
         }
 
-        $headings[] = 'Présences';
-        $headings[] = 'Absences';
+        $writer = new Writer($options);
+        $writer->openToFile($path);
 
-        $writer->addRow(Row::fromValuesWithStyle($headings, $header));
-
-        // Second line spells out each column's date, so the numbers above are
-        // readable outside the app.
-        $dates = ['Date', ''];
+        // Two header rows exactly like the reference workbook: the séance
+        // NUMBER on top, its DATE directly underneath, and « Étudiant » as
+        // the only label of the name column (the second row's first cell is
+        // left empty rather than repeating a « Date » label the reference
+        // does not have).
+        //
+        // No « Référence » / « Présences » / « Absences » columns: the
+        // reference sheet is the matrix and nothing else, and the counters
+        // are already on screen.
+        $numeros = ['Étudiant'];
+        $dates = [''];
 
         foreach ($matrice['seances'] as $seance) {
+            $numeros[] = (string) $seance['numero'];
             $dates[] = $this->formatDate((string) $seance['date']);
         }
 
-        $dates[] = '';
-        $dates[] = '';
-
+        $writer->addRow(Row::fromValuesWithStyle($numeros, $header));
         $writer->addRow(Row::fromValuesWithStyle($dates, $header));
 
         foreach ($matrice['students'] as $student) {
             $marks = (array) $student['cells'];
+            $statut = (string) $student['inscriptionStatut'];
+            $actif = (bool) $student['actif'];
+
             $cells = [
-                Cell::fromValue(mb_strtoupper("{$student['prenom']} {$student['nom']}")),
-                Cell::fromValue((string) ($student['reference'] ?? '')),
+                Cell::fromValue(
+                    mb_strtoupper("{$student['prenom']} {$student['nom']}"),
+                    $actif ? $nomActif : ($statut === 'Annulée' ? $nomAnnule : $nomClos),
+                ),
             ];
 
-            // Each P/Q carries its own green/red fill, so the sheet reads
-            // like the screen rather than as a wall of letters.
+            // Each P/A carries its own green/red fill, so the sheet reads
+            // like the screen rather than as a wall of letters; a séance
+            // nobody pointed is grey for EVERY student, like its greyed
+            // column on the page.
             foreach ($matrice['seances'] as $seance) {
-                $mark = $marks[(string) $seance['id']] ?? null;
+                $mark = ($seance['saisie'] ?? true) ? ($marks[(string) $seance['id']] ?? null) : null;
 
                 $cells[] = $mark === null
-                    ? Cell::fromValue('')
+                    ? Cell::fromValue('', $vide)
                     : Cell::fromValue(
                         (string) $mark['lettre'],
                         $mark['lettre'] === GetAbsencesParGroupe::CELL_PRESENT ? $present : $absent,
                     );
             }
-
-            $cells[] = Cell::fromValue((int) $student['presents']);
-            $cells[] = Cell::fromValue((int) $student['absents']);
 
             $writer->addRow(new Row($cells));
         }
@@ -147,6 +204,17 @@ final class ExporterMatriceAbsences
         $window = trim(($filters['dateFrom'] ?: '').'_'.($filters['dateTo'] ?: ''), '_');
 
         return trim("absences_{$slug}".($window !== '' ? "_{$window}" : ''), '-_').'.xlsx';
+    }
+
+    /** Thin grey grid around every cell, like the reference workbook. */
+    private function border(): Border
+    {
+        return new Border(
+            new BorderPart(BorderName::TOP, '808080', BorderWidth::THIN, BorderStyle::SOLID),
+            new BorderPart(BorderName::RIGHT, '808080', BorderWidth::THIN, BorderStyle::SOLID),
+            new BorderPart(BorderName::BOTTOM, '808080', BorderWidth::THIN, BorderStyle::SOLID),
+            new BorderPart(BorderName::LEFT, '808080', BorderWidth::THIN, BorderStyle::SOLID),
+        );
     }
 
     private function formatDate(string $date): string

@@ -81,6 +81,10 @@ final class RolesAndPermissionsSeederTest extends TestCase
                 // affectes par Store/UpdateSalleRequest. `rooms.delete`
                 // reste super-admin.
                 'rooms.view', 'rooms.create', 'rooms.update',
+                // Gestion des rapports : base commune a TOUS les roles
+                // (PermissionRegistry::defaultForEveryRole()) — un rapport
+                // imprime une liste que son lecteur peut deja ouvrir.
+                'reports.view',
             ],
             $teacher->permissions()->pluck('name')->all(),
         );
@@ -435,6 +439,57 @@ final class RolesAndPermissionsSeederTest extends TestCase
      * corriger l'enseignant d'un groupe sans pouvoir renommer le groupe,
      * changer sa salle ou toucher ses frais.
      */
+    /**
+     * « Gestion des rapports » est accessible à TOUS les rôles par défaut
+     * (demande métier). Ce n'est pas un privilège : un rapport ne fait
+     * qu'IMPRIMER une liste que son lecteur peut déjà ouvrir, et il reste
+     * borné par les « Centres affectés » et le contexte actif — la requête
+     * Domain applique les deux (RapportInscriptionsTest couvre la portée).
+     *
+     * La garantie est structurelle, pas recopiée : `matrix()` ajoute
+     * `defaultForEveryRole()` à chaque preset. Deux rôles écrits à la main
+     * (marketing-manager, teacher) n'héritent d'aucune base commune et
+     * l'avaient donc manquée — d'où ce test, qui vaut aussi pour le prochain
+     * rôle ajouté.
+     */
+    public function test_every_role_can_open_the_reports_screen(): void
+    {
+        foreach (PermissionRegistry::roles() as $name => $label) {
+            if ($name === Role::SUPER_ADMIN) {
+                continue; // Gate::before bypass — holds no explicit permission.
+            }
+
+            $this->assertTrue(
+                Role::findByName($name)->hasPermissionTo('reports.view'),
+                "Le rôle {$name} doit pouvoir consulter les rapports.",
+            );
+        }
+    }
+
+    /**
+     * « Par défaut pour tous » décide d'où PART un preset, jamais de ce qu'un
+     * administrateur peut changer ensuite : la permission doit rester
+     * attribuable/révocable depuis les écrans Rôles et Autorisations. Si elle
+     * cessait de l'être, elle deviendrait un droit câblé en dur — l'inverse de
+     * la demande (« contrôlable depuis les permissions »).
+     */
+    public function test_the_default_baseline_stays_grantable_and_revocable(): void
+    {
+        foreach (PermissionRegistry::defaultForEveryRole() as $permission) {
+            $this->assertContains(
+                $permission,
+                PermissionRegistry::grantable(),
+                "{$permission} doit rester pilotable depuis l'écran des permissions.",
+            );
+
+            $this->assertNotContains(
+                $permission,
+                PermissionRegistry::superAdminOnly(),
+                "{$permission} ne peut pas être à la fois donné à tous et réservé au super-admin.",
+            );
+        }
+    }
+
     public function test_every_role_can_change_a_group_teacher(): void
     {
         foreach (PermissionRegistry::roles() as $name => $label) {

@@ -167,7 +167,7 @@ final class SeanceController extends Controller
 
     /**
      * « Absence par groupe » tab — the presence MATRIX of one group: students
-     * in rows, the séances of the date window in columns, P/Q in the cells.
+     * in rows, the séances of the date window in columns, P/A in the cells.
      * Read-only, so no pagination and no context WRITE guard; the group is
      * still scoped by centre reach + active context inside the query.
      */

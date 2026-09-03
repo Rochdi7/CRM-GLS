@@ -136,12 +136,73 @@ final class AbsenceParGroupeTest extends TestCase
                 ->where('matrice.students.0.presents', 1)
                 ->where('matrice.students.0.absents', 1)
                 ->where("matrice.students.0.cells.{$s1->id}.lettre", 'P')
-                ->where("matrice.students.0.cells.{$s2->id}.lettre", 'Q')
+                ->where("matrice.students.0.cells.{$s2->id}.lettre", 'A')
                 // Bob was late on s1 (P) and never marked on s2 (no cell).
                 ->where("matrice.students.1.cells.{$s1->id}.lettre", 'P')
                 ->where('matrice.students.1.presents', 1)
                 ->where('matrice.totals.presents', 2)
                 ->where('matrice.totals.absents', 1)
+            );
+    }
+
+    /**
+     * A séance carrying NO roll-call at all is flagged `saisie = false`, which
+     * the page uses to grey its WHOLE column. Same definition the rest of the
+     * app uses for an untreated séance (SeanceController@destroy). A séance
+     * that WAS pointed stays `saisie = true` even for the students who have no
+     * cell on it — that is an individual gap, not a missing day.
+     */
+    public function test_a_seance_with_no_attendance_at_all_is_flagged_unsaisie(): void
+    {
+        $alice = $this->enrollStudent('Alice');
+        $this->enrollStudent('Bob');
+
+        $pointee = $this->makeSeance('2026-03-02');
+        $vide = $this->makeSeance('2026-03-04');
+
+        // Only Alice is marked on the first séance: Bob's missing cell must
+        // NOT make the column count as unsaisie.
+        Presence::create(['seance_id' => $pointee->id, 'student_id' => $alice->id, 'statut' => Presence::STATUT_PRESENT]);
+
+        $this->actingAs($this->userWith('attendance.view'))
+            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $this->group->id]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->count('matrice.seances', 2)
+                ->where('matrice.seances.0.id', $pointee->id)
+                ->where('matrice.seances.0.saisie', true)
+                ->where('matrice.seances.1.id', $vide->id)
+                ->where('matrice.seances.1.saisie', false)
+            );
+    }
+
+    /**
+     * Row order mirrors « Détails paiement »
+     * (GetGroupPaymentMatrix::STATUT_ORDRE): the statut block wins, then the
+     * full name inside it. Reading the same group on the two screens must
+     * never give two different orders.
+     */
+    public function test_rows_are_ordered_by_statut_block_then_alphabetically(): void
+    {
+        $this->enrollStudent('Zoe');
+        $this->enrollStudent('Adam', Inscription::STATUT_ANNULEE);
+        $this->enrollStudent('Bruno');
+        $this->enrollStudent('Yves', Inscription::STATUT_CHANGEMENT);
+
+        $this->makeSeance('2026-03-02');
+
+        $this->actingAs($this->userWith('attendance.view'))
+            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $this->group->id]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->count('matrice.students', 4)
+                // Active first, alphabetically…
+                ->where('matrice.students.0.prenom', 'Bruno')
+                ->where('matrice.students.1.prenom', 'Zoe')
+                // …then Changement, then Annulée — never interleaved, even
+                // though "Adam" would sort first in a flat alphabetical list.
+                ->where('matrice.students.2.prenom', 'Yves')
+                ->where('matrice.students.3.prenom', 'Adam')
             );
     }
 

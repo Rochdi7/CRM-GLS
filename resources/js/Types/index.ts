@@ -1481,6 +1481,24 @@ export interface CaisseGlobaleData {
     /** The accounts of each kind, keyed by Caisse type. */
     comptes: Record<string, Array<{ id: number; nom: string; centre: string | null; responsable: string | null; solde: MoneyDisplay; showUrl: string }>>;
     total: MoneyDisplay;
+    /**
+     * The day every figure above is a balance AS OF (yyyy-mm-dd), or null when
+     * no « Date de fin » filter is set and the figures are today's stored
+     * soldes. The date window rewinds the balances, it never sums a period —
+     * see GetCaisseGlobale's docblock.
+     */
+    asOf: string | null;
+    /**
+     * First day the CaisseLedger journal can answer for (yyyy-mm-dd), or null
+     * when the journal is empty. A rewind older than this is impossible.
+     */
+    journalDepuis: string | null;
+    /**
+     * True when the requested « Date de fin » predates journalDepuis: the
+     * rewind was NOT performed (it would have printed 0.00 DH for every
+     * account) and the figures above are today's stored soldes.
+     */
+    avantJournal: boolean;
 }
 
 /**
@@ -1599,6 +1617,8 @@ export interface CaissesPageProps {
     compteEtablissements: { id: number; nom: string }[];
     comptePermissions: CrudPermissions;
     compteFilters: { compteSearch: string; compteTypeFilter: string };
+    /** « Caisse globale » date window; globaleDateTo rewinds the balances to that day. */
+    globaleFilters: { globaleDateFrom: string; globaleDateTo: string };
     [key: string]: unknown;
 }
 
@@ -2121,5 +2141,42 @@ export interface AuditLogPageProps {
 
 export interface AuditLogShowPageProps {
     entry: AuditLogRow;
+    [key: string]: unknown;
+}
+
+// --- Gestion des rapports --------------------------------------------------
+
+/** Un rapport proposé par le sélecteur « Rapport » d'un onglet. */
+export interface RapportOption {
+    value: string;
+    label: string;
+}
+
+/**
+ * Un domaine du catalogue serveur (RapportCatalogue). `rapports` vide = domaine
+ * prévu mais sans rapport implémenté ; la page aplatit tous les domaines en un
+ * seul sélecteur, donc un domaine vide n'apparaît simplement pas.
+ */
+export interface RapportOnglet {
+    key: string;
+    label: string;
+    rapports: RapportOption[];
+}
+
+export interface RapportFilters {
+    rapport: string;
+    groupFilter: string;
+    statutFilter: string;
+    dateFrom: string;
+    dateTo: string;
+}
+
+export interface RapportsPageProps {
+    onglets: RapportOnglet[];
+    filters: RapportFilters;
+    groupOptions: SelectOption[];
+    statutOptions: SelectOption[];
+    /** Nombre de lignes que le document contiendra avec les filtres courants. */
+    nombreLignes: number;
     [key: string]: unknown;
 }

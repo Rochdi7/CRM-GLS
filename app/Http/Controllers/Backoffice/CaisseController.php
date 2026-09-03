@@ -76,6 +76,12 @@ final class CaisseController extends Controller
         $typeFilter = (string) $request->string('typeFilter');
         $compteSearch = (string) $request->string('compteSearch');
         $compteTypeFilter = (string) $request->string('compteTypeFilter');
+        // « Caisse globale » date window. dateTo REWINDS the balances to that
+        // day (GetCaisseGlobale rebuilds them from the journal); dateFrom is
+        // the readable other half of the window — see that query's docblock
+        // for why a period SUM would be the wrong figure here.
+        $globaleDateFrom = (string) $request->string('globaleDateFrom');
+        $globaleDateTo = (string) $request->string('globaleDateTo');
 
         // The transfer modal's fixed source: the acting employee's OWN till
         // (even super-admins transfer from their own till — the source is
@@ -104,8 +110,12 @@ final class CaisseController extends Controller
             // (physical tills, TPE, bank, cheques, external); same permission
             // as the journal, same centre scope as its 'all' mode.
             'globale' => $canViewCaisses && $tab === 'globale'
-                ? $getCaisseGlobale($user)
+                ? $getCaisseGlobale($user, ['dateFrom' => $globaleDateFrom, 'dateTo' => $globaleDateTo])
                 : null,
+            'globaleFilters' => [
+                'globaleDateFrom' => $globaleDateFrom,
+                'globaleDateTo' => $globaleDateTo,
+            ],
             'transfers' => $transfersList['data'] ?? null,
             // Montant over the WHOLE filtered set, not the visible page — the
             // React page used to sum its own rows, so the figure moved on

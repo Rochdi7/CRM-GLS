@@ -709,14 +709,14 @@ final class InscriptionsInertiaCrudTest extends TestCase
         $this->assertSame($originalGroup->id, $inscription->fresh()->group_id);
     }
 
-    // --- update-statut (row-menu "Annuler"/"Réactiver") ------------------
+    // --- update-statut (row-menu "Réactiver"/"Marquer comme Changement") --
 
     /**
-     * "Changement" is deliberately NOT reachable through this endpoint —
-     * only the dedicated changeGroup() flow (which also migrates fees and
-     * creates a replacement Active inscription) may set that status.
+     * Only « Active » and « Changement » are reachable through this endpoint;
+     * every other value is refused outright, so no status can be written by
+     * hand behind the flows that own it (archivage, expiration).
      */
-    public function test_update_statut_rejects_changement_as_a_target(): void
+    public function test_update_statut_rejects_an_unreachable_target_statut(): void
     {
         $this->actingAs($this->userWith('registrations.view', 'registrations.update'));
         $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
@@ -728,7 +728,7 @@ final class InscriptionsInertiaCrudTest extends TestCase
         ]);
 
         $this->patch(route('backoffice.inscriptions.update-statut', $inscription), [
-            'statut' => 'Changement',
+            'statut' => 'Archivée',
         ])->assertStatus(422);
 
         $this->assertSame('Active', $inscription->fresh()->statut);
@@ -803,6 +803,49 @@ final class InscriptionsInertiaCrudTest extends TestCase
         $this->patch(route('backoffice.inscriptions.update-statut', $inscription), [
             'statut' => 'Active',
         ])->assertRedirect(route('backoffice.inscriptions.index'));
+
+        $this->assertSame('Active', $inscription->fresh()->statut);
+    }
+
+    /**
+     * « Marquer comme Changement » (03/09/2026) : la correction d'étiquette
+     * d'un changement de groupe fait à la main. Elle n'est acceptée QUE depuis
+     * « Annulée », n'écrit que le statut, et est refusée depuis « Active » —
+     * sinon elle deviendrait un raccourci vers changeGroup() sans successeur
+     * ni migration de frais.
+     */
+    public function test_update_statut_marks_a_cancelled_inscription_as_changement(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.update'));
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $group = $this->makeGroup();
+        $inscription = Inscription::create([
+            'reference' => 'INS-MARK-CHG', 'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => 'Annulée', 'date_inscription' => '2025-09-15',
+        ]);
+
+        $this->patch(route('backoffice.inscriptions.update-statut', $inscription), [
+            'statut' => 'Changement',
+        ])->assertRedirect(route('backoffice.inscriptions.index'));
+
+        $this->assertSame('Changement', $inscription->fresh()->statut);
+    }
+
+    public function test_update_statut_refuses_marking_an_active_inscription_as_changement(): void
+    {
+        $this->actingAs($this->userWith('registrations.view', 'registrations.update'));
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $group = $this->makeGroup();
+        $inscription = Inscription::create([
+            'reference' => 'INS-ACT-CHG', 'student_id' => $student->id, 'group_id' => $group->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => 'Active', 'date_inscription' => '2025-09-15',
+        ]);
+
+        $this->from(route('backoffice.inscriptions.index'))
+            ->patch(route('backoffice.inscriptions.update-statut', $inscription), ['statut' => 'Changement'])
+            ->assertSessionHasErrors('statut');
 
         $this->assertSame('Active', $inscription->fresh()->statut);
     }

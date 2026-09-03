@@ -479,9 +479,16 @@ export default function InscriptionsIndex({
         return Number.isInteger(value) ? String(value) : value.toFixed(2);
     }
     const [showFeesDetails, setShowFeesDetails] = useState(false);
-    // Reactivation only (Annulée/Changement -> Active). Cancelling has its own
-    // form modal below — it needs a reason, an end date and a fee decision.
-    const [statutTarget, setStatutTarget] = useState<{ inscription: InscriptionRow; statut: 'Active' } | null>(null);
+    // Manual statut corrections on a CLOSED row: reactivation
+    // (Annulée/Changement -> Active) and the étiquette fix
+    // (Annulée -> Changement, when the group move was done by hand and the old
+    // row should read « Changement » instead of « Annulée »). Cancelling has
+    // its own form modal below — it needs a reason, an end date and a fee
+    // decision — and « Changement » here writes ONLY the statut: migrating the
+    // fees and creating the successor row stays « Changement de groupe ».
+    const [statutTarget, setStatutTarget] = useState<
+        { inscription: InscriptionRow; statut: 'Active' | 'Changement' } | null
+    >(null);
     const [cancelTarget, setCancelTarget] = useState<InscriptionRow | null>(null);
     const [statutError, setStatutError] = useState<string | undefined>(undefined);
     const [statutProcessing, setStatutProcessing] = useState(false);
@@ -1137,7 +1144,7 @@ export default function InscriptionsIndex({
         });
     }
 
-    function confirmStatutChange(inscription: InscriptionRow, statut: 'Active') {
+    function confirmStatutChange(inscription: InscriptionRow, statut: 'Active' | 'Changement') {
         setStatutTarget({ inscription, statut });
         setStatutError(undefined);
     }
@@ -1402,12 +1409,43 @@ export default function InscriptionsIndex({
 
                                             <RowActionDivider />
 
-                                            {inscription.statut === 'Active' ? (
+                                            {inscription.statut === 'Active' && (
                                                 <RowActionItem icon="ti-x" danger onClick={() => openCancel(inscription)}>
                                                     Annuler
                                                 </RowActionItem>
-                                            ) : (
-                                                <RowActionItem icon="ti-refresh" onClick={() => confirmStatutChange(inscription, 'Active')}>
+                                            )}
+
+                                            {/* Corrections manuelles de statut : proposées sur une
+                                                inscription « Annulée » uniquement. « Marquer comme
+                                                Changement » n'écrit QUE le statut (aucun frais migré,
+                                                aucune inscription successeur) — c'est la correction
+                                                d'étiquette d'un changement de groupe fait à la main,
+                                                jamais un raccourci vers « Changement de groupe ». */}
+                                            {inscription.statut === 'Annulée' && (
+                                                <>
+                                                    <RowActionItem
+                                                        icon="ti-refresh"
+                                                        onClick={() => confirmStatutChange(inscription, 'Active')}
+                                                    >
+                                                        Réactiver
+                                                    </RowActionItem>
+                                                    <RowActionItem
+                                                        icon="ti-replace"
+                                                        onClick={() => confirmStatutChange(inscription, 'Changement')}
+                                                    >
+                                                        Marquer comme Changement
+                                                    </RowActionItem>
+                                                </>
+                                            )}
+
+                                            {/* Une inscription « Changement » revient à Active : son
+                                                successeur a pu être annulé, c'est alors la seule
+                                                ligne à réveiller (garde serveur DB-08). */}
+                                            {inscription.statut === 'Changement' && (
+                                                <RowActionItem
+                                                    icon="ti-refresh"
+                                                    onClick={() => confirmStatutChange(inscription, 'Active')}
+                                                >
                                                     Réactiver
                                                 </RowActionItem>
                                             )}
@@ -2750,13 +2788,21 @@ export default function InscriptionsIndex({
 
             <ConfirmDialog
                 show={statutTarget !== null}
-                title="Réactiver l'inscription"
+                title={
+                    statutTarget?.statut === 'Changement'
+                        ? 'Marquer comme Changement'
+                        : "Réactiver l'inscription"
+                }
                 recordLabel={statutTarget?.inscription.reference ?? ''}
-                message="Voulez-vous vraiment réactiver cette inscription ?"
-                icon="ti-refresh"
+                message={
+                    statutTarget?.statut === 'Changement'
+                        ? 'Le statut passera de « Annulée » à « Changement ». Aucun frais n’est déplacé et aucune inscription de remplacement n’est créée : utilisez « Changement de groupe » pour cela.'
+                        : 'Voulez-vous vraiment réactiver cette inscription ?'
+                }
+                icon={statutTarget?.statut === 'Changement' ? 'ti-replace' : 'ti-refresh'}
                 variant="primary"
-                confirmLabel="Oui, réactiver"
-                processingLabel="Réactivation…"
+                confirmLabel={statutTarget?.statut === 'Changement' ? 'Oui, marquer' : 'Oui, réactiver'}
+                processingLabel={statutTarget?.statut === 'Changement' ? 'Mise à jour…' : 'Réactivation…'}
                 error={statutError}
                 processing={statutProcessing}
                 onConfirm={handleStatutChange}

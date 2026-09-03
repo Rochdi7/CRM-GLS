@@ -33,6 +33,7 @@ use App\Http\Controllers\Backoffice\InscriptionController;
 use App\Http\Controllers\Backoffice\MotifAnnulationController;
 use App\Http\Controllers\Backoffice\PermissionController;
 use App\Http\Controllers\Backoffice\ProfileController;
+use App\Http\Controllers\Backoffice\RapportController;
 use App\Http\Controllers\Backoffice\RecouvrementController;
 use App\Http\Controllers\Backoffice\RemboursementController;
 use App\Http\Controllers\Backoffice\Roles\RoleController;
@@ -515,6 +516,18 @@ Route::prefix('backoffice')
             // durée" / "Retards selon les critères") share the same query.
             Route::get('recouvrement', [RecouvrementController::class, 'index'])
                 ->middleware('permission:collections.view')->name('recouvrement.index');
+
+            // Gestion des rapports — édition de documents (aperçu, PDF, Excel).
+            // ⚠ LECTURE SEULE : ces trois routes sont les seules du module et
+            // il ne doit jamais s'en ajouter une qui écrit. Un rapport imprime
+            // ce que l'utilisateur peut déjà consulter — même portée (centres
+            // affectés + contexte actif), appliquée dans la requête Domain.
+            Route::get('rapports', [RapportController::class, 'index'])
+                ->middleware('permission:reports.view')->name('rapports.index');
+            Route::get('rapports/pdf', [RapportController::class, 'pdf'])
+                ->middleware('permission:reports.view')->name('rapports.pdf');
+            Route::get('rapports/excel', [RapportController::class, 'excel'])
+                ->middleware('permission:reports.view')->name('rapports.excel');
 
             // Avances — unallocated advances (no fee attached, see
             // Encaissement::isAvance()). A create route (fresh money, no

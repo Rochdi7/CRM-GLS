@@ -1,8 +1,23 @@
 import { useState } from 'react';
 import Card from '@/Components/Shared/Card';
+import DateField from '@/Components/Forms/DateField';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
+import TableToolbar from '@/Components/Tables/TableToolbar';
 import type { CaisseGlobaleData } from '@/Types';
+
+export interface GlobaleFilters {
+    globaleDateFrom: string;
+    globaleDateTo: string;
+}
+
+interface GlobalePanelProps {
+    data: CaisseGlobaleData;
+    filters: GlobaleFilters;
+    onFilter: (next: Partial<GlobaleFilters>) => void;
+    onReset: () => void;
+    resetActive: boolean;
+}
 
 /**
  * « Caisse globale » — where the money of the active centre is: one card
@@ -10,6 +25,19 @@ import type { CaisseGlobaleData } from '@/Types';
  * « Externe » kind is hidden for now, see GetCaisseGlobale::LABELS) and, under the selected card, every account of that kind with its
  * stored solde. Mirrors GetCaisseGlobale; every figure is an account's own
  * CaisseLedger balance — nothing is derived, nothing is counted twice.
+ *
+ * The date window REWINDS those balances rather than summing a period: with
+ * « Date de fin » set, all four cards and their accounts show what they HELD
+ * at the end of that day (GetCaisseGlobale::soldesAt rebuilds it from the
+ * journal).
+ *
+ * No « soldes tels qu'ils étaient le … » banner is drawn — asked for on
+ * 03/09/2026, the date filter speaks for itself. The safety it used to carry
+ * lives server-side instead: a « Date de fin » older than the journal's first
+ * entry (GetCaisseGlobale::journalDepuis — 26/08/2026, when CaisseLedger was
+ * introduced) performs NO rewind at all, because subtracting every known
+ * movement printed 0.00 DH for tills that held money. Never reinstate a
+ * client-side rewind or a zero fallback here.
  */
 const CARD_BG: Record<string, string> = {
     'Caissière': 'bg-primary',
@@ -19,13 +47,36 @@ const CARD_BG: Record<string, string> = {
     Externe: 'bg-warning',
 };
 
-export default function GlobalePanel({ data }: { data: CaisseGlobaleData }) {
+export default function GlobalePanel({ data, filters, onFilter, onReset, resetActive }: GlobalePanelProps) {
     const [active, setActive] = useState<string>(data.cards[0]?.type ?? '');
     const rows = data.comptes[active] ?? [];
     const activeCard = data.cards.find((c) => c.type === active);
 
     return (
         <>
+            <TableToolbar onReset={onReset} resetActive={resetActive}>
+                <div style={{ width: 190 }}>
+                    <label className="form-label" htmlFor="caisse-globale-date-from">
+                        Date de début
+                    </label>
+                    <DateField
+                        id="caisse-globale-date-from"
+                        value={filters.globaleDateFrom}
+                        onChange={(event) => onFilter({ globaleDateFrom: event.target.value })}
+                    />
+                </div>
+                <div style={{ width: 190 }}>
+                    <label className="form-label" htmlFor="caisse-globale-date-to">
+                        Date de fin
+                    </label>
+                    <DateField
+                        id="caisse-globale-date-to"
+                        value={filters.globaleDateTo}
+                        onChange={(event) => onFilter({ globaleDateTo: event.target.value })}
+                    />
+                </div>
+            </TableToolbar>
+
             <div className="row">
                 {data.cards.map((card) => (
                     <div className="col-md-6 col-xl mb-3" key={card.type}>

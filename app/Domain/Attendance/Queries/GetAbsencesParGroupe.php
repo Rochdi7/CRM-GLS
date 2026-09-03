@@ -30,10 +30,26 @@ use Illuminate\Support\Collection;
  */
 final class GetAbsencesParGroupe
 {
-    /** Cell letters shown in the matrix (French: Présent / absent = Quitté). */
+    /** Cell letters shown in the matrix: Présent / Absent. */
     public const CELL_PRESENT = 'P';
 
-    public const CELL_ABSENT = 'Q';
+    public const CELL_ABSENT = 'A';
+
+    /**
+     * Row order, IDENTICAL to « Détails paiement »
+     * (Groups\Queries\GetGroupPaymentMatrix::STATUT_ORDRE) so the same group
+     * reads in the same order on both screens: active students first, then
+     * the closed blocks, alphabetically inside each block. A statut absent
+     * from this map sorts after every known one, never interleaved with the
+     * active students.
+     */
+    private const STATUT_ORDRE = [
+        Inscription::STATUT_ACTIVE => 0,
+        Inscription::STATUT_CHANGEMENT => 1,
+        Inscription::STATUT_EXPIREE => 2,
+        Inscription::STATUT_ARCHIVEE => 3,
+        Inscription::STATUT_ANNULEE => 4,
+    ];
 
     public function __construct(
         private readonly CenterAccessService $centerAccess,
@@ -68,6 +84,11 @@ final class GetAbsencesParGroupe
 
         $built = $this->students($groupId, $presences, $filters);
 
+        // Séance ids carrying at least one pointage, resolved once — a
+        // ->where() per column would rescan the whole présence collection for
+        // every séance of the window.
+        $seancesSaisies = $presences->pluck('seance_id')->unique()->flip();
+
         return [
             'seances' => $seances
                 ->values()
@@ -78,6 +99,14 @@ final class GetAbsencesParGroupe
                     'heureDebut' => $seance->heure_debut ? substr($seance->heure_debut, 0, 5) : null,
                     'heureFin' => $seance->heure_fin ? substr($seance->heure_fin, 0, 5) : null,
                     'statut' => $seance->statut,
+                    // No roll-call AT ALL on this séance — the same test the
+                    // rest of the app uses to call a séance untreated
+                    // (SeanceController@destroy: « Effectuée OR has
+                    // presences » = traitée). The page greys the WHOLE column
+                    // for these, so an unmarked séance is visible as one
+                    // missing day rather than as a scatter of empty cells that
+                    // read like « that student wasn't there ».
+                    'saisie' => $seancesSaisies->has($seance->id),
                 ])
                 ->all(),
             'students' => $built['students'],
@@ -119,6 +148,15 @@ final class GetAbsencesParGroupe
      * @param  array{dateFrom: string, dateTo: string, statutFilter: string}  $filters
      * @return array{students: list<array<string, mixed>>, totals: array<string, int>}
      */
+    /**
+     * Position of a statut's block, with unknown values pushed past every
+     * known one — mirrors GetGroupPaymentMatrix::rangStatut().
+     */
+    private function rangStatut(string $statut): int
+    {
+        return self::STATUT_ORDRE[$statut] ?? count(self::STATUT_ORDRE);
+    }
+
     private function students(int $groupId, Collection $presences, array $filters): array
     {
         $byStudent = $presences->groupBy('student_id');
@@ -135,8 +173,18 @@ final class GetAbsencesParGroupe
 
         $totals = $this->emptyTotals();
 
+        // Same two-level order as « Détails paiement »: statut block first,
+        // then the student's full name inside it (strcoll, like
+        // GetGroupPaymentMatrix::sortRows, so accented names collate the same
+        // way on both screens).
         $students = $inscriptions
-            ->sortBy(fn (Inscription $i): string => mb_strtolower("{$i->student->prenom} {$i->student->nom}"))
+            ->sort(function (Inscription $a, Inscription $b): int {
+                $bloc = $this->rangStatut($a->statut) <=> $this->rangStatut($b->statut);
+
+                return $bloc !== 0
+                    ? $bloc
+                    : strcoll($a->student->nomComplet(), $b->student->nomComplet());
+            })
             ->values()
             ->map(function (Inscription $inscription) use ($byStudent, &$totals): array {
                 $student = $inscription->student;

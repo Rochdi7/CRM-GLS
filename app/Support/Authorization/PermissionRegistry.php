@@ -233,6 +233,15 @@ final class PermissionRegistry
             'Recouvrement' => [
                 'collections.view' => 'Consulter la gestion des recouvrements',
             ],
+            // Gestion des rapports — un SEUL droit, de lecture, qui ouvre la
+            // page et ses téléchargements (PDF / Excel). Un rapport ne fait
+            // qu'imprimer ce que l'utilisateur peut déjà consulter : la portée
+            // reste celle des « Centres affectés » + du contexte actif, comme
+            // toute autre liste. Pas de `.create/.update/.delete` : il n'y a
+            // rien à écrire.
+            'Rapports' => [
+                'reports.view' => 'Consulter et télécharger les rapports',
+            ],
             // Deliberately absent from every role in matrix() below — only
             // the Gate::before super-admin bypass may flip system switches.
             'Système' => [
@@ -538,11 +547,19 @@ final class PermissionRegistry
      * the day a delete is deliberately delegated, it is one line removed
      * from `superAdminOnly()`, not a re-audit of thirteen roles.
      *
+     * Symmetrically, every preset RECEIVES `defaultForEveryRole()`, so a
+     * baseline ability is granted in one place instead of being copied into
+     * thirteen hand-written lists (where the next one added would miss it —
+     * exactly what happened to `reports.view`, absent from `marketing-manager`
+     * and `teacher` because both are built by hand rather than from
+     * `$operations`).
+     *
      * @return array<string, list<string>>
      */
     public static function matrix(): array
     {
         $forbidden = array_flip(self::superAdminOnly());
+        $baseline = self::defaultForEveryRole();
 
         $presets = self::presets();
 
@@ -552,12 +569,41 @@ final class PermissionRegistry
             }
 
             $presets[$role] = array_values(array_filter(
-                array_unique($permissions),
+                array_unique([...$permissions, ...$baseline]),
                 static fn (string $p): bool => ! isset($forbidden[$p]) && self::exists($p),
             ));
         }
 
         return $presets;
+    }
+
+    /**
+     * Abilities EVERY role holds by default — the mirror image of
+     * `superAdminOnly()`.
+     *
+     * These are granted to every preset by `matrix()`, so they need not be
+     * repeated in each job description. They remain ordinary permissions: a
+     * super-admin can still revoke one from a role on the Rôles screen, or
+     * from a single user on the Autorisations screen. « Par défaut pour tous »
+     * decides where the preset STARTS, never what an administrator may change
+     * afterwards — the whole point of putting it behind a permission.
+     *
+     * ⚠ Only put an ability here when it grants nothing beyond what its holder
+     * can already reach. `reports.view` qualifies: a report merely PRINTS a
+     * list the user could already open, and stays bounded by « Centres
+     * affectés » and the active context (the Domain query applies both). It is
+     * a read, it moves no money, and it writes nothing.
+     *
+     * @return list<string>
+     */
+    public static function defaultForEveryRole(): array
+    {
+        return [
+            // Gestion des rapports — demande métier : accessible à tous les
+            // rôles d'emblée, tout en restant pilotable depuis l'écran des
+            // permissions.
+            'reports.view',
+        ];
     }
 
     /**

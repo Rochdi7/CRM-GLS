@@ -185,6 +185,23 @@ export const backofficeNavigation: NavGroup[] = [
         ],
     },
     {
+        // Gestion des rapports — sa PROPRE section, et non un item de
+        // « Gestion financière » : ses onglets couvrent tous les modules
+        // (Inscriptions, Finance & Paiements, Caisse, Dépenses, Vie scolaire,
+        // Employés), donc le ranger sous la finance mentirait sur sa portée.
+        label: t('Reports'),
+        items: [
+            {
+                label: t('Reports management'),
+                href: '/backoffice/rapports',
+                icon: 'ti ti-file-text',
+                permissions: ['reports.view'],
+                matchPaths: ['/backoffice/rapports'],
+                inertia: true,
+            },
+        ],
+    },
+    {
         label: t('Configuration'),
         items: [
             {

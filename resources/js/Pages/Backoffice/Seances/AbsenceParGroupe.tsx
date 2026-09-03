@@ -1,8 +1,6 @@
-import { useState } from 'react';
 import { Link, router } from '@inertiajs/react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
-import Modal from '@/Components/Modals/Modal';
 import SelectField from '@/Components/Forms/SelectField';
 import DateField from '@/Components/Forms/DateField';
 import TableToolbar from '@/Components/Tables/TableToolbar';
@@ -20,11 +18,13 @@ interface MatriceSeance {
     heureDebut: string | null;
     heureFin: string | null;
     statut: string;
+    /** False when the séance carries NO roll-call at all — its whole column is greyed. */
+    saisie: boolean;
 }
 
 interface MatriceCell {
     statut: string;
-    lettre: 'P' | 'Q';
+    lettre: 'P' | 'A';
     note: string | null;
 }
 
@@ -65,8 +65,49 @@ function formatDate(date: string): string {
 }
 
 /**
+ * Column tooltip, in the reference CRM's wording:
+ * « 01/07/2026 de 19:00 à 21:30 ». The hours are dropped when the séance has
+ * none, and a séance nobody pointed says so — that is what its grey column
+ * means.
+ */
+function seanceTitle(seance: MatriceSeance): string {
+    const quand =
+        seance.heureDebut && seance.heureFin
+            ? `${formatDate(seance.date)} de ${seance.heureDebut} à ${seance.heureFin}`
+            : seance.heureDebut
+              ? `${formatDate(seance.date)} à ${seance.heureDebut}`
+              : formatDate(seance.date);
+
+    return seance.saisie ? quand : `${quand} — absence non saisie`;
+}
+
+/**
+ * Name-cell fill per inscription statut — the SAME split « Détails paiement »
+ * uses (Components/Groups/GroupPaymentMatrix.tsx ROW_FILL): grey once the
+ * enrollment has moved on, red only for a cancellation, nothing while it is
+ * Active. Keyed on the statut rather than on the `actif` boolean so the two
+ * screens can never drift apart; an unknown statut falls back to grey (closed
+ * but not cancelled), never to red.
+ */
+const ROW_CLASS: Record<string, string> = {
+    Active: '',
+    Changement: 'gls-absence-clos',
+    Expirée: 'gls-absence-clos',
+    Archivée: 'gls-absence-clos',
+    Annulée: 'gls-absence-annulee',
+};
+
+function rowClass(student: MatriceStudent): string {
+    if (student.actif) {
+        return '';
+    }
+
+    return ROW_CLASS[student.inscriptionStatut] ?? 'gls-absence-clos';
+}
+
+/**
  * « Absence par groupe » — the presence MATRIX of one group: students in
- * rows, the séances of the selected window in columns, one P/Q cell each.
+ * rows, the séances of the selected window in columns, one P/A cell each.
  *
  * The whole matrix is rendered at once (no pagination): it is one group over
  * one period, and the point of the screen is seeing every séance side by
@@ -87,14 +128,6 @@ export default function AbsenceParGroupe({
         );
     }
 
-    // « Fonctionnalité en test » — shown on EVERY arrival on this tab (no
-    // localStorage, no dismissal memory): the matrix is still being verified
-    // against the real registers, so every user must be told each time they
-    // open it that what they read here is not yet authoritative. Plain React
-    // state initialised to true, so an Inertia partial reload (a filter
-    // change, which keeps the component mounted) does NOT re-open it — only
-    // a real navigation to the tab does.
-    const [showTestNotice, setShowTestNotice] = useState(true);
     const filterReset = useFilterReset(filters, reload);
     const hasGroup = filters.groupFilter !== '';
     const exportUrl = `/backoffice/seances/absence-par-groupe/export?${new URLSearchParams(filters).toString()}`;
@@ -108,26 +141,6 @@ export default function AbsenceParGroupe({
                 { label: 'Absence par groupe' },
             ]}
         >
-            <Modal
-                show={showTestNotice}
-                title="Fonctionnalité en cours de test"
-                onClose={() => setShowTestNotice(false)}
-                footer={
-                    <button type="button" className="btn btn-primary" onClick={() => setShowTestNotice(false)}>
-                        J'ai compris
-                    </button>
-                }
-            >
-                <div className="text-center mb-3">
-                    <span className="avatar avatar-xl bg-warning-transparent text-warning rounded-circle">
-                        <i className="ti ti-flask fs-24" />
-                    </span>
-                </div>
-                <p className="mb-0 text-center">
-                    L'onglet <strong>« Absence par groupe »</strong> est encore en <strong>phase de test</strong>.
-                </p>
-            </Modal>
-
             <ul className="nav nav-tabs mb-3" role="tablist">
                 <li className="nav-item" role="presentation">
                     <Link href="/backoffice/seances" className="nav-link fw-medium" role="tab" aria-selected="false">
@@ -153,16 +166,6 @@ export default function AbsenceParGroupe({
                     </button>
                 </li>
             </ul>
-
-            {/* Permanent reminder once the modal is closed — the popup is
-                seen on arrival, this line keeps the caveat on screen while
-                the user actually reads the matrix. */}
-            <div className="alert alert-warning d-flex align-items-center gap-2 mb-3" role="status">
-                <i className="ti ti-flask fs-18" />
-                <span>
-                    Fonctionnalité en cours de test — une case vide signifie « séance non pointée », pas une absence.
-                </span>
-            </div>
 
             <Card bodyClassName="p-0 py-3">
                 <div className="px-3 pt-2">
@@ -263,10 +266,8 @@ export default function AbsenceParGroupe({
                                         {matrice.seances.map((seance) => (
                                             <th
                                                 key={seance.id}
-                                                className="text-center"
-                                                title={`${formatDate(seance.date)}${
-                                                    seance.heureDebut ? ` — ${seance.heureDebut}` : ''
-                                                } (${seance.statut})`}
+                                                className={`text-center${seance.saisie ? '' : ' gls-absence-non-saisie'}`}
+                                                title={seanceTitle(seance)}
                                             >
                                                 {seance.numero}
                                             </th>
@@ -275,8 +276,15 @@ export default function AbsenceParGroupe({
                                 </thead>
                                 <tbody>
                                     {matrice.students.map((student) => (
-                                        <tr key={student.id} className={student.actif ? '' : 'gls-absence-inactif'}>
-                                            <td className="gls-absence-student">
+                                        <tr key={student.id} className={rowClass(student)}>
+                                            {/* The statut is what the row's
+                                                colour means, so it is spelled
+                                                out on hover — a grey name is
+                                                otherwise unexplained. */}
+                                            <td
+                                                className="gls-absence-student"
+                                                title={student.actif ? undefined : `Inscription ${student.inscriptionStatut}`}
+                                            >
                                                 <Link
                                                     href={`/backoffice/students/${student.id}`}
                                                     className="d-flex align-items-center gap-2 text-reset"
@@ -300,25 +308,36 @@ export default function AbsenceParGroupe({
                                             {matrice.seances.map((seance) => {
                                                 const cell = student.cells[String(seance.id)];
 
+                                                // A séance nobody pointed greys
+                                                // its WHOLE column (header
+                                                // included), so it reads as one
+                                                // missing day rather than as a
+                                                // column of blanks that each
+                                                // look like an individual
+                                                // oversight.
                                                 return (
                                                     <td
                                                         key={seance.id}
                                                         className={`text-center gls-absence-cell${
-                                                            cell
-                                                                ? cell.lettre === 'P'
-                                                                    ? ' gls-absence-present'
-                                                                    : ' gls-absence-absent'
-                                                                : ' gls-absence-vide'
+                                                            !seance.saisie
+                                                                ? ' gls-absence-non-saisie'
+                                                                : cell
+                                                                  ? cell.lettre === 'P'
+                                                                      ? ' gls-absence-present'
+                                                                      : ' gls-absence-absent'
+                                                                  : ' gls-absence-vide'
                                                         }`}
                                                         title={
-                                                            cell
-                                                                ? `${formatDate(seance.date)} — ${cell.statut}${
-                                                                      cell.note ? ` (${cell.note})` : ''
-                                                                  }`
-                                                                : `${formatDate(seance.date)} — non pointé`
+                                                            !seance.saisie
+                                                                ? seanceTitle(seance)
+                                                                : cell
+                                                                  ? `${formatDate(seance.date)} — ${cell.statut}${
+                                                                        cell.note ? ` (${cell.note})` : ''
+                                                                    }`
+                                                                  : `${formatDate(seance.date)} — non pointé`
                                                         }
                                                     >
-                                                        {cell?.lettre ?? ''}
+                                                        {seance.saisie ? (cell?.lettre ?? '') : ''}
                                                     </td>
                                                 );
                                             })}

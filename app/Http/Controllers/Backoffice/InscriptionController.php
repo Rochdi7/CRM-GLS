@@ -746,22 +746,30 @@ final class InscriptionController extends Controller
     }
 
     /**
-     * Quick status action from the list's row menu — "Réactiver"
-     * (Changement/Annulée -> Active, the reverse move, so a mistaken cancel
-     * doesn't require opening the full edit modal to undo).
+     * Quick status action from the list's row menu, offered on a
+     * « Annulée » row ONLY (the list hides both items otherwise):
      *
-     * Cancelling is NOT reachable here any more: Active -> Annulée now needs
-     * a reason, an end date and a decision about the leftover fee lines, so
-     * it goes through cancel() and its own form. Keeping a bare
-     * `statut=Annulée` path open would be a way to cancel with no reason
-     * recorded, which is exactly what that form exists to prevent — the
-     * value is refused outright below.
+     *  - « Réactiver »               Annulée|Changement -> Active, the reverse
+     *                                move, so a mistaken cancel doesn't require
+     *                                opening the full edit modal to undo.
+     *  - « Marquer comme Changement » Annulée -> Changement, an étiquette
+     *                                correction requested 03/09/2026: when the
+     *                                group move was done by hand (a cancel plus
+     *                                a fresh inscription) the old row reads
+     *                                « Annulée », which tells the student's
+     *                                history the course was dropped rather than
+     *                                continued elsewhere. It writes the STATUT
+     *                                AND NOTHING ELSE — no fee migration, no
+     *                                successor row: that is changeGroup()'s job
+     *                                and this must never be used as a shortcut
+     *                                to it on a live inscription, which is why
+     *                                Active -> Changement is refused below.
      *
-     * Reaching "Changement" is likewise deliberately NOT offered here — that
-     * status is only ever set by the dedicated changeGroup() flow, which also
-     * migrates fees and creates a replacement Active inscription; a bare
-     * Active -> Changement with no successor would leave the student's
-     * enrollment history looking like a change that never actually happened.
+     * Cancelling is NOT reachable here: Active -> Annulée needs a reason, an
+     * end date and a decision about the leftover fee lines, so it goes through
+     * cancel() and its own form. Keeping a bare `statut=Annulée` path open
+     * would be a way to cancel with no reason recorded, which is exactly what
+     * that form exists to prevent — the value is refused outright below.
      */
     public function updateStatut(Request $request, Inscription $inscription): RedirectResponse
     {
@@ -770,8 +778,25 @@ final class InscriptionController extends Controller
 
         $statut = $request->string('statut')->toString();
 
-        if ($statut !== Inscription::STATUT_ACTIVE) {
+        if (! in_array($statut, [Inscription::STATUT_ACTIVE, Inscription::STATUT_CHANGEMENT], true)) {
             abort(422, __('Invalid status.'));
+        }
+
+        // Annulée -> Changement: a label correction on an already-closed row,
+        // so none of the reactivation guards below apply (nothing becomes
+        // live). Refused from any other status — above all from Active, where
+        // it would fake a group change that never happened.
+        if ($statut === Inscription::STATUT_CHANGEMENT) {
+            if ($inscription->statut !== Inscription::STATUT_ANNULEE) {
+                throw ValidationException::withMessages([
+                    'statut' => __('This status change is not allowed from the current status.'),
+                ]);
+            }
+
+            $inscription->update(['statut' => Inscription::STATUT_CHANGEMENT]);
+
+            return redirect()->route('backoffice.inscriptions.index')
+                ->with('success', __('Registration status updated.'));
         }
 
         // Only a closed registration comes back — « Annulée » or
