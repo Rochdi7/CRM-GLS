@@ -40,11 +40,18 @@ final class ReouvrirCreneauxFermesSansChangement extends Command
     {
         $apply = (bool) $this->option('apply');
 
-        // Groupes actifs ayant des créneaux, mais AUCUN encore ouvert.
+        // Groupes actifs ayant AU MOINS UN créneau clôturé.
+        //
+        // ⚠ Ne PAS exiger que TOUS les créneaux soient fermés : la clôture est
+        // parfois partielle et le groupe reste alors silencieusement amputé
+        // des jours fermés. OUASSIMA 13H et HERR ABDESSAMAD 10H (Marrakech,
+        // 03/09/2026) gardaient leur seul créneau du lundi ouvert, les quatre
+        // autres fermés au 01/09 : le groupe paraissait vivant, mais ne
+        // produisait plus rien du mardi au vendredi. Un premier filtre « aucun
+        // créneau ouvert » les avait laissés passer.
         $groupes = Group::query()
             ->whereIn('statut', [Group::STATUT_EN_INSCRIPTION, Group::STATUT_EN_FORMATION])
-            ->whereHas('creneaux')
-            ->whereDoesntHave('creneaux', fn ($q) => $q->whereNull('date_fin'))
+            ->whereHas('creneaux', fn ($q) => $q->whereNotNull('date_fin'))
             ->with(['etablissement', 'anneeScolaire'])
             ->orderBy('etablissement_id')
             ->get();
@@ -69,13 +76,15 @@ final class ReouvrirCreneauxFermesSansChangement extends Command
 
             $creneaux = Creneau::query()->where('group_id', $group->id)->whereNotNull('date_fin')->count();
 
+            $ouverts = Creneau::query()->where('group_id', $group->id)->whereNull('date_fin')->count();
+
             $lignes[] = [
                 $group->id,
                 $group->nom,
                 $group->etablissement?->nom_centre ?? '—',
                 $group->anneeScolaire?->nom ?? '—',
                 $periodes->count(),
-                $creneaux,
+                $creneaux . ' / ' . ($creneaux + $ouverts),
                 $vraiChangement ? 'IGNORÉ (changement réel)' : ($apply ? 'ROUVERT' : 'à rouvrir'),
             ];
 
@@ -99,7 +108,7 @@ final class ReouvrirCreneauxFermesSansChangement extends Command
         }
 
         $this->table(
-            ['ID', 'Groupe', 'Centre', 'Année', 'Périodes', 'Créneaux fermés', 'Action'],
+            ['ID', 'Groupe', 'Centre', 'Année', 'Périodes', 'Fermés / total', 'Action'],
             $lignes,
         );
 

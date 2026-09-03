@@ -140,6 +140,23 @@ final class EmploiDuTempsDiagnosticTest extends TestCase
     }
 
     /**
+     * ⚠ Clôture PARTIELLE — le piège le plus discret : il reste des créneaux
+     * ouverts, donc le groupe génère bien des séances, mais seulement
+     * certains jours. OUASSIMA 13H et HERR ABDESSAMAD 10H (Marrakech,
+     * 03/09/2026) avaient le lundi ouvert et le mardi au vendredi fermés :
+     * rien ne le signalait, et le premier balayage (« aucun créneau ouvert »)
+     * les laissait passer.
+     */
+    public function test_a_partially_closed_timetable_is_reported(): void
+    {
+        $probleme = $this->diagnostiquer($this->group(), 5, 1);
+
+        $this->assertSame(DiagnostiquerEmploiDuTemps::CRENEAUX_PARTIELS, $probleme['code']);
+        // Le message chiffre l'amputation : 4 créneaux sur 5.
+        $this->assertStringContainsString('4 de ses 5', $probleme['message']);
+    }
+
+    /**
      * Un groupe terminé ou annulé N'EST PAS censé générer des séances : le
      * signaler noierait les vrais problèmes sous des fausses alertes.
      */

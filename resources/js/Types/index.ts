@@ -283,7 +283,12 @@ export interface StudentDetails {
  * clôturés), chacune avec sa marche à suivre.
  */
 export interface EmploiDuTempsProbleme {
-    code: 'aucun_creneau' | 'creneaux_fermes' | 'date_debut_manquante' | 'formation_terminee';
+    code:
+        | 'aucun_creneau'
+        | 'creneaux_fermes'
+        | 'creneaux_partiels'
+        | 'date_debut_manquante'
+        | 'formation_terminee';
     titre: string;
     message: string;
     action: string;

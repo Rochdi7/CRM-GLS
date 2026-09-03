@@ -35,6 +35,8 @@ final class DiagnostiquerEmploiDuTemps
 
     public const FORMATION_TERMINEE = 'formation_terminee';
 
+    public const CRENEAUX_PARTIELS = 'creneaux_partiels';
+
     /**
      * @return array{code: string, titre: string, message: string, action: string}|null
      *         null = le groupe génère normalement ses séances.
@@ -112,6 +114,29 @@ final class DiagnostiquerEmploiDuTemps
                     ? "Supprimez les anciens créneaux et saisissez ceux de l'enseignant actuel."
                     : "Rouvrez les créneaux existants, ou faites-les rouvrir en masse avec la commande "
                         . "« groupes:reouvrir-emploi-du-temps ».",
+            ];
+        }
+
+        // 5. Clôture PARTIELLE — le piège le plus discret : il reste des
+        //    créneaux ouverts, donc le groupe génère bien des séances… mais
+        //    seulement certains jours. OUASSIMA 13H et HERR ABDESSAMAD 10H
+        //    (Marrakech, 03/09/2026) avaient le lundi ouvert et le mardi au
+        //    vendredi fermés au 01/09 : rien ne signalait les quatre jours
+        //    manquants, ni à l'écran ni dans le premier balayage.
+        if ($creneauxOuverts < $creneauxTotal) {
+            $fermes = $creneauxTotal - $creneauxOuverts;
+
+            return [
+                'code' => self::CRENEAUX_PARTIELS,
+                'titre' => "L'emploi du temps de ce groupe est incomplet.",
+                'message' => sprintf(
+                    "%d de ses %d créneaux sont clôturés : aucune séance n'est générée les jours "
+                        . "concernés, alors que les autres jours fonctionnent normalement.",
+                    $fermes,
+                    $creneauxTotal,
+                ),
+                'action' => "Vérifiez les créneaux clôturés dans l'emploi du temps : rouvrez-les s'ils "
+                    . "sont toujours d'actualité, ou saisissez ceux qui les remplacent.",
             ];
         }
 
