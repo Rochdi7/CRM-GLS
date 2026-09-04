@@ -177,6 +177,10 @@
         }
         .row-line.spaced { margin-top: {{ $compact ? '2mm' : ($format === 'a5x2' ? '2mm' : '3.5mm') }}; }
 
+        /* Le reste à payer est la ligne que l'étudiant cherche. */
+        .row-line.reste .fr, .row-line.reste .val, .row-line.reste .ar { font-weight: 700; }
+        .row-line.reste { border-top: 1px solid #999; margin-top: 0.8mm; padding-top: 1mm; }
+
         .row-line .fr { width: 30%; }
         .row-line .val { flex: 1; text-align: center; font-weight: 700; }
         .row-line .ar { width: 30%; direction: rtl; text-align: right; }
@@ -348,11 +352,35 @@
                             <tr>
                                 <td>Total <span class="ar">/ المجموع</span></td>
                                 <td class="num">{{ $fmt($montantTotal) }}</td>
-                                <td class="num"></td>
+                                {{-- Le reste GLOBAL du lot, pas une cellule vide :
+                                     la colonne Reste détaille frais par frais, son
+                                     total est ce qui décide si l'étudiant est quitte. --}}
+                                <td class="num">{{ $situation->disponible ? $fmt($situation->reste) : '' }}</td>
                                 <td class="num"></td>
                             </tr>
                         </tfoot>
                     </table>
+
+                    @if ($situation->disponible)
+                        {{-- Même récapitulatif que le reçu unitaire : le dû, le cumul
+                             payé (TOUS les versements de ces frais, ce lot compris)
+                             et le solde restant. --}}
+                        <div class="row-line">
+                            <span class="fr">Total des frais</span>
+                            <span class="val">{{ $fmt($situation->totalFrais) }} DH</span>
+                            <span class="ar">مجموع المصاريف</span>
+                        </div>
+                        <div class="row-line">
+                            <span class="fr">Total payé</span>
+                            <span class="val">{{ $fmt($situation->totalPaye) }} DH</span>
+                            <span class="ar">المبلغ المؤدى</span>
+                        </div>
+                        <div class="row-line reste">
+                            <span class="fr">Reste à payer</span>
+                            <span class="val">{{ $fmt($situation->reste) }} DH</span>
+                            <span class="ar">المبلغ المتبقي</span>
+                        </div>
+                    @endif
 
                     <div class="row-line">
                         <span class="fr">Mode de paiement</span>

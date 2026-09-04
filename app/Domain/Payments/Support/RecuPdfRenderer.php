@@ -53,6 +53,7 @@ final class RecuPdfRenderer
             'anneeScolaire' => $inscription?->anneeScolaire?->nom,
             'niveau' => $inscription?->group?->nom ?? $encaissement->student?->niveau,
             'fraisNom' => $encaissement->libelleFrais(),
+            'situation' => SituationFraisRecu::pour($encaissement),
         ])->render();
 
         $mpdf = $this->mpdf();
@@ -90,6 +91,7 @@ final class RecuPdfRenderer
             'montantTotal' => (float) $encaissements->sum('montant'),
             'reference' => $first?->reference,
             'payeParFee' => $payeParFee,
+            'situation' => SituationFraisRecu::pourLot($encaissements),
         ])->render();
 
         $mpdf = $this->mpdf();
