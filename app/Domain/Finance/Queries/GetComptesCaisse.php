@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Finance\Queries;
 
 use App\Models\Caisse;
+use App\Models\Depense;
 use App\Services\Context\CurrentContext;
 use App\Support\Access\DormantTill;
 use App\Support\Access\HiddenAccount;
@@ -126,8 +127,24 @@ final class GetComptesCaisse
             // centres » (super-admin only) ⇒ no narrowing.
             ->when($this->context->etablissementId(), fn ($q, $id) => $q
                 ->where(fn ($w) => $w->whereNull('etablissement_id')->orWhere('etablissement_id', $id)))
-            ->withSum('encaissements as encaissements_total', 'montant')
-            ->withSum('depenses as depenses_total', 'montant')
+            // Both columns must count ONLY what actually moved the till, so
+            // the row reconciles with the `solde` printed beside it — the
+            // same two filters GetCaisseDetails and GetCaisseJournal apply:
+            //  - an "apply" row (applied_from_encaissement_id) re-allocates
+            //    an avance already counted once; AppliquerAvance credits
+            //    nothing;
+            //  - a pending or refused dépense debited nothing (approval flow,
+            //    CLAUDE.md §11) — its money is still held in the till.
+            // Reported 04/09/2026: Maria Nezha Jalloul's row announced
+            // 8 960.00 DH spent while her own detail page correctly listed
+            // « Aucune dépense » — the 4 rows behind it were all « En
+            // attente ». The two screens must never disagree about what left.
+            ->withSum([
+                'encaissements as encaissements_total' => fn ($q) => $q->whereNull('applied_from_encaissement_id'),
+            ], 'montant')
+            ->withSum([
+                'depenses as depenses_total' => fn ($q) => $q->where('statut', Depense::STATUT_APPROUVEE),
+            ], 'montant')
             ->when($typeFilter !== '', fn ($q) => $q->where('type', $typeFilter))
             ->when($search !== '', fn ($q) => $q->where(function ($q) use ($search): void {
                 $q->where('nom', 'ilike', "%{$search}%")

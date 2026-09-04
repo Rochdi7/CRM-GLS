@@ -139,7 +139,7 @@ final class GetCaisseJournal
             ->where(fn ($q) => $this->exclureAnnules($q))
             ->tap(fn ($q) => $this->scopeRecordsToActiveCenter($q))
             ->sum('montant');
-        $solde = $this->soldeVentile($ids);
+        $solde = $this->soldeVentile($ids, $depenseIdsDuCentre);
 
         $rows = $this->rows($ids, $typeFilter, $dateFrom, $dateTo, $depenseIdsDuCentre);
 
@@ -172,31 +172,34 @@ final class GetCaisseJournal
      * Solde du CENTRE ACTIF pour les caisses données — pas le solde entier.
      *
      * Une caissière n'a qu'UNE caisse à vie (CLAUDE.md §11,
-     * `caisses_une_caissiere_par_employe`, proposition multi-caisses REJETÉE
-     * le 01/09/2026), mais elle peut encaisser pour plusieurs centres : la
-     * caisse de Latifa Abou Elfath est étiquetée GLS Marrakech et porte
-     * pourtant 6 200 DH Marrakech + 4 100 DH Online. Filtrer sur
-     * `caisses.etablissement_id` ferait basculer la caisse EN BLOC — 10 300 DH
-     * sur Marrakech (dont 4 100 qui n'y sont pas) et 0,00 DH sur Online (où
-     * 4 100 DH dorment pourtant). Les deux chiffres seraient faux.
+     * `caisses_une_caissiere_par_employe`, multi-caisses REJETÉ le
+     * 01/09/2026), mais elle encaisse pour plusieurs centres : la caisse
+     * d'Hafssa Elkhattabi est étiquetée GLS Rabat et porte pourtant des
+     * paiements GLS Online. Filtrer sur `caisses.etablissement_id` ferait
+     * basculer la caisse EN BLOC — tout sur Rabat, 0,00 DH sur Online où
+     * l'argent dort pourtant.
      *
-     * La ventilation vient donc du LEDGER, dont chaque écriture estampille son
-     * `etablissement_id` depuis le 01/09/2026 précisément pour ça (§11
-     * « Centre dimension on the ledger »). `caisses.solde` reste l'autorité :
-     * la somme des parts par centre doit retomber dessus — c'est ce que vérifie
+     * ⚠ La ventilation se lit sur les MÊMES colonnes que les lignes du
+     * journal, jamais sur une autre source. Une première version dérivait le
+     * solde du ledger (`properties->etablissement_id`) pendant que les lignes
+     * filtraient sur `encaissements.etablissement_id` : les deux moitiés de
+     * l'écran comptaient deux choses différentes, et l'onglet affichait
+     * « 2 transactions, 500 DH » au-dessus d'un solde à 0,00 DH (04/09/2026,
+     * caisse #10 — 154 écritures de ledger, aucune portant le centre 7, alors
+     * que les encaissements le portent bien). Un écran dont le total et les
+     * lignes ne lisent pas la même colonne se contredira toujours.
+     *
+     * `caisses.solde` reste l'autorité : la somme des parts de tous les
+     * centres doit retomber dessus, ce que vérifie
      * `CaisseVentilationCentreTest`.
      *
-     * ⚠ Les écritures ANTÉRIEURES à la règle n'ont pas la clé. Elles sont
-     * rattachées au centre de rattachement de la caisse par un fallback de
-     * LECTURE — jamais par un backfill (§11 : « read-time fallback, NEVER a
-     * backfill »). Réécrire ces propriétés falsifierait le journal d'audit.
-     *
-     * Sans centre actif (« Tous les centres », super-admin) le solde entier est
-     * rendu tel quel : rien n'est ventilé, donc rien n'est masqué.
+     * Sans centre actif (« Tous les centres ») le solde entier est rendu tel
+     * quel : rien n'est ventilé, donc rien n'est masqué.
      *
      * @param  array<int, int>  $ids
+     * @param  array<int, int>|null  $depenseIdsDuCentre  dépenses du centre (le ledger reste leur seule dimension)
      */
-    private function soldeVentile(array $ids): float
+    private function soldeVentile(array $ids, ?array $depenseIdsDuCentre): float
     {
         $centreId = $this->context->etablissementId();
 
@@ -204,32 +207,43 @@ final class GetCaisseJournal
             return (float) Caisse::query()->whereIn('id', $ids)->sum('solde');
         }
 
-        // Centre de rattachement de chaque caisse — le fallback des écritures
-        // historiques, résolu ici en une requête plutôt qu'une par ligne.
-        $centreDeLaCaisse = Caisse::query()->whereIn('id', $ids)->pluck('etablissement_id', 'id');
+        // Espèces uniquement : le solde d'une caisse physique est un solde
+        // espèces par construction depuis les comptes de méthode (24/08/2026).
+        $entrees = (float) Encaissement::query()
+            ->whereIn('caisse_id', $ids)
+            ->whereNull('applied_from_encaissement_id')
+            ->where('methode', Encaissement::METHODE_ESPECES)
+            ->where('etablissement_id', $centreId)
+            ->sum('montant');
 
-        return (float) Activity::query()
-            ->where('log_name', 'caisse')
-            ->where('event', 'solde_movement')
-            ->where('subject_type', Caisse::class)
-            ->whereIn('subject_id', $ids)
-            ->get(['subject_id', 'properties'])
-            ->reduce(function (float $total, Activity $entry) use ($centreId, $centreDeLaCaisse): float {
-                $props = $entry->properties;
-                $etab = $props['etablissement_id'] ?? $centreDeLaCaisse[$entry->subject_id] ?? null;
+        $sorties = (float) Depense::query()
+            ->whereIn('caisse_id', $ids)
+            ->where('statut', Depense::STATUT_APPROUVEE)
+            ->when($depenseIdsDuCentre !== null, fn ($q) => $q->whereIn('id', $depenseIdsDuCentre))
+            ->sum('montant');
 
-                if ($etab === null || (int) $etab !== $centreId) {
-                    return $total;
-                }
+        $sorties += (float) Remboursement::query()
+            ->whereIn('caisse_id', $ids)
+            ->where(fn ($q) => $this->exclureAnnules($q))
+            ->where('etablissement_id', $centreId)
+            ->sum('montant');
 
-                $montant = (float) ($props['montant'] ?? 0);
+        // Les transferts validés déplacent réellement l'argent entre caisses :
+        // les ignorer ferait diverger la somme des parts du solde stocké.
+        $transfertIds = $this->idsDuCentreDepuisLeLedger(CaisseTransfer::class, $ids);
+        $transferts = CaisseTransfer::query()
+            ->where(fn ($q) => $q->whereIn('caisse_source_id', $ids)->orWhereIn('caisse_destination_id', $ids))
+            ->where('statut', CaisseTransfer::STATUT_VALIDE)
+            ->when($transfertIds !== null, fn ($q) => $q->whereIn('id', $transfertIds))
+            ->get(['caisse_source_id', 'montant']);
 
-                // `sens` est écrit en toutes lettres par CaisseLedger
-                // ('Entrée'/'Sortie'), pas avec ses constantes SENS_*.
-                return ($props['sens'] ?? null) === 'Sortie'
-                    ? $total - $montant
-                    : $total + $montant;
-            }, 0.0);
+        foreach ($transferts as $transfert) {
+            $sorties += in_array($transfert->caisse_source_id, $ids, true)
+                ? (float) $transfert->montant
+                : -(float) $transfert->montant;
+        }
+
+        return round($entrees - $sorties, 2);
     }
 
     /**

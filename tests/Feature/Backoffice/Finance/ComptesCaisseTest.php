@@ -100,6 +100,80 @@ final class ComptesCaisseTest extends TestCase
     }
 
     // ---------------------------------------------------------------
+    // Totals — only money that actually MOVED the till
+    // ---------------------------------------------------------------
+
+    /**
+     * The Encaissements / Dépenses columns must reconcile with the `solde`
+     * printed on the same row, so they count ONLY what really moved the
+     * till — the same two filters GetCaisseDetails and GetCaisseJournal
+     * apply. A pending or refused dépense debited nothing (approval flow,
+     * CLAUDE.md §11): its money is still IN the till.
+     *
+     * Reported 04/09/2026: Maria Nezha Jalloul's row announced 8 960.00 DH
+     * spent while her own detail page listed « Aucune dépense » — all four
+     * rows behind the figure were « En attente ». Two screens describing the
+     * same till must never disagree about what left it.
+     */
+    public function test_depenses_total_counts_approved_expenses_only(): void
+    {
+        $caisse = Caisse::factory()->create([
+            'type' => Caisse::TYPE_CAISSIERE,
+            'etablissement_id' => $this->centre->id,
+        ]);
+
+        $this->makeDepense($caisse, '500.00')->update(['statut' => Depense::STATUT_APPROUVEE]);
+        $this->makeDepense($caisse, '7650.00')->update(['statut' => Depense::STATUT_EN_ATTENTE]);
+        $this->makeDepense($caisse, '810.00')->update(['statut' => Depense::STATUT_REFUSEE]);
+
+        $row = $this->comptesRowFor($caisse);
+
+        // 500 approved — NOT 8 960, which would count money still held.
+        $this->assertSame('500.00', $row['depenses']);
+    }
+
+    /**
+     * Same rule on the credit side: an "apply" row only re-allocates an
+     * avance already counted once (AppliquerAvance credits nothing), so
+     * counting it would report money the till never received.
+     */
+    public function test_encaissements_total_excludes_avance_application_rows(): void
+    {
+        $caisse = Caisse::factory()->create([
+            'type' => Caisse::TYPE_CAISSIERE,
+            'etablissement_id' => $this->centre->id,
+        ]);
+
+        $recu = $this->makeEncaissement($caisse, '1000.00');
+        $this->makeEncaissement($caisse, '400.00')
+            ->update(['applied_from_encaissement_id' => $recu->id]);
+
+        $row = $this->comptesRowFor($caisse);
+
+        $this->assertSame('1000.00', $row['encaissements']);
+    }
+
+    /**
+     * The row this caisse renders as on « Comptes de caisse ».
+     *
+     * @return array<string, mixed>
+     */
+    private function comptesRowFor(Caisse $caisse): array
+    {
+        // Paginated: ask for enough rows that the caisse under test is on
+        // the page whatever else the fixture created.
+        $rows = app(\App\Domain\Finance\Queries\GetComptesCaisse::class)('', '', 100);
+
+        foreach ($rows->items() as $row) {
+            if (($row['id'] ?? null) === $caisse->id) {
+                return $row;
+            }
+        }
+
+        $this->fail("Caisse #{$caisse->id} is missing from « Comptes de caisse ».");
+    }
+
+    // ---------------------------------------------------------------
     // Access
     // ---------------------------------------------------------------
 

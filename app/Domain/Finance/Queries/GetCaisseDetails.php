@@ -31,9 +31,13 @@ final class GetCaisseDetails
         //    an avance already counted once — AppliquerAvance never credits;
         //  - a pending/refused dépense debited nothing (approval flow).
         // Listing either made this page contradict the balance beside it.
+        // `etablissement` eager-loaded for the Centre column: ONE till per
+        // employee, but a cashier working across centres books payments in
+        // each of them, so the till's own centre is not the payment's
+        // (CLAUDE.md §11, « Centre dimension on the ledger »).
         $encaissements = $caisse->encaissements()
             ->whereNull('applied_from_encaissement_id')
-            ->with('student')->latest('date_paiement')->limit(10)->get();
+            ->with(['student', 'etablissement'])->latest('date_paiement')->limit(10)->get();
         $depenses = $caisse->depenses()
             ->where('statut', Depense::STATUT_APPROUVEE)
             ->with('typeDepense')->latest('date_depense')->limit(10)->get();
@@ -59,6 +63,9 @@ final class GetCaisseDetails
                 'date' => $enc->date_paiement?->format('d/m/Y'),
                 'montant' => number_format((float) $enc->montant, 2, '.', ''),
                 'extra' => $enc->methode,
+                // The payment's OWN centre — where the money was taken in,
+                // which may differ from the till's centre.
+                'centre' => $enc->etablissement?->nom_centre,
             ])->values()->all(),
             'depenses' => $depenses->map(fn ($dep): array => [
                 'reference' => $dep->reference,

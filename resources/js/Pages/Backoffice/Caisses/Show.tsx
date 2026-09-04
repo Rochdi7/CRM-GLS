@@ -59,6 +59,7 @@ export default function CaisseShow({ caisse }: CaisseShowProps) {
                                 <tr>
                                     <th>Référence</th>
                                     <th>Étudiant</th>
+                                    <th>Centre</th>
                                     <th>Date</th>
                                     <th>Méthode</th>
                                     <th className="text-end">Montant</th>
@@ -71,6 +72,7 @@ export default function CaisseShow({ caisse }: CaisseShowProps) {
                                         <code>{row.reference}</code>
                                     </td>
                                     <td>{row.label}</td>
+                                    <td>{row.centre ?? '—'}</td>
                                     <td>{row.date ?? '—'}</td>
                                     <td>
                                         <span className="badge badge-soft-info">{row.extra}</span>

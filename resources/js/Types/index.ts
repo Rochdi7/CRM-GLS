@@ -419,6 +419,12 @@ export interface CaisseMovementRow {
     date: string | null;
     montant: MoneyDisplay;
     extra?: string | null;
+    /**
+     * The movement's OWN centre — set on payments. A cashier keeps one till
+     * but books payments in every centre they work in, so this is not the
+     * till's centre (CLAUDE.md §11, « Centre dimension on the ledger »).
+     */
+    centre?: string | null;
 }
 
 export interface CaisseTransferRow extends CaisseMovementRow {

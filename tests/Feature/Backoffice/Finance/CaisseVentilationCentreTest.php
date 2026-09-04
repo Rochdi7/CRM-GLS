@@ -166,13 +166,65 @@ final class CaisseVentilationCentreTest extends TestCase
         $this->assertCount(2, $journal['rows']);
     }
 
-    public function test_une_ecriture_historique_sans_centre_est_rattachee_au_centre_de_la_caisse(): void
+    /**
+     * Le garde-fou de la régression du 04/09/2026 : le solde et les lignes
+     * doivent lire la MÊME colonne.
+     *
+     * La première version ventilait le solde depuis le ledger
+     * (`properties->etablissement_id`) pendant que les lignes filtraient sur
+     * `encaissements.etablissement_id`. Sur la caisse #10 aucune des 154
+     * écritures ne portait le centre 7, alors que les encaissements le
+     * portaient : l'écran affichait « 2 transactions, 500 DH » au-dessus d'un
+     * solde à 0,00 DH.
+     */
+    public function test_le_solde_ne_contredit_jamais_les_lignes_affichees(): void
+    {
+        $agent = $this->latifa();
+
+        // Écritures de ledger volontairement estampillées d'un AUTRE centre
+        // que celui de leurs encaissements — exactement l'état de la caisse
+        // #10 en production.
+        Activity::query()
+            ->where('subject_type', Caisse::class)
+            ->where('subject_id', $agent->till()->firstOrFail()->id)
+            ->get()
+            ->each(function (Activity $entry): void {
+                $props = $entry->properties->all();
+                $props['etablissement_id'] = $this->marrakech->id;
+                DB::table('activity_log')
+                    ->where('id', $entry->id)
+                    ->update(['properties' => json_encode($props)]);
+            });
+
+        foreach ([$this->marrakech->id, $this->online->id] as $centreId) {
+            $journal = $this->journalFor($agent, $centreId);
+            $sommeDesLignes = collect($journal['rows'])
+                ->sum(fn (array $row): float => $row['sens'] * (float) $row['montant']);
+
+            $this->assertSame(
+                round($sommeDesLignes, 2),
+                round((float) $journal['solde'], 2),
+                "Le solde affiché contredit les lignes du centre {$centreId}.",
+            );
+        }
+    }
+
+    /**
+     * Les encaissements ne dépendent PLUS du ledger pour leur centre : ils
+     * portent `etablissement_id` en propre, toujours rempli
+     * (`EnregistrerEncaissement`), y compris sur les lignes importées.
+     *
+     * C'est ce qui rend la ventilation immunisée contre l'état du ledger —
+     * les 33 642 écritures antérieures au 01/09/2026 n'ont pas la clé, et sur
+     * la caisse #10 les écritures qui l'ont portent un centre différent de
+     * celui de leurs paiements. Aucun des deux cas ne doit déplacer un
+     * dirham. Rien n'est réécrit en base (§11 : jamais de backfill).
+     */
+    public function test_la_ventilation_des_encaissements_ignore_l_etat_du_ledger(): void
     {
         $agent = $this->latifa();
         $till = $agent->till()->firstOrFail();
 
-        // Simule les 33 642 écritures antérieures à la règle du 01/09/2026 :
-        // la clé manque. §11 impose un fallback de LECTURE, jamais un backfill.
         Activity::query()
             ->where('subject_type', Caisse::class)
             ->where('subject_id', $till->id)
@@ -186,9 +238,8 @@ final class CaisseVentilationCentreTest extends TestCase
                     ->update(['properties' => json_encode($props)]);
             });
 
-        // Tout retombe sur le centre de rattachement de la caisse (Marrakech),
-        // et rien n'est perdu.
-        $this->assertSame('10300.00', $this->journalFor($agent, $this->marrakech->id)['solde']);
-        $this->assertSame('0.00', $this->journalFor($agent, $this->online->id)['solde']);
+        // Inchangé : la ventilation lit `encaissements.etablissement_id`.
+        $this->assertSame('6200.00', $this->journalFor($agent, $this->marrakech->id)['solde']);
+        $this->assertSame('4100.00', $this->journalFor($agent, $this->online->id)['solde']);
     }
 }
