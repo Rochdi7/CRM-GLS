@@ -157,11 +157,11 @@ final class GetCaisseTransfersList
             // money stays offered, so the transfer that empties it remains
             // possible. Never drop that half.
             ->tap(fn ($q) => DormantTill::hide($q))
-            ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
-            // ⚠ NOT scopeToActiveCenter(): a till is offered in every centre
-            // its responsable is ASSIGNED to, not only the one it is filed
-            // under. See scopeToCentreOfService() below.
-            ->tap(fn ($q) => $this->scopeToCentreOfService($q))
+            // ⚠ NOT scopeAccessibleCenters()/scopeToActiveCenter(): both ask
+            // where the till is FILED. Reach and active centre are applied
+            // through the OWNER's assignments instead — see
+            // scopeToCentreOfService().
+            ->tap(fn ($q) => $this->scopeToCentreOfService($q, $user))
             ->orderBy('nom')
             ->get()
             ->map(fn (Caisse $c): array => [
@@ -244,13 +244,47 @@ final class GetCaisseTransfersList
      * `caisses.etablissement_id` asked where the till SITS instead of where
      * its owner WORKS.
      *
-     * The centre filing is untouched — `caisses.etablissement_id` keeps its
-     * stored meaning and is never reinterpreted (§11, third companion rule);
-     * this widens only which options a screen OFFERS. A centre-less account
-     * (an Externe safe) stays global, as everywhere else.
+     * ⚠ Reach is answered here too, NOT by scopeAccessibleCenters(). That
+     * helper matches `caisses.etablissement_id` alone, so it dropped the row
+     * before the assignment clause could rescue it: Hafssa Elkhattabi
+     * (assigned to Rabat + Salé) still got « Aucun résultat » searching for
+     * a colleague who works in Rabat but whose till is filed in Marrakech.
+     * Both halves therefore ask the same widened question — filed here, OR
+     * held by someone who works here.
+     *
+     * ⚠ withoutGlobalScopes() on the responsable subquery: Employee is
+     * #[ScopedBy(HiddenAccountScope::class)] and a global scope applies
+     * inside a nested whereHas too (CLAUDE.md §11), which would silently
+     * shrink the very set this clause exists to widen. The maintainer's own
+     * till stays out regardless — HiddenAccount::hideCaisses() removes it
+     * earlier in the chain.
+     *
+     * This widens only which options the TRANSFER dropdown offers. The
+     * centre filing is untouched — `caisses.etablissement_id` keeps its
+     * stored meaning and is never reinterpreted (§11, third companion rule)
+     * — and no other screen, query or permission is affected. Validation is
+     * unchanged: only the employee owning the DESTINATION till may accept,
+     * super-admins included (§11). A centre-less account (an Externe safe)
+     * stays global, as everywhere else.
      */
-    private function scopeToCentreOfService($query): void
+    private function scopeToCentreOfService($query, User $user): void
     {
+        // A till is reachable when it is FILED in one of the viewer's centres
+        // or when the colleague holding it WORKS in one of them. Applied as a
+        // single clause instead of scopeAccessibleCenters(), which only ever
+        // asks the first question and would drop the row before the second
+        // could rescue it.
+        if (! $this->centerAccess->hasGlobalAccess($user)) {
+            $reachable = $this->centerAccess->accessibleCenterIds($user);
+
+            $query->where(fn ($q) => $q
+                ->whereNull('etablissement_id')
+                ->orWhereIn('etablissement_id', $reachable)
+                ->orWhereHas('responsable', fn ($r) => $r
+                    ->withoutGlobalScopes()
+                    ->whereHas('etablissements', fn ($e) => $e->whereIn('etablissements.id', $reachable))));
+        }
+
         $id = $this->context->etablissementId();
 
         if ($id === null) {
@@ -261,6 +295,7 @@ final class GetCaisseTransfersList
             ->whereNull('etablissement_id')
             ->orWhere('etablissement_id', $id)
             ->orWhereHas('responsable', fn ($r) => $r
+                ->withoutGlobalScopes()
                 ->whereHas('etablissements', fn ($e) => $e->where('etablissements.id', $id))));
     }
 

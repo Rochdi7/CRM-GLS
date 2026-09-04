@@ -124,6 +124,59 @@ final class TransfertCaisseOptionsCentreTest extends TestCase
         $this->assertContains($till->id, $this->optionIdsIn($this->marrakech, $user));
     }
 
+    /**
+     * Hafssa Elkhattabi's exact case (04/09/2026), and the reason the first
+     * attempt at this fix did not work: she is a CASHIER, not a super-admin,
+     * assigned to Rabat + Salé. Rafik works in all seven centres but his till
+     * is filed in Marrakech, which she cannot reach — so
+     * scopeAccessibleCenters() dropped the row before the assignment clause
+     * could rescue it, and the dropdown still said « Aucun résultat ».
+     */
+    public function test_a_cashier_reaches_a_colleague_who_works_in_her_centre(): void
+    {
+        $hafssa = Employee::factory()->create([
+            'etablissement_id' => $this->rabat->id,
+            'categorie' => Employee::CATEGORIE_ASSISTANTE,
+        ]);
+        $hafssa->syncEtablissements([$this->rabat->id]);
+        $user = $hafssa->user ?? User::factory()->create();
+        $hafssa->forceFill(['user_id' => $user->id])->save();
+        $user->givePermissionTo('cash-transfers.view');
+
+        // Filed in Marrakech — a centre Hafssa cannot reach — but its owner
+        // works in Rabat, where she does.
+        $rafik = Employee::factory()->create([
+            'etablissement_id' => $this->marrakech->id,
+            'categorie' => Employee::CATEGORIE_DIRECTEUR,
+        ]);
+        $rafik->syncEtablissements([$this->marrakech->id, $this->rabat->id]);
+        $till = $this->tillOf($rafik, '17000.00');
+
+        $this->assertContains($till->id, $this->optionIdsIn($this->rabat, $user->fresh()));
+    }
+
+    /** Widening reach must not become « every till in the country ». */
+    public function test_a_cashier_does_not_reach_a_colleague_who_never_works_in_her_centre(): void
+    {
+        $hafssa = Employee::factory()->create([
+            'etablissement_id' => $this->rabat->id,
+            'categorie' => Employee::CATEGORIE_ASSISTANTE,
+        ]);
+        $hafssa->syncEtablissements([$this->rabat->id]);
+        $user = $hafssa->user ?? User::factory()->create();
+        $hafssa->forceFill(['user_id' => $user->id])->save();
+        $user->givePermissionTo('cash-transfers.view');
+
+        $marrakechOnly = Employee::factory()->create([
+            'etablissement_id' => $this->marrakech->id,
+            'categorie' => Employee::CATEGORIE_DIRECTEUR,
+        ]);
+        $marrakechOnly->syncEtablissements([$this->marrakech->id]);
+        $till = $this->tillOf($marrakechOnly, '5000.00');
+
+        $this->assertNotContains($till->id, $this->optionIdsIn($this->rabat, $user->fresh()));
+    }
+
     public function test_an_empty_teacher_till_is_hidden(): void
     {
         $enseignant = Employee::factory()->create([
