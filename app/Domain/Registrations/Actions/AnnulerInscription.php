@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Domain\Registrations\Actions;
 
-use App\Models\Encaissement;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
 use Illuminate\Support\Facades\DB;
@@ -19,16 +18,23 @@ use Illuminate\Validation\ValidationException;
  * offers (ChangerGroupeInscription::SCOPES), with the same meaning, so a
  * cancellation and a group change dispose of leftover fees identically:
  *
- *   - SCOPE_ALL          — every fee line not fully paid is removed.
- *   - SCOPE_OVERDUE_ONLY — only those due AFTER the end date; a line that
- *                          fell due while the student was still enrolled
- *                          stays owed, because it was genuinely earned.
+ *   - SCOPE_ALL          — toute ligne n'ayant jamais rien reçu est retirée.
+ *   - SCOPE_OVERDUE_ONLY — seulement celles échéant APRÈS la date de fin ;
+ *                          une ligne échue alors que l'étudiant était encore
+ *                          inscrit reste due, elle a été réellement gagnée.
  *
- * A fee that already received money is never deleted outright: like the
- * group-change flow, any Encaissement pointing at a removed line is
- * UNLINKED (inscription_fee_id = null) rather than deleted — money records
- * are append-only (CLAUDE.md §11) — turning the amount into an unallocated
- * avance that stays available to the student.
+ * ⚠ Une ligne qui a reçu le moindre dirham n'est JAMAIS retirée — ni un
+ * frais « Payé », ni un « Payé partiellement » (décidé le 04/09/2026). Le
+ * critère n'est donc pas le statut mais l'absence d'encaissement : un statut
+ * peut avoir dérivé, un encaissement non. Un frais partiellement payé reste
+ * dû pour son reste, parce que l'étudiant a commencé à payer cette
+ * prestation ; c'est un remboursement, pas une suppression de créance, qui
+ * lui rendrait cet argent.
+ *
+ * Corollaire : cette action ne détache et ne supprime aucun encaissement.
+ * La règle §11 « retirer un frais payé libère son argent en avance » n'est
+ * pas contournée — elle est sans objet, puisque aucun frais portant de
+ * l'argent n'est retiré ici.
  */
 final class AnnulerInscription
 {
@@ -95,19 +101,24 @@ final class AnnulerInscription
     private function removeUnpaidFees(Inscription $inscription, string $scope, string $dateFin): void
     {
         $query = $inscription->fees()
-            ->where('statut', '!=', InscriptionFee::STATUT_PAYE);
+            ->where('statut', '!=', InscriptionFee::STATUT_PAYE)
+            // Le seul critère sûr : aucun argent reçu. Le statut peut avoir
+            // dérivé, un encaissement non.
+            ->whereDoesntHave('encaissements');
 
         if ($scope === self::SCOPE_OVERDUE_ONLY) {
             $query->whereDate('date_echeance', '>', $dateFin);
         }
 
+        // Masqué, jamais supprimé : la ligne et son historique restent, et un
+        // « Restaurer » la ramène si l'annulation était une erreur — même
+        // mécanique que la corbeille du modal
+        // (BasculerVisibiliteFraisInscription::hide).
         $query->get()->each(function (InscriptionFee $fee): void {
-            Encaissement::query()
-                ->where('inscription_fee_id', $fee->id)
-                ->lockForUpdate()
-                ->get()
-                ->each(fn (Encaissement $e) => $e->update(['inscription_fee_id' => null]));
-            $fee->delete();
+            $fee->update([
+                'masque_le' => now(),
+                'masque_origine' => InscriptionFee::MASQUE_ORIGINE_MANUEL,
+            ]);
         });
     }
 }

@@ -188,9 +188,10 @@ final class InscriptionCancelTest extends TestCase
             'unpaid_fees_scope' => 'all',
         ])->assertRedirect(route('backoffice.inscriptions.index'));
 
-        $this->assertDatabaseMissing('inscription_fees', ['id' => $unpaidBefore->id]);
-        $this->assertDatabaseMissing('inscription_fees', ['id' => $unpaidAfter->id]);
-        $this->assertDatabaseHas('inscription_fees', ['id' => $paid->id]);
+        // Masqués, jamais supprimés : la ligne et son historique restent.
+        $this->assertNotNull($unpaidBefore->fresh()->masque_le);
+        $this->assertNotNull($unpaidAfter->fresh()->masque_le);
+        $this->assertNull($paid->fresh()->masque_le);
         // The stored total follows what is actually still owed.
         $this->assertSame('1000.00', (string) $inscription->fresh()->montant_total);
     }
@@ -219,8 +220,8 @@ final class InscriptionCancelTest extends TestCase
             'unpaid_fees_scope' => 'overdue_only',
         ])->assertRedirect(route('backoffice.inscriptions.index'));
 
-        $this->assertDatabaseHas('inscription_fees', ['id' => $before->id]);
-        $this->assertDatabaseMissing('inscription_fees', ['id' => $after->id]);
+        $this->assertNull($before->fresh()->masque_le);
+        $this->assertNotNull($after->fresh()->masque_le);
     }
 
     public function test_no_scope_leaves_every_fee_alone(): void
@@ -238,15 +239,16 @@ final class InscriptionCancelTest extends TestCase
             'date_fin' => '2026-03-01',
         ])->assertRedirect(route('backoffice.inscriptions.index'));
 
-        $this->assertDatabaseHas('inscription_fees', ['id' => $fee->id]);
+        $this->assertNull($fee->fresh()->masque_le);
     }
 
     /**
-     * Money records are append-only (CLAUDE.md §11): a payment against a
-     * removed fee line is UNLINKED, never deleted, so the amount stays
-     * available to the student as an unallocated avance.
+     * Une ligne ayant reçu le moindre dirham n'est jamais retirée (décidé le
+     * 04/09/2026) : elle reste due pour son reste, et son encaissement reste
+     * attaché. C'est un remboursement, pas une suppression de créance, qui
+     * rendrait cet argent à l'étudiant.
      */
-    public function test_a_payment_on_a_removed_fee_is_unlinked_not_deleted(): void
+    public function test_a_partially_paid_fee_is_never_removed(): void
     {
         $this->actingAs($this->userWith('registrations.view', 'registrations.update'));
         $inscription = $this->makeInscription();
@@ -270,10 +272,10 @@ final class InscriptionCancelTest extends TestCase
             'unpaid_fees_scope' => 'all',
         ])->assertRedirect(route('backoffice.inscriptions.index'));
 
-        $this->assertDatabaseMissing('inscription_fees', ['id' => $fee->id]);
+        $this->assertNull($fee->fresh()->masque_le);
         $this->assertDatabaseHas('encaissements', [
             'id' => $encaissement->id,
-            'inscription_fee_id' => null,
+            'inscription_fee_id' => $fee->id,
             'montant' => 400,
         ]);
     }

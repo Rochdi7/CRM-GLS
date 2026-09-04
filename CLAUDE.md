@@ -688,6 +688,23 @@ the database layer. Non-negotiable invariants already enforced in code:
   `php artisan inscriptions:liberer-paiements-frais-masques` (dry-run par
   défaut, `--apply`). Tests :
   `tests/Feature/Backoffice/Inscriptions/InscriptionFeeVisibilityTest.php`.
+- **⚠ Le recouvrement ne poursuit QUE les inscriptions `Active`.**
+  « Gestion des recouvrements » (`GetRetardsList`) est un miroir des frais
+  échus non soldés, et un dossier **Annulée / Changement / Expirée /
+  Archivée** est clos : ses frais ne sont plus dus, donc ni listés, ni
+  comptés dans le total d'en-tête, ni comptés dans les badges de durée.
+  Le filtre vit dans les **deux** chemins de requête — `__invoke()` (lignes +
+  `montantTotal`) et `bucketCounts()` (badges de l'onglet « Retards selon la
+  durée ») : chacun porte sa propre copie du `whereHas('inscription', …)`,
+  donc n'en corriger qu'un fait promettre au badge des lignes que le tableau
+  refuse d'afficher. Signalé le 04/09/2026 : la page annonçait 31,7 M DH de
+  retards sur 33 790 lignes, dont **30,3 M DH (96 %) sur des dossiers clos**
+  (16 684 lignes Annulée, 15 168 Changement) — le front office était envoyé
+  réclamer de l'argent que personne ne doit. C'est le pendant en LECTURE du
+  masquage des frais à l'annulation : masquer à l'écriture ne rattrape pas
+  les inscriptions déjà closes en base, et ne couvre pas `Changement`.
+  Tests :
+  `tests/Feature/Backoffice/Finance/RecouvrementInscriptionActiveTest.php`.
 - **Étudiants & Inscriptions CRUD** (same React modal pattern as Employees).
   Students: `backoffice.students.index` (`Backoffice\StudentController`) —
   modal with photo upload (media `photo` collection, `/media/<uuid8>/…`

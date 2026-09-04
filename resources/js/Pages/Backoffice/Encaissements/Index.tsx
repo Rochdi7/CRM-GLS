@@ -97,7 +97,7 @@ function emptyAvanceForm(): AvanceFormState {
  * directly under that row; numéro/banque/échéance are always read off that
  * Cheque record server-side (EncaissementController@store).
  */
-export default function EncaissementsIndex({ encaissements, montantTotal, caisses, students, groups, methodes, banques, filters, can }: EncaissementsPageProps) {
+export default function EncaissementsIndex({ encaissements, montantTotal, caisses, students, groups, frais, methodes, banques, filters, can }: EncaissementsPageProps) {
     const isLoading = useInertiaLoading();
     const [deleteTarget, setDeleteTarget] = useState<EncaissementRow | null>(null);
     const [deleting, setDeleting] = useState(false);
@@ -142,6 +142,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
     const caisseOptions: SelectOption[] = caisses.map((c) => ({ value: c.id, label: c.nom }));
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.nom }));
     const groupOptions: SelectOption[] = groups.map((g) => ({ value: g.id, label: g.nom }));
+    const fraisFilterOptions: SelectOption[] = frais.map((f) => ({ value: f.id, label: f.nom }));
     const methodeOptions: SelectOption[] = methodes.map((m) => ({ value: m, label: m }));
 
     const createForm = useForm<CreateFormState>(emptyCreateForm());
@@ -857,6 +858,18 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                 placeholder="Tous les groupes"
                                 value={filters.groupFilter}
                                 onChange={(event) => reload({ groupFilter: event.target.value })}
+                            />
+                        </div>
+                        <div className="col-6 col-md-4 col-lg-2">
+                            <label className="form-label" htmlFor="enc-f-frais">
+                                Frais
+                            </label>
+                            <SelectField
+                                id="enc-f-frais"
+                                options={fraisFilterOptions}
+                                placeholder="Tous les frais"
+                                value={filters.fraisFilter}
+                                onChange={(event) => reload({ fraisFilter: event.target.value })}
                             />
                         </div>
                         {filters.view === 'cheque' ? (

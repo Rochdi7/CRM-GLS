@@ -248,6 +248,16 @@ final class RapportPdfRenderer
      * filtres rappelés, date d'édition. Assemblé ici pour que deux rapports ne
      * puissent pas afficher leur périmètre différemment.
      *
+     * `$filtresAppliques` est un dictionnaire libellé => valeur, et non une
+     * liste de paramètres nommés (« groupe », « statut »…) : chaque rapport a
+     * ses propres filtres, et une signature qui les énumérerait tous
+     * grossirait à chaque nouveau rapport tout en laissant les autres passer
+     * des `null`. Seuls les filtres RÉELLEMENT appliqués y figurent — le
+     * gabarit imprime ce qu'il reçoit, sans savoir de quel rapport il s'agit.
+     * Le contrôleur passe le MÊME dictionnaire au classeur Excel, donc les deux
+     * documents rappellent le périmètre à l'identique.
+     *
+     * @param  array<string, string>  $filtresAppliques
      * @return array<string, mixed>
      */
     public function entete(
@@ -255,16 +265,14 @@ final class RapportPdfRenderer
         ?Etablissement $centre,
         string $periodeDebut,
         string $periodeFin,
-        ?string $groupeLabel = null,
-        ?string $statutLabel = null,
+        array $filtresAppliques = [],
     ): array {
         return [
             'titre' => $titre,
             'centre' => $centre,
             'periodeDebut' => $periodeDebut,
             'periodeFin' => $periodeFin,
-            'groupeLabel' => $groupeLabel,
-            'statutLabel' => $statutLabel,
+            'filtresAppliques' => $filtresAppliques,
             'editeLe' => now()->format('d/m/Y H:i'),
         ];
     }

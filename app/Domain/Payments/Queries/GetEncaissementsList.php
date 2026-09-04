@@ -10,6 +10,7 @@ use App\Models\Caisse;
 use App\Models\Cheque;
 use App\Models\Employee;
 use App\Models\Encaissement;
+use App\Models\Frais;
 use App\Models\Group;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
@@ -64,6 +65,7 @@ final class GetEncaissementsList
         string $banqueFilter = '',
         string $soldeFilter = '',
         string $groupFilter = '',
+        string $fraisFilter = '',
     ): array {
         $base = Encaissement::query()
             // What has been given back on this payment (Remboursement.
@@ -192,6 +194,25 @@ final class GetEncaissementsList
                     ->orWhere(fn ($a) => $a
                         ->whereNull('inscription_fee_id')
                         ->whereHas('student.inscriptions', fn ($i) => $i->where('group_id', $groupId)));
+            }))
+            // Frais : la ligne du catalogue (frais.id) que ce paiement
+            // règle. Le lien passe par inscription_fees.frais_id — jamais par
+            // le libellé `inscription_fees.nom`, qui est une COPIE figée au
+            // moment de l'inscription (un frais renommé depuis laisserait des
+            // lignes que le filtre ne retrouverait plus).
+            //
+            // Une AVANCE n'a pas de frais ; elle est pourtant rattachée au
+            // filtre par les frais auxquels son argent a été APPLIQUÉ
+            // (mêmes principes que le filtre Groupe juste au-dessus : on
+            // rattache l'avance à sa destination, pas au néant). Une avance
+            // encore libre sort donc du résultat dès qu'un frais est demandé
+            // — c'est correct : elle ne paie aucun frais pour l'instant.
+            ->when($fraisFilter !== '', fn ($q) => $q->where(function ($w) use ($fraisFilter): void {
+                $fraisId = (int) $fraisFilter;
+                $w->whereHas('fee', fn ($f) => $f->where('frais_id', $fraisId))
+                    ->orWhere(fn ($a) => $a
+                        ->whereNull('inscription_fee_id')
+                        ->whereHas('applications.fee', fn ($f) => $f->where('frais_id', $fraisId)));
             }))
             ->when($numeroChequeFilter !== '', fn ($q) => $q->where('numero_cheque', 'ilike', "%{$numeroChequeFilter}%"))
             ->when($banqueFilter !== '', fn ($q) => $q->where('banque', 'ilike', "%{$banqueFilter}%"))
@@ -536,6 +557,26 @@ final class GetEncaissementsList
             ->orderBy('nom')
             ->get(['id', 'nom'])
             ->map(fn (Group $g): array => ['id' => $g->id, 'nom' => $g->nom]);
+    }
+
+    /**
+     * Le catalogue des frais, pour le filtre « Frais ».
+     *
+     * Les frais INACTIFS restent listés : le catalogue peut être désactivé
+     * après coup, alors que les paiements qui l'ont réglé, eux, restent à
+     * l'écran. Les retirer de la liste rendrait ces lignes infiltrables
+     * (une option absente ne peut jamais élargir un résultat, CLAUDE.md §5).
+     * Le catalogue n'est pas scopé par centre : `frais` est une table de
+     * référence globale, comme sur Recouvrement.
+     *
+     * @return Collection<int, array{id:int, nom:string}>
+     */
+    public function fraisOptions(): Collection
+    {
+        return Frais::query()
+            ->orderBy('nom')
+            ->get(['id', 'nom'])
+            ->map(fn (Frais $f): array => ['id' => $f->id, 'nom' => $f->nom]);
     }
 
     public function studentOptions(User $user): Collection

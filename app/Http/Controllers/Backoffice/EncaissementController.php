@@ -116,6 +116,7 @@ final class EncaissementController extends Controller
         $referenceFilter = (string) $request->string('referenceFilter');
         $studentFilter = (string) $request->string('studentFilter');
         $groupFilter = (string) $request->string('groupFilter');
+        $fraisFilter = (string) $request->string('fraisFilter');
         $numeroChequeFilter = (string) $request->string('numeroChequeFilter');
         $banqueFilter = (string) $request->string('banqueFilter');
         $perPage = (int) $request->integer('perPage', GetEncaissementsList::DEFAULT_PER_PAGE);
@@ -146,6 +147,7 @@ final class EncaissementController extends Controller
             $banqueFilter,
             $soldeFilter,
             $groupFilter,
+            $fraisFilter,
         );
 
         return Inertia::render('Backoffice/Encaissements/Index', [
@@ -158,6 +160,7 @@ final class EncaissementController extends Controller
             'caisses' => fn () => $getEncaissementsList->caisseOptions($request->user()),
             'students' => fn () => $getEncaissementsList->studentOptions($request->user()),
             'groups' => fn () => $getEncaissementsList->groupOptions($request->user()),
+            'frais' => fn () => $getEncaissementsList->fraisOptions(),
             'methodes' => Encaissement::METHODES,
             'banques' => fn () => $getBanquesList->activeNames(),
             'filters' => [
@@ -174,6 +177,7 @@ final class EncaissementController extends Controller
                 'banqueFilter' => $banqueFilter,
                 'soldeFilter' => $soldeFilter,
                 'groupFilter' => $groupFilter,
+                'fraisFilter' => $fraisFilter,
             ],
             // UI convenience only — destroy() re-authorizes server-side and the
             // route itself is behind permission:payments.delete.

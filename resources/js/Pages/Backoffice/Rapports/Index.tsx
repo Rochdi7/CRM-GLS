@@ -6,7 +6,7 @@ import DateField from '@/Components/Forms/DateField';
 import SelectField from '@/Components/Forms/SelectField';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { t } from '@/Lib/i18n';
-import type { RapportsPageProps } from '@/Types';
+import type { RapportFiltreKey, RapportsPageProps, SelectOption } from '@/Types';
 
 /**
  * Gestion des rapports — édition de documents : un sélecteur « Rapport », les
@@ -30,8 +30,11 @@ import type { RapportsPageProps } from '@/Types';
 export default function RapportsIndex({
     onglets,
     filters,
+    filtresVisibles,
     groupOptions,
     statutOptions,
+    sexeOptions,
+    inscriptionOptions,
     nombreLignes,
 }: RapportsPageProps) {
     const isLoading = useInertiaLoading();
@@ -43,6 +46,58 @@ export default function RapportsIndex({
         () => onglets.flatMap((o) => o.rapports).map((r) => ({ value: r.value, label: r.label })),
         [onglets],
     );
+
+    /**
+     * La définition de CHAQUE filtre possible : libellé, options, placeholder.
+     * Lesquels sont dessinés vient du SERVEUR (`filtresVisibles`), jamais d'un
+     * test sur la clé du rapport écrit ici — un rapport dont la requête Domain
+     * n'applique pas un filtre ne doit pas pouvoir l'afficher, sinon
+     * l'utilisateur croit avoir restreint son document alors qu'il ne l'a pas
+     * fait. Ajouter un rapport = une entrée dans RapportCatalogue::filtres(),
+     * et ici seulement si son filtre n'existe pas déjà.
+     */
+    const definitionsFiltres: Record<
+        RapportFiltreKey,
+        { label: string; placeholder: string; options: SelectOption[] }
+    > = {
+        groupFilter: {
+            label: t('Group'),
+            placeholder: t('Choose a course'),
+            options: groupOptions,
+        },
+        statutFilter: {
+            label: t('Status'),
+            placeholder: t('All statuses'),
+            options: statutOptions,
+        },
+        sexeFilter: {
+            label: t('Gender'),
+            placeholder: t('Select gender'),
+            options: sexeOptions,
+        },
+        inscriptionFilter: {
+            label: t('Registration status'),
+            placeholder: t('All'),
+            options: inscriptionOptions,
+        },
+    };
+
+    /**
+     * Ce que compte l'aperçu : un rapport d'étudiants ne compte pas des
+     * inscriptions. Le mot suit le rapport, sinon le compteur mentirait sur ce
+     * que l'utilisateur s'apprête à télécharger. Défaut = inscriptions, pour
+     * que le premier rapport garde son libellé exact.
+     */
+    const messages =
+        filters.rapport === 'liste-etudiants'
+            ? {
+                  vide: t('No student matches these filters.'),
+                  unite: nombreLignes === 1 ? t('student') : t('students'),
+              }
+            : {
+                  vide: t('No registration matches these filters.'),
+                  unite: nombreLignes === 1 ? t('registration') : t('registrations'),
+              };
 
     function reload(nextFilters: Partial<typeof filters>) {
         const next = { ...filters, ...nextFilters };
@@ -66,13 +121,13 @@ export default function RapportsIndex({
 
     /** Ouvre le document dans un nouvel onglet (PDF) ou déclenche le téléchargement (Excel). */
     function telecharger(format: 'pdf' | 'excel') {
-        const params = new URLSearchParams({
-            rapport: filters.rapport,
-            groupFilter: filters.groupFilter,
-            statutFilter: filters.statutFilter,
-            dateFrom: filters.dateFrom,
-            dateTo: filters.dateTo,
-        });
+        // Tous les filtres partent, y compris ceux qu'un autre rapport
+        // utilise : le contrôleur n'applique à ce rapport que ceux qu'il
+        // déclare (RapportCatalogue::filtres()), donc les autres sont inertes.
+        // Les énumérer un par un ici ferait silencieusement tomber le filtre
+        // du prochain rapport ajouté, et le document ne correspondrait plus au
+        // compteur affiché — la seule chose que cette page promet.
+        const params = new URLSearchParams(filters as unknown as Record<string, string>);
 
         const url = `/backoffice/rapports/${format}?${params.toString()}`;
 
@@ -122,28 +177,21 @@ export default function RapportsIndex({
                             onChange={(e) => reload({ rapport: e.target.value })}
                         />
                     </div>
-                    {/* Le groupe est OPTIONNEL : vide, le rapport sort
-                        toutes les inscriptions de la période. */}
-                    <div className="col-12 col-md-6 col-xl-2">
-                        <SelectField
-                            id="groupFilter"
-                            label={t('Group')}
-                            placeholder={t('Choose a course')}
-                            options={groupOptions}
-                            value={filters.groupFilter}
-                            onChange={(e) => reload({ groupFilter: e.target.value })}
-                        />
-                    </div>
-                    <div className="col-12 col-md-6 col-xl-2">
-                        <SelectField
-                            id="statutFilter"
-                            label={t('Status')}
-                            placeholder={t('All statuses')}
-                            options={statutOptions}
-                            value={filters.statutFilter}
-                            onChange={(e) => reload({ statutFilter: e.target.value })}
-                        />
-                    </div>
+                    {/* Les filtres du rapport choisi, dans l'ordre décidé par
+                        le serveur. Tous OPTIONNELS : vides, le rapport sort
+                        toutes les lignes de la période. */}
+                    {filtresVisibles.map((cle) => (
+                        <div className="col-12 col-md-6 col-xl-2" key={cle}>
+                            <SelectField
+                                id={cle}
+                                label={definitionsFiltres[cle].label}
+                                placeholder={definitionsFiltres[cle].placeholder}
+                                options={definitionsFiltres[cle].options}
+                                value={filters[cle]}
+                                onChange={(e) => reload({ [cle]: e.target.value })}
+                            />
+                        </div>
+                    ))}
                     <div className="col-6 col-md-3 col-xl-2">
                         <DateField
                             id="dateFrom"
@@ -196,11 +244,7 @@ export default function RapportsIndex({
                         cliquer, et un rapport vide se voit ici plutôt
                         que dans un PDF d'une page blanche. */}
                     <p className="text-muted mb-3 me-3">
-                        {nombreLignes === 0
-                            ? t('No registration matches these filters.')
-                            : `${nombreLignes} ${
-                                  nombreLignes === 1 ? t('registration') : t('registrations')
-                              }`}
+                        {nombreLignes === 0 ? messages.vide : `${nombreLignes} ${messages.unite}`}
                     </p>
                     {/* Rouge pour le PDF, vert pour l'Excel : les couleurs des
                         deux formats eux-mêmes, ce qui permet de viser le bon

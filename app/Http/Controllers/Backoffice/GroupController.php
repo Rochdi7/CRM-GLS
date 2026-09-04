@@ -8,6 +8,7 @@ use App\Domain\Groups\Actions\ChangerEnseignantGroupe;
 use App\Domain\Groups\Actions\ReaffecterGroupeVersAnnee;
 use App\Domain\Groups\Actions\RetirerFraisGroupe;
 use App\Domain\Groups\Actions\SupprimerGroupe;
+use App\Domain\Groups\Actions\SynchroniserDatesInscriptions;
 use App\Domain\Groups\Queries\GetGroupDetails;
 use App\Domain\Groups\Queries\GetGroupFormOptions;
 use App\Domain\Groups\Queries\GetGroupPaymentMatrix;
@@ -222,8 +223,9 @@ final class GroupController extends Controller
         );
 
         $changement = null;
+        $datesResynchronisees = 0;
 
-        DB::transaction(function () use ($request, $data, $fraisLignes, $group, &$changement): void {
+        DB::transaction(function () use ($request, $data, $fraisLignes, $group, &$changement, &$datesResynchronisees): void {
             $statut = $data['statut'];
 
             // A raw statut change to either terminal status (Fin de
@@ -272,10 +274,26 @@ final class GroupController extends Controller
             // Every catalog fee is assigned to the group (no checkbox): each
             // line carries the amount entered for this group — 0 DH included.
             $group->frais()->sync($fraisLignes);
+
+            // Les dates de formation appartiennent au GROUPE : ses
+            // inscriptions n'en gardent qu'une copie, faite le jour de leur
+            // création. Sans cette propagation, corriger les dates ici ne
+            // corrigeait rien pour les étudiants déjà inscrits. Seules les
+            // inscriptions Actives réellement divergentes sont réécrites —
+            // voir SynchroniserDatesInscriptions.
+            $datesResynchronisees = app(SynchroniserDatesInscriptions::class)->handle($group->refresh());
         });
 
         $redirect = redirect()->route('backoffice.groups.index')
             ->with('success', __('Group updated.'));
+
+        // Réécrire les dates de plusieurs dizaines d'inscriptions ne doit
+        // jamais être silencieux : l'utilisateur a modifié UN groupe.
+        if ($datesResynchronisees > 0) {
+            $redirect->with('info', __(':count registration(s) updated with the new group dates.', [
+                'count' => $datesResynchronisees,
+            ]));
+        }
 
         // A teacher swap made from the list page stops the emploi du temps
         // just like the detail-page flow does — tell the user what stopped and

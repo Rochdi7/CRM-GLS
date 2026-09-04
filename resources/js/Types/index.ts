@@ -1720,6 +1720,8 @@ export interface EncaissementsFilters {
     soldeFilter: string;
     /** Group id: fee rows by their inscription's group, avances by the student's inscriptions. */
     groupFilter: string;
+    /** Frais catalog id: fee rows by `inscription_fees.frais_id`, avances by the fees their money was applied to. */
+    fraisFilter: string;
 }
 
 export interface EncaissementsPageProps {
@@ -1730,6 +1732,8 @@ export interface EncaissementsPageProps {
     students: FinanceOption[];
     /** Groups of the active centre + année — the « Groupe » filter's options. */
     groups: FinanceOption[];
+    /** The whole frais catalog (inactive included) — the « Frais » filter's options. */
+    frais: FinanceOption[];
     methodes: string[];
     /** Active bank names from the catalog (Paramètres → Banques) — the Chèque form's dropdown source. */
     banques: string[];
@@ -2181,19 +2185,37 @@ export interface RapportOnglet {
     rapports: RapportOption[];
 }
 
+/**
+ * Tous les filtres de la page, tous rapports confondus. Un rapport n'en
+ * utilise qu'une partie — voir `filtresVisibles`, qui dit lesquels dessiner.
+ * Les autres restent portés dans l'URL sans effet : le contrôleur ne les
+ * applique qu'aux rapports qui les déclarent.
+ */
 export interface RapportFilters {
     rapport: string;
     groupFilter: string;
     statutFilter: string;
+    sexeFilter: string;
+    inscriptionFilter: string;
     dateFrom: string;
     dateTo: string;
 }
 
+/** Clé d'un filtre propre à un rapport (la fenêtre de dates est toujours dessinée). */
+export type RapportFiltreKey = 'groupFilter' | 'statutFilter' | 'sexeFilter' | 'inscriptionFilter';
+
 export interface RapportsPageProps {
     onglets: RapportOnglet[];
     filters: RapportFilters;
+    /**
+     * Les filtres que le rapport choisi expose, dans l'ordre d'affichage —
+     * décidés par RapportCatalogue::filtres() côté serveur.
+     */
+    filtresVisibles: RapportFiltreKey[];
     groupOptions: SelectOption[];
     statutOptions: SelectOption[];
+    sexeOptions: SelectOption[];
+    inscriptionOptions: SelectOption[];
     /** Nombre de lignes que le document contiendra avec les filtres courants. */
     nombreLignes: number;
     [key: string]: unknown;

@@ -1,21 +1,24 @@
 {{--
-    « Liste des inscriptions » — gabarit PDF (mPDF), servi par
-    RapportPdfRenderer.
+    « Liste des étudiants » — gabarit PDF (mPDF), servi par RapportPdfRenderer.
 
-    ⚠ Le gabarit est rendu en TROIS sections ($section = debut | lignes | fin),
-    et non d'une seule pièce : mPDF analyse le HTML avec PCRE et refuse au-delà
-    de `pcre.backtrack_limit` (« The HTML code size is larger than… »), ce qui
-    fait échouer net un rapport d'année pleine. Le renderer écrit donc
-    l'ouverture, puis les lignes par tranches, puis la fermeture. Le tableau
-    reste ouvert entre les appels — d'où les balises volontairement non
-    refermées à la fin de « debut ».
+    Copie conforme d'inscriptions-pdf.blade.php : mêmes styles, même titre
+    encadré, même rappel des filtres, mêmes contraintes. Les deux documents
+    doivent se lire pareil — un rapport GLS a une seule mise en page.
+
+    ⚠ Rendu en TROIS sections ($section = debut | lignes | fin), et non d'une
+    seule pièce : mPDF analyse le HTML avec PCRE et refuse au-delà de
+    `pcre.backtrack_limit` (« The HTML code size is larger than… »), ce qui fait
+    échouer net un rapport d'année pleine. Le renderer écrit donc l'ouverture,
+    puis les lignes par tranches, puis la fermeture. Le tableau reste ouvert
+    entre les appels — d'où les balises volontairement non refermées à la fin de
+    « debut ».
 
     ⚠ L'identité du centre (nom, adresse, téléphone, logo) et le pied
     (signature, cachet, pagination) ne sont PAS dans ce fichier : ce sont
     RapportPdfRenderer::entetePage() / ::pied(), posés par
     SetHTMLHeader()/SetHTMLFooter() pour être répétés sur CHAQUE page. Écrits
-    ici, ils ne s'imprimeraient qu'en page 1 — une page détachée du lot ne
-    dirait plus de quel centre elle vient.
+    ici, ils ne s'imprimeraient qu'en page 1 — une page détachée du lot ne dirait
+    plus de quel centre elle vient.
 
     Construit en tableaux pour la grille, jamais en flexbox : mPDF ne supporte
     pas flexbox (même contrainte que recu-pdf.blade.php).
@@ -37,7 +40,7 @@
 
         table { width: 100%; border-collapse: collapse; }
 
-        /* --- Titre encadré gris, centré, comme le rapport de référence --- */
+        /* --- Titre encadré gris, centré, comme le rapport des inscriptions --- */
         .titre {
             background: {{ $couleurFond }};
             text-align: center;
@@ -48,7 +51,7 @@
         }
 
         /* --- Rappel des filtres appliqués : le document dit toujours de
-               quel périmètre il parle (période, groupe, statut). --- */
+               quel périmètre il parle (période, sexe, état d'inscription). --- */
         .filtres { margin-bottom: 8pt; font-size: 8.5pt; }
         .filtres div { padding: 1pt 0; }
 
@@ -66,8 +69,8 @@
             font-weight: normal;
             font-size: 9pt;
         }
-        /* Le nom se lit aligné au fil du texte, comme sur le document de
-           référence ; les autres colonnes restent centrées. */
+        /* Le nom se lit aligné au fil du texte, comme sur le rapport des
+           inscriptions ; les autres colonnes restent centrées. */
         .rapport td.txt { text-align: left; }
 
         .vide { padding: 14pt 0; text-align: center; font-style: italic; }
@@ -78,33 +81,31 @@
 
     <div class="filtres">
         <div>Période : Du {{ $periodeDebut }} au {{ $periodeFin }}</div>
-        {{-- Les filtres réellement appliqués, nommés par le contrôleur : le
-             gabarit n'a pas à connaître la liste des filtres de ce rapport
-             (voir RapportPdfRenderer::entete()). --}}
         @foreach ($filtresAppliques as $libelle => $valeur)
             <div>{{ $libelle }} : {{ $valeur }}</div>
         @endforeach
     </div>
 
     @if ($lignes->isEmpty())
-        <div class="vide">Aucune inscription sur cette période.</div>
+        <div class="vide">Aucun étudiant sur cette période.</div>
     @else
         {{-- Tableau volontairement laissé OUVERT : les tranches de lignes
              suivantes viennent s'y empiler (voir l'entête du fichier). --}}
         <table class="rapport">
             <thead>
                 {{-- repeat_header : mPDF redessine cette ligne en haut de
-                     chaque page, comme le document de référence. --}}
+                     chaque page, comme le rapport des inscriptions. --}}
                 <tr repeat_header="1">
                     <th style="width:5%;">N°</th>
-                    <th style="width:10%;">Réf</th>
-                    <th style="width:20%;">Étudiant</th>
-                    <th style="width:13%;">Téléphone</th>
-                    <th style="width:14%;">Groupe</th>
-                    <th style="width:9%;">Statut</th>
-                    <th style="width:10%;">Date d'inscription</th>
-                    <th style="width:9%;">Date de début</th>
-                    <th style="width:10%;">Date de fin</th>
+                    <th style="width:11%;">Réf</th>
+                    <th style="width:22%;">Étudiant</th>
+                    <th style="width:8%;">Sexe</th>
+                    <th style="width:11%;">Date de naissance</th>
+                    <th style="width:6%;">Âge</th>
+                    <th style="width:11%;">CIN</th>
+                    <th style="width:12%;">Téléphone</th>
+                    <th style="width:8%;">Niveau</th>
+                    <th style="width:11%;">Date d'ajout</th>
                 </tr>
             </thead>
             <tbody>
@@ -113,9 +114,9 @@
 
 @if ($section === 'lignes')
                 @foreach ($lignes as $ligne)
-                    {{-- Une ligne sur deux est légèrement teintée : sur neuf
+                    {{-- Une ligne sur deux est légèrement teintée : sur dix
                          colonnes serrées, c'est ce qui empêche l'œil de sauter
-                         d'une ligne à l'autre en lisant la date de fin.
+                         d'une ligne à l'autre en lisant la dernière colonne.
                          Alternée sur le N° de la ligne et NON sur $loop : les
                          lignes arrivent par tranches (LIGNES_PAR_TRANCHE), et
                          $loop repartirait de zéro à chaque tranche — deux
@@ -129,12 +130,13 @@
                              document doit se lire comme la page. La donnée
                              stockée garde sa casse — CLAUDE.md §5. --}}
                         <td class="txt">{{ mb_strtoupper($ligne['etudiant']) }}</td>
+                        <td>{{ $ligne['sexe'] }}</td>
+                        <td>{{ $ligne['dateNaissance'] }}</td>
+                        <td>{{ $ligne['age'] }}</td>
+                        <td>{{ mb_strtoupper($ligne['cin']) }}</td>
                         <td>{{ $ligne['telephone'] }}</td>
-                        <td>{{ mb_strtoupper($ligne['groupe']) }}</td>
-                        <td>{{ $ligne['statut'] }}</td>
-                        <td>{{ $ligne['dateInscription'] }}</td>
-                        <td>{{ $ligne['dateDebut'] }}</td>
-                        <td>{{ $ligne['dateFin'] }}</td>
+                        <td>{{ $ligne['niveau'] }}</td>
+                        <td>{{ $ligne['dateCreation'] }}</td>
                     </tr>
                 @endforeach
 @endif

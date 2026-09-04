@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Reports\Support;
 
 use App\Domain\Reports\Queries\GetInscriptionsReport;
+use App\Domain\Reports\Queries\GetStudentsReport;
 
 /**
  * Le catalogue des rapports — source de vérité UNIQUE des onglets de « Gestion
@@ -41,6 +42,10 @@ final class RapportCatalogue
                         'value' => GetInscriptionsReport::KEY,
                         'label' => 'Liste des inscriptions',
                     ],
+                    [
+                        'value' => GetStudentsReport::KEY,
+                        'label' => 'Liste des étudiants',
+                    ],
                 ],
             ],
             ['key' => 'admissions', 'label' => 'Admissions & CRM', 'rapports' => []],
@@ -55,7 +60,27 @@ final class RapportCatalogue
     /** Les clés de rapport réellement servies — ce que le contrôleur accepte. */
     public static function clesImplementees(): array
     {
-        return [GetInscriptionsReport::KEY];
+        return [GetInscriptionsReport::KEY, GetStudentsReport::KEY];
+    }
+
+    /**
+     * Les filtres que CE rapport expose, décidés ici et non dans le composant.
+     *
+     * La page dessine exactement ces champs : elle ne peut donc pas offrir à
+     * l'utilisateur un filtre que la requête Domain n'applique pas (un filtre
+     * inerte qui ne change rien au document est pire qu'un filtre absent), ni
+     * en oublier un. La fenêtre de dates n'y figure pas : elle est commune à
+     * tous les rapports et toujours dessinée.
+     *
+     * @return list<string>
+     */
+    public static function filtres(string $cle): array
+    {
+        return match ($cle) {
+            GetInscriptionsReport::KEY => ['groupFilter', 'statutFilter'],
+            GetStudentsReport::KEY => ['sexeFilter', 'inscriptionFilter'],
+            default => [],
+        };
     }
 
     /** Le titre imprimé en tête du PDF et du classeur. */
@@ -63,6 +88,7 @@ final class RapportCatalogue
     {
         return match ($cle) {
             GetInscriptionsReport::KEY => "Liste d'inscriptions",
+            GetStudentsReport::KEY => 'Liste des étudiants',
             default => 'Rapport',
         };
     }
@@ -72,6 +98,7 @@ final class RapportCatalogue
     {
         return match ($cle) {
             GetInscriptionsReport::KEY => 'backoffice.rapports.inscriptions-pdf',
+            GetStudentsReport::KEY => 'backoffice.rapports.etudiants-pdf',
             default => throw new \InvalidArgumentException("Rapport inconnu : {$cle}"),
         };
     }
@@ -97,6 +124,18 @@ final class RapportCatalogue
                 ['key' => 'dateDebut', 'label' => 'Date de début', 'width' => 14.0],
                 ['key' => 'dateFin', 'label' => 'Date de fin', 'width' => 14.0],
             ],
+            GetStudentsReport::KEY => [
+                ['key' => 'numero', 'label' => 'N°', 'width' => 6.0],
+                ['key' => 'reference', 'label' => 'Réf', 'width' => 14.0],
+                ['key' => 'etudiant', 'label' => 'Étudiant', 'width' => 30.0],
+                ['key' => 'sexe', 'label' => 'Sexe', 'width' => 10.0],
+                ['key' => 'dateNaissance', 'label' => 'Date de naissance', 'width' => 16.0],
+                ['key' => 'age', 'label' => 'Âge', 'width' => 7.0],
+                ['key' => 'cin', 'label' => 'CIN', 'width' => 14.0],
+                ['key' => 'telephone', 'label' => 'Téléphone', 'width' => 16.0],
+                ['key' => 'niveau', 'label' => 'Niveau', 'width' => 12.0],
+                ['key' => 'dateCreation', 'label' => "Date d'ajout", 'width' => 14.0],
+            ],
             default => throw new \InvalidArgumentException("Rapport inconnu : {$cle}"),
         };
     }
@@ -110,6 +149,7 @@ final class RapportCatalogue
     {
         $prefixe = match ($cle) {
             GetInscriptionsReport::KEY => 'liste-inscriptions',
+            GetStudentsReport::KEY => 'liste-etudiants',
             default => 'rapport',
         };
 

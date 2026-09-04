@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Domain\Groups\Actions\SynchroniserDatesInscriptions;
 use App\Models\Employee;
 use App\Models\Group;
 use Illuminate\Console\Command;
@@ -19,10 +20,19 @@ use OpenSpout\Reader\XLSX\Reader;
  *   STATUS_NAME                -> groups.statut
  *   EMPLOYEE_TEACHER_FULL_NAME -> groups.enseignant_id         (matched by name)
  *
- * Nothing else is touched: not the group's centre, not its année, not one
- * inscription, not a single dirham. A group whose name is not in the file is
- * left exactly as it is, and a teacher who cannot be matched leaves
- * enseignant_id untouched rather than guessing.
+ * Nothing else is touched: not the group's centre, not its année, not a
+ * single dirham. A group whose name is not in the file is left exactly as it
+ * is, and a teacher who cannot be matched leaves enseignant_id untouched
+ * rather than guessing.
+ *
+ * ⚠ Une exception, depuis le 04/09/2026 : quand les DATES du groupe changent,
+ * elles redescendent sur ses inscriptions Actives
+ * (Domain\Groups\Actions\SynchroniserDatesInscriptions), exactement comme
+ * dans le modal « Modifier le groupe ». `inscriptions.date_debut` /
+ * `date_fin` sont les dates du groupe recopiées, pas des données propres à
+ * l'étudiant — seule `date_inscription` lui appartient, et elle n'est jamais
+ * touchée. Sans cela, corriger un groupe ici laissait tous ses étudiants sur
+ * l'ancienne copie.
  *
  * Rows are saved one by one through Eloquent — NOT a mass update — so the
  * Auditable trait journals every change (avant/après) like any other edit.
@@ -61,6 +71,12 @@ final class MettreAJourGroupesDepuisExport extends Command
         'NAME', 'START_DATE', 'END_DATE', 'CLASSIFICATION_NAME',
         'EMPLOYEE_TEACHER_FULL_NAME', 'STATUS_NAME',
     ];
+
+    public function __construct(
+        private readonly SynchroniserDatesInscriptions $synchroniserDates,
+    ) {
+        parent::__construct();
+    }
 
     public function handle(): int
     {
@@ -102,6 +118,7 @@ final class MettreAJourGroupesDepuisExport extends Command
         $inchanges = 0;
         $absents = [];
         $profsInconnus = [];
+        $inscriptionsResynchronisees = 0;
 
         foreach ($groupes as $groupe) {
             $ligne = $lignes[$this->cle($groupe->nom)] ?? null;
@@ -131,15 +148,32 @@ final class MettreAJourGroupesDepuisExport extends Command
             ));
 
             if (! $this->option('dry-run')) {
-                DB::transaction(function () use ($groupe, $changements): void {
+                DB::transaction(function () use ($groupe, $changements, &$inscriptionsResynchronisees): void {
                     foreach ($changements as $colonne => [, $apres]) {
                         $groupe->{$colonne} = $apres;
                     }
                     $groupe->save();
+
+                    // Les dates de formation appartiennent au GROUPE et sont
+                    // recopiees sur ses inscriptions : les corriger ici sans
+                    // les propager laisserait chaque etudiant sur l'ancienne
+                    // copie. Meme action que le modal « Modifier le groupe »,
+                    // pour que les deux chemins ne puissent pas diverger.
+                    if (isset($changements['date_debut_formation']) || isset($changements['date_fin_formation'])) {
+                        $inscriptionsResynchronisees += $this->synchroniserDates->handle($groupe);
+                    }
                 });
             }
 
             $modifies++;
+        }
+
+        if ($inscriptionsResynchronisees > 0) {
+            $this->line('');
+            $this->info(sprintf(
+                '%d inscription(s) réalignée(s) sur les nouvelles dates de leur groupe.',
+                $inscriptionsResynchronisees
+            ));
         }
 
         $this->line('');

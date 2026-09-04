@@ -18,10 +18,11 @@ use Illuminate\Pagination\LengthAwarePaginator;
  * Read-model for "Gestion des recouvrements" (gls-crm-schema.md §9/§11 —
  * InscriptionFee.montant vs its Encaissement rows). A fee is "en retard"
  * when its date_echeance is in the past AND its reste-à-payer is still > 0
- * (fully unpaid or partially paid both count). Both list tabs ("Retards
- * selon la durée" and "Retards selon les critères") share this one query —
- * the durée tab is the same result set pre-filtered to one non-overlapping
- * bucket via $dureeBucket.
+ * (fully unpaid or partially paid both count) AND its inscription is still
+ * Active — a closed dossier owes nothing, see CLAUDE.md §11. Both list tabs
+ * ("Retards selon la durée" and "Retards selon les critères") share this one
+ * query — the durée tab is the same result set pre-filtered to one
+ * non-overlapping bucket via $dureeBucket.
  */
 final class GetRetardsList
 {
@@ -83,7 +84,12 @@ final class GetRetardsList
             ->whereNotNull('date_echeance')
             ->where('date_echeance', '<', $today)
             ->whereHas('inscription', function (Builder $q) use ($user): void {
-                $q->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+                // Only a LIVE dossier is chased for money. An inscription
+                // Annulée / Changement / Expirée / Archivée is closed: its
+                // fees are no longer due, so listing them as "en retard"
+                // sends the front office after money nobody owes.
+                $q->where('statut', Inscription::STATUT_ACTIVE)
+                    ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
                     ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
                     ->tap(fn ($q) => $this->scopeToActiveCenter($q));
             })
@@ -163,7 +169,12 @@ final class GetRetardsList
             ->whereNotNull('date_echeance')
             ->where('date_echeance', '<', $today)
             ->whereHas('inscription', function (Builder $q) use ($user): void {
-                $q->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+                // Only a LIVE dossier is chased for money. An inscription
+                // Annulée / Changement / Expirée / Archivée is closed: its
+                // fees are no longer due, so listing them as "en retard"
+                // sends the front office after money nobody owes.
+                $q->where('statut', Inscription::STATUT_ACTIVE)
+                    ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
                     ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
                     ->tap(fn ($q) => $this->scopeToActiveCenter($q));
             })
