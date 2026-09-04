@@ -9,6 +9,7 @@ use App\Models\CaisseTransfer;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
+use App\Support\Access\DormantTill;
 use App\Support\Access\HiddenAccount;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -148,7 +149,18 @@ final class GetCaisseTransfersList
             // The maintainer's till is never an option: offering it would
             // name the hidden account in a dropdown (HiddenAccount).
             ->tap(fn ($q) => HiddenAccount::hideCaisses($q))
+            // An EMPTY till belonging to a teacher (who never handles the
+            // school's money) or to a departed employee is noise in a
+            // destination list — the same filter « Comptes de caisse » and
+            // « Caisse globale » already apply. ⚠ Its zero-balance condition
+            // is what makes this safe here: a dormant till that still HOLDS
+            // money stays offered, so the transfer that empties it remains
+            // possible. Never drop that half.
+            ->tap(fn ($q) => DormantTill::hide($q))
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+            // ⚠ NOT scopeToActiveCenter(): a till is offered in every centre
+            // its responsable is ASSIGNED to, not only the one it is filed
+            // under. See scopeToCentreOfService() below.
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
             ->orderBy('nom')
             ->get()
@@ -212,6 +224,44 @@ final class GetCaisseTransfersList
         }
 
         $query->where('etablissement_id', $centerId);
+    }
+
+    /**
+     * Destination-list scoping: a till belongs to the active centre when it
+     * is FILED there, or when the employee who holds it is ASSIGNED there.
+     *
+     * « Centres affectés » is the one authority on where a person works
+     * (CLAUDE.md §16); `employees.etablissement_id` is merely their PRIMARY
+     * centre — where the till is filed and where its money is counted. The
+     * two are different questions, and only the first decides whether a
+     * cashier standing in Rabat can hand money to a colleague who also works
+     * in Rabat.
+     *
+     * Reported 04/09/2026: Mohammed Rafik's till is filed in GLS Marrakech
+     * (his primary centre) while he is assigned to several centres, so a
+     * cashier working in Rabat searching « mohammed » got « Aucun résultat »
+     * and could not transfer to him at all. Matching only
+     * `caisses.etablissement_id` asked where the till SITS instead of where
+     * its owner WORKS.
+     *
+     * The centre filing is untouched — `caisses.etablissement_id` keeps its
+     * stored meaning and is never reinterpreted (§11, third companion rule);
+     * this widens only which options a screen OFFERS. A centre-less account
+     * (an Externe safe) stays global, as everywhere else.
+     */
+    private function scopeToCentreOfService($query): void
+    {
+        $id = $this->context->etablissementId();
+
+        if ($id === null) {
+            return;
+        }
+
+        $query->where(fn ($q) => $q
+            ->whereNull('etablissement_id')
+            ->orWhere('etablissement_id', $id)
+            ->orWhereHas('responsable', fn ($r) => $r
+                ->whereHas('etablissements', fn ($e) => $e->where('etablissements.id', $id))));
     }
 
     private function scopeToActiveCenter($query): void
