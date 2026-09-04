@@ -55,7 +55,7 @@ const TRANSACTION_TYPE_BADGE: Record<string, 'success' | 'danger'> = {
     'Transfert': 'danger',
 };
 
-function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJournalData }) {
+function JournalPanel({ scope, data, centerLocked }: { scope: 'mine' | 'all'; data: CaisseJournalData; centerLocked: boolean }) {
     const [typeFilter, setTypeFilter] = useState('');
     const [dateFrom, setDateFrom] = useState(todayIso);
     const [dateTo, setDateTo] = useState(todayIso);
@@ -217,6 +217,7 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
                                     <th className="text-end">Montant</th>
                                     <th>Date</th>
                                     <th>Agent</th>
+                                    {!centerLocked && <th>Centre</th>}
                                 </tr>
                             }
                         >
@@ -231,6 +232,7 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
                                     </td>
                                     <td>{row.date ?? '—'}</td>
                                     <td>{row.agent ?? '—'}</td>
+                                    {!centerLocked && <td>{row.centre ?? '—'}</td>}
                                 </tr>
                             ))}
                         </DataTable>
@@ -275,6 +277,7 @@ function JournalPanel({ scope, data }: { scope: 'mine' | 'all'; data: CaisseJour
  */
 export default function CaissesIndex({
     canViewCaisses,
+    centerLocked,
     canViewTransfers,
     canViewComptes,
     journalMine,
@@ -528,7 +531,7 @@ export default function CaissesIndex({
                 )}
             </ul>
 
-            {tab === 'ma-caisse' && canViewCaisses && journalMine && <JournalPanel scope="mine" data={journalMine} />}
+            {tab === 'ma-caisse' && canViewCaisses && journalMine && <JournalPanel scope="mine" data={journalMine} centerLocked={centerLocked} />}
 
             {tab === 'globale' && canViewCaisses && globale && (
                 <GlobalePanel

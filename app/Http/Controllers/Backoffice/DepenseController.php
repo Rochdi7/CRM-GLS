@@ -79,6 +79,17 @@ final class DepenseController extends Controller
             ? $getDepensesList($user, $search, $typeFilter, $caisseFilter, $dateFrom, $dateTo, $perPage, GetDepensesList::SCOPE_PAIEMENT_PROF, $statutFilter)
             : null;
 
+        // « Validation des dépenses » — EVERY dépense, both kinds. The two
+        // browsing tabs above are split for readability; validation is the
+        // only screen that decides a pending row, so a dépense missing from
+        // it can never be approved or refused and its money stays held in
+        // the till indefinitely (04/09/2026: every « Paiement prof » was
+        // unreachable because this tab reused $depensesList). Built only for
+        // whoever can actually act on it.
+        $validationList = $canAudit
+            ? $getDepensesList($user, $search, $typeFilter, $caisseFilter, $dateFrom, $dateTo, $perPage, GetDepensesList::SCOPE_TOUS, $statutFilter)
+            : null;
+
         // The acting employee's own till balance — shown read-only in the
         // Dépense create modal so staff can see what they're spending
         // against (same till StoreDepenseRequest silently derives on save).
@@ -99,6 +110,13 @@ final class DepenseController extends Controller
             'enAttenteCount' => $depensesList['enAttenteCount'] ?? 0,
             'paiementsProf' => $this->scrubOperationDates($paiementsProfList['data'] ?? null, $canAudit),
             'paiementsProfTotal' => $paiementsProfList['montantTotal'] ?? null,
+            // The Validation tab's own rows and totals — over BOTH kinds, so
+            // the badge and the « En attente » figure report the real amount
+            // held across the tills, not just the Dépenses tab's share.
+            'validationDepenses' => $this->scrubOperationDates($validationList['data'] ?? null, $canAudit),
+            'validationMontantTotal' => $validationList['montantTotal'] ?? null,
+            'validationMontantEnAttente' => $validationList['montantEnAttente'] ?? null,
+            'validationEnAttenteCount' => $validationList['enAttenteCount'] ?? 0,
             // Drives the UI: when approval is OFF the statut column, the
             // filter and the approve/refuse actions are all pointless.
             'approvalEnabled' => AppSettings::expenseApprovalEnabled(),

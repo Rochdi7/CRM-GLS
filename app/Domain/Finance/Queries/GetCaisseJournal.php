@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Finance\Queries;
 
+use App\Models\Activity;
 use App\Models\Caisse;
 use App\Models\CaisseTransfer;
 use App\Models\Depense;
@@ -14,6 +15,7 @@ use App\Services\CaisseProvisioner;
 use App\Services\Context\CurrentContext;
 use App\Support\Access\HiddenAccount;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Read-model for the unified till journal ("Ma caisse" / "Journal des
@@ -106,15 +108,21 @@ final class GetCaisseJournal
             ->selectRaw('methode, sum(montant) as total')
             ->whereNull('applied_from_encaissement_id')
             ->where(fn ($q) => $q->whereIn('caisse_id', $ids)->orWhereIn('agent_id', $agentIds))
+            // Ventilation par centre : une caissière encaisse pour plusieurs
+            // centres avec une seule caisse, donc le KPI suit le centre du
+            // PAIEMENT, pas l'étiquette de la caisse (cf. soldeVentile()).
+            ->tap(fn ($q) => $this->scopeRecordsToActiveCenter($q))
             ->groupBy('methode')
             ->pluck('total', 'methode');
         $encaissementsParMethode = collect(Encaissement::METHODES)
             ->mapWithKeys(fn (string $m) => [$m => number_format((float) ($parMethode[$m] ?? 0), 2, '.', '')])
             ->all();
         $totalEncaissements = (float) $parMethode->sum();
+        $depenseIdsDuCentre = $this->idsDuCentreDepuisLeLedger(Depense::class, $ids);
         $totalDepenses = (float) Depense::query()
             ->whereIn('caisse_id', $ids)
             ->where('statut', Depense::STATUT_APPROUVEE)
+            ->when($depenseIdsDuCentre !== null, fn ($q) => $q->whereIn('id', $depenseIdsDuCentre))
             ->sum('montant');
         // Refunds decrement the till exactly like a dépense
         // (EnregistrerRemboursement), but they are their own outflow and must
@@ -129,10 +137,11 @@ final class GetCaisseJournal
         $totalRemboursements = (float) Remboursement::query()
             ->whereIn('caisse_id', $ids)
             ->where(fn ($q) => $this->exclureAnnules($q))
+            ->tap(fn ($q) => $this->scopeRecordsToActiveCenter($q))
             ->sum('montant');
-        $solde = (float) Caisse::query()->whereIn('id', $ids)->sum('solde');
+        $solde = $this->soldeVentile($ids);
 
-        $rows = $this->rows($ids, $typeFilter, $dateFrom, $dateTo);
+        $rows = $this->rows($ids, $typeFilter, $dateFrom, $dateTo, $depenseIdsDuCentre);
 
         $totauxParType = $rows->groupBy('type')->map(fn ($g) => number_format((float) $g->sum('montant'), 2, '.', ''));
 
@@ -157,6 +166,140 @@ final class GetCaisseJournal
                 'date' => $row['date']?->format('d/m/Y'),
             ]),
         ];
+    }
+
+    /**
+     * Solde du CENTRE ACTIF pour les caisses données — pas le solde entier.
+     *
+     * Une caissière n'a qu'UNE caisse à vie (CLAUDE.md §11,
+     * `caisses_une_caissiere_par_employe`, proposition multi-caisses REJETÉE
+     * le 01/09/2026), mais elle peut encaisser pour plusieurs centres : la
+     * caisse de Latifa Abou Elfath est étiquetée GLS Marrakech et porte
+     * pourtant 6 200 DH Marrakech + 4 100 DH Online. Filtrer sur
+     * `caisses.etablissement_id` ferait basculer la caisse EN BLOC — 10 300 DH
+     * sur Marrakech (dont 4 100 qui n'y sont pas) et 0,00 DH sur Online (où
+     * 4 100 DH dorment pourtant). Les deux chiffres seraient faux.
+     *
+     * La ventilation vient donc du LEDGER, dont chaque écriture estampille son
+     * `etablissement_id` depuis le 01/09/2026 précisément pour ça (§11
+     * « Centre dimension on the ledger »). `caisses.solde` reste l'autorité :
+     * la somme des parts par centre doit retomber dessus — c'est ce que vérifie
+     * `CaisseVentilationCentreTest`.
+     *
+     * ⚠ Les écritures ANTÉRIEURES à la règle n'ont pas la clé. Elles sont
+     * rattachées au centre de rattachement de la caisse par un fallback de
+     * LECTURE — jamais par un backfill (§11 : « read-time fallback, NEVER a
+     * backfill »). Réécrire ces propriétés falsifierait le journal d'audit.
+     *
+     * Sans centre actif (« Tous les centres », super-admin) le solde entier est
+     * rendu tel quel : rien n'est ventilé, donc rien n'est masqué.
+     *
+     * @param  array<int, int>  $ids
+     */
+    private function soldeVentile(array $ids): float
+    {
+        $centreId = $this->context->etablissementId();
+
+        if ($centreId === null || $ids === []) {
+            return (float) Caisse::query()->whereIn('id', $ids)->sum('solde');
+        }
+
+        // Centre de rattachement de chaque caisse — le fallback des écritures
+        // historiques, résolu ici en une requête plutôt qu'une par ligne.
+        $centreDeLaCaisse = Caisse::query()->whereIn('id', $ids)->pluck('etablissement_id', 'id');
+
+        return (float) Activity::query()
+            ->where('log_name', 'caisse')
+            ->where('event', 'solde_movement')
+            ->where('subject_type', Caisse::class)
+            ->whereIn('subject_id', $ids)
+            ->get(['subject_id', 'properties'])
+            ->reduce(function (float $total, Activity $entry) use ($centreId, $centreDeLaCaisse): float {
+                $props = $entry->properties;
+                $etab = $props['etablissement_id'] ?? $centreDeLaCaisse[$entry->subject_id] ?? null;
+
+                if ($etab === null || (int) $etab !== $centreId) {
+                    return $total;
+                }
+
+                $montant = (float) ($props['montant'] ?? 0);
+
+                // `sens` est écrit en toutes lettres par CaisseLedger
+                // ('Entrée'/'Sortie'), pas avec ses constantes SENS_*.
+                return ($props['sens'] ?? null) === 'Sortie'
+                    ? $total - $montant
+                    : $total + $montant;
+            }, 0.0);
+    }
+
+    /**
+     * Ids des enregistrements d'un modèle qui appartiennent au centre actif,
+     * d'après le LEDGER.
+     *
+     * `depenses` et `caisse_transfers` ne portent aucune colonne
+     * `etablissement_id` (vérifié en base le 04/09/2026) : leur centre n'existe
+     * que dans les propriétés jsonb de l'écriture de caisse (§11 « Centre
+     * dimension on the ledger »). C'est donc la seule façon de les ventiler.
+     *
+     * Retourne `null` quand aucun centre n'est actif — l'appelant ne filtre
+     * alors rien, au lieu de filtrer sur une liste vide qui masquerait tout.
+     *
+     * Le fallback de lecture reste le même que `soldeVentile()` : une écriture
+     * historique sans la clé est rattachée au centre de sa caisse, jamais
+     * réécrite.
+     *
+     * @param  array<int, int>  $caisseIds
+     * @return array<int, int>|null
+     */
+    private function idsDuCentreDepuisLeLedger(string $modelClass, array $caisseIds): ?array
+    {
+        $centreId = $this->context->etablissementId();
+
+        if ($centreId === null) {
+            return null;
+        }
+
+        $centreDeLaCaisse = Caisse::query()->whereIn('id', $caisseIds)->pluck('etablissement_id', 'id');
+
+        return Activity::query()
+            ->where('log_name', 'caisse')
+            ->where('event', 'solde_movement')
+            ->where('subject_type', Caisse::class)
+            ->whereIn('subject_id', $caisseIds)
+            ->where('properties->origine_type', $modelClass)
+            ->get(['subject_id', 'properties'])
+            ->filter(function (Activity $entry) use ($centreId, $centreDeLaCaisse): bool {
+                $etab = $entry->properties['etablissement_id']
+                    ?? $centreDeLaCaisse[$entry->subject_id]
+                    ?? null;
+
+                return $etab !== null && (int) $etab === $centreId;
+            })
+            ->pluck('properties.origine_id')
+            ->filter()
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Restreint une requête au centre actif via la colonne `etablissement_id`
+     * que porte la table elle-même.
+     *
+     * Vaut pour `encaissements` et `remboursements` uniquement : `depenses` et
+     * `caisse_transfers` n'ont PAS cette colonne (vérifié en base le
+     * 04/09/2026), leur centre ne vit que dans le ledger.
+     */
+    private function scopeRecordsToActiveCenter($query): void
+    {
+        $centreId = $this->context->etablissementId();
+
+        if ($centreId === null) {
+            return;
+        }
+
+        $query->where('etablissement_id', $centreId);
     }
 
     /** @return array<int, int> */
@@ -199,16 +342,17 @@ final class GetCaisseJournal
             ->orWhere('note', 'not ilike', '%'.Remboursement::MARQUEUR_ANNULE.'%');
     }
 
-    private function rows(array $ids, string $typeFilter, string $dateFrom, string $dateTo): Collection
+    private function rows(array $ids, string $typeFilter, string $dateFrom, string $dateTo, ?array $depenseIdsDuCentre = null): Collection
     {
         $rows = collect();
         $wants = fn (string $type): bool => $typeFilter === '' || $typeFilter === $type;
 
         if ($wants(self::TYPE_PAIEMENT)) {
             $rows = $rows->concat(
-                Encaissement::query()->with(['student', 'agent'])
+                Encaissement::query()->with(['student', 'agent', 'etablissement'])
                     ->whereIn('caisse_id', $ids)
                     ->whereNull('applied_from_encaissement_id')
+                    ->tap(fn ($q) => $this->scopeRecordsToActiveCenter($q))
                     ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_paiement', '>=', $dateFrom))
                     ->when($dateTo !== '', fn ($q) => $q->whereDate('date_paiement', '<=', $dateTo))
                     ->get()
@@ -222,6 +366,7 @@ final class GetCaisseJournal
                         'date' => $e->date_paiement,
                         'note' => $e->note,
                         'agent' => $e->agent?->nomComplet(),
+                        'centre' => $e->etablissement?->nom_centre,
                         'url' => route('backoffice.encaissements.show', $e),
                     ]),
             );
@@ -229,9 +374,10 @@ final class GetCaisseJournal
 
         if ($wants(self::TYPE_DEPENSE)) {
             $rows = $rows->concat(
-                Depense::query()->with(['typeDepense', 'agent'])
+                Depense::query()->with(['typeDepense', 'agent', 'group.etablissement'])
                     ->whereIn('caisse_id', $ids)
                     ->where('statut', Depense::STATUT_APPROUVEE)
+                    ->when($depenseIdsDuCentre !== null, fn ($q) => $q->whereIn('id', $depenseIdsDuCentre))
                     ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_depense', '>=', $dateFrom))
                     ->when($dateTo !== '', fn ($q) => $q->whereDate('date_depense', '<=', $dateTo))
                     ->get()
@@ -245,6 +391,11 @@ final class GetCaisseJournal
                         'date' => $d->date_depense,
                         'note' => $d->note,
                         'agent' => $d->agent?->nomComplet(),
+                        // `depenses` ne porte pas de colonne centre : celui du
+                        // groupe quand il y en a un (Paiement prof), sinon
+                        // celui de la caisse qui a payé.
+                        'centre' => $d->group?->etablissement?->nom_centre
+                            ?? $d->caisse?->etablissement?->nom_centre,
                         'url' => route('backoffice.depenses.show', $d),
                     ]),
             );
@@ -252,8 +403,9 @@ final class GetCaisseJournal
 
         if ($wants(self::TYPE_REMBOURSEMENT)) {
             $rows = $rows->concat(
-                Remboursement::query()->with(['beneficiaire', 'agent'])
+                Remboursement::query()->with(['beneficiaire', 'agent', 'etablissement'])
                     ->whereIn('caisse_id', $ids)
+                    ->tap(fn ($q) => $this->scopeRecordsToActiveCenter($q))
                     // Même règle que le total ci-dessus : un remboursement
                     // annulé n'a pas bougé la caisse, il n'a rien à faire
                     // dans le journal des mouvements.
@@ -271,6 +423,7 @@ final class GetCaisseJournal
                         'date' => $r->date_remboursement,
                         'note' => $r->note,
                         'agent' => $r->agent?->nomComplet(),
+                        'centre' => $r->etablissement?->nom_centre,
                         // No detail page exists anywhere for Remboursements
                         // (docs/phase-10-finance-mapping.md Q2: preserved).
                         'url' => null,
@@ -280,9 +433,18 @@ final class GetCaisseJournal
 
         if ($wants(self::TYPE_TRANSFERT)) {
             $rows = $rows->concat(
-                CaisseTransfer::query()->with(['caisseSource', 'caisseDestination', 'requestedBy'])
+                CaisseTransfer::query()->with(['caisseSource.etablissement', 'caisseDestination.etablissement', 'requestedBy'])
                     ->where(fn ($q) => $q->whereIn('caisse_source_id', $ids)->orWhereIn('caisse_destination_id', $ids))
                     ->where('statut', CaisseTransfer::STATUT_VALIDE)
+                    // Un transfert inter-centres est un mouvement de centre
+                    // EXPLICITE et journalisé (§11) : chaque jambe estampille
+                    // le centre de SA caisse, donc il reste visible des deux
+                    // côtés — masquer une jambe ferait disparaître de l'argent
+                    // qui a réellement bougé.
+                    ->when(
+                        ($transfertIds = $this->idsDuCentreDepuisLeLedger(CaisseTransfer::class, $ids)) !== null,
+                        fn ($q) => $q->whereIn('id', $transfertIds),
+                    )
                     ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_transfert', '>=', $dateFrom))
                     ->when($dateTo !== '', fn ($q) => $q->whereDate('date_transfert', '<=', $dateTo))
                     ->get()
@@ -296,6 +458,11 @@ final class GetCaisseJournal
                         'date' => $t->date_transfert,
                         'note' => $t->note,
                         'agent' => $t->requestedBy?->nomComplet(),
+                        // Le centre de la jambe vue d'ici : source si la caisse
+                        // débitée est dans le scope, destination sinon.
+                        'centre' => in_array($t->caisse_source_id, $ids, true)
+                            ? $t->caisseSource?->etablissement?->nom_centre
+                            : $t->caisseDestination?->etablissement?->nom_centre,
                         'url' => route('backoffice.caisse-transfers.show', $t),
                     ]),
             );

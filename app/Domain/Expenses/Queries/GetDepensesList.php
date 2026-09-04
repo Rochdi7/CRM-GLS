@@ -35,6 +35,19 @@ final class GetDepensesList
     /** ONLY the "Paiement prof" system type — the Paiements prof tab. */
     public const SCOPE_PAIEMENT_PROF = 'paiement-prof';
 
+    /**
+     * EVERY dépense, both kinds — the « Validation des dépenses » tab.
+     *
+     * The Dépenses / Paiements prof split above is a READABILITY choice for
+     * the two browsing tabs. Validation is not browsing: it is the single
+     * screen where a pending dépense is approved or refused, and a row it
+     * does not list can never be decided — its money stays held in the till
+     * forever. Reported 04/09/2026: 10 « Paiement prof » rows (30 025.50 MAD
+     * across 4 tills, one of them heading negative on a duplicate) were
+     * invisible because this tab reused the HORS_PAIEMENT_PROF list.
+     */
+    public const SCOPE_TOUS = 'tous';
+
     public function __construct(
         private readonly CenterAccessService $centerAccess,
         private readonly CurrentContext $context,
@@ -66,7 +79,7 @@ final class GetDepensesList
             // Paiements prof tab is simply empty and nothing is hidden from
             // the Dépenses tab.
             ->when(
-                $paiementProfId !== null,
+                $paiementProfId !== null && $scope !== self::SCOPE_TOUS,
                 fn ($q) => $scope === self::SCOPE_PAIEMENT_PROF
                     ? $q->where('type_depense_id', $paiementProfId)
                     : $q->where(fn ($sub) => $sub->whereNot('type_depense_id', $paiementProfId)->orWhereNull('type_depense_id')),
@@ -110,7 +123,11 @@ final class GetDepensesList
             ->latest()
             // Each tab paginates independently, so the Paiements prof tab
             // uses its own page query-string key.
-            ->paginate($perPage, ['*'], $scope === self::SCOPE_PAIEMENT_PROF ? 'pageProf' : 'page')
+            ->paginate($perPage, ['*'], match ($scope) {
+                self::SCOPE_PAIEMENT_PROF => 'pageProf',
+                self::SCOPE_TOUS => 'pageValidation',
+                default => 'page',
+            })
             ->withQueryString();
 
         $depenses->through(fn (Depense $d): array => [

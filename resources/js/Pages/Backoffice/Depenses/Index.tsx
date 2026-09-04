@@ -146,6 +146,10 @@ export default function DepensesIndex({
     montantTotal,
     paiementsProf,
     paiementsProfTotal,
+    validationDepenses,
+    validationMontantTotal,
+    validationMontantEnAttente,
+    validationEnAttenteCount,
     typesDepenses,
     paiementProfTypeId,
     groups,
@@ -224,7 +228,7 @@ export default function DepensesIndex({
     const remboursementForm = useForm<RemboursementFormState>(emptyRemboursementForm());
 
     function reload(nextFilters: Partial<typeof filters>) {
-        router.get('/backoffice/depenses', { ...filters, ...nextFilters, page: undefined, pageProf: undefined, tab }, {
+        router.get('/backoffice/depenses', { ...filters, ...nextFilters, page: undefined, pageProf: undefined, pageValidation: undefined, tab }, {
             preserveState: true,
             preserveScroll: true,
             replace: true,
@@ -279,7 +283,7 @@ export default function DepensesIndex({
 
     function switchTab(next: Tab) {
         setTab(next);
-        router.get('/backoffice/depenses', { ...filters, page: undefined, pageProf: undefined, tab: next }, { preserveState: true, preserveScroll: true, replace: true });
+        router.get('/backoffice/depenses', { ...filters, page: undefined, pageProf: undefined, pageValidation: undefined, tab: next }, { preserveState: true, preserveScroll: true, replace: true });
     }
 
     // --- Dépenses ---
@@ -567,8 +571,8 @@ export default function DepensesIndex({
                         >
                             <i className="ti ti-checkup-list me-2" aria-hidden="true" />
                             Validation des dépenses
-                            {enAttenteCount > 0 && (
-                                <span className="badge bg-warning ms-2">{enAttenteCount}</span>
+                            {validationEnAttenteCount > 0 && (
+                                <span className="badge bg-warning ms-2">{validationEnAttenteCount}</span>
                             )}
                         </button>
                     </li>
@@ -1001,7 +1005,7 @@ export default function DepensesIndex({
                 trail; the eye opens the full details. The approve/refuse
                 actions are the SAME endpoints as the Dépenses tab — this tab
                 only gathers them in one place for whoever validates. */}
-            {tab === 'validation' && canAudit && depenses && (
+            {tab === 'validation' && canAudit && validationDepenses && (
                 <Card title="Validation des dépenses" bodyClassName="p-0 py-3">
                     <div className="px-3 pt-2">
                         <TableToolbar onReset={filterReset.reset} resetActive={filterReset.active}>
@@ -1056,19 +1060,19 @@ export default function DepensesIndex({
                         search={<SearchInput value={filters.search} onSearch={(value) => reload({ search: value })} />}
                     />
 
-                    {montantTotal !== null && (
+                    {validationMontantTotal !== null && (
                         <p className="fw-medium px-3 mb-3">
-                            Montant total : {Number(montantTotal).toFixed(2)} MAD
-                            {enAttenteCount > 0 && (
+                            Montant total : {Number(validationMontantTotal).toFixed(2)} MAD
+                            {validationEnAttenteCount > 0 && (
                                 <span className="text-warning ms-3">
                                     <i className="ti ti-clock-hour-4 me-1" />
-                                    En attente : {Number(montantEnAttente ?? 0).toFixed(2)} MAD ({enAttenteCount})
+                                    En attente : {Number(validationMontantEnAttente ?? 0).toFixed(2)} MAD ({validationEnAttenteCount})
                                 </span>
                             )}
                         </p>
                     )}
 
-                    {depenses.data.length === 0 ? (
+                    {validationDepenses.data.length === 0 ? (
                         <EmptyState title="Aucune dépense" icon="ti ti-checkup-list" />
                     ) : (
                         <>
@@ -1089,7 +1093,7 @@ export default function DepensesIndex({
                                     </tr>
                                 }
                             >
-                                {depenses.data.map((row) => (
+                                {validationDepenses.data.map((row) => (
                                     <tr key={row.id}>
                                         <td>
                                             <code>{row.reference}</code>
@@ -1148,7 +1152,7 @@ export default function DepensesIndex({
                                     </tr>
                                 ))}
                             </DataTable>
-                            <Pagination paginator={depenses} />
+                            <Pagination paginator={validationDepenses} />
                         </>
                     )}
                 </Card>

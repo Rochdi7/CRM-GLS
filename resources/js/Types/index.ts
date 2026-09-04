@@ -1474,6 +1474,8 @@ export interface CaisseJournalRow {
     date: string | null;
     note: string | null;
     agent: string | null;
+    /** Centre du MOUVEMENT (jamais l'étiquette de la caisse) — voir GetCaisseJournal. */
+    centre: string | null;
     url: string | null;
 }
 
@@ -1595,6 +1597,8 @@ export interface CompteCaisseForm {
 }
 
 export interface CaissesPageProps {
+    /** Vrai dès qu'un centre est actif — masque la colonne « Centre » (§5). */
+    centerLocked: boolean;
     canViewCaisses: boolean;
     canViewTransfers: boolean;
     /** « Comptes de caisse » tab — super-admin only (`cash-accounts.view` is in no role). */
@@ -1984,6 +1988,17 @@ export interface DepensesPageProps {
     /** Only the "Paiement prof" system type — its own tab, excluded from `depenses`. */
     paiementsProf: PaginatedData<DepenseRow> | null;
     paiementsProfTotal: MoneyDisplay | null;
+    /**
+     * « Validation des dépenses » — EVERY dépense, both kinds, with its own
+     * totals. The Dépenses/Paiements prof split is a readability choice for
+     * the browsing tabs only: validation is the one screen that decides a
+     * pending row, so it must see them all or their money stays held in the
+     * till forever. Null for anyone without `expenses.approve`.
+     */
+    validationDepenses: PaginatedData<DepenseRow> | null;
+    validationMontantTotal: MoneyDisplay | null;
+    validationMontantEnAttente: MoneyDisplay | null;
+    validationEnAttenteCount: number;
     typesDepenses: FinanceOption[];
     /** id of the "Paiement prof" type — filtered out of the Dépenses tab's Type filter. */
     paiementProfTypeId: number | null;

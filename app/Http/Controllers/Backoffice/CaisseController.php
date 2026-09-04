@@ -50,6 +50,7 @@ final class CaisseController extends Controller
         GetCaisseTransfersList $getCaisseTransfersList,
         GetComptesCaisse $getComptesCaisse,
         GetCaisseGlobale $getCaisseGlobale,
+        \App\Services\Context\CurrentContext $context,
     ): Response {
         $user = $request->user();
         $canViewCaisses = $user->can('cash-registers.view');
@@ -100,6 +101,10 @@ final class CaisseController extends Controller
                 'nom' => $myCaisse->nom,
                 'solde' => number_format((float) $myCaisse->solde, 2, '.', ''),
             ] : null,
+            // Colonne « Centre » : visible seulement sur « Tous les centres »
+            // (CLAUDE.md §5) — une fois le switcher posé sur un centre, la
+            // colonne répéterait la même valeur sur chaque ligne.
+            'centerLocked' => ! $context->isAllCenters(),
             'canViewCaisses' => $canViewCaisses,
             'canViewTransfers' => $canViewTransfers,
             'canViewComptes' => $canViewComptes,
