@@ -17,20 +17,28 @@ use Tests\TestCase;
 /**
  * Which tills the « Transfert à une autre caisse » modal offers.
  *
- * Two rules, both about the DESTINATION dropdown only — neither changes
- * where a caisse is filed or how its money is counted:
+ * The destination list is deliberately NOT scoped by centre (04/09/2026).
+ * A transfer is the one money flow whose real control is the RECIPIENT:
+ * nothing moves until the employee owning the destination till accepts it,
+ * and a super-admin cannot bypass that (CLAUDE.md §11). Filtering by centre
+ * blocked legitimate hand-overs without protecting anything — a cashier in
+ * Rabat could not hand cash to a director who works in Rabat because his
+ * till is filed in Marrakech, and staff assigned to all seven centres were
+ * unreachable from six of them.
  *
- *  1. A till is offered in every centre its responsable is ASSIGNED to, not
- *     only the one it is filed under. « Centres affectés » is the single
- *     authority on where somebody works (CLAUDE.md §16), while
- *     `employees.etablissement_id` is merely their PRIMARY centre.
- *     Reported 04/09/2026: Mohammed Rafik's till is filed in GLS Marrakech
- *     while he also works in Rabat, so a cashier in Rabat searching
- *     « mohammed » got « Aucun résultat ».
+ * What still narrows the list, none of it a centre rule:
+ *  - cash accounts only (a transfer never targets a TPE/Chèque/Virement
+ *    account);
+ *  - the hidden maintainer till (HiddenAccount);
+ *  - an EMPTY till belonging to a teacher or a departed employee
+ *    (DormantTill) — one that still HOLDS money stays offered, or the
+ *    transfer that empties it would be impossible.
  *
- *  2. An EMPTY till belonging to a teacher is noise and is hidden
- *     (DormantTill) — but one that still HOLDS money stays offered, or the
- *     transfer that empties it would be impossible.
+ * ⚠ The dropdown and StoreCaisseTransferRequest must stay in step: a
+ * destination the screen offers must be one the request accepts. They
+ * disagreed once — the list was widened while the Form Request still ran
+ * AccessibleCaisse — and the user got « La caisse sélectionnée n'est pas
+ * accessible depuis votre centre. » on a till the page had just offered.
  */
 final class TransfertCaisseOptionsCentreTest extends TestCase
 {
@@ -90,7 +98,7 @@ final class TransfertCaisseOptionsCentreTest extends TestCase
             ->all();
     }
 
-    public function test_a_till_is_offered_in_every_centre_its_owner_is_assigned_to(): void
+    public function test_a_till_is_offered_from_any_centre(): void
     {
         // Filed in Marrakech (his primary centre), but he also works in Rabat.
         $rafik = Employee::factory()->create([
@@ -108,21 +116,6 @@ final class TransfertCaisseOptionsCentreTest extends TestCase
         $this->assertContains($till->id, $this->optionIdsIn($this->marrakech, $user));
     }
 
-    public function test_a_till_stays_out_of_a_centre_its_owner_does_not_work_in(): void
-    {
-        $marrakechOnly = Employee::factory()->create([
-            'etablissement_id' => $this->marrakech->id,
-            'categorie' => Employee::CATEGORIE_DIRECTEUR,
-        ]);
-        $marrakechOnly->syncEtablissements([$this->marrakech->id]);
-        $till = $this->tillOf($marrakechOnly, '5000.00');
-
-        $user = $this->superAdmin();
-
-        // Widening the dropdown must not turn it into "every till everywhere".
-        $this->assertNotContains($till->id, $this->optionIdsIn($this->rabat, $user));
-        $this->assertContains($till->id, $this->optionIdsIn($this->marrakech, $user));
-    }
 
     /**
      * Hafssa Elkhattabi's exact case (04/09/2026), and the reason the first
@@ -136,7 +129,7 @@ final class TransfertCaisseOptionsCentreTest extends TestCase
     {
         $hafssa = Employee::factory()->create([
             'etablissement_id' => $this->rabat->id,
-            'categorie' => Employee::CATEGORIE_ASSISTANTE,
+            'categorie' => Employee::CATEGORIE_ASSISTANTE_ADMINISTRATIVE,
         ]);
         $hafssa->syncEtablissements([$this->rabat->id]);
         $user = $hafssa->user ?? User::factory()->create();
@@ -155,26 +148,41 @@ final class TransfertCaisseOptionsCentreTest extends TestCase
         $this->assertContains($till->id, $this->optionIdsIn($this->rabat, $user->fresh()));
     }
 
-    /** Widening reach must not become « every till in the country ». */
-    public function test_a_cashier_does_not_reach_a_colleague_who_never_works_in_her_centre(): void
+
+    /**
+     * The other half of the same rule: a dropdown that OFFERS a till must
+     * lead to a request that ACCEPTS it. Widening only the query left
+     * Hafssa able to pick Rafik and refused on submit with « La caisse
+     * sélectionnée n'est pas accessible depuis votre centre. »
+     */
+    public function test_a_cashier_may_actually_submit_a_transfer_to_that_colleague(): void
     {
         $hafssa = Employee::factory()->create([
             'etablissement_id' => $this->rabat->id,
-            'categorie' => Employee::CATEGORIE_ASSISTANTE,
+            'categorie' => Employee::CATEGORIE_ASSISTANTE_ADMINISTRATIVE,
         ]);
         $hafssa->syncEtablissements([$this->rabat->id]);
         $user = $hafssa->user ?? User::factory()->create();
         $hafssa->forceFill(['user_id' => $user->id])->save();
         $user->givePermissionTo('cash-transfers.view');
+        $user->givePermissionTo('cash-transfers.create');
+        $this->tillOf($hafssa, '20000.00');
 
-        $marrakechOnly = Employee::factory()->create([
+        $rafik = Employee::factory()->create([
             'etablissement_id' => $this->marrakech->id,
             'categorie' => Employee::CATEGORIE_DIRECTEUR,
         ]);
-        $marrakechOnly->syncEtablissements([$this->marrakech->id]);
-        $till = $this->tillOf($marrakechOnly, '5000.00');
+        $rafik->syncEtablissements([$this->marrakech->id, $this->rabat->id]);
+        $destination = $this->tillOf($rafik, '0.00');
 
-        $this->assertNotContains($till->id, $this->optionIdsIn($this->rabat, $user->fresh()));
+        $this->actingAs($user->fresh());
+        app(CurrentContext::class)->setEtablissement($this->rabat->id);
+
+        $this->post(route('backoffice.caisse-transfers.store'), [
+            'caisse_destination_id' => $destination->id,
+            'montant' => '500',
+            'date_transfert' => now()->toDateString(),
+        ])->assertSessionHasNoErrors();
     }
 
     public function test_an_empty_teacher_till_is_hidden(): void

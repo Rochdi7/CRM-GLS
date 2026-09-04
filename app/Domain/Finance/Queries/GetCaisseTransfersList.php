@@ -157,11 +157,24 @@ final class GetCaisseTransfersList
             // money stays offered, so the transfer that empties it remains
             // possible. Never drop that half.
             ->tap(fn ($q) => DormantTill::hide($q))
-            // ⚠ NOT scopeAccessibleCenters()/scopeToActiveCenter(): both ask
-            // where the till is FILED. Reach and active centre are applied
-            // through the OWNER's assignments instead — see
-            // scopeToCentreOfService().
-            ->tap(fn ($q) => $this->scopeToCentreOfService($q, $user))
+            // ⚠ NO centre filter at all — deliberate (04/09/2026).
+            //
+            // A transfer is the ONE money flow whose real control is not the
+            // centre but the RECIPIENT: balances move only when the employee
+            // owning the destination till accepts it, and a super-admin
+            // cannot bypass that (ValiderTransfertCaisse, CLAUDE.md §11).
+            // Filtering the destination list by centre therefore blocked
+            // legitimate hand-overs without protecting anything — a cashier
+            // in Rabat could not hand cash to a director who works in Rabat
+            // because his till happens to be filed in Marrakech, and staff
+            // assigned to all seven centres were unreachable from six of
+            // them. Every leg is still journaled with its own centre
+            // (CaisseLedger), so a cross-centre transfer stays a visible,
+            // auditable, two-person movement instead of an impossible one.
+            //
+            // What still narrows this list: cash accounts only, the hidden
+            // maintainer till, and empty dormant tills — none of which is a
+            // centre rule.
             ->orderBy('nom')
             ->get()
             ->map(fn (Caisse $c): array => [
@@ -224,79 +237,6 @@ final class GetCaisseTransfersList
         }
 
         $query->where('etablissement_id', $centerId);
-    }
-
-    /**
-     * Destination-list scoping: a till belongs to the active centre when it
-     * is FILED there, or when the employee who holds it is ASSIGNED there.
-     *
-     * « Centres affectés » is the one authority on where a person works
-     * (CLAUDE.md §16); `employees.etablissement_id` is merely their PRIMARY
-     * centre — where the till is filed and where its money is counted. The
-     * two are different questions, and only the first decides whether a
-     * cashier standing in Rabat can hand money to a colleague who also works
-     * in Rabat.
-     *
-     * Reported 04/09/2026: Mohammed Rafik's till is filed in GLS Marrakech
-     * (his primary centre) while he is assigned to several centres, so a
-     * cashier working in Rabat searching « mohammed » got « Aucun résultat »
-     * and could not transfer to him at all. Matching only
-     * `caisses.etablissement_id` asked where the till SITS instead of where
-     * its owner WORKS.
-     *
-     * ⚠ Reach is answered here too, NOT by scopeAccessibleCenters(). That
-     * helper matches `caisses.etablissement_id` alone, so it dropped the row
-     * before the assignment clause could rescue it: Hafssa Elkhattabi
-     * (assigned to Rabat + Salé) still got « Aucun résultat » searching for
-     * a colleague who works in Rabat but whose till is filed in Marrakech.
-     * Both halves therefore ask the same widened question — filed here, OR
-     * held by someone who works here.
-     *
-     * ⚠ withoutGlobalScopes() on the responsable subquery: Employee is
-     * #[ScopedBy(HiddenAccountScope::class)] and a global scope applies
-     * inside a nested whereHas too (CLAUDE.md §11), which would silently
-     * shrink the very set this clause exists to widen. The maintainer's own
-     * till stays out regardless — HiddenAccount::hideCaisses() removes it
-     * earlier in the chain.
-     *
-     * This widens only which options the TRANSFER dropdown offers. The
-     * centre filing is untouched — `caisses.etablissement_id` keeps its
-     * stored meaning and is never reinterpreted (§11, third companion rule)
-     * — and no other screen, query or permission is affected. Validation is
-     * unchanged: only the employee owning the DESTINATION till may accept,
-     * super-admins included (§11). A centre-less account (an Externe safe)
-     * stays global, as everywhere else.
-     */
-    private function scopeToCentreOfService($query, User $user): void
-    {
-        // A till is reachable when it is FILED in one of the viewer's centres
-        // or when the colleague holding it WORKS in one of them. Applied as a
-        // single clause instead of scopeAccessibleCenters(), which only ever
-        // asks the first question and would drop the row before the second
-        // could rescue it.
-        if (! $this->centerAccess->hasGlobalAccess($user)) {
-            $reachable = $this->centerAccess->accessibleCenterIds($user);
-
-            $query->where(fn ($q) => $q
-                ->whereNull('etablissement_id')
-                ->orWhereIn('etablissement_id', $reachable)
-                ->orWhereHas('responsable', fn ($r) => $r
-                    ->withoutGlobalScopes()
-                    ->whereHas('etablissements', fn ($e) => $e->whereIn('etablissements.id', $reachable))));
-        }
-
-        $id = $this->context->etablissementId();
-
-        if ($id === null) {
-            return;
-        }
-
-        $query->where(fn ($q) => $q
-            ->whereNull('etablissement_id')
-            ->orWhere('etablissement_id', $id)
-            ->orWhereHas('responsable', fn ($r) => $r
-                ->withoutGlobalScopes()
-                ->whereHas('etablissements', fn ($e) => $e->where('etablissements.id', $id))));
     }
 
     private function scopeToActiveCenter($query): void
