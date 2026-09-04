@@ -35,21 +35,13 @@ final class StoreCaisseTransferRequest extends FormRequest
             // tampered-request path (Phase 12 security). "different from the
             // source" is checked in the controller, since the source is
             // server-derived.
-            // ⚠ No AccessibleCaisse here — deliberate (04/09/2026), and it must
-            // stay in step with GetCaisseTransfersList::caisseOptions(), which
-            // applies no centre filter either. A destination the screen offers
-            // must be a destination the request accepts.
-            //
-            // A transfer's real control is the RECIPIENT, not the centre:
-            // balances move only when the employee owning the destination till
-            // accepts it (ValiderTransfertCaisse — no super-admin bypass,
-            // CLAUDE.md §11), and both legs are journaled with their own
-            // centre. Refusing a cross-centre destination here blocked
-            // legitimate hand-overs while protecting nothing: the money had
-            // not moved yet, and the person receiving it still has to say yes.
-            // Refunds keep AccessibleCaisse — they drain a till immediately,
-            // with nobody to confirm.
-            'caisse_destination_id' => ['required', 'exists:caisses,id'],
+            // ⚠ Mirrors GetCaisseTransfersList::caisseOptions(): a
+            // destination the screen offers must be one the request accepts.
+            // The two disagreed once — the list matched the holder's assigned
+            // centres while this still ran AccessibleCaisse (which matches
+            // `caisses.etablissement_id`) — and the user was refused a till
+            // the page had just offered.
+            'caisse_destination_id' => ['required', 'exists:caisses,id', new \App\Rules\CaisseDeServiceAccessible],
             'montant' => ['required', 'numeric', 'min:0.01'],
             'note' => ['nullable', 'string'],
         ];

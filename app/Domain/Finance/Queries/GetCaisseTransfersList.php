@@ -157,24 +157,30 @@ final class GetCaisseTransfersList
             // money stays offered, so the transfer that empties it remains
             // possible. Never drop that half.
             ->tap(fn ($q) => DormantTill::hide($q))
-            // ⚠ NO centre filter at all — deliberate (04/09/2026).
+            // Centre of SERVICE, not centre of filing (04/09/2026).
             //
-            // A transfer is the ONE money flow whose real control is not the
-            // centre but the RECIPIENT: balances move only when the employee
-            // owning the destination till accepts it, and a super-admin
-            // cannot bypass that (ValiderTransfertCaisse, CLAUDE.md §11).
-            // Filtering the destination list by centre therefore blocked
-            // legitimate hand-overs without protecting anything — a cashier
-            // in Rabat could not hand cash to a director who works in Rabat
-            // because his till happens to be filed in Marrakech, and staff
-            // assigned to all seven centres were unreachable from six of
-            // them. Every leg is still journaled with its own centre
-            // (CaisseLedger), so a cross-centre transfer stays a visible,
-            // auditable, two-person movement instead of an impossible one.
+            // A till is offered when its holder is ASSIGNED to the active
+            // centre — « Centres affectés » being the one authority on where
+            // somebody works (CLAUDE.md §16). Neither the centre the till is
+            // filed under nor the holder's PRIMARY centre decides this:
+            // Mohammed Rafik's primary centre is Rabat and his till is filed
+            // in Marrakech, yet he is assigned to all seven, so a cashier
+            // standing in Marrakech may hand him cash there.
             //
-            // What still narrows this list: cash accounts only, the hidden
-            // maintainer till, and empty dormant tills — none of which is a
-            // centre rule.
+            // The two rejected alternatives, both reported the same day:
+            // matching `caisses.etablissement_id` hid every colleague whose
+            // till sits elsewhere, and dropping the filter entirely listed
+            // the whole network — offering people who never set foot in the
+            // centre. Assignment is the question that matches what a cashier
+            // is actually doing: handing money to someone who works here.
+            //
+            // Reach is answered by the same clause: scopeAccessibleCenters()
+            // matches the filing column alone and would drop the row before
+            // this could rescue it. Validation is unchanged — only the
+            // employee owning the DESTINATION till may accept it, super
+            // -admins included (§11), and both legs stay journaled with
+            // their own centre.
+            ->tap(fn ($q) => $this->scopeToCentreOfService($q, $user))
             ->orderBy('nom')
             ->get()
             ->map(fn (Caisse $c): array => [
@@ -237,6 +243,41 @@ final class GetCaisseTransfersList
         }
 
         $query->where('etablissement_id', $centerId);
+    }
+
+    /**
+     * Destination-list scoping: a till is reachable when the employee who
+     * HOLDS it is assigned to the centre in question.
+     *
+     * ⚠ withoutGlobalScopes() on the responsable subquery: Employee is
+     * #[ScopedBy(HiddenAccountScope::class)] and a global scope applies
+     * inside a nested whereHas too (CLAUDE.md §11), which would silently
+     * shrink the very set this clause defines. The maintainer's own till
+     * stays out regardless — HiddenAccount::hideCaisses() removed it
+     * earlier in the chain.
+     *
+     * A centre-less account (an Externe safe) has no holder and stays
+     * global, as on every other finance screen.
+     */
+    private function scopeToCentreOfService($query, User $user): void
+    {
+        $assignedTo = fn (array $centreIds) => fn ($q) => $q
+            ->whereNull('etablissement_id')
+            ->orWhereHas('responsable', fn ($r) => $r
+                ->withoutGlobalScopes()
+                ->whereHas('etablissements', fn ($e) => $e->whereIn('etablissements.id', $centreIds)));
+
+        // Reach: every centre the viewer works in. A global user skips it.
+        if (! $this->centerAccess->hasGlobalAccess($user)) {
+            $query->where($assignedTo($this->centerAccess->accessibleCenterIds($user)));
+        }
+
+        // Active centre from the top-bar switcher.
+        $id = $this->context->etablissementId();
+
+        if ($id !== null) {
+            $query->where($assignedTo([$id]));
+        }
     }
 
     private function scopeToActiveCenter($query): void

@@ -17,27 +17,26 @@ use Tests\TestCase;
 /**
  * Which tills the « Transfert à une autre caisse » modal offers.
  *
- * The destination list is deliberately NOT scoped by centre (04/09/2026).
- * A transfer is the one money flow whose real control is the RECIPIENT:
- * nothing moves until the employee owning the destination till accepts it,
- * and a super-admin cannot bypass that (CLAUDE.md §11). Filtering by centre
- * blocked legitimate hand-overs without protecting anything — a cashier in
- * Rabat could not hand cash to a director who works in Rabat because his
- * till is filed in Marrakech, and staff assigned to all seven centres were
- * unreachable from six of them.
+ * The rule is centre of SERVICE, not centre of filing: a till is listed when
+ * the employee HOLDING it is assigned to the active centre — « Centres
+ * affectés » being the one authority on where somebody works (CLAUDE.md
+ * §16). Neither `caisses.etablissement_id` (where the till is filed) nor the
+ * holder's PRIMARY centre decides it. Mohammed Rafik's primary centre is
+ * Rabat and his till is filed in Marrakech while he is assigned to all
+ * seven, so a cashier standing in Marrakech may hand him cash there.
  *
- * What still narrows the list, none of it a centre rule:
- *  - cash accounts only (a transfer never targets a TPE/Chèque/Virement
- *    account);
- *  - the hidden maintainer till (HiddenAccount);
- *  - an EMPTY till belonging to a teacher or a departed employee
- *    (DormantTill) — one that still HOLDS money stays offered, or the
- *    transfer that empties it would be impossible.
+ * Two alternatives were tried and rejected on 04/09/2026: matching the
+ * filing column hid every colleague whose till sits elsewhere, and dropping
+ * the filter entirely listed the whole network, offering people who never
+ * set foot in the centre.
  *
- * ⚠ The dropdown and StoreCaisseTransferRequest must stay in step: a
- * destination the screen offers must be one the request accepts. They
- * disagreed once — the list was widened while the Form Request still ran
- * AccessibleCaisse — and the user got « La caisse sélectionnée n'est pas
+ * Also narrowing the list, none of it a centre rule: cash accounts only, the
+ * hidden maintainer till, and EMPTY dormant tills — one that still HOLDS
+ * money stays offered, or the transfer that empties it would be impossible.
+ *
+ * ⚠ The dropdown and StoreCaisseTransferRequest must ask the same question.
+ * They disagreed once — the list was widened while the Form Request still
+ * ran AccessibleCaisse — and the user got « La caisse sélectionnée n'est pas
  * accessible depuis votre centre. » on a till the page had just offered.
  */
 final class TransfertCaisseOptionsCentreTest extends TestCase
@@ -98,9 +97,9 @@ final class TransfertCaisseOptionsCentreTest extends TestCase
             ->all();
     }
 
-    public function test_a_till_is_offered_from_any_centre(): void
+    public function test_assignment_decides_not_where_the_till_is_filed(): void
     {
-        // Filed in Marrakech (his primary centre), but he also works in Rabat.
+        // Filed in Marrakech, primary centre Marrakech, but assigned to both.
         $rafik = Employee::factory()->create([
             'etablissement_id' => $this->marrakech->id,
             'categorie' => Employee::CATEGORIE_DIRECTEUR,
@@ -110,21 +109,28 @@ final class TransfertCaisseOptionsCentreTest extends TestCase
 
         $user = $this->superAdmin();
 
-        // The point of the fix: reachable from Rabat, where he also works.
+        // Offered in BOTH centres he works in — the filing column decides
+        // neither of them.
         $this->assertContains($till->id, $this->optionIdsIn($this->rabat, $user));
-        // Still reachable from the centre it is filed in.
         $this->assertContains($till->id, $this->optionIdsIn($this->marrakech, $user));
     }
 
+    /** The list is not « everybody »: a colleague who never works here is out. */
+    public function test_a_colleague_not_assigned_to_the_centre_is_not_offered(): void
+    {
+        $marrakechOnly = Employee::factory()->create([
+            'etablissement_id' => $this->marrakech->id,
+            'categorie' => Employee::CATEGORIE_DIRECTEUR,
+        ]);
+        $marrakechOnly->syncEtablissements([$this->marrakech->id]);
+        $till = $this->tillOf($marrakechOnly, '5000.00');
 
-    /**
-     * Hafssa Elkhattabi's exact case (04/09/2026), and the reason the first
-     * attempt at this fix did not work: she is a CASHIER, not a super-admin,
-     * assigned to Rabat + Salé. Rafik works in all seven centres but his till
-     * is filed in Marrakech, which she cannot reach — so
-     * scopeAccessibleCenters() dropped the row before the assignment clause
-     * could rescue it, and the dropdown still said « Aucun résultat ».
-     */
+        $user = $this->superAdmin();
+
+        $this->assertNotContains($till->id, $this->optionIdsIn($this->rabat, $user));
+        $this->assertContains($till->id, $this->optionIdsIn($this->marrakech, $user));
+    }
+
     public function test_a_cashier_reaches_a_colleague_who_works_in_her_centre(): void
     {
         $hafssa = Employee::factory()->create([
@@ -134,6 +140,9 @@ final class TransfertCaisseOptionsCentreTest extends TestCase
         $hafssa->syncEtablissements([$this->rabat->id]);
         $user = $hafssa->user ?? User::factory()->create();
         $hafssa->forceFill(['user_id' => $user->id])->save();
+        // Otherwise the must-change-password middleware bounces every POST
+        // to /backoffice/profile and the controller never runs.
+        $user->forceFill(['must_change_password' => false])->save();
         $user->givePermissionTo('cash-transfers.view');
 
         // Filed in Marrakech — a centre Hafssa cannot reach — but its owner
@@ -164,6 +173,9 @@ final class TransfertCaisseOptionsCentreTest extends TestCase
         $hafssa->syncEtablissements([$this->rabat->id]);
         $user = $hafssa->user ?? User::factory()->create();
         $hafssa->forceFill(['user_id' => $user->id])->save();
+        // Otherwise the must-change-password middleware bounces every POST
+        // to /backoffice/profile and the controller never runs.
+        $user->forceFill(['must_change_password' => false])->save();
         $user->givePermissionTo('cash-transfers.view');
         $user->givePermissionTo('cash-transfers.create');
         $this->tillOf($hafssa, '20000.00');
@@ -183,6 +195,57 @@ final class TransfertCaisseOptionsCentreTest extends TestCase
             'montant' => '500',
             'date_transfert' => now()->toDateString(),
         ])->assertSessionHasNoErrors();
+
+        $this->assertGreaterThan(
+            0,
+            \App\Models\CaisseTransfer::query()->count(),
+            'No transfer row was created — the POST was accepted but nothing was filed.',
+        );
+
+        // Filed as a REQUEST — the two-person control is what protects this
+        // flow, so nothing moves until the destination's owner accepts.
+        $transfer = \App\Models\CaisseTransfer::query()->firstOrFail();
+        $this->assertSame($destination->id, $transfer->caisse_destination_id);
+        $this->assertSame('20000.00', (string) $hafssa->till()->first()->solde);
+        $this->assertSame('0.00', (string) $destination->fresh()->solde);
+    }
+
+    /**
+     * The server must refuse what the dropdown does not offer — otherwise a
+     * crafted request could still file a transfer to a colleague who works
+     * nowhere near the cashier.
+     */
+    public function test_a_transfer_to_an_unassigned_colleague_is_refused(): void
+    {
+        $hafssa = Employee::factory()->create([
+            'etablissement_id' => $this->rabat->id,
+            'categorie' => Employee::CATEGORIE_ASSISTANTE_ADMINISTRATIVE,
+        ]);
+        $hafssa->syncEtablissements([$this->rabat->id]);
+        $user = $hafssa->user ?? User::factory()->create();
+        $hafssa->forceFill(['user_id' => $user->id])->save();
+        $user->forceFill(['must_change_password' => false])->save();
+        $user->givePermissionTo('cash-transfers.view');
+        $user->givePermissionTo('cash-transfers.create');
+        $this->tillOf($hafssa, '20000.00');
+
+        $etranger = Employee::factory()->create([
+            'etablissement_id' => $this->marrakech->id,
+            'categorie' => Employee::CATEGORIE_DIRECTEUR,
+        ]);
+        $etranger->syncEtablissements([$this->marrakech->id]);
+        $destination = $this->tillOf($etranger, '0.00');
+
+        $this->actingAs($user->fresh());
+        app(CurrentContext::class)->setEtablissement($this->rabat->id);
+
+        $this->post(route('backoffice.caisse-transfers.store'), [
+            'caisse_destination_id' => $destination->id,
+            'montant' => '500',
+            'date_transfert' => now()->toDateString(),
+        ])->assertSessionHasErrors('caisse_destination_id');
+
+        $this->assertSame(0, \App\Models\CaisseTransfer::query()->count());
     }
 
     public function test_an_empty_teacher_till_is_hidden(): void
