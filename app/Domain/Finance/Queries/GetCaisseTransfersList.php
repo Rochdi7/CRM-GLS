@@ -161,7 +161,7 @@ final class GetCaisseTransfersList
             // ⚠ NOT scopeToActiveCenter(): a till is offered in every centre
             // its responsable is ASSIGNED to, not only the one it is filed
             // under. See scopeToCentreOfService() below.
-            ->tap(fn ($q) => $this->scopeToActiveCenter($q))
+            ->tap(fn ($q) => $this->scopeToCentreOfService($q))
             ->orderBy('nom')
             ->get()
             ->map(fn (Caisse $c): array => [
