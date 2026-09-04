@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Domain\Finance\Actions\AnnulerRemboursement;
 use App\Domain\Finance\Actions\EnregistrerRemboursement;
 use App\Domain\Finance\Support\CaisseResolver;
 use App\Domain\Finance\Queries\GetStudentPaymentsForRefund;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
+use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Http\Requests\Backoffice\Remboursements\StoreRemboursementRequest;
 use App\Http\Requests\Backoffice\Remboursements\UpdateRemboursementRequest;
 use App\Models\Encaissement;
@@ -35,6 +37,7 @@ use Illuminate\Validation\ValidationException;
 final class RemboursementController extends Controller
 {
     use AssertsContextScope;
+    use RedirectsPreservingFilters;
 
     /**
      * A student's fee-targeted payments — the create form's "which payment
@@ -120,6 +123,30 @@ final class RemboursementController extends Controller
 
         return redirect()->route('backoffice.depenses.index', ['tab' => 'remboursements'])
             ->with('success', __('Refund updated.'));
+    }
+
+    /**
+     * Annule un remboursement deja paye : la caisse est recreditee par
+     * ecriture compensatoire et la ligne est annotee — jamais supprimee
+     * (§11). Super-admin uniquement (`refunds.cancel`), et la policy refuse
+     * un remboursement deja annule pour que la caisse ne soit pas
+     * recreditee deux fois.
+     */
+    public function cancel(Request $request, Remboursement $remboursement, AnnulerRemboursement $action): RedirectResponse
+    {
+        $this->authorize('cancel', $remboursement);
+
+        // Le verrou « annee cloturee » vaut ici comme pour toute autre
+        // ecriture : annuler bouge de l'argent.
+        $this->assertContextAnneeOuverte('remboursement');
+
+        $action->handle($remboursement, (string) $request->string('motif'));
+
+        return $this->backToListPreservingFilters(
+            $request,
+            'backoffice.depenses.index',
+            ['tab' => 'remboursements'],
+        )->with('success', __('Refund cancelled.'));
     }
 
     /**

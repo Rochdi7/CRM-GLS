@@ -274,6 +274,13 @@ final class PermissionRegistry
                 'refunds.view' => 'Consulter les remboursements',
                 'refunds.create' => 'Enregistrer un remboursement',
                 'refunds.update' => 'Modifier un remboursement',
+                // ⚠ Annuler un remboursement DÉJÀ PAYÉ : la caisse est
+                // recréditée par écriture compensatoire (la ligne n'est
+                // jamais supprimée, §11). C'est rendre à la caisse de
+                // l'argent qui en est sorti — même classe que
+                // payments.update-amount, donc super-admin uniquement
+                // (superAdminOnly() ci-dessous, 03/09/2026).
+                'refunds.cancel' => 'Annuler un remboursement (super-admin)',
             ],
             'Chèques' => [
                 'cheques.view' => 'Consulter les chèques',
@@ -511,6 +518,10 @@ final class PermissionRegistry
             // correction normale (remboursement + nouvel encaissement), donc
             // même classe que payments.update-date (02/09/2026).
             'payments.update-amount',
+            // Annuler un remboursement recrédite la caisse : c'est un
+            // mouvement d'argent en sens inverse, pas une correction de
+            // libellé. Même classe que payments.update-amount (03/09/2026).
+            'refunds.cancel',
             // Moving a group between années rewrites the year of every
             // inscription, séance (and therefore payment) hanging off it —
             // a history-altering act reserved to super-admins (24/08/2026).

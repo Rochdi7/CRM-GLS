@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models\CaisseTransfer;
 use App\Models\Employee;
 use App\Models\Etablissement;
+use App\Models\Remboursement;
 use App\Models\Role;
 use App\Models\User;
 use App\Observers\EmployeeObserver;
@@ -45,6 +46,13 @@ class AppServiceProvider extends ServiceProvider
      */
     private const NO_SUPER_ADMIN_BYPASS = [
         'validate' => CaisseTransfer::class,
+        // Annuler un remboursement recredite la caisse. La policy refuse une
+        // ligne DEJA annulee — sans cette exclusion, Gate::before accorde
+        // tout au super-admin et ce garde-fou devient injoignable : deux
+        // clics recreditent la caisse deux fois pour une seule sortie
+        // (03/09/2026). La permission reste super-admin ; c'est l'etat de la
+        // ligne, pas le role, que la policy verifie ici.
+        'cancel' => Remboursement::class,
     ];
 
     /**

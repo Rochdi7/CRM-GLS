@@ -106,6 +106,10 @@ final class DepenseController extends Controller
             // Drives BOTH the « Date d'opération » column and the
             // « Validation des dépenses » tab — see $canAudit above.
             'canAudit' => $canAudit,
+            // Annuler un remboursement recredite une caisse : super-admin
+            // uniquement (`refunds.cancel` est dans superAdminOnly()). Prop
+            // de CONFORT — la policy reste le vrai verrou (§16).
+            'canCancelRemboursement' => $user->can('refunds.cancel'),
             'depenseStatuts' => Depense::STATUTS,
             'typesDepenses' => $user->can('expenses.view') ? $getDepensesList->typeDepenseOptions() : [],
             // The Dépenses tab's Type filter must not offer "Paiement prof"

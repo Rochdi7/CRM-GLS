@@ -608,6 +608,12 @@ Route::prefix('backoffice')
                 ->middleware('permission:refunds.create')->name('remboursements.store');
             Route::put('remboursements/{remboursement}', [RemboursementController::class, 'update'])
                 ->middleware('permission:refunds.update')->name('remboursements.update');
+            // Annulation par ecriture compensatoire : la caisse est
+            // recreditee, la ligne n'est jamais supprimee (§11). Reserve au
+            // super-admin — `refunds.cancel` est dans superAdminOnly(), donc
+            // aucun preset de role ne peut le porter (03/09/2026).
+            Route::post('remboursements/{remboursement}/annuler', [RemboursementController::class, 'cancel'])
+                ->middleware('permission:refunds.cancel')->name('remboursements.cancel');
             Route::get('students/{student}/payments-for-refund', [RemboursementController::class, 'studentPayments'])
                 ->name('students.payments-for-refund');
             // No remboursements.show — zero detail page anywhere in the live

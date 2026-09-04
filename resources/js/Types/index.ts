@@ -1997,6 +1997,8 @@ export interface DepensesPageProps {
     approvalEnabled: boolean;
     /** UI convenience only (`expenses.approve`); the policy is the real gate. */
     canApprove: boolean;
+    /** UI convenience only (`refunds.cancel`, super-admin) ; la policy reste le vrai verrou. */
+    canCancelRemboursement: boolean;
     /**
      * Same permission, different job: gates the « Date d'operation » column
      * and the « Validation des depenses » tab. When false the controller has

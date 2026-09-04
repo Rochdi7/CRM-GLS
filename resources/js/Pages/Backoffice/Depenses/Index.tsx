@@ -154,6 +154,7 @@ export default function DepensesIndex({
     justificatifMaxKb,
     remboursements,
     remboursementsTotaux,
+    canCancelRemboursement,
     remboursementCaisses,
     students,
     approvalEnabled,
@@ -194,6 +195,9 @@ export default function DepensesIndex({
     // shown is already on the row, so opening it costs no extra request.
     const [detailsRow, setDetailsRow] = useState<DepenseRow | null>(null);
     const [showRemboursementModal, setShowRemboursementModal] = useState(false);
+    const [remboursementToCancel, setRemboursementToCancel] = useState<RemboursementRow | null>(null);
+    const [cancelling, setCancelling] = useState(false);
+    const [motifAnnulationRemboursement, setMotifAnnulationRemboursement] = useState('');
     const [editingRemboursement, setEditingRemboursement] = useState<RemboursementRow | null>(null);
     const [studentPayments, setStudentPayments] = useState<EncaissementFormOption[]>([]);
     const [loadingStudentPayments, setLoadingStudentPayments] = useState(false);
@@ -969,6 +973,18 @@ export default function DepensesIndex({
                                                 <RowActionItem icon="ti-edit" onClick={() => openEditRemboursement(row)}>
                                                     Modifier
                                                 </RowActionItem>
+                                                {/* Annuler recredite la caisse : super-admin
+                                                    uniquement, et jamais sur une ligne deja
+                                                    annulee (la caisse serait recreditee deux
+                                                    fois pour une seule sortie). */}
+                                                {canCancelRemboursement && !row.annule && (
+                                                    <RowActionItem
+                                                        icon="ti-arrow-back-up"
+                                                        onClick={() => setRemboursementToCancel(row)}
+                                                    >
+                                                        Annuler le remboursement
+                                                    </RowActionItem>
+                                                )}
                                             </RowActions>
                                         </td>
                                     </tr>
@@ -1626,6 +1642,62 @@ export default function DepensesIndex({
                         onChange={(e) => setMotifRefus(e.target.value)}
                     />
                 )}
+            </ConfirmDialog>
+
+            {/* Annulation d'un remboursement (super-admin). La caisse est
+                recreditee par ecriture compensatoire : la ligne reste
+                listee, barree, et sort des totaux — elle n'est jamais
+                supprimee (§11). Le libelle nomme la caisse creditee, parce
+                que c'est un mouvement d'argent, pas un changement d'etat. */}
+            <ConfirmDialog
+                show={remboursementToCancel !== null}
+                title="Annuler le remboursement"
+                message={
+                    'La caisse sera recreditee de ce montant. Le remboursement restera '
+                    + 'visible, barre et marque « Annule », mais ne comptera plus dans les totaux.'
+                }
+                recordLabel={
+                    remboursementToCancel
+                        ? remboursementToCancel.reference
+                          + ' - '
+                          + Number(remboursementToCancel.montant).toFixed(2)
+                          + ' MAD vers ' + (remboursementToCancel.caisse ?? 'la caisse')
+                        : ''
+                }
+                processing={cancelling}
+                onConfirm={() => {
+                    if (remboursementToCancel === null) {
+                        return;
+                    }
+
+                    setCancelling(true);
+                    router.post(
+                        `/backoffice/remboursements/${remboursementToCancel.id}/annuler`,
+                        { motif: motifAnnulationRemboursement },
+                        {
+                            preserveScroll: true,
+                            onFinish: () => {
+                                setCancelling(false);
+                                setRemboursementToCancel(null);
+                                setMotifAnnulationRemboursement('');
+                            },
+                        },
+                    );
+                }}
+                onCancel={() => {
+                    setRemboursementToCancel(null);
+                    setMotifAnnulationRemboursement('');
+                }}
+                icon="ti-arrow-back-up"
+                confirmLabel="Annuler le remboursement"
+                processingLabel="Annulation..."
+            >
+                <TextareaField
+                    id="rmb-motif-annulation"
+                    label="Motif de l'annulation (optionnel)"
+                    value={motifAnnulationRemboursement}
+                    onChange={(e) => setMotifAnnulationRemboursement(e.target.value)}
+                />
             </ConfirmDialog>
         </BackofficeLayout>
     );
