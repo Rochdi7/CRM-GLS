@@ -67,12 +67,6 @@
         .num-lbl-ar { width: 32%; text-align: left; }
 
         .row-table td { padding: 2pt 0; }
-        /* mPDF ne gère pas les bordures sur <tr> : elles vont sur les <td>. */
-        .row-reste td {
-            font-weight: bold;
-            border-top: 0.4pt solid #999;
-            padding-top: 3pt;
-        }
         .row-fr { width: 30%; text-align: left; }
         .row-val { text-align: center; font-weight: bold; }
         .row-ar { width: 30%; text-align: right; }
@@ -203,36 +197,11 @@
             <tr>
                 <td>Total / المجموع</td>
                 <td class="num">{{ $fmt($montantTotal) }}</td>
-                {{-- Le reste GLOBAL du lot, pas une cellule vide : la colonne
-                     Reste détaille frais par frais, son total est ce qui décide
-                     si l'étudiant repart quitte. --}}
-                <td class="num">{{ $situation->disponible ? $fmt($situation->reste) : '' }}</td>
+                <td class="num"></td>
                 <td class="num"></td>
             </tr>
         </tfoot>
     </table>
-
-    @if ($situation->disponible)
-        {{-- Même récapitulatif que le reçu unitaire : le dû, le cumul payé
-             (TOUS les versements de ces frais, ce lot compris) et le solde. --}}
-        <table class="row-table">
-            <tr>
-                <td class="row-fr">Total des frais</td>
-                <td class="row-val">{{ $fmt($situation->totalFrais) }} DH</td>
-                <td class="row-ar">مجموع المصاريف</td>
-            </tr>
-            <tr>
-                <td class="row-fr">Total payé</td>
-                <td class="row-val">{{ $fmt($situation->totalPaye) }} DH</td>
-                <td class="row-ar">المبلغ المؤدى</td>
-            </tr>
-            <tr class="row-reste">
-                <td class="row-fr">Reste à payer</td>
-                <td class="row-val">{{ $fmt($situation->reste) }} DH</td>
-                <td class="row-ar">المبلغ المتبقي</td>
-            </tr>
-        </table>
-    @endif
 
     <table class="row-table">
         <tr>

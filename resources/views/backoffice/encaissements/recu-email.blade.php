@@ -25,10 +25,6 @@
     $centre = $inscription?->etablissement ?? $encaissement->student?->etablissement;
     $montantAffiche = rtrim(rtrim(number_format((float) $encaissement->montant, 2, '.', ' '), '0'), '.').' DH';
     $fraisNom = $encaissement->libelleFrais();
-    // Situation du frais — App\Domain\Payments\Support\SituationFraisRecu,
-    // passée par le mailable ; la MÊME que celle du PDF joint.
-    $fmtDh = fn (float $v): string => rtrim(rtrim(number_format($v, 2, '.', ' '), '0'), '.').' DH';
-    $montantRedondant = $situation->montantRedondant((float) $encaissement->montant);
     // Logo blanc sur fond bleu, embarqué en cid — voir l'en-tête du fichier.
     $logoPath = public_path('assets/images/logo/gls-blanc-email.png');
 @endphp
@@ -79,32 +75,10 @@
                                     <td style="padding: 12px 16px; font-size: 13px; color: #6b7280; border-bottom: 1px solid #e5e7eb;">Date de paiement</td>
                                     <td style="padding: 12px 16px; font-size: 13px; font-weight: 700; color: #111827; text-align: right; border-bottom: 1px solid #e5e7eb;">{{ $encaissement->date_paiement?->format('d/m/Y') ?? '—' }}</td>
                                 </tr>
-                                @unless ($montantRedondant)
-                                    {{-- Masquée quand elle répète « Total payé » — voir recu.blade.php. --}}
-                                    <tr>
-                                        <td style="padding: 14px 16px; font-size: 14px; color: #111827; font-weight: 700;{{ $situation->disponible ? ' border-bottom: 1px solid #e5e7eb;' : '' }}">Montant réglé</td>
-                                        <td style="padding: 14px 16px; font-size: 18px; font-weight: 700; color: #1b5a90; text-align: right;{{ $situation->disponible ? ' border-bottom: 1px solid #e5e7eb;' : '' }}">{{ $montantAffiche }}</td>
-                                    </tr>
-                                @endunless
-                                @if ($situation->disponible)
-                                    {{-- Ce qu'il reste dû après ce versement : le PDF joint
-                                         porte les mêmes trois lignes, mais beaucoup
-                                         d'étudiants ne lisent que le corps de l'email.
-                                         « Total payé » est CUMULATIF (tous les versements
-                                         du frais), pas le montant de ce seul reçu. --}}
-                                    <tr>
-                                        <td style="padding: 12px 16px; font-size: 13px; color: #6b7280; border-bottom: 1px solid #e5e7eb;">Total du frais</td>
-                                        <td style="padding: 12px 16px; font-size: 13px; font-weight: 700; color: #111827; text-align: right; border-bottom: 1px solid #e5e7eb;">{{ $fmtDh($situation->totalFrais) }}</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding: 12px 16px; font-size: 13px; color: #6b7280; border-bottom: 1px solid #e5e7eb;">Total payé</td>
-                                        <td style="padding: 12px 16px; font-size: 13px; font-weight: 700; color: #111827; text-align: right; border-bottom: 1px solid #e5e7eb;">{{ $fmtDh($situation->totalPaye) }}</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding: 14px 16px; font-size: 14px; color: #111827; font-weight: 700; background: #f9fafb;">Reste à payer</td>
-                                        <td style="padding: 14px 16px; font-size: 18px; font-weight: 700; color: {{ $situation->reste > 0 ? '#b45309' : '#15803d' }}; text-align: right; background: #f9fafb;">{{ $fmtDh($situation->reste) }}</td>
-                                    </tr>
-                                @endif
+                                <tr>
+                                    <td style="padding: 14px 16px; font-size: 14px; color: #111827; font-weight: 700;">Montant réglé</td>
+                                    <td style="padding: 14px 16px; font-size: 18px; font-weight: 700; color: #1b5a90; text-align: right;">{{ $montantAffiche }}</td>
+                                </tr>
                             </table>
 
                             <p style="margin: 24px 0 0; font-size: 13px; line-height: 1.6; color: #6b7280;">

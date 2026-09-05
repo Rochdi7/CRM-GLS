@@ -15,10 +15,6 @@
         .($encaissement->numero_cheque ? ' N° :'.$encaissement->numero_cheque : '')
         .($encaissement->banque ? ' - '.$encaissement->banque : '');
     $logoPath = public_path('assets/images/logo/gls-noir.png');
-    // Situation du frais — App\Domain\Payments\Support\SituationFraisRecu,
-    // la MÊME que le reçu imprimé au guichet.
-    $fmtDh = fn (float $v): string => rtrim(rtrim(number_format($v, 2, '.', ' '), '0'), '.').' DH';
-    $montantRedondant = $situation->montantRedondant((float) $encaissement->montant);
 @endphp
 <!DOCTYPE html>
 <html lang="fr">
@@ -71,13 +67,6 @@
         .row-val { text-align: center; font-weight: bold; }
         .row-ar { width: 30%; text-align: right; }
         .row-spacer td { padding-top: 10pt; }
-
-        /* mPDF ne gère pas les bordures sur <tr> : elles vont sur les <td>. */
-        .row-reste td {
-            font-weight: bold;
-            border-top: 0.4pt solid #999;
-            padding-top: 3pt;
-        }
 
         /* Mention légale : les frais réglés ne sont pas remboursables. */
         .mention-nr {
@@ -159,33 +148,11 @@
             <td class="row-val">{{ $fraisNom }}</td>
             <td class="row-ar">مصاريف التمدرس</td>
         </tr>
-        @unless ($montantRedondant)
-            {{-- Masquée quand elle répète « Total payé » — voir recu.blade.php. --}}
-            <tr class="row-spacer">
-                <td class="row-fr">Montant</td>
-                <td class="row-val">{{ $montantAffiche }}</td>
-                <td class="row-ar">المبلغ</td>
-            </tr>
-        @endunless
-        @if ($situation->disponible)
-            {{-- Reste dû après ce versement — voir recu.blade.php pour le
-                 pourquoi. « Total payé » est cumulatif, pas le montant de ce reçu. --}}
-            <tr class="{{ $montantRedondant ? 'row-spacer' : '' }}">
-                <td class="row-fr">Total du frais</td>
-                <td class="row-val">{{ $fmtDh($situation->totalFrais) }}</td>
-                <td class="row-ar">مجموع المصاريف</td>
-            </tr>
-            <tr>
-                <td class="row-fr">Total payé</td>
-                <td class="row-val">{{ $fmtDh($situation->totalPaye) }}</td>
-                <td class="row-ar">المبلغ المؤدى</td>
-            </tr>
-            <tr class="row-reste">
-                <td class="row-fr">Reste à payer</td>
-                <td class="row-val">{{ $fmtDh($situation->reste) }}</td>
-                <td class="row-ar">المبلغ المتبقي</td>
-            </tr>
-        @endif
+        <tr class="row-spacer">
+            <td class="row-fr">Montant</td>
+            <td class="row-val">{{ $montantAffiche }}</td>
+            <td class="row-ar">المبلغ</td>
+        </tr>
         <tr>
             <td class="row-fr">Mode de paiement</td>
             <td class="row-val">{{ $modePaiement }}</td>

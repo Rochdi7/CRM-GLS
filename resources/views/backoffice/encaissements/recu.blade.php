@@ -24,11 +24,6 @@
     $modePaiement = $encaissement->methode
         .($encaissement->numero_cheque ? ' N° :'.$encaissement->numero_cheque : '')
         .($encaissement->banque ? ' - '.$encaissement->banque : '');
-    // Situation du frais (total dû / total déjà payé / reste) — voir
-    // App\Domain\Payments\Support\SituationFraisRecu. Absente d'une avance
-    // encore non allouée : elle ne solde aucun frais.
-    $fmtDh = fn (float $v): string => rtrim(rtrim(number_format($v, 2, '.', ' '), '0'), '.').' DH';
-    $montantRedondant = $situation->montantRedondant((float) $encaissement->montant);
 @endphp
 <!DOCTYPE html>
 <html lang="fr">
@@ -179,11 +174,6 @@
         }
         .row-line.spaced { margin-top: {{ $compact ? '2mm' : ($format === 'a5x2' ? '2mm' : '3.5mm') }}; }
 
-        /* Le reste à payer est la ligne que l'étudiant cherche : encadrée pour
-           la trouver d'un coup d'œil sur les trois formats. */
-        .row-line.reste .fr, .row-line.reste .val, .row-line.reste .ar { font-weight: 700; }
-        .row-line.reste { border-top: 1px solid #999; margin-top: 0.8mm; padding-top: 1mm; }
-
         .row-line .fr { width: 30%; }
         .row-line .val { flex: 1; text-align: center; font-weight: 700; }
         .row-line .ar { width: 30%; direction: rtl; text-align: right; }
@@ -315,38 +305,11 @@
                         <span class="val">{{ $fraisNom }}</span>
                         <span class="ar">مصاريف التمدرس</span>
                     </div>
-                    @unless ($montantRedondant)
-                        {{-- Masquée quand elle répète « Total payé » (1er versement) :
-                             le même chiffre deux lignes de suite se lit comme une
-                             erreur. Elle revient dès qu'elle diffère. --}}
-                        <div class="row-line spaced">
-                            <span class="fr">Montant</span>
-                            <span class="val">{{ $montantAffiche }}</span>
-                            <span class="ar">المبلغ</span>
-                        </div>
-                    @endunless
-                    @if ($situation->disponible)
-                        {{-- Ce que l'étudiant doit encore : sans ces trois lignes, un
-                             règlement partiel de 500 DH sur 1 500 DH repartait sans
-                             indiquer le solde. « Total payé » est CUMULATIF (tous les
-                             versements du frais, celui-ci compris), pas le montant de
-                             ce seul reçu. --}}
-                        <div class="row-line{{ $montantRedondant ? ' spaced' : '' }}">
-                            <span class="fr">Total du frais</span>
-                            <span class="val">{{ $fmtDh($situation->totalFrais) }}</span>
-                            <span class="ar">مجموع المصاريف</span>
-                        </div>
-                        <div class="row-line">
-                            <span class="fr">Total payé</span>
-                            <span class="val">{{ $fmtDh($situation->totalPaye) }}</span>
-                            <span class="ar">المبلغ المؤدى</span>
-                        </div>
-                        <div class="row-line reste">
-                            <span class="fr">Reste à payer</span>
-                            <span class="val">{{ $fmtDh($situation->reste) }}</span>
-                            <span class="ar">المبلغ المتبقي</span>
-                        </div>
-                    @endif
+                    <div class="row-line spaced">
+                        <span class="fr">Montant</span>
+                        <span class="val">{{ $montantAffiche }}</span>
+                        <span class="ar">المبلغ</span>
+                    </div>
                     <div class="row-line">
                         <span class="fr">Mode de paiement</span>
                         <span class="val">{{ $modePaiement }}</span>

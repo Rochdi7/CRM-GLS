@@ -13,7 +13,6 @@ use App\Domain\Finance\Support\CaisseResolver;
 use App\Domain\Payments\Actions\EnregistrerEncaissement;
 use App\Domain\Payments\Mail\EncaissementRecuMail;
 use App\Domain\Payments\Support\RecuPdfRenderer;
-use App\Domain\Payments\Support\SituationFraisRecu;
 use App\Domain\Payments\Support\RecuWhatsAppLink;
 use App\Domain\Payments\Actions\SupprimerEncaissement;
 use App\Domain\Payments\Queries\GetEncaissementDetails;
@@ -574,7 +573,6 @@ final class EncaissementController extends Controller
             'anneeScolaire' => $inscription?->anneeScolaire?->nom,
             'niveau' => $inscription?->group?->nom ?? $encaissement->student?->niveau,
             'fraisNom' => $encaissement->libelleFrais(),
-            'situation' => SituationFraisRecu::pour($encaissement),
         ]);
     }
 
@@ -649,7 +647,6 @@ final class EncaissementController extends Controller
             'montantTotal' => (float) $encaissements->sum('montant'),
             'reference' => $first->reference,
             'payeParFee' => $payeParFee,
-            'situation' => SituationFraisRecu::pourLot($encaissements),
         ]);
     }
 

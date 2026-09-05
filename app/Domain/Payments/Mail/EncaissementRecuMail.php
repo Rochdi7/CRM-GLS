@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Domain\Payments\Mail;
 
-use App\Domain\Payments\Support\RecuPdfRenderer;
-use App\Domain\Payments\Support\SituationFraisRecu;
 use App\Models\Encaissement;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
@@ -51,29 +49,45 @@ final class EncaissementRecuMail extends Mailable
     {
         return new Content(
             view: 'backoffice.encaissements.recu-email',
-            with: [
-                'encaissement' => $this->encaissement,
-                'situation' => SituationFraisRecu::pour($this->encaissement),
-            ],
+            with: ['encaissement' => $this->encaissement],
         );
     }
 
-    /**
-     * ⚠ Le PDF est fabriqué par RecuPdfRenderer, jamais ici : c'est la
-     * fabrique unique du document (config mPDF, gabarit, situation du frais),
-     * pour que le reçu reçu par email soit exactement celui du lien WhatsApp
-     * et du guichet. La copie locale de cette configuration qui vivait dans
-     * ce mailable a divergé au premier ajout au gabarit (les lignes
-     * « Total payé / Reste à payer » du 04/09/2026 lui manquaient) — c'est
-     * précisément le risque annoncé par le docblock du renderer.
-     */
     public function attachments(): array
     {
-        $renderer = app(RecuPdfRenderer::class);
-        $pdfContent = $renderer->render($this->encaissement);
+        $inscription = $this->encaissement->fee?->inscription
+            ?? $this->encaissement->applications->sortBy('id')->first()?->fee?->inscription;
+        $centre = $inscription?->etablissement ?? $this->encaissement->student?->etablissement;
+
+        $html = view('backoffice.encaissements.recu-pdf', [
+            'encaissement' => $this->encaissement,
+            'centre' => $centre,
+            'anneeScolaire' => $inscription?->anneeScolaire?->nom,
+            'niveau' => $inscription?->group?->nom ?? $this->encaissement->student?->niveau,
+            'fraisNom' => $this->encaissement->libelleFrais(),
+        ])->render();
+
+        $tempDir = storage_path('app/mpdf');
+        if (! is_dir($tempDir)) {
+            mkdir($tempDir, 0755, true);
+        }
+
+        $mpdf = new \Mpdf\Mpdf([
+            'mode' => 'utf-8',
+            'format' => 'A5-L',
+            'margin_left' => 8,
+            'margin_right' => 8,
+            'margin_top' => 8,
+            'margin_bottom' => 8,
+            'autoScriptToLang' => true,
+            'autoLangToFont' => true,
+            'tempDir' => $tempDir,
+        ]);
+        $mpdf->WriteHTML($html);
+        $pdfContent = $mpdf->Output('', \Mpdf\Output\Destination::STRING_RETURN);
 
         return [
-            Attachment::fromData(fn () => $pdfContent, $renderer->filename($this->encaissement))
+            Attachment::fromData(fn () => $pdfContent, 'recu-'.$this->encaissement->reference.'.pdf')
                 ->withMime('application/pdf'),
         ];
     }
