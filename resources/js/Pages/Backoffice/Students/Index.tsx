@@ -1,6 +1,8 @@
 import { router, useForm } from '@inertiajs/react';
 import { useRef, useState, type FormEvent } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
+import PageTabs from '@/Components/Navigation/PageTabs';
+import { STUDENTS_TABS } from '@/Config/pageTabs';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
@@ -281,6 +283,8 @@ export default function StudentsIndex({
                 </button>
             }
         >
+            <PageTabs tabs={STUDENTS_TABS} />
+
             <Card title="Étudiants" bodyClassName="p-0 py-3">
                 {/* Per-column filter row (reference CRM's Étudiants filters,
                     without Catégorie d'âge) — replaces the single search box

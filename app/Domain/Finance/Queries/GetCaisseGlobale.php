@@ -8,6 +8,7 @@ use App\Models\Activity;
 use App\Models\Caisse;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
+use App\Domain\Finance\Support\VentilationCentre;
 use App\Services\Context\CurrentContext;
 use App\Support\Access\DormantTill;
 use App\Support\Access\HiddenAccount;
@@ -80,6 +81,7 @@ final class GetCaisseGlobale
     public function __construct(
         private readonly CenterAccessService $centerAccess,
         private readonly CurrentContext $context,
+        private readonly VentilationCentre $ventilation,
     ) {}
 
     /**
@@ -110,8 +112,13 @@ final class GetCaisseGlobale
             ->tap(fn ($q) => HiddenAccount::hideCaisses($q))
             ->tap(fn ($q) => DormantTill::hide($q))
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
-            ->when($this->context->etablissementId(), fn ($q, $id) => $q
-                ->where(fn ($w) => $w->whereNull('etablissement_id')->orWhere('etablissement_id', $id)))
+            // ⚠ Même règle que « Comptes de caisse » : une caisse appartient
+            // à un centre par rattachement, par AFFECTATION de son
+            // responsable (§16) ou parce qu'elle y détient de l'argent.
+            // Filtrer sur le seul `caisses.etablissement_id` faisait basculer
+            // la caisse EN BLOC et masquait les caissières dont ce centre
+            // n'est que secondaire (VentilationCentre).
+            ->tap(fn ($q) => $this->ventilation->scopeCaissesDuCentre($q, $this->context->etablissementId()))
             ->orderByDesc('solde')
             ->orderBy('nom')
             ->get();
@@ -122,8 +129,26 @@ final class GetCaisseGlobale
             ? []
             : $this->soldesAt($caisses->pluck('id')->all(), $dateTo);
 
+        // Part du centre actif, dérivée des mêmes tables que les écrans de
+        // détail (VentilationCentre) : sans elle, sélectionner un centre
+        // affichait la TOTALITÉ de chaque caisse, y compris l'argent d'un
+        // autre centre. Sur « Tous les centres » rien n'est ventilé.
+        $centreId = $this->context->etablissementId();
+
         foreach ($caisses as $caisse) {
-            $caisse->solde = number_format($soldes[$caisse->id] ?? (float) $caisse->solde, 2, '.', '');
+            $solde = $soldes[$caisse->id] ?? (float) $caisse->solde;
+
+            // ⚠ Rembobinage et ventilation ne se composent pas : le premier
+            // reconstruit un solde PASSÉ depuis le journal, la seconde
+            // découpe le solde ACTUEL par centre. Les combiner donnerait un
+            // nombre qui n'est ni l'un ni l'autre, donc la ventilation ne
+            // s'applique qu'à la vue courante — une date choisie reste un
+            // état global, ce que la page annonce déjà (`asOf`).
+            if ($centreId !== null && $dateTo === null) {
+                $solde = $this->ventilation->soldeDuCentre($caisse, $centreId);
+            }
+
+            $caisse->solde = number_format($solde, 2, '.', '');
         }
 
         // Re-sorted AFTER the rewind: ordering on today's solde would list a

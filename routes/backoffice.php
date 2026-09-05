@@ -44,6 +44,7 @@ use App\Http\Controllers\Backoffice\SalleController;
 use App\Http\Controllers\Backoffice\StockController;
 use App\Http\Controllers\Backoffice\StockTypeController;
 use App\Http\Controllers\Backoffice\StudentController;
+use App\Http\Controllers\Backoffice\StudentMergeController;
 use App\Http\Controllers\Backoffice\TypeDepenseController;
 use App\Http\Controllers\Backoffice\Users\UserAuthorizationController;
 use App\Http\Controllers\Backoffice\Users\UserController;
@@ -180,6 +181,24 @@ Route::prefix('backoffice')
             // docs/phase-8-students-groups-inventory.md). The Livewire
             // StudentsIndex component + its route registration are retired
             // here but the class/view files are kept, unused, for rollback.
+            // « Fusion de fiches & réaffectation des paiements » — écran de
+            // réparation super-admin (students.merge / payments.move-fee, tous
+            // deux dans PermissionRegistry::superAdminOnly()). Recolle deux
+            // fiches d'une même personne et rattache un paiement au bon frais,
+            // y compris sur une inscription Annulée / d'une autre année : ce
+            // sont précisément les lignes que les écrans ordinaires masquent.
+            // Aucune entrée de barre latérale (cf. backofficeNavigation.ts) —
+            // atteignable par l'URL directe et par l'onglet des Étudiants,
+            // même convention que « Déplacer des encaissements ».
+            // ⚠ DOIT précéder students/{student}, sinon le joker capture
+            // « students/fusion » et renvoie un 404 de binding.
+            Route::get('students/fusion', [StudentMergeController::class, 'index'])
+                ->middleware('permission:students.merge')->name('students.merge.index');
+            Route::post('students/fusion', [StudentMergeController::class, 'merge'])
+                ->middleware('permission:students.merge')->name('students.merge.store');
+            Route::post('students/fusion/deplacer-paiement', [StudentMergeController::class, 'movePayment'])
+                ->middleware('permission:payments.move-fee')->name('students.merge.move-payment');
+
             Route::get('students', [StudentController::class, 'index'])
                 ->middleware('permission:students.view')->name('students.index');
             Route::post('students', [StudentController::class, 'store'])

@@ -10,6 +10,13 @@ export interface PageTabDef {
     permissions?: string[];
     /** Paths that mark this tab active (prefix match); defaults to [href]. */
     matchPaths?: string[];
+    /**
+     * Match `matchPaths` EXACTLY instead of by prefix. Needed when another
+     * tab lives under this one's path — « Étudiants » (/backoffice/students)
+     * vs « Fusion de fiches » (/backoffice/students/fusion), where the
+     * default prefix rule would light both up at once.
+     */
+    exact?: boolean;
 }
 
 /**
@@ -40,8 +47,10 @@ export default function PageTabs({ tabs }: { tabs: PageTabDef[] }) {
     return (
         <ul className="nav nav-tabs p-0 border-bottom rounded-0 mb-4" role="tablist">
             {visible.map((tab) => {
-                const active = (tab.matchPaths ?? [tab.href]).some(
-                    (path) => currentPath === path || currentPath.startsWith(`${path}/`),
+                const active = (tab.matchPaths ?? [tab.href]).some((path) =>
+                    tab.exact
+                        ? currentPath === path
+                        : currentPath === path || currentPath.startsWith(`${path}/`),
                 );
 
                 return (

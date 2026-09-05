@@ -96,6 +96,13 @@ final class CaisseController extends Controller
             : null;
 
         return Inertia::render('Backoffice/Caisses/Index', [
+            // ⚠ Solde ENTIER, jamais ventilé par centre — contrairement aux
+            // trois écrans de lecture (VentilationCentre). Un transfert
+            // déplace de l'argent PHYSIQUE : DemanderTransfertCaisse /
+            // ValiderTransfertCaisse valident contre `caisses.solde` en
+            // entier. Afficher ici la part d'un centre ferait proposer un
+            // plafond que le serveur refuserait ensuite — ou pire, laisserait
+            // croire qu'un billet du tiroir est indisponible.
             'myCaisse' => $myCaisse !== null ? [
                 'id' => $myCaisse->id,
                 'nom' => $myCaisse->nom,

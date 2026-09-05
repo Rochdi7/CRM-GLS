@@ -61,9 +61,14 @@ final class CaisseDeServiceAccessible implements ValidationRule
         // withoutGlobalScopes(): Employee is #[ScopedBy(HiddenAccountScope)]
         // and a global scope applies inside a nested relation query too
         // (§11), which would shrink the set this check is meant to allow.
+        // The primary column counts too — CenterAccessService treats it as
+        // authoritative for rows with no pivot entry yet (§16), and legacy
+        // staff still look like that. The dropdown applies the same pair.
         $servesReachableCentre = $caisse->responsable()
             ->withoutGlobalScopes()
-            ->whereHas('etablissements', fn ($e) => $e->whereIn('etablissements.id', $reachable))
+            ->where(fn ($w) => $w
+                ->whereIn('etablissement_id', $reachable)
+                ->orWhereHas('etablissements', fn ($e) => $e->whereIn('etablissements.id', $reachable)))
             ->exists();
 
         if (! $servesReachableCentre) {

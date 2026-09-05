@@ -261,11 +261,19 @@ final class GetCaisseTransfersList
      */
     private function scopeToCentreOfService($query, User $user): void
     {
+        // ⚠ The PRIMARY column is part of the answer, not a shortcut past
+        // it: CenterAccessService treats `employees.etablissement_id` as
+        // authoritative for rows that have no pivot entry yet (§16), and
+        // legacy staff created before the pivot existed still look like
+        // that. Reading the pivot alone silently drops every one of them —
+        // it removed the CEO's own till from this dropdown.
         $assignedTo = fn (array $centreIds) => fn ($q) => $q
             ->whereNull('etablissement_id')
             ->orWhereHas('responsable', fn ($r) => $r
                 ->withoutGlobalScopes()
-                ->whereHas('etablissements', fn ($e) => $e->whereIn('etablissements.id', $centreIds)));
+                ->where(fn ($w) => $w
+                    ->whereIn('etablissement_id', $centreIds)
+                    ->orWhereHas('etablissements', fn ($e) => $e->whereIn('etablissements.id', $centreIds))));
 
         // Reach: every centre the viewer works in. A global user skips it.
         if (! $this->centerAccess->hasGlobalAccess($user)) {

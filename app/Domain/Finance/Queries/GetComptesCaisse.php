@@ -9,6 +9,7 @@ use App\Models\CaisseTransfer;
 use App\Models\Depense;
 use App\Models\Encaissement;
 use App\Models\Remboursement;
+use App\Domain\Finance\Support\VentilationCentre;
 use App\Services\Context\CurrentContext;
 use App\Support\Access\DormantTill;
 use App\Support\Access\HiddenAccount;
@@ -62,7 +63,10 @@ final class GetComptesCaisse
 {
     public const DEFAULT_PER_PAGE = 10;
 
-    public function __construct(private readonly CurrentContext $context) {}
+    public function __construct(
+        private readonly CurrentContext $context,
+        private readonly VentilationCentre $ventilation,
+    ) {}
 
     /** The only type a user may create by hand. */
     public const CREATABLE_TYPES = [Caisse::TYPE_EXTERNE];
@@ -143,33 +147,10 @@ final class GetComptesCaisse
             // noise — one that still holds money is never hidden (DormantTill).
             ->tap(fn ($q) => DormantTill::hide($q))
             // Active centre from the top-bar switcher; null = « Tous les
-            // centres » (super-admin only) ⇒ no narrowing.
-            //
-            // ⚠ Une caisse est visible sur un centre si elle lui est rattachée
-            // OU si elle porte de l'argent de ce centre. Ne garder que le
-            // rattachement ferait disparaître de l'écran la caisse d'Hafssa
-            // Elkhattabi (étiquetée Rabat) alors qu'elle détient des paiements
-            // GLS Online — et l'argent avec elle, donc impossible à
-            // transférer depuis le centre qui le possède.
-            ->when($this->context->etablissementId(), fn ($q, $id) => $q
-                ->where(fn ($w) => $w
-                    ->whereNull('etablissement_id')
-                    ->orWhere('etablissement_id', $id)
-                    // « Centres affectés » est LA source de vérité de la portée
-                    // d'un employé (§16) : une caissière affectée à plusieurs
-                    // centres tient la caisse de chacun d'eux, pas seulement de
-                    // son centre PRIMAIRE. Sans cette branche, basculer sur un
-                    // centre secondaire faisait disparaître sa caisse de la
-                    // liste — et l'argent qu'elle y détient avec elle.
-                    ->orWhereHas('responsable', fn ($r) => $r
-                        ->whereHas('etablissements', fn ($e) => $e->where('etablissements.id', $id)))
-                    // Filet supplémentaire : une caisse qui porte de l'argent
-                    // d'un centre y reste visible même si son responsable n'y
-                    // est plus affecté (mutation, départ) — sinon cet argent
-                    // deviendrait intransférable depuis le centre qui le
-                    // possède.
-                    ->orWhereHas('encaissements', fn ($e) => $e->where('etablissement_id', $id))
-                    ->orWhereHas('remboursements', fn ($r) => $r->where('etablissement_id', $id))))
+            // centres » (super-admin only) ⇒ no narrowing. Les trois façons
+            // dont une caisse appartient à un centre vivent dans
+            // VentilationCentre, partagées avec « Caisse globale ».
+            ->tap(fn ($q) => $this->ventilation->scopeCaissesDuCentre($q, $this->context->etablissementId()))
             // Both columns must count ONLY what actually moved the till, so
             // the row reconciles with the `solde` printed beside it — the
             // same two filters GetCaisseDetails and GetCaisseJournal apply:
@@ -202,91 +183,30 @@ final class GetComptesCaisse
             }));
     }
 
-    /**
-     * Restreint une relation portant sa propre colonne `etablissement_id` au
-     * centre actif. Sans centre actif, rien n'est restreint.
-     */
+    /** Restreint une relation portant sa propre colonne `etablissement_id`. */
     private function scopeToActiveCentre($query): void
     {
         $centreId = $this->context->etablissementId();
 
-        if ($centreId === null) {
-            return;
+        if ($centreId !== null) {
+            $query->where('etablissement_id', $centreId);
         }
-
-        $query->where('etablissement_id', $centreId);
     }
 
-    /**
-     * Idem pour les dépenses, qui n'ont PAS de colonne `etablissement_id`
-     * (vérifié en base le 04/09/2026) : leur centre est celui du groupe pour
-     * un « Paiement prof », sinon celui de la caisse qui a payé — la même
-     * résolution que la colonne Centre du journal.
-     */
+    /** Dépenses : pas de colonne centre, résolution partagée (§ VentilationCentre). */
     private function scopeDepensesToActiveCentre($query): void
     {
         $centreId = $this->context->etablissementId();
 
-        if ($centreId === null) {
-            return;
+        if ($centreId !== null) {
+            $this->ventilation->scopeDepensesAuCentre($query, $centreId);
         }
-
-        $query->where(fn ($q) => $q
-            ->whereHas('group', fn ($g) => $g->where('etablissement_id', $centreId))
-            ->orWhere(fn ($w) => $w
-                ->whereDoesntHave('group')
-                ->whereHas('caisse', fn ($c) => $c->where('etablissement_id', $centreId))));
     }
 
-    /**
-     * Part du centre actif dans le solde d'une caisse — construite sur les
-     * mêmes tables que les lignes des écrans de détail, jamais sur une
-     * seconde source (voir GetCaisseJournal::soldeVentile(), même leçon).
-     *
-     * Sans centre actif, le solde stocké est rendu tel quel : c'est
-     * l'autorité, et la somme des parts de tous les centres doit y retomber.
-     */
+    /** Part du centre actif dans le solde — source unique, voir VentilationCentre. */
     private function soldeDuCentre(Caisse $caisse): float
     {
-        $centreId = $this->context->etablissementId();
-
-        if ($centreId === null) {
-            return (float) $caisse->solde;
-        }
-
-        $entrees = (float) Encaissement::query()
-            ->where('caisse_id', $caisse->id)
-            ->whereNull('applied_from_encaissement_id')
-            ->where('etablissement_id', $centreId)
-            ->sum('montant');
-
-        $sorties = (float) Remboursement::query()
-            ->where('caisse_id', $caisse->id)
-            ->where('etablissement_id', $centreId)
-            ->sum('montant');
-
-        $sorties += (float) Depense::query()
-            ->where('caisse_id', $caisse->id)
-            ->where('statut', Depense::STATUT_APPROUVEE)
-            ->tap(fn ($q) => $this->scopeDepensesToActiveCentre($q))
-            ->sum('montant');
-
-        foreach (CaisseTransfer::query()
-            ->where(fn ($q) => $q->where('caisse_source_id', $caisse->id)->orWhere('caisse_destination_id', $caisse->id))
-            ->where('statut', CaisseTransfer::STATUT_VALIDE)
-            ->get(['caisse_source_id', 'montant']) as $transfert) {
-            // Un transfert déplace de l'argent physique : il est imputé au
-            // centre de la caisse concernée, seule dimension qu'il porte.
-            if ((int) $caisse->etablissement_id !== $centreId) {
-                continue;
-            }
-
-            $sorties += (int) $transfert->caisse_source_id === $caisse->id
-                ? (float) $transfert->montant
-                : -(float) $transfert->montant;
-        }
-
-        return round($entrees - $sorties, 2);
+        return $this->ventilation->soldeDuCentre($caisse, $this->context->etablissementId());
     }
 
     private function money(float $amount): string

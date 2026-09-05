@@ -108,6 +108,15 @@ final class PermissionRegistry
                 'students.create' => 'Créer un étudiant',
                 'students.update' => 'Modifier un étudiant',
                 'students.delete' => 'Supprimer un étudiant',
+                // ⚠ Recolle DEUX fiches en une : l'ancien CRM (et une double
+                // saisie au comptoir) tient la même personne deux fois, si
+                // bien que ses inscriptions sont sur une fiche et ses
+                // paiements sur l'autre. Réservée au super-admin
+                // (superAdminOnly() ci-dessous) : se tromper de paire réunit
+                // l'historique financier de deux personnes différentes.
+                // Aucun montant ne bouge — seul `student_id` est réécrit
+                // (FusionnerEtudiants).
+                'students.merge' => 'Fusionner deux fiches étudiant en double (super-admin)',
             ],
             // Deliberately absent from every role preset in matrix() below
             // (superAdminOnly()) — a legacy import writes thousands of
@@ -235,6 +244,15 @@ final class PermissionRegistry
                 // frais redevient dû, donc l'écran de l'étudiant change.
                 // Deliberately in NO role preset (superAdminOnly() ci-dessous).
                 'payments.detach' => "Détacher un paiement de son frais (retour en avance)",
+                // ⚠ Déplacement fiche par fiche vers le frais d'une AUTRE
+                // inscription du même étudiant, quel que soit le STATUT de
+                // cette inscription (Annulée, Changement, Expirée, Archivée)
+                // et hors sélecteur de contexte : l'argent à rapatrier est
+                // justement celui que les écrans normaux masquent. Complément
+                // de payments.reallocate (qui, lui, traite un groupe entier).
+                // Rien ne bouge sauf `inscription_fee_id` — ni la date, ni la
+                // caisse, ni l'agent, ni le montant (DeplacerEncaissementVersFrais).
+                'payments.move-fee' => "Déplacer un paiement vers le frais d'une autre inscription (super-admin)",
             ],
             'Recouvrement' => [
                 'collections.view' => 'Consulter la gestion des recouvrements',
@@ -538,6 +556,17 @@ final class PermissionRegistry
             // the année — the money is booked against. Same history-altering
             // class as groups.move-year (26/08/2026).
             'payments.reallocate',
+            // Déplacer un paiement vers le frais d'une autre inscription, en
+            // acceptant DÉLIBÉRÉMENT un dossier clos et en ignorant le
+            // sélecteur de contexte : les deux garde-fous que tout le reste
+            // de l'app applique. Même classe que payments.reallocate, dont
+            // c'est la variante ligne à ligne (05/09/2026).
+            'payments.move-fee',
+            // Fusionner deux fiches étudiant réunit DEUX historiques
+            // financiers. Aucun montant ne bouge, mais viser la mauvaise
+            // paire attribue les paiements de quelqu'un d'autre — et la
+            // fiche vidée sort des recherches (05/09/2026).
+            'students.merge',
             // « Centres affectés » is the ONE authority on which centers a
             // user reaches (employee_etablissement pivot, CLAUDE.md §16) —
             // no ROLE may widen it to the whole network. Someone who needs

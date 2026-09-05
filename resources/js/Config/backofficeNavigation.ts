@@ -68,6 +68,13 @@ export const backofficeNavigation: NavGroup[] = [
                 href: '/backoffice/students',
                 icon: 'ti ti-school',
                 permissions: ['students.view'],
+                // « Fusion de fiches & réaffectation des paiements »
+                // (/backoffice/students/fusion) n'a PAS d'entrée propre :
+                // outil de réparation super-admin, atteignable par son URL
+                // directe et par l'onglet de la page Étudiants — même
+                // convention que « Déplacer des encaissements » et les
+                // Chèques. Le préfixe ci-dessous suffit à garder l'entrée
+                // Étudiants active pendant qu'on y est.
                 matchPaths: ['/backoffice/students'],
                 inertia: true,
             },

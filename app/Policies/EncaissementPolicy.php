@@ -4,12 +4,30 @@ declare(strict_types=1);
 
 namespace App\Policies;
 
+use App\Models\User;
 use App\Policies\Concerns\ResourcePolicy;
 use Illuminate\Database\Eloquent\Model;
 
 final class EncaissementPolicy extends ResourcePolicy
 {
     protected string $module = 'payments';
+
+    /**
+     * Déplacer un paiement vers le frais d'une autre inscription du même
+     * étudiant (super-admin — `payments.move-fee` est dans
+     * PermissionRegistry::superAdminOnly()).
+     *
+     * ⚠ Sans contrôle de centre, comme StudentPolicy@merge : l'argent à
+     * rapatrier se trouve souvent sur un dossier d'un autre centre ou d'une
+     * autre année, ce que les écrans ordinaires masquent justement.
+     * L'identité du payeur, elle, reste vérifiée dans l'action
+     * (DeplacerEncaissementVersFrais) : l'argent d'un étudiant ne solde
+     * jamais le frais d'un autre.
+     */
+    public function movePayment(User $user): bool
+    {
+        return $user->can('payments.move-fee');
+    }
 
     /**
      * A payment reaches its center through the STUDENT it is for — the same
