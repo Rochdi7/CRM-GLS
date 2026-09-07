@@ -84,7 +84,7 @@ components directly from it.** Copy and adapt reviewed components into
 `resources/js/` instead, document the mapping in
 `docs/react-theme-file-map.md`, and never run `npm install` inside the
 reference directory. See its own `README-GLS.md` for the full rule set and
-`docs/preskool-react-reference-inventory.md` for what was copied/excluded.
+`docs/rapports/ui/preskool-react-reference-inventory.md` for what was copied/excluded.
 
 **All modals are controlled by React state** — this is the only modal
 architecture in the app (Livewire/Alpine modals no longer exist). Never use
@@ -116,7 +116,7 @@ Never duplicate layout HTML in a page; never create a second layout system.
 ## 5. React/Inertia frontend rules (backoffice)
 
 The backoffice is **100% Inertia + React + TypeScript** — Livewire has been
-fully removed (Phase 11, `docs/phase-11-final-verification.md`). Pages live
+fully removed (Phase 11, `docs/rapports/migration-inertia/phase-11-final-verification.md`). Pages live
 in `resources/js/Pages/Backoffice/<Module>/{Index,Create,Edit,Show}.tsx`,
 backed by a thin Laravel controller (`App\Http\Controllers\Backoffice\…`)
 that authorizes, validates via Form Requests, and returns
@@ -1141,6 +1141,32 @@ keeps the primary column stable when an edit merely adds a center. Enforcing
   `cash-transfers.validate`. Tests:
   `RolesAndPermissionsSeederTest::test_every_role_can_deposit_a_cheque_at_the_bank`
   (both halves: everyone deposits, the front office still cannot update).
+- **⚠ Un écran ABSENT de la barre latérale n'est pas un écran protégé**
+  (07/09/2026, « Échéances en masse », `/backoffice/bulk-echeance`,
+  `FeeDueDateBulkController`). Un outil ponctuel peut légitimement ne pas
+  avoir d'entrée dans `resources/js/Config/backofficeNavigation.ts` — c'est
+  une décision d'ERGONOMIE, jamais de sécurité : la route reste atteignable
+  par son URL, donc elle porte son `permission:` comme n'importe quelle
+  autre et le contrôleur revérifie (§5 : le prop client n'est qu'un
+  confort d'interface). Ne jamais « sécuriser » un écran en le retirant du
+  menu.
+  L'outil applique UNE date d'échéance à plusieurs lignes de frais d'un
+  groupe d'un coup, au lieu de rouvrir le modal de chaque inscription. Son
+  droit `fee-due-dates.bulk-update` est dans `defaultForEveryRole()` pour la
+  même raison que `cheques.deposit` : **aucun argent ne bouge** — il n'écrit
+  que `inscription_fees.date_echeance`, jamais un montant, un statut, un
+  encaissement ni une caisse. Une échéance est une date de rappel.
+  Deux règles que tout futur écran « en masse » doit reprendre :
+  (1) **la portée est revérifiée À L'ÉCRITURE, ligne par ligne**, pas
+  seulement dans le read-model — les ids arrivent cochés depuis le
+  navigateur, donc forgeables ; (2) **un id hors portée refuse le LOT
+  ENTIER** au lieu d'être filtré en silence, sinon l'opérateur croit avoir
+  modifié 30 lignes quand 28 seulement ont bougé (§11 « signaler plutôt que
+  masquer »). Une ligne MASQUÉE est refusée de la même façon : elle n'est
+  plus due et son argent a été libéré en avance. Chaque ligne passe par
+  `save()` sur un modèle Eloquent, jamais un `update()` de masse, sinon
+  `Auditable` ne journalise rien. Tests :
+  `tests/Feature/Backoffice/Inscriptions/BulkFeeDueDateTest.php`.
 - **⚠ Modifier un groupe CLOS est une IDENTITÉ, pas une permission**
   (07/09/2026). L'onglet Historique des Groupes est en lecture seule : un
   dossier « Fin de formation » / « Annulée » ne se retouche pas, sinon la
@@ -1223,7 +1249,7 @@ This project uses PostgreSQL as its only supported database engine.
 - Minimum acceptable production version: PostgreSQL 16+
 
 The full audit and migration history (what changed, why, and what was verified)
-lives in `POSTGRES_AUDIT.md` and `POSTGRES_MIGRATION_REPORT.md` — read those
+lives in `docs/rapports/postgres/POSTGRES_AUDIT.md` and `docs/rapports/postgres/POSTGRES_MIGRATION_REPORT.md` — read those
 before any further database-layer work.
 
 ### Database compatibility
@@ -1316,7 +1342,7 @@ JSONB data — don't add them speculatively.
   reporting the work done — `Schema::hasColumn()` on `gls_crm` is the check.
 - Before the first production deployment, existing project-owned migrations
   may still be corrected in place (this is what happened during the
-  PostgreSQL migration — see `POSTGRES_MIGRATION_REPORT.md` §2 for the two
+  PostgreSQL migration — see `docs/rapports/postgres/POSTGRES_MIGRATION_REPORT.md` §2 for the two
   `json()`→`jsonb()` edits made to already-applied local migrations).
 - After a migration has run in **production**: never edit it — create a new
   migration instead.
@@ -1421,9 +1447,9 @@ When Laravel and PostgreSQL run on the same VPS:
 
 PostgreSQL does not automatically solve application-level inefficiencies.
 Continue to measure query counts, duplicate queries, unpaginated
-collections, and PHP-side sorting/merging — see `PERFORMANCE_AUDIT.md`,
-`PERFORMANCE_OPTIMIZATION_REPORT.md`, and
-`docs/phase-11-performance-baseline.md` for the established methodology
+collections, and PHP-side sorting/merging — see `docs/rapports/performance/PERFORMANCE_AUDIT.md`,
+`docs/rapports/performance/PERFORMANCE_OPTIMIZATION_REPORT.md`, and
+`docs/rapports/performance/phase-11-performance-baseline.md` for the established methodology
 (the first two predate the Inertia+React migration and use Livewire-era
 terminology like "Livewire renders"/"Select2 option lists" in their own
 historical measurements — read them as a record of what was measured then,
@@ -1462,3 +1488,41 @@ Do not add these to migrations without a measured need:
   French/German/Arabic names).
 - **`pgcrypto`** — useful for PostgreSQL-generated UUIDs or cryptographic
   functions, not currently needed (all PKs are bigint identity).
+
+## 18. Documentation & rapports — où va un fichier .md
+
+Deux natures de document, deux emplacements — ne pas les mélanger :
+
+- **Documentation vivante** → `docs/` (racine du dossier) et la racine du
+  projet. Elle décrit l'**état courant** et se met à jour avec le code :
+  `docs/audit-journal.md`, `docs/roles-and-permissions.md`,
+  `docs/vps-deployment.md`, `docs/*-architecture.md`, `docs/*-plan.md`,
+  `docs/legacy-import-cli.md`, plus `README.md`, `CLAUDE.md`,
+  `gls-crm-schema.md`, `gls-crm-laravel-structure.md`, `PROJECT_INVENTORY.md`.
+- **Rapports datés** → `docs/rapports/<catégorie>/`. Ce sont des **traces
+  historiques** : ce qui a été mesuré, audité ou migré à un moment donné.
+  Elles ne sont jamais réécrites pour refléter l'état courant, et jamais
+  supprimées.
+
+Catégories existantes (voir `docs/rapports/README.md` pour l'index complet) :
+
+| Dossier | Contenu |
+|---|---|
+| `docs/rapports/audits/` | audits généraux, autorisations, production |
+| `docs/rapports/finance/` | audits financiers, caisse, invariants monétaires |
+| `docs/rapports/performance/` | mesures et rapports d'optimisation |
+| `docs/rapports/postgres/` | audit et migration PostgreSQL |
+| `docs/rapports/migration-inertia/` | migration Livewire → Inertia + React |
+| `docs/rapports/ui/` | thème PreSkool et interface |
+
+**Un nouveau rapport ne se dépose jamais à la racine du projet.** Il va dans
+la catégorie qui lui correspond (ou une nouvelle catégorie si aucune ne
+convient) et s'ajoute au tableau de `docs/rapports/README.md` dans le même
+changement — sinon l'index ment dès le rapport suivant.
+
+⚠ **Déplacer un rapport casse les liens qui le citent.** Ces fichiers sont
+référencés depuis des commentaires de code, des tests, `routes/backoffice.php`
+et d'autres documents. Après tout déplacement, réécrire chaque référence puis
+vérifier qu'aucun chemin `.md` cité ne pointe dans le vide. Exception :
+`resources/theme-reference/` est en lecture seule (§3) — ses pointeurs
+périmés se laissent tels quels, on n'édite pas ce dossier pour les corriger.

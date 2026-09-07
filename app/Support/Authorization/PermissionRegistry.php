@@ -257,6 +257,13 @@ final class PermissionRegistry
             'Recouvrement' => [
                 'collections.view' => 'Consulter la gestion des recouvrements',
             ],
+            // Modification groupée des échéances — outil de saisie du front
+            // office (07/09/2026). Accordé à TOUS les rôles via
+            // defaultForEveryRole() : il ne déplace aucun argent, il corrige
+            // une date de rappel sur des frais que le porteur voit déjà.
+            'Échéances en masse' => [
+                'fee-due-dates.bulk-update' => 'Modifier en masse les dates d’échéance des frais d’un groupe',
+            ],
             // Gestion des rapports — un SEUL droit, de lecture, qui ouvre la
             // page et ses téléchargements (PDF / Excel). Un rapport ne fait
             // qu'imprimer ce que l'utilisateur peut déjà consulter : la portée
@@ -675,6 +682,16 @@ final class PermissionRegistry
             // monétaires d'un rejet passent par un remboursement, qui garde
             // ses propres permissions.
             'cheques.deposit',
+            // Modification groupée des dates d'échéance — demande métier du
+            // 07/09/2026 : n'importe quel employé doit pouvoir recaler les
+            // échéances d'un groupe entier au lieu de rouvrir chaque
+            // inscription une par une. Conforme à la règle ci-dessus : le
+            // porteur voit déjà ces frais (portée « Centres affectés » +
+            // contexte actif, appliquée par le read-model ET par l'action),
+            // et l'écriture ne touche QUE `inscription_fees.date_echeance` —
+            // aucune caisse, aucun montant, aucun statut. C'est une date de
+            // rappel, pas un mouvement d'argent.
+            'fee-due-dates.bulk-update',
         ];
     }
 

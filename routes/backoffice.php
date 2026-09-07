@@ -34,6 +34,7 @@ use App\Http\Controllers\Backoffice\MotifAnnulationController;
 use App\Http\Controllers\Backoffice\PermissionController;
 use App\Http\Controllers\Backoffice\ProfileController;
 use App\Http\Controllers\Backoffice\RapportController;
+use App\Http\Controllers\Backoffice\FeeDueDateBulkController;
 use App\Http\Controllers\Backoffice\RecouvrementController;
 use App\Http\Controllers\Backoffice\RemboursementController;
 use App\Http\Controllers\Backoffice\Roles\RoleController;
@@ -178,7 +179,7 @@ Route::prefix('backoffice')
             Route::delete('employees/{employee}', [EmployeeController::class, 'destroy'])
                 ->middleware('permission:employees.delete')->name('employees.destroy');
             // Students — Inertia/React list + modal add/edit (Phase 8,
-            // docs/phase-8-students-groups-inventory.md). The Livewire
+            // docs/rapports/migration-inertia/phase-8-students-groups-inventory.md). The Livewire
             // StudentsIndex component + its route registration are retired
             // here but the class/view files are kept, unused, for rollback.
             // « Fusion de fiches & réaffectation des paiements » — écran de
@@ -366,8 +367,8 @@ Route::prefix('backoffice')
                 ->except(['show', 'create', 'edit', 'index']);
 
             // Enrollments — Inertia/React list + modal add/edit with manual
-            // fee lines (Phase 9, docs/phase-9-inscriptions-audit.md +
-            // docs/phase-9-inscriptions-mapping.md). Base fields (student/
+            // fee lines (Phase 9, docs/rapports/migration-inertia/phase-9-inscriptions-audit.md +
+            // docs/rapports/migration-inertia/phase-9-inscriptions-mapping.md). Base fields (student/
             // group/statut/dates/note) keep the Livewire form's own
             // create-vs-edit asymmetry; fee-line editing on an existing
             // registration is a separate action below (registrations.manage-fees).
@@ -419,7 +420,7 @@ Route::prefix('backoffice')
             Route::put('inscriptions/{inscription}/livres', [InscriptionController::class, 'updateLivres'])
                 ->middleware('permission:registrations.manage-fees')->name('inscriptions.livres.update');
             // "Frais disponibles" for a group — the create form's live
-            // group-fee lookup (docs/phase-9-inscriptions-mapping.md's
+            // group-fee lookup (docs/rapports/migration-inertia/phase-9-inscriptions-mapping.md's
             // confirmed decision: a dedicated endpoint, not embedding every
             // group's fees in the initial options payload).
             Route::get('groups/{group}/inscription-fees', [InscriptionController::class, 'groupFees'])
@@ -437,8 +438,8 @@ Route::prefix('backoffice')
             // create transaction (InscriptionController::store()), never
             // standalone.
 
-            // Finance (Phase 10, docs/phase-10-finance-audit.md +
-            // docs/phase-10-finance-mapping.md) — money records are never
+            // Finance (Phase 10, docs/rapports/finance/phase-10-finance-audit.md +
+            // docs/rapports/finance/phase-10-finance-mapping.md) — money records are never
             // deleted (audit trail). Migrated from Livewire to Inertia+React;
             // legacy Livewire components/Blade views retained unreferenced
             // for rollback (docs/legacy-frontend-removal-plan.md §0g).
@@ -529,6 +530,23 @@ Route::prefix('backoffice')
                 ->name('inscriptions.unpaid-fees');
             Route::get('inscriptions/{inscription}/payments', [EncaissementController::class, 'inscriptionPayments'])
                 ->name('inscriptions.payments');
+
+            // Echeances en masse — outil de saisie : appliquer UNE date
+            // d'echeance a plusieurs lignes de frais d'un groupe d'un seul
+            // coup, au lieu de rouvrir le modal de chaque inscription.
+            //
+            // Volontairement HORS de la barre laterale (demande metier du
+            // 07/09/2026) : atteint par son lien direct
+            // /backoffice/bulk-echeance. L'absence d'entree de menu
+            // n'est pas une protection — c'est la permission ci-dessous qui
+            // decide, et elle est accordee a TOUS les roles
+            // (defaultForEveryRole) parce que l'ecran ne deplace aucun
+            // argent : il ne reecrit que inscription_fees.date_echeance,
+            // sur des frais que son porteur voit deja.
+            Route::get('bulk-echeance', [FeeDueDateBulkController::class, 'index'])
+                ->middleware('permission:fee-due-dates.bulk-update')->name('bulk-echeance.index');
+            Route::post('bulk-echeance', [FeeDueDateBulkController::class, 'update'])
+                ->middleware('permission:fee-due-dates.bulk-update')->name('bulk-echeance.update');
 
             // Gestion des recouvrements — read-only overdue-fees report
             // (GetRetardsList). Two client-side tabs ("Retards selon la
@@ -641,7 +659,7 @@ Route::prefix('backoffice')
             Route::get('students/{student}/payments-for-refund', [RemboursementController::class, 'studentPayments'])
                 ->name('students.payments-for-refund');
             // No remboursements.show — zero detail page anywhere in the live
-            // app, preserved (docs/phase-10-finance-mapping.md Q2).
+            // app, preserved (docs/rapports/finance/phase-10-finance-mapping.md Q2).
 
             // Till transfers — two-step request/validate flow, now lives in
             // the « Transferts » tab of Gestion de la caisse; the legacy URL

@@ -108,7 +108,7 @@ export interface NavGroup {
 
 /**
  * Mirrors App\Domain\Reports\DTOs\DashboardStatsData::toArray() exactly —
- * see docs/dashboard-livewire-to-inertia-map.md for the full per-stat
+ * see docs/rapports/migration-inertia/dashboard-livewire-to-inertia-map.md for the full per-stat
  * source mapping. paymentsMonth is a pre-formatted decimal string (never a
  * raw float over the wire — CLAUDE.md §17 Money rules), parsed only for
  * display, never for arithmetic.
@@ -2107,6 +2107,42 @@ export interface RecouvrementPageProps {
     filters: RecouvrementFilters;
     perPageOptions: number[];
     groupOptions: SelectOption[];
+    fraisOptions: SelectOption[];
+    statuts: string[];
+    [key: string]: unknown;
+}
+
+// --- Echeances en masse ----------------------------------------------------
+
+/** One fee line of a group's student, as listed by the bulk due-date tool. */
+export interface EcheanceEnMasseRow {
+    /** inscription_fees.id — the row the bulk write targets. */
+    feeId: number;
+    inscriptionId: number;
+    reference: string | null;
+    studentNom: string;
+    telephone: string | null;
+    /** The INSCRIPTION's statut, shown so the operator sees what they touch. */
+    statut: string;
+    feeNom: string;
+    montant: MoneyDisplay;
+    dateEcheance: string | null;
+    montantPaye: MoneyDisplay;
+    statutFrais: string;
+}
+
+export interface EcheancesEnMasseFilters {
+    groupFilter: string;
+    fraisFilter: string;
+    statutFilter: string;
+}
+
+export interface EcheancesEnMassePageProps {
+    /** Not paginated: already bounded to one group + one fee (see the page's docblock). */
+    lignes: EcheanceEnMasseRow[];
+    filters: EcheancesEnMasseFilters;
+    groupOptions: SelectOption[];
+    /** Only the fees the chosen group's inscriptions actually carry. */
     fraisOptions: SelectOption[];
     statuts: string[];
     [key: string]: unknown;

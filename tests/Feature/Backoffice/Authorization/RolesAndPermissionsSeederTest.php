@@ -91,6 +91,13 @@ final class RolesAndPermissionsSeederTest extends TestCase
                 // enseignant n'ouvre meme pas l'ecran des cheques — la
                 // permission decrit un geste, la VISIBILITE reste separee.
                 'cheques.deposit',
+                // Echeances en masse : meme base commune (07/09/2026).
+                // Recaler la date de rappel des frais d'un groupe entier ne
+                // deplace aucun argent — ni caisse, ni montant, ni statut —
+                // et la portee reste celle des centres affectes + du
+                // contexte actif, reverifiee ligne par ligne a l'ecriture
+                // (ModifierEcheancesFraisEnMasse).
+                'fee-due-dates.bulk-update',
             ],
             $teacher->permissions()->pluck('name')->all(),
         );

@@ -1,6 +1,6 @@
 # Roles & Permissions — GLS CRM
 
-Companion docs: `authorization-audit.md` (state before implementation),
+Companion docs: `rapports/audits/authorization-audit.md` (state before implementation),
 `authorization-architecture.md` (decisions & rationale).
 
 ## 1. Package
@@ -223,6 +223,36 @@ keep the roles from drifting apart:
   `tests/Feature/Backoffice/Finance/EncaissementsInertiaCrudTest.php`.
 - **`$financeReadOnly`** — read access to every finance screen, the baseline
   the accounting/oversight roles build on.
+- **`defaultForEveryRole()`** — la base commune AJOUTÉE À TOUS les presets par
+  `matrix()`, jamais recopiée dans les treize listes : un rôle créé demain
+  l'hérite d'office, alors qu'une liste écrite à la main l'oublierait (c'est
+  exactement ce qui était arrivé à `reports.view`, absent de
+  `marketing-manager` et `teacher`). Elle contient aujourd'hui :
+
+  | permission | pourquoi elle est ouverte à tous |
+  |---|---|
+  | `reports.view` | un rapport ne fait qu'imprimer une liste que son lecteur peut déjà ouvrir — même portée « Centres affectés » + contexte actif |
+  | `cheques.deposit` | l'employé qui porte physiquement les chèques à la banque enregistre le geste ; **aucune caisse ne bouge** (cf. §5b et CLAUDE.md §16) |
+  | `fee-due-dates.bulk-update` | « Échéances en masse » (07/09/2026) — recaler la date de rappel des frais d'un groupe ; **aucun argent ne bouge** |
+
+  ⚠ La règle qui rend ces trois sûrs est la même : **le porteur voit déjà les
+  lignes concernées**, et l'écriture ne touche ni `caisses.solde`, ni un
+  montant, ni un statut de paiement. Une permission qui déplacerait de
+  l'argent n'a rien à faire ici, quel que soit le confort d'usage invoqué.
+
+  **« Échéances en masse »** (`/backoffice/bulk-echeance`,
+  `FeeDueDateBulkController`) n'écrit que `inscription_fees.date_echeance`,
+  ligne par ligne via Eloquent pour que `Auditable` journalise chaque
+  changement. La portée est appliquée DEUX fois — par le read-model
+  (`GetGroupFeeDueDates`) pour ce qui est proposé, et par l'action
+  (`ModifierEcheancesFraisEnMasse`) pour ce qui est réellement écrit, puisque
+  les ids arrivent cochés depuis le navigateur. Un id hors portée, ou une
+  ligne masquée, **refuse le lot entier** au lieu d'être filtré en silence :
+  un filtrage discret ferait croire à l'opérateur qu'il a modifié 30 lignes
+  quand 28 seulement ont bougé. L'écran est volontairement absent de la barre
+  latérale (outil ponctuel atteint par son lien direct) — ce qui ne le protège
+  pas : c'est la permission côté serveur qui décide. Tests :
+  `tests/Feature/Backoffice/Inscriptions/BulkFeeDueDateTest.php`.
 
 ⚠ **`centers.access-all` sits in `superAdminOnly()` — NO role preset may
 carry it.** « Centres affectés » on the employee form (the
