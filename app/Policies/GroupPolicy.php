@@ -7,6 +7,7 @@ namespace App\Policies;
 use App\Models\Group;
 use App\Models\User;
 use App\Policies\Concerns\ResourcePolicy;
+use App\Support\Access\HiddenAccount;
 use Illuminate\Database\Eloquent\Model;
 
 final class GroupPolicy extends ResourcePolicy
@@ -68,6 +69,32 @@ final class GroupPolicy extends ResourcePolicy
     public function reopen(User $user, Group $group): bool
     {
         return $user->can('groups.reopen') && $this->withinCenter($user, $group);
+    }
+
+    /**
+     * ⚠ Modifier un groupe DÉJÀ CLOS (« Fin de formation » ou « Annulée »).
+     *
+     * L'onglet Historique est en lecture seule pour tout le monde : un
+     * dossier clos ne se retouche pas, sinon la ligne vivante et le snapshot
+     * `groups_historique` divergent. Le MAINTENEUR seul y échappe
+     * (`HiddenAccount::EMAIL`, demandé le 07/09/2026) : il doit pouvoir
+     * corriger un nom, un niveau ou une date saisis de travers par l'import
+     * legacy sans passer par `reopen`, qui remettrait le groupe dans les
+     * listes actives et le rendrait de nouveau inscriptible.
+     *
+     * Ce n'est PAS une permission : `groups.update-closed` n'existe pas et ne
+     * s'accorde pas. Un super-admin ordinaire (le CEO compris) ne l'obtient
+     * pas — sinon « un dossier clos est clos » ne tiendrait plus que par
+     * convention. `EMAIL` seul, jamais `emails()` : l'autre compte du
+     * mainteneur est un compte de STAFF, pas l'identité de maintenance.
+     *
+     * Le STATUT reste verrouillé dans GroupController::update() pour tout le
+     * monde, mainteneur inclus : sortir d'un statut terminal passe uniquement
+     * par `reopen`.
+     */
+    public function updateClosed(User $user, Group $group): bool
+    {
+        return $user->email === HiddenAccount::EMAIL && $this->update($user, $group);
     }
 
     /**

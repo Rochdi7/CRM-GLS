@@ -89,6 +89,11 @@ final class GroupController extends Controller
             'statuts' => Group::STATUTS,
             'enseignants' => $getGroupFormOptions->enseignants(),
             'fraisCatalog' => $getGroupFormOptions->fraisCatalog(),
+            // Confort d'UI seulement (CLAUDE.md §5) : dessine « Modifier » sur
+            // un groupe clos de l'onglet Historique. La vraie garde est
+            // GroupPolicy@updateClosed, revérifiée dans update().
+            'canEditClosedGroups' => $request->user() !== null
+                && $request->user()->can('updateClosed', new Group),
         ]);
     }
 
@@ -209,6 +214,16 @@ final class GroupController extends Controller
     public function update(UpdateGroupRequest $request, Group $group): RedirectResponse
     {
         $this->authorize('update', $group);
+
+        // Un groupe clos (« Fin de formation » / « Annulée ») n'est
+        // modifiable que par le compte de maintenance — le prop
+        // `canEditClosedGroups` ne dessine que le bouton (CLAUDE.md §5), la
+        // garde est ici. Le statut lui-meme reste verrouille plus bas pour
+        // TOUT LE MONDE : sortir d'un statut terminal passe par `reopen`.
+        if (in_array($group->statut, Group::STATUTS_HISTORIQUE, true)) {
+            $this->authorize('updateClosed', $group);
+        }
+
         $this->assertGroupInContext($request, $group, 'nom');
 
         $data = $request->validated();

@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models\CaisseTransfer;
 use App\Models\Employee;
 use App\Models\Etablissement;
+use App\Models\Group;
 use App\Models\Remboursement;
 use App\Models\Role;
 use App\Models\User;
@@ -53,6 +54,11 @@ class AppServiceProvider extends ServiceProvider
         // (03/09/2026). La permission reste super-admin ; c'est l'etat de la
         // ligne, pas le role, que la policy verifie ici.
         'cancel' => Remboursement::class,
+        // Modifier un groupe « Fin de formation » / « Annulée » est reserve
+        // au SEUL compte de maintenance (GroupPolicy@updateClosed). Sans
+        // cette exclusion, Gate::before l'accorde a tous les super-admins,
+        // le CEO compris, et « un dossier clos est clos » ne tient plus.
+        'updateClosed' => Group::class,
     ];
 
     /**

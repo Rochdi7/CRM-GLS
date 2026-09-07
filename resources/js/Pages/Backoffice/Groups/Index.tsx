@@ -200,6 +200,15 @@ function defaultFraisLignes(fraisCatalog: GroupFraisCatalogOption[], dateDebutFo
     return lignes;
 }
 
+/**
+ * Les deux statuts TERMINAUX. Un groupe qui les porte est un dossier clos :
+ * l'onglet Historique est en lecture seule, sauf pour le compte de
+ * maintenance (prop `canEditClosedGroups`, GroupPolicy@updateClosed).
+ * Le statut lui-meme reste verrouille pour tout le monde — en sortir passe
+ * par « Reactiver » / `reopen`, jamais par le modal (CLAUDE.md §11).
+ */
+const GROUP_STATUTS_CLOS = ['Fin de formation', 'Annulée'];
+
 /** Blank lines, used only as the fallback base when loading an existing group. */
 function emptyFraisLignes(fraisCatalog: GroupFraisCatalogOption[]): Record<number, GroupFraisLigne> {
     const lignes: Record<number, GroupFraisLigne> = {};
@@ -270,6 +279,7 @@ export default function GroupsIndex({
     niveaux,
     enseignants,
     fraisCatalog,
+    canEditClosedGroups,
 }: GroupsPageProps) {
     const { auth, flash } = usePage<SharedProps>().props;
     // Same banner as Groups/Show.tsx: a teacher swap made from the edit modal
@@ -351,6 +361,16 @@ export default function GroupsIndex({
         { value: 'En formation', label: 'En formation' },
         { value: 'Fin de formation', label: 'Fin de formation' },
     ];
+    // Groupe clos ouvert par le mainteneur : le statut n'est ni changeable
+    // ici ni renvoye par update() (le controleur le repointe sur la valeur
+    // stockee), donc on l'affiche tel quel et on gele le champ plutot que de
+    // laisser un select vide sur une valeur absente de la liste.
+    const editingStatutClos = editingGroup !== null && GROUP_STATUTS_CLOS.includes(editingGroup.statut);
+    const statutOptions: SelectOption[] = editingStatutClos
+        ? [{ value: editingGroup.statut, label: editingGroup.statut }]
+        : editingGroup
+          ? editStatutOptions
+          : createStatutOptions;
 
     const form = useForm<GroupFormState>(emptyForm(fraisCatalog));
 
@@ -946,7 +966,7 @@ export default function GroupsIndex({
                                     </td>
                                     <td className="text-end">
                                         <RowActions view={group.showUrl}>
-                                            {group.statut !== 'Fin de formation' && group.statut !== 'Annulée' && (
+                                            {(!GROUP_STATUTS_CLOS.includes(group.statut) || canEditClosedGroups) && (
                                                 <RowActionItem icon="ti-edit" onClick={() => openEdit(group)}>
                                                     Modifier
                                                 </RowActionItem>
@@ -1049,11 +1069,15 @@ export default function GroupsIndex({
                                 id="grp-statut"
                                 label="Statut"
                                 required
-                                options={editingGroup ? editStatutOptions : createStatutOptions}
+                                options={statutOptions}
+                                disabled={editingStatutClos}
                                 value={form.data.statut}
                                 onChange={(event) => form.setData('statut', event.target.value)}
                                 error={form.errors.statut}
                             />
+                            {editingStatutClos && (
+                                <div className="form-text">Dossier clos : le statut ne se change pas ici.</div>
+                            )}
                         </div>
                         <div className="col-md-3">
                             <DateField

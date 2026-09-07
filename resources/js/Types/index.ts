@@ -1311,6 +1311,12 @@ export interface GroupsPageProps {
     statuts: string[];
     enseignants: GroupFormOption[];
     fraisCatalog: GroupFraisCatalogOption[];
+    /**
+     * Dessine « Modifier » sur un groupe clos de l'onglet Historique — vrai
+     * pour le seul compte de maintenance. Confort d'UI : GroupPolicy@updateClosed
+     * revérifie côté serveur (CLAUDE.md §5).
+     */
+    canEditClosedGroups: boolean;
     [key: string]: unknown;
 }
 
