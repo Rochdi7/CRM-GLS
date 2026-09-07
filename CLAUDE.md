@@ -1141,6 +1141,26 @@ keeps the primary column stable when an edit merely adds a center. Enforcing
   `cash-transfers.validate`. Tests:
   `RolesAndPermissionsSeederTest::test_every_role_can_deposit_a_cheque_at_the_bank`
   (both halves: everyone deposits, the front office still cannot update).
+- **⚠ Modifier un groupe CLOS est une IDENTITÉ, pas une permission**
+  (07/09/2026). L'onglet Historique des Groupes est en lecture seule : un
+  dossier « Fin de formation » / « Annulée » ne se retouche pas, sinon la
+  ligne vivante et le snapshot `groups_historique` divergent. Le SEUL compte
+  de maintenance (`HiddenAccount::EMAIL`) y échappe via
+  `GroupPolicy@updateClosed`, pour corriger un nom, un niveau ou une date
+  saisis de travers par l'import legacy **sans passer par `reopen`** — qui
+  remettrait le groupe dans les listes actives et le rendrait de nouveau
+  inscriptible. Trois règles indissociables : (1) l'ability est dans
+  `AppServiceProvider::NO_SUPER_ADMIN_BYPASS` (`'updateClosed' =>
+  Group::class`) — **sans cette ligne `Gate::before` l'accorde à TOUS les
+  super-admins**, le CEO compris, et « un dossier clos est clos » ne tient
+  plus que par convention (même mécanisme que `CaisseTransfer@validate`) ;
+  (2) `EMAIL` **seul**, jamais `emails()` — `STAFF_EMAIL` est un compte de
+  staff, pas l'identité de maintenance ; (3) le **statut reste verrouillé
+  pour tout le monde**, mainteneur inclus — `GroupController::update()` le
+  repointe sur la valeur stockée et le modal gèle le champ, sortir d'un
+  statut terminal passe UNIQUEMENT par `reopen`. Le prop
+  `canEditClosedGroups` ne dessine que le bouton (§5). Tests :
+  `tests/Feature/Backoffice/Groups/GroupUpdateClosedTest.php`.
 - **⚠ Only super-admin deletes.** `PermissionRegistry::superAdminOnly()`
   lists what no role preset may hold, and `matrix()` FILTERS every preset
   through it — so writing a `*.delete` into a preset has no effect, and a
