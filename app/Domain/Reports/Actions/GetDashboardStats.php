@@ -16,7 +16,7 @@ use App\Services\Context\CurrentContext;
 /**
  * Server-side dashboard KPI computation — extracted verbatim from the
  * Livewire App\Livewire\Backoffice\Dashboard\DashboardStats::render()
- * this replaces (docs/dashboard-livewire-to-inertia-map.md has the full
+ * this replaces (docs/rapports/migration-inertia/dashboard-livewire-to-inertia-map.md has the full
  * per-stat mapping). Query semantics, filters, and center/year scoping are
  * byte-for-byte identical; only the transport (DTO vs. Blade view data)
  * changed.
@@ -41,7 +41,20 @@ final class GetDashboardStats
 
         // Employees are staff — they exist regardless of academic year, so
         // they are scoped by center only (no year dimension to scope on).
-        $employeesQuery = Employee::query()->when($centreId, fn ($q) => $q->where('etablissement_id', $centreId));
+        //
+        // The centre match reads the employee_etablissement PIVOT as well as
+        // the primary column, exactly like GetEmployeesList:69-72. §16 makes
+        // « Centres affectés » the one authority on reach, so filtering on
+        // `etablissement_id` alone counted only employees whose PRIMARY
+        // centre is the active one: the card under-reported in 6 of the 7
+        // centres against the Employés list (Agadir 9 vs 13, Online 13 vs
+        // 18) — two screens answering the same question differently.
+        // Audit 07/09/2026, H-3.
+        $employeesQuery = Employee::query()
+            ->when($centreId, fn ($q, $id) => $q->where(function ($sub) use ($id): void {
+                $sub->where('etablissement_id', $id)
+                    ->orWhereHas('etablissements', fn ($e) => $e->where('etablissements.id', $id));
+            }));
 
         // Groups / registrations are scoped by BOTH year and center.
         $groupsQuery = Group::query()

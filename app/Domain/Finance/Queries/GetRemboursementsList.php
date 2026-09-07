@@ -19,7 +19,7 @@ use Illuminate\Support\Collection;
  * Read-model for the Remboursements list — extracted verbatim from
  * RemboursementsIndex::render() (center-scoping through the caisse relation,
  * same caisse/date-range/search filters). No detail/show page anywhere in
- * the live app (docs/phase-10-finance-mapping.md Q2: preserved, not added).
+ * the live app (docs/rapports/finance/phase-10-finance-mapping.md Q2: preserved, not added).
  */
 final class GetRemboursementsList
 {
@@ -37,8 +37,9 @@ final class GetRemboursementsList
         string $dateFrom = '',
         string $dateTo = '',
         int $perPage = self::DEFAULT_PER_PAGE,
+        bool $dateFilterEngaged = false,
     ): LengthAwarePaginator {
-        $remboursements = $this->filtered($user, $search, $caisseFilter, $dateFrom, $dateTo)
+        $remboursements = $this->filtered($user, $search, $caisseFilter, $dateFrom, $dateTo, $dateFilterEngaged)
             ->with(['beneficiaire', 'caisse', 'agent'])
             ->latest()
             ->paginate($perPage)
@@ -80,6 +81,7 @@ final class GetRemboursementsList
         string $caisseFilter,
         string $dateFrom,
         string $dateTo,
+        bool $dateFilterEngaged = false,
     ): Builder {
         return Remboursement::query()
             // Centre scoping reads the refund's OWN etablissement_id — the
@@ -99,8 +101,15 @@ final class GetRemboursementsList
             // Year switcher: a remboursement belongs to the year its date
             // falls in; the active year is only the DEFAULT window — an
             // explicit date filter takes over.
+            //
+            // ⚠ Decided from $dateFilterEngaged, not from the two edges
+            // being empty (audit 07/09/2026, H-1): keyed on the edges, the
+            // window re-armed the moment the LAST date was cleared, so
+            // clearing a filter REMOVED rows instead of widening (§5). This
+            // sits in filtered(), shared by the rows AND the totals, so the
+            // header can never disagree with the table.
             ->when(
-                $dateFrom === '' && $dateTo === '' && $this->context->anneeDateRange() !== null,
+                ! $dateFilterEngaged && $this->context->anneeDateRange() !== null,
                 fn ($q) => $q->whereBetween('date_remboursement', $this->context->anneeDateRange()),
             )
             ->when($search !== '', function ($q) use ($search): void {
@@ -132,8 +141,9 @@ final class GetRemboursementsList
         string $caisseFilter = '',
         string $dateFrom = '',
         string $dateTo = '',
+        bool $dateFilterEngaged = false,
     ): array {
-        $base = fn () => $this->filtered($user, $search, $caisseFilter, $dateFrom, $dateTo);
+        $base = fn () => $this->filtered($user, $search, $caisseFilter, $dateFrom, $dateTo, $dateFilterEngaged);
 
         $reels = $base()->where(fn ($q) => $this->exclureAnnules($q));
 

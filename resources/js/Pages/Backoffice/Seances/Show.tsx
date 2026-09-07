@@ -102,14 +102,28 @@ export default function SeanceShow({
 
     useEffect(() => () => window.clearTimeout(saveTimer.current), []);
 
-    const [presences, setPresences] = useState<Record<string, PresenceLine>>(() =>
+    const buildPresences = (): Record<string, PresenceLine> =>
         Object.fromEntries(
             (seance?.students ?? []).map((student) => [
                 String(student.id),
                 { statut: student.statut ?? '', note: student.note },
             ]),
-        ),
-    );
+        );
+
+    const [presences, setPresences] = useState<Record<string, PresenceLine>>(buildPresences);
+
+    // ⚠ Re-seed whenever the ACTIVE SÉANCE changes (audit 07/09/2026, C-4).
+    // The date/teacher pickers navigate with `preserveState: true`, so this
+    // component is not remounted and the lazy initializer above runs only
+    // once: the previous séance's roll call survived the switch. For a group
+    // meeting Mon/Wed/Fri the stale statuts passed the server's
+    // group-enrolment filter and were written onto the WRONG session,
+    // overwriting a roll call already taken there. Keyed on seance.id so a
+    // partial reload of the same séance never clobbers unsaved edits.
+    useEffect(() => {
+        setPresences(buildPresences());
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [seance?.id]);
 
     function save(next: Record<string, PresenceLine>) {
         if (!seance) {

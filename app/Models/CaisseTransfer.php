@@ -41,6 +41,16 @@ class CaisseTransfer extends Model
         'requested_by', 'validated_by',
     ];
 
+    /**
+     * Mirror of the column default (§11): without it a create() that omits
+     * `statut` leaves the model NULL while the row holds 'En attente', so the
+     * next change is journalled as « avant : vide » — the trail would then
+     * state a false previous value, which is worse than a missing one.
+     */
+    protected $attributes = [
+        'statut' => self::STATUT_EN_ATTENTE,
+    ];
+
     protected function casts(): array
     {
         return [

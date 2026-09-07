@@ -66,6 +66,7 @@ final class GetDepensesList
         int $perPage = self::DEFAULT_PER_PAGE,
         string $scope = self::SCOPE_HORS_PAIEMENT_PROF,
         string $statutFilter = '',
+        bool $dateFilterEngaged = false,
     ): array {
         $paiementProfId = $this->paiementProfTypeId();
 
@@ -92,8 +93,18 @@ final class GetDepensesList
             // Year switcher: a dépense belongs to the year its date falls
             // in. The active year is only the DEFAULT window — an explicit
             // date filter states the user's intent and takes over.
+            //
+            // ⚠ `$anneeWindowApplies` is decided ONCE, from whether the user
+            // has engaged the date filter AT ALL — not re-evaluated per edge
+            // (audit 07/09/2026, H-1). Keying it on `$dateFrom === '' &&
+            // $dateTo === ''` re-armed the whole year window the moment the
+            // LAST date was cleared, so a row from another year that the
+            // user had deliberately surfaced with « Du » vanished again when
+            // they cleared it. §5: clearing a filter must only ever WIDEN a
+            // result set. `$dateFilterEngaged` is passed by the controller,
+            // which alone can tell « never touched » from « cleared ».
             ->when(
-                $dateFrom === '' && $dateTo === '' && $this->context->anneeDateRange() !== null,
+                ! $dateFilterEngaged && $this->context->anneeDateRange() !== null,
                 fn ($q) => $q->whereBetween('date_depense', $this->context->anneeDateRange()),
             )
             ->when($search !== '', function ($q) use ($search): void {

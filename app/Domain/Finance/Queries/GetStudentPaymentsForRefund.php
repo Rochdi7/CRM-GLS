@@ -27,9 +27,11 @@ use Illuminate\Support\Collection;
  * `montantRemboursable` is therefore the ROW's own rule, not a subtraction
  * the client re-derives: an avance can give back only what is still
  * unallocated, an ordinary fee payment only what it brought in minus what
- * was already refunded. Application rows (applied_from_encaissement_id set,
- * fee detached) are excluded — that money is the parent avance's, and
- * refunding it here would let the same dirhams leave the till twice.
+ * was already refunded. Application rows are excluded only while they are
+ * still ATTACHED to a fee — that money is the parent avance's, and refunding
+ * it there would let the same dirhams leave the till twice. Once reconverted
+ * (fee detached, applied_from kept) the row is an avance in its own right and
+ * must be offered, or the student's money becomes unreachable (H-5).
  */
 final class GetStudentPaymentsForRefund
 {
@@ -50,7 +52,20 @@ final class GetStudentPaymentsForRefund
             // An "apply" row is not money received — it is a slice of its
             // parent avance already spent on a fee. It is refunded by
             // refunding the parent, never on its own.
-            ->whereNull('applied_from_encaissement_id')
+            //
+            // ⚠ ONLY while it is still attached to that fee (audit
+            // 07/09/2026, H-5). ConvertirEncaissementsEnAvance detaches the
+            // fee but deliberately KEEPS the applied_from link, so a
+            // reconverted row has inscription_fee_id = NULL and IS an avance
+            // again — Encaissement::isAvance() says so, and
+            // EnregistrerRemboursement:56 already caps it by montantRestant().
+            // Excluding it on the applied_from column alone made real money
+            // owed to the student unreachable: the parent cannot absorb it
+            // either, since its montantUtilise() still counts this child as
+            // spent. Matches the rule GetEncaissementsList:176 applies.
+            ->where(fn ($q) => $q
+                ->whereNull('applied_from_encaissement_id')
+                ->orWhereNull('inscription_fee_id'))
             ->latest('date_paiement')
             ->get()
             ->map(function (Encaissement $e): array {

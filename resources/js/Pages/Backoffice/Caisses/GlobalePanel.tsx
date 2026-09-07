@@ -17,6 +17,12 @@ interface GlobalePanelProps {
     onFilter: (next: Partial<GlobaleFilters>) => void;
     onReset: () => void;
     resetActive: boolean;
+    /**
+     * Hide the Centre column once the top-bar switcher is on a single centre
+     * (§5): repeating the active context in every row is noise. Every other
+     * caisse panel already receives it — this one was missed (M-13).
+     */
+    centerLocked: boolean;
 }
 
 /**
@@ -47,7 +53,7 @@ const CARD_BG: Record<string, string> = {
     Externe: 'bg-warning',
 };
 
-export default function GlobalePanel({ data, filters, onFilter, onReset, resetActive }: GlobalePanelProps) {
+export default function GlobalePanel({ data, filters, onFilter, onReset, resetActive, centerLocked }: GlobalePanelProps) {
     const [active, setActive] = useState<string>(data.cards[0]?.type ?? '');
     const rows = data.comptes[active] ?? [];
     const activeCard = data.cards.find((c) => c.type === active);
@@ -117,7 +123,7 @@ export default function GlobalePanel({ data, filters, onFilter, onReset, resetAc
                         head={
                             <tr>
                                 <th>Désignation</th>
-                                <th>Centre</th>
+                                {!centerLocked && <th>Centre</th>}
                                 <th>Responsable</th>
                                 <th className="text-end">Montant</th>
                             </tr>
@@ -128,13 +134,13 @@ export default function GlobalePanel({ data, filters, onFilter, onReset, resetAc
                                 <td>
                                     <a href={row.showUrl}>{row.nom}</a>
                                 </td>
-                                <td>{row.centre ?? '—'}</td>
+                                {!centerLocked && <td>{row.centre ?? '—'}</td>}
                                 <td>{row.responsable ?? '—'}</td>
                                 <td className="text-end fw-medium">{Number(row.solde).toFixed(2)} DH</td>
                             </tr>
                         ))}
                         <tr className="table-light">
-                            <td colSpan={3} className="text-end text-muted">Total {activeCard?.label}</td>
+                            <td colSpan={centerLocked ? 2 : 3} className="text-end text-muted">Total {activeCard?.label}</td>
                             <td className="text-end fw-semibold">{Number(activeCard?.total ?? 0).toFixed(2)} DH</td>
                         </tr>
                     </DataTable>

@@ -20,6 +20,7 @@ use App\Models\Remboursement;
 use App\Models\Seance;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\Access\HiddenAccount;
 use App\Support\Audit\AuditLogRegistry;
 use App\Support\Audit\AuditValueResolver;
 use Illuminate\Database\Eloquent\Builder;
@@ -328,7 +329,10 @@ final class GetActivityLogList
      *
      * @return array<string, mixed>|null
      */
-    public function find(int $id, bool $includeDeveloper = false): ?array
+    /**
+     * @param  list<int>|null  $causerIds  null = unrestricted (global access)
+     */
+    public function find(int $id, bool $includeDeveloper = false, ?array $causerIds = null): ?array
     {
         $entry = Activity::query()->with(['causer', 'subject'])->find($id);
 
@@ -336,11 +340,23 @@ final class GetActivityLogList
             return null;
         }
 
+        // Centre scope of the reader, exactly as the LIST applies it (audit
+        // 07/09/2026, H-7). index() passed causerScope() and find() did not,
+        // so a reader confined to one centre could read ANY entry — including
+        // another centre's money trail — just by guessing its id. A detail
+        // page must never show what its own listing would have filtered out.
+        if ($causerIds !== null
+            && $entry->causer_id !== null
+            && ! in_array((int) $entry->causer_id, $causerIds, true)) {
+            return null;
+        }
+
         // Hidden in the list means hidden by direct URL too, otherwise the
         // filter is cosmetic — guessing an id would walk straight past it.
+        // Both hidden logins, via HiddenAccount::emails() (H-6).
         if (! $includeDeveloper
             && $entry->causer_id !== null
-            && $entry->causer_id === $this->developerUserId()) {
+            && in_array((int) $entry->causer_id, $this->hiddenUserIds(), true)) {
             return null;
         }
 
@@ -568,7 +584,15 @@ final class GetActivityLogList
                 ->pluck('causer_id'))
             // Keep the dropdown consistent with the list: offering an actor
             // whose entries are hidden would just yield an empty result.
-            ->when(! $includeDeveloper, fn ($q) => $q->where('email', '!=', AuditLogRegistry::DEVELOPER_EMAIL))
+            // BOTH hidden logins, not just the technical one (audit
+            // 07/09/2026, H-6): HiddenAccount::emails() carries the
+            // @gmail.com maintainer AND his @glszentrum.com staff account,
+            // and the latter — seeded as ordinary staff — was listed here
+            // while the Employés/Utilisateurs lists correctly hid it.
+            // DEVELOPER_EMAIL deliberately stays SINGULAR (§11: the
+            // « Inclure le compte technique » toggle must keep meaning one
+            // account), so the fix belongs in this display filter.
+            ->when(! $includeDeveloper, fn ($q) => $q->whereNotIn('email', HiddenAccount::emails()))
             ->orderBy('name')
             ->get()
             ->map(fn (User $u): array => [
@@ -590,9 +614,9 @@ final class GetActivityLogList
      */
     private function excludeDeveloper(Builder $query): void
     {
-        $developerId = $this->developerUserId();
+        $hiddenIds = $this->hiddenUserIds();
 
-        if ($developerId === null) {
+        if ($hiddenIds === []) {
             return;
         }
 
@@ -600,7 +624,7 @@ final class GetActivityLogList
         // and must never be filtered out by a causer-based rule.
         $query->where(fn (Builder $q) => $q
             ->whereNull('causer_id')
-            ->orWhere('causer_id', '!=', $developerId));
+            ->orWhereNotIn('causer_id', $hiddenIds));
     }
 
     /** The developer account's id, or null when that login does not exist. */
@@ -611,6 +635,25 @@ final class GetActivityLogList
             ->value('id');
 
         return $id === null ? null : (int) $id;
+    }
+
+    /**
+     * Every hidden login's user id (technical + GLS-domain staff account).
+     *
+     * Used by the row filter so the journal page hides the same set the
+     * causer dropdown does — filtering through HiddenAccount::emails() rather
+     * than matching one address by hand, so a third address stays a
+     * one-constant change (§11).
+     *
+     * @return list<int>
+     */
+    private function hiddenUserIds(): array
+    {
+        return User::query()
+            ->whereIn('email', HiddenAccount::emails())
+            ->pluck('id')
+            ->map(intval(...))
+            ->all();
     }
 
     /** True when the developer login exists, so the UI can offer the toggle. */

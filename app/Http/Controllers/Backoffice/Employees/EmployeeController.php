@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice\Employees;
 
 use App\Domain\Employees\Queries\GetEmployeesList;
+use App\Domain\Settings\Queries\GetAccessibleCenterOptions;
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Employees\StoreEmployeeRequest;
@@ -39,8 +40,11 @@ use Inertia\Response;
  */
 final class EmployeeController extends Controller
 {
-    public function index(Request $request, GetEmployeesList $getEmployeesList): Response
-    {
+    public function index(
+        Request $request,
+        GetEmployeesList $getEmployeesList,
+        GetAccessibleCenterOptions $accessibleCenters,
+    ): Response {
         $this->authorize('viewAny', Employee::class);
 
         $context = app(CurrentContext::class);
@@ -67,7 +71,17 @@ final class EmployeeController extends Controller
             'statuts' => Employee::STATUTS,
             'sexes' => Employee::SEXES,
             'defaultCountry' => Countries::DEFAULT,
-            'etablissements' => Etablissement::query()->orderBy('nom_centre')->get(['id', 'nom_centre']),
+            // Centre reach governs this dropdown — never the full table
+            // (audit 07/09/2026, C-2). This same list feeds the « Centres
+            // affectés » MultiSelect, so an unfiltered query let a manager
+            // confined to {Marrakech, Rabat} tick a centre they cannot reach
+            // — the input that made the silent substitution in
+            // syncEtablissementIds() reachable (C-3). Same funnel as
+            // Settings/Salles/Frais, so it stays in sync with §16.
+            'etablissements' => Etablissement::query()
+                ->whereIn('id', $accessibleCenters->allowedIds($request->user()))
+                ->orderBy('nom_centre')
+                ->get(['id', 'nom_centre']),
             'centerLocked' => ! $context->isAllCenters(),
             'contextCenterId' => $context->etablissementId(),
             'contextCenterName' => $context->etablissement()?->nom_centre,
@@ -124,7 +138,9 @@ final class EmployeeController extends Controller
 
         DB::transaction(function () use ($employee, $payload, $data, $request): void {
             $employee->update($payload);
-            $employee->syncEtablissements($this->resolveCenterIds($data));
+            // Pass the record so centres it already holds outside the actor's
+            // reach are preserved instead of dropped (C-3).
+            $employee->syncEtablissements($this->resolveCenterIds($data, $employee));
             $this->storePhoto($employee, $request);
 
             // The login's e-mail follows the staff record (they were two
@@ -261,7 +277,10 @@ final class EmployeeController extends Controller
      * It is still never trusted blindly: the list is narrowed to the centres
      * the signed-in user may actually assign, so a centre-confined admin can
      * neither assign an employee to a centre it cannot see nor move one out
-     * of its own reach.
+     * of its own reach. When NOTHING submitted is within reach: an UPDATE is
+     * REFUSED rather than silently rewritten (C-3), while a CREATE keeps the
+     * long-standing narrowing (no prior assignment exists to destroy). On an
+     * edit, `$employee`'s existing out-of-reach centres are preserved.
      *
      * Guaranteed non-empty: the Form Requests require at least one id, and
      * the locked branch always yields the context center.
@@ -269,7 +288,7 @@ final class EmployeeController extends Controller
      * @param  array<string, mixed>  $data
      * @return list<int>
      */
-    private function resolveCenterIds(array $data): array
+    private function resolveCenterIds(array $data, ?Employee $employee = null): array
     {
         $context = app(CurrentContext::class);
 
@@ -295,7 +314,49 @@ final class EmployeeController extends Controller
 
             if ($allowed !== []) {
                 $narrowed = array_values(array_intersect($ids, $allowed));
-                $ids = $narrowed === [] ? $allowed : $narrowed;
+
+                // Nothing submitted is within reach. What happens next
+                // depends on whether a real assignment is at stake (audit
+                // 07/09/2026, C-3):
+                //
+                //  - UPDATE ($employee !== null) — REFUSE. The old code read
+                //    `$ids = $narrowed === [] ? $allowed : $narrowed`, so the
+                //    submission was silently replaced by ALL of the actor's
+                //    own centres and syncEtablissements() then OVERWROTE the
+                //    employee's real assignment. Since accessibleCenterIds()
+                //    reads that pivot, the victim's own centre reach changed
+                //    — with a success flash and no error. That is the hole.
+                //
+                //  - CREATE ($employee === null) — narrow to the actor's own
+                //    centres, the deliberate long-standing behaviour ("you
+                //    hire into your own centre"), asserted by
+                //    EmployeesInertiaCrudTest::test_a_user_cannot_assign_an
+                //    _employee_to_a_center_it_does_not_hold. There is no
+                //    prior assignment to destroy here, so nothing is lost.
+                if ($narrowed === [] && $employee !== null) {
+                    throw ValidationException::withMessages([
+                        'etablissement_ids' => __('You cannot assign an employee to centers you do not have access to.'),
+                    ]);
+                }
+
+                if ($narrowed === []) {
+                    $narrowed = $allowed;
+                }
+
+                // On an EDIT, centres the employee already holds outside the
+                // actor's reach are preserved rather than dropped: a manager
+                // of {Marrakech} editing a phone number must not silently
+                // un-assign that employee from Rabat. Same intent as
+                // FraisController::syncPayload(). On a CREATE there is no
+                // record yet, so $keep is empty and this is a no-op.
+                $keep = $employee !== null
+                    ? array_values(array_diff(
+                        $employee->etablissements()->pluck('etablissements.id')->map(intval(...))->all(),
+                        $allowed,
+                    ))
+                    : [];
+
+                $ids = array_values(array_unique([...$narrowed, ...$keep]));
             }
         }
 

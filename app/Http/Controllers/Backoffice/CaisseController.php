@@ -51,6 +51,7 @@ final class CaisseController extends Controller
         GetComptesCaisse $getComptesCaisse,
         GetCaisseGlobale $getCaisseGlobale,
         \App\Services\Context\CurrentContext $context,
+        \App\Domain\Settings\Queries\GetAccessibleCenterOptions $accessibleCenters,
     ): Response {
         $user = $request->user();
         $canViewCaisses = $user->can('cash-registers.view');
@@ -159,8 +160,15 @@ final class CaisseController extends Controller
             // The FILTER offers every kind the tab can show: employee tills,
             // the centres' TPE/Chèque/Virement accounts, and Externe accounts.
             'compteTypeFilters' => GetComptesCaisse::allTypes(),
+            // Centre reach governs this dropdown — never the full table
+            // (audit 07/09/2026, C-2). « Comptes de caisse » is readable by
+            // the five management roles, whose reach is their assigned
+            // centres, so listing all 7 branches here misrepresented what
+            // they may act on. Same funnel as Settings/Salles/Frais.
             'compteEtablissements' => $canViewComptes
-                ? Etablissement::query()->orderBy('nom_centre')->get()
+                ? Etablissement::query()
+                    ->whereIn('id', $accessibleCenters->allowedIds($user))
+                    ->orderBy('nom_centre')->get()
                     ->map(fn (Etablissement $e): array => ['id' => $e->id, 'nom' => $e->nom_centre])
                     ->all()
                 : [],

@@ -41,6 +41,7 @@ final class GetChequesList
         string $dateEcheanceFrom = '',
         string $dateEcheanceTo = '',
         int $perPage = self::DEFAULT_PER_PAGE,
+        bool $dateFilterEngaged = false,
     ): array {
         if (! in_array($perPage, self::PER_PAGE_OPTIONS, true)) {
             $perPage = self::DEFAULT_PER_PAGE;
@@ -69,8 +70,16 @@ final class GetChequesList
             // falls in (the page's own date filters are échéance-based); the
             // active year is only the DEFAULT window — an explicit échéance
             // filter takes over. A cheque with no échéance stays visible.
+            //
+            // ⚠ Decided from $dateFilterEngaged, not from the two edges being
+            // empty (audit 07/09/2026, H-1): keyed on the edges, the window
+            // re-armed the moment the LAST échéance was cleared, so clearing
+            // a filter REMOVED rows instead of widening (§5). Harmless today
+            // — every chèque in production has a NULL échéance and is kept by
+            // the orWhereNull below — but the shape is the bug, and the first
+            // dated chèque would hit it.
             ->when(
-                $dateEcheanceFrom === '' && $dateEcheanceTo === '' && $this->context->anneeDateRange() !== null,
+                ! $dateFilterEngaged && $this->context->anneeDateRange() !== null,
                 fn ($q) => $q->where(fn ($sub) => $sub
                     ->whereBetween('date_echeance', $this->context->anneeDateRange())
                     ->orWhereNull('date_echeance')),
@@ -97,7 +106,16 @@ final class GetChequesList
             'whatsapp' => $cheque->student?->whatsapp,
             'numeroCheque' => $cheque->numero_cheque,
             'montant' => number_format((float) $cheque->montant, 2, '.', ''),
-            'reste' => number_format($cheque->montantRestant(), 2, '.', ''),
+            // Computed from the ALREADY eager-loaded relation, not via
+            // Cheque::montantRestant() → montantUtilise(), which fires its
+            // own SUM per row — one extra query per line, up to 100 on a
+            // full page (audit 07/09/2026, M-14; §17 forbids a per-row money
+            // accessor in a read model). The accessor stays as-is: the money
+            // ACTIONS need it to re-read a freshly locked row.
+            'reste' => number_format(
+                round(max(0.0, (float) $cheque->montant - (float) $cheque->encaissements->sum('montant')), 2),
+                2, '.', ''
+            ),
             'banque' => $cheque->banque,
             'dateReception' => $cheque->date_reception?->toDateString(),
             'type' => $cheque->type,

@@ -47,8 +47,8 @@ use Inertia\Response;
 
 /**
  * Registrations (inscriptions) list + modal add/edit with manual fee lines
- * (Phase 9, docs/phase-9-inscriptions-audit.md +
- * docs/phase-9-inscriptions-mapping.md) — mirrors
+ * (Phase 9, docs/rapports/migration-inertia/phase-9-inscriptions-audit.md +
+ * docs/rapports/migration-inertia/phase-9-inscriptions-mapping.md) — mirrors
  * App\Livewire\Backoffice\Inscriptions\InscriptionsIndex one-for-one for the
  * base fields (group-derived dates only apply on create; edit's own
  * update() still only ever touches its original 6 columns). Fee lines are
@@ -155,7 +155,14 @@ final class InscriptionController extends Controller
         $this->authorize('view', $inscription);
 
         return response()->json([
-            'fees' => $inscription->fees()->whereNull('masque_le')->get()
+            // withSum instead of the per-row montantPaye() accessor, which
+            // fires one SUM per fee line every time the edit modal opens
+            // (audit 07/09/2026, M-15; §17 forbids a per-row money accessor
+            // in a loop). The accessor stays as-is for the money ACTIONS,
+            // which must re-read a freshly locked row. restoreFee() below
+            // keeps it too: that path maps ONE row, not a collection.
+            'fees' => $inscription->fees()->whereNull('masque_le')
+                ->withSum('encaissements as paye_sum', 'montant')->get()
                 // Teaching-calendar order (janvier → décembre), with the
                 // one-off charges (inscription, examen) first — the fee lines
                 // are created in whatever order the group assigned them, which
@@ -178,7 +185,7 @@ final class InscriptionController extends Controller
                 'statut' => $fee->statut,
                 // Informational only (never submitted back) — drives the
                 // "Reste à payer" column in the edit table.
-                'paye' => number_format($fee->montantPaye(), 2, '.', ''),
+                'paye' => number_format((float) ($fee->paye_sum ?? 0), 2, '.', ''),
             ])->values(),
             // Hidden fees — feeds the edit modal's "Frais masqués" list, the
             // only place a hidden fee can be restored from.
@@ -323,7 +330,7 @@ final class InscriptionController extends Controller
 
     /**
      * "Frais disponibles" for a group — the create form's live group-fee
-     * lookup (docs/phase-9-inscriptions-mapping.md's confirmed decision: a
+     * lookup (docs/rapports/migration-inertia/phase-9-inscriptions-mapping.md's confirmed decision: a
      * dedicated endpoint, not embedding every group's fees in the initial
      * options payload). Gated the same as creating a registration
      * (`registrations.create` only — mirrors InscriptionsIndex::
@@ -726,7 +733,7 @@ final class InscriptionController extends Controller
         // never touched on edit, matching InscriptionsIndex::save()'s
         // $editing branch exactly. date_debut/date_fin come straight from
         // the request (NOT re-derived from the group, unlike create — a
-        // confirmed asymmetry, see docs/phase-9-inscriptions-audit.md §12).
+        // confirmed asymmetry, see docs/rapports/migration-inertia/phase-9-inscriptions-audit.md §12).
         // group_id is deliberately never accepted here — moving a student to
         // another group only ever happens through changeGroup()
         // (ChangerGroupeInscription: fee migration + archival snapshot) or

@@ -41,6 +41,16 @@ class GroupEnseignant extends Model
         'statut', 'motif', 'created_by',
     ];
 
+    /**
+     * Mirror of the column default (§11): without it a create() that omits
+     * `statut` leaves the model NULL while the row holds 'Actif', so the
+     * next change is journalled as « avant : vide » — the trail would then
+     * state a false previous value, which is worse than a missing one.
+     */
+    protected $attributes = [
+        'statut' => self::STATUT_ACTIF,
+    ];
+
     protected function casts(): array
     {
         return [

@@ -11,7 +11,7 @@ use Illuminate\Validation\Rule;
 
 /**
  * Validates exactly the fields the current Livewire InscriptionsIndex form
- * exposes on CREATE (docs/phase-9-inscriptions-audit.md §4.9) — NOT the
+ * exposes on CREATE (docs/rapports/migration-inertia/phase-9-inscriptions-audit.md §4.9) — NOT the
  * wider/narrower field set the dead pre-Phase-9 version of this Request
  * used to validate (no etablissement_id/annee_scolaire_id/montant_total
  * from the client — all three are always server-derived from the group;
@@ -52,6 +52,12 @@ final class StoreInscriptionRequest extends FormRequest
             'fee_lines.*.remise_pct' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'fee_lines.*.remise_montant' => ['nullable', 'numeric', 'min:0'],
             'fee_lines.*.date_echeance' => ['nullable', 'date'],
+            // The create modal renders and submits this field and
+            // InscriptionController:550 reads $line['note'] — without a rule
+            // it never reaches validated(), so every note typed at ENROLMENT
+            // was silently dropped while the same field saved correctly on
+            // edit (UpdateInscriptionFeesRequest:38). Audit 07/09/2026, C-6.
+            'fee_lines.*.note' => ['nullable', 'string'],
             'livre_ids' => ['nullable', 'array'],
             'livre_ids.*' => ['integer', 'exists:stock_articles,id'],
         ];

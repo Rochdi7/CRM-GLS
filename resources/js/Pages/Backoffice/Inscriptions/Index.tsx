@@ -997,6 +997,16 @@ export default function InscriptionsIndex({
             return;
         }
 
+        // Cancel the pending 600 ms auto-save first, exactly as
+        // removeEditingLine() does (audit 07/09/2026, C-5). Without this the
+        // in-flight debounce fires with the PRE-restore fee_lines array, and
+        // MettreAJourFraisInscription treats the just-restored line as
+        // deleted — hard-removing a row that may carry money (§11: removing
+        // a paid fee must free it as an avance, which this race bypassed).
+        if (feesSaveTimeout.current) {
+            clearTimeout(feesSaveTimeout.current);
+        }
+
         // fetch() — see removeEditingLine(). The response carries the restored
         // line's full shape, so it is spliced straight back into the table
         // instead of re-fetching the whole fee list afterwards (the old path

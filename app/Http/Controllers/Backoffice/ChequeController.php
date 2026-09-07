@@ -61,6 +61,11 @@ final class ChequeController extends Controller
         $dateEcheanceTo = (string) $request->string('dateEcheanceTo');
         $perPage = (int) $request->integer('perPage', GetChequesList::DEFAULT_PER_PAGE);
 
+        // « Jamais touché » (aucune clé) vs « effacé » (clé vide) — seul le
+        // request le sait, et la fenêtre de l'année ne doit pas se réarmer
+        // dans le second cas (audit 07/09/2026, H-1 ; §5 effacer élargit).
+        $dateFilterEngaged = $request->has('dateEcheanceFrom') || $request->has('dateEcheanceTo');
+
         $chequesList = $getChequesList(
             $request->user(),
             $numeroFilter,
@@ -71,6 +76,7 @@ final class ChequeController extends Controller
             $dateEcheanceFrom,
             $dateEcheanceTo,
             $perPage,
+            $dateFilterEngaged,
         );
 
         return Inertia::render('Backoffice/Cheques/Index', [

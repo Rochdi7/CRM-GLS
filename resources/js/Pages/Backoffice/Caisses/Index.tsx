@@ -553,6 +553,7 @@ export default function CaissesIndex({
                     onFilter={reloadGlobale}
                     onReset={globaleReset.reset}
                     resetActive={globaleReset.active}
+                    centerLocked={centerLocked}
                 />
             )}
 

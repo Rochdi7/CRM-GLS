@@ -26,7 +26,7 @@ use Inertia\Response;
 
 /**
  * "Gestion des dépenses" — ONE Inertia page (Phase 10,
- * docs/phase-10-finance-audit.md §2.5/§3) hosting dépenses + remboursements
+ * docs/rapports/finance/phase-10-finance-audit.md §2.5/§3) hosting dépenses + remboursements
  * as client-side React tabs, replacing the former Livewire-tab Blade shell
  * (DepenseManagementController, now unreferenced — see
  * docs/legacy-frontend-removal-plan.md §0g). Access = ANY of the two
@@ -68,15 +68,22 @@ final class DepenseController extends Controller
         $statutFilter = (string) $request->string('statutFilter');
         $perPage = (int) $request->integer('perPage', GetDepensesList::DEFAULT_PER_PAGE);
 
+        // Has the user engaged the date filter AT ALL? Only the request can
+        // tell « never touched » (no key) from « cleared » (key present,
+        // empty) — and the read model must not re-arm the active-year window
+        // in the second case, or clearing a date REMOVES rows (audit
+        // 07/09/2026, H-1; §5 clearing must only widen).
+        $dateFilterEngaged = $request->has('dateFrom') || $request->has('dateTo');
+
         $depensesList = $user->can('expenses.view')
-            ? $getDepensesList($user, $search, $typeFilter, $caisseFilter, $dateFrom, $dateTo, $perPage, GetDepensesList::SCOPE_HORS_PAIEMENT_PROF, $statutFilter)
+            ? $getDepensesList($user, $search, $typeFilter, $caisseFilter, $dateFrom, $dateTo, $perPage, GetDepensesList::SCOPE_HORS_PAIEMENT_PROF, $statutFilter, $dateFilterEngaged)
             : null;
 
         // "Paiement prof" dépenses live in their own tab — same records,
         // same money rules, just listed apart to keep the Dépenses table
         // readable (they are excluded from $depensesList above).
         $paiementsProfList = $user->can('expenses.view')
-            ? $getDepensesList($user, $search, $typeFilter, $caisseFilter, $dateFrom, $dateTo, $perPage, GetDepensesList::SCOPE_PAIEMENT_PROF, $statutFilter)
+            ? $getDepensesList($user, $search, $typeFilter, $caisseFilter, $dateFrom, $dateTo, $perPage, GetDepensesList::SCOPE_PAIEMENT_PROF, $statutFilter, $dateFilterEngaged)
             : null;
 
         // « Validation des dépenses » — EVERY dépense, both kinds. The two
@@ -87,7 +94,7 @@ final class DepenseController extends Controller
         // unreachable because this tab reused $depensesList). Built only for
         // whoever can actually act on it.
         $validationList = $canAudit
-            ? $getDepensesList($user, $search, $typeFilter, $caisseFilter, $dateFrom, $dateTo, $perPage, GetDepensesList::SCOPE_TOUS, $statutFilter)
+            ? $getDepensesList($user, $search, $typeFilter, $caisseFilter, $dateFrom, $dateTo, $perPage, GetDepensesList::SCOPE_TOUS, $statutFilter, $dateFilterEngaged)
             : null;
 
         // The acting employee's own till balance — shown read-only in the
@@ -142,13 +149,13 @@ final class DepenseController extends Controller
             // total porterait sur un ensemble different de ce qui est
             // affiche (et la recherche restait sans effet sur cet onglet).
             'remboursements' => $user->can('refunds.view')
-                ? $getRemboursementsList($user, $search, $caisseFilter, $dateFrom, $dateTo, $perPage)
+                ? $getRemboursementsList($user, $search, $caisseFilter, $dateFrom, $dateTo, $perPage, $dateFilterEngaged)
                 : null,
             // Le total vient du SERVEUR sur l'ensemble filtre — jamais d'un
             // reduce() sur les lignes de la page — et il exclut les
             // remboursements annules (leur caisse a ete recreditee).
             'remboursementsTotaux' => $user->can('refunds.view')
-                ? $getRemboursementsList->totaux($user, $search, $caisseFilter, $dateFrom, $dateTo)
+                ? $getRemboursementsList->totaux($user, $search, $caisseFilter, $dateFrom, $dateTo, $dateFilterEngaged)
                 : null,
             'students' => $user->can('refunds.view') ? $getRemboursementsList->studentOptions($user) : [],
             // Cash tills of the active centre — the refund form now names the

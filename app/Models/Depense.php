@@ -47,6 +47,16 @@ class Depense extends Model implements HasMedia
         'statut', 'approved_by', 'approved_at', 'motif_refus',
     ];
 
+    /**
+     * Mirror of the column default (§11): without it a create() that omits
+     * `statut` leaves the model NULL while the row holds 'Approuvée', so the
+     * next change is journalled as « avant : vide » — the trail would then
+     * state a false previous value, which is worse than a missing one.
+     */
+    protected $attributes = [
+        'statut' => self::STATUT_APPROUVEE,
+    ];
+
     protected function casts(): array
     {
         return [

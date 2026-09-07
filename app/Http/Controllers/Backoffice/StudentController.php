@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Domain\Settings\Queries\GetAccessibleCenterOptions;
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Domain\Students\Queries\GetStudentDetails;
 use App\Domain\Students\Queries\GetStudentsList;
@@ -24,14 +25,17 @@ use Inertia\Response;
 
 /**
  * Real HTTP endpoints mirroring App\Livewire\Backoffice\Students\StudentsIndex
- * one-for-one (Phase 8, docs/phase-8-students-groups-inventory.md), following
+ * one-for-one (Phase 8, docs/rapports/migration-inertia/phase-8-students-groups-inventory.md), following
  * the Phase 7 Employees pattern. The Livewire component and its view are left
  * completely untouched as unreferenced fallback code.
  */
 final class StudentController extends Controller
 {
-    public function index(Request $request, GetStudentsList $getStudentsList): Response
-    {
+    public function index(
+        Request $request,
+        GetStudentsList $getStudentsList,
+        GetAccessibleCenterOptions $accessibleCenters,
+    ): Response {
         $this->authorize('viewAny', Student::class);
 
         $context = app(CurrentContext::class);
@@ -87,7 +91,17 @@ final class StudentController extends Controller
             'niveauxAvecDomaine' => Student::NIVEAUX_AVEC_DOMAINE,
             'niveauStudium' => Student::NIVEAU_STUDIUM,
             'defaultCountry' => Countries::DEFAULT,
-            'etablissements' => Etablissement::query()->orderBy('nom_centre')->get(['id', 'nom_centre']),
+            // Centre reach governs this dropdown — never the full table
+            // (audit 07/09/2026, C-2). An unfiltered `Etablissement::query()`
+            // listed all 7 branches to the 25 staff accounts confined to one,
+            // both as a filter and as a create/edit target. `allowedIds()` is
+            // the same funnel Settings/Salles/Frais already use, so the list
+            // stays in sync with « Centres affectés » (§16: the pivot is the
+            // one authority on reach — never a role, never a permission).
+            'etablissements' => Etablissement::query()
+                ->whereIn('id', $accessibleCenters->allowedIds($request->user()))
+                ->orderBy('nom_centre')
+                ->get(['id', 'nom_centre']),
             'centerLocked' => ! $context->isAllCenters(),
             'contextCenterId' => $context->etablissementId(),
         ]);

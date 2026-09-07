@@ -51,7 +51,17 @@ final class DormantTill
         return $query->whereNot(fn (Builder $q) => $q
             ->where('type', Caisse::TYPE_CAISSIERE)
             ->where('solde', 0)
+            // withoutGlobalScopes() is REQUIRED here (audit 07/09/2026,
+            // M-5): Employee is #[ScopedBy(HiddenAccountScope::class)] and a
+            // global scope applies inside a nested whereHas too, so this
+            // subquery looked for the responsable in a set the scope had
+            // already removed them from. It is the trap documented in §11 —
+            // here it over-SHOWS (no responsable found ⇒ not dormant ⇒ the
+            // till is kept) rather than over-hides. Harmless today only
+            // because every caller runs HiddenAccount::hideCaisses() first;
+            // the first screen that forgets would list the hidden tills.
             ->whereHas('responsable', fn ($r) => $r
+                ->withoutGlobalScopes()
                 ->where(fn ($w) => $w
                     ->where('categorie', Employee::CATEGORIE_ENSEIGNANT)
                     ->orWhere('statut', '!=', Employee::STATUT_ACTIF))));

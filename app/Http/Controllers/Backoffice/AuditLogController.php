@@ -103,7 +103,13 @@ final class AuditLogController extends Controller
     {
         abort_unless($request->user()->can('audit-logs.view'), 403);
 
-        $entry = $getActivityLogList->find($activity, $request->boolean('includeDeveloper'));
+        // Same centre scope as index() — a detail page must never reveal an
+        // entry the reader's own listing would have filtered out (H-7).
+        $entry = $getActivityLogList->find(
+            $activity,
+            $request->boolean('includeDeveloper'),
+            $this->causerScope($request->user()),
+        );
 
         abort_if($entry === null, 404);
 
