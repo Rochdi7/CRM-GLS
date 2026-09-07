@@ -116,6 +116,63 @@ final class TransfertTotauxParCentreTest extends TestCase
         $this->assertSame('25000.00', $this->listIn(null, $viewer)['montantTotal']);
     }
 
+    /**
+     * A transfer belongs to the centre the cash LEAVES — the sender's.
+     *
+     * Reported 07/09/2026: Mohamed Rafik is assigned to all seven centres,
+     * so matching the destination too made his till pull every transfer into
+     * every centre — transfers from Rabat, Salé and Kénitra tills were all
+     * listed on the Marrakech screen, money that never passed through
+     * Marrakech.
+     */
+    public function test_a_multi_centre_recipient_does_not_pull_transfers_everywhere(): void
+    {
+        $viewer = $this->superAdminIn($this->marrakech, '0.00');
+
+        // The recipient works in BOTH centres; his till is filed in Marrakech.
+        $rafik = Employee::factory()->create([
+            'etablissement_id' => $this->marrakech->id,
+            'categorie' => Employee::CATEGORIE_DIRECTEUR,
+        ]);
+        $rafik->syncEtablissements([$this->marrakech->id, $this->rabat->id]);
+        $destination = $rafik->till()->first();
+
+        // Two senders, one per centre, both paying the same recipient.
+        [$deMarrakech, $tillMarrakech] = $this->tillHolder($this->marrakech, '50000.00');
+        $this->transfer($tillMarrakech, $destination, '20000.00', $deMarrakech);
+
+        [$deRabat, $tillRabat] = $this->tillHolder($this->rabat, '50000.00');
+        $this->transfer($tillRabat, $destination, '5000.00', $deRabat);
+
+        // Each centre sees only what left ITS tills.
+        $this->assertSame('20000.00', $this->listIn($this->marrakech, $viewer)['montantTotal']);
+        $this->assertSame('5000.00', $this->listIn($this->rabat, $viewer)['montantTotal']);
+        // « Tous les centres » still sees both.
+        $this->assertSame('25000.00', $this->listIn(null, $viewer)['montantTotal']);
+    }
+
+    /**
+     * ⚠ The one exception that must survive: a transfer touching the
+     * viewer's OWN till is listed whatever the switcher says. Only the
+     * employee owning the destination may accept it, so a pending row that
+     * hid behind a centre change could never be cleared and the money would
+     * stay « En attente » forever (§11).
+     */
+    public function test_my_own_pending_transfer_is_listed_from_any_centre(): void
+    {
+        // The viewer works in Marrakech; the money is coming from Rabat.
+        $viewer = $this->superAdminIn($this->marrakech, '0.00');
+        $maCaisse = $viewer->employee->till()->first();
+
+        [$deRabat, $tillRabat] = $this->tillHolder($this->rabat, '50000.00');
+        $this->transfer($tillRabat, $maCaisse, '3000.00', $deRabat);
+
+        // Visible from Marrakech even though the source is a Rabat till —
+        // this is the row the viewer has to accept.
+        $this->assertSame('3000.00', $this->listIn($this->marrakech, $viewer)['montantTotal']);
+        $this->assertSame('3000.00', $this->listIn($this->rabat, $viewer)['montantTotal']);
+    }
+
     public function test_the_balance_shown_is_the_viewers_own_till(): void
     {
         $viewer = $this->superAdminIn($this->marrakech, '7500.00');

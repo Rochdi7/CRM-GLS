@@ -235,7 +235,7 @@ final class GetCaisseTransfersList
     /**
      * Constrains the inbox to transfers the viewer may see: at least one leg
      * in a centre they can REACH, and — when the top-bar switcher names a
-     * single centre — at least one leg in THAT centre.
+     * single centre — whose SOURCE till belongs to THAT centre.
      *
      * CLAUDE.md §11 names this inbox a deliberate exception to context
      * scoping, and it still is: a transfer with one of the viewer's OWN
@@ -265,14 +265,31 @@ final class GetCaisseTransfersList
                     ->orWhereIn('caisse_destination_id', $myCaisseIds);
             }
 
+            // ⚠ The SENDER's centre decides, not either leg (07/09/2026).
+            //
+            // A transfer belongs to the centre the cash physically LEAVES.
+            // Matching the destination too made a recipient assigned to many
+            // centres pull every transfer into all of them: Mohamed Rafik
+            // works in all seven, so transfers from Rabat, Salé and Kénitra
+            // tills were all listed on the Marrakech screen — money that
+            // never passed through Marrakech.
+            //
+            // Reach is still answered on both ends by scopeAccessibleCenters
+            // (you may not see a transfer between two centres you cannot
+            // reach at all); it is only the ACTIVE-centre narrowing that now
+            // keys on the source alone. And the exception above still holds:
+            // a transfer touching one of the viewer's OWN tills is listed
+            // whatever the switcher says, so a pending row can never hide
+            // behind a centre change and strand the money (§11).
             $outer->orWhere(function (Builder $q) use ($user, $activeCenterId): void {
-                $q->whereHas('caisseSource', function (Builder $sq) use ($user, $activeCenterId): void {
-                    $this->centerAccess->scopeAccessibleCenters($sq, $user);
-                    $this->restrictToCenter($sq, $activeCenterId);
-                })->orWhereHas('caisseDestination', function (Builder $dq) use ($user, $activeCenterId): void {
-                    $this->centerAccess->scopeAccessibleCenters($dq, $user);
-                    $this->restrictToCenter($dq, $activeCenterId);
+                $q->where(function (Builder $reach) use ($user): void {
+                    $reach->whereHas('caisseSource', fn (Builder $sq) => $this->centerAccess->scopeAccessibleCenters($sq, $user))
+                        ->orWhereHas('caisseDestination', fn (Builder $dq) => $this->centerAccess->scopeAccessibleCenters($dq, $user));
                 });
+
+                if ($activeCenterId !== null) {
+                    $q->whereHas('caisseSource', fn (Builder $sq) => $this->restrictToCenter($sq, $activeCenterId));
+                }
             });
         });
     }

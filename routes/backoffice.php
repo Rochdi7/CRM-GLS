@@ -579,13 +579,18 @@ Route::prefix('backoffice')
                 ->middleware('permission:cheques.create')->name('cheques.store');
             Route::put('cheques/{cheque}', [ChequeController::class, 'update'])
                 ->middleware('permission:cheques.update')->name('cheques.update');
+            // Parcours bancaire (Remise à la banque, Encaissé, Rejeté) :
+            // `cheques.deposit`, ouvert à tous les rôles — porter les chèques
+            // à la banque est un geste de guichet, pas une correction de
+            // document (07/09/2026). L'édition du chèque reste sur
+            // `cheques.update`, réservée aux rôles de direction.
             Route::patch('cheques/{cheque}/statut', [ChequeController::class, 'updateStatut'])
-                ->middleware('permission:cheques.update')->name('cheques.update-statut');
+                ->middleware('permission:cheques.deposit')->name('cheques.update-statut');
             // Records that a rejected chèque was physically handed back to
             // its owner — off-ledger bookkeeping only, same permission as
             // every other chèque lifecycle move.
             Route::patch('cheques/{cheque}/retour', [ChequeController::class, 'markRetourne'])
-                ->middleware('permission:cheques.update')->name('cheques.retour');
+                ->middleware('permission:cheques.deposit')->name('cheques.retour');
             // Feeds the "Payer avec un chèque" dropdown in the payment form.
             Route::get('students/{student}/cheques', [ChequeController::class, 'studentCheques'])
                 ->name('students.cheques');

@@ -30,8 +30,7 @@ export default function AnneeClotureeBanner() {
                 </strong>
                 <div className="mt-1">
                     Aucun enregistrement ne peut être créé ni modifié dans cette année. Pour saisir une
-                    opération, changez d’année dans le sélecteur en haut de page. Un super-administrateur
-                    peut rouvrir l’année depuis Paramètres&nbsp;→&nbsp;Années scolaires.
+                    opération, changez d’année dans le sélecteur en haut de page.
                 </div>
             </div>
         </div>

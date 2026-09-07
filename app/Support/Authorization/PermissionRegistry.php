@@ -304,6 +304,17 @@ final class PermissionRegistry
                 'cheques.view' => 'Consulter les chèques',
                 'cheques.create' => 'Enregistrer un chèque',
                 'cheques.update' => 'Modifier un chèque',
+                // « Remise à la banque » et la suite du cycle de vie
+                // (Déposé → Encaissé | Rejeté) sont un geste de guichet,
+                // pas une correction de document (07/09/2026) : celui qui
+                // porte physiquement les chèques à la banque doit pouvoir
+                // le consigner. Séparé de `cheques.update` — qui reste
+                // réservé aux rôles de direction — parce que modifier
+                // l'identité d'un chèque (propriétaire, numéro, montant)
+                // et déclarer où il en est dans son parcours bancaire sont
+                // deux responsabilités différentes. Accordé à TOUS les
+                // rôles via defaultForEveryRole().
+                'cheques.deposit' => 'Remettre un chèque à la banque et suivre son statut',
             ],
             'Transferts de caisse' => [
                 'cash-transfers.view' => 'Consulter les transferts de caisse',
@@ -653,6 +664,17 @@ final class PermissionRegistry
             // rôles d'emblée, tout en restant pilotable depuis l'écran des
             // permissions.
             'reports.view',
+            // Suivre le parcours bancaire d'un chèque (remise, encaissement,
+            // rejet, restitution) — demande métier du 07/09/2026 : n'importe
+            // quel employé du centre dépose les chèques à la banque, il ne
+            // faut pas un directeur pour l'enregistrer. Conforme à la règle
+            // ci-dessus : le porteur voit déjà ces chèques (`cheques.view`,
+            // scopé « Centres affectés » + contexte actif) et l'action ne
+            // touche AUCUNE caisse — `caisses.solde` n'a pas bougé à la
+            // saisie du chèque et ne bouge pas ici ; les conséquences
+            // monétaires d'un rejet passent par un remboursement, qui garde
+            // ses propres permissions.
+            'cheques.deposit',
         ];
     }
 

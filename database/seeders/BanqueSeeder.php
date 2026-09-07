@@ -26,8 +26,13 @@ final class BanqueSeeder extends Seeder
             'Al Barid Bank',
         ];
 
+        // firstOrCreate, PAS updateOrCreate (07/09/2026) : `db:seed` est
+        // rejouable sur la production, et réécrire `statut` y ressuscitait à
+        // chaque déploiement une banque qu'un administrateur avait archivée
+        // depuis Paramètres. Le seeder GARNIT le catalogue ; ce qui a été
+        // fermé à la main le reste.
         foreach ($banques as $nom) {
-            Banque::query()->updateOrCreate(
+            Banque::query()->firstOrCreate(
                 ['nom' => $nom],
                 ['statut' => Banque::STATUT_ACTIF],
             );

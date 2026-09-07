@@ -6,6 +6,7 @@ namespace Tests\Feature\Backoffice\Groups;
 
 use App\Domain\Attendance\Support\DiagnostiquerEmploiDuTemps;
 use App\Models\AnneeScolaire;
+use App\Models\Creneau;
 use App\Models\Employee;
 use App\Models\Etablissement;
 use App\Models\Group;
@@ -149,11 +150,63 @@ final class EmploiDuTempsDiagnosticTest extends TestCase
      */
     public function test_a_partially_closed_timetable_is_reported(): void
     {
-        $probleme = $this->diagnostiquer($this->group(), 5, 1);
+        $group = $this->group();
+
+        // Lundi couvert, mardi → vendredi clos sans rien pour les remplacer :
+        // quatre jours réellement muets.
+        Creneau::create([
+            'group_id' => $group->id, 'jour_semaine' => 1,
+            'heure_debut' => '10:00', 'heure_fin' => '12:00',
+        ]);
+
+        foreach ([2, 3, 4, 5] as $jour) {
+            Creneau::create([
+                'group_id' => $group->id, 'jour_semaine' => $jour,
+                'heure_debut' => '10:00', 'heure_fin' => '12:00',
+                'date_fin' => '2025-10-01',
+            ]);
+        }
+
+        $probleme = $this->diagnostiquer($group, 5, 1);
 
         $this->assertSame(DiagnostiquerEmploiDuTemps::CRENEAUX_PARTIELS, $probleme['code']);
-        // Le message chiffre l'amputation : 4 créneaux sur 5.
-        $this->assertStringContainsString('4 de ses 5', $probleme['message']);
+        // Le message NOMME les jours muets — c'est ce que l'utilisateur doit
+        // aller corriger, un compte de créneaux ne lui dirait pas où aller.
+        $this->assertStringContainsString('Mardi, Mercredi, Jeudi, Vendredi', $probleme['message']);
+    }
+
+    /**
+     * ⚠ Régression 07/09/2026 — « Yassine SEPT 10H » (Agadir) affichait
+     * « L'emploi du temps de ce groupe est incomplet » et l'icône rouge de la
+     * liste, alors que ses cinq jours étaient couverts. Le diagnostic
+     * comparait les COMPTEURS (5 clos sur 10) : après un changement
+     * d'enseignant, le sortant laisse un créneau clos et l'entrant en a saisi
+     * un ouvert le MÊME jour, si bien qu'un groupe parfaitement à jour
+     * paraissait amputé de moitié. Pire, l'action proposée envoyait rouvrir
+     * les créneaux périmés — soit fabriquer le doublon que le détecteur
+     * signale juste après. Ce qui manque se compte en JOURS découverts.
+     */
+    public function test_a_replaced_teacher_does_not_make_the_timetable_look_incomplete(): void
+    {
+        $group = $this->group();
+
+        foreach ([1, 2, 3, 4, 5] as $jour) {
+            // Le créneau du prof sortant, clôturé…
+            Creneau::create([
+                'group_id' => $group->id, 'jour_semaine' => $jour,
+                'heure_debut' => '10:00', 'heure_fin' => '12:30',
+                'date_fin' => '2025-10-01',
+            ]);
+            // …et celui de l'entrant, qui couvre le MÊME jour.
+            Creneau::create([
+                'group_id' => $group->id, 'jour_semaine' => $jour,
+                'heure_debut' => '10:00', 'heure_fin' => '12:30',
+            ]);
+        }
+
+        // 10 créneaux au total dont 5 ouverts : les compteurs à eux seuls
+        // criaient « incomplet ». Rien ne manque pourtant.
+        $this->assertNull($this->diagnostiquer($group, 10, 5));
     }
 
     /**

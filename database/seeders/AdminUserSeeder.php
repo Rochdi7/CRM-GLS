@@ -95,20 +95,44 @@ final class AdminUserSeeder extends Seeder
             $password = 'password';
         }
 
-        $user = User::query()->updateOrCreate(
-            ['email' => $email],
-            [
-                'name' => $name,
-                'username' => (string) env('ADMIN_USERNAME', 'rafik'),
-                'password' => Hash::make((string) $password),
-                // A provisioned production admin must rotate its password;
-                // the local dev default stays frictionless.
-                'must_change_password' => ! $isLocal,
-                // A deactivated user can never sign in (LoginRequest) — make
-                // sure a re-seed never leaves the dev admin locked out.
-                'is_active' => true,
-            ],
-        );
+        // ⚠ Le mot de passe n'est écrit qu'à la CRÉATION du compte
+        // (07/09/2026). `db:seed` doit rester rejouable sur la base de
+        // production — c'est toute la raison d'être de ce jeu de seeders —
+        // or la version précédente réécrivait `password` à chaque exécution :
+        // un re-seed après un déploiement remettait le compte du directeur
+        // sur la valeur d'ADMIN_PASSWORD du `.env` du serveur, et le
+        // repassait en `must_change_password`. L'administrateur qui avait
+        // changé son mot de passe depuis l'application se retrouvait dehors,
+        // sans que rien ne l'annonce.
+        //
+        // Un mot de passe se change depuis Profil ou par réinitialisation ;
+        // le seeder PROVISIONNE un compte, il ne le reprend jamais en main.
+        $user = User::query()->firstWhere('email', $email);
+        $creation = $user === null;
+
+        $attributs = [
+            'name' => $name,
+            'username' => (string) env('ADMIN_USERNAME', 'rafik'),
+            // A deactivated user can never sign in (LoginRequest) — make
+            // sure a re-seed never leaves the dev admin locked out.
+            'is_active' => true,
+        ];
+
+        if ($creation) {
+            $attributs['password'] = Hash::make((string) $password);
+            // A provisioned production admin must rotate its password;
+            // the local dev default stays frictionless.
+            $attributs['must_change_password'] = ! $isLocal;
+        }
+
+        $user = User::query()->updateOrCreate(['email' => $email], $attributs);
+
+        if (! $creation) {
+            $this->command?->info(
+                "Compte administrateur {$email} déjà présent — mot de passe conservé "
+                .'(le seeder ne réinitialise jamais un mot de passe existant).'
+            );
+        }
 
         // user_id is set explicitly, so EmployeeObserver does NOT generate
         // a second login for this employee.

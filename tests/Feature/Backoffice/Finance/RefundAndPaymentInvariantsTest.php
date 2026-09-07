@@ -205,7 +205,7 @@ final class RefundAndPaymentInvariantsTest extends TestCase
 
         $cheque = $this->makeCheque($autre, $student);
 
-        $user = $this->userWith('cheques.view', 'cheques.update');
+        $user = $this->userWith('cheques.view', 'cheques.update', 'cheques.deposit');
         $user->employee->syncEtablissements([$this->centre->id, $autre->id]);
 
         $this->actingAs($user);
@@ -224,7 +224,7 @@ final class RefundAndPaymentInvariantsTest extends TestCase
 
         $cheque = $this->makeCheque($this->centre, $student);
 
-        $user = $this->userWith('cheques.view', 'cheques.update');
+        $user = $this->userWith('cheques.view', 'cheques.update', 'cheques.deposit');
         $this->actingAs($user);
         app(CurrentContext::class)->setEtablissement($this->centre->id);
 

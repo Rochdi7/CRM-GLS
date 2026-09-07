@@ -142,9 +142,10 @@ final class HiddenAccountTest extends TestCase
     {
         $this->maintainer();
 
-        // Same person's name, a REAL GLS login — must not be caught by the
-        // filter, which keys on the e-mail address and nothing else.
-        $namesake = $this->staff('rochdi.karouali@glszentrum.com');
+        // A DIFFERENT person who merely shares the surname: the filter keys
+        // on the e-mail address and nothing else, so a real Karouali on the
+        // payroll must stay visible.
+        $namesake = $this->staff('sanae.karouali@glszentrum.com');
         $ceo = $this->staff('rafik@glszentrum.com');
 
         $this->actingAs($ceo->user);
@@ -156,6 +157,50 @@ final class HiddenAccountTest extends TestCase
 
         $this->assertContains($namesakeTill->id, $query->pluck('id'));
         $this->assertTrue(Employee::whereKey($namesake->id)->exists());
+    }
+
+    /**
+     * The maintainer's SECOND login — the GLS-domain account once seeded as
+     * an ordinary « Responsable de système » (EMP-004).
+     *
+     * Reported 07/09/2026: « Caisse globale » showed two ROCHDI KAROUALI
+     * tills side by side. Only the technical gmail account was filtered; the
+     * staff account was assumed to be a different person. Both belong to the
+     * developer, so both are hidden — while `AuditLogRegistry::DEVELOPER_EMAIL`
+     * deliberately keeps naming the technical account alone.
+     */
+    public function test_the_maintainers_gls_domain_account_is_hidden_too(): void
+    {
+        $dev = $this->staff(HiddenAccount::STAFF_EMAIL);
+        $ceo = $this->staff('rafik@glszentrum.com');
+
+        $devTill = Caisse::where('responsable_employee_id', $dev->id)->firstOrFail();
+
+        $this->actingAs($ceo->user);
+
+        $caisses = Caisse::query();
+        HiddenAccount::hideCaisses($caisses);
+        $this->assertNotContains($devTill->id, $caisses->pluck('id'));
+
+        $users = User::query();
+        HiddenAccount::hideUsers($users);
+        $this->assertNotContains($dev->user_id, $users->pluck('id'));
+
+        $this->assertFalse(
+            Employee::whereKey($dev->id)->exists(),
+            'The global scope must hide the staff account exactly like the technical one.',
+        );
+    }
+
+    public function test_the_audit_journal_identity_stays_the_technical_account_alone(): void
+    {
+        // Widening the journal's notion of "compte technique" would silently
+        // fold a second account behind « Inclure le compte technique ».
+        $this->assertSame(
+            HiddenAccount::EMAIL,
+            \App\Support\Audit\AuditLogRegistry::DEVELOPER_EMAIL,
+        );
+        $this->assertContains(HiddenAccount::STAFF_EMAIL, HiddenAccount::emails());
     }
 
     public function test_the_maintainer_still_sees_himself(): void

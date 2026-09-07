@@ -172,7 +172,7 @@ final class ChequesInertiaCrudTest extends TestCase
 
     public function test_remise_a_la_banque_moves_en_possession_to_depose(): void
     {
-        $this->actingAs($this->userWith('cheques.view', 'cheques.update'));
+        $this->actingAs($this->userWith('cheques.view', 'cheques.update', 'cheques.deposit'));
         $cheque = $this->makeCheque(Cheque::STATUT_EN_POSSESSION);
 
         $this->patch(route('backoffice.cheques.update-statut', $cheque), [
@@ -184,7 +184,7 @@ final class ChequesInertiaCrudTest extends TestCase
 
     public function test_deposited_cheque_can_be_marked_encaisse_or_rejete(): void
     {
-        $this->actingAs($this->userWith('cheques.view', 'cheques.update'));
+        $this->actingAs($this->userWith('cheques.view', 'cheques.update', 'cheques.deposit'));
         $cheque = $this->makeCheque(Cheque::STATUT_DEPOSE);
 
         $this->patch(route('backoffice.cheques.update-statut', $cheque), [
@@ -196,7 +196,7 @@ final class ChequesInertiaCrudTest extends TestCase
 
     public function test_a_direct_en_possession_to_encaisse_move_is_refused(): void
     {
-        $this->actingAs($this->userWith('cheques.view', 'cheques.update'));
+        $this->actingAs($this->userWith('cheques.view', 'cheques.update', 'cheques.deposit'));
         $cheque = $this->makeCheque(Cheque::STATUT_EN_POSSESSION);
 
         $this->patch(route('backoffice.cheques.update-statut', $cheque), [
@@ -208,7 +208,7 @@ final class ChequesInertiaCrudTest extends TestCase
 
     public function test_a_rejete_cheque_cannot_be_transitioned_further(): void
     {
-        $this->actingAs($this->userWith('cheques.view', 'cheques.update'));
+        $this->actingAs($this->userWith('cheques.view', 'cheques.update', 'cheques.deposit'));
         $cheque = $this->makeCheque(Cheque::STATUT_REJETE);
 
         $this->patch(route('backoffice.cheques.update-statut', $cheque), [
@@ -220,7 +220,7 @@ final class ChequesInertiaCrudTest extends TestCase
 
     public function test_a_rejete_cheque_can_be_marked_as_returned(): void
     {
-        $user = $this->userWith('cheques.view', 'cheques.update');
+        $user = $this->userWith('cheques.view', 'cheques.update', 'cheques.deposit');
         $this->actingAs($user);
         $cheque = $this->makeCheque(Cheque::STATUT_REJETE);
 
@@ -235,7 +235,7 @@ final class ChequesInertiaCrudTest extends TestCase
 
     public function test_a_non_rejete_cheque_cannot_be_marked_as_returned(): void
     {
-        $this->actingAs($this->userWith('cheques.view', 'cheques.update'));
+        $this->actingAs($this->userWith('cheques.view', 'cheques.update', 'cheques.deposit'));
         $cheque = $this->makeCheque(Cheque::STATUT_EN_POSSESSION);
 
         $this->patch(route('backoffice.cheques.retour', $cheque))
@@ -246,7 +246,7 @@ final class ChequesInertiaCrudTest extends TestCase
 
     public function test_a_cheque_cannot_be_marked_as_returned_twice(): void
     {
-        $this->actingAs($this->userWith('cheques.view', 'cheques.update'));
+        $this->actingAs($this->userWith('cheques.view', 'cheques.update', 'cheques.deposit'));
         $cheque = $this->makeCheque(Cheque::STATUT_REJETE);
 
         $this->patch(route('backoffice.cheques.retour', $cheque))
@@ -267,7 +267,7 @@ final class ChequesInertiaCrudTest extends TestCase
 
     public function test_marking_a_cheque_as_returned_does_not_touch_any_caisse_solde(): void
     {
-        $this->actingAs($this->userWith('cheques.view', 'cheques.update'));
+        $this->actingAs($this->userWith('cheques.view', 'cheques.update', 'cheques.deposit'));
         $cheque = $this->makeCheque(Cheque::STATUT_REJETE);
         $caisse = \App\Models\Caisse::factory()->create(['etablissement_id' => $this->centre->id, 'solde' => 500]);
 
@@ -281,7 +281,7 @@ final class ChequesInertiaCrudTest extends TestCase
 
     public function test_montant_cannot_be_lowered_below_the_used_amount(): void
     {
-        $this->actingAs($this->userWith('cheques.view', 'cheques.update'));
+        $this->actingAs($this->userWith('cheques.view', 'cheques.update', 'cheques.deposit'));
         $cheque = $this->makeCheque();
         $cheque->encaissements()->create([
             'reference' => 'ENC-USED', 'student_id' => $cheque->student_id,

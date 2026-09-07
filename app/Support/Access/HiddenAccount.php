@@ -36,8 +36,17 @@ use Illuminate\Support\Facades\Auth;
  *     rule asked for is "others cannot see me", not "nothing can resolve me"
  *     — and a globally invisible employee row would 500 its own profile page.
  *
- * Single source of truth: `AuditLogRegistry::DEVELOPER_EMAIL` aliases
- * `self::EMAIL`, so the address is written down exactly once.
+ * TWO logins belong to him and both are hidden (`self::emails()`): the
+ * technical account `EMAIL` and the GLS-domain staff account `STAFF_EMAIL`,
+ * once seeded as a real « Responsable de système ». Every DISPLAY filter
+ * matches the LIST; `EMAIL` alone stays the audit-journal identity
+ * (`AuditLogRegistry::DEVELOPER_EMAIL` aliases it) and the address
+ * `MaintainerUserSeeder` provisions — never widen that constant instead.
+ *
+ * ⚠ Both accounts hold `super-admin`. Hiding them is display-only, so GLS
+ * keeps at least one VISIBLE super-admin of its own (the CEO,
+ * rafik@glszentrum.com) — never hide the last visible one, or the
+ * Autorisations screen shows nobody who can grant anything.
  */
 final class HiddenAccount
 {
@@ -49,6 +58,38 @@ final class HiddenAccount
      * row the UI filters out from here on.
      */
     public const EMAIL = 'rochdi.karouali1234@gmail.com';
+
+    /**
+     * The GLS-domain login of the same person.
+     *
+     * Historically this was seeded as ordinary staff (« Responsable de
+     * système », EMP-004) on the assumption that the maintainer's technical
+     * account and his staff account were two different people. They are not:
+     * both belong to the developer of the system, so both are filtered from
+     * the interface (decided 07/09/2026, after « Caisse globale » listed two
+     * ROCHDI KAROUALI tills side by side).
+     *
+     * ⚠ It is deliberately NOT `EMAIL`. That constant is the maintainer's
+     * identity for the AUDIT JOURNAL (`AuditLogRegistry::DEVELOPER_EMAIL`
+     * aliases it, and « Inclure le compte technique » toggles exactly that
+     * one account) and for `MaintainerUserSeeder`, which provisions it.
+     * Widening `EMAIL` would silently fold a second account into both.
+     */
+    public const STAFF_EMAIL = 'rochdi.karouali@glszentrum.com';
+
+    /**
+     * Every login the interface must not show.
+     *
+     * This — not `EMAIL` — is what every DISPLAY filter matches on. Adding a
+     * further address here hides it everywhere at once, because all the
+     * filters below and `HiddenAccountScope` funnel through this list.
+     *
+     * @return list<string>
+     */
+    public static function emails(): array
+    {
+        return [self::EMAIL, self::STAFF_EMAIL];
+    }
 
     /**
      * Whether the CURRENT viewer should have the account hidden from them.
@@ -68,7 +109,7 @@ final class HiddenAccount
     {
         $user ??= Auth::user();
 
-        return $user instanceof User && $user->email === self::EMAIL;
+        return $user instanceof User && in_array($user->email, self::emails(), true);
     }
 
     /**
@@ -99,7 +140,7 @@ final class HiddenAccount
         }
 
         return match (true) {
-            $subject instanceof User => $subject->email === self::EMAIL,
+            $subject instanceof User => in_array($subject->email, self::emails(), true),
             $subject instanceof \App\Models\Employee => self::isMaintainerEmployee($subject),
             $subject instanceof \App\Models\Caisse => self::isMaintainerCaisse($subject),
             default => false,
@@ -114,7 +155,7 @@ final class HiddenAccount
         // see hideCaisses() for what that blindness costs.
         return User::query()
             ->whereKey($employee->getAttribute('user_id'))
-            ->where('email', self::EMAIL)
+            ->whereIn('email', self::emails())
             ->exists();
     }
 
@@ -128,7 +169,7 @@ final class HiddenAccount
 
         return \App\Models\Employee::withoutGlobalScopes()
             ->whereKey($employeeId)
-            ->whereHas('user', fn ($q) => $q->where('email', self::EMAIL))
+            ->whereHas('user', fn ($q) => $q->whereIn('email', self::emails()))
             ->exists();
     }
     /**
@@ -146,7 +187,7 @@ final class HiddenAccount
             return;
         }
 
-        $query->where($table.'.email', '!=', self::EMAIL);
+        $query->whereNotIn($table.'.email', self::emails());
     }
 
     /**
@@ -165,7 +206,7 @@ final class HiddenAccount
             return;
         }
 
-        $query->whereDoesntHave('user', fn ($q) => $q->where('email', self::EMAIL));
+        $query->whereDoesntHave('user', fn ($q) => $q->whereIn('email', self::emails()));
     }
 
     /**
@@ -198,7 +239,7 @@ final class HiddenAccount
         $query->whereDoesntHave(
             'responsable',
             fn ($q) => $q->withoutGlobalScopes()
-                ->whereHas('user', fn ($u) => $u->where('email', self::EMAIL)),
+                ->whereHas('user', fn ($u) => $u->whereIn('email', self::emails())),
         );
     }
 }

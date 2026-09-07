@@ -85,6 +85,12 @@ final class RolesAndPermissionsSeederTest extends TestCase
                 // (PermissionRegistry::defaultForEveryRole()) — un rapport
                 // imprime une liste que son lecteur peut deja ouvrir.
                 'reports.view',
+                // Remise d'un cheque a la banque : meme base commune
+                // (07/09/2026, demande metier « tout le monde peut le
+                // faire »). Inoffensif ici : sans `cheques.view` un
+                // enseignant n'ouvre meme pas l'ecran des cheques — la
+                // permission decrit un geste, la VISIBILITE reste separee.
+                'cheques.deposit',
             ],
             $teacher->permissions()->pluck('name')->all(),
         );
@@ -461,6 +467,40 @@ final class RolesAndPermissionsSeederTest extends TestCase
             $this->assertTrue(
                 Role::findByName($name)->hasPermissionTo('reports.view'),
                 "Le rôle {$name} doit pouvoir consulter les rapports.",
+            );
+        }
+    }
+
+    /**
+     * Demande métier du 07/09/2026 : « Remise à la banque » doit être à la
+     * portée de TOUT le monde — c'est l'employé qui porte physiquement les
+     * chèques à la banque qui le consigne, pas un directeur.
+     *
+     * La règle a deux moitiés, et n'en tester qu'une la laisse se défaire :
+     * (1) tous les rôles portent `cheques.deposit` ; (2) `cheques.update` —
+     * réécrire l'identité d'un chèque (propriétaire, numéro, montant) —
+     * reste réservé aux rôles de direction. Fusionner les deux abilities
+     * rendrait le guichet capable de modifier un document monétaire, ce que
+     * la refonte des rôles interdit explicitement (CLAUDE.md §16).
+     */
+    public function test_every_role_can_deposit_a_cheque_at_the_bank(): void
+    {
+        foreach (PermissionRegistry::roles() as $name => $label) {
+            if ($name === Role::SUPER_ADMIN) {
+                continue; // Gate::before bypass — holds no explicit permission.
+            }
+
+            $this->assertTrue(
+                Role::findByName($name)->hasPermissionTo('cheques.deposit'),
+                "Le rôle {$name} doit pouvoir remettre un chèque à la banque.",
+            );
+        }
+
+        // L'autre moitié : le front-office ne MODIFIE toujours pas un chèque.
+        foreach (['consultant', 'administrative-assistant'] as $name) {
+            $this->assertFalse(
+                Role::findByName($name)->hasPermissionTo('cheques.update'),
+                "Le rôle {$name} ne doit pas pouvoir modifier un chèque.",
             );
         }
     }

@@ -96,8 +96,15 @@ final class FraisSeeder extends Seeder
             } else {
                 // Never reset an amount an admin has already tuned in
                 // Paramètres — only fill one still sitting at zero.
+                //
+                // ⚠ `statut` n'est PAS réécrit (07/09/2026) : archiver un
+                // frais du catalogue depuis Paramètres est une décision
+                // métier, et un re-seed sur la production le ressuscitait à
+                // chaque déploiement — il réapparaissait dans la liste des
+                // « Frais disponibles » au moment d'inscrire un étudiant.
+                // Le seeder REMPLIT le catalogue, il ne rouvre pas ce qu'un
+                // administrateur a fermé.
                 $existing->update([
-                    'statut' => Frais::STATUT_ACTIF,
                     'montant_defaut' => (float) $existing->montant_defaut > 0
                         ? $existing->montant_defaut
                         : $montantDefaut,

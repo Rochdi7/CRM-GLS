@@ -97,6 +97,9 @@ final class ChequeController extends Controller
             'parents' => $getChequesList->parentOptions($request->user()),
             'canCreate' => $request->user()->can('cheques.create'),
             'canUpdate' => $request->user()->can('cheques.update'),
+            // Remise à la banque / Encaissé / Rejeté / Restitué — ouvert à
+            // tous les rôles, séparé de l'édition du chèque lui-même.
+            'canDeposit' => $request->user()->can('cheques.deposit'),
         ]);
     }
 
@@ -199,7 +202,9 @@ final class ChequeController extends Controller
      */
     public function updateStatut(Request $request, Cheque $cheque): RedirectResponse
     {
-        $this->authorize('update', $cheque);
+        // `deposit`, not `update` (07/09/2026) : suivre le parcours bancaire
+        // d'un chèque est ouvert à tous les rôles, modifier son identité non.
+        $this->authorize('deposit', $cheque);
         // Marking « Rejeté » has money consequences downstream
         // (CaisseResolver::forRemboursement branches on it), so the lifecycle
         // move is guarded like every other write: reach AND active centre.
@@ -263,7 +268,9 @@ final class ChequeController extends Controller
      */
     public function markRetourne(Request $request, Cheque $cheque): RedirectResponse
     {
-        $this->authorize('update', $cheque);
+        // Même famille que updateStatut() : bookkeeping du parcours physique
+        // du chèque, ouvert à tous les rôles (`cheques.deposit`).
+        $this->authorize('deposit', $cheque);
         $this->assertRecordInContext(
             $request,
             'statut',

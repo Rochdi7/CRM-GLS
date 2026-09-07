@@ -99,6 +99,7 @@ export default function ChequesIndex({
     parents,
     canCreate,
     canUpdate,
+    canDeposit,
 }: ChequesPageProps) {
     const isLoading = useInertiaLoading();
     const [showModal, setShowModal] = useState(false);
@@ -488,17 +489,17 @@ export default function ChequesIndex({
                                                     Modifier
                                                 </RowActionItem>
                                             )}
-                                            {canUpdate && cheque.statut === 'En possession' && (
+                                            {canDeposit && cheque.statut === 'En possession' && (
                                                 <>
-                                                    <RowActionDivider />
+                                                    {canUpdate && <RowActionDivider />}
                                                     <RowActionItem icon="ti-building-bank" onClick={() => confirmStatut(cheque, 'Déposé')}>
                                                         Remise à la banque
                                                     </RowActionItem>
                                                 </>
                                             )}
-                                            {canUpdate && cheque.statut === 'Déposé' && (
+                                            {canDeposit && cheque.statut === 'Déposé' && (
                                                 <>
-                                                    <RowActionDivider />
+                                                    {canUpdate && <RowActionDivider />}
                                                     <RowActionItem icon="ti-check" onClick={() => confirmStatut(cheque, 'Encaissé')}>
                                                         Marquer encaissé
                                                     </RowActionItem>
@@ -507,9 +508,9 @@ export default function ChequesIndex({
                                                     </RowActionItem>
                                                 </>
                                             )}
-                                            {canUpdate && cheque.statut === 'Rejeté' && (
+                                            {canDeposit && cheque.statut === 'Rejeté' && (
                                                 <>
-                                                    <RowActionDivider />
+                                                    {canUpdate && <RowActionDivider />}
                                                     {cheque.encaissements.length > 0 && (
                                                         <RowActionItem icon="ti-arrow-back-up" onClick={() => goToRemboursement(cheque)}>
                                                             Rembourser

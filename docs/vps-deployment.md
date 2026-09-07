@@ -462,6 +462,26 @@ sudo -u www-data php8.4 artisan migrate --force
 sudo -u www-data php8.4 artisan db:seed --force
 ```
 
+**Ce que « idempotent » garantit ici** (audit du 07/09/2026 — quatre seeders
+ne l'étaient pas vraiment et ont été corrigés). Re-jouer `db:seed` sur la
+production ne défait AUCUNE décision prise depuis l'application :
+
+| Ce qu'un administrateur a fait | Survit à un re-seed |
+|---|---|
+| Changé son mot de passe depuis Profil | ✅ `AdminUserSeeder` n'écrit `password` qu'à la CRÉATION du compte |
+| Archivé une banque / une salle / un frais / un motif | ✅ `firstOrCreate` — le statut n'est jamais réécrit |
+| Corrigé la capacité d'une salle, le montant d'un frais | ✅ seule une valeur restée à zéro est comblée |
+| Détaché un frais d'un centre qui ne le facture pas | ✅ `attacherCentres()` attache sans `sync()` |
+| Saisi une note sur une fiche employé | ✅ `GlsStaffSeeder` n'efface que son ancien texte généré |
+
+Avant le correctif, un re-seed remettait le compte du directeur sur la valeur
+d'`ADMIN_PASSWORD` du `.env` du serveur (et le repassait en
+« doit changer son mot de passe ») — il se retrouvait dehors sans que rien ne
+l'annonce — et ressuscitait toute ligne de catalogue archivée.
+
+⚠ Si vous ajoutez un seeder : `updateOrCreate` avec un `statut` dans la charge
+utile est le piège. Voir CLAUDE.md § « Seeders — production only ».
+
 If you prefer to run them one at a time, the order is:
 
 ```bash

@@ -106,9 +106,17 @@ final class ReferentialDataSeeder extends Seeder
             $this->renommerAnciennesSalles($etab->id);
 
             // Rooms are named after German cities (German language school),
-            // 4 per branch — created once, capacity kept stable on re-run.
+            // 4 per branch — created once and never rewritten afterwards.
+            //
+            // ⚠ firstOrCreate, PAS updateOrCreate (07/09/2026) : `db:seed`
+            // est rejouable sur la production, et réécrire `capacite` /
+            // `statut` y annulait à chaque déploiement le travail de
+            // l'administrateur — une capacité corrigée depuis Paramètres >
+            // Salles revenait à la valeur du seeder, et une salle archivée
+            // (travaux, salle rendue) redevenait active et réapparaissait
+            // dans les sélecteurs de groupe.
             foreach (self::SALLES_PAR_CENTRE as $salleNom => $capacite) {
-                Salle::query()->updateOrCreate(
+                Salle::query()->firstOrCreate(
                     ['etablissement_id' => $etab->id, 'nom' => $salleNom],
                     ['capacite' => $capacite, 'statut' => Salle::STATUT_ACTIVE],
                 );

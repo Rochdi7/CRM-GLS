@@ -38,13 +38,27 @@ final class MotifAnnulationSeeder extends Seeder
             'Fin de formation' => MotifAnnulation::PORTEE_SEANCE,
         ];
 
+        // firstOrCreate pour les motifs ORDINAIRES (07/09/2026) : `db:seed`
+        // est rejouable sur la production, et réécrire `statut` y
+        // ressuscitait à chaque déploiement un motif qu'un administrateur
+        // avait archivé. `portee` reste corrigée sur une ligne existante,
+        // elle : c'est une donnée structurelle (elle décide dans QUEL
+        // sélecteur le motif apparaît, séance ou inscription), jamais une
+        // décision de l'utilisateur — l'écran ne l'expose pas.
         foreach ($motifs as $nom => $portee) {
-            MotifAnnulation::query()->updateOrCreate(
+            $motif = MotifAnnulation::query()->firstOrCreate(
                 ['nom' => $nom],
                 ['statut' => MotifAnnulation::STATUT_ACTIF, 'portee' => $portee],
             );
+
+            if ($motif->portee !== $portee) {
+                $motif->update(['portee' => $portee]);
+            }
         }
 
+        // Le motif SYSTÈME « Changement de groupe » garde updateOrCreate :
+        // il est posé par le code (ChangerGroupeInscription le cherche par
+        // son nom), donc il doit rester actif et is_system quoi qu'il arrive.
         MotifAnnulation::query()->updateOrCreate(
             ['nom' => MotifAnnulation::MOTIF_CHANGEMENT_GROUPE],
             ['statut' => MotifAnnulation::STATUT_ACTIF, 'is_system' => true, 'portee' => MotifAnnulation::PORTEE_INSCRIPTION],

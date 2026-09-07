@@ -596,6 +596,31 @@ the database layer. Non-negotiable invariants already enforced in code:
     dropdown, the header totals AND the rows) so the three cannot disagree,
     and prove the fix with a query rather than by reading the code. Tests:
     `tests/Feature/Backoffice/Access/HiddenAccountTest.php`.
+  - **⚠ EVERY list, dropdown, lookup and total — current and future — must
+    route through `HiddenAccount`.** The account is hidden by DISPLAY
+    filters, so a new screen is visible-by-default: the maintainer reappears
+    the moment a module ships a query nobody filtered. When adding any CRUD
+    index, option list, autocomplete, stat card or export that can surface an
+    **employee**, a **user**, a **caisse** or a **responsable name**, apply
+    the matching funnel in the read model (never in the React component):
+    `HiddenAccount::hideEmployees()` (usually automatic —
+    `Employee` is `#[ScopedBy(HiddenAccountScope::class)]`),
+    `hideUsers($query, $table)`, `hideCaisses()`. Two hidden logins exist and
+    both come from `HiddenAccount::emails()` — the technical
+    `EMAIL` and the GLS-domain `STAFF_EMAIL` (both are the developer;
+    established 07/09/2026 after « Caisse globale » listed two ROCHDI
+    KAROUALI tills). Never match one address by hand: filter through
+    `emails()` so a third address is one constant, not a repo-wide sweep.
+    `AuditLogRegistry::DEVELOPER_EMAIL` deliberately stays `EMAIL` ALONE —
+    the « Inclure le compte technique » toggle must keep meaning one account.
+    Three things this rule never becomes: a write-time skip (the journal
+    records both accounts in full — see the bullet above), an authorization
+    bypass (both hold `super-admin` and `Gate::before` treats them normally,
+    cash-transfer validation included), or a filter applied to GLS's own
+    business records. Hiding is display-only, so at least one super-admin
+    must stay VISIBLE (the CEO) or the Autorisations screen shows nobody who
+    can grant anything. Verify a new screen with a query as the CEO, not by
+    reading the code.
   - **The journal is append-only.** `App\Models\Activity` throws on update
     and delete (model level, below every Gate — so it holds even for a
     super-admin), and `backoffice.audit-logs.index` is the ONLY route:
@@ -899,6 +924,33 @@ an « Entrée » movement in Gestion du stock. It is idempotent per
 touches an existing quantity. Never give it a starting quantity again (the
 deleted version seeded 40 units per row — that is demo data).
 
+**⚠ A seeder GARNIT a catalog — it never reopens what an admin closed, and
+never takes a password back.** `db:seed` is meant to be re-run on the live
+database, and "re-runnable" means it must not undo a decision made through
+the UI (07/09/2026 audit, four offenders fixed):
+
+- **`AdminUserSeeder` writes `password` / `must_change_password` only when
+  the row is CREATED.** The previous version re-hashed on every run, so a
+  re-seed after a deploy put the CEO's account back on whatever
+  `ADMIN_PASSWORD` sat in the server `.env` — and flipped him back to
+  `must_change_password` — locking him out with nothing announcing it. A
+  password is changed from Profil or by reset; the seeder PROVISIONS an
+  account, it never takes one back over. `MaintainerUserSeeder` already did
+  this; copy that pattern for any future account seeder.
+- **Use `firstOrCreate`, not `updateOrCreate`, whenever the payload carries
+  `statut` or a user-tunable value** (`BanqueSeeder`, `FraisSeeder`, the
+  salles in `ReferentialDataSeeder`, the ordinary motifs in
+  `MotifAnnulationSeeder`). `updateOrCreate` there resurrected an archived
+  bank / room / frais / motif as ACTIVE at every deploy, and reset a
+  `capacite` or `montant_defaut` an admin had corrected in Paramètres.
+  `updateOrCreate` stays legitimate for rows the CODE looks up by name (the
+  `is_system` « Changement de groupe » motif must remain active) and for
+  structural fields the UI does not expose (`MotifAnnulation::portee`).
+
+Prove it by SIMULATION, never by reading the seeder: on a scratch DB, change
+the admin password, archive a bank + a room + a frais, tune an amount, re-run
+`db:seed --force`, and assert all of it survived.
+
 ⚠ **There is no demo/fake-data seeder any more, and none may be added.** The
 whole `Demo*` family (`DemoSeeder`, `DemoData`, `DemoFinance`,
 `DemoRoleUsers`, `DemoStock`, `DemoDashboard`, `DemoRecouvrement`,
@@ -1071,6 +1123,24 @@ keeps the primary column stable when an edit merely adds a center. Enforcing
   dans aucun preset (embaucher crée un login, et un « Responsable de
   système » crée un super-admin). Détail complet et tableau :
   `docs/roles-and-permissions.md` §5b.
+- **⚠ A physical front-desk GESTURE gets its own permission — never a wider
+  `*.update`** (07/09/2026). « Remise à la banque » and the rest of a
+  chèque's bank journey (En possession → Déposé → Encaissé | Rejeté, plus
+  « restitué ») are `cheques.deposit`, held by EVERY role through
+  `defaultForEveryRole()`; `cheques.update` — rewriting a chèque's owner,
+  number or amount — stays with the management roles. The employee who
+  physically carries the chèques to the bank is the one who records it, and
+  it is not a directeur. Merging the two would have handed the front office
+  the power to rewrite a money document, which the roles rework forbids
+  (§16). Safe because depositing touches NO caisse: `caisses.solde` did not
+  move when the chèque was recorded and does not move here; a rejection's
+  money consequences go through a remboursement, which keeps its own
+  permissions. Enforced in three places that must stay in sync —
+  `ChequePolicy::deposit()` (centre scope kept), the route middleware, and
+  the `canDeposit` prop the page uses to draw the menu item. Same shape as
+  `cash-transfers.validate`. Tests:
+  `RolesAndPermissionsSeederTest::test_every_role_can_deposit_a_cheque_at_the_bank`
+  (both halves: everyone deposits, the front office still cannot update).
 - **⚠ Only super-admin deletes.** `PermissionRegistry::superAdminOnly()`
   lists what no role preset may hold, and `matrix()` FILTERS every preset
   through it — so writing a `*.delete` into a preset has no effect, and a

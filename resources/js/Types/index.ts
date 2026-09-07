@@ -1856,6 +1856,8 @@ export interface ChequesPageProps {
     parents: ChequeParentOption[];
     canCreate: boolean;
     canUpdate: boolean;
+    /** Bank lifecycle moves (remise, encaissé, rejeté, restitué) — `cheques.deposit`, held by every role. */
+    canDeposit: boolean;
     [key: string]: unknown;
 }
 

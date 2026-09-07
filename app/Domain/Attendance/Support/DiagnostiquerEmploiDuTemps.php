@@ -135,20 +135,34 @@ final class DiagnostiquerEmploiDuTemps
         //    (Marrakech, 03/09/2026) avaient le lundi ouvert et le mardi au
         //    vendredi fermés au 01/09 : rien ne signalait les quatre jours
         //    manquants, ni à l'écran ni dans le premier balayage.
-        if ($creneauxOuverts < $creneauxTotal) {
-            $fermes = $creneauxTotal - $creneauxOuverts;
+        //
+        //    ⚠ Ce qui manque se compte en JOURS DÉCOUVERTS, jamais en créneaux
+        //    clôturés (signalé le 07/09/2026 sur « Yassine SEPT 10H »). Après un
+        //    changement d'enseignant, le sortant laisse un créneau clos et
+        //    l'entrant en a saisi un ouvert le MÊME jour : 5 clos sur 10 alors
+        //    que les cinq jours sont couverts et que rien ne manque. Comparer
+        //    les deux compteurs annonçait « emploi du temps incomplet » sur un
+        //    groupe parfaitement à jour, et envoyait rouvrir des créneaux
+        //    périmés — soit exactement le doublon que le détecteur signale
+        //    juste après. Seul un jour SANS aucun créneau ouvert est un trou.
+        $joursDecouverts = $this->joursSansCreneauOuvert($group);
+
+        if ($joursDecouverts !== []) {
+            $noms = array_map(
+                static fn (int $jour): string => Creneau::JOURS[$jour] ?? (string) $jour,
+                $joursDecouverts,
+            );
 
             return [
                 'code' => self::CRENEAUX_PARTIELS,
                 'titre' => "L'emploi du temps de ce groupe est incomplet.",
                 'message' => sprintf(
-                    "%d de ses %d créneaux sont clôturés : aucune séance n'est générée les jours "
-                        . "concernés, alors que les autres jours fonctionnent normalement.",
-                    $fermes,
-                    $creneauxTotal,
+                    "Aucune séance n'est générée le %s : le ou les créneaux de ce jour sont clôturés "
+                        . "et rien ne les remplace, alors que les autres jours fonctionnent normalement.",
+                    implode(', ', $noms),
                 ),
-                'action' => "Vérifiez les créneaux clôturés dans l'emploi du temps : rouvrez-les s'ils "
-                    . "sont toujours d'actualité, ou saisissez ceux qui les remplacent.",
+                'action' => "Saisissez le créneau qui remplace celui de ce jour dans l'emploi du temps, "
+                    . "ou rouvrez l'ancien s'il est toujours d'actualité.",
             ];
         }
 
@@ -190,5 +204,30 @@ final class DiagnostiquerEmploiDuTemps
         }
 
         return null;
+    }
+
+    /**
+     * Les jours de la semaine où ce groupe a un créneau CLÔTURÉ sans aucun
+     * créneau ouvert pour le remplacer — les seuls jours réellement muets.
+     *
+     * @return array<int, int> numéros de jour, dans l'ordre de la semaine
+     */
+    private function joursSansCreneauOuvert(Group $group): array
+    {
+        $parJour = $group->creneaux()
+            ->get(['jour_semaine', 'date_fin'])
+            ->groupBy('jour_semaine');
+
+        $decouverts = [];
+
+        foreach ($parJour as $jour => $creneaux) {
+            if ($creneaux->every(fn ($creneau): bool => $creneau->date_fin !== null)) {
+                $decouverts[] = (int) $jour;
+            }
+        }
+
+        sort($decouverts);
+
+        return $decouverts;
     }
 }
