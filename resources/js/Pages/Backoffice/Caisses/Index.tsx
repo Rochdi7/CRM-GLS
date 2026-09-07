@@ -284,6 +284,7 @@ export default function CaissesIndex({
     globale,
     transfers,
     transfersMontantTotal,
+    transfersSoldeCaisse,
     transferCaisses,
     transferStatuts,
     myCaisse,
@@ -330,6 +331,9 @@ export default function CaissesIndex({
     // dialog instead of an inline page alert.
     const [confirmAction, setConfirmAction] = useState<{ type: 'validate' | 'cancel'; row: CaisseTransferRow } | null>(null);
     const [actionError, setActionError] = useState<string | undefined>(undefined);
+    // Required only when cancelling a transfer the viewer is not party to
+    // (row.cancelNeedsMotif) — the server refuses an empty one.
+    const [motifAnnulation, setMotifAnnulation] = useState('');
     const [actionProcessing, setActionProcessing] = useState(false);
 
     // Destination choices — every accessible till EXCEPT the acting
@@ -460,6 +464,7 @@ export default function CaissesIndex({
     function closeConfirmAction() {
         setConfirmAction(null);
         setActionError(undefined);
+        setMotifAnnulation('');
     }
 
     function runConfirmAction() {
@@ -471,7 +476,15 @@ export default function CaissesIndex({
         const url = type === 'validate'
             ? `/backoffice/caisse-transfers/${row.id}/validate`
             : `/backoffice/caisse-transfers/${row.id}`;
-        const payload = type === 'validate' ? {} : { note: row.note ?? '', statut: 'Annulé' };
+        const payload = type === 'validate'
+            ? {}
+            : {
+                note: row.note ?? '',
+                statut: 'Annulé',
+                // Sent only when it is somebody else's transfer; the server
+                // decides whether it is mandatory (it knows who is a party).
+                ...(row.cancelNeedsMotif ? { motif_annulation: motifAnnulation } : {}),
+            };
 
         router.put(url, payload, {
             preserveScroll: true,
@@ -582,7 +595,21 @@ export default function CaissesIndex({
                         (GetCaisseTransfersList). Summing transfers.data here
                         totalled only the visible page, so the figure moved on
                         every page click while the filters were unchanged. */}
-                    <p className="px-3 fw-semibold">Total : {Number(transfersMontantTotal ?? 0).toFixed(2)}</p>
+                    {/* Two different questions, side by side: what the
+                        viewer personally holds (their own till, never a
+                        colleague's) and what has moved across the rows the
+                        current filters show. */}
+                    <div className="px-3 d-flex flex-wrap align-items-center gap-4 mb-2">
+                        {transfersSoldeCaisse !== null && (
+                            <span className="fw-semibold">
+                                <i className="ti ti-wallet me-1 text-success" />
+                                Ma caisse : {Number(transfersSoldeCaisse).toFixed(2)} DH
+                            </span>
+                        )}
+                        <span className="fw-semibold">
+                            Total des transferts : {Number(transfersMontantTotal ?? 0).toFixed(2)} DH
+                        </span>
+                    </div>
 
                     {transfers.data.length === 0 ? (
                         <EmptyState title="Aucun transfert" icon="ti ti-arrows-exchange" />
@@ -628,7 +655,11 @@ export default function CaissesIndex({
                                                         Modifier
                                                     </RowActionItem>
                                                 )}
-                                                {row.isPending && canUpdateTransfers && (
+                                                {/* Annuler: the two parties, plus the maintainer
+                                                    for any pending row (row.canCancel). Cancelling
+                                                    someone else's transfer asks for a reason in the
+                                                    dialog. */}
+                                                {row.canCancel && canUpdateTransfers && (
                                                     <RowActionItem icon="ti-x" onClick={() => openConfirmAction('cancel', row)}>
                                                         Annuler
                                                     </RowActionItem>
@@ -677,7 +708,9 @@ export default function CaissesIndex({
                 message={
                     confirmAction?.type === 'validate'
                         ? 'Vous confirmez avoir reçu ce montant. Les soldes des deux caisses vont bouger immédiatement.'
-                        : 'Le transfert sera marqué comme annulé — aucun solde ne bouge.'
+                        : confirmAction?.row.cancelNeedsMotif
+                            ? "Vous annulez le transfert d'un autre employé. Indiquez pourquoi : le motif est enregistré avec votre nom dans la note du transfert. Aucun solde ne bouge."
+                            : 'Le transfert sera marqué comme annulé — aucun solde ne bouge.'
                 }
                 recordLabel={
                     confirmAction
@@ -692,7 +725,24 @@ export default function CaissesIndex({
                 variant={confirmAction?.type === 'validate' ? 'primary' : 'danger'}
                 confirmLabel={confirmAction?.type === 'validate' ? 'Accepter' : "Oui, annuler"}
                 processingLabel={confirmAction?.type === 'validate' ? 'Validation…' : 'Annulation…'}
-            />
+            >
+                {confirmAction?.type === 'cancel' && confirmAction.row.cancelNeedsMotif && (
+                    <div className="text-start">
+                        <label className="form-label" htmlFor="motif-annulation-transfert">
+                            Motif de l'annulation <span className="text-danger">*</span>
+                        </label>
+                        <input
+                            id="motif-annulation-transfert"
+                            type="text"
+                            className="form-control"
+                            maxLength={255}
+                            value={motifAnnulation}
+                            onChange={(event) => setMotifAnnulation(event.target.value)}
+                            placeholder="ex : doublon, la caisse a déjà été vidée par un autre transfert"
+                        />
+                    </div>
+                )}
+            </ConfirmDialog>
 
             <Modal
                 show={showTransferModal}

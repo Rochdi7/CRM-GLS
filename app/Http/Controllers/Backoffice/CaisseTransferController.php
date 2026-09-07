@@ -13,6 +13,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\CaisseTransfers\StoreCaisseTransferRequest;
 use App\Http\Requests\Backoffice\CaisseTransfers\UpdateCaisseTransferRequest;
 use App\Models\CaisseTransfer;
+use App\Support\Access\HiddenAccount;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -107,10 +108,44 @@ final class CaisseTransferController extends Controller
                 || $employee->caisses()->whereKey($caisse_transfer->caisse_destination_id)->exists()
             );
 
-            if (! $isParty) {
+            // The maintainer may clear ANY pending transfer, including one he
+            // is no party to (07/09/2026). A request nobody acts on is a
+            // live hazard — TRF-021 sat pending for three days ready to
+            // debit 103 900,00 DH from a till that had since dropped to
+            // 4 800,00 DH — and until now only its two parties could clear
+            // it, so an abandoned one needed the very people who forgot it.
+            //
+            // ⚠ This account is HIDDEN from the journal's default view
+            // (HiddenAccount), so a third-party cancellation by him would
+            // otherwise leave no visible trace of who voided someone else's
+            // money movement. The mandatory `motif_annulation` below is what
+            // keeps that legible: it is written into the row's own note, in
+            // the record itself rather than only in the activity log.
+            $isMaintainer = HiddenAccount::isViewer($request->user());
+
+            if (! $isParty && ! $isMaintainer) {
                 throw ValidationException::withMessages([
                     'statut' => __('Only the requester or the recipient can cancel a transfer.'),
                 ]);
+            }
+
+            // Cancelling somebody ELSE's transfer must say why.
+            if (! $isParty && $isMaintainer) {
+                $motif = trim((string) ($data['motif_annulation'] ?? ''));
+
+                if ($motif === '') {
+                    throw ValidationException::withMessages([
+                        'motif_annulation' => __('A reason is required to cancel a transfer you are not party to.'),
+                    ]);
+                }
+
+                $data['note'] = trim(implode(' — ', array_filter([
+                    $caisse_transfer->note,
+                    __('Cancelled by :who: :motif', [
+                        'who' => $request->user()->name,
+                        'motif' => $motif,
+                    ]),
+                ])));
             }
         }
 

@@ -40,7 +40,7 @@ final class GetCreneauxGrille
      *     id: int, groupId: int, groupNom: string, groupNiveau: ?string,
      *     jourSemaine: int, heureDebut: string, heureFin: string,
      *     enseignant: ?string, enseignantId: ?int, salle: ?string, salleId: ?int,
-     *     clos: bool, dateFin: ?string,
+     *     clos: bool, dateFin: ?string, motifCloture: ?string,
      * }>
      */
     public function __invoke(User $user, array $filters = []): Collection
@@ -51,7 +51,7 @@ final class GetCreneauxGrille
         $jourFilter = $filters['jourFilter'] ?? '';
 
         return Creneau::query()
-            ->with(['group:id,nom,niveau,etablissement_id,annee_scolaire_id', 'enseignant:id,nom,prenom', 'salle:id,nom'])
+            ->with(['group:id,nom,niveau,etablissement_id,annee_scolaire_id,date_fin_formation', 'enseignant:id,nom,prenom', 'salle:id,nom'])
             ->whereHas('group', function ($q) use ($user): void {
                 $this->centerAccess->scopeAccessibleCenters($q, $user);
                 $this->scopeToActiveCenter($q);
@@ -65,6 +65,17 @@ final class GetCreneauxGrille
             ->when($jourFilter !== '', fn ($q) => $q->where('jour_semaine', (int) $jourFilter))
             ->orderBy('jour_semaine')
             ->orderBy('heure_debut')
+            // Deux créneaux peuvent partager le MÊME jour et la MÊME heure —
+            // c'est exactement ce que produit un changement d'enseignant :
+            // l'ancien créneau clôturé et le nouveau se superposent dans la
+            // case. Sans départage, PostgreSQL rend l'ordre qu'il veut et une
+            // colonne du tableau s'affiche à l'envers (signalé le 07/09/2026 :
+            // sur Yassine SEPT 10H, jeudi listait l'actif au-dessus du clos,
+            // les quatre autres jours l'inverse). On range donc TOUJOURS le
+            // vivant d'abord, puis l'id pour un ordre stable d'un rendu à
+            // l'autre.
+            ->orderByRaw('(date_fin is not null)')
+            ->orderBy('id')
             ->get()
             ->map(fn (Creneau $creneau): array => [
                 'id' => $creneau->id,
@@ -82,7 +93,42 @@ final class GetCreneauxGrille
                 // ne produit plus de séance et doit se voir comme telle.
                 'clos' => $creneau->date_fin !== null,
                 'dateFin' => $creneau->date_fin?->format('d/m/Y'),
+                'motifCloture' => $this->motifCloture($creneau),
             ]);
+    }
+
+    /**
+     * Pourquoi ce créneau est clos — la grille n'a pas à le redériver
+     * (§5 : un read-model porte la règle, l'écran l'affiche).
+     *
+     * Deux causes très différentes finissent dans la MÊME colonne
+     * `date_fin`, et les confondre alarmait pour rien (signalé le
+     * 07/09/2026) :
+     *
+     *  - `termine` — la formation du groupe est arrivée à son terme. C'est
+     *    la fin NORMALE d'un emploi du temps, l'équivalent d'un archivage :
+     *    il n'y a rien à corriger.
+     *  - `remplace` — le créneau a été fermé AVANT cette date, donc en cours
+     *    de formation : c'est ChangerEnseignantGroupe qui a séparé l'emploi
+     *    du temps du prof sortant pour la paie. Là encore rien d'anormal,
+     *    mais l'enseignant a changé.
+     *
+     * Un groupe sans `date_fin_formation` ne permet pas de trancher : on
+     * reste sur `remplace`, la cause de loin la plus fréquente.
+     */
+    private function motifCloture(Creneau $creneau): ?string
+    {
+        if ($creneau->date_fin === null) {
+            return null;
+        }
+
+        $finFormation = $creneau->group?->date_fin_formation;
+
+        if ($finFormation !== null && ! $creneau->date_fin->lt($finFormation)) {
+            return 'termine';
+        }
+
+        return 'remplace';
     }
 
     private function scopeToActiveCenter($query): void

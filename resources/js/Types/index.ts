@@ -601,6 +601,15 @@ export interface CreneauRow {
     clos: boolean;
     /** Date de clôture (d/m/Y), pour l'afficher sur la case grisée. */
     dateFin: string | null;
+    /**
+     * POURQUOI il est clos — calculé par GetCreneauxGrille, jamais redérivé
+     * ici. `termine` = la formation du groupe est allée à son terme (fin
+     * normale, rien à corriger) ; `remplace` = l'enseignant a changé en cours
+     * de route et l'emploi du temps sortant a été séparé pour la paie. Les
+     * deux étaient rendus par un badge rouge « Clôturé » identique, qui
+     * faisait passer une fin de formation pour une anomalie.
+     */
+    motifCloture: 'termine' | 'remplace' | null;
 }
 
 /** Edit form — one créneau, one day. */
@@ -1560,6 +1569,15 @@ export interface CaisseTransferRow {
      * CaisseTransferPolicy@validate is the real gate.
      */
     canValidate: boolean;
+    /**
+     * Cancelling is the two parties' call — plus the maintainer, who may
+     * clear ANY pending transfer (an abandoned request is a live hazard and
+     * otherwise needed the very people who forgot it). UI convenience only:
+     * the controller re-checks the same facts.
+     */
+    canCancel: boolean;
+    /** True when cancelling this row means cancelling somebody ELSE's transfer — a reason is then required. */
+    cancelNeedsMotif: boolean;
     showUrl: string;
 }
 
@@ -1615,6 +1633,13 @@ export interface CaissesPageProps {
     transfers: PaginatedData<CaisseTransferRow> | null;
     /** Montant summed over the WHOLE filtered set of transfers, not the visible page. */
     transfersMontantTotal: MoneyDisplay;
+    /**
+     * The viewer's OWN till balance — what they can actually transfer right
+     * now. Shown beside the transfer total because the two answer different
+     * questions: « how much do I hold » vs « how much has moved in this
+     * view ». Null when the account has no till.
+     */
+    transfersSoldeCaisse: MoneyDisplay | null;
     transferStatutCounts: Record<string, number>;
     transferCaisses: CaisseTransferFormOption[];
     transferStatuts: string[];

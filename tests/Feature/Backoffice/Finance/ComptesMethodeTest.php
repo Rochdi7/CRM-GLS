@@ -499,7 +499,15 @@ final class ComptesMethodeTest extends TestCase
     public function test_the_transfer_form_offers_cash_accounts_only(): void
     {
         $user = $this->userWith('cash-transfers.view', 'cash-transfers.create');
-        Employee::factory()->create(['etablissement_id' => $this->centre->id]); // another till
+        // ⚠ EmployeeFactory defaults to « Enseignant », and an EMPTY teacher
+        // till is hidden from destination lists (DormantTill) — a teacher
+        // never handles the school's money. Give this one a category that
+        // does, otherwise the dropdown is legitimately empty and the
+        // assertion below tests nothing.
+        Employee::factory()->create([
+            'etablissement_id' => $this->centre->id,
+            'categorie' => Employee::CATEGORIE_ASSISTANTE_ADMINISTRATIVE,
+        ]); // another till
 
         $this->actingAs($user)
             ->get(route('backoffice.caisses.index', ['tab' => 'transferts']))

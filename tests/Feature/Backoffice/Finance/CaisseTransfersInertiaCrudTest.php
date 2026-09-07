@@ -388,6 +388,11 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
     {
         $requester = $this->userWith('cash-transfers.view', 'cash-transfers.create', 'cash-transfers.update');
         $this->actingAs($requester);
+        // The source must actually HOLD the money: ValiderTransfertCaisse
+        // re-checks the balance under lock before moving anything, so an
+        // unfunded till makes the validation below fail and the test would
+        // then assert against a transfer that was never validated.
+        $requester->employee->caisses()->first()->update(['solde' => 1000]);
         $destination = $this->caisse(500);
         $this->post(route('backoffice.caisse-transfers.store'), [
             'caisse_destination_id' => $destination->id, 'montant' => '300',

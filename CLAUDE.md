@@ -705,6 +705,33 @@ the database layer. Non-negotiable invariants already enforced in code:
   les inscriptions déjà closes en base, et ne couvre pas `Changement`.
   Tests :
   `tests/Feature/Backoffice/Finance/RecouvrementInscriptionActiveTest.php`.
+- **⚠ Un groupe ne peut avoir DEUX créneaux ouverts sur la même case
+  horaire** (07/09/2026). `GenererSeancesDepuisCreneau` est idempotent PAR
+  CRÉNEAU : il ne recrée pas la séance du jour d'un créneau qui en a déjà une.
+  Deux créneaux jumeaux (même groupe + jour + heure de début, tous deux
+  `date_fin` NULL) produisent donc chacun légitimement la leur, et le job de
+  08:00 écrit deux séances identiques sans jamais se répéter lui-même — le
+  groupe se retrouve avec deux appels à faire pour la même classe
+  (« Ilyass sept 19H » : 5 créneaux saisis le 02/09, 5 identiques le 04/09).
+  Trois protections, chacune couvrant un trou que les autres ne voient pas :
+  (1) `CreneauController@store/@update` REFUSE une case déjà occupée via
+  `Domain\Attendance\Support\DetecteurCreneauxDoubles` — refus GLOBAL sur
+  une saisie multi-jours, sinon la moitié des créneaux passe et l'utilisateur
+  ne sait pas lesquels ; (2) le générateur ajoute une garde au niveau du
+  GROUPE + date + heure, pour les doublons DÉJÀ en base ; (3)
+  `DiagnostiquerEmploiDuTemps::CRENEAUX_DOUBLES` le signale sur la fiche ET la
+  liste des groupes — c'est le seul cas du diagnostic où rien ne MANQUE à
+  l'écran (l'emploi du temps paraît complet), donc le seul invisible sans
+  alerte ; il passe en dernier, un vrai blocage prime. Un créneau CLÔTURÉ
+  n'occupe jamais une case : c'est l'emploi du temps d'un enseignant parti,
+  conservé pour la paie, et le nouvel enseignant doit pouvoir reprendre le même
+  horaire. Rattrapage : `php artisan groupes:supprimer-creneaux-doubles`
+  (dry-run par défaut, `--apply`) — garde le plus ANCIEN de chaque paire, ne
+  supprime que les séances futures « Prévue » SANS présence, et CLÔTURE au lieu
+  de supprimer un créneau dont il reste des séances réelles. La liste des
+  groupes passe ses doublons pré-calculés (`doublonsParGroupe`, une requête
+  pour toute la page) — jamais une requête par ligne (§ perf). Tests :
+  `tests/Feature/Backoffice/Attendance/CreneauxDoublonsTest.php`.
 - **Étudiants & Inscriptions CRUD** (same React modal pattern as Employees).
   Students: `backoffice.students.index` (`Backoffice\StudentController`) —
   modal with photo upload (media `photo` collection, `/media/<uuid8>/…`

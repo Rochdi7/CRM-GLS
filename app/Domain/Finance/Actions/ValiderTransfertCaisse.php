@@ -73,6 +73,35 @@ final class ValiderTransfertCaisse
                 ]);
             }
 
+            // ⚠ The source must still HOLD the money, checked here — inside
+            // the transaction, on the locked row (CLAUDE.md §11: every
+            // "read a balance, then write" runs under lockForUpdate).
+            //
+            // A request captures `solde_source_avant` when it is filed, but
+            // days can pass before anyone validates, and the till keeps
+            // living in between. Reported 07/09/2026: Hafssa Elkhattabi
+            // filed TRF-021 for 103 900,00 DH on 04/09, nobody acted on it,
+            // she re-filed and had 103 400,00 DH validated on 07/09 — and
+            // the forgotten request was still sitting there, ready to debit
+            // 103 900,00 DH from a till holding 4 800,00 DH and to credit
+            // the recipient a second time. Validating it would have written
+            // a NEGATIVE balance, which no cash till can ever hold.
+            //
+            // Refusing here (rather than silently capping) leaves the row
+            // « En attente » so a human decides: cancel it, or transfer what
+            // the till actually holds.
+            if ((float) $source->solde < (float) $transfer->montant) {
+                throw ValidationException::withMessages([
+                    'statut' => __(
+                        'The source till only holds :solde MAD — not enough for this :montant MAD transfer. It has moved since the request was filed; cancel it or file a new one for the available amount.',
+                        [
+                            'solde' => number_format((float) $source->solde, 2, ',', ' '),
+                            'montant' => number_format((float) $transfer->montant, 2, ',', ' '),
+                        ],
+                    ),
+                ]);
+            }
+
             // Both legs go through the ledger so the journal shows the money
             // leaving one till AND arriving in the other — a transfer that only
             // logged one side would look like a loss.

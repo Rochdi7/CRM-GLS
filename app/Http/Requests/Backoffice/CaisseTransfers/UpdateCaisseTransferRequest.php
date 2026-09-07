@@ -29,6 +29,11 @@ final class UpdateCaisseTransferRequest extends FormRequest
         return [
             'note' => ['nullable', 'string'],
             'statut' => ['sometimes', Rule::in([CaisseTransfer::STATUT_ANNULE])],
+            // Only sent when the maintainer cancels a transfer he is NOT a
+            // party to. Whether it is REQUIRED is decided in the controller,
+            // which is the only place that knows if the acting user is a
+            // party — the rule here just lets the field through and caps it.
+            'motif_annulation' => ['nullable', 'string', 'max:255'],
         ];
     }
 }

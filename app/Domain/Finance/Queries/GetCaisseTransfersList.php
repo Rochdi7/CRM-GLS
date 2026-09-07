@@ -39,7 +39,7 @@ final class GetCaisseTransfersList
     public const TYPE_RECU = 'recu';
 
     /**
-     * @return array{data: LengthAwarePaginator, montantTotal: string}
+     * @return array{data: LengthAwarePaginator, montantTotal: string, soldeCaisse: string|null}
      */
     public function __invoke(
         User $user,
@@ -112,6 +112,21 @@ final class GetCaisseTransfersList
             'canValidate' => $t->statut === CaisseTransfer::STATUT_EN_ATTENTE
                 && in_array($t->caisse_destination_id, $myCaisseIds, true)
                 && $t->requested_by !== $myEmployeeId,
+                // Cancelling is normally the two parties' call. The
+                // maintainer may clear ANY pending transfer (07/09/2026 — an
+                // abandoned request is a live hazard and otherwise needed
+                // the very people who forgot it), and is then asked for a
+                // reason. Same facts the controller checks, so the button
+                // and the server cannot disagree; UI convenience only.
+                'canCancel' => $t->statut === CaisseTransfer::STATUT_EN_ATTENTE
+                    && ($t->requested_by === $myEmployeeId
+                        || in_array($t->caisse_destination_id, $myCaisseIds, true)
+                        || HiddenAccount::isViewer()),
+                // Drives the mandatory reason field: cancelling somebody
+                // else's transfer must say why.
+                'cancelNeedsMotif' => $t->statut === CaisseTransfer::STATUT_EN_ATTENTE
+                    && $t->requested_by !== $myEmployeeId
+                    && ! in_array($t->caisse_destination_id, $myCaisseIds, true),
                 'showUrl' => route('backoffice.caisse-transfers.show', $t),
             ];
         });
@@ -119,6 +134,18 @@ final class GetCaisseTransfersList
         return [
             'data' => $transfers,
             'montantTotal' => number_format((float) $montantTotal, 2, '.', ''),
+            // The viewer's OWN till balance — what they can actually transfer
+            // right now, shown beside the filtered transfer total so the two
+            // answer different questions: « how much do I hold » next to
+            // « how much has moved in this view » (07/09/2026).
+            //
+            // Deliberately their own till and nobody else's: a colleague's
+            // balance is not this screen's business, and the figure exists so
+            // somebody about to send money knows what is available. It is the
+            // stored, ledger-maintained `solde` (§11) — never recomputed from
+            // the rows above, which would ignore payments, expenses and
+            // refunds. Null when the account has no till at all.
+            'soldeCaisse' => $this->soldeDeMaCaisse($user),
         ];
     }
 
@@ -188,6 +215,21 @@ final class GetCaisseTransfersList
                 'nom' => $c->nom,
                 'solde' => number_format((float) $c->solde, 2, '.', ''),
             ]);
+    }
+
+    /**
+     * The viewer's own physical till balance, or null when they have none.
+     *
+     * Employee::till() — the « Caissière » till only, the same account
+     * CaisseResolver::tillOf() debits — never `caisses()->first()`, which
+     * would also return an « Externe » safe they happen to be responsable of
+     * (§11).
+     */
+    private function soldeDeMaCaisse(User $user): ?string
+    {
+        $till = $user->employee?->till()->first();
+
+        return $till === null ? null : number_format((float) $till->solde, 2, '.', '');
     }
 
     /**

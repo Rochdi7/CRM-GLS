@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Domain\Attendance\Support;
 
+use App\Models\Creneau;
 use App\Models\Group;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * Explique POURQUOI un groupe ne génère plus de séances automatiques.
@@ -37,12 +39,22 @@ final class DiagnostiquerEmploiDuTemps
 
     public const CRENEAUX_PARTIELS = 'creneaux_partiels';
 
+    public const CRENEAUX_DOUBLES = 'creneaux_doubles';
+
+    public function __construct(
+        private readonly DetecteurCreneauxDoubles $doubles,
+    ) {}
+
     /**
      * @return array{code: string, titre: string, message: string, action: string}|null
      *         null = le groupe génère normalement ses séances.
      */
-    public function __invoke(Group $group, int $creneauxTotal, int $creneauxOuverts): ?array
-    {
+    public function __invoke(
+        Group $group,
+        int $creneauxTotal,
+        int $creneauxOuverts,
+        ?Collection $doublonsPrecalcules = null,
+    ): ?array {
         // Un groupe terminé ou annulé n'est PAS censé générer des séances :
         // c'est l'état normal de fin de vie, pas une anomalie à signaler.
         if (in_array($group->statut, Group::STATUTS_HISTORIQUE, true)) {
@@ -137,6 +149,43 @@ final class DiagnostiquerEmploiDuTemps
                 ),
                 'action' => "Vérifiez les créneaux clôturés dans l'emploi du temps : rouvrez-les s'ils "
                     . "sont toujours d'actualité, ou saisissez ceux qui les remplacent.",
+            ];
+        }
+
+        // 6. Créneaux EN DOUBLE — le groupe génère bien ses séances, mais deux
+        //    fois par jour. Contrairement aux cinq cas ci-dessus, rien n'est
+        //    « manquant » : l'écran a l'air correct, seul l'appel se présente
+        //    en double, ce qui se remarque tard et fausse les présences. C'est
+        //    donc le dernier test — un vrai blocage prime toujours — mais il
+        //    doit exister, sinon le doublon reste invisible sur la fiche du
+        //    groupe (signalé le 07/09/2026 sur « Ilyass sept 19H » : cinq
+        //    créneaux saisis le 02/09, cinq identiques le 04/09).
+        // La LISTE passe ses doublons déjà calculés en une seule requête
+        // (doublonsParGroupe) ; la FICHE, qui n'affiche qu'un groupe, laisse
+        // le détecteur les chercher. Jamais une requête par ligne de liste.
+        $doublons = $doublonsPrecalcules ?? $this->doubles->doublons($group->id);
+
+        if ($doublons->isNotEmpty()) {
+            $jours = $doublons
+                ->map(fn ($c): string => sprintf(
+                    '%s %s',
+                    Creneau::JOURS[(int) $c->jour_semaine] ?? (string) $c->jour_semaine,
+                    substr((string) $c->heure_debut, 0, 5),
+                ))
+                ->unique()
+                ->implode(', ');
+
+            return [
+                'code' => self::CRENEAUX_DOUBLES,
+                'titre' => "L'emploi du temps de ce groupe est saisi en double.",
+                'message' => sprintf(
+                    "%d créneau(x) font double emploi (%s) : la même classe est planifiée deux fois, "
+                        . "donc deux séances sont créées chaque jour concerné et l'appel apparaît en double.",
+                    $doublons->count(),
+                    $jours,
+                ),
+                'action' => "Supprimez les créneaux en trop dans l'emploi du temps du groupe "
+                    . "(les séances futures encore « Prévue » partiront avec eux).",
             ];
         }
 

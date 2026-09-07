@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Groups\Queries;
 
+use App\Domain\Attendance\Support\DetecteurCreneauxDoubles;
 use App\Domain\Attendance\Support\DiagnostiquerEmploiDuTemps;
 use App\Models\Frais;
 use App\Models\Group;
@@ -33,6 +34,7 @@ final class GetGroupsList
         private readonly CenterAccessService $centerAccess,
         private readonly CurrentContext $context,
         private readonly DiagnostiquerEmploiDuTemps $diagnostic,
+        private readonly DetecteurCreneauxDoubles $doubles,
     ) {}
 
     public function __invoke(
@@ -92,6 +94,10 @@ final class GetGroupsList
             ->orderBy('nom')
             ->get(['id', 'nom']);
 
+        // Créneaux en double du LOT affiché — une seule requête pour toute la
+        // page, jamais une par ligne (§ perf). Voir DetecteurCreneauxDoubles.
+        $doublonsParGroupe = $this->doubles->doublonsParGroupe($groups->pluck('id'));
+
         $groups->through(fn (Group $group): array => [
             'id' => $group->id,
             'nom' => $group->nom,
@@ -114,6 +120,7 @@ final class GetGroupsList
                 $group,
                 (int) $group->creneaux_count,
                 (int) $group->creneaux_ouverts_count,
+                $doublonsParGroupe[$group->id] ?? collect(),
             ),
             'showUrl' => route('backoffice.groups.show', $group),
             // Keyed by frais_id so the edit modal can prefill the fee-lines

@@ -121,6 +121,122 @@ final class CreneauxInertiaCrudTest extends TestCase
             );
     }
 
+    /**
+     * ⚠ Régression 07/09/2026 — deux causes très différentes remplissent la
+     * MÊME colonne `date_fin`, et la grille les rendait d'un unique badge
+     * rouge « Clôturé » : une formation arrivée à son terme (fin NORMALE,
+     * rien à corriger) se lisait comme un incident. Le read-model nomme donc
+     * la cause, l'écran se contente de l'afficher.
+     */
+    public function test_a_creneau_closed_at_the_end_of_training_is_reported_as_finished(): void
+    {
+        $this->group->update(['date_fin_formation' => '2026-08-31']);
+
+        Creneau::create([
+            'group_id' => $this->group->id,
+            'jour_semaine' => 1,
+            'heure_debut' => '10:00',
+            'heure_fin' => '12:00',
+            // Fermé LE jour de la fin de formation : le groupe est allé à
+            // son terme.
+            'date_fin' => '2026-08-31',
+        ]);
+
+        $this->actingAs($this->userWith('attendance.view'))
+            ->get(route('backoffice.emploi-du-temps.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/EmploiDuTemps/Index', false)
+                ->where('creneaux.0.motifCloture', 'termine')
+            );
+    }
+
+    /**
+     * Le pendant : fermé AVANT la fin de formation, c'est un changement
+     * d'enseignant en cours de route — l'emploi du temps du sortant a été
+     * séparé pour la paie.
+     */
+    public function test_a_creneau_closed_mid_training_is_reported_as_a_teacher_handover(): void
+    {
+        $this->group->update(['date_fin_formation' => '2026-12-31']);
+
+        Creneau::create([
+            'group_id' => $this->group->id,
+            'jour_semaine' => 1,
+            'heure_debut' => '10:00',
+            'heure_fin' => '12:00',
+            'date_fin' => '2026-08-31',
+        ]);
+
+        $this->actingAs($this->userWith('attendance.view'))
+            ->get(route('backoffice.emploi-du-temps.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/EmploiDuTemps/Index', false)
+                ->where('creneaux.0.motifCloture', 'remplace')
+            );
+    }
+
+    /** Un créneau ouvert n'a aucun motif de clôture. */
+    public function test_an_open_creneau_has_no_closure_reason(): void
+    {
+        Creneau::create([
+            'group_id' => $this->group->id,
+            'jour_semaine' => 1,
+            'heure_debut' => '10:00',
+            'heure_fin' => '12:00',
+        ]);
+
+        $this->actingAs($this->userWith('attendance.view'))
+            ->get(route('backoffice.emploi-du-temps.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/EmploiDuTemps/Index', false)
+                ->where('creneaux.0.motifCloture', null)
+            );
+    }
+
+    /**
+     * ⚠ Régression 07/09/2026 — après un changement d'enseignant, l'ancien
+     * créneau clôturé et le nouveau partagent le MÊME jour et la MÊME heure.
+     * Le tri ne portait que sur (jour_semaine, heure_debut) : à égalité,
+     * PostgreSQL rendait l'ordre qu'il voulait et une colonne du tableau
+     * s'affichait à l'envers (sur Yassine SEPT 10H, jeudi listait l'actif
+     * au-dessus du clos, les quatre autres jours l'inverse). Le vivant passe
+     * toujours en premier.
+     */
+    public function test_a_live_creneau_is_always_listed_before_a_closed_one_in_the_same_slot(): void
+    {
+        // Créé EN PREMIER, donc plus petit id : sans le tri sur date_fin, il
+        // sortirait devant et le test passerait par accident.
+        $clos = Creneau::create([
+            'group_id' => $this->group->id,
+            'jour_semaine' => 4,
+            'heure_debut' => '10:00',
+            'heure_fin' => '12:30',
+            'date_fin' => '2026-08-31',
+        ]);
+
+        $actif = Creneau::create([
+            'group_id' => $this->group->id,
+            'jour_semaine' => 4,
+            'heure_debut' => '10:00',
+            'heure_fin' => '12:30',
+        ]);
+
+        $this->actingAs($this->userWith('attendance.view'))
+            ->get(route('backoffice.emploi-du-temps.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/EmploiDuTemps/Index', false)
+                ->has('creneaux', 2)
+                ->where('creneaux.0.id', $actif->id)
+                ->where('creneaux.0.clos', false)
+                ->where('creneaux.1.id', $clos->id)
+                ->where('creneaux.1.clos', true)
+            );
+    }
+
     /** Le pendant : un créneau ouvert n'est jamais marqué comme clôturé. */
     public function test_the_grid_does_not_mark_an_open_creneau(): void
     {

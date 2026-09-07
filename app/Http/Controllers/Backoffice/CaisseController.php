@@ -133,6 +133,9 @@ final class CaisseController extends Controller
             // React page used to sum its own rows, so the figure moved on
             // every page click while the filters were unchanged (27/08/2026).
             'transfersMontantTotal' => $transfersList['montantTotal'] ?? '0.00',
+            // The viewer's own till balance, shown beside that total: « how
+            // much do I hold » next to « how much has moved in this view ».
+            'transfersSoldeCaisse' => $transfersList['soldeCaisse'] ?? null,
             'transferStatutCounts' => $canViewTransfers && $tab === 'transferts'
                 ? $getCaisseTransfersList->statutCounts($user)
                 : [],

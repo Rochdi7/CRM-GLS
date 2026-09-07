@@ -415,7 +415,7 @@ export default function EmploiDuTempsIndex({
                                                         {rows.map((row) => (
                                                             <div
                                                                 key={row.id}
-                                                                className={`rounded p-2 mb-1 ${row.clos ? 'bg-light border border-danger-subtle opacity-75' : 'bg-primary-transparent'}`}
+                                                                className={`rounded p-2 mb-1 ${row.clos ? 'bg-light border opacity-75' : 'bg-primary-transparent'}`}
                                                                 style={{ cursor: permissions.update ? 'pointer' : 'default' }}
                                                                 onClick={() => permissions.update && openEdit(row)}
                                                             >
@@ -430,13 +430,26 @@ export default function EmploiDuTempsIndex({
                                                                       Case morte : ce créneau ne génère plus de
                                                                       séance. Sans ce repère, la grille donnait
                                                                       l'illusion d'un emploi du temps en place.
+
+                                                                      ⚠ Mais une case morte n'est pas une anomalie :
+                                                                      une formation qui arrive à son terme finit
+                                                                      NORMALEMENT ainsi. Le badge rouge unique
+                                                                      « Clôturé » faisait lire un archivage comme un
+                                                                      incident (signalé le 07/09/2026). On nomme donc
+                                                                      la cause — « Terminé » / « Remplacé » — en gris
+                                                                      neutre, le rouge étant réservé à ce qui appelle
+                                                                      une correction.
                                                                     */}
                                                                     {row.clos && (
                                                                         <span
-                                                                            className="badge badge-soft-danger ms-1"
-                                                                            title={`Créneau clôturé${row.dateFin ? ` le ${row.dateFin}` : ''} — il ne génère plus de séance.`}
+                                                                            className="badge badge-soft-secondary ms-1"
+                                                                            title={
+                                                                                row.motifCloture === 'termine'
+                                                                                    ? `Fin de formation${row.dateFin ? ` le ${row.dateFin}` : ''} — ce créneau ne génère plus de séance, c'est normal.`
+                                                                                    : `Enseignant remplacé${row.dateFin ? ` le ${row.dateFin}` : ''} — l'emploi du temps du prof sortant a été séparé pour la paie. Le nouvel enseignant a ses propres créneaux.`
+                                                                            }
                                                                         >
-                                                                            Clôturé
+                                                                            {row.motifCloture === 'termine' ? 'Terminé' : 'Remplacé'}
                                                                         </span>
                                                                     )}
                                                                 </div>

@@ -172,6 +172,12 @@ SELECT 'Produits consommables', false, 'Actif', now(), now()
 -- Motif : une dépense a été saisie par erreur sur une année passée restée
 -- sélectionnée dans le sélecteur du haut.
 ALTER TABLE annees_scolaires ADD COLUMN IF NOT EXISTS cloturee boolean NOT NULL DEFAULT false;
+-- 07/09/2026 — même table, colonne oubliée dans ce patch : « Inscriptions
+-- ouvertes » (annees_scolaires.inscription_ouverte) est elle aussi dans le
+-- create_annees_scolaires_table et manquait en production, ce qui faisait
+-- échouer TOUT enregistrement dans Paramètres → Années scolaires
+-- (AnneeScolaireController@persist écrit les deux colonnes ensemble).
+ALTER TABLE annees_scolaires ADD COLUMN IF NOT EXISTS inscription_ouverte boolean NOT NULL DEFAULT true;
 -- ---------------------------------------------------------------------------
 
 -- ---------------------------------------------------------------------------

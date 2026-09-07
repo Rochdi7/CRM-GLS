@@ -154,6 +154,25 @@ final class GenererSeancesDepuisCreneau
                 return;
             }
 
+            // ⚠ Deuxième garde, au niveau du GROUPE et non du créneau.
+            // L'idempotence ci-dessus ne protège que d'une relance sur LE MÊME
+            // créneau ; deux créneaux ouverts sur la même case horaire (emploi
+            // du temps saisi deux fois) produisent chacun légitimement leur
+            // séance, et le groupe se retrouve avec deux appels à faire pour
+            // la même classe (« Ilyass sept 19H », 07/09/2026). La cause se
+            // corrige à la saisie (CreneauController), mais un doublon déjà en
+            // base ne doit pas continuer à en fabriquer chaque matin : la
+            // classe n'a lieu qu'une fois, donc une seule séance existe.
+            $memeCase = Seance::query()
+                ->where('group_id', $group->id)
+                ->whereDate('date_seance', $aujourdhui->toDateString())
+                ->whereRaw('LEFT(heure_debut::text, 5) = ?', [substr((string) $creneau->heure_debut, 0, 5)])
+                ->exists();
+
+            if ($memeCase) {
+                return;
+            }
+
             Seance::create([
                 'group_id' => $group->id,
                 'creneau_id' => $creneau->id,

@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Backoffice;
 use App\Domain\Attendance\Actions\GenererSeancesDepuisCreneau;
 use App\Domain\Attendance\Queries\GetCreneauFormOptions;
 use App\Domain\Attendance\Queries\GetCreneauxGrille;
+use App\Domain\Attendance\Support\DetecteurCreneauxDoubles;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Attendance\StoreCreneauRequest;
@@ -68,8 +69,11 @@ final class CreneauController extends Controller
      * day — same group/time/teacher/room on each — letting a single submit
      * cover e.g. "Lundi, Mardi, Mercredi 10h-12h" instead of one request per day.
      */
-    public function store(StoreCreneauRequest $request, GenererSeancesDepuisCreneau $generer): RedirectResponse
-    {
+    public function store(
+        StoreCreneauRequest $request,
+        GenererSeancesDepuisCreneau $generer,
+        DetecteurCreneauxDoubles $doubles,
+    ): RedirectResponse {
         $this->authorize('create', Creneau::class);
 
         $data = $request->validated();
@@ -83,6 +87,16 @@ final class CreneauController extends Controller
 
         $jours = $data['jours_semaine'];
         unset($data['jours_semaine']);
+
+        // ⚠ Un même groupe ne peut pas avoir DEUX créneaux ouverts sur la même
+        // case horaire. Le générateur de séances est idempotent par créneau,
+        // pas par case : deux jumeaux produisent chacun leur séance et le
+        // groupe se retrouve avec deux appels à faire pour la même classe
+        // (« Ilyass sept 19H », 07/09/2026 — l'emploi du temps avait
+        // simplement été saisi deux fois, rien ne l'avait refusé). Le refus
+        // vit ICI, à l'écriture, parce qu'un doublon déjà en base ne se
+        // rattrape plus côté séance sans deviner laquelle garder.
+        $this->refuserJoursDejaPlanifies($doubles, (int) $data['group_id'], $jours, (string) $data['heure_debut']);
 
         $bloque = false;
         $sansDateDebut = false;
@@ -113,13 +127,29 @@ final class CreneauController extends Controller
             ->with('success', __('Schedule slot created.'));
     }
 
-    public function update(UpdateCreneauRequest $request, Creneau $creneau, GenererSeancesDepuisCreneau $generer): RedirectResponse
-    {
+    public function update(
+        UpdateCreneauRequest $request,
+        Creneau $creneau,
+        GenererSeancesDepuisCreneau $generer,
+        DetecteurCreneauxDoubles $doubles,
+    ): RedirectResponse {
         $this->authorize('update', $creneau);
         $this->assertGroupInContext($request, $creneau->group, 'salle_id');
 
         $data = $request->validated();
         $this->assertSalleDuCentre($data['salle_id'] ?? null, $creneau->group);
+
+        // Même règle qu'à la création — en excluant le créneau lui-même, sinon
+        // une simple correction (changer la salle) se croirait en conflit avec
+        // sa propre ligne.
+        if ($doubles->existeDeja((int) $creneau->group_id, (int) $data['jour_semaine'], (string) $data['heure_debut'], $creneau->id)) {
+            throw ValidationException::withMessages([
+                'heure_debut' => __('This group already has an open schedule slot on :day at :time. Edit that slot instead of creating a second one.', [
+                    'day' => Creneau::JOURS[(int) $data['jour_semaine']] ?? (string) $data['jour_semaine'],
+                    'time' => substr((string) $data['heure_debut'], 0, 5),
+                ]),
+            ]);
+        }
 
         $creneau->update($data);
         $generer->resynchroniser($creneau);
@@ -136,6 +166,40 @@ final class CreneauController extends Controller
 
         return redirect()->route('backoffice.emploi-du-temps.index')
             ->with('success', __('Schedule slot updated.'));
+    }
+
+    /**
+     * Refuse d'ouvrir un créneau sur une case déjà occupée par un créneau
+     * OUVERT du même groupe. Les jours fautifs sont tous nommés d'un coup :
+     * la saisie multi-jours en crée cinq à la fois, et n'en signaler qu'un
+     * ferait recommencer l'utilisateur cinq fois.
+     *
+     * @param  array<int, int|string>  $jours
+     */
+    private function refuserJoursDejaPlanifies(
+        DetecteurCreneauxDoubles $doubles,
+        int $groupId,
+        array $jours,
+        string $heureDebut,
+    ): void {
+        $deja = [];
+
+        foreach ($jours as $jour) {
+            if ($doubles->existeDeja($groupId, (int) $jour, $heureDebut)) {
+                $deja[] = Creneau::JOURS[(int) $jour] ?? (string) $jour;
+            }
+        }
+
+        if ($deja === []) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'jours_semaine' => __('This group already has an open schedule slot at :time on: :days. Edit the existing slot instead of creating a second one.', [
+                'time' => substr($heureDebut, 0, 5),
+                'days' => implode(', ', $deja),
+            ]),
+        ]);
     }
 
     /**
