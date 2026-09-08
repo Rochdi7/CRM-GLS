@@ -183,6 +183,28 @@ final class HiddenAccount
      */
     public static function hideUsers(Builder $query, string $table = 'users'): void
     {
+        // ⚠ OPT-IN, AND IT CANNOT BE A GLOBAL SCOPE. `Employee` hides
+        // itself automatically (HiddenAccountScope), so a page written next
+        // month is safe by default. `User` cannot do the same: Laravel's
+        // EloquentUserProvider builds its credential lookup with
+        // `newQuery()`, so a global scope there would apply DURING
+        // authentication and lock the maintainer out of his own login.
+        //
+        // Therefore EVERY query that lists, counts or exposes `users` must
+        // call this by hand — GetUsersList and GetActivityLogList already
+        // do. When adding a screen that surfaces a user (a picker, an
+        // export, a stat card), call it or the account reappears.
+        //
+        // ⚠ The same applies to `caisses` via hideCaisses(). A global scope
+        // was TRIED on Caisse (08/09/2026) and REVERTED: hides() is true
+        // whenever nobody is authenticated, so in console context the
+        // maintainer's tills vanished — `caisse:verifier-coherence` then
+        // reported them as « aucune caisse (caisses:provision la créera) »,
+        // and following that advice would have attempted duplicate tills
+        // against `caisses_une_caissiere_par_employe`. A finance job that
+        // silently skips two real tills is worse than the display leak it
+        // would have closed. Keep hideCaisses() opt-in.
+
         if (! self::hides()) {
             return;
         }
