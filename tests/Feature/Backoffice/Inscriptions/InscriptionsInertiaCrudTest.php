@@ -22,8 +22,8 @@ use Tests\TestCase;
  * Covers the new Inertia/React Inscriptions endpoints (InscriptionController)
  * built alongside the unchanged Livewire InscriptionsIndex fallback — see
  * InscriptionsCrudTest for the Livewire-side coverage of the same business
- * rules (docs/phase-9-inscriptions-audit.md +
- * docs/phase-9-inscriptions-mapping.md). Money/discount math mirrors
+ * rules (docs/rapports/migration-inertia/phase-9-inscriptions-audit.md +
+ * docs/rapports/migration-inertia/phase-9-inscriptions-mapping.md). Money/discount math mirrors
  * InscriptionFee::computeMontant() and is asserted server-side only — the
  * client-side preview is display-only and never trusted.
  */

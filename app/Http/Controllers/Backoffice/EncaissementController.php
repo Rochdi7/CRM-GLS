@@ -46,7 +46,7 @@ use Inertia\Response;
 
 /**
  * Payments list + create/edit with the cascading multi-row payment form
- * (Phase 10, docs/phase-10-finance-audit.md §2.4) — mirrors
+ * (Phase 10, docs/rapports/finance/phase-10-finance-audit.md §2.4) — mirrors
  * EncaissementsIndex one-for-one, including the multi-row single-submit
  * DB::transaction (an invalid row rolls back every row already processed in
  * this submit) and the per-row `fee->inscription_id === inscription_id`

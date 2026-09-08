@@ -11,7 +11,7 @@
         Same static asset strategy as the Blade/Livewire shell
         (components/backoffice/layout/head.blade.php) — one Bootstrap CSS
         instance, one set of icon fonts, never duplicated via npm imports
-        (docs/inertia-react-migration-audit.md §6.8/§6.10).
+        (docs/rapports/migration-inertia/inertia-react-migration-audit.md §6.8/§6.10).
     --}}
     <link rel="icon" type="image/png" sizes="96x96" href="{{ asset('assets/images/favicon/favicon-96x96.png') }}">
     <link rel="icon" type="image/svg+xml" href="{{ asset('assets/images/favicon/favicon.svg') }}">

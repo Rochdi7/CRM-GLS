@@ -25,8 +25,8 @@ use Tests\TestCase;
  * store/update, served from the Depenses tabbed page) built alongside the
  * unchanged Livewire RemboursementsIndex fallback — see
  * RemboursementsCrudTest for the Livewire-side coverage of the same
- * business rules (docs/phase-10-finance-audit.md §2.6). No maximum-refund
- * check is added (docs/phase-10-finance-mapping.md Q1: preserved) and no
+ * business rules (docs/rapports/finance/phase-10-finance-audit.md §2.6). No maximum-refund
+ * check is added (docs/rapports/finance/phase-10-finance-mapping.md Q1: preserved) and no
  * detail page is added (Q2: preserved).
  */
 final class RemboursementsInertiaCrudTest extends TestCase

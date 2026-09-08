@@ -23,7 +23,7 @@ use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 /**
- * Phase 6 (docs/phase-6-simple-crud-inventory.md) — Inertia/React Settings
+ * Phase 6 (docs/rapports/migration-inertia/phase-6-simple-crud-inventory.md) — Inertia/React Settings
  * page: Etablissements, Annees Scolaires, Salles, Frais tabs. Replaces the
  * retired Livewire-component tests (Livewire::test(...)) entirely — the UI
  * layer changed, not just its assertions.
@@ -326,7 +326,7 @@ final class SettingsTest extends TestCase
      * GetSallesList already implements this (same scopeToActiveCenter logic
      * as the retired SallesTab component); this test asserts it at the HTTP
      * level so the behavior stays covered once the Livewire component and
-     * its own test are removed (docs/phase-11-livewire-cleanup-audit.md
+     * its own test are removed (docs/rapports/migration-inertia/phase-11-livewire-cleanup-audit.md
      * §G.5).
      */
     public function test_salles_tab_is_scoped_to_the_selected_center(): void

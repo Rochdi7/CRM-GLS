@@ -135,7 +135,7 @@ function emptyRemboursementForm(): RemboursementFormState {
  * Remboursements). montant/caisse_id (and beneficiaire_id for refunds) are
  * server-derived and frozen — the forms never carry a caisse field — everything else stays editable, matching
  * DepensesIndex/RemboursementsIndex exactly. No max-refund-amount check and
- * no insufficient-balance check are added (docs/phase-10-finance-mapping.md
+ * no insufficient-balance check are added (docs/rapports/finance/phase-10-finance-mapping.md
  * Q1: preserved as-is).
  */
 export default function DepensesIndex({

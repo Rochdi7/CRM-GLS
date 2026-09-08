@@ -22,7 +22,7 @@ use Tests\TestCase;
  * Covers the new Inertia/React Depenses endpoints (DepenseController) built
  * alongside the unchanged Livewire DepensesIndex fallback — see
  * DepensesCrudTest for the Livewire-side coverage of the same business
- * rules (docs/phase-10-finance-audit.md §2.5).
+ * rules (docs/rapports/finance/phase-10-finance-audit.md §2.5).
  */
 final class DepensesInertiaCrudTest extends TestCase
 {

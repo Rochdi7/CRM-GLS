@@ -35,7 +35,7 @@ use Tests\TestCase;
 
 /**
  * Regression suite for the 24/08/2026 financial audit (see
- * docs/financial-audit-2026-08-24.md). Each test pins one bug that was found
+ * docs/rapports/finance/financial-audit-2026-08-24.md). Each test pins one bug that was found
  * in the live code or one invariant the fixes must keep true:
  *
  *  - the physical till is the Caissière row ONLY — never an Externe safe the

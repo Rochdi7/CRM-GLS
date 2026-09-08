@@ -9,7 +9,7 @@ use Illuminate\Foundation\Http\FormRequest;
 /**
  * Format-level validation only — CurrentContext::setAnneeScolaire()/
  * setEtablissement() are the actual authorization boundary (they silently
- * reject an inaccessible/invalid id; see docs/dashboard-livewire-to-inertia-map.md
+ * reject an inaccessible/invalid id; see docs/rapports/migration-inertia/dashboard-livewire-to-inertia-map.md
  * and the existing Context test suite this preserves). This Form Request
  * exists so the controller never touches raw, unvalidated request input.
  */

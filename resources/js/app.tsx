@@ -6,7 +6,7 @@ import './app.css';
 // Lazy glob (no `eager`) → every page becomes its own Vite chunk, fetched on
 // first visit and then browser-cached. The initial bundle carries only
 // React + Inertia + the shared component/layout graph
-// (Phase 12 bundle optimization — docs/phase12-performance-report.md).
+// (Phase 12 bundle optimization — docs/rapports/performance/phase12-performance-report.md).
 const pages = import.meta.glob<{ default: ComponentType }>('./Pages/**/*.tsx');
 
 createInertiaApp({

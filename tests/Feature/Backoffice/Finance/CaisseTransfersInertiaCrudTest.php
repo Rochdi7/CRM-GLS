@@ -20,7 +20,7 @@ use Tests\TestCase;
  * Caisses tabbed page) built alongside the unchanged Livewire
  * CaisseTransfersIndex fallback — see CaisseTransfersTest for the
  * Livewire-side coverage of the same business rules
- * (docs/phase-10-finance-audit.md §2.3).
+ * (docs/rapports/finance/phase-10-finance-audit.md §2.3).
  */
 final class CaisseTransfersInertiaCrudTest extends TestCase
 {

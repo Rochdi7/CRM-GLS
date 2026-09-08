@@ -10,7 +10,7 @@ use Illuminate\Validation\Rule;
 
 /**
  * Validates exactly the fields the current Livewire GroupsIndex form exposes
- * (docs/phase-8-students-groups-inventory.md) — no salle_id/capacite_max.
+ * (docs/rapports/migration-inertia/phase-8-students-groups-inventory.md) — no salle_id/capacite_max.
  *
  * `enseignant_date_debut` / `enseignant_motif` accompany a teacher swap: the
  * edit modal reveals them as soon as the selected teacher differs from the

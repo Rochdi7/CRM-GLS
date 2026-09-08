@@ -23,7 +23,7 @@ use Inertia\Response;
 
 /**
  * Two-step request/validate flow (Phase 10,
- * docs/phase-10-finance-audit.md §2.3 / §5): store() = request (balances
+ * docs/rapports/finance/phase-10-finance-audit.md §2.3 / §5): store() = request (balances
  * untouched) · validateAction() = approval by a DIFFERENT employee (balances
  * move, one transaction, self-validation refused). No destroy() — full
  * audit trail. Mirrors CaisseTransfersIndex one-for-one, including its
@@ -35,7 +35,7 @@ use Inertia\Response;
  * Caisses, matching the former Livewire-tab Blade shell exactly) — this
  * controller only handles the mutations + the detail page.
  *
- * docs/phase-10-finance-mapping.md Q3: the validate() action's
+ * docs/rapports/finance/phase-10-finance-mapping.md Q3: the validate() action's
  * "TODO(permissions phase): gate to Directeur-level roles" is carried
  * forward unaddressed, exactly matching current Livewire behavior — ships
  * gated by cash-transfers.validate only.

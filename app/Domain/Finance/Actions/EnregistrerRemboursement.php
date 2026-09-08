@@ -69,7 +69,7 @@ final class EnregistrerRemboursement
                 //
                 // ⚠ A refund with NO `encaissement_id` stays deliberately
                 // uncapped — that is the documented decision
-                // (docs/phase-10-finance-audit.md §2.6 Q1, asserted by
+                // (docs/rapports/finance/phase-10-finance-audit.md §2.6 Q1, asserted by
                 // test_no_maximum_refund_amount_check_exists): an outflow
                 // unrelated to any tracked payment has no amount to cap
                 // against. Only the linked case is constrained.

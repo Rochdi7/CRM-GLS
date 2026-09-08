@@ -18,7 +18,7 @@ use Inertia\Response;
  * Types de dépenses (expense types) CRUD — Inertia/React (Phase 6). Was
  * previously the 3rd tab of the Livewire Gestion des dépenses page; given
  * its own standalone page here since Depenses/Remboursements (the other two
- * tabs) are out of Phase 6 scope (docs/phase-6-simple-crud-inventory.md
+ * tabs) are out of Phase 6 scope (docs/rapports/migration-inertia/phase-6-simple-crud-inventory.md
  * §Q2) — mixing an Inertia tab with two Livewire tabs on one page isn't
  * viable. `backoffice.depenses.index?tab=types` used to render this
  * inline; the tab itself is now removed there (2-tab page) and any old

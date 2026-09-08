@@ -20,7 +20,7 @@ use Tests\TestCase;
  * Covers the new Inertia/React Students endpoints (StudentController) built
  * alongside the unchanged Livewire StudentsIndex fallback — see
  * StudentsCrudTest for the Livewire-side coverage of the same business
- * rules (docs/phase-8-students-groups-inventory.md).
+ * rules (docs/rapports/migration-inertia/phase-8-students-groups-inventory.md).
  */
 final class StudentsInertiaCrudTest extends TestCase
 {

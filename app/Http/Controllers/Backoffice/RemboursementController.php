@@ -23,14 +23,14 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Refund create/edit (Phase 10, docs/phase-10-finance-audit.md §2.6) —
+ * Refund create/edit (Phase 10, docs/rapports/finance/phase-10-finance-audit.md §2.6) —
  * mirrors RemboursementsIndex one-for-one. The list itself is served by
  * DepenseController@index (Remboursements shares its tabbed page with
  * Dépenses, matching the former Livewire-tab Blade shell exactly) — this
  * controller only handles the two mutations. No destroy(): a recorded
  * refund is never deleted (audit trail). No show(): Remboursements has zero
  * detail page anywhere in the live app and this phase does not add one
- * (docs/phase-10-finance-mapping.md Q2). No maximum-refund-amount check is
+ * (docs/rapports/finance/phase-10-finance-mapping.md Q2). No maximum-refund-amount check is
  * added either (Q1) — `min:0.01` remains the only numeric constraint,
  * matching current behavior exactly.
  */

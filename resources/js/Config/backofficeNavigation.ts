@@ -4,7 +4,7 @@ import { t } from '@/Lib/i18n';
 /**
  * The backoffice sidebar navigation. Every module is now a real Inertia
  * page (Phase 11 completed the Livewire→Inertia migration — see
- * docs/phase-11-final-verification.md) — every item below carries
+ * docs/rapports/migration-inertia/phase-11-final-verification.md) — every item below carries
  * `inertia: true` so NavLink renders an Inertia `<Link>` (SPA navigation)
  * instead of a plain anchor (full page reload). Add `inertia: true` to any
  * new item once its route is confirmed to return a real Inertia response.

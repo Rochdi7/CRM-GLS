@@ -27,7 +27,7 @@ use Tests\TestCase;
  * lifecycle moves.
  *
  * `date_paiement` is deliberately NOT covered here — it stays editable by
- * design (docs/phase-10-finance-audit.md §2.4); see the note in
+ * design (docs/rapports/finance/phase-10-finance-audit.md §2.4); see the note in
  * EncaissementController::update().
  */
 final class RefundAndPaymentInvariantsTest extends TestCase
@@ -168,7 +168,7 @@ final class RefundAndPaymentInvariantsTest extends TestCase
     }
 
     /**
-     * The documented decision (docs/phase-10-finance-audit.md §2.6 Q1) is
+     * The documented decision (docs/rapports/finance/phase-10-finance-audit.md §2.6 Q1) is
      * untouched: a refund tied to NO payment stays uncapped.
      */
     public function test_an_unlinked_refund_is_still_uncapped(): void

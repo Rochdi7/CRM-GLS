@@ -27,7 +27,7 @@ use Tests\TestCase;
  * Covers the new Inertia/React Encaissements endpoints (EncaissementController)
  * built alongside the unchanged Livewire EncaissementsIndex fallback — see
  * EncaissementsCrudTest for the Livewire-side coverage of the same business
- * rules (docs/phase-10-finance-audit.md §2.4).
+ * rules (docs/rapports/finance/phase-10-finance-audit.md §2.4).
  */
 final class EncaissementsInertiaCrudTest extends TestCase
 {

@@ -19,7 +19,7 @@ use Tests\TestCase;
  * Covers the new Inertia/React Groups endpoints (GroupController) built
  * alongside the unchanged Livewire GroupsIndex fallback — see
  * GroupsCrudTest for the Livewire-side coverage of the same business rules
- * (docs/phase-8-students-groups-inventory.md). Deliberately has NO
+ * (docs/rapports/migration-inertia/phase-8-students-groups-inventory.md). Deliberately has NO
  * room/capacity/schedule coverage — those fields do not exist in the
  * current UI (see the inventory doc's §Q on scope).
  */

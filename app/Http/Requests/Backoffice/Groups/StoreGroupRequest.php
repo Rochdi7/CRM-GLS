@@ -10,7 +10,7 @@ use Illuminate\Validation\Rule;
 
 /**
  * Validates exactly the fields the current Livewire GroupsIndex form exposes
- * (docs/phase-8-students-groups-inventory.md) — no salle_id/capacite_max,
+ * (docs/rapports/migration-inertia/phase-8-students-groups-inventory.md) — no salle_id/capacite_max,
  * which do not appear anywhere in the live UI. etablissement_id/
  * annee_scolaire_id are never form inputs: the controller always inherits
  * them from CurrentContext, matching GroupsIndex::save().

@@ -98,7 +98,7 @@ final class UsersInertiaTest extends TestCase
      * rule (whereDoesntHave('employee') OR employee in the active center);
      * this test asserts it at the HTTP level so the behavior stays covered
      * once CenterScopingTest.php (and the Livewire UsersIndex it tests) are
-     * removed (docs/phase-11-livewire-cleanup-audit.md §G.5).
+     * removed (docs/rapports/migration-inertia/phase-11-livewire-cleanup-audit.md §G.5).
      */
     public function test_index_follows_the_employee_center_but_keeps_admin_accounts(): void
     {

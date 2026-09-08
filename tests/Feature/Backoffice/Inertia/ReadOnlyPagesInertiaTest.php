@@ -25,7 +25,7 @@ use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 /**
- * Phase 5 (docs/phase-5-read-pages-inventory.md) — every migrated
+ * Phase 5 (docs/rapports/migration-inertia/phase-5-read-pages-inventory.md) — every migrated
  * read-only detail/index page. Verifies the Inertia contract (component,
  * safe minimal props) and the security invariants the task requires: no
  * sensitive fields, no full models, cross-center access denied exactly as

@@ -19,7 +19,7 @@ use Tests\TestCase;
  * (CaisseController@index/@journal) built alongside the unchanged Livewire
  * CaissesIndex/CaisseJournal fallback — see CaissesCrudTest/
  * CaisseManagementPageTest for the Livewire-side coverage of the same
- * business rules (docs/phase-10-finance-audit.md).
+ * business rules (docs/rapports/finance/phase-10-finance-audit.md).
  */
 final class CaissesInertiaCrudTest extends TestCase
 {

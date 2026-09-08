@@ -12,7 +12,7 @@ use Illuminate\Validation\Rule;
 /**
  * Validates the create-mode cascading multi-row payment form exactly as
  * EncaissementsIndex::rules() does (Phase 10,
- * docs/phase-10-finance-audit.md §2.4) — NOT the single-fee shape the
+ * docs/rapports/finance/phase-10-finance-audit.md §2.4) — NOT the single-fee shape the
  * pre-Phase-10 version of this Request used to validate (that shape never
  * matched the live Livewire form, which has always been multi-row; see the
  * audit's §7 "Store-vs-Livewire divergence" finding).

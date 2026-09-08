@@ -17,7 +17,7 @@ use Illuminate\Validation\ValidationException;
  * transaction — the edit-modal counterpart to the create form's fee-line
  * table (InscriptionController::store()), now made live for the first time
  * (registrations.manage-fees was previously only checked by a dead
- * controller — see docs/phase-9-inscriptions-audit.md §12 point 1).
+ * controller — see docs/rapports/migration-inertia/phase-9-inscriptions-audit.md §12 point 1).
  *
  * Lines carrying an `id` update that InscriptionFee row (amount/discount/
  * date/note only — statut is always recomputed from actual payments, never

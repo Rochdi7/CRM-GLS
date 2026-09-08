@@ -20,10 +20,10 @@ use Illuminate\Support\Facades\DB;
 /**
  * Read-model for the unified till journal ("Ma caisse" / "Journal des
  * transactions" tabs) — extracted verbatim from CaisseJournal::render()
- * (docs/phase-10-finance-mapping.md Q4: ported as-is, preserving the exact
+ * (docs/rapports/finance/phase-10-finance-mapping.md Q4: ported as-is, preserving the exact
  * current PHP-merge/sort/slice() pagination semantics — the confirmed
  * performance bottleneck is preserved, not fixed, in this phase; see
- * PERFORMANCE_AUDIT.md/PERFORMANCE_OPTIMIZATION_REPORT.md).
+ * docs/rapports/performance/PERFORMANCE_AUDIT.md et PERFORMANCE_OPTIMIZATION_REPORT.md).
  *
  * Merges 4 money trails (encaissements, depenses, remboursements,
  * transferts) into one chronological Collection per till scope
@@ -439,7 +439,7 @@ final class GetCaisseJournal
                         'agent' => $r->agent?->nomComplet(),
                         'centre' => $r->etablissement?->nom_centre,
                         // No detail page exists anywhere for Remboursements
-                        // (docs/phase-10-finance-mapping.md Q2: preserved).
+                        // (docs/rapports/finance/phase-10-finance-mapping.md Q2: preserved).
                         'url' => null,
                     ]),
             );

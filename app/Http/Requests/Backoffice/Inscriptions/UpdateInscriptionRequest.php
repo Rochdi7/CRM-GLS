@@ -8,7 +8,7 @@ use Illuminate\Foundation\Http\FormRequest;
 
 /**
  * Validates exactly the fields the current Livewire InscriptionsIndex form
- * exposes on EDIT (docs/phase-9-inscriptions-audit.md §4.7/§4.9) — only 5
+ * exposes on EDIT (docs/rapports/migration-inertia/phase-9-inscriptions-audit.md §4.7/§4.9) — only 5
  * columns are ever updated, never fees/totals/group. `date_debut`/
  * `date_fin` are taken directly from the request (NOT re-derived from the
  * group on update, unlike create — a confirmed, deliberate asymmetry

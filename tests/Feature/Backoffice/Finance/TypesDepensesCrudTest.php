@@ -18,7 +18,7 @@ use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 /**
- * Phase 6 (docs/phase-6-simple-crud-inventory.md §Q2) — Types de dépenses is
+ * Phase 6 (docs/rapports/migration-inertia/phase-6-simple-crud-inventory.md §Q2) — Types de dépenses is
  * now its own standalone Inertia page (was the 3rd tab of the Livewire
  * Gestion des dépenses page). Replaces the retired
  * Livewire::test(TypesDepensesIndex::class) assertions entirely.

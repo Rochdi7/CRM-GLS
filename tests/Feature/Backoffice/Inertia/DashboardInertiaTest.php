@@ -22,7 +22,7 @@ use Tests\TestCase;
  * Phase 4 (docs/inertia-react-migration-plan.md) — Dashboard converted from
  * the Livewire DashboardStats to Inertia (DashboardController +
  * GetDashboardStats). Query semantics preserved exactly — see
- * docs/dashboard-livewire-to-inertia-map.md — this file verifies the
+ * docs/rapports/migration-inertia/dashboard-livewire-to-inertia-map.md — this file verifies the
  * Inertia contract on top of that.
  */
 final class DashboardInertiaTest extends TestCase

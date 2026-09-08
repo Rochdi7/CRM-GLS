@@ -34,7 +34,7 @@ final class StoreRemboursementRequest extends FormRequest
             // Optional: picking one of the student's listed payments links
             // the refund back to it for traceability, but a refund unrelated
             // to any tracked payment is still allowed (no max-amount check —
-            // docs/phase-10-finance-audit.md §2.6 Q1, unchanged).
+            // docs/rapports/finance/phase-10-finance-audit.md §2.6 Q1, unchanged).
             'encaissement_id' => ['nullable', 'exists:encaissements,id'],
             // Cash accounts only, and only in a centre the user can reach.
             // The bounced-cheque exception stays server-side
