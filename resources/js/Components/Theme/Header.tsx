@@ -23,8 +23,10 @@ export default function Header({ user, context, canManageSettings, onMobileMenuT
     const [userMenuOpen, setUserMenuOpen] = useState(false);
     const [darkMode, setDarkMode] = useState(() => localStorage.getItem('gls-theme') === 'dark');
     const [miniSidebar, setMiniSidebar] = useState(() => localStorage.getItem('gls-mini-sidebar') === '1');
+    const [switching, setSwitching] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
     const avatarButtonRef = useRef<HTMLButtonElement>(null);
+    const themeButtonRef = useRef<HTMLButtonElement>(null);
 
     /*
      * The avatar menu is measured and rendered `position: fixed`, the same
@@ -45,10 +47,80 @@ export default function Header({ user, context, canManageSettings, onMobileMenuT
     // PreSkool dark mode: <html data-theme="dark"> (mainlayout.blade.php
     // variant) — the theme CSS handles everything else. Persisted like the
     // old Blade theme-settings component did (Phase 13 header parity).
+    //
+    // L'attribut est posé DANS un effect (et non dans le onClick) pour rester
+    // la seule écriture de `data-theme` : la bascule animée ci-dessous ne fait
+    // que décorer ce même effect. Le premier rendu ne doit rien animer — sinon
+    // chaque navigation Inertia qui remonte le header repeindrait l'écran.
+    const firstThemeRender = useRef(true);
+
     useEffect(() => {
-        document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
-        localStorage.setItem('gls-theme', darkMode ? 'dark' : 'light');
+        const root = document.documentElement;
+
+        const apply = () => {
+            root.setAttribute('data-theme', darkMode ? 'dark' : 'light');
+            localStorage.setItem('gls-theme', darkMode ? 'dark' : 'light');
+        };
+
+        if (firstThemeRender.current) {
+            firstThemeRender.current = false;
+            apply();
+
+            return;
+        }
+
+        const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        if (reducedMotion) {
+            apply();
+
+            return;
+        }
+
+        // Fondu des couleurs : actif uniquement pendant la bascule (voir
+        // app.css). Le timer est nettoyé au démontage pour ne pas laisser la
+        // classe collée si l'utilisateur navigue entre-temps.
+        root.classList.add('gls-theme-animating');
+        const timer = window.setTimeout(() => root.classList.remove('gls-theme-animating'), 520);
+
+        // Balayage circulaire depuis le bouton, quand le navigateur sait le
+        // faire. Origine = centre du bouton ; rayon = coin le plus éloigné,
+        // pour que le cercle couvre toujours toute la fenêtre.
+        const startViewTransition = (
+            document as Document & { startViewTransition?: (cb: () => void) => unknown }
+        ).startViewTransition?.bind(document);
+
+        if (!startViewTransition) {
+            apply();
+
+            return () => window.clearTimeout(timer);
+        }
+
+        const rect = themeButtonRef.current?.getBoundingClientRect();
+        const x = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+        const y = rect ? rect.top + rect.height / 2 : 0;
+        const radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
+
+        root.style.setProperty('--gls-theme-x', `${x}px`);
+        root.style.setProperty('--gls-theme-y', `${y}px`);
+        root.style.setProperty('--gls-theme-r', `${radius}px`);
+
+        startViewTransition(apply);
+
+        return () => window.clearTimeout(timer);
     }, [darkMode]);
+
+    // Rotation de l'icône : posée le temps de la bascule, retirée juste après
+    // pour que le glyphe revienne à sa position neutre.
+    useEffect(() => {
+        if (!switching) {
+            return;
+        }
+
+        const timer = window.setTimeout(() => setSwitching(false), 220);
+
+        return () => window.clearTimeout(timer);
+    }, [switching]);
 
     // PreSkool collapsed sidebar: body.mini-sidebar (#toggle_btn in the
     // theme header); Sidebar.tsx adds body.expand-menu on hover while
@@ -209,9 +281,13 @@ export default function Header({ user, context, canManageSettings, onMobileMenuT
                     <div className="d-flex align-items-center">
                         <div className="pe-1">
                             <button
+                                ref={themeButtonRef}
                                 type="button"
-                                className="btn btn-outline-light bg-white btn-icon me-1"
-                                onClick={() => setDarkMode((v) => !v)}
+                                className={`btn btn-outline-light bg-white btn-icon me-1 gls-theme-toggle${switching ? ' is-switching' : ''}`}
+                                onClick={() => {
+                                    setSwitching(true);
+                                    setDarkMode((v) => !v);
+                                }}
                                 aria-label={darkMode ? t('Switch to light mode') : t('Switch to dark mode')}
                                 aria-pressed={darkMode}
                             >

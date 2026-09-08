@@ -1615,3 +1615,105 @@ html[data-theme='dark'] .gls-payment-matrix > :not(caption) > * > * {
 .gls-absence-matrix .gls-absence-annulee .gls-absence-student a {
     color: #fff;
 }
+
+/*
+ * ---------------------------------------------------------------------------
+ * Bascule clair / sombre — animation
+ * ---------------------------------------------------------------------------
+ * Deux couches indépendantes, chacune dégradant proprement :
+ *
+ * 1. Le fondu des couleurs. Pendant la bascule seulement, `html.gls-theme-
+ *    animating` fait transiter background/color/border sur les surfaces
+ *    concernées. La classe est retirée par Header.tsx à la fin — une
+ *    transition permanente ralentirait chaque hover de ligne de tableau.
+ * 2. Le balayage circulaire depuis le bouton (View Transitions API,
+ *    Chrome/Edge/Safari 18). Là où l'API n'existe pas (Firefox), il ne reste
+ *    que le fondu, ce qui suffit.
+ *
+ * `prefers-reduced-motion` coupe les deux.
+ */
+html.gls-theme-animating,
+html.gls-theme-animating body,
+html.gls-theme-animating .header,
+html.gls-theme-animating .sidebar,
+html.gls-theme-animating .page-wrapper,
+html.gls-theme-animating .card,
+html.gls-theme-animating .modal-content,
+html.gls-theme-animating .dropdown-menu,
+html.gls-theme-animating .table,
+html.gls-theme-animating .table thead th,
+html.gls-theme-animating .table tbody td,
+html.gls-theme-animating .form-control,
+html.gls-theme-animating .form-select,
+html.gls-theme-animating .input-group-text,
+html.gls-theme-animating .nav-tabs,
+html.gls-theme-animating .nav-tabs .nav-link,
+html.gls-theme-animating .page-link,
+html.gls-theme-animating .badge,
+html.gls-theme-animating .btn {
+    transition:
+        background-color 320ms ease,
+        background 320ms ease,
+        border-color 320ms ease,
+        color 320ms ease,
+        box-shadow 320ms ease;
+}
+
+/* L'icône du bouton pivote et se substitue au lieu de sauter d'un glyphe à l'autre. */
+.gls-theme-toggle i {
+    display: inline-block;
+    transition: transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 200ms ease;
+}
+
+.gls-theme-toggle.is-switching i {
+    transform: rotate(180deg) scale(0.6);
+    opacity: 0;
+}
+
+/*
+ * Balayage circulaire. L'ancienne capture reste immobile et la nouvelle est
+ * révélée par un cercle qui s'ouvre depuis le bouton (coordonnées passées en
+ * variables par Header.tsx). Les deux captures se superposent sans mélange
+ * d'opacité, sinon le texte clignote au travers.
+ */
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+    z-index: 1;
+}
+
+::view-transition-new(root) {
+    z-index: 2;
+    animation: gls-theme-reveal 520ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes gls-theme-reveal {
+    from {
+        clip-path: circle(0% at var(--gls-theme-x, 50%) var(--gls-theme-y, 0%));
+    }
+    to {
+        clip-path: circle(var(--gls-theme-r, 150%) at var(--gls-theme-x, 50%) var(--gls-theme-y, 0%));
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html.gls-theme-animating,
+    html.gls-theme-animating * {
+        transition: none !important;
+    }
+
+    .gls-theme-toggle i,
+    .gls-theme-toggle.is-switching i {
+        transition: none;
+        transform: none;
+        opacity: 1;
+    }
+
+    ::view-transition-new(root) {
+        animation: none;
+    }
+}
