@@ -43,6 +43,13 @@ interface EmployeeFormState {
     salaire: string;
     /** An employee works in one or MORE centers — at least one is required. */
     etablissement_ids: number[];
+    /**
+     * The PRIMARY center — where the employee is based, and where its Caisse
+     * lives. Must be one of `etablissement_ids` (the server re-checks).
+     * Empty string = "no explicit choice": the server then keeps the current
+     * primary, or takes the first assigned center on a creation.
+     */
+    etablissement_principal_id: string;
     username: string;
 }
 
@@ -64,6 +71,7 @@ function emptyForm(defaultCountry: string, contextCenterId: number | null): Empl
         date_embauche: '',
         salaire: '',
         etablissement_ids: contextCenterId ? [contextCenterId] : [],
+        etablissement_principal_id: contextCenterId ? String(contextCenterId) : '',
         username: '',
     };
 }
@@ -128,6 +136,15 @@ export default function EmployeesIndex({
     const centerOptions: SelectOption[] = etablissements.map((etab) => ({ value: etab.id, label: etab.nom_centre }));
     const categorieFilterOptions: SelectOption[] = categories.map((categorie) => ({ value: categorie, label: categorie }));
 
+    // « Centre principal » may only ever be one of the ASSIGNED centres — a
+    // primary outside the assignment would place the employee's Caisse in a
+    // centre they cannot even reach. So the dropdown is derived from the
+    // multi-select above rather than from the full centre list, and the
+    // server re-checks it (StoreEmployeeRequest / UpdateEmployeeRequest).
+    const primaryCenterOptions: SelectOption[] = centerOptions.filter((option) =>
+        form.data.etablissement_ids.includes(Number(option.value)),
+    );
+
     function reload(nextFilters: Partial<typeof filters>) {
         router.get(
             '/backoffice/employees',
@@ -178,6 +195,9 @@ export default function EmployeesIndex({
                 : employee.etablissementId
                   ? [employee.etablissementId]
                   : [],
+            etablissement_principal_id: employee.etablissementId
+                ? String(employee.etablissementId)
+                : '',
         });
         setShowModal(true);
     }
@@ -689,12 +709,58 @@ export default function EmployeesIndex({
                                     options={centerOptions}
                                     placeholder="Choisir un ou plusieurs centres…"
                                     values={form.data.etablissement_ids.map(String)}
-                                    onChange={(values) =>
-                                        form.setData('etablissement_ids', values.map(Number))
-                                    }
+                                    onChange={(values) => {
+                                        const ids = values.map(Number);
+                                        // Un-assigning the centre that was the
+                                        // primary must not leave a dangling
+                                        // choice pointing outside the list:
+                                        // fall back to the first remaining one
+                                        // (same rule the server applies).
+                                        const current = Number(form.data.etablissement_principal_id);
+                                        const nextPrimary = ids.includes(current)
+                                            ? form.data.etablissement_principal_id
+                                            : ids.length > 0
+                                              ? String(ids[0])
+                                              : '';
+
+                                        form.setData((previous) => ({
+                                            ...previous,
+                                            etablissement_ids: ids,
+                                            etablissement_principal_id: nextPrimary,
+                                        }));
+                                    }}
                                     error={form.errors.etablissement_ids}
                                 />
                             </div>
+
+                            {/* The PRIMARY centre — where the employee is based
+                                and where its Caisse lives. Shown only once at
+                                least one centre is assigned, since it can only
+                                be chosen among them. ⚠ Changing it re-points
+                                `employees.etablissement_id` ONLY: it never moves
+                                the employee's till (CLAUDE.md §11, 01/09/2026) —
+                                the controller flashes a warning when the two end
+                                up in different centres, and re-homing a till
+                                stays an explicit action on « Comptes de caisse ». */}
+                            {form.data.etablissement_ids.length > 0 && (
+                                <div className="col-md-6">
+                                    <SelectField
+                                        id="emp-etab-principal"
+                                        label="Centre principal"
+                                        options={primaryCenterOptions}
+                                        placeholder="Premier centre affecté"
+                                        value={form.data.etablissement_principal_id}
+                                        onChange={(event) =>
+                                            form.setData('etablissement_principal_id', event.target.value)
+                                        }
+                                        error={form.errors.etablissement_principal_id}
+                                    />
+                                    <div className="form-text mt-n2 mb-3">
+                                        Centre de rattachement de l'employé, où se trouve sa
+                                        caisse. Le modifier ne déplace jamais la caisse.
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="col-md-4">
                                 <DateField

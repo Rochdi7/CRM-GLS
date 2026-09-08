@@ -14,7 +14,9 @@ use Illuminate\Pagination\LengthAwarePaginator;
 /**
  * Read-model for the Séances list — same center/year scoping recipe as
  * GetGroupsList (accessible centers ∩ active context center, active academic
- * year), search on the group name, newest session first.
+ * year), search on the group name. « Prévue » séances (roll call still to
+ * do) are listed FIRST, then everything else; within each block the newest
+ * session comes first.
  */
 final class GetSeancesList
 {
@@ -63,6 +65,7 @@ final class GetSeancesList
                 'group',
                 fn ($g) => $g->where('nom', 'ilike', "%{$search}%"),
             ))
+            ->orderByRaw('CASE WHEN statut = ? THEN 0 ELSE 1 END', [Seance::STATUT_PREVUE])
             ->orderByDesc('date_seance')
             ->orderByDesc('id')
             ->paginate($perPage)

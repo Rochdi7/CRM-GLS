@@ -121,6 +121,9 @@ export interface DashboardStats {
     parentsTotal: number;
     groupsTotal: number;
     groupsEnFormation: number;
+    groupsEnInscription: number;
+    groupsTermines: number;
+    groupsAnnules: number;
     inscriptionsTotal: number;
     inscriptionsActives: number;
     inscriptionsAnnulees: number;
@@ -1042,7 +1045,9 @@ export interface EmployeeRow {
     dateNaissance: string | null;
     dateEmbauche: string | null;
     salaire: MoneyDisplay | null;
-    /** Primary center (first assigned) — kept for the detail/edit defaults. */
+    /** Primary center — where the employee is based and its Caisse lives.
+     *  Chosen explicitly on the form (« Centre principal »); defaults to the
+     *  first assigned center. Always one of `etablissementIds`. */
     etablissementId: number | null;
     etablissement: string | null;
     /** Every center this employee is assigned to (always at least one). */
@@ -1283,6 +1288,12 @@ export interface GroupsFilters {
     dateFrom: string;
     dateTo: string;
     perPage: number;
+    /**
+     * Ordre de la liste : 'recent' (défaut) ou 'classification' (ordre CEFR
+     * A1.1 → B2.3). Le tri est fait en SQL par GetGroupsList — la page n'en
+     * réordonne jamais les lignes elle-même, la pagination étant côté serveur.
+     */
+    sort: string;
 }
 
 export interface GroupFormOption {

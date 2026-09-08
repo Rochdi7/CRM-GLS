@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Backoffice\AnneeScolaireController;
+use App\Http\Controllers\Backoffice\AuditLogController;
 use App\Http\Controllers\Backoffice\Auth\ForgotPasswordController;
 use App\Http\Controllers\Backoffice\Auth\LoginController;
 use App\Http\Controllers\Backoffice\Auth\LogoutController;
@@ -14,12 +15,12 @@ use App\Http\Controllers\Backoffice\ChequeController;
 use App\Http\Controllers\Backoffice\ContextController;
 use App\Http\Controllers\Backoffice\CreneauController;
 use App\Http\Controllers\Backoffice\DashboardController;
-use App\Http\Controllers\Backoffice\AuditLogController;
 use App\Http\Controllers\Backoffice\DepenseController;
 use App\Http\Controllers\Backoffice\Employees\EmployeeController;
 use App\Http\Controllers\Backoffice\EncaissementController;
 use App\Http\Controllers\Backoffice\EncaissementReallocationController;
 use App\Http\Controllers\Backoffice\EtablissementController;
+use App\Http\Controllers\Backoffice\FeeDueDateBulkController;
 use App\Http\Controllers\Backoffice\FraisController;
 use App\Http\Controllers\Backoffice\GroupController;
 use App\Http\Controllers\Backoffice\GroupHistoriqueController;
@@ -30,22 +31,22 @@ use App\Http\Controllers\Backoffice\Import\InscriptionImportController;
 use App\Http\Controllers\Backoffice\Import\PresenceImportController;
 use App\Http\Controllers\Backoffice\Import\StudentImportController;
 use App\Http\Controllers\Backoffice\InscriptionController;
+use App\Http\Controllers\Backoffice\LegacyReconciliationController;
 use App\Http\Controllers\Backoffice\MotifAnnulationController;
 use App\Http\Controllers\Backoffice\PermissionController;
 use App\Http\Controllers\Backoffice\ProfileController;
 use App\Http\Controllers\Backoffice\RapportController;
-use App\Http\Controllers\Backoffice\FeeDueDateBulkController;
 use App\Http\Controllers\Backoffice\RecouvrementController;
 use App\Http\Controllers\Backoffice\RemboursementController;
 use App\Http\Controllers\Backoffice\Roles\RoleController;
+use App\Http\Controllers\Backoffice\SalleController;
 use App\Http\Controllers\Backoffice\SeanceController;
 use App\Http\Controllers\Backoffice\SettingController;
-use App\Http\Controllers\Backoffice\SystemSettingController;
-use App\Http\Controllers\Backoffice\SalleController;
 use App\Http\Controllers\Backoffice\StockController;
 use App\Http\Controllers\Backoffice\StockTypeController;
 use App\Http\Controllers\Backoffice\StudentController;
 use App\Http\Controllers\Backoffice\StudentMergeController;
+use App\Http\Controllers\Backoffice\SystemSettingController;
 use App\Http\Controllers\Backoffice\TypeDepenseController;
 use App\Http\Controllers\Backoffice\Users\UserAuthorizationController;
 use App\Http\Controllers\Backoffice\Users\UserController;
@@ -548,6 +549,28 @@ Route::prefix('backoffice')
             Route::post('bulk-echeance', [FeeDueDateBulkController::class, 'update'])
                 ->middleware('permission:fee-due-dates.bulk-update')->name('bulk-echeance.update');
 
+            // Reconciliation des paiements importes — l'interface de
+            // `paiements:reconcilier` (docs/legacy-import-cli.md) : compare
+            // l'export de l'ancien CRM aux paiements en base et rattache
+            // chaque paiement au frais que nomme SON FICHIER SOURCE.
+            //
+            // ⚠ RESERVE AU COMPTE DE MAINTENANCE : c'est une IDENTITE, pas
+            // une permission, et elle n'est accordable a personne
+            // (AppServiceProvider::MAINTAINER_ONLY_ABILITIES, decidee
+            // AU-DESSUS du bypass super-admin — meme mecanique que
+            // GroupPolicy@updateClosed). L'outil reecrit l'affectation
+            // d'argent deja encaisse en lisant des fichiers du serveur :
+            // outil de reparation de donnees, pas ecran d'exploitation.
+            //
+            // Hors de la barre laterale, comme bulk-echeance ci-dessus —
+            // et, comme elle, ce n'est PAS ce qui le protege : le gate
+            // ci-dessous decide, le controleur reverifie, et le Form
+            // Request rejoue l'identite (§16).
+            Route::get('reconciliation-paiements', [LegacyReconciliationController::class, 'index'])
+                ->middleware('can:legacy-payments.reconcile')->name('reconciliation-paiements.index');
+            Route::post('reconciliation-paiements', [LegacyReconciliationController::class, 'run'])
+                ->middleware('can:legacy-payments.reconcile')->name('reconciliation-paiements.run');
+
             // Gestion des recouvrements — read-only overdue-fees report
             // (GetRetardsList). Two client-side tabs ("Retards selon la
             // durée" / "Retards selon les critères") share the same query.
@@ -584,7 +607,6 @@ Route::prefix('backoffice')
             // super-admin (payments.detach ∈ superAdminOnly).
             Route::post('encaissements/{encaissement}/detach', [EncaissementController::class, 'detach'])
                 ->middleware('permission:payments.detach')->name('encaissements.detach');
-
 
             // Chèques — off-ledger inventory of physical checks in hand
             // (garantie / à déposer), tracked reception -> dépôt ->

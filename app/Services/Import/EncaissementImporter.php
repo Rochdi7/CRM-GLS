@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Import;
 
+use App\Domain\Finance\Support\CaisseResolver;
 use App\Domain\Payments\Actions\EnregistrerEncaissement;
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Models\Cheque;
@@ -14,17 +15,17 @@ use App\Models\ImportRow;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
 use App\Models\Student;
-use Illuminate\Support\Facades\Schema;
-use App\Domain\Finance\Support\CaisseResolver;
 use App\Services\Import\Concerns\TracksBatchProgress;
 use App\Services\Import\Contracts\Importer;
 use App\Services\Import\DTO\ImportContext;
 use App\Services\Import\DTO\ImportResult;
 use App\Services\Import\Exceptions\ImportCellParseException;
 use App\Services\Import\Support\CellNormalizer;
+use App\Services\Import\Support\LegacyLabels;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Legacy "Relevé des Encaissements" export -> encaissements. An Encaissement
@@ -66,27 +67,19 @@ final class EncaissementImporter implements Importer
      * the loose fallback, which piled them onto whatever line was still
      * unpaid (26/08/2026). Monthly fees are unaffected: they already match
      * exactly.
+     *
+     * @see LegacyLabels — the shared source, also read by paiements:reconcilier
+     *                     so the importer and the reconciler never drift apart.
      */
-    private const array FRAIS_ALIASES = [
-        "frais d'inscription" => "Frais d'inscription A1/A2/B1",
-        "frais d'inscription 1" => "Frais d'inscription A1/A2/B1",
-        "frais d'inscription a1" => "Frais d'inscription A1/A2/B1",
-        "frais d'inscription a2" => "Frais d'inscription A1/A2/B1",
-        "frais d'inscription b1" => "Frais d'inscription A1/A2/B1",
-        "frais d'inscription 2" => "Frais d'inscription B2",
-    ];
+    private const array FRAIS_ALIASES = LegacyLabels::FRAIS_ALIASES;
 
-    /** File label => Encaissement::METHODE_* — "Virement bancaire" is NOT a literal match. */
-    private const array METHODE_MAP = [
-        'Espèces' => Encaissement::METHODE_ESPECES,
-        'TPE' => Encaissement::METHODE_TPE,
-        'Virement bancaire' => Encaissement::METHODE_VIREMENT,
-        'Chèque' => Encaissement::METHODE_CHEQUE,
-        // The legacy CRM writes "Chéque" (e-acute) — a misspelling of
-        // "Chèque". Both map to the same method; without this the whole
-        // cheque column lands in ERREUR as an unknown méthode.
-        'Chéque' => Encaissement::METHODE_CHEQUE,
-    ];
+    /**
+     * File label => Encaissement::METHODE_* — "Virement bancaire" is NOT a
+     * literal match.
+     *
+     * @see LegacyLabels — shared with paiements:reconcilier.
+     */
+    private const array METHODE_MAP = LegacyLabels::METHODE_MAP;
 
     /**
      * Per-analyze()-call caches, rebuilt fresh every call — real exports can
@@ -131,8 +124,8 @@ final class EncaissementImporter implements Importer
 
     /**
      * @var array<string, true>|null fallback dedupe composite keys
-     * ("studentId|montant|date|methode|inscriptionFeeId") of every existing
-     * encaissement, preloaded once — used when a row has no legacy_ref.
+     *                               ("studentId|montant|date|methode|inscriptionFeeId") of every existing
+     *                               encaissement, preloaded once — used when a row has no legacy_ref.
      */
     private ?array $existingEncaissementCompositeKeys = null;
 
@@ -575,7 +568,6 @@ final class EncaissementImporter implements Importer
         }
     }
 
-
     /** @param array<string, mixed> $rawRow */
     private function analyzeRow(ImportBatch $batch, int $rowNumber, array $rawRow, array $operateurEmployees): void
     {
@@ -804,7 +796,7 @@ final class EncaissementImporter implements Importer
      * row — flushed in bulk via flushPendingRows() every
      * INSERT_BUFFER_SIZE rows, and once more at the end of analyze().
      *
-     * @param array<string, mixed> $attributes
+     * @param  array<string, mixed>  $attributes
      */
     private function pushPendingRow(ImportBatch $batch, int $rowNumber, array $attributes): void
     {

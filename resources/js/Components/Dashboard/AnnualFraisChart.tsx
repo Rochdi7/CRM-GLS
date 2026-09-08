@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AnnualFraisSummary } from '@/Types';
 import { t } from '@/Lib/i18n';
 
@@ -28,8 +28,17 @@ const SERIES: SeriesSpec[] = [
     { key: 'encaissements', label: 'All payments received', color: '#E83E8C' },
 ];
 
-const WIDTH = 1000;
+/**
+ * The SVG is drawn at the container's REAL pixel width (measured with a
+ * ResizeObserver) rather than a fixed 1000-unit viewBox stretched to fit:
+ * with a scaled viewBox every 11px axis label grew with the screen, so on a
+ * 2 500px monitor the axis read "2000000" in ~28px type and the whole card
+ * looked like a blown-up thumbnail. Real pixels keep the type at 11px on
+ * every screen; only the plot itself stretches.
+ */
+const FALLBACK_WIDTH = 1000;
 const HEIGHT = 320;
+const HEIGHT_MOBILE = 240;
 // Wide enough for a fully-written, ungrouped axis label ("40000000" at 11px)
 // — see formatAxis: the abbreviated "40 M" form fitted 56px, the full one does
 // not. Ungrouped digits are narrower than the space-separated form.
@@ -111,6 +120,42 @@ function smoothTop(points: Point[], minY: number, maxY: number): string {
  */
 export default function AnnualFraisChart({ data, periode }: AnnualFraisChartProps) {
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+    // Legend pills toggle a series off/on — a reader comparing "collecté"
+    // with "reste à payer" can silence the three others instead of
+    // squinting through five overlapping areas.
+    const [hidden, setHidden] = useState<Set<string>>(() => new Set());
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const [WIDTH, setWidth] = useState(FALLBACK_WIDTH);
+
+    useEffect(() => {
+        const el = containerRef.current;
+        if (!el || typeof ResizeObserver === 'undefined') return;
+
+        const observer = new ResizeObserver((entries) => {
+            const w = Math.round(entries[0]?.contentRect.width ?? 0);
+            if (w > 0) setWidth(w);
+        });
+        observer.observe(el);
+
+        return () => observer.disconnect();
+    }, []);
+
+    const isNarrow = WIDTH < 640;
+    const HEIGHT_PX = isNarrow ? HEIGHT_MOBILE : HEIGHT;
+    const visibleSeries = SERIES.filter((s) => !hidden.has(s.key));
+
+    function toggleSeries(key: string) {
+        setHidden((prev) => {
+            const next = new Set(prev);
+            if (next.has(key)) {
+                next.delete(key);
+            } else if (next.size < SERIES.length - 1) {
+                // Never hide the last visible series — an empty chart reads as broken data.
+                next.add(key);
+            }
+            return next;
+        });
+    }
 
     const values = useMemo(
         () =>
@@ -121,13 +166,18 @@ export default function AnnualFraisChart({ data, periode }: AnnualFraisChartProp
         [data],
     );
 
+    // The scale follows the VISIBLE series, so hiding the tallest one lets the
+    // remaining curves use the whole height instead of hugging the baseline.
     const maxValue = useMemo(() => {
-        const all = SERIES.flatMap((s) => values[s.key]);
+        const all = visibleSeries.flatMap((s) => values[s.key]);
         return niceMax(Math.max(1, ...all));
-    }, [values]);
+    }, [values, visibleSeries]);
 
     const plotWidth = WIDTH - PAD_LEFT - PAD_RIGHT;
-    const plotHeight = HEIGHT - PAD_TOP - PAD_BOTTOM;
+    const plotHeight = HEIGHT_PX - PAD_TOP - PAD_BOTTOM;
+    // Twelve "MM/YYYY" labels at 11px need ~55px each: thin them out as the
+    // plot narrows (every other one under 640px, one in three under 420px).
+    const labelStep = WIDTH < 420 ? 3 : isNarrow ? 2 : 1;
     const count = data.months.length;
     const xFor = (i: number) => PAD_LEFT + (count <= 1 ? 0 : (i / (count - 1)) * plotWidth);
     const yFor = (v: number) => PAD_TOP + plotHeight - (v / maxValue) * plotHeight;
@@ -151,26 +201,46 @@ export default function AnnualFraisChart({ data, periode }: AnnualFraisChartProp
     const gridLines = [0, 0.25, 0.5, 0.75, 1];
 
     return (
-        <div className="card gls-frais-chart">
-            <div className="card-header d-flex align-items-center justify-content-between flex-wrap pb-0">
-                <div className="mb-3">
-                    <h4 className="mb-1">{t('Annual fees summary')}</h4>
+        <div className="card gls-frais-chart gls-dash-card">
+            <div className="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div>
+                    <h4 className="card-title mb-1">{t('Annual fees summary')}</h4>
                     <p className="text-muted mb-0">{t('Annual fees overview')}</p>
                 </div>
-                <div className="d-flex align-items-center gap-2 mb-3">
-                    <i className="ti ti-calendar text-muted" />
-                    <span className="text-muted">{t('Academic year')}</span>
-                    <span className="badge bg-light text-dark fs-13">{periode}</span>
-                </div>
+                <span className="badge badge-soft-primary fs-13">
+                    <i className="ti ti-calendar me-1" />
+                    {t('Academic year')} {periode}
+                </span>
             </div>
-            <div className="card-body pt-2">
-                <div className="position-relative">
+            <div className="card-body">
+                <div className="gls-frais-legend" role="group" aria-label={t('Click to hide or show a series')}>
+                    {SERIES.map((s) => {
+                        const off = hidden.has(s.key);
+
+                        return (
+                            <button
+                                type="button"
+                                key={s.key}
+                                className={`gls-frais-legend-pill${off ? ' is-off' : ''}`}
+                                aria-pressed={!off}
+                                title={t('Click to hide or show a series')}
+                                onClick={() => toggleSeries(s.key)}
+                            >
+                                <span className="gls-frais-legend-dot" style={{ backgroundColor: s.color }} aria-hidden="true" />
+                                {t(s.label)}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                <div className="position-relative" ref={containerRef}>
                     <svg
-                        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+                        width={WIDTH}
+                        height={HEIGHT_PX}
+                        viewBox={`0 0 ${WIDTH} ${HEIGHT_PX}`}
                         role="img"
                         aria-label={t('Annual fees overview')}
-                        className="w-100"
-                        style={{ display: 'block' }}
+                        style={{ display: 'block', maxWidth: '100%' }}
                         onMouseLeave={() => setHoverIndex(null)}
                     >
                         <defs>
@@ -194,10 +264,10 @@ export default function AnnualFraisChart({ data, periode }: AnnualFraisChartProp
                             );
                         })}
 
-                        {SERIES.map((s) => (
+                        {visibleSeries.map((s) => (
                             <path key={`area-${s.key}`} d={areaPath(s.key)} fill={`url(#gls-frais-grad-${s.key})`} stroke="none" />
                         ))}
-                        {SERIES.map((s) => (
+                        {visibleSeries.map((s) => (
                             <path
                                 key={`line-${s.key}`}
                                 d={linePath(s.key)}
@@ -232,7 +302,7 @@ export default function AnnualFraisChart({ data, periode }: AnnualFraisChartProp
                                     strokeWidth={1}
                                     strokeDasharray="4 3"
                                 />
-                                {SERIES.map((s) => (
+                                {visibleSeries.map((s) => (
                                     <circle
                                         key={`dot-${s.key}`}
                                         cx={xFor(hoverIndex)}
@@ -247,16 +317,18 @@ export default function AnnualFraisChart({ data, periode }: AnnualFraisChartProp
                         )}
 
                         {data.months.map((label, i) => (
-                            <text
-                                key={label}
-                                x={xFor(i)}
-                                y={HEIGHT - 8}
-                                textAnchor="middle"
-                                fontSize={11}
-                                fill="var(--gls-chart-muted)"
-                            >
-                                {label}
-                            </text>
+                            i % labelStep === 0 && (
+                                <text
+                                    key={label}
+                                    x={xFor(i)}
+                                    y={HEIGHT_PX - 8}
+                                    textAnchor="middle"
+                                    fontSize={11}
+                                    fill="var(--gls-chart-muted)"
+                                >
+                                    {label}
+                                </text>
+                            )
                         ))}
                     </svg>
 
@@ -264,8 +336,8 @@ export default function AnnualFraisChart({ data, periode }: AnnualFraisChartProp
                         <div
                             className="gls-frais-tooltip"
                             style={{
-                                left: `${(xFor(hoverIndex) / WIDTH) * 100}%`,
-                                top: `${(PAD_TOP / HEIGHT) * 100}%`,
+                                left: `${xFor(hoverIndex)}px`,
+                                top: `${PAD_TOP}px`,
                                 // Right half of the plot: flip the tooltip to
                                 // the LEFT of the crosshair so it never clips
                                 // past the card edge on the last months.
@@ -276,7 +348,7 @@ export default function AnnualFraisChart({ data, periode }: AnnualFraisChartProp
                             }}
                         >
                             <div className="gls-frais-tooltip-header">{data.months[hoverIndex]}</div>
-                            {SERIES.map((s) => (
+                            {visibleSeries.map((s) => (
                                 <div className="gls-frais-tooltip-row" key={s.key}>
                                     <span className="gls-frais-tooltip-dot" style={{ backgroundColor: s.color }} />
                                     <span className="gls-frais-tooltip-label">{t(s.label)}:</span>
@@ -287,19 +359,6 @@ export default function AnnualFraisChart({ data, periode }: AnnualFraisChartProp
                             ))}
                         </div>
                     )}
-                </div>
-
-                <div className="d-flex flex-wrap gap-3 justify-content-center mt-3">
-                    {SERIES.map((s) => (
-                        <span key={s.key} className="d-inline-flex align-items-center gap-1 text-muted fs-13">
-                            <span
-                                className="d-inline-block rounded-circle"
-                                style={{ width: 10, height: 10, backgroundColor: s.color }}
-                                aria-hidden="true"
-                            />
-                            {t(s.label)}
-                        </span>
-                    ))}
                 </div>
             </div>
         </div>

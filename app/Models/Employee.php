@@ -208,14 +208,33 @@ class Employee extends Model implements HasMedia
 
     /**
      * Replaces the employee's center assignment in one place: syncs the
-     * pivot and re-points the primary `etablissement_id` column at the first
-     * given center (or keeps the current one when it is still among them, so
-     * an edit that merely ADDS a center doesn't silently move the employee's
-     * base — which would also move its Caisse).
+     * pivot and re-points the primary `etablissement_id` column.
+     *
+     * The primary center is chosen in this order:
+     *  1. `$primaryId` when given AND part of the assigned list — the
+     *     explicit « Centre principal » choice made on the Employees form.
+     *  2. the current primary, when it is still among the assigned centers,
+     *     so an edit that merely ADDS a center doesn't silently move the
+     *     employee's base.
+     *  3. the first assigned center (creation, or the current primary was
+     *     just un-assigned).
+     *
+     * A primary outside the assigned list is IGNORED rather than obeyed:
+     * `etablissement_id` must always be one of the centers the employee is
+     * actually assigned to, or its Caisse would sit in a center the employee
+     * cannot even reach. The Form Requests validate it too (`in:`-style
+     * check against `etablissement_ids`); this is the last line.
+     *
+     * ⚠ Moving the primary center NEVER moves the employee's Caisse
+     * (CLAUDE.md §11, 01/09/2026): this only re-points
+     * `employees.etablissement_id`. Re-homing a till stays an explicit
+     * action on « Comptes de caisse », which refuses once it holds any
+     * movement. EmployeeController::update() flashes a warning when the two
+     * diverge.
      *
      * @param  list<int>  $etablissementIds
      */
-    public function syncEtablissements(array $etablissementIds): void
+    public function syncEtablissements(array $etablissementIds, ?int $primaryId = null): void
     {
         $ids = array_values(array_unique(array_map('intval', $etablissementIds)));
 
@@ -225,9 +244,13 @@ class Employee extends Model implements HasMedia
 
         $this->etablissements()->sync($ids);
 
-        $primary = in_array((int) $this->etablissement_id, $ids, true)
-            ? (int) $this->etablissement_id
-            : $ids[0];
+        if ($primaryId !== null && in_array($primaryId, $ids, true)) {
+            $primary = $primaryId;
+        } elseif (in_array((int) $this->etablissement_id, $ids, true)) {
+            $primary = (int) $this->etablissement_id;
+        } else {
+            $primary = $ids[0];
+        }
 
         if ((int) $this->etablissement_id !== $primary) {
             $this->forceFill(['etablissement_id' => $primary])->save();

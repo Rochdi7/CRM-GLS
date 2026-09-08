@@ -62,6 +62,27 @@ class AppServiceProvider extends ServiceProvider
     ];
 
     /**
+     * Abilities reserved to the MAINTENANCE ACCOUNT — an identity, never a
+     * permission, and never grantable (same reasoning as
+     * GroupPolicy@updateClosed, 07/09/2026).
+     *
+     * These are model-less abilities, so NO_SUPER_ADMIN_BYPASS above cannot
+     * express them: it is keyed by the model passed to the gate, and there
+     * is none here. They are therefore decided in Gate::before, ABOVE the
+     * super-admin bypass — otherwise every super-admin, the CEO included,
+     * would reach a repair tool that rewrites imported money allocations.
+     *
+     * `HiddenAccount::EMAIL` ALONE, never `emails()`: STAFF_EMAIL is a staff
+     * login of the same person, not the maintenance identity.
+     *
+     * @var array<int, string>
+     */
+    private const MAINTAINER_ONLY_ABILITIES = [
+        // Réconciliation des paiements importés (paiements:reconcilier).
+        'legacy-payments.reconcile',
+    ];
+
+    /**
      * Bootstrap any application services.
      */
     public function boot(): void
@@ -97,6 +118,13 @@ class AppServiceProvider extends ServiceProvider
             // to the policy, which cannot see the rule.
             if (HiddenAccount::denies($user, $arguments[0] ?? null)) {
                 return false;
+            }
+
+            // Decided ABOVE the super-admin bypass: these abilities belong to
+            // the maintenance IDENTITY, so no role — super-admin included —
+            // may reach them.
+            if (in_array($ability, self::MAINTAINER_ONLY_ABILITIES, true)) {
+                return $user->email === HiddenAccount::EMAIL;
             }
 
             $excludedModel = self::NO_SUPER_ADMIN_BYPASS[$ability] ?? null;

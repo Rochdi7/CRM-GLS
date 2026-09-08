@@ -110,6 +110,27 @@ final class SeancesInertiaCrudTest extends TestCase
             );
     }
 
+    public function test_index_lists_prevue_seances_before_the_others_whatever_their_date(): void
+    {
+        $effectueeRecent = $this->makeSeance(['date_seance' => '2026-03-20', 'statut' => Seance::STATUT_EFFECTUEE]);
+        $annuleeRecent = $this->makeSeance(['date_seance' => '2026-03-19', 'statut' => Seance::STATUT_ANNULEE]);
+        $prevueOld = $this->makeSeance(['date_seance' => '2026-03-01', 'statut' => Seance::STATUT_PREVUE]);
+        $prevueNewer = $this->makeSeance(['date_seance' => '2026-03-10', 'statut' => Seance::STATUT_PREVUE]);
+
+        $this->actingAs($this->userWith('attendance.view'))
+            ->get(route('backoffice.seances.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/Seances/Index', false)
+                ->has('seances.data', 4)
+                // Prévue block first (newest first inside it), then the rest newest first.
+                ->where('seances.data.0.id', $prevueNewer->id)
+                ->where('seances.data.1.id', $prevueOld->id)
+                ->where('seances.data.2.id', $effectueeRecent->id)
+                ->where('seances.data.3.id', $annuleeRecent->id)
+            );
+    }
+
     public function test_a_seance_inherits_center_and_year_from_its_group(): void
     {
         $this->actingAs($this->userWith('attendance.view', 'attendance.create'));

@@ -103,12 +103,17 @@ final class EmployeeController extends Controller
         // requested username (read by EmployeeCredentialService, not a real
         // column) is present on the instance the "created" event receives.
         $centerIds = $this->resolveCenterIds($data);
+        $primaryId = $this->resolvePrimaryCenterId($data, $centerIds);
 
-        $employee = DB::transaction(function () use ($payload, $centerIds, $data, $request): Employee {
+        $employee = DB::transaction(function () use ($payload, $centerIds, $primaryId, $data, $request): Employee {
             $employee = new Employee([
                 ...$payload,
-                // Primary center = the first assigned one (see Employee::syncEtablissements).
-                'etablissement_id' => $centerIds[0],
+                // Primary center = the explicit « Centre principal » choice,
+                // else the first assigned one (see Employee::syncEtablissements).
+                // NOT NULL column: null here means "no explicit choice",
+                // which on a creation resolves to the first assigned centre
+                // (same rule as Employee::syncEtablissements).
+                'etablissement_id' => $primaryId ?? $centerIds[0],
                 'reference' => ReferenceGenerator::make('EMP', 'employees'),
             ]);
             $employee->requestedUsername = $data['username'] ?? null;
@@ -116,7 +121,7 @@ final class EmployeeController extends Controller
             // observer must not leave a role-less employee without a login.
             $employee->save();
 
-            $employee->syncEtablissements($centerIds);
+            $employee->syncEtablissements($centerIds, $primaryId);
             $this->storePhoto($employee, $request);
 
             return $employee;
@@ -140,7 +145,11 @@ final class EmployeeController extends Controller
             $employee->update($payload);
             // Pass the record so centres it already holds outside the actor's
             // reach are preserved instead of dropped (C-3).
-            $employee->syncEtablissements($this->resolveCenterIds($data, $employee));
+            $centerIds = $this->resolveCenterIds($data, $employee);
+            $employee->syncEtablissements(
+                $centerIds,
+                $this->resolvePrimaryCenterId($data, $centerIds),
+            );
             $this->storePhoto($employee, $request);
 
             // The login's e-mail follows the staff record (they were two
@@ -374,6 +383,39 @@ final class EmployeeController extends Controller
         }
 
         return $ids;
+    }
+
+    /**
+     * The PRIMARY centre to store in `employees.etablissement_id` — the
+     * centre the employee is based in, and the one their Caisse belongs to.
+     *
+     * Returns null when the form submitted no explicit choice, letting
+     * Employee::syncEtablissements() keep the current primary (or take the
+     * first assigned centre on a creation).
+     *
+     * The submitted id is honored ONLY when it survived resolveCenterIds()
+     * — i.e. it is both assigned AND within the acting user's own centre
+     * reach. That second half matters: a centre-confined admin editing an
+     * employee who also works elsewhere must not be able to re-base that
+     * employee into a centre the admin cannot see, which would move where
+     * its till is expected to live. When the choice does not survive, we
+     * fall back to null (keep the current primary) rather than silently
+     * picking another centre.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  list<int>  $centerIds  the resolved, already-narrowed assignment
+     */
+    private function resolvePrimaryCenterId(array $data, array $centerIds): ?int
+    {
+        $primary = isset($data['etablissement_principal_id'])
+            ? (int) $data['etablissement_principal_id']
+            : 0;
+
+        if ($primary > 0 && in_array($primary, $centerIds, true)) {
+            return $primary;
+        }
+
+        return null;
     }
 
     /**

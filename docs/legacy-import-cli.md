@@ -76,3 +76,101 @@ sudo -u postgres pg_dump gls_crm | gzip > /root/gls_crm_$(date +%F_%H%M).sql.gz
 
 Les lignes non résolues restent consultables dans **Import → Voir → « Lignes
 non résolues »**.
+
+---
+
+# Réconcilier après coup — `paiements:reconcilier`
+
+L'import fait de son mieux ligne par ligne ; il lui arrive de se tromper de
+**frais**, ou de ne pas savoir rattacher un paiement du tout. Cette commande
+relit l'export et remet chaque paiement sur le frais que **son fichier
+source** nomme.
+
+```bash
+# 1. simulation (par défaut) — ne touche à rien
+php artisan paiements:reconcilier --centre=Marrakech --dossier="/var/www/crm-gls/data"
+
+# 2. un seul étudiant (réf. legacy, réf. CRM, ou id)
+php artisan paiements:reconcilier --etudiant=E812 --dossier="/var/www/crm-gls/data"
+
+# 3. écrire, après avoir LU la simulation
+sudo -u postgres pg_dump gls_crm | gzip > /root/gls_crm_$(date +%F_%H%M).sql.gz
+php artisan paiements:reconcilier --centre=Marrakech --dossier="..." --apply
+```
+
+## Ce qu'elle corrige
+
+| Écart | Ce qu'elle fait |
+|---|---|
+| Le fichier nomme « Frais d'Octobre », la base montre « Inscription B2 » | détache et ré-applique sur Octobre — crée la ligne si le groupe la prévoit mais qu'elle manque |
+| Le fichier ne nomme **aucun** frais (cellule « - ») | détache : l'argent redevient une **avance** |
+| La ligne du fichier n'existe pas en base | **signalée**, jamais inventée — c'est `import:centre` qui importe |
+
+## Ce qu'elle ne touche JAMAIS
+
+`montant`, `date_paiement`, `methode`, `caisse_id`, `caisses.solde`. Un
+paiement garde la date et la caisse avec lesquelles il a été enregistré — pour
+les lignes legacy, la caisse de M. Rafik, exactement comme l'import les a
+classées. Réaffecter de l'argent déjà dans la caisse n'est pas un mouvement de
+caisse : le solde ne bouge pas, par construction. Aucun enregistrement
+monétaire n'est supprimé (§11) : un mauvais rattachement est **détaché** puis
+ré-appliqué.
+
+## Année clôturée
+
+Une année clôturée est **refusée**, jamais rouverte en douce :
+
+```
+P2868 : année 2025/2026 CLÔTURÉE — rouvrir dans Paramètres → Années
+        scolaires, relancer, puis reclôturer.
+```
+
+Rouvrir est un geste explicite et audité, fait depuis l'interface — pas une
+décision de traitement par lot. **Penser à reclôturer** juste après.
+
+## Depuis l'interface (compte de maintenance uniquement)
+
+L'écran **`/backoffice/reconciliation-paiements`** fait la même chose sans
+PuTTY : deux boutons, « Simuler » (n'écrit jamais rien) et « Appliquer »
+(avec confirmation), et la sortie de la commande affichée telle quelle.
+
+⚠ **C'est une IDENTITÉ, pas une permission.** L'écran appartient au seul
+compte de maintenance (`HiddenAccount::EMAIL`) : **pas même un super-admin
+ne l'atteint**, le CEO compris. La décision est prise dans `Gate::before`,
+AU-DESSUS du bypass super-admin
+(`AppServiceProvider::MAINTAINER_ONLY_ABILITIES`) — sans cela `Gate::before`
+l'accorderait à tous les super-admins, exactement comme pour
+`GroupPolicy@updateClosed` (§16). L'ability `legacy-payments.reconcile`
+n'est dans aucun preset et n'est accordable à personne.
+
+Comme « Échéances en masse », la page est **hors de la barre latérale** et
+atteinte par son lien direct — et, comme elle, ce n'est **pas** ce qui la
+protège : le gate décide, le contrôleur revérifie, le Form Request rejoue
+l'identité.
+
+Le champ « Dossier de l'export » est borné par `config('gls.legacy_import_path')`
+(`GLS_LEGACY_IMPORT_PATH` dans `.env`, défaut `base_path('data')`) : un
+chemin hors de cette racine est refusé, `../..` compris. Élargir cette racine
+à `/` donnerait à l'écran la lecture de tout le disque.
+
+Tests : `tests/Feature/Backoffice/Access/LegacyReconciliationAccessTest.php`.
+
+## Origine
+
+Trois réparations manuelles des 07–08/09/2026, même problème sous trois
+formes :
+
+- **ISMAIL AMARIR** (Kénitra) — la cellule payeur contient ÉTUDIANT + PAYEUR
+  (« ISMAIL AMARIR ZAKARIA AMARIR », son frère payait) : l'import trouvait
+  deux vrais étudiants et refusait de deviner. 10 paiements / 10 100 DH
+  jamais arrivés.
+- **RAJA & CHAIMA EL ABLAOUI** (Casablanca) — le groupe tarifie 12 frais mais
+  l'import ne crée que les lignes qu'un paiement touche : « Frais d'Octobre »
+  n'existait pas, le repli approximatif a posé 1 300 DH sur « Frais
+  d'inscription B2 ».
+- **HAMZA LACHKAR** (Marrakech) — une avance éclatée sur les mauvais frais de
+  la mauvaise inscription.
+
+Tests : `tests/Feature/Backoffice/Finance/ReconcilierPaiementsLegacyTest.php`
+(8 cas, sur un vrai .xlsx au format de l'export — fixture
+`tests/Fixtures/legacy/`).

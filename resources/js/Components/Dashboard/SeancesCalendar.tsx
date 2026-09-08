@@ -1,26 +1,30 @@
 import { Link, router } from '@inertiajs/react';
+import { t } from '@/Lib/i18n';
 import type { SeanceCalendarEntry, SeancesCalendarData } from '@/Types';
 
 interface SeancesCalendarProps {
     data: SeancesCalendarData;
+    /** 'YYYY-MM-DD' of the day previewed in the agenda panel next to the calendar. */
+    selectedDay: string;
     onMonthChange: (month: string) => void;
+    onSelectDay: (dateKey: string) => void;
 }
 
-const MONTHS_FR = [
+export const MONTHS_FR = [
     'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
 ];
 
-const WEEKDAYS_FR = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+const WEEKDAYS_FR = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
 
 /** Local (never UTC-shifted) 'YYYY-MM-DD' key — must match the server's date_seance keys. */
-function isoDate(d: Date): string {
+export function isoDate(d: Date): string {
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${d.getFullYear()}-${m}-${day}`;
 }
 
-function dotVariant(statut: string): string {
+export function statutVariant(statut: string): 'success' | 'danger' | 'warning' {
     if (statut === 'Effectuée') return 'success';
     if (statut === 'Annulée') return 'danger';
     return 'warning'; // Prévue
@@ -29,7 +33,7 @@ function dotVariant(statut: string): string {
 function tooltipFor(seance: SeanceCalendarEntry): string {
     const heures = seance.heureDebut ? ` · ${seance.heureDebut} - ${seance.heureFin ?? '?'}` : '';
     const enseignant = seance.enseignant ? ` - ${seance.enseignant}` : '';
-    return `[S${seance.id}] ${seance.groupNom ?? 'Groupe supprimé'}${enseignant} (${seance.statut}${heures})`;
+    return `[S${seance.id}] ${seance.groupNom ?? t('Deleted group')}${enseignant} (${seance.statut}${heures})`;
 }
 
 /**
@@ -37,23 +41,23 @@ function tooltipFor(seance: SeanceCalendarEntry): string {
  * context (GetSeancesCalendar). Each day shows a count bubble plus one
  * status-colored dot per séance (vert Effectuée, rouge Annulée, ambre
  * Prévue); dots carry a pure-CSS tooltip (no Bootstrap JS — §3) and open
- * the séance's fiche de présence, while the day itself opens the Séances
- * list filtered to that date.
+ * the séance's fiche de présence. Clicking a day SELECTS it: the agenda
+ * panel beside the calendar lists that day's séances, with a link to the
+ * Séances list filtered to the date (one click to preview, a second to
+ * leave the dashboard — instead of being sent away on the first click).
  */
-export default function SeancesCalendar({ data, onMonthChange }: SeancesCalendarProps) {
+export default function SeancesCalendar({ data, selectedDay, onMonthChange, onSelectDay }: SeancesCalendarProps) {
     const [year, month] = data.month.split('-').map(Number);
     const firstOfMonth = new Date(year, month - 1, 1);
     const gridStart = new Date(year, month - 1, 1 - firstOfMonth.getDay());
-    const todayKey = isoDate(new Date());
+    const today = new Date();
+    const todayKey = isoDate(today);
+    const currentMonthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    const monthTotal = Object.values(data.days).reduce((sum, list) => sum + list.length, 0);
 
     function shiftMonth(delta: number) {
         const target = new Date(year, month - 1 + delta, 1);
         onMonthChange(`${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}`);
-    }
-
-    function openDay(dateKey: string, hasSeances: boolean) {
-        if (!hasSeances) return;
-        router.get('/backoffice/seances', { dateFrom: dateKey, dateTo: dateKey });
     }
 
     const cells = Array.from({ length: 42 }, (_, i) => {
@@ -67,35 +71,58 @@ export default function SeancesCalendar({ data, onMonthChange }: SeancesCalendar
     });
 
     return (
-        <div className="card flex-fill">
+        <div className="card flex-fill gls-dash-card">
             <div className="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div>
-                    <h4 className="card-title mb-1">Résumé des séances</h4>
-                    <p className="text-muted mb-0">Vue d&apos;ensemble des séances sur la période sélectionnée.</p>
+                    <h4 className="card-title mb-1">{t('Sessions summary')}</h4>
+                    <p className="text-muted mb-0">
+                        {t(':count sessions this month', { count: monthTotal.toLocaleString('fr-FR') })}
+                        {' · '}
+                        {t('Click a day to preview its sessions')}
+                    </p>
                 </div>
                 <Link href="/backoffice/seances" className="link-primary fw-medium">
-                    Voir les détails <i className="ti ti-chevron-right" />
+                    {t('View all sessions')} <i className="ti ti-chevron-right" />
                 </Link>
             </div>
             <div className="card-body">
-                <div className="d-flex align-items-center justify-content-between mb-3">
-                    <button
-                        type="button"
-                        className="btn btn-sm btn-icon text-primary"
-                        aria-label="Mois précédent"
-                        onClick={() => shiftMonth(-1)}
-                    >
-                        <i className="ti ti-chevron-left fs-16" />
-                    </button>
+                <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                    <div className="d-flex align-items-center gap-1">
+                        <button
+                            type="button"
+                            className="btn btn-sm btn-outline-light border text-dark gls-cal-nav"
+                            aria-label={t('Previous month')}
+                            onClick={() => shiftMonth(-1)}
+                        >
+                            <i className="ti ti-chevron-left fs-16" />
+                        </button>
+                        <button
+                            type="button"
+                            className="btn btn-sm btn-outline-light border text-dark gls-cal-nav"
+                            aria-label={t('Next month')}
+                            onClick={() => shiftMonth(1)}
+                        >
+                            <i className="ti ti-chevron-right fs-16" />
+                        </button>
+                        {data.month !== currentMonthKey && (
+                            <button
+                                type="button"
+                                className="btn btn-sm btn-soft-primary ms-1"
+                                onClick={() => {
+                                    onMonthChange(currentMonthKey);
+                                    onSelectDay(todayKey);
+                                }}
+                            >
+                                {t('Today')}
+                            </button>
+                        )}
+                    </div>
                     <h5 className="mb-0">{MONTHS_FR[month - 1]} {year}</h5>
-                    <button
-                        type="button"
-                        className="btn btn-sm btn-icon text-primary"
-                        aria-label="Mois suivant"
-                        onClick={() => shiftMonth(1)}
-                    >
-                        <i className="ti ti-chevron-right fs-16" />
-                    </button>
+                    <div className="gls-cal-legend d-none d-sm-flex">
+                        <span><i className="gls-seancecal-dot gls-seancecal-dot-success" /> {t('Completed')}</span>
+                        <span><i className="gls-seancecal-dot gls-seancecal-dot-warning" /> {t('Planned')}</span>
+                        <span><i className="gls-seancecal-dot gls-seancecal-dot-danger" /> {t('Cancelled')}</span>
+                    </div>
                 </div>
 
                 <div className="gls-seancecal">
@@ -106,6 +133,7 @@ export default function SeancesCalendar({ data, onMonthChange }: SeancesCalendar
                     {cells.map((cell) => {
                         const seances = data.days[cell.key] ?? [];
                         const isToday = cell.key === todayKey;
+                        const isSelected = cell.key === selectedDay;
 
                         return (
                             <div
@@ -115,13 +143,18 @@ export default function SeancesCalendar({ data, onMonthChange }: SeancesCalendar
                                     cell.inMonth ? '' : 'is-outside',
                                     cell.weekend ? 'is-weekend' : '',
                                     isToday ? 'is-today' : '',
+                                    isSelected ? 'is-selected' : '',
                                     seances.length > 0 ? 'has-seances' : '',
                                 ].filter(Boolean).join(' ')}
-                                role={seances.length > 0 ? 'button' : undefined}
-                                tabIndex={seances.length > 0 ? 0 : undefined}
-                                onClick={() => openDay(cell.key, seances.length > 0)}
+                                role="button"
+                                tabIndex={0}
+                                aria-pressed={isSelected}
+                                onClick={() => onSelectDay(cell.key)}
                                 onKeyDown={(event) => {
-                                    if (event.key === 'Enter') openDay(cell.key, seances.length > 0);
+                                    if (event.key === 'Enter' || event.key === ' ') {
+                                        event.preventDefault();
+                                        onSelectDay(cell.key);
+                                    }
                                 }}
                             >
                                 <div className="gls-seancecal-day-top">
@@ -135,7 +168,7 @@ export default function SeancesCalendar({ data, onMonthChange }: SeancesCalendar
                                         {seances.map((seance) => (
                                             <span
                                                 key={seance.id}
-                                                className={`gls-seancecal-dot gls-seancecal-dot-${dotVariant(seance.statut)}`}
+                                                className={`gls-seancecal-dot gls-seancecal-dot-${statutVariant(seance.statut)}`}
                                                 data-tooltip={tooltipFor(seance)}
                                                 onClick={(event) => {
                                                     event.stopPropagation();

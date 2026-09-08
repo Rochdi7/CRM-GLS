@@ -12,6 +12,7 @@ use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -848,6 +849,195 @@ final class EmployeesInertiaCrudTest extends TestCase
         $this->assertEqualsCanonicalizing(
             [$centre->id, $autreCentre->id],
             $employee->fresh()->etablissements()->pluck('etablissements.id')->all(),
+        );
+    }
+
+    /**
+     * « Centre principal » is now an explicit choice on the form, instead of
+     * "whichever centre happened to be first in the list" — which is what
+     * made it uncontrollable.
+     */
+    public function test_the_primary_center_can_be_chosen_explicitly_on_creation(): void
+    {
+        $premier = Etablissement::factory()->create();
+        $second = Etablissement::factory()->create();
+
+        $this->actingAs($this->userWith('employees.view', 'employees.create', 'centers.access-all'));
+
+        $this->post(route('backoffice.employees.store'), [
+            'nom' => 'Principale',
+            'prenom' => 'Sara',
+            'sexe' => 'Femme',
+            'categorie' => Employee::CATEGORIE_CONSULTANT,
+            'statut' => Employee::STATUT_ACTIF,
+            'etablissement_ids' => [$premier->id, $second->id],
+            // NOT the first of the list — the whole point of the field.
+            'etablissement_principal_id' => $second->id,
+        ])->assertSessionDoesntHaveErrors();
+
+        $employee = Employee::where('nom', 'Principale')->firstOrFail();
+
+        $this->assertSame($second->id, $employee->etablissement_id);
+        $this->assertEqualsCanonicalizing(
+            [$premier->id, $second->id],
+            $employee->etablissements()->pluck('etablissements.id')->all(),
+        );
+    }
+
+    public function test_the_primary_center_can_be_changed_on_an_existing_employee(): void
+    {
+        $centre = Etablissement::factory()->create();
+        $autre = Etablissement::factory()->create();
+
+        $employee = Employee::factory()->create(['etablissement_id' => $centre->id]);
+        $employee->etablissements()->sync([$centre->id, $autre->id]);
+
+        $this->actingAs($this->userWith('employees.view', 'employees.update', 'centers.access-all'));
+
+        $this->put(route('backoffice.employees.update', $employee), [
+            'nom' => $employee->nom,
+            'prenom' => $employee->prenom,
+            'sexe' => $employee->sexe,
+            'categorie' => $employee->categorie,
+            'statut' => $employee->statut,
+            'etablissement_ids' => [$centre->id, $autre->id],
+            'etablissement_principal_id' => $autre->id,
+        ])->assertSessionDoesntHaveErrors();
+
+        $this->assertSame($autre->id, $employee->fresh()->etablissement_id);
+    }
+
+    /**
+     * `employees.etablissement_id` must always be one of the assigned
+     * centres: a primary outside the assignment would leave the employee's
+     * Caisse in a centre they cannot even reach.
+     */
+    public function test_a_primary_center_outside_the_assigned_list_is_refused(): void
+    {
+        $centre = Etablissement::factory()->create();
+        $etranger = Etablissement::factory()->create();
+
+        $employee = Employee::factory()->create(['etablissement_id' => $centre->id]);
+        $employee->etablissements()->sync([$centre->id]);
+
+        $this->actingAs($this->userWith('employees.view', 'employees.update', 'centers.access-all'));
+
+        $this->put(route('backoffice.employees.update', $employee), [
+            'nom' => $employee->nom,
+            'prenom' => $employee->prenom,
+            'sexe' => $employee->sexe,
+            'categorie' => $employee->categorie,
+            'statut' => $employee->statut,
+            'etablissement_ids' => [$centre->id],
+            'etablissement_principal_id' => $etranger->id,
+        ])->assertSessionHasErrors('etablissement_principal_id');
+
+        $this->assertSame($centre->id, $employee->fresh()->etablissement_id);
+    }
+
+    /**
+     * ⚠ CLAUDE.md §11 (01/09/2026): a profile edit NEVER moves money. Making
+     * the primary centre editable must not become a back door that relocates
+     * a till — the caisse stays where it is, and the user is TOLD so.
+     */
+    public function test_changing_the_primary_center_never_moves_the_employees_caisse(): void
+    {
+        $centre = Etablissement::factory()->create();
+        $autre = Etablissement::factory()->create();
+
+        $employee = Employee::factory()->create(['etablissement_id' => $centre->id]);
+        $employee->etablissements()->sync([$centre->id, $autre->id]);
+
+        $till = $employee->till()->first();
+        $this->assertNotNull($till, 'The employee observer provisions a « Caissière » till.');
+        $this->assertSame($centre->id, (int) $till->etablissement_id);
+
+        $this->actingAs($this->userWith('employees.view', 'employees.update', 'centers.access-all'));
+
+        $this->put(route('backoffice.employees.update', $employee), [
+            'nom' => $employee->nom,
+            'prenom' => $employee->prenom,
+            'sexe' => $employee->sexe,
+            'categorie' => $employee->categorie,
+            'statut' => $employee->statut,
+            'etablissement_ids' => [$centre->id, $autre->id],
+            'etablissement_principal_id' => $autre->id,
+        ])->assertSessionHas('warning');
+
+        $this->assertSame($autre->id, $employee->fresh()->etablissement_id);
+        // The money did NOT follow.
+        $this->assertSame($centre->id, (int) $till->fresh()->etablissement_id);
+    }
+
+    /**
+     * Omitting the field keeps the previous behaviour, so every existing
+     * caller (and every payload that predates the field) is unaffected.
+     */
+    public function test_omitting_the_primary_center_keeps_the_current_one(): void
+    {
+        $centre = Etablissement::factory()->create();
+        $autre = Etablissement::factory()->create();
+
+        $employee = Employee::factory()->create(['etablissement_id' => $autre->id]);
+        $employee->etablissements()->sync([$centre->id, $autre->id]);
+
+        $this->actingAs($this->userWith('employees.view', 'employees.update', 'centers.access-all'));
+
+        $this->put(route('backoffice.employees.update', $employee), [
+            'nom' => $employee->nom,
+            'prenom' => $employee->prenom,
+            'sexe' => $employee->sexe,
+            'categorie' => $employee->categorie,
+            'statut' => $employee->statut,
+            'etablissement_ids' => [$centre->id, $autre->id],
+        ])->assertSessionDoesntHaveErrors();
+
+        $this->assertSame($autre->id, $employee->fresh()->etablissement_id);
+    }
+
+    /**
+     * ⚠ The stronger half of the invariant: not only does the till stay in
+     * its centre, its BALANCE is untouched — `caisses.solde` only ever moves
+     * through CaisseLedger (CLAUDE.md §11), and a profile edit is not a
+     * money operation. Asserted on a NON-ZERO balance, since a till at 0.00
+     * would pass even if the column were being rewritten.
+     */
+    public function test_changing_the_primary_center_never_changes_the_caisse_balance(): void
+    {
+        $centre = Etablissement::factory()->create();
+        $autre = Etablissement::factory()->create();
+
+        $employee = Employee::factory()->create(['etablissement_id' => $centre->id]);
+        $employee->etablissements()->sync([$centre->id, $autre->id]);
+
+        $till = $employee->till()->first();
+        $this->assertNotNull($till);
+        $till->forceFill(['solde' => 2200.00])->save();
+
+        $journalAvant = DB::table('activity_log')->where('event', 'solde_movement')->count();
+
+        $this->actingAs($this->userWith('employees.view', 'employees.update', 'centers.access-all'));
+
+        $this->put(route('backoffice.employees.update', $employee), [
+            'nom' => $employee->nom,
+            'prenom' => $employee->prenom,
+            'sexe' => $employee->sexe,
+            'categorie' => $employee->categorie,
+            'statut' => $employee->statut,
+            'etablissement_ids' => [$centre->id, $autre->id],
+            'etablissement_principal_id' => $autre->id,
+        ])->assertSessionDoesntHaveErrors();
+
+        // The primary moved…
+        $this->assertSame($autre->id, $employee->fresh()->etablissement_id);
+        // …the money did not: same centre, same balance, to the centime.
+        $till->refresh();
+        $this->assertSame($centre->id, (int) $till->etablissement_id);
+        $this->assertSame('2200.00', (string) $till->solde);
+        // …and nothing was journaled, because nothing moved.
+        $this->assertSame(
+            $journalAvant,
+            DB::table('activity_log')->where('event', 'solde_movement')->count(),
         );
     }
 }

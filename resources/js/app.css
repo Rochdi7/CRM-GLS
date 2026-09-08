@@ -12,6 +12,48 @@
  * the same in dev and build, matching the static PreSkool asset strategy —
  * no Google Fonts runtime request).
  */
+/*
+ * Nunito Sans (variable, OFL) — fonte d'interface demandée le 08/09/2026,
+ * celle de l'ANCIEN CRM : le personnel la reconnaît, ce qui compte plus
+ * qu'un choix typographique « objectivement » meilleur.
+ *
+ * ⚠ Auto-hébergée, comme Inter avant elle et comme tous les assets du thème
+ * (§12) : les @font-face fournis pointaient sur fonts.gstatic.com, ce qui
+ * aurait ajouté une requête tierce à chaque chargement, cassé l'affichage
+ * hors ligne et fait dépendre le CRM d'un CDN externe. Les fichiers sont
+ * donc téléchargés dans public/assets/fonts/nunito-sans/.
+ *
+ * UNE seule paire de fichiers (romain + italique) au lieu des 5 graisses
+ * statiques du CSS d'origine : ce sont les fontes VARIABLES, axes
+ * wght 200-1000 + opsz 6-12, donc toutes les graisses intermédiaires sont
+ * disponibles pour 49 Ko — contre 352 Ko pour Inter, et contre 10 requêtes
+ * pour la version statique. Chemins absolus, comme pour Inter, afin que la
+ * résolution soit identique en dev et en build.
+ */
+@font-face {
+    font-family: 'Nunito Sans';
+    src: url('/assets/fonts/nunito-sans/NunitoSans-Variable.woff2') format('woff2-variations'),
+         url('/assets/fonts/nunito-sans/NunitoSans-Variable.woff2') format('woff2');
+    font-weight: 200 1000;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Nunito Sans';
+    src: url('/assets/fonts/nunito-sans/NunitoSans-Variable-Italic.woff2') format('woff2-variations'),
+         url('/assets/fonts/nunito-sans/NunitoSans-Variable-Italic.woff2') format('woff2');
+    font-weight: 200 1000;
+    font-style: italic;
+    font-display: swap;
+}
+
+/*
+ * Inter reste EMBARQUÉE et sert de premier repli. Deux raisons de ne pas la
+ * supprimer : elle couvre des glyphes que Nunito Sans n'a pas (jeu latin
+ * étendu), et si un fichier Nunito manque au déploiement l'interface retombe
+ * sur une fonte de même nature plutôt que sur l'Arial du système.
+ */
 @font-face {
     font-family: 'Inter';
     src: url('/assets/fonts/inter/InterVariable.woff2') format('woff2-variations'),
@@ -31,7 +73,7 @@
 }
 
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Nunito Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     /*
      * PreSkool ships body { font-size: 14px }, which renders noticeably
      * smaller than the old CRM (WimSchool, 16px) on high-resolution
@@ -39,7 +81,12 @@ body {
      * wide finance tables into horizontal scroll.
      */
     font-size: 15px;
-    font-feature-settings: 'cv11', 'ss01', 'tnum';
+    /*
+     * Les réglages OpenType (features, chiffres, graisse, lissage) sont
+     * regroupés dans la « passe TYPOGRAPHIE » en fin de fichier — `tnum`
+     * était appliqué ICI à tout le texte, ce qui espaçait les chiffres au
+     * milieu des mots. Il n'y reste que la taille et la pile de fontes.
+     */
     font-optical-sizing: auto;
 }
 
@@ -396,6 +443,80 @@ html[data-theme='dark'] .gls-select2-search__clear:hover {
 
 .header {
     z-index: 1042 !important;
+}
+
+/*
+ * Context switcher buttons (ContextSwitcher.tsx). Two soft-tinted pills in
+ * the theme's own hues — blue for the année scolaire, teal for the centre —
+ * instead of two identical white outline buttons, so the eye reads at a
+ * glance WHICH of the two it is looking at. Same `.btn` box, only colour.
+ */
+.gls-ctx-btn {
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-weight: 600;
+    padding: 0.45rem 0.95rem;
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.gls-ctx-btn > i {
+    font-size: 16px;
+}
+.gls-ctx-btn-year {
+    background: #eaf0ff;
+    border-color: #d6e0ff;
+    color: #3d5ee1;
+}
+.gls-ctx-btn-year:hover,
+.gls-ctx-btn-year:focus-visible,
+.gls-ctx-btn-year[aria-expanded='true'] {
+    background: #dce6ff;
+    border-color: #3d5ee1;
+    color: #2f4bc4;
+}
+.gls-ctx-btn-centre {
+    background: #e4f7f6;
+    border-color: #c8eeeb;
+    color: #0f8f86;
+}
+.gls-ctx-btn-centre:hover,
+.gls-ctx-btn-centre:focus-visible,
+.gls-ctx-btn-centre[aria-expanded='true'] {
+    background: #d3f1ee;
+    border-color: #0f8f86;
+    color: #0b756e;
+}
+/* A single-centre employee cannot switch: keep the tint, drop the affordance. */
+.gls-ctx-btn:disabled {
+    opacity: 1;
+    cursor: default;
+}
+.gls-ctx-btn-centre:disabled {
+    background: #e4f7f6;
+    border-color: #c8eeeb;
+    color: #0f8f86;
+}
+html[data-theme='dark'] .gls-ctx-btn-year {
+    background: rgba(61, 94, 225, 0.18);
+    border-color: rgba(61, 94, 225, 0.45);
+    color: #9fb2ff;
+}
+html[data-theme='dark'] .gls-ctx-btn-year:hover,
+html[data-theme='dark'] .gls-ctx-btn-year[aria-expanded='true'] {
+    background: rgba(61, 94, 225, 0.3);
+    border-color: #6f8bff;
+    color: #c3cfff;
+}
+html[data-theme='dark'] .gls-ctx-btn-centre,
+html[data-theme='dark'] .gls-ctx-btn-centre:disabled {
+    background: rgba(15, 143, 134, 0.18);
+    border-color: rgba(15, 143, 134, 0.45);
+    color: #6fd3cb;
+}
+html[data-theme='dark'] .gls-ctx-btn-centre:hover,
+html[data-theme='dark'] .gls-ctx-btn-centre[aria-expanded='true'] {
+    background: rgba(15, 143, 134, 0.3);
+    border-color: #3fb8ae;
+    color: #9fe6e0;
 }
 
 /*
@@ -1085,10 +1206,20 @@ html[data-theme='dark'] .gls-seancecal-day.is-today {
     align-items: baseline;
     gap: 0.25rem;
     margin-bottom: 0.25rem;
-    /* Digits share one advance width, so the two money cards stay aligned
-     * with each other however the amounts change. */
-    font-variant-numeric: tabular-nums;
-    font-feature-settings: 'tnum' 1;
+    /*
+     * ⚠ NE PAS remettre `font-variant-numeric: tabular-nums` / `'tnum'` ici.
+     * Nunito Sans n'expose PAS la fonction `tnum` (vérifié dans la table
+     * GSUB : calt, ccmp, dnom, frac, liga, locl, numr — rien d'autre).
+     * Demander des chiffres tabulaires à une fonte qui n'en a pas force le
+     * navigateur à les SYNTHÉTISER, et c'est ce rendu synthétique qui traçait
+     * un trait au travers du « 0 » sur les cartes du tableau de bord
+     * (signalé le 08/09/2026).
+     *
+     * Aucune perte d'alignement : les dix chiffres de Nunito Sans ont déjà
+     * la même chasse native (600 unités, table hmtx), donc les montants
+     * restent alignés en colonne sans aucun réglage OpenType.
+     */
+    font-variant-numeric: normal;
 }
 
 .stat-counter-value {
@@ -1220,9 +1351,12 @@ html[data-theme='dark'] .gls-seancecal-day.is-today {
     margin-bottom: 0;
 }
 
-/* Dashboard KPI count-up: tabular digits so the number doesn't jitter in width while it rolls. */
+/* Dashboard KPI count-up. Les chiffres ne « sautent » pas en largeur pendant
+ * l'animation parce que la chasse des chiffres de Nunito Sans est déjà
+ * constante — surtout pas `tabular-nums` ici, voir l'avertissement sur
+ * `.stat-counter` : c'est exactement l'élément où le « 0 » barré apparaissait. */
 .stat-counter-animated {
-    font-variant-numeric: tabular-nums;
+    font-variant-numeric: normal;
 }
 
 /* ---------------------------------------------------------------------------
@@ -1716,4 +1850,1215 @@ html.gls-theme-animating .btn {
     ::view-transition-new(root) {
         animation: none;
     }
+}
+
+/* ---------------------------------------------------------------------------
+ * Couche de LISIBILITÉ (passe UI/UX 08/09/2026)
+ *
+ * Signalé : « le texte est pâle », sur toutes les pages. Mesuré plutôt que
+ * deviné — ce sont les couleurs de PreSkool en mode CLAIR qui posent problème,
+ * le mode sombre était déjà bon (9,4:1) :
+ *
+ *   .table          #6A7287 sur #FFF  = 4,81:1  (4,56:1 sur le fond de page)
+ *   .text-muted     #677788 sur #FFF  = 4,59:1  (4,36:1 → ÉCHOUE WCAG AA)
+ *   bordures        #9CA1AF           = 2,58:1  (lignes de tableau invisibles)
+ *
+ * Or ce gris est appliqué au contenu le PLUS lu de l'application — les
+ * cellules de tableau, rendues à 13px par la couche de densité ci-dessus.
+ * `.text-muted` est utilisé 256 fois dans resources/js/Pages : le corriger
+ * ICI corrige toutes les pages d'un coup, présentes et futures, plutôt que de
+ * remplacer une classe fichier par fichier.
+ *
+ * Ratios après correction (AA = 4,5:1, AAA = 7:1) :
+ *   texte de tableau  #3F4759 →  9,30:1 clair   #D2D0DA → 12,25:1 sombre
+ *   texte secondaire  #55607A →  6,29:1 clair   #A8A5B4 →  7,74:1 sombre
+ *   titres            #1A2440 → 15,33:1 clair   #F2F1F6 → 16,61:1 sombre
+ *
+ * Strictement présentationnel : aucune donnée, aucun markup, aucun fichier de
+ * thème touché (CLAUDE.md §3 / §12). Annuler la passe = supprimer ce bloc. La
+ * teinte bleu-ardoise de PreSkool est CONSERVÉE — on l'assombrit, on ne la
+ * remplace pas par du noir pur, sinon l'écran devient dur et perd l'identité
+ * du thème.
+ * ------------------------------------------------------------------------- */
+
+/* --- Corps de texte -------------------------------------------------------
+ * Le thème pose le gris sur `.table` et l'hérite dans chaque cellule.
+ *
+ * 08/09/2026 : passage au NOIR sur demande. Le #3F4759 de la première passe
+ * était déjà à 9,3:1, mais lu à 13px dans des tableaux consultés toute la
+ * journée il gardait un voile gris — « pas clair ». Le noir tire le contraste
+ * à 18,9:1, le maximum possible.
+ *
+ * #111111 plutôt que #000000 pur : sur un écran LCD, du noir absolu sur du
+ * blanc absolu crée un halo (l'œil sur-corrige les contours) qui FATIGUE en
+ * lecture prolongée. #111 est indiscernable du noir et n'a pas ce défaut.
+ */
+.table {
+    color: #111111;
+}
+
+.table tbody td,
+.table tbody th {
+    color: #111111;
+}
+
+/* En-têtes de colonne : déjà #202C4B, mais en graisse normale, donc noyés
+ * dans les lignes. Une graisse un peu plus marquée sépare la ligne d'en-tête
+ * du corps sans ajouter de trait. */
+.table thead th,
+.table thead tr th {
+    color: #000000;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+/* Lignes de séparation : à 2,58:1 elles disparaissaient, l'œil perdait sa
+ * ligne en balayant une table large. Assez visibles pour guider, assez
+ * légères pour ne pas quadriller la page. */
+.table,
+.table > :not(caption) > * > * {
+    border-color: #dde2ec;
+}
+
+/* --- Texte secondaire -----------------------------------------------------
+ * `.text-muted` reste MUET (il doit continuer à passer au second plan), mais
+ * au-dessus du seuil AA : la hiérarchie vient du contraste relatif au texte
+ * principal, pas d'un gris illisible. */
+.text-muted,
+.text-default,
+.text-gray-6,
+.form-text,
+small.text-muted,
+.small.text-muted {
+    color: #55607a !important;
+}
+
+/* --- Titres ---------------------------------------------------------------
+ * Titres de carte : 18px/600 dans le thème, mais `text-transform: capitalize`,
+ * qui sur des libellés français déjà capitalisés ne sert à rien et casse les
+ * sigles (« Tpe » au lieu de « TPE »). */
+.card .card-title,
+.card-title {
+    color: #1a2440;
+    font-weight: 600;
+    text-transform: none;
+}
+
+.page-header .page-title,
+h1, .h1, h2, .h2, h3, .h3, h4, .h4, h5, .h5, h6, .h6 {
+    color: #1a2440;
+}
+
+/* Le titre de page est le premier repère de l'écran : il doit se détacher des
+ * titres de carte qui le suivent. */
+.page-header .page-title {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+/* --- Formulaires ----------------------------------------------------------
+ * Les libellés de filtre descendent à 12px dans la couche de densité ; à
+ * cette taille un gris moyen devient illisible, donc ils prennent la couleur
+ * du texte principal et un demi-gras pour compenser. */
+.form-label,
+.gls-filter-bar .form-label,
+.card .form-label {
+    color: #3f4759;
+    font-weight: 500;
+}
+
+.form-control,
+.form-select {
+    color: #2b3348;
+}
+
+/* Le placeholder doit rester distinct d'une valeur SAISIE — sinon un champ
+ * vide se lit comme un champ rempli. Il reste donc plus clair que le texte
+ * (#697287 vs #2B3348) tout en passant AA à 4,82:1 : c'est le seul gris de la
+ * passe dont l'écart au texte principal est PORTEUR DE SENS, pas décoratif. */
+.form-control::placeholder {
+    color: #697287;
+    opacity: 1;
+}
+
+/* --- Badges ---------------------------------------------------------------
+ * Les badges « soft » posent une teinte à 10 % d'opacité sous une écriture de
+ * la même teinte : lisible en gros, limite à 11-12px. C'est le FOND qui est
+ * légèrement densifié, pas le texte qui est assombri, ce qui garde le code
+ * couleur des statuts intact. */
+.badge {
+    font-weight: 600;
+}
+
+.badge.badge-soft-primary { background: rgba(61, 94, 225, 0.16); }
+.badge.badge-soft-success { background: rgba(20, 145, 18, 0.16); color: #149112; }
+.badge.badge-soft-danger  { background: rgba(232, 38, 70, 0.16); }
+.badge.badge-soft-warning { background: rgba(234, 179, 0, 0.2); color: #8a6a00; }
+.badge.badge-soft-info    { background: rgba(15, 101, 205, 0.16); }
+.badge.badge-soft-dark    { background: rgba(32, 44, 75, 0.14); }
+
+/* `badge-warning` plein : jaune #EAB300 sous du blanc = 1,88:1, le pire
+ * contraste du thème. Le TEXTE passe en foncé, le fond ne bouge pas — un
+ * statut « en attente » doit rester jaune. */
+.badge.badge-warning,
+.badge.bg-warning {
+    color: #3d2f00;
+}
+
+/* --- Liens ----------------------------------------------------------------
+ * Le thème peint les liens comme du texte (#202C4B) : dans un tableau, rien
+ * ne distingue un nom cliquable d'un nom inerte. Le soulignement n'apparaît
+ * qu'au survol pour ne pas hachurer les listes denses. */
+.table a:not(.btn):not(.dropdown-item):not(.page-link) {
+    color: #2c4bc4;
+}
+
+.table a:not(.btn):not(.dropdown-item):not(.page-link):hover {
+    color: #1d3696;
+    text-decoration: underline;
+}
+
+/* --- Mode sombre ----------------------------------------------------------
+ * Déjà correct au départ (9,4:1) ; on aligne simplement la même hiérarchie à
+ * trois niveaux — principal / secondaire / titre — pour que la lecture soit
+ * identique dans les deux thèmes. */
+html[data-theme='dark'] .table,
+html[data-theme='dark'] .table tbody td,
+html[data-theme='dark'] .table tbody th {
+    color: #d2d0da !important;
+}
+
+html[data-theme='dark'] .table thead th,
+html[data-theme='dark'] .table thead tr th {
+    color: #f2f1f6 !important;
+}
+
+html[data-theme='dark'] .text-muted,
+html[data-theme='dark'] .text-default,
+html[data-theme='dark'] .text-gray-6,
+html[data-theme='dark'] .form-text {
+    color: #a8a5b4 !important;
+}
+
+html[data-theme='dark'] .card .card-title,
+html[data-theme='dark'] .card-title,
+html[data-theme='dark'] .page-header .page-title,
+html[data-theme='dark'] h1,
+html[data-theme='dark'] h2,
+html[data-theme='dark'] h3,
+html[data-theme='dark'] h4,
+html[data-theme='dark'] h5,
+html[data-theme='dark'] h6 {
+    color: #f2f1f6;
+}
+
+html[data-theme='dark'] .form-label,
+html[data-theme='dark'] .gls-filter-bar .form-label,
+html[data-theme='dark'] .card .form-label {
+    color: #d2d0da;
+}
+
+html[data-theme='dark'] .form-control,
+html[data-theme='dark'] .form-select {
+    color: #d2d0da;
+}
+
+html[data-theme='dark'] .form-control::placeholder {
+    color: #8a8798;
+    opacity: 1;
+}
+
+/* Sur fond sombre le bleu de lien du mode clair devient illisible : il faut
+ * la version claire de la même teinte, pas la même valeur. */
+html[data-theme='dark'] .table a:not(.btn):not(.dropdown-item):not(.page-link) {
+    color: #9db2ff;
+}
+
+html[data-theme='dark'] .table a:not(.btn):not(.dropdown-item):not(.page-link):hover {
+    color: #c2d0ff;
+}
+
+/* Le jaune plein garde un texte foncé dans les deux thèmes — le fond ne
+ * change pas, donc la règle de contraste ne change pas non plus. */
+html[data-theme='dark'] .badge.badge-warning,
+html[data-theme='dark'] .badge.bg-warning {
+    color: #3d2f00 !important;
+}
+
+/* ---------------------------------------------------------------------------
+ * Lisibilité, 2ᵉ passe — l'échelle de gris et les cartes du tableau de bord
+ *
+ * La 1ʳᵉ passe a traité les tableaux, `.text-muted` et les libellés de
+ * formulaire, mais l'écran signalé — le TABLEAU DE BORD — est resté pâle :
+ * ses libellés de carte (« Étudiants », « Employés », « Groupes actifs »)
+ * n'utilisent aucune de ces classes. Ils portent `.text-gray`, que le thème
+ * peint #838A9B, soit :
+ *
+ *     #838A9B sur blanc = 3,46:1  →  le PIRE contraste de texte du thème,
+ *                                    très en-dessous du seuil AA de 4,5:1
+ *
+ * C'est ce que montrait la comparaison avec l'ancien CRM : là-bas ces mêmes
+ * libellés sont foncés et un cran plus grands ; ici ils étaient à la fois
+ * plus petits ET deux fois moins contrastés.
+ *
+ * Correction en deux temps :
+ *   1. le PLANCHER de l'échelle `.text-gray-*` du thème, pour que le problème
+ *      ne revienne pas dès qu'un futur écran emploie une de ces classes ;
+ *   2. la carte de statistique elle-même (taille + graisse du libellé), pour
+ *      retrouver la lisibilité de l'ancien CRM.
+ *
+ * L'échelle GARDE sa progression claire→foncé : seules les valeurs illisibles
+ * sur fond blanc remontent. Les nuances 1 et 2 (#E6E8EB, #CDD0D7) ne sont pas
+ * touchées — ce sont des gris de BORDURE/fond, jamais du texte, et les
+ * remonter casserait des séparateurs.
+ * ------------------------------------------------------------------------- */
+
+/* --- Plancher de l'échelle de gris ---------------------------------------
+ * gray-3 reste le plus clair des gris de TEXTE (légendes discrètes) ; il
+ * cible AA « grand texte » (3:1), les suivants AA texte courant. */
+.text-gray-3 {
+    color: #7b8496;
+}
+
+.text-gray-4 {
+    color: #6b7488;
+}
+
+/* `.text-gray` et `.text-gray-5` sont le même gris dans le thème : c'est
+ * celui des libellés de carte du tableau de bord. Il s'aligne sur le gris
+ * secondaire de la 1ʳᵉ passe (`.text-muted`), donc « secondaire » veut dire
+ * la même chose partout dans l'application. */
+.text-gray,
+.text-gray-5 {
+    color: #55607a !important;
+}
+
+.text-gray-6 {
+    color: #3f4759;
+}
+
+.text-gray-7 {
+    color: #3a4257;
+}
+
+/* --- Cartes de statistique (StatCard.tsx) ---------------------------------
+ * Le libellé sous le chiffre est ce que l'œil lit pour SAVOIR CE QU'IL
+ * COMPTE : il ne doit pas être plus discret que le chiffre, seulement plus
+ * petit. Dans l'ancien CRM il est foncé et proche de la taille du texte
+ * courant — c'est ce qu'on retrouve ici.
+ *
+ * On vise le `<p>` DANS la carte de statistique plutôt que `.text-gray`
+ * globalement : ailleurs, un gris secondaire reste légitime. */
+.card-body .stat-counter + p,
+.card-body .stat-counter + .text-gray {
+    color: #3f4759 !important;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 0;
+    line-height: 1.35;
+}
+
+/* Le chiffre lui-même : le thème le rend en `<h2>` mais la graisse du thème
+ * (700) était déjà bonne — on ne fixe QUE la couleur, qui suivait la teinte
+ * de titre la plus foncée. Explicite ici pour ne pas dépendre de l'ordre des
+ * règles de titres de la 1ʳᵉ passe. */
+.stat-counter {
+    color: #1a2440;
+}
+
+/* La ligne de pied de carte (« Actifs : 89 », « Total groupes : 81 ») est un
+ * `<p>` nu, donc elle héritait du gris de corps du thème. Elle porte une
+ * donnée chiffrée : même traitement que le libellé. */
+.card-body .border-top p {
+    color: #3f4759;
+    font-size: 13px;
+}
+
+/* --- Mode sombre ---------------------------------------------------------- */
+html[data-theme='dark'] .text-gray,
+html[data-theme='dark'] .text-gray-5,
+html[data-theme='dark'] .text-gray-4,
+html[data-theme='dark'] .text-gray-3 {
+    color: #a8a5b4 !important;
+}
+
+html[data-theme='dark'] .text-gray-6,
+html[data-theme='dark'] .text-gray-7 {
+    color: #d2d0da !important;
+}
+
+html[data-theme='dark'] .card-body .stat-counter + p,
+html[data-theme='dark'] .card-body .stat-counter + .text-gray {
+    color: #c4c2ce !important;
+}
+
+html[data-theme='dark'] .stat-counter {
+    color: #f2f1f6;
+}
+
+html[data-theme='dark'] .card-body .border-top p {
+    color: #c4c2ce;
+}
+
+/* ---------------------------------------------------------------------------
+ * Tableau de bord (Pages/Backoffice/Dashboard/Index.tsx + Components/Dashboard)
+ *
+ * Same PreSkool cards, avatars and badges — this block only adds the layer
+ * the theme's static dashboard lacks: a hero that carries the working
+ * context and the day's shortcuts, KPI cards that are links, a day agenda
+ * beside the calendar, and legend pills on the chart.
+ * Every colour has a html[data-theme='dark'] twin at the end of the block.
+ * ------------------------------------------------------------------------- */
+.gls-dash-hero .card-body {
+    padding: 24px 28px;
+}
+.gls-dash-hero-inner {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 24px;
+}
+.gls-dash-hero-text {
+    flex: 1 1 320px;
+    min-width: 0;
+}
+.gls-dash-hero-date {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+.gls-dash-hero-muted {
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 13px;
+}
+.gls-dash-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+.gls-dash-quick {
+    flex: 1 1 560px;
+    max-width: 760px;
+}
+/* One row of five equal buttons; the hero's flex-wrap drops the whole block
+ * under the greeting before a button is ever squeezed. */
+.gls-dash-quick-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(104px, 1fr));
+    gap: 8px;
+}
+.gls-dash-quick-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 12px 10px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 500;
+    text-align: center;
+    line-height: 1.2;
+    transition: background-color 0.15s ease, transform 0.15s ease;
+}
+.gls-dash-quick-btn i {
+    font-size: 20px;
+}
+.gls-dash-quick-btn:hover,
+.gls-dash-quick-btn:focus-visible {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    transform: translateY(-1px);
+}
+@media (max-width: 767.98px) {
+    .gls-dash-hero .card-body {
+        padding: 20px;
+    }
+    .gls-dash-quick {
+        width: 100%;
+    }
+    /* Phones: a swipeable strip instead of a 3+2 grid with a hole. */
+    .gls-dash-quick-grid {
+        display: flex;
+        overflow-x: auto;
+        padding-bottom: 4px;
+        scrollbar-width: thin;
+    }
+    .gls-dash-quick-btn {
+        flex: 0 0 112px;
+    }
+}
+
+/* Section labels between the two KPI rows. */
+.gls-dash-section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 4px 0 14px;
+}
+.gls-dash-section-title h5 {
+    font-size: 15px;
+    font-weight: 600;
+    color: #202c4b;
+}
+
+/* KPI cards (StatCard.tsx): link affordance (no accent bar — the icon colour is the only colour cue). */
+.gls-stat-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.gls-stat-icon {
+    flex-shrink: 0;
+}
+/* The theme's .bg-teal-transparent / .bg-skyblue-transparent set only a
+ * background (unlike the primary/success/danger… ones, which also set
+ * `color`), so the icon inherited the avatar's white and vanished on the
+ * « Solde du mois » card. Same tone as the theme's .text-teal / .text-skyblue. */
+.gls-stat-icon.bg-teal-transparent {
+    color: #02a8b5;
+}
+.gls-stat-icon.bg-skyblue-transparent {
+    color: #0dcaf0;
+}
+.gls-stat-card-link {
+    display: flex;
+    flex-direction: column;
+    text-decoration: none;
+    color: inherit;
+}
+.gls-stat-card-link:hover,
+.gls-stat-card-link:focus-visible {
+    color: inherit;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(16, 24, 40, 0.08);
+}
+.gls-stat-open {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #3d5ee1;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+.gls-stat-card-link:hover .gls-stat-open,
+.gls-stat-card-link:focus-visible .gls-stat-open {
+    opacity: 1;
+}
+
+/* Widget cards (calendar, agenda, chart). */
+.gls-dash-card {
+    border-radius: 10px;
+}
+.gls-cal-nav {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.gls-cal-legend {
+    display: flex;
+    gap: 14px;
+    font-size: 12px;
+    color: #6a7287;
+}
+.gls-cal-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.gls-cal-legend .gls-seancecal-dot {
+    cursor: default;
+}
+.gls-cal-legend .gls-seancecal-dot::before,
+.gls-cal-legend .gls-seancecal-dot::after {
+    display: none;
+}
+.gls-cal-legend .gls-seancecal-dot:hover {
+    transform: none;
+}
+.gls-seancecal-day {
+    min-height: 72px;
+    cursor: pointer;
+}
+.gls-seancecal-day.is-selected {
+    box-shadow: inset 0 0 0 2px #3d5ee1;
+}
+.gls-seancecal-day:focus-visible {
+    outline: 2px solid #3d5ee1;
+    outline-offset: -2px;
+}
+
+/* Day agenda (SeancesAgenda.tsx). */
+.gls-agenda-counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 12px 24px 0;
+}
+.gls-agenda-body {
+    max-height: 560px;
+    overflow-y: auto;
+}
+.gls-agenda-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.gls-agenda-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid #e9edf4;
+    border-left-width: 4px;
+    border-radius: 8px;
+    color: inherit;
+    transition: background-color 0.15s ease;
+}
+.gls-agenda-item:hover,
+.gls-agenda-item:focus-visible {
+    background: #f8f9fb;
+    color: inherit;
+}
+.gls-agenda-success { border-left-color: #2e9d7e; }
+.gls-agenda-warning { border-left-color: #eab300; }
+.gls-agenda-danger  { border-left-color: #ef6879; }
+.gls-agenda-time {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 48px;
+    line-height: 1.2;
+}
+.gls-agenda-time strong {
+    font-size: 14px;
+    color: #202c4b;
+}
+.gls-agenda-time small {
+    font-size: 11px;
+    color: #6a7287;
+}
+.gls-agenda-group {
+    font-weight: 600;
+    font-size: 14px;
+    color: #202c4b;
+}
+.gls-agenda-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    height: 100%;
+    padding: 32px 12px;
+}
+
+/* Chart legend pills (AnnualFraisChart.tsx) — click toggles a series. */
+.gls-frais-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+.gls-frais-legend-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    border: 1px solid #e9edf4;
+    background: #fff;
+    color: #202c4b;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 0.15s ease, opacity 0.15s ease;
+}
+.gls-frais-legend-pill:hover {
+    border-color: #c8cfe0;
+}
+.gls-frais-legend-pill.is-off {
+    opacity: 0.45;
+    text-decoration: line-through;
+}
+.gls-frais-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+/* Dark mode twins. */
+html[data-theme='dark'] .gls-dash-section-title h5,
+html[data-theme='dark'] .gls-agenda-time strong,
+html[data-theme='dark'] .gls-agenda-group {
+    color: #e6e5ee;
+}
+html[data-theme='dark'] .gls-stat-card {
+    box-shadow: none;
+}
+html[data-theme='dark'] .gls-stat-card-link:hover {
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+html[data-theme='dark'] .gls-stat-open {
+    color: #8fa3ff;
+}
+html[data-theme='dark'] .gls-cal-nav {
+    color: #d5d8de !important;
+    border-color: #393f4d !important;
+}
+html[data-theme='dark'] .gls-seancecal-day.is-selected {
+    box-shadow: inset 0 0 0 2px #8fa3ff;
+}
+html[data-theme='dark'] .gls-agenda-item {
+    border-color: #393f4d;
+}
+html[data-theme='dark'] .gls-agenda-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+html[data-theme='dark'] .gls-frais-legend-pill {
+    background: #1b1f27;
+    border-color: #393f4d;
+    color: #d5d8de;
+}
+
+/* ---------------------------------------------------------------------------
+ * Passe TYPOGRAPHIE — unification de la fonte (08/09/2026)
+ *
+ * Demande : « une meilleure police, plus visible ». Vérification faite avant
+ * de changer quoi que ce soit : la fonte de CORPS est déjà Inter variable,
+ * auto-hébergée (public/assets/fonts/inter/, axes opsz 14-32 + wght 100-900,
+ * jeu complet cv01-cv14 / ss01-ss08 / tnum / zero). Inter est le bon choix
+ * pour un CRM dense — la remplacer n'apporterait rien. Le problème était
+ * ailleurs, en trois points mesurés :
+ *
+ * 1. LES TITRES N'ÉTAIENT PAS EN INTER. Le thème force
+ *    `font-family: "Roboto"` sur h1-h6, `.dropdown-menu`, le calendrier et
+ *    SweetAlert — or Roboto n'est PAS livré avec le thème (aucun @font-face,
+ *    aucune requête Google Fonts, vérifié). Sur Windows la pile retombait
+ *    donc sur une générique (Arial). Chaque titre de page et de carte était
+ *    rendu dans une AUTRE fonte que le texte au-dessous : c'est ce décalage
+ *    qui se lit comme « la police n'est pas belle ».
+ *
+ * 2. `tnum` ÉTAIT GLOBAL. Les chiffres tabulaires ont toute leur place dans
+ *    les colonnes d'argent (ils alignent les décimales), mais appliqués à
+ *    TOUT le texte ils espacent artificiellement les chiffres au milieu des
+ *    mots et donnent un rendu mécanique. Ils redescendent donc là où ils
+ *    servent : tableaux, montants, dates, références.
+ *
+ * 3. AUCUN RÉGLAGE DE RENDU. `-webkit-font-smoothing` et `text-rendering`
+ *    n'étaient pas posés, donc Inter s'affichait plus lourd et plus flou que
+ *    nécessaire sur les écrans à forte densité.
+ *
+ * Aucune fonte ajoutée, aucun téléchargement, aucune requête réseau
+ * supplémentaire : on se contente d'employer correctement celle qui est déjà
+ * embarquée. Les fontes d'ICÔNES (tabler-icons, Font Awesome, bootstrap-
+ * icons, feather) ne sont jamais touchées — elles sont posées sur des
+ * sélecteurs de classe et des pseudo-éléments, de spécificité supérieure aux
+ * règles d'élément ci-dessous.
+ * ------------------------------------------------------------------------- */
+
+/* --- Une seule fonte pour toute l'interface -------------------------------
+ * Variable déclarée une fois : les règles suivantes s'y réfèrent, donc
+ * changer de fonte un jour ne se fait qu'à un seul endroit. */
+:root {
+    --gls-font-sans: 'Nunito Sans', 'Inter', -apple-system, BlinkMacSystemFont,
+        'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* Les titres reprennent la fonte du corps. C'est la correction principale :
+ * elle supprime le mélange Inter (texte) / Arial (titres). */
+h1, .h1,
+h2, .h2,
+h3, .h3,
+h4, .h4,
+h5, .h5,
+h6, .h6,
+.card-title,
+.page-header .page-title,
+.modal-title {
+    font-family: var(--gls-font-sans);
+    /*
+     * Pas de resserrement négatif ici. Il avait été posé pour Inter, une
+     * grotesque étroite ; Nunito Sans est une fonte ARRONDIE, aux contreformes
+     * ouvertes — la resserrer fait se toucher les rondeurs (« o », « e »,
+     * « c ») et brouille justement ce qui la rend lisible. Une tracking
+     * neutre, voire très légèrement positive, la sert mieux.
+     */
+    letter-spacing: 0;
+}
+
+/* Mêmes fuites de Roboto ailleurs dans le thème. */
+.dropdown .dropdown-menu,
+.swal2-input,
+.swal2-close,
+.fc-toolbar h2,
+.fc-day-grid-event .fc-time,
+.fc-basic-view td.fc-week-number span,
+.fc-basic-view td.fc-day-number {
+    font-family: var(--gls-font-sans);
+}
+
+/* Les contrôles de formulaire héritent rarement de `body` selon les
+ * navigateurs : on les rattache explicitement. */
+.form-control,
+.form-select,
+.btn,
+.badge,
+input,
+select,
+textarea,
+button {
+    font-family: var(--gls-font-sans);
+}
+
+/* --- Rendu ----------------------------------------------------------------
+ * Inter est dessinée pour être rendue « fine » ; sans ces deux réglages elle
+ * apparaît empâtée sur macOS et légèrement floue sur les écrans HiDPI. */
+body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+/* --- Chiffres -------------------------------------------------------------
+ * `tnum` quitte `body` (voir point 2 de l'en-tête) et ne s'applique plus
+ * qu'au texte courant sous forme de ligatures contextuelles + zéro barré.
+ *
+ * `zero` (zéro barré) est le gain de lisibilité le plus direct de cette
+ * passe pour un CRM : dans « ETU-001 », « ENC-0042 », « 0,00 MAD », un zéro
+ * barré ne peut plus être confondu avec un O majuscule.
+ * `cv11` garde le « l » à empattement (l vs 1 vs I).           */
+body {
+    /*
+     * Ligatures contextuelles uniquement. Les réglages précédents (`cv11`,
+     * `ss01`, `zero`) étaient PROPRES À INTER : Nunito Sans n'expose que
+     * calt / ccmp / liga / locl / frac / numr / dnom (vérifié dans le
+     * fichier). Les laisser serait sans effet, mais trompeur à la lecture.
+     *
+     * `locl` active les formes localisées — utile ici, le CRM est en
+     * français et prépare l'arabe.
+     */
+    font-feature-settings: 'calt' 1, 'liga' 1, 'locl' 1;
+}
+
+/* Chiffres tabulaires là où ils servent vraiment : tout ce qui s'aligne en
+ * colonne ou se compare verticalement. */
+.table,
+.table td,
+.table th,
+/*
+ * ⚠ Plus AUCUN `font-variant-numeric: tabular-nums` dans cette feuille.
+ *
+ * Le raisonnement initial — « on le garde pour la fonte de repli, qui a la
+ * fonction » — était faux : c'est la fonte ACTIVE (Nunito Sans) qui reçoit la
+ * propriété, donc c'est elle que le navigateur synthétise, et le repli ne
+ * sert jamais. Résultat : un trait tracé au travers du « 0 » sur toutes les
+ * cartes chiffrées. Les chiffres de Nunito Sans étant déjà de chasse fixe,
+ * la propriété n'apportait rien et ne coûtait que ce défaut.
+ */
+
+.table,
+.table td,
+.table th,
+.stat-counter,
+.badge,
+.pagination,
+input[type='number'],
+input[type='date'],
+.text-nowrap-num {
+    font-variant-numeric: normal;
+}
+
+/* --- Graisses -------------------------------------------------------------
+ * Nunito Sans est variable (wght 200-1000) : toutes les graisses
+ * intermédiaires sont disponibles, sans fichier supplémentaire.
+ *
+ * Demande du 08/09/2026 : « plus gras, pour mieux voir ». La fonte a un fût
+ * plus fin et une hauteur d'x plus basse qu'Inter, donc à valeur numérique
+ * égale elle PARAÎT plus légère — d'où des valeurs nettement plus hautes ici
+ * que celles calées pour Inter. Les titres passent en 800, le texte courant
+ * en 500 (un demi-gras franc, pas un 400 qui s'efface).
+ *
+ * On ne va PAS jusqu'à 900/600 : au-delà, les contreformes rondes de Nunito
+ * Sans se referment et les tableaux denses à 13px deviennent des pâtés —
+ * l'inverse de l'objectif. */
+h1, .h1, h2, .h2, h3, .h3 {
+    font-weight: 800;
+}
+
+h4, .h4, h5, .h5, h6, .h6 {
+    font-weight: 750;
+}
+
+/* Le corps passe en demi-gras : c'est le principal levier de « visibilité »
+ * sur les écrans consultés toute la journée (listes, libellés, formulaires). */
+body {
+    font-weight: 500;
+}
+
+/* Les libellés de tableau et de formulaire ont déjà leur graisse fixée par
+ * la passe de lisibilité — on ne la contredit pas ici. */
+
+/* --- Interlignage ---------------------------------------------------------
+ * Le thème pose 1.5 partout. C'est confortable en prose, trop aéré dans une
+ * cellule de tableau (qui tient sur une ligne) et trop serré sous un titre
+ * multi-lignes. */
+.table td,
+.table th {
+    line-height: 1.4;
+}
+
+p {
+    line-height: 1.55;
+}
+
+/* --- Mode sombre ----------------------------------------------------------
+ * Sur fond sombre, une fonte claire « déborde » optiquement et paraît plus
+ * grasse qu'en mode clair. On compense en retirant l'anti-crénelage sous-
+ * pixel, ce qui restitue l'épaisseur voulue. */
+html[data-theme='dark'] body {
+    -webkit-font-smoothing: antialiased;
+    font-weight: 430;
+}
+
+/* --- Graisses, suite : les éléments de données ----------------------------
+ * `body { font-weight: 500 }` ne suffit pas partout — le thème repose des
+ * graisses explicites sur les tableaux, les cartes et les badges, qui
+ * l'emportent sur l'héritage. On les remonte au même niveau, sinon la moitié
+ * de l'écran reste en 400 et la demande « plus gras » n'est qu'à moitié
+ * satisfaite.
+ * ------------------------------------------------------------------------- */
+
+/* Le contenu des tableaux, c'est-à-dire l'essentiel des données du CRM.
+ *
+ * 08/09/2026 : remonté de 500 à 600 pour retrouver la densité de l'ANCIEN CRM
+ * (capture « Gestion des paiements »), où les lignes se lisent nettement plus
+ * franchement que dans un tableau Bootstrap par défaut. Combiné au noir posé
+ * plus haut, c'est ce qui donne des lignes qui « sautent aux yeux ».
+ *
+ * 600 est une instance RÉELLE de la fonte variable (axe wght 200-1000), donc
+ * aucun gras synthétique ici — contrairement aux icônes, qui n'ont qu'une
+ * seule graisse et doivent rester en 400 (voir l'avertissement plus bas). */
+.table tbody td,
+.table tbody th {
+    font-weight: 600;
+}
+
+/* Les en-têtes de colonne restent au-dessus du corps pour garder la
+ * hiérarchie : si tout monte, plus rien ne ressort. Les lignes étant passées
+ * à 600, les en-têtes montent à 750 pour conserver l'écart — c'est le rapport
+ * qu'on lit dans l'ancien CRM, pas une valeur absolue. */
+.table thead th,
+.table thead tr th {
+    font-weight: 750;
+}
+
+/* Les chiffres des cartes du tableau de bord — c'est ce que l'œil vient
+ * chercher en premier sur l'écran d'accueil. */
+.stat-counter,
+.stat-counter-value,
+.stat-counter-animated {
+    font-weight: 800;
+}
+
+/* Le libellé sous le chiffre (« Étudiants », « Inscriptions »). Il monte
+ * moins que le chiffre : il l'explique, il ne le concurrence pas. */
+.card-body .stat-counter + p,
+.card-body .stat-counter + .text-gray {
+    font-weight: 600;
+}
+
+/* La ligne de pied de carte (« Employés : 89 », « Nombre de dépenses : 0 ») */
+.card-body .border-top p {
+    font-weight: 500;
+}
+
+.card-body .border-top p .text-dark,
+.card-body .border-top p .fw-semibold {
+    font-weight: 700 !important;
+}
+
+/* Libellés de formulaire et de filtre : petits (12px), donc les premiers à
+ * devenir illisibles si la graisse est faible. */
+.form-label,
+.gls-filter-bar .form-label,
+.card .form-label {
+    font-weight: 600;
+}
+
+/* Champs de saisie : la valeur tapée doit peser plus que le placeholder. */
+.form-control,
+.form-select {
+    font-weight: 500;
+}
+
+/* Le placeholder redescend, sinon un champ vide pèse autant qu'un champ
+ * rempli — c'est la distinction posée dans la passe de lisibilité. */
+.form-control::placeholder {
+    font-weight: 400;
+}
+
+/* Onglets. La barre latérale a ses propres règles en fin de fichier : le
+ * sélecteur générique qui figurait ici ne portait pas, le thème posant une
+ * graisse plus spécifique sur les entrées de menu. */
+.nav-tabs .nav-link {
+    font-weight: 600;
+}
+
+.nav-tabs .nav-link.active {
+    font-weight: 700;
+}
+
+/* Boutons — un libellé d'action doit se lire d'un coup d'œil. */
+.btn {
+    font-weight: 600;
+}
+
+/* Les badges de statut portent une information courte et colorée : la
+ * graisse compense leur petite taille (11-12px). */
+.badge {
+    font-weight: 700;
+}
+
+/* Les liens de tableau (noms d'étudiants, références) : cliquables ET
+ * lisibles. */
+.table a:not(.btn):not(.dropdown-item):not(.page-link) {
+    font-weight: 600;
+}
+
+/* --- Mode sombre ----------------------------------------------------------
+ * Un texte clair sur fond sombre s'épaissit optiquement : à graisse égale il
+ * paraît plus gras qu'en mode clair. On redescend donc d'un cran pour obtenir
+ * la MÊME densité perçue dans les deux thèmes — sans repasser sous le seuil
+ * demandé. */
+html[data-theme='dark'] .table tbody td,
+html[data-theme='dark'] .table tbody th {
+    font-weight: 450;
+}
+
+html[data-theme='dark'] .stat-counter,
+html[data-theme='dark'] .stat-counter-value,
+html[data-theme='dark'] .stat-counter-animated {
+    font-weight: 750;
+}
+
+html[data-theme='dark'] h1,
+html[data-theme='dark'] h2,
+html[data-theme='dark'] h3 {
+    font-weight: 750;
+}
+
+/* --- Barre latérale -------------------------------------------------------
+ * Demandé le 08/09/2026 : « mettre la barre latérale en gras ».
+ *
+ * La règle posée plus haut (`.sidebar .sidebar-menu ul li a`) ne s'appliquait
+ * PAS : le menu React imbrique un niveau de plus que le sélecteur ne le
+ * supposait. La structure réelle rendue par Components/Theme/Sidebar.tsx est
+ *
+ *     .sidebar-menu > ul > li  (le GROUPE, avec son .submenu-hdr)
+ *                      └── ul > li > a > span   (l'entrée cliquable)
+ *
+ * et le thème y pose explicitement `font-weight: 400` — plus spécifique que
+ * l'héritage du `body`, donc la barre restait fine alors que le reste de
+ * l'application était passé en demi-gras.
+ *
+ * Deux corrections indissociables : la graisse (demandée) et la couleur des
+ * en-têtes de section, à #9CA1AF = 2,58:1 sur fond blanc — le dernier gris
+ * illisible que les passes précédentes n'avaient pas atteint, parce que la
+ * règle du thème est plus spécifique que `.text-gray`.
+ * ------------------------------------------------------------------------- */
+
+/* Les entrées de menu (« Inscriptions », « Groupes », « Étudiants »…). */
+.sidebar .sidebar-menu > ul > li ul li a span {
+    font-weight: 600;
+}
+
+/* L'entrée active se distingue encore de ses voisines une fois toutes
+ * épaissies — sinon « en gras partout » revient à « en gras nulle part ». */
+.sidebar .sidebar-menu > ul > li ul li a.active span,
+.sidebar .sidebar-menu > ul > li.active a span {
+    font-weight: 700;
+}
+
+/* Entrées de premier niveau (sans sous-menu). */
+.sidebar .sidebar-menu > ul > li > a span {
+    font-weight: 600;
+}
+
+/* En-têtes de section (« PRINCIPAL », « GESTION D'INSCRIPTIONS »…) :
+ * 12px en majuscules à 2,58:1 — le pire rapport lisibilité/taille de
+ * l'écran. Ils restent SECONDAIRES (ce sont des étiquettes, pas des liens),
+ * d'où une graisse haute mais une couleur qui reste en retrait des entrées
+ * elles-mêmes : 5,95:1, largement au-dessus du seuil AA. */
+.sidebar .sidebar-menu > ul > li .submenu-hdr {
+    font-weight: 700;
+    color: #5a6478;
+}
+
+/* Les icônes accompagnent le texte : elles suivent son poids visuel. */
+/*
+ * ⚠ Les icônes ne prennent JAMAIS de graisse. Tabler Icons est une fonte à
+ * graisse UNIQUE (usWeightClass 400, non variable — vérifié dans le fichier
+ * woff2). Lui demander 600 force le navigateur à FABRIQUER le gras en
+ * épaississant le tracé, ce qui bave sur les contours : c'est le flou des
+ * icônes de la barre latérale signalé le 08/09/2026. Même cause que le « 0 »
+ * barré des cartes : réclamer à une fonte ce qu'elle ne contient pas.
+ *
+ * Pour épaissir une icône, il faut une fonte d'icônes qui possède la
+ * graisse — jamais `font-weight`. Ici on rétablit le tracé net et on gagne
+ * en présence par la COULEUR, qui elle ne dégrade rien.
+ */
+.sidebar .sidebar-menu > ul > li ul li a i {
+    font-weight: normal;
+    color: #3f4759;
+    /* Le rendu par niveaux de gris évite le frangé coloré du sous-pixel sur
+     * un glyphe monochrome de 16px. */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* L'entrée active garde l'icône dans la couleur d'accent du thème. */
+.sidebar .sidebar-menu > ul > li ul li.active a i,
+.sidebar .sidebar-menu > ul > li ul li a.active i {
+    color: #3d5ee1;
+}
+
+/*
+ * Aucune icône de l'application ne doit être mise en gras, pour la même
+ * raison. Règle générale, posée après les blocs de graisse ci-dessus afin de
+ * rattraper tout `font-weight` hérité (des boutons, badges, en-têtes de
+ * tableau… qui sont eux légitimement en gras).
+ */
+i[class*='ti-'],
+i[class*='fa-'],
+i[class*='bi-'],
+.ti,
+.fa,
+.fas,
+.far,
+.fab {
+    font-weight: normal !important;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* --- Mode sombre ----------------------------------------------------------
+ * Le thème peint déjà la barre en sombre ; on n'y touche que la graisse, en
+ * redescendant d'un cran comme partout ailleurs (un texte clair sur fond
+ * sombre paraît plus gras à valeur égale). */
+html[data-theme='dark'] .sidebar .sidebar-menu > ul > li ul li a span,
+html[data-theme='dark'] .sidebar .sidebar-menu > ul > li > a span {
+    font-weight: 550;
+}
+
+html[data-theme='dark'] .sidebar .sidebar-menu > ul > li .submenu-hdr {
+    font-weight: 650;
+    color: #9b98a8;
+}
+
+/*
+ * Les variantes de barre colorée du thème (data-sidebar=primary / darkblack /
+ * darkblue) peignent leurs en-têtes en blanc : on ne remplace pas leur
+ * couleur, seulement la graisse, sinon on casse un preset du thème (§12).
+ */
+[data-sidebar='primary'] .sidebar .sidebar-menu > ul > li .submenu-hdr,
+[data-sidebar='darkblack'] .sidebar .sidebar-menu > ul > li .submenu-hdr,
+[data-sidebar='darkblue'] .sidebar .sidebar-menu > ul > li .submenu-hdr {
+    color: #fff;
+}
+
+/* --- Données de tableau en noir ------------------------------------------
+ * Complément du passage au noir plus haut : le thème et Bootstrap reposent
+ * leurs propres couleurs sur certains contenus DANS une cellule, qui
+ * échappaient donc à la règle posée sur `td`. Une donnée reste une donnée,
+ * quel que soit le balisage qui l'enveloppe.
+ * ------------------------------------------------------------------------- */
+.table tbody td > span:not(.badge),
+.table tbody td strong,
+.table tbody td b,
+.table tbody td small,
+.table tbody td .fw-medium,
+.table tbody td .fw-semibold,
+.table tbody td .fw-bold,
+.table tbody td p {
+    color: #111111;
+}
+
+/*
+ * `.text-muted` DANS un tableau : il garde son rôle de second plan (une
+ * mention comme « Appel non fait » ne doit pas peser autant qu'une donnée),
+ * mais remonte bien au-dessus du seuil AA. #4A5265 = 7,8:1, soit AAA, tout
+ * en restant visiblement plus léger que le noir des vraies données.
+ */
+.table tbody td .text-muted,
+.table tbody td .text-gray,
+.table tbody td .text-gray-5 {
+    color: #4a5265 !important;
+}
+
+/* Les badges gardent leur code couleur : ce sont des STATUTS, pas du texte
+ * courant — les noircir supprimerait l'information portée par la couleur. */
+.table tbody td .badge {
+    color: inherit;
+}
+
+/* --- Mode sombre ----------------------------------------------------------
+ * Le pendant du noir est le blanc quasi pur. Même raisonnement inversé :
+ * #F5F4F8 plutôt que #FFF absolu, pour éviter l'éblouissement d'un blanc
+ * plein sur fond très sombre lors d'une lecture prolongée. */
+html[data-theme='dark'] .table,
+html[data-theme='dark'] .table tbody td,
+html[data-theme='dark'] .table tbody th,
+html[data-theme='dark'] .table tbody td > span:not(.badge),
+html[data-theme='dark'] .table tbody td strong,
+html[data-theme='dark'] .table tbody td b,
+html[data-theme='dark'] .table tbody td p {
+    color: #f5f4f8 !important;
+}
+
+html[data-theme='dark'] .table thead th,
+html[data-theme='dark'] .table thead tr th {
+    color: #ffffff !important;
+}
+
+html[data-theme='dark'] .table tbody td .text-muted,
+html[data-theme='dark'] .table tbody td .text-gray,
+html[data-theme='dark'] .table tbody td .text-gray-5 {
+    color: #b3b0be !important;
+}
+
+html[data-theme='dark'] .table tbody td .badge {
+    color: inherit !important;
+}
+
+/* Les liens de tableau restent bleus — c'est ce qui signale qu'ils sont
+ * cliquables ; les noircir les rendrait indistinguables du texte. */
+html[data-theme='dark'] .table tbody td a:not(.btn):not(.dropdown-item):not(.page-link) {
+    color: #9db2ff !important;
 }

@@ -52,6 +52,16 @@ const STATUT_TABS: Array<{ key: string; icon: string; label: string }> = [
     { key: 'Fin de formation', icon: 'ti-history', label: 'Historique' },
 ];
 
+/**
+ * Ordres proposés par le sélecteur « Trier par ». Les valeurs sont celles de
+ * GetGroupsList::SORTS — le tri lui-même est fait en SQL côté serveur, cette
+ * liste ne fait que le demander.
+ */
+const SORT_OPTIONS: SelectOption[] = [
+    { value: 'recent', label: 'Plus récents' },
+    { value: 'classification', label: 'Classification (A1.1 → B2.3)' },
+];
+
 type LifecycleAction = 'archive' | 'annuler' | 'reactiver' | 'activer' | 'retourner-en-inscription';
 
 /** Per-action copy for the row-menu lifecycle ConfirmDialog — one place to keep title/message/icon/labels in sync per action, instead of parallel ternary chains that can drift apart. */
@@ -397,7 +407,10 @@ export default function GroupsIndex({
         );
     }
 
-    const filterReset = useFilterReset(filters, reload, { perPage: filters.perPage });
+    // `sort` a une valeur par DÉFAUT non vide : sans cette entrée, la
+    // réinitialisation l'enverrait à '' et le bouton s'allumerait sur une liste
+    // pourtant intacte (voir useFilterReset).
+    const filterReset = useFilterReset(filters, reload, { perPage: filters.perPage, sort: 'recent' });
 
     function setStatutTab(statut: string) {
         reload({ statutFilter: statut });
@@ -861,6 +874,17 @@ export default function GroupsIndex({
                                 id="grp-f-au"
                                 value={filters.dateTo}
                                 onChange={(event) => reload({ dateTo: event.target.value })}
+                            />
+                        </div>
+                        <div style={{ width: 220 }}>
+                            <label className="form-label" htmlFor="grp-f-tri">
+                                Trier par
+                            </label>
+                            <SelectField
+                                id="grp-f-tri"
+                                options={SORT_OPTIONS}
+                                value={filters.sort}
+                                onChange={(event) => reload({ sort: event.target.value })}
                             />
                         </div>
                     </TableToolbar>

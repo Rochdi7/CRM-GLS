@@ -54,6 +54,9 @@ final class DashboardInertiaTest extends TestCase
                 ->has('stats.employeesActive')
                 ->has('stats.groupsTotal')
                 ->has('stats.groupsEnFormation')
+                ->has('stats.groupsEnInscription')
+                ->has('stats.groupsTermines')
+                ->has('stats.groupsAnnules')
                 ->has('stats.inscriptionsTotal')
                 ->has('stats.inscriptionsActives')
                 ->has('stats.inscriptionsAnnulees')
@@ -75,7 +78,8 @@ final class DashboardInertiaTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->where('stats', fn ($stats) => collect($stats)->keys()->all() === [
                     'studentsTotal', 'employeesTotal', 'employeesActive', 'enseignantsTotal', 'parentsTotal', 'groupsTotal',
-                    'groupsEnFormation', 'inscriptionsTotal', 'inscriptionsActives', 'inscriptionsAnnulees', 'inscriptionsChangement',
+                    'groupsEnFormation', 'groupsEnInscription', 'groupsTermines', 'groupsAnnules',
+                    'inscriptionsTotal', 'inscriptionsActives', 'inscriptionsAnnulees', 'inscriptionsChangement',
                     'paymentsMonth', 'depensesMonth', 'depensesMonthCount', 'anneeLabel', 'centreLabel',
                 ])
             );

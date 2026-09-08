@@ -30,6 +30,17 @@ final class GetGroupsList
 
     public const DEFAULT_PER_PAGE = 10;
 
+    /** Newest group first — the list's historical default. */
+    public const SORT_RECENT = 'recent';
+
+    /** CEFR order: A1.1, A1.2, A2.1 … B2.3 (Group::NIVEAUX order). */
+    public const SORT_CLASSIFICATION = 'classification';
+
+    /** @var list<string> */
+    public const SORTS = [self::SORT_RECENT, self::SORT_CLASSIFICATION];
+
+    public const DEFAULT_SORT = self::SORT_RECENT;
+
     public function __construct(
         private readonly CenterAccessService $centerAccess,
         private readonly CurrentContext $context,
@@ -45,9 +56,14 @@ final class GetGroupsList
         string $enseignantFilter = '',
         string $dateFrom = '',
         string $dateTo = '',
+        string $sort = self::DEFAULT_SORT,
     ): LengthAwarePaginator {
         if (! in_array($perPage, self::PER_PAGE_OPTIONS, true)) {
             $perPage = self::DEFAULT_PER_PAGE;
+        }
+
+        if (! in_array($sort, self::SORTS, true)) {
+            $sort = self::DEFAULT_SORT;
         }
 
         $groups = Group::query()
@@ -82,7 +98,7 @@ final class GetGroupsList
             ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_debut_formation', '>=', $dateFrom))
             ->when($dateTo !== '', fn ($q) => $q->whereDate('date_debut_formation', '<=', $dateTo))
             ->when($search !== '', fn ($q) => $q->where('nom', 'ilike', "%{$search}%"))
-            ->latest()
+            ->tap(fn ($q) => $this->applySort($q, $sort))
             ->paginate($perPage)
             ->withQueryString();
 
@@ -170,6 +186,81 @@ final class GetGroupsList
         $historiqueTotal = collect(Group::STATUTS_HISTORIQUE)->sum(fn (string $statut) => $perStatut->get($statut, 0));
 
         return $perStatut->put(Group::STATUT_FIN_FORMATION, $historiqueTotal);
+    }
+
+    /**
+     * Ordonne la liste, TOUJOURS en SQL — la pagination est côté serveur
+     * (CLAUDE.md §5), donc trier la page déjà reçue ne trierait que les 10
+     * lignes affichées, pas les centaines derrière.
+     *
+     * « Classification » suit l'ordre PÉDAGOGIQUE (A1.1, A1.2, A2.1, … B2.3),
+     * pas l'ordre alphabétique. Les deux coïncident aujourd'hui par chance,
+     * mais un niveau ajouté hors séquence (un « A0 » débutant, un « C1 ») se
+     * rangerait au mauvais endroit sans que rien ne l'explique.
+     *
+     * ⚠ Le tri se fait sur le PALIER (A1, A2, B1, B2) puis sur le sous-niveau,
+     * et NON sur la valeur entière — parce que la base contient des paliers
+     * NUS que le menu déroulant n'offre pas : au 08/09/2026, 9 groupes sont
+     * classés « A1 » tout court, dont 8 « En formation ». Un CASE sur la
+     * valeur complète les enverrait après B2.3, tout en bas d'une liste où
+     * l'utilisateur les cherche en haut. Découper la valeur les range avec
+     * les A1.x, là où ils appartiennent, et le palier nu passe AVANT ses
+     * sous-niveaux (A1 puis A1.1 puis A1.2) — sous-niveau 0.
+     *
+     * Rien n'est filtré : une valeur hors barème ou vide reste listée, à la
+     * fin. Une ligne sans classification reste une ligne à traiter (§ read-model
+     * « signaler plutôt que masquer »).
+     *
+     * Le nom départage à niveau égal, et `id` clôt le tri : sans clé unique
+     * finale, PostgreSQL peut renvoyer deux ordres différents pour deux pages
+     * du même tri, et une ligne apparaît alors deux fois — ou jamais.
+     */
+    private function applySort($query, string $sort): void
+    {
+        if ($sort !== self::SORT_CLASSIFICATION) {
+            $query->latest()->orderByDesc('id');
+
+            return;
+        }
+
+        // Paliers dans l'ordre, déduits de la constante : « A1.1 » ⇒ « A1 ».
+        $paliers = [];
+
+        foreach (Group::NIVEAUX as $niveau) {
+            $palier = explode('.', $niveau)[0];
+
+            if (! in_array($palier, $paliers, true)) {
+                $paliers[] = $palier;
+            }
+        }
+
+        $bindings = [];
+        $position = 1;
+
+        foreach ($paliers as $palier) {
+            $bindings[] = $palier;
+            $bindings[] = $position++;
+        }
+
+        $whens = implode(' ', array_fill(0, count($paliers), 'WHEN ? THEN ?'));
+
+        $query
+            // Palier : « A1.2 » et « A1 » donnent tous deux « A1 ». Aucune
+            // valeur n'est concaténée dans le SQL — tout passe en binding.
+            ->orderByRaw(
+                "CASE split_part(COALESCE(niveau, ''), '.', 1) {$whens} ELSE ? END",
+                [...$bindings, count($paliers) + 1],
+            )
+            // Sous-niveau : « A1.2 » ⇒ 2, « A1 » ⇒ 0 (le palier nu passe en
+            // premier). Le test ~ '^[0-9]+$' évite un CAST sur un suffixe non
+            // numérique, qui ferait échouer TOUTE la requête et pas seulement
+            // la ligne fautive.
+            ->orderByRaw(
+                "CASE WHEN split_part(COALESCE(niveau, ''), '.', 2) ~ '^[0-9]+$'"
+                ." THEN split_part(niveau, '.', 2)::int ELSE 0 END"
+            )
+            ->orderBy('nom')
+            ->orderBy('id');
     }
 
     private function scopeToActiveCenter($query): void

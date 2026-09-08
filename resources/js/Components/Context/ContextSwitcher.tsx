@@ -170,7 +170,7 @@ export default function ContextSwitcher({ context }: ContextSwitcherProps) {
                 <button
                     ref={yearButtonRef}
                     type="button"
-                    className="btn btn-outline-light bg-white d-flex align-items-center dropdown-toggle"
+                    className="btn gls-ctx-btn gls-ctx-btn-year d-flex align-items-center dropdown-toggle"
                     onClick={toggleYearMenu}
                     aria-expanded={yearMenuOpen}
                     disabled={processing}
@@ -206,7 +206,7 @@ export default function ContextSwitcher({ context }: ContextSwitcherProps) {
                 <button
                     ref={centerButtonRef}
                     type="button"
-                    className={`btn btn-outline-light bg-white d-flex align-items-center${context.canSwitchCenter ? ' dropdown-toggle' : ''}`}
+                    className={`btn gls-ctx-btn gls-ctx-btn-centre d-flex align-items-center${context.canSwitchCenter ? ' dropdown-toggle' : ''}`}
                     onClick={toggleCenterMenu}
                     aria-expanded={centerMenuOpen}
                     disabled={processing || !context.canSwitchCenter}

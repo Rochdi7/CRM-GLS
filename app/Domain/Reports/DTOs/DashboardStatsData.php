@@ -18,6 +18,9 @@ final class DashboardStatsData
         public readonly int $parentsTotal,
         public readonly int $groupsTotal,
         public readonly int $groupsEnFormation,
+        public readonly int $groupsEnInscription,
+        public readonly int $groupsTermines,
+        public readonly int $groupsAnnules,
         public readonly int $inscriptionsTotal,
         public readonly int $inscriptionsActives,
         public readonly int $inscriptionsAnnulees,
@@ -31,7 +34,8 @@ final class DashboardStatsData
 
     /**
      * @return array{studentsTotal: int, employeesTotal: int, employeesActive: int,
-     *     enseignantsTotal: int, parentsTotal: int, groupsTotal: int, groupsEnFormation: int, inscriptionsTotal: int,
+     *     enseignantsTotal: int, parentsTotal: int, groupsTotal: int, groupsEnFormation: int, groupsEnInscription: int,
+     *     groupsTermines: int, groupsAnnules: int, inscriptionsTotal: int,
      *     inscriptionsActives: int, inscriptionsAnnulees: int, inscriptionsChangement: int, paymentsMonth: string,
      *     depensesMonth: string, depensesMonthCount: int, anneeLabel: ?string, centreLabel: ?string}
      */
@@ -45,6 +49,9 @@ final class DashboardStatsData
             'parentsTotal' => $this->parentsTotal,
             'groupsTotal' => $this->groupsTotal,
             'groupsEnFormation' => $this->groupsEnFormation,
+            'groupsEnInscription' => $this->groupsEnInscription,
+            'groupsTermines' => $this->groupsTermines,
+            'groupsAnnules' => $this->groupsAnnules,
             'inscriptionsTotal' => $this->inscriptionsTotal,
             'inscriptionsActives' => $this->inscriptionsActives,
             'inscriptionsAnnulees' => $this->inscriptionsAnnulees,

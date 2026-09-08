@@ -112,8 +112,8 @@ final class GetDashboardStats
         )->toBase()->first();
 
         $groups = $groupsQuery->selectRaw(
-            'COUNT(*) AS total, COUNT(*) FILTER (WHERE statut = ?) AS en_formation',
-            [Group::STATUT_EN_FORMATION],
+            'COUNT(*) AS total, COUNT(*) FILTER (WHERE statut = ?) AS en_formation, COUNT(*) FILTER (WHERE statut = ?) AS en_inscription, COUNT(*) FILTER (WHERE statut = ?) AS termines, COUNT(*) FILTER (WHERE statut = ?) AS annules',
+            [Group::STATUT_EN_FORMATION, Group::STATUT_EN_INSCRIPTION, Group::STATUT_FIN_FORMATION, Group::STATUT_ANNULEE],
         )->toBase()->first();
 
         $inscriptions = $inscriptionsQuery->selectRaw(
@@ -136,6 +136,9 @@ final class GetDashboardStats
             parentsTotal: (int) $students->parents,
             groupsTotal: (int) $groups->total,
             groupsEnFormation: (int) $groups->en_formation,
+            groupsEnInscription: (int) $groups->en_inscription,
+            groupsTermines: (int) $groups->termines,
+            groupsAnnules: (int) $groups->annules,
             inscriptionsTotal: (int) $inscriptions->total,
             inscriptionsActives: (int) $inscriptions->actives,
             inscriptionsAnnulees: (int) $inscriptions->annulees,

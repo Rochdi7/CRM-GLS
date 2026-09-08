@@ -66,13 +66,18 @@ final class GroupController extends Controller
         $dateFrom = (string) $request->string('dateFrom');
         $dateTo = (string) $request->string('dateTo');
         $perPage = (int) $request->integer('perPage', GetGroupsList::DEFAULT_PER_PAGE);
+        $sort = (string) $request->string('sort', GetGroupsList::DEFAULT_SORT);
 
         if (! in_array($statutFilter, Group::STATUTS, true)) {
             $statutFilter = Group::STATUT_EN_FORMATION;
         }
 
+        if (! in_array($sort, GetGroupsList::SORTS, true)) {
+            $sort = GetGroupsList::DEFAULT_SORT;
+        }
+
         return Inertia::render('Backoffice/Groups/Index', [
-            'groups' => $getGroupsList($request->user(), $search, $statutFilter, $perPage, $enseignantFilter, $dateFrom, $dateTo),
+            'groups' => $getGroupsList($request->user(), $search, $statutFilter, $perPage, $enseignantFilter, $dateFrom, $dateTo, $sort),
             'statutCounts' => $getGroupsList->statutCounts($request->user()),
             'filters' => [
                 'search' => $search,
@@ -83,6 +88,7 @@ final class GroupController extends Controller
                 'perPage' => in_array($perPage, GetGroupsList::PER_PAGE_OPTIONS, true)
                     ? $perPage
                     : GetGroupsList::DEFAULT_PER_PAGE,
+                'sort' => $sort,
             ],
             'perPageOptions' => GetGroupsList::PER_PAGE_OPTIONS,
             'niveaux' => Group::NIVEAUX,

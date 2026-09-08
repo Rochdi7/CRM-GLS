@@ -1,116 +1,158 @@
+import { usePage } from '@inertiajs/react';
 import CountUp from '@/Components/Dashboard/CountUp';
 import StatCard from '@/Components/Dashboard/StatCard';
+import { t } from '@/Lib/i18n';
 import { formatMontant, formatMontantCompact } from '@/Lib/money';
-import type { DashboardStats } from '@/Types';
+import type { DashboardStats, SharedProps } from '@/Types';
 
 interface StatsGridProps {
     stats: DashboardStats;
 }
 
 /**
- * Dashboard KPI cards — 8 distinct counts, no two cards covering the same
- * concept (an earlier version had both "Inscriptions actives" and
- * "Inscriptions" cards, and both "Groupes" and "Groupes actifs" — merged
- * here into one card per concept, with the other figure as the secondary
- * line instead of a whole extra card).
+ * Dashboard KPI cards in two rows — « Vue d'ensemble » (people, groups,
+ * registrations) and « Finances du mois » (money in, money out, net).
+ * One card per concept; a related figure rides as the secondary line
+ * instead of a whole extra card (an earlier version had both "Inscriptions
+ * actives" and "Inscriptions", and both "Groupes" and "Groupes actifs").
+ *
+ * Every card links to the module its figure comes from when the user holds
+ * that module's `*.view` permission — UI convenience only (§5): the count
+ * itself was computed server-side and is shown either way.
  */
 export default function StatsGrid({ stats }: StatsGridProps) {
+    const { auth } = usePage<SharedProps>().props;
+
+    const linkIf = (permission: string, href: string): string | undefined =>
+        auth.isSuperAdmin || auth.permissions.includes(permission) ? href : undefined;
+
+    // Both figures are server totals over the SAME month + centre + année
+    // window (GetDashboardStats keeps the two queries directly comparable),
+    // so their difference is a plain subtraction of two authoritative
+    // amounts, not a client-side aggregation of rows.
+    const net = Number(stats.paymentsMonth) - Number(stats.depensesMonth);
+    const monthLabel = new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+
     return (
-        <div className="row">
-            <div className="d-flex align-items-center flex-wrap gap-2 mb-3">
-                <span className="text-muted">Affichage des données pour :</span>
-                <span className="badge badge-soft-primary">
-                    <i className="ti ti-calendar me-1" />
-                    {stats.anneeLabel ?? '—'}
-                </span>
-                <span className="badge badge-soft-info">
-                    <i className="ti ti-building me-1" />
-                    {stats.centreLabel ?? 'Tous les centres'}
-                </span>
+        <>
+            <div className="gls-dash-section-title">
+                <h5 className="mb-0">{t('Overview')}</h5>
+            </div>
+            <div className="row">
+                <StatCard
+                    icon="ti-school"
+                    variant="danger"
+                    value={<CountUp value={stats.studentsTotal} />}
+                    label={t('Students')}
+                    secondaryLabel={t('Parents on file')}
+                    secondaryValue={stats.parentsTotal.toLocaleString('fr-FR')}
+                    href={linkIf('students.view', '/backoffice/students')}
+                />
+
+                <StatCard
+                    icon="ti-clipboard-list"
+                    variant="info"
+                    value={<CountUp value={stats.inscriptionsTotal} />}
+                    label={t('Registrations')}
+                    footer={
+                        <>
+                            <span className="badge badge-soft-success">
+                                {t('Active (registrations)')} : {stats.inscriptionsActives}
+                            </span>
+                            <span className="badge badge-soft-danger">
+                                {t('Cancelled registrations')} : {stats.inscriptionsAnnulees}
+                            </span>
+                            <span className="badge badge-soft-info">
+                                {t('Group changes')} : {stats.inscriptionsChangement}
+                            </span>
+                        </>
+                    }
+                    href={linkIf('registrations.view', '/backoffice/inscriptions')}
+                />
+
+                <StatCard
+                    icon="ti-users-group"
+                    variant="primary"
+                    value={<CountUp value={stats.groupsTotal} />}
+                    label={t('Groups')}
+                    footer={
+                        <>
+                            <span className="badge badge-soft-success">
+                                {t('In training')} : {stats.groupsEnFormation}
+                            </span>
+                            <span className="badge badge-soft-warning">
+                                {t('Enrolling')} : {stats.groupsEnInscription}
+                            </span>
+                            <span className="badge badge-soft-dark">
+                                {t('Finished')} : {stats.groupsTermines}
+                            </span>
+                            <span className="badge badge-soft-danger">
+                                {t('Cancelled (groups)')} : {stats.groupsAnnules}
+                            </span>
+                        </>
+                    }
+                    href={linkIf('groups.view', '/backoffice/groups')}
+                />
+
+                <StatCard
+                    icon="ti-user"
+                    variant="warning"
+                    value={<CountUp value={stats.enseignantsTotal} />}
+                    label={t('Teachers')}
+                    secondaryLabel={t('Employees')}
+                    secondaryValue={stats.employeesTotal}
+                    href={linkIf('employees.view', '/backoffice/employees')}
+                />
             </div>
 
-            <StatCard
-                icon="ti-school"
-                iconBg="bg-danger-transparent"
-                value={<CountUp value={stats.studentsTotal} />}
-                label="Étudiants"
-            />
+            <div className="gls-dash-section-title">
+                <h5 className="mb-0">{t("This month's finances")}</h5>
+                <span className="badge badge-soft-primary text-capitalize">{monthLabel}</span>
+            </div>
+            <div className="row">
+                <StatCard
+                    icon="ti-users"
+                    variant="secondary"
+                    value={<CountUp value={stats.employeesActive} />}
+                    label={t('Active employees')}
+                    secondaryLabel={t('Employees')}
+                    secondaryValue={stats.employeesTotal}
+                    href={linkIf('employees.view', '/backoffice/employees')}
+                />
 
-            <StatCard
-                icon="ti-users"
-                iconBg="bg-secondary-transparent"
-                value={<CountUp value={stats.employeesTotal} />}
-                label="Employés"
-                secondaryLabel="Actifs"
-                secondaryValue={stats.employeesActive}
-            />
+                <StatCard
+                    icon="ti-cash-banknote"
+                    variant="success"
+                    value={<CountUp value={stats.paymentsMonth} format={formatMontantCompact} />}
+                    valueTitle={`${formatMontant(stats.paymentsMonth)} MAD`}
+                    unit="MAD"
+                    label={t('Payments this month')}
+                    href={linkIf('payments.view', '/backoffice/encaissements')}
+                />
 
-            <StatCard
-                icon="ti-user"
-                iconBg="bg-warning-transparent"
-                value={<CountUp value={stats.enseignantsTotal} />}
-                label="Total d'enseignants"
-                secondaryLabel="Employés actifs"
-                secondaryValue={stats.employeesActive}
-            />
+                <StatCard
+                    icon="ti-cash-banknote-off"
+                    variant="danger"
+                    value={<CountUp value={stats.depensesMonth} format={formatMontantCompact} />}
+                    valueTitle={`${formatMontant(stats.depensesMonth)} MAD`}
+                    unit="MAD"
+                    label={t('Expenses this month')}
+                    secondaryLabel={t('Number of expenses')}
+                    secondaryValue={stats.depensesMonthCount}
+                    href={linkIf('expenses.view', '/backoffice/depenses')}
+                />
 
-            <StatCard
-                icon="ti-users"
-                iconBg="bg-secondary-transparent"
-                value={<CountUp value={stats.parentsTotal} />}
-                label="Parents"
-                secondaryLabel="Sur"
-                secondaryValue={`${stats.studentsTotal} étudiants`}
-            />
-
-            <StatCard
-                icon="ti-users-group"
-                iconBg="bg-primary-transparent"
-                value={<CountUp value={stats.groupsEnFormation} />}
-                label="Groupes actifs"
-                secondaryLabel="Total groupes"
-                secondaryValue={stats.groupsTotal}
-            />
-
-            <StatCard
-                icon="ti-clipboard-list"
-                iconBg="bg-info-transparent"
-                value={<CountUp value={stats.inscriptionsTotal} />}
-                label="Inscriptions"
-                footer={
-                    <>
-                        <span className="badge badge-soft-success">
-                            Actives : {stats.inscriptionsActives}
-                        </span>
-                        <span className="badge badge-soft-danger">
-                            Annulées : {stats.inscriptionsAnnulees}
-                        </span>
-                        <span className="badge badge-soft-info">
-                            Changement : {stats.inscriptionsChangement}
-                        </span>
-                    </>
-                }
-            />
-
-            <StatCard
-                icon="ti-cash-banknote"
-                iconBg="bg-success-transparent"
-                value={<CountUp value={stats.paymentsMonth} format={formatMontantCompact} />}
-                valueTitle={`${formatMontant(stats.paymentsMonth)} MAD`}
-                unit="MAD"
-                label="Encaissements ce mois-ci"
-            />
-
-            <StatCard
-                icon="ti-cash-banknote-off"
-                iconBg="bg-danger-transparent"
-                value={<CountUp value={stats.depensesMonth} format={formatMontantCompact} />}
-                valueTitle={`${formatMontant(stats.depensesMonth)} MAD`}
-                unit="MAD"
-                label="Dépenses ce mois-ci"
-                secondaryLabel="Nombre de dépenses"
-                secondaryValue={stats.depensesMonthCount}
-            />
-        </div>
+                <StatCard
+                    icon={net >= 0 ? 'ti-trending-up' : 'ti-trending-down'}
+                    variant={net >= 0 ? 'teal' : 'warning'}
+                    value={<CountUp value={net} format={formatMontantCompact} />}
+                    valueTitle={`${formatMontant(net)} MAD`}
+                    unit="MAD"
+                    label={t('Net balance this month')}
+                    secondaryLabel={t('Calculation')}
+                    secondaryValue={t('Payments minus expenses')}
+                />
+            </div>
+        </>
     );
 }

@@ -75,6 +75,25 @@ final class StoreEmployeeRequest extends FormRequest
             // (a center-locked admin is forced to its own context center).
             'etablissement_ids' => ['required', 'array', 'min:1'],
             'etablissement_ids.*' => ['integer', 'distinct', 'exists:etablissements,id'],
+            // The PRIMARY centre (« Centre principal ») — where the employee
+            // is based and where its Caisse lives. Optional: when absent the
+            // model keeps the current primary, or falls back to the first
+            // assigned centre (Employee::syncEtablissements). It MUST be one
+            // of the centres submitted above — a primary outside the
+            // assignment would put the till in a centre the employee cannot
+            // reach. Changing it never moves money (CLAUDE.md §11).
+            'etablissement_principal_id' => [
+                'nullable',
+                'integer',
+                'exists:etablissements,id',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    $assigned = array_map('intval', (array) $this->input('etablissement_ids', []));
+
+                    if (! in_array((int) $value, $assigned, true)) {
+                        $fail(__('The primary center must be one of the assigned centers.'));
+                    }
+                },
+            ],
             // Optional — EmployeeCredentialService auto-generates one from
             // nom/prenom when left blank. Validated here only if provided.
             'username' => ['nullable', 'string', 'max:50', 'regex:/^[a-zA-Z0-9._-]+$/', Rule::unique(User::class, 'username')],
