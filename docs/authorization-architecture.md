@@ -1,6 +1,6 @@
 # Authorization Architecture — GLS CRM
 
-Decisions taken after the audit (`docs/authorization-audit.md`).
+Decisions taken after the audit (`docs/rapports/audits/authorization-audit.md`).
 
 ## Core decisions
 

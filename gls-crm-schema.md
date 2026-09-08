@@ -6,8 +6,8 @@
 > design, relationships, and invariants below are still the approved schema and
 > remain current** — only the engine name is outdated. For the current database
 > rules (PostgreSQL-only, `ILIKE`, FK indexing, JSONB, etc.), see `CLAUDE.md`
-> § "Database Standard — PostgreSQL Only", `POSTGRES_AUDIT.md`, and
-> `POSTGRES_MIGRATION_REPORT.md`.
+> § "Database Standard — PostgreSQL Only", `docs/rapports/postgres/POSTGRES_AUDIT.md`, and
+> `docs/rapports/postgres/POSTGRES_MIGRATION_REPORT.md`.
 
 This is the schema GLS decided to build with, after simplifying and adapting the WimSchool reverse-engineering research (see `architecture.md`, `database-schema.md`, `startup-mvp.md`) into something buildable from scratch on the existing Laravel 11 + MySQL stack.
 

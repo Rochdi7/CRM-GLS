@@ -10,7 +10,7 @@ and `gls-crm-laravel-structure.md`. This file is a map, not a rulebook.
 > log). CLAUDE.md's "Forbidden: React... Inertia" line below and §1's
 > Livewire-only description are **stale** — both were written before this
 > approved migration started and have not been rewritten yet (deliberately
-> deferred, per `docs/inertia-react-migration-audit.md` §8 "Documentation
+> deferred, per `docs/rapports/migration-inertia/inertia-react-migration-audit.md` §8 "Documentation
 > debt"). Current real state as of Phase 10: **Inertia + React** now serve
 > Permissions, Login, Forgot/Reset Password, Profile, Dashboard, the
 > top-bar Context Switcher, the groups-historique index, the five simple
@@ -42,7 +42,7 @@ and `gls-crm-laravel-structure.md`. This file is a map, not a rulebook.
 > unreferenced, for rollback. A permanent, read-only reference copy of the
 > purchased PreSkool React theme also now lives at
 > `resources/theme-reference/crm-gls-react/` (see
-> `docs/preskool-react-reference-inventory.md`) — never a build input,
+> `docs/rapports/ui/preskool-react-reference-inventory.md`) — never a build input,
 > never imported directly.
 
 ---

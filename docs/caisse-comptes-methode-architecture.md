@@ -1,7 +1,7 @@
 # Comptes de paiement par centre et méthode — Architecture & Impact Report
 
 > Phase 1 (audit) + Phase 2 (proposition) — 24/08/2026. **Aucun code modifié.**
-> Complète `docs/caisse-solde-especes-analysis.md` (le constat) avec la cible.
+> Complète `docs/rapports/finance/caisse-solde-especes-analysis.md` (le constat) avec la cible.
 
 ---
 

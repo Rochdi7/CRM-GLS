@@ -20,7 +20,7 @@ They are tailored to:
 
 > A sixth skill, `livewire-component-builder`, existed while the backoffice
 > was Livewire-based. It was removed once the Livewire→Inertia+React
-> migration completed (`docs/phase-11-final-verification.md`) — Livewire no
+> migration completed (`docs/rapports/migration-inertia/phase-11-final-verification.md`) — Livewire no
 > longer exists anywhere in this codebase, so a skill instructing Claude to
 > build new Livewire components would actively contradict the project.
 

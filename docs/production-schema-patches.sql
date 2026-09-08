@@ -210,3 +210,62 @@ SET etablissement_id = COALESCE(
     )
 WHERE r.etablissement_id IS NULL;
 -- ---------------------------------------------------------------------------
+
+-- ===========================================================================
+-- AUDIT QA DU 07/09/2026 — CORRECTIFS DE SCHÉMA
+-- ===========================================================================
+-- ⚠ NON APPLIQUÉ. Ces instructions n'ont été exécutées NI sur `gls_crm`, NI
+-- sur la production. Elles attendent une autorisation explicite et une
+-- fenêtre de maintenance. Faire un pg_dump AVANT.
+--
+-- Rappel §17 : éditer une migration `create_*` ne modifie AUCUNE base déjà
+-- migrée — il faut appliquer le SQL ci-dessous à la main, en plus.
+-- ---------------------------------------------------------------------------
+
+-- H-2 — `employees.categorie` est trop court pour une de ses propres valeurs.
+-- Employee::CATEGORIES contient « Directeur Qualité et Amélioration continue »
+-- (44 caractères) alors que la colonne est varchar(30). Rule::in l'accepte,
+-- puis PostgreSQL rejette l'INSERT (SQLSTATE 22001, vérifié) : erreur 500 dès
+-- qu'un employé reçoit ce poste. 0 ligne existante n'est concernée (la valeur
+-- n'a jamais pu être stockée), donc AUCUNE réparation de données n'est requise.
+-- Élargir un varchar est une opération de métadonnées : pas de réécriture de
+-- table, verrou ACCESS EXCLUSIVE très bref.
+ALTER TABLE employees ALTER COLUMN categorie TYPE varchar(60);
+
+-- ---------------------------------------------------------------------------
+-- H-13 — Clés étrangères sans index. PostgreSQL n'indexe PAS le côté
+-- référençant d'une FK (contrairement à MySQL/InnoDB). CONCURRENTLY évite tout
+-- verrou d'écriture, mais ne peut PAS tourner dans une transaction : exécuter
+-- ces lignes une par une, hors migration.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS cheques_agent_id_idx
+    ON cheques (agent_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS cheques_etablissement_id_idx
+    ON cheques (etablissement_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS cheques_retourne_par_id_idx
+    ON cheques (retourne_par_id);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS import_batches_etablissement_id_idx
+    ON import_batches (etablissement_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS import_batches_annee_scolaire_id_idx
+    ON import_batches (annee_scolaire_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS import_batches_created_by_idx
+    ON import_batches (created_by);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS inscription_livres_stock_article_id_idx
+    ON inscription_livres (stock_article_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS inscription_livres_assigned_by_idx
+    ON inscription_livres (assigned_by);
+
+-- `inscriptions_historique` ne déclare AUCUN index alors que `inscription_id`
+-- est sa clé de lecture (Inscription::historique()).
+CREATE INDEX CONCURRENTLY IF NOT EXISTS inscriptions_historique_inscription_id_idx
+    ON inscriptions_historique (inscription_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS inscriptions_historique_new_inscription_id_idx
+    ON inscriptions_historique (new_inscription_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS inscriptions_historique_student_id_idx
+    ON inscriptions_historique (student_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS inscriptions_historique_group_id_idx
+    ON inscriptions_historique (group_id);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS inscriptions_historique_archived_by_idx
+    ON inscriptions_historique (archived_by);
+-- ---------------------------------------------------------------------------

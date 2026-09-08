@@ -162,7 +162,7 @@ Types de dépenses.
 | `app/Livewire/Backoffice/Settings/FraisTab.php` | Same — no longer rendered |
 | `resources/views/livewire/backoffice/settings/frais-tab.blade.php` | Owning view of the above |
 | `resources/views/backoffice/settings/index.blade.php` | No longer referenced by `SettingController` (now returns `Inertia::render()`); kept, unused, for rollback — same as every other retained file in this plan, no deletion happens outside Phase 10 |
-| `app/Livewire/Backoffice/TypesDepenses/TypesDepensesIndex.php` | No longer rendered — was the 3rd tab of `resources/views/backoffice/depenses/index.blade.php`, now removed (docs/phase-6-simple-crud-inventory.md §Q2); kept for rollback |
+| `app/Livewire/Backoffice/TypesDepenses/TypesDepensesIndex.php` | No longer rendered — was the 3rd tab of `resources/views/backoffice/depenses/index.blade.php`, now removed (docs/rapports/migration-inertia/phase-6-simple-crud-inventory.md §Q2); kept for rollback |
 | `resources/views/livewire/backoffice/types-depenses/types-depenses-index.blade.php` | Owning view of the above |
 
 **`app/Http/Controllers/Backoffice/{Etablissement,AnneeScolaire,Salle,Frais,

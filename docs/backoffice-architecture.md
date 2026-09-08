@@ -2,7 +2,7 @@
 
 A practical guide to the admin area of the GLS CRM: how a page is served, how
 the UI shell is assembled, and the patterns every module follows. As of
-Phase 11 (`docs/phase-11-final-verification.md`), the backoffice is **100%
+Phase 11 (`docs/rapports/migration-inertia/phase-11-final-verification.md`), the backoffice is **100%
 Inertia + React + TypeScript** — Livewire has been fully removed (no
 `livewire/livewire` package, no `app/Livewire/`, no
 `resources/views/livewire/`, no Alpine, no jQuery plugins). This document

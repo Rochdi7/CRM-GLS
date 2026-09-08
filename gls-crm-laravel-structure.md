@@ -5,8 +5,8 @@
 > migration completed on July 29, 2026. Any MySQL references below (e.g. the
 > audit-log security note) are historical design rationale, not current setup
 > instructions. For the current database rules, see `CLAUDE.md`
-> § "Database Standard — PostgreSQL Only", `POSTGRES_AUDIT.md`, and
-> `POSTGRES_MIGRATION_REPORT.md`.
+> § "Database Standard — PostgreSQL Only", `docs/rapports/postgres/POSTGRES_AUDIT.md`, and
+> `docs/rapports/postgres/POSTGRES_MIGRATION_REPORT.md`.
 
 Companion to `gls-crm-schema.md`. This document maps the 15-table `gls_full_v4` schema onto an actual Laravel 11 folder/file structure — models, migrations, controllers, Livewire components, routes — for a **brand-new, standalone Laravel project**, separate from the existing GLS website/backoffice repo. Nothing here assumes or reuses any existing code; this is a from-scratch build plan.
 

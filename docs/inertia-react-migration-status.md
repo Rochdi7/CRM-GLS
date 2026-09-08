@@ -3,7 +3,7 @@
 Running log of verified milestones. Append one entry per phase; do not rewrite history.
 
 > **Migration status: COMPLETE.** As of Phase 11
-> (`docs/phase-11-final-verification.md`), the backoffice is 100% Inertia +
+> (`docs/rapports/migration-inertia/phase-11-final-verification.md`), the backoffice is 100% Inertia +
 > React + TypeScript and Livewire has been entirely removed from the
 > codebase — no `livewire/livewire` package, no `app/Livewire/`, no
 > `resources/views/livewire/`. Every phase entry below is a historical
@@ -22,9 +22,9 @@ Running log of verified milestones. Append one entry per phase; do not rewrite h
 
 Closed 2 confirmed test-coverage gaps (Salles tab center scoping, Users list
 center-following-with-admin-visibility) plus 13 further gaps discovered
-during the audit, all documented in `docs/phase-11-test-coverage-mapping.md`,
+during the audit, all documented in `docs/rapports/migration-inertia/phase-11-test-coverage-mapping.md`,
 before any deletion began. Classified every remaining Livewire-era file in
-`docs/phase-11-dependency-graph.md` (SAFE TO DELETE / STILL ACTIVE / SHARED
+`docs/rapports/migration-inertia/phase-11-dependency-graph.md` (SAFE TO DELETE / STILL ACTIVE / SHARED
 WITH INERTIA / UNCERTAIN — all UNCERTAIN items independently re-verified and
 closed). Deleted, module by module, with a focused test run and a commit
 after each group: Students, Inscriptions, Groups, Employees (+ the old
@@ -41,7 +41,7 @@ repository (confirmed via repeated repo-wide greps). Ran a final whole-
 application verification pass (routes, TypeScript, build, full test suite —
 both per-directory and one successful combined run, 307/307 passing) and a
 performance baseline against the current PostgreSQL dev database — see
-`docs/phase-11-final-verification.md` and `docs/phase-11-performance-baseline.md`.
+`docs/rapports/migration-inertia/phase-11-final-verification.md` and `docs/rapports/performance/phase-11-performance-baseline.md`.
 Rewrote `CLAUDE.md` §1/§4-7/§11/§16/§17, `README.md`, and
 `docs/backoffice-architecture.md` to describe the current Inertia+React
 architecture instead of the retired Livewire one; added superseded-banners
@@ -61,8 +61,8 @@ real-browser Playwright/Chromium smoke pass covered every module — 25/25
 checks as super-admin (0 console errors, 0 failed requests) and 7/7 as a
 limited-role teacher (sidebar gating + real 403s confirmed). Only
 visual-only checklist items (dark mode, RTL, mobile widths) remain manual
-— see `docs/phase-11-manual-browser-checklist.md`. Final report:
-`docs/phase-11-livewire-cleanup-report.md` — **PHASE 11 COMPLETE**.
+— see `docs/rapports/migration-inertia/phase-11-manual-browser-checklist.md`. Final report:
+`docs/rapports/migration-inertia/phase-11-livewire-cleanup-report.md` — **PHASE 11 COMPLETE**.
 
 ## Phase 10 — Finance migration (Caisses, Encaissements, Dépenses, Remboursements, Transferts)
 
@@ -74,9 +74,9 @@ Migrated the entire Finance domain from Livewire to Inertia + React: the
 Transferts / Comptes de caisse), Payments (Encaissements, with the
 cascading student→inscription→fee-lines payment form), and the "Gestion
 des dépenses" tabbed page (Dépenses with justificatif uploads /
-Remboursements). Full audit in `docs/phase-10-finance-audit.md` and
+Remboursements). Full audit in `docs/rapports/finance/phase-10-finance-audit.md` and
 implementation mapping (including 6 open questions resolved with the user
-before any code was written) in `docs/phase-10-finance-mapping.md`. All
+before any code was written) in `docs/rapports/finance/phase-10-finance-mapping.md`. All
 legacy Livewire components and Blade views are left completely untouched as
 the unreferenced rollback fallback.
 
@@ -347,8 +347,8 @@ Inertia + React: list + modal create/edit, inline new-student creation, and
 the repeatable fee-lines editor with live percentage/fixed-DH discount
 preview. `App\Livewire\Backoffice\Inscriptions\InscriptionsIndex` and its
 view are left completely untouched as the unreferenced rollback fallback.
-Full audit in `docs/phase-9-inscriptions-audit.md` and field-by-field mapping
-in `docs/phase-9-inscriptions-mapping.md` (both written before any code, per
+Full audit in `docs/rapports/migration-inertia/phase-9-inscriptions-audit.md` and field-by-field mapping
+in `docs/rapports/migration-inertia/phase-9-inscriptions-mapping.md` (both written before any code, per
 the task's own requirement).
 
 ### Existing behavior discovered
@@ -574,7 +574,7 @@ exists anywhere in the current UI** — despite `Group::$fillable` and a dead,
 unrouted `StoreGroupRequest` supporting `salle_id`/`capacite_max`. Decision:
 migrate Groups exactly as it exists today (Name, Level, Teacher, Status,
 dates, fee lines) — no new fields added. See
-docs/phase-8-students-groups-inventory.md for the full audit.
+docs/rapports/migration-inertia/phase-8-students-groups-inventory.md for the full audit.
 
 ### Existing behavior discovered
 
@@ -768,7 +768,7 @@ implementation stretch.
 
 Établissements (Centers), Années scolaires (Academic Years), Salles (Rooms),
 Frais (Fee catalog), Types de dépenses (Expense Types) — all 5 modules
-listed in scope, per docs/phase-6-simple-crud-inventory.md.
+listed in scope, per docs/rapports/migration-inertia/phase-6-simple-crud-inventory.md.
 
 ### Modal/form/table architecture established
 
@@ -788,7 +788,7 @@ listed in scope, per docs/phase-6-simple-crud-inventory.md.
   — filter-bar row, debounced search, and a React-owned row-action dropdown
   (replacing `action-menu.blade.php`'s `data-bs-toggle="dropdown"`).
 
-### Existing behavior discovered (docs/phase-6-simple-crud-inventory.md)
+### Existing behavior discovered (docs/rapports/migration-inertia/phase-6-simple-crud-inventory.md)
 
 - `TypeDepenseController` was **entirely dead code** pre-Phase-6 (no route
   referenced any of its actions) — the real UI was the Livewire
@@ -879,7 +879,7 @@ explicit array built in a Domain query class.
 ### Create/update/delete behavior
 
 Every module preserves its exact Livewire-era validation, uniqueness, and
-delete-guard rules (see docs/phase-6-simple-crud-inventory.md for the
+delete-guard rules (see docs/rapports/migration-inertia/phase-6-simple-crud-inventory.md for the
 per-module detail). Delete refusals (record still in use) are returned via
 `back()->withErrors(['delete' => ...])` — a 422-style field error, not a
 flash message — so the React `ConfirmDialog` stays open and shows the
@@ -1200,7 +1200,7 @@ No pre-existing failures. Proceeding with Phase 5 implementation.
 Migrated 8 read-only Backoffice pages to Inertia + React: groups-historique
 index, and show pages for students, groups, inscriptions, caisses,
 encaissements, dépenses, and caisse-transfers. Full audit in
-`docs/phase-5-read-pages-inventory.md`; per-controller behavior discovered
+`docs/rapports/migration-inertia/phase-5-read-pages-inventory.md`; per-controller behavior discovered
 during that audit informed every decision below.
 
 ### Existing behavior discovered
@@ -1242,8 +1242,8 @@ during that audit informed every decision below.
 - Reusable components: `Tables/Pagination.tsx`, `Details/{DetailRow,
   StatusBadge,RelatedRecordsTable}.tsx`, `Media/DocumentLink.tsx`
 - `tests/Feature/Backoffice/Inertia/ReadOnlyPagesInertiaTest.php` (17 tests)
-- `docs/phase-5-read-pages-inventory.md`,
-  `docs/dashboard-authorization-audit.md`
+- `docs/rapports/migration-inertia/phase-5-read-pages-inventory.md`,
+  `docs/rapports/audits/dashboard-authorization-audit.md`
 
 ### Files modified
 - 7 controllers converted to `Inertia::render()` for `show()`/`index()`
@@ -1308,7 +1308,7 @@ All 8 original Blade views (`groups-historique/index`, `students/show`,
 for rollback per the established pattern.
 
 ### Dashboard authorization audit result
-See `docs/dashboard-authorization-audit.md` — the missing
+See `docs/rapports/audits/dashboard-authorization-audit.md` — the missing
 `dashboard.view` route gate is **intentional-by-test**
 (`AuthTest::test_authenticated_users_can_view_dashboard` explicitly uses a
 permission-less user and asserts success). Left unchanged; none of the
@@ -1360,7 +1360,7 @@ console errors reported.
 No pre-existing failures. Proceeding with Phase 4 implementation.
 
 **Theme reference copy** added in commit `dfdd917` (separate from the
-Dashboard/Context work) — see `docs/preskool-react-reference-inventory.md`.
+Dashboard/Context work) — see `docs/rapports/ui/preskool-react-reference-inventory.md`.
 Verified byte-identical build output before/after the copy — confirms Vite
 never scans `resources/theme-reference/`.
 
@@ -1374,7 +1374,7 @@ never scans `resources/theme-reference/`.
 Migrated the Backoffice dashboard and the top-bar academic-year/center
 context switcher from Livewire to Inertia + React. Query semantics,
 center/year scoping, and authorization are unchanged — see
-`docs/dashboard-livewire-to-inertia-map.md` for the full per-stat mapping.
+`docs/rapports/migration-inertia/dashboard-livewire-to-inertia-map.md` for the full per-stat mapping.
 
 ### Dashboard behavior discovered
 - `DashboardController` had **no permission middleware** — only `auth` —
@@ -1415,7 +1415,7 @@ center/year scoping, and authorization are unchanged — see
   `resources/js/Components/Dashboard/{StatCard,StatsGrid}.tsx`,
   `resources/js/Components/Context/ContextSwitcher.tsx`
 - `tests/Feature/Backoffice/Inertia/{DashboardInertiaTest,ContextUpdateTest}.php`
-- `docs/dashboard-livewire-to-inertia-map.md`
+- `docs/rapports/migration-inertia/dashboard-livewire-to-inertia-map.md`
 
 ### Files modified
 - `app/Http/Controllers/Backoffice/DashboardController.php` — Blade view →

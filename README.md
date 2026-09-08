@@ -117,7 +117,7 @@ npm run dev                       # Vite watch (our JS/SCSS only)
 
 > See `CLAUDE.md` § "Database Standard — PostgreSQL Only" for the full set of
 > PostgreSQL rules (search must use `ILIKE`, FK columns need explicit indexes,
-> `.env` conventions, etc.) and `POSTGRES_MIGRATION_REPORT.md` for deployment
+> `.env` conventions, etc.) and `docs/rapports/postgres/POSTGRES_MIGRATION_REPORT.md` for deployment
 > instructions.
 
 ### 🔑 Demo accounts (local only — password: `password`)
