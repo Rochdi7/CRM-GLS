@@ -269,3 +269,23 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS inscriptions_historique_group_id_idx
 CREATE INDEX CONCURRENTLY IF NOT EXISTS inscriptions_historique_archived_by_idx
     ON inscriptions_historique (archived_by);
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 09/09/2026 — caisse_transfers.etablissement_id
+--
+-- Le centre ACTIF du caissier au moment de la demande de transfert. Une caisse
+-- n'a qu'UN centre de rattachement mais encaisse pour plusieurs (CLAUDE.md
+-- §11) : sans cette colonne, la ventilation retombait sur
+-- `caisses.etablissement_id` et imputait la SORTIE au mauvais centre — 1 300 DH
+-- encaissés à Casablanca puis transférés en sortaient comptablement à Kénitra,
+-- laissant Casablanca affiché à 1 300,00 DH au lieu de 0,00 DH.
+--
+-- NULLABLE et SANS backfill (§11) : les transferts antérieurs se lisent avec un
+-- repli sur le centre de la caisse. Aucune donnée monétaire n'est modifiée —
+-- `caisses.solde` reste l'autorité et ne bouge pas.
+ALTER TABLE caisse_transfers
+    ADD COLUMN IF NOT EXISTS etablissement_id bigint NULL
+    REFERENCES etablissements (id) ON DELETE SET NULL;
+CREATE INDEX CONCURRENTLY IF NOT EXISTS caisse_transfers_etablissement_id_idx
+    ON caisse_transfers (etablissement_id);
+-- ---------------------------------------------------------------------------

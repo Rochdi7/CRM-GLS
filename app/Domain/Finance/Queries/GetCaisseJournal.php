@@ -265,7 +265,7 @@ final class GetCaisseJournal
             return 0.0;
         }
 
-        $transfertIds = $this->idsDuCentreDepuisLeLedger(CaisseTransfer::class, $ids);
+        $transfertIds = $this->idsTransfertsDuCentre($ids);
 
         $net = 0.0;
 
@@ -301,6 +301,65 @@ final class GetCaisseJournal
      * @param  array<int, int>  $caisseIds
      * @return array<int, int>|null
      */
+    /**
+     * Ids des transferts VALIDÉS appartenant au centre actif.
+     *
+     * ⚠ La colonne `caisse_transfers.etablissement_id` PRIME sur l'écriture de
+     * ledger (09/09/2026). Le ledger stampe le centre au moment de la
+     * VALIDATION et ne peut plus être réécrit (le journal est append-only,
+     * §11) : une correction d'imputation ne peut donc vivre que sur la ligne
+     * de transfert. Sans cette priorité, « Ma caisse » continuait d'afficher
+     * 1 300,00 DH sur Casablanca — avec « Transferts 0,00 DH » — alors que la
+     * fiche caisse, qui lit la colonne, affichait déjà 0,00 DH : deux écrans
+     * du même argent qui se contredisent.
+     *
+     * Repli sur le ledger (puis sur le centre de la caisse) tant que la
+     * colonne est nulle — les transferts antérieurs ne sont jamais backfillés.
+     *
+     * @param  array<int, int>  $caisseIds
+     * @return array<int, int>|null  null = aucun centre actif ⇒ ne rien filtrer
+     */
+    private function idsTransfertsDuCentre(array $caisseIds): ?array
+    {
+        $centreId = $this->context->etablissementId();
+
+        if ($centreId === null) {
+            return null;
+        }
+
+        $parLedger = $this->idsDuCentreDepuisLeLedger(CaisseTransfer::class, $caisseIds) ?? [];
+
+        $ids = [];
+
+        foreach (CaisseTransfer::query()
+            ->where(fn ($q) => $q->whereIn('caisse_source_id', $caisseIds)->orWhereIn('caisse_destination_id', $caisseIds))
+            ->get(['id', 'etablissement_id', 'caisse_source_id']) as $transfert) {
+            // Une ENTRÉE garde la résolution du ledger : les billets rejoignent
+            // ce tiroir, la colonne décrit le centre d'où ils SORTENT.
+            if (! in_array((int) $transfert->caisse_source_id, $caisseIds, true)) {
+                if (in_array((int) $transfert->id, $parLedger, true)) {
+                    $ids[] = (int) $transfert->id;
+                }
+
+                continue;
+            }
+
+            if ($transfert->etablissement_id !== null) {
+                if ((int) $transfert->etablissement_id === $centreId) {
+                    $ids[] = (int) $transfert->id;
+                }
+
+                continue;
+            }
+
+            if (in_array((int) $transfert->id, $parLedger, true)) {
+                $ids[] = (int) $transfert->id;
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
     private function idsDuCentreDepuisLeLedger(string $modelClass, array $caisseIds): ?array
     {
         $centreId = $this->context->etablissementId();
@@ -492,7 +551,7 @@ final class GetCaisseJournal
                     // côtés — masquer une jambe ferait disparaître de l'argent
                     // qui a réellement bougé.
                     ->when(
-                        ($transfertIds = $this->idsDuCentreDepuisLeLedger(CaisseTransfer::class, $ids)) !== null,
+                        ($transfertIds = $this->idsTransfertsDuCentre($ids)) !== null,
                         fn ($q) => $q->whereIn('id', $transfertIds),
                     )
                     ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_transfert', '>=', $dateFrom))

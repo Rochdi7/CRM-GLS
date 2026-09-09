@@ -45,10 +45,7 @@ export default function CaisseShow({ caisse }: CaisseShowProps) {
                 </div>
 
                 <div className="col-xl-8">
-                    <Card
-                        title="Paiements récents"
-                        tools={<span className="badge badge-soft-secondary">{caisse.encaissements.length}</span>}
-                    >
+                    <Card title="Paiements récents">
                         <RelatedRecordsTable
                             isEmpty={caisse.encaissements.length === 0}
                             emptyTitle="Aucun paiement"
@@ -81,10 +78,7 @@ export default function CaisseShow({ caisse }: CaisseShowProps) {
                         </RelatedRecordsTable>
                     </Card>
 
-                    <Card
-                        title="Dépenses récentes"
-                        tools={<span className="badge badge-soft-secondary">{caisse.depenses.length}</span>}
-                    >
+                    <Card title="Dépenses récentes">
                         <RelatedRecordsTable
                             isEmpty={caisse.depenses.length === 0}
                             emptyTitle="Aucune dépense"
@@ -111,10 +105,7 @@ export default function CaisseShow({ caisse }: CaisseShowProps) {
                         </RelatedRecordsTable>
                     </Card>
 
-                    <Card
-                        title="Remboursements récents"
-                        tools={<span className="badge badge-soft-secondary">{caisse.remboursements.length}</span>}
-                    >
+                    <Card title="Remboursements récents">
                         <RelatedRecordsTable
                             isEmpty={caisse.remboursements.length === 0}
                             emptyTitle="Aucun remboursement"
@@ -141,10 +132,7 @@ export default function CaisseShow({ caisse }: CaisseShowProps) {
                         </RelatedRecordsTable>
                     </Card>
 
-                    <Card
-                        title="Transferts récents"
-                        tools={<span className="badge badge-soft-secondary">{caisse.transfers.length}</span>}
-                    >
+                    <Card title="Transferts récents">
                         <RelatedRecordsTable
                             isEmpty={caisse.transfers.length === 0}
                             emptyTitle="Aucun transfert"

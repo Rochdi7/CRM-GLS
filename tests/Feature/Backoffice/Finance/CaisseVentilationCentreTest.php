@@ -457,4 +457,47 @@ final class CaisseVentilationCentreTest extends TestCase
             'date_transfert' => '2026-09-09',
         ], $agent);
     }
+
+    /**
+     * « Ma caisse » doit lire le centre sur la LIGNE de transfert, pas sur
+     * l'écriture de ledger (09/09/2026).
+     *
+     * Le ledger stampe le centre à la VALIDATION et reste append-only (§11) :
+     * une correction d'imputation ne peut vivre que sur
+     * `caisse_transfers.etablissement_id`. Tant que le journal lisait le
+     * ledger, la fiche caisse affichait déjà 0,00 DH pour Casablanca pendant
+     * que « Ma caisse » annonçait encore 1 300,00 DH avec « Transferts
+     * 0,00 DH » — deux écrans du même argent qui se contredisent.
+     */
+    public function test_le_journal_suit_le_centre_corrige_du_transfert(): void
+    {
+        $agent = $this->latifa();
+        $destinataire = Employee::factory()->create(['etablissement_id' => $this->marrakech->id]);
+
+        // Transfert demandé depuis MARRAKECH, donc stampé Marrakech partout.
+        $this->actingAs($agent->user->fresh());
+        app()->forgetInstance(CurrentContext::class);
+        app(CurrentContext::class)->setEtablissement($this->marrakech->id);
+
+        $transfert = app(\App\Domain\Finance\Actions\DemanderTransfertCaisse::class)->handle([
+            'caisse_source_id' => $agent->till()->firstOrFail()->id,
+            'caisse_destination_id' => $destinataire->till()->firstOrFail()->id,
+            'montant' => 1000,
+            'date_transfert' => '2026-09-09',
+        ], $agent);
+
+        app(\App\Domain\Finance\Actions\ValiderTransfertCaisse::class)->handle($transfert, $destinataire);
+
+        // Correction d'imputation APRÈS coup : l'argent venait d'Online.
+        // Le ledger, lui, reste stampé Marrakech — il est append-only.
+        $transfert->forceFill(['etablissement_id' => $this->online->id])->saveQuietly();
+
+        // Online doit désormais porter la sortie…
+        $online = $this->journalFor($agent, $this->online->id);
+        $this->assertSame('-1000.00', $online['totalTransferts']);
+
+        // …et Marrakech ne plus la porter du tout.
+        $marrakech = $this->journalFor($agent, $this->marrakech->id);
+        $this->assertSame('0.00', $marrakech['totalTransferts']);
+    }
 }
