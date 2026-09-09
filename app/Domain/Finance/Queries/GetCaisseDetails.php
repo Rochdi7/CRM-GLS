@@ -4,19 +4,50 @@ declare(strict_types=1);
 
 namespace App\Domain\Finance\Queries;
 
+use App\Domain\Finance\Support\VentilationCentre;
 use App\Models\Caisse;
 use App\Models\CaisseTransfer;
 use App\Models\Depense;
+use App\Services\Context\CurrentContext;
 
 /**
- * Extracted from resources/views/backoffice/caisses/show.blade.php's own
- * inline @php block (that view queried the last 10 rows of each movement
- * type directly — its own comment noted "the controller stays untouched").
- * Moved here verbatim: same 4 relations, same limit(10), same ordering.
- * Read-only — no create/update/delete anywhere in this class.
+ * Fiche d'une caisse — « Gestion de la caisse » → un compte.
+ *
+ * ⚠ Ventilée par centre actif comme les trois autres écrans de lecture
+ * (`GetComptesCaisse`, `GetCaisseGlobale`, `GetCaisseJournal`), via la source
+ * unique `Domain\Finance\Support\VentilationCentre` — corrigé le 09/09/2026.
+ *
+ * Cette page était la SEULE restée non ventilée : elle affichait le
+ * `caisses.solde` ENTIER au-dessus de listes elles aussi entières. La caisse
+ * de Yassine Ouled Laghzal, étiquetée GLS Kénitra, annonçait donc 72 740,00 DH
+ * et listait des paiements GLS Casablanca / GLS Kénitra / GLS Online pêle-mêle,
+ * pendant que l'onglet « Comptes de caisse » — ventilé, lui — donnait 1 300,00
+ * DH pour le même compte sur le centre actif. Deux écrans du même argent qui
+ * se contredisent : l'utilisateur ne peut plus savoir lequel croire.
+ *
+ * La règle de CLAUDE.md §11 s'applique ici comme ailleurs : un total se
+ * calcule sur les MÊMES colonnes que les lignes qu'il chapeaute. Le solde
+ * affiché est donc la part du centre actif, et les quatre listes ne montrent
+ * que les mouvements de ce centre. Sur « Tous les centres » (super-admin),
+ * rien n'est ventilé : le solde stocké est rendu tel quel — il reste
+ * l'autorité (CaisseLedger), et la somme des parts y retombe.
+ *
+ * Les deux filtres de mouvement d'origine sont conservés, pour que la page
+ * reconcilie avec le solde imprimé au-dessus :
+ *  - une ligne d'application (`applied_from_encaissement_id`) ne fait que
+ *    réallouer une avance déjà comptée une fois — `AppliquerAvance` ne crédite
+ *    aucune caisse ;
+ *  - une dépense en attente ou refusée n'a rien débité (flux d'approbation).
+ *
+ * Read-only — aucun create/update/delete dans cette classe.
  */
 final class GetCaisseDetails
 {
+    public function __construct(
+        private readonly CurrentContext $context,
+        private readonly VentilationCentre $ventilation,
+    ) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -24,38 +55,59 @@ final class GetCaisseDetails
     {
         $caisse->loadMissing(['etablissement', 'responsable']);
 
-        // Same movement filters as GetCaisseJournal: this page shows what
-        // actually MOVED the till, so it must reconcile with the `solde`
-        // printed above it.
-        //  - an "apply" row (applied_from_encaissement_id) only re-allocates
-        //    an avance already counted once — AppliquerAvance never credits;
-        //  - a pending/refused dépense debited nothing (approval flow).
-        // Listing either made this page contradict the balance beside it.
+        $centreId = $this->context->etablissementId();
+
         // `etablissement` eager-loaded for the Centre column: ONE till per
         // employee, but a cashier working across centres books payments in
         // each of them, so the till's own centre is not the payment's
         // (CLAUDE.md §11, « Centre dimension on the ledger »).
         $encaissements = $caisse->encaissements()
             ->whereNull('applied_from_encaissement_id')
+            ->when($centreId !== null, fn ($q) => $q->where('etablissement_id', $centreId))
             ->with(['student', 'etablissement'])->latest('date_paiement')->limit(10)->get();
+
+        // `depenses` ne porte pas de colonne centre : sa résolution (groupe
+        // pour un « Paiement prof », sinon la caisse qui a payé) vit dans
+        // VentilationCentre, partagée avec le journal et les comptes.
         $depenses = $caisse->depenses()
             ->where('statut', Depense::STATUT_APPROUVEE)
+            ->when($centreId !== null, fn ($q) => $this->ventilation->scopeDepensesAuCentre($q, $centreId))
             ->with('typeDepense')->latest('date_depense')->limit(10)->get();
-        $remboursements = $caisse->remboursements()->with('beneficiaire')->latest('date_remboursement')->limit(10)->get();
-        $transfers = CaisseTransfer::query()
-            ->with(['caisseSource', 'caisseDestination'])
-            ->where('caisse_source_id', $caisse->id)
-            ->orWhere('caisse_destination_id', $caisse->id)
-            ->latest('date_transfert')
-            ->limit(10)
-            ->get();
+
+        $remboursements = $caisse->remboursements()
+            ->when($centreId !== null, fn ($q) => $q->where('etablissement_id', $centreId))
+            ->with('beneficiaire')->latest('date_remboursement')->limit(10)->get();
+
+        // Un transfert ne porte aucune dimension centre propre : il déplace de
+        // l'argent PHYSIQUE entre deux caisses, donc il est imputé au centre de
+        // rattachement de la caisse regardée — même règle que
+        // VentilationCentre::transfertsDuCentre(), sinon la liste montrerait
+        // des lignes que le solde au-dessus n'a pas comptées.
+        $transfersDuCentre = $centreId === null || (int) $caisse->etablissement_id === $centreId;
+
+        $transfers = $transfersDuCentre
+            ? CaisseTransfer::query()
+                ->with(['caisseSource', 'caisseDestination'])
+                ->where(fn ($q) => $q
+                    ->where('caisse_source_id', $caisse->id)
+                    ->orWhere('caisse_destination_id', $caisse->id))
+                ->latest('date_transfert')
+                ->limit(10)
+                ->get()
+            : collect();
 
         return [
             'id' => $caisse->id,
             'nom' => $caisse->nom,
             'centre' => $caisse->etablissement?->nom_centre,
             'responsable' => $caisse->responsable?->nomComplet(),
-            'solde' => number_format((float) $caisse->solde, 2, '.', ''),
+            // La part du centre actif, jamais le solde entier — c'est
+            // exactement ce que les quatre listes ci-dessous montrent.
+            'solde' => number_format($this->ventilation->soldeDuCentre($caisse, $centreId), 2, '.', ''),
+            // La page montre-t-elle tout le compte, ou la part de ce centre ?
+            // Sans ce drapeau le lecteur ne peut pas savoir laquelle des deux
+            // valeurs il regarde (le bandeau de la page le dit).
+            'ventileParCentre' => $centreId !== null,
             'statut' => $caisse->statut,
             'encaissements' => $encaissements->map(fn ($enc): array => [
                 'reference' => $enc->reference,

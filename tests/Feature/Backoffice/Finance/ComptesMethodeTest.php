@@ -379,13 +379,16 @@ final class ComptesMethodeTest extends TestCase
         $user = $this->userWith('expenses.view', 'expenses.create');
         $type = TypeDepense::create(['nom' => 'Fournitures', 'is_system' => false, 'statut' => 'Actif']);
         $till = $user->employee->caisses()->first();
+        // The till must hold what it spends (GardeSoldeCaisse, 09/09/2026).
+        // What this test pins is WHICH account moves, not by how much.
+        $till->update(['solde' => '1000.00']);
 
         $this->actingAs($user)->post(route('backoffice.depenses.store'), [
             'type_depense_id' => $type->id, 'montant' => '300', 'methode_paiement' => Encaissement::METHODE_VIREMENT,
             'date_depense' => '2025-09-22', 'description' => 'Test',
         ])->assertSessionHasNoErrors();
 
-        $this->assertSame('-300.00', (string) $till->fresh()->solde);
+        $this->assertSame('700.00', (string) $till->fresh()->solde);
         $this->assertSame($till->id, Depense::query()->firstOrFail()->caisse_id);
         $this->assertSame('0.00', (string) $this->compte($this->centre, Encaissement::METHODE_VIREMENT)->solde);
     }

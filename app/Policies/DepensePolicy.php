@@ -41,14 +41,15 @@ final class DepensePolicy extends ResourcePolicy
     }
 
     /**
-     * A refused expense is closed history — nothing about it may be edited.
-     * (An approved one stays editable exactly as before: its money already
-     * moved, and UpdateDepenseRequest structurally excludes montant/caisse_id,
-     * so an edit can never change the amount that left the till.)
+     * A refused or cancelled expense is closed history — nothing about it may
+     * be edited. (An approved one stays editable exactly as before: its money
+     * already moved, and UpdateDepenseRequest structurally excludes
+     * montant/caisse_id, so an edit can never change the amount that left
+     * the till.)
      */
     public function update(User $user, Model $model): bool
     {
-        if ($model instanceof Depense && $model->isRefusee()) {
+        if ($model instanceof Depense && ($model->isRefusee() || $model->isAnnulee())) {
             return false;
         }
 

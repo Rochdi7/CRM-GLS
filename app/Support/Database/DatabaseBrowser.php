@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Database;
 
+use App\Support\Audit\AuditValueResolver;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -48,23 +49,61 @@ final class DatabaseBrowser
     private const TEXT_TYPES = ['text', 'json', 'jsonb'];
 
     /**
+     * Resolves a foreign-key id to the name it points at, shared with the
+     * audit journal so both screens read an id the same way.
+     */
+    private ?AuditValueResolver $resolver = null;
+
+    /**
+     * Per-request memo of the catalogue reads.
+     *
+     * `columns()` alone costs four introspection queries (tables, indexes,
+     * foreign keys, columns) and a single page calls it from `rows()`,
+     * `show()` and `foreignKeyLabels()`. The schema cannot change under a
+     * request, so reading it once per table is correct as well as cheaper.
+     *
+     * @var array<string, list<array<string, mixed>>>
+     */
+    private array $columnCache = [];
+
+    /** @var array<string, list<string>> */
+    private array $primaryKeyCache = [];
+
+    /** @var list<string>|null */
+    private ?array $tableNameCache = null;
+
+    /**
      * Every table of the connected database with its exact row count.
      *
-     * @return list<array{name: string, rows: int, columns: int, readOnly: bool, editable: bool}>
+     * `rows` is null and `accessible` false when the application role may
+     * not read the table — production 09/09/2026: `tmp_caisse_snapshot_0901`,
+     * a repair snapshot created by the `postgres` superuser, threw
+     * « permission denied » on the count and took the whole index down with
+     * it. One odd table must never do that: the maintainer needs this
+     * screen most precisely when something is wrong. The fix is on the
+     * server side (`ALTER TABLE … OWNER TO gls_crm_app`, or drop it) — the
+     * page only reports it.
+     *
+     * @return list<array{name: string, rows: int|null, columns: int, readOnly: bool, editable: bool, accessible: bool}>
      */
     public function tables(): array
     {
         $tables = [];
 
-        foreach (Schema::getTableListing(schemaQualified: false) as $name) {
-            $columns = Schema::getColumns($name);
+        foreach ($this->tableNames() as $name) {
+            try {
+                $rows = DB::table($name)->count();
+            } catch (\Throwable) {
+                $rows = null;
+            }
 
             $tables[] = [
                 'name' => $name,
-                'rows' => DB::table($name)->count(),
-                'columns' => count($columns),
+                'rows' => $rows,
+                'columns' => count(Schema::getColumns($name)),
                 'readOnly' => $this->isReadOnly($name),
-                'editable' => ! $this->isReadOnly($name) && $this->primaryKey($name) !== [],
+                'editable' => $rows !== null && ! $this->isReadOnly($name) && $this->primaryKey($name) !== [],
+                'accessible' => $rows !== null,
             ];
         }
 
@@ -76,7 +115,29 @@ final class DatabaseBrowser
     public function exists(string $table): bool
     {
         return preg_match('/^[a-z0-9_]+$/', $table) === 1
-            && in_array($table, Schema::getTableListing(schemaQualified: false), true);
+            && in_array($table, $this->tableNames(), true);
+    }
+
+    /**
+     * Bare table names of the connection's OWN schema(s) — `search_path`,
+     * i.e. `public` (config/database.php).
+     *
+     * ⚠ Without the schema argument, Laravel's PostgreSQL grammar lists
+     * every non-system schema of the database. A table living in another
+     * schema then comes back under its bare name, which the query builder
+     * resolves through `search_path` and cannot find — « relation does not
+     * exist », a 500 on the index for a table the tool could never have
+     * shown anyway. The local database has a single schema so this never
+     * surfaced there; the server's may not.
+     *
+     * @return list<string>
+     */
+    private function tableNames(): array
+    {
+        return $this->tableNameCache ??= Schema::getTableListing(
+            Schema::getCurrentSchemaListing(),
+            schemaQualified: false,
+        );
     }
 
     /**
@@ -106,6 +167,10 @@ final class DatabaseBrowser
      */
     public function columns(string $table): array
     {
+        if (isset($this->columnCache[$table])) {
+            return $this->columnCache[$table];
+        }
+
         $this->assertExists($table);
 
         $primary = $this->primaryKey($table);
@@ -136,7 +201,7 @@ final class DatabaseBrowser
             ];
         }
 
-        return $columns;
+        return $this->columnCache[$table] = $columns;
     }
 
     /**
@@ -147,13 +212,17 @@ final class DatabaseBrowser
      */
     public function primaryKey(string $table): array
     {
+        if (isset($this->primaryKeyCache[$table])) {
+            return $this->primaryKeyCache[$table];
+        }
+
         foreach (Schema::getIndexes($table) as $index) {
             if ($index['primary']) {
-                return array_values($index['columns']);
+                return $this->primaryKeyCache[$table] = array_values($index['columns']);
             }
         }
 
-        return [];
+        return $this->primaryKeyCache[$table] = [];
     }
 
     /**
@@ -205,6 +274,68 @@ final class DatabaseBrowser
         $paginator->through(fn (object $row): array => $this->presentRow((array) $row, $primary));
 
         return $paginator;
+    }
+
+    /**
+     * Human names behind every foreign-key value present in these rows —
+     * `{"group_id": {"34": "GLS-A1-SOIR"}, …}`, batch-loaded (one query per
+     * referenced table, never one per cell).
+     *
+     * ⚠ The NAME is a display aid; the id stays the stored truth and is
+     * always shown next to it. Same rule, and the same resolver, as the
+     * audit journal — a screen that showed only the name would hide which
+     * row is actually referenced, and a rename would silently rewrite what
+     * the user believes they saw (CLAUDE.md §11).
+     *
+     * @param  iterable<array{values: array<string, string|null>}>  $rows
+     * @return array<string, array<string, string>>
+     */
+    public function foreignKeyLabels(string $table, iterable $rows): array
+    {
+        $foreignColumns = [];
+
+        foreach ($this->columns($table) as $column) {
+            if ($column['references'] !== null) {
+                $foreignColumns[] = $column['name'];
+            }
+        }
+
+        if ($foreignColumns === []) {
+            return [];
+        }
+
+        $pairs = [];
+
+        foreach ($rows as $row) {
+            $values = is_array($row) ? ($row['values'] ?? $row) : (array) $row;
+
+            foreach ($foreignColumns as $column) {
+                $value = $values[$column] ?? null;
+
+                if ($value !== null && $value !== '' && is_numeric($value)) {
+                    $pairs[] = [$column, $value];
+                }
+            }
+        }
+
+        if ($pairs === []) {
+            return [];
+        }
+
+        $resolver = $this->resolver ??= new AuditValueResolver;
+        $resolver->warm($pairs);
+
+        $labels = [];
+
+        foreach ($pairs as [$column, $value]) {
+            $name = $resolver->resolve($column, $value);
+
+            if ($name !== null) {
+                $labels[$column][(string) $value] = $name;
+            }
+        }
+
+        return $labels;
     }
 
     /**

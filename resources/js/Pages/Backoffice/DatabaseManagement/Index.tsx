@@ -41,9 +41,13 @@ export default function DatabaseManagementIndex({ database, tables }: DatabaseMa
         return needle === '' ? tables : tables.filter((table) => table.name.includes(needle));
     }, [tables, search]);
 
-    const totalRows = tables.reduce((sum, table) => sum + table.rows, 0);
+    const totalRows = tables.reduce((sum, table) => sum + (table.rows ?? 0), 0);
 
     function stateBadge(table: DatabaseTableSummary) {
+        if (!table.accessible) {
+            return <StatusBadge label={t('Access denied to the app role')} variant="danger" dot />;
+        }
+
         if (table.readOnly) {
             return <StatusBadge label={t('Read-only')} variant="secondary" dot />;
         }
@@ -144,20 +148,26 @@ export default function DatabaseManagementIndex({ database, tables }: DatabaseMa
                                         {table.name}
                                     </Link>
                                 </td>
-                                <td className="text-end">{formatCount(table.rows)}</td>
+                                <td className="text-end">{table.rows === null ? '?' : formatCount(table.rows)}</td>
                                 <td className="text-end">{table.columns}</td>
                                 <td>{stateBadge(table)}</td>
                                 <td className="text-end">
-                                    <div className="d-inline-flex gap-1">
-                                        <Link href={tableUrl(table.name)} className="btn btn-sm btn-outline-primary">
-                                            <i className="ti ti-eye me-1" />
-                                            {t('Open')}
-                                        </Link>
-                                        <a href={`${tableUrl(table.name)}/export`} className="btn btn-sm btn-outline-secondary">
-                                            <i className="ti ti-download me-1" />
-                                            CSV
-                                        </a>
-                                    </div>
+                                    {table.accessible ? (
+                                        <div className="d-inline-flex gap-1">
+                                            <Link href={tableUrl(table.name)} className="btn btn-sm btn-outline-primary">
+                                                <i className="ti ti-eye me-1" />
+                                                {t('Open')}
+                                            </Link>
+                                            <a href={`${tableUrl(table.name)}/export`} className="btn btn-sm btn-outline-secondary">
+                                                <i className="ti ti-download me-1" />
+                                                CSV
+                                            </a>
+                                        </div>
+                                    ) : (
+                                        <span className="text-muted fs-12 text-normal-case">
+                                            {t('Fix on the server: ALTER TABLE … OWNER TO the app role, or drop it.')}
+                                        </span>
+                                    )}
                                 </td>
                             </tr>
                         ))}

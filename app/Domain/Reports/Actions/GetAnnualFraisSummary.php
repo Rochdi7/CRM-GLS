@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Reports\Actions;
 
+use App\Models\Depense;
 use App\Models\Inscription;
 use App\Services\Context\CurrentContext;
 use Illuminate\Database\Query\Builder;
@@ -96,8 +97,13 @@ final class GetAnnualFraisSummary
         );
 
         // Dépenses — by date_depense, center via the till.
+        // Approuvée ONLY: the yearly recap reports money that actually left
+        // the tills, like every caisse screen. A pending, refused or
+        // cancelled dépense never left (or came back), so counting it here
+        // would make the annual total disagree with the Dépenses list.
         $depenses = $this->byMonth(
             DB::table('depenses')
+                ->where('statut', Depense::STATUT_APPROUVEE)
                 ->whereBetween('date_depense', $range)
                 ->when($centreId, fn (Builder $q) => $q->whereIn(
                     'caisse_id',

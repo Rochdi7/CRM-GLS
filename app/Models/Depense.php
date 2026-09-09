@@ -33,11 +33,26 @@ class Depense extends Model implements HasMedia
     public const STATUT_APPROUVEE = 'Approuvée';
     public const STATUT_REFUSEE = 'Refusée';
 
+    /**
+     * Cancelled by COMPENSATING ENTRY (Domain\Expenses\Actions\AnnulerDepense,
+     * 09/09/2026): an approved dépense whose money came BACK into the till
+     * through a journaled CaisseLedger credit — a duplicate keyed twice, for
+     * instance. The row is never deleted (§11): it stays listed with this
+     * statut, and every read model that sums « money that left the tills »
+     * already filters on STATUT_APPROUVEE, so it drops out of the totals
+     * without any of them knowing the concept.
+     */
+    public const STATUT_ANNULEE = 'Annulée';
+
     public const STATUTS = [
         self::STATUT_EN_ATTENTE,
         self::STATUT_APPROUVEE,
         self::STATUT_REFUSEE,
+        self::STATUT_ANNULEE,
     ];
+
+    /** Written into `note` by AnnulerDepense — the human-readable half of the trail. */
+    public const MARQUEUR_ANNULE = '[ANNULÉE]';
 
     protected $fillable = [
         'reference', 'type_depense_id', 'caisse_id', 'group_id', 'montant',
@@ -83,6 +98,12 @@ class Depense extends Model implements HasMedia
     public function isRefusee(): bool
     {
         return $this->statut === self::STATUT_REFUSEE;
+    }
+
+    /** Reversed by a compensating credit — its money is back in the till. */
+    public function isAnnulee(): bool
+    {
+        return $this->statut === self::STATUT_ANNULEE;
     }
 
     /**

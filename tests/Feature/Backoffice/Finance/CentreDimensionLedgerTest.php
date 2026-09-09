@@ -203,6 +203,9 @@ final class CentreDimensionLedgerTest extends TestCase
 
         $agent = Employee::factory()->create(['etablissement_id' => $this->online->id]);
         $type = TypeDepense::create(['nom' => 'Fournitures', 'statut' => 'Actif']);
+        // Approval is OFF, so the till is debited on the spot and must cover
+        // the amount (GardeSoldeCaisse). This test pins the CENTRE stamp.
+        $agent->till()->firstOrFail()->update(['solde' => '500.00']);
 
         app(EnregistrerDepense::class)->handle([
             'type_depense_id' => $type->id,
@@ -223,6 +226,9 @@ final class CentreDimensionLedgerTest extends TestCase
         $approver = Employee::factory()->create(['etablissement_id' => $this->online->id]);
         $type = TypeDepense::create(['nom' => 'Paiement prof', 'is_system' => true, 'statut' => 'Actif']);
         $group = Group::factory()->create(['etablissement_id' => $this->rabat->id]);
+        // Funded so the APPROVAL below can go through — what this test pins
+        // is the centre stamped at approval, not the balance.
+        $agent->till()->firstOrFail()->update(['solde' => '900.00']);
 
         $depense = app(EnregistrerDepense::class)->handle([
             'type_depense_id' => $type->id,
@@ -235,14 +241,15 @@ final class CentreDimensionLedgerTest extends TestCase
             'description' => 'Août',
         ], $agent);
 
-        // Approval ON: nothing journaled, nothing debited yet.
-        $this->assertSame('0.00', (string) $agent->till()->firstOrFail()->solde);
+        // Approval ON: nothing journaled, nothing debited yet — the till
+        // still holds the 900,00 it was funded with above.
+        $this->assertSame('900.00', (string) $agent->till()->firstOrFail()->solde);
 
         app(ApprouverDepense::class)->handle($depense, $approver);
 
         // The GROUP's centre — not the approver's, not the agent's.
         $this->assertSame($this->rabat->id, $this->lastEntryCentre());
-        $this->assertSame('-900.00', (string) $agent->till()->firstOrFail()->solde);
+        $this->assertSame('0.00', (string) $agent->till()->firstOrFail()->solde);
     }
 
     // ---------------------------------------------------------------

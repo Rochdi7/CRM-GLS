@@ -443,6 +443,8 @@ export interface CaisseDetails {
     centre: string | null;
     responsable: string | null;
     solde: MoneyDisplay;
+    /** true = solde et listes ventilés sur le centre actif, pas tout le compte. */
+    ventileParCentre: boolean;
     statut: string;
     encaissements: CaisseMovementRow[];
     depenses: CaisseMovementRow[];
@@ -527,6 +529,17 @@ export interface DepenseDetails {
     approvedBy: string | null;
     approvedAt: string | null;
     motifRefus: string | null;
+    /** Reversed by a compensating credit (statut « Annulée »). */
+    isAnnulee: boolean;
+    /** The compensating entry that cancelled this dépense, read from the caisse journal. */
+    annulation: {
+        correction: string | null;
+        montant: MoneyDisplay;
+        date: string | null;
+        par: string | null;
+        motif: string | null;
+        caisse: string | null;
+    } | null;
     /** Operation trail — super-admin only; see DepenseRow for the rule. */
     createdAt?: string | null;
     updatedAt?: string | null;
@@ -1960,11 +1973,13 @@ export interface DepenseRow {
     note: string | null;
     agent: string | null;
     receiptsCount: number;
-    /** Approval workflow — "En attente" | "Approuvée" | "Refusée". */
+    /** Approval workflow — "En attente" | "Approuvée" | "Refusée" | "Annulée". */
     statut: string;
     /** Pending: no money has left the till yet. */
     isEnAttente: boolean;
     isRefusee: boolean;
+    /** Reversed by a compensating credit — its money is back in the till. */
+    isAnnulee: boolean;
     approvedBy: string | null;
     approvedAt: string | null;
     motifRefus: string | null;
@@ -2339,12 +2354,15 @@ export interface RapportsPageProps {
 
 export interface DatabaseTableSummary {
     name: string;
-    rows: number;
+    /** Null when the count failed (table the role cannot read) — shown as « ? », never a 500. */
+    rows: number | null;
     columns: number;
     /** activity_log / migrations — browsable, never written to. */
     readOnly: boolean;
-    /** False when read-only or without a primary key (rows cannot be named one by one). */
+    /** False when read-only, unreadable, or without a primary key (rows cannot be named one by one). */
     editable: boolean;
+    /** False when the application role cannot read the table (e.g. a superuser-owned snapshot). */
+    accessible: boolean;
 }
 
 export type DatabaseColumnInput =
@@ -2393,5 +2411,7 @@ export interface DatabaseTablePageProps {
     table: { name: string; readOnly: boolean; primaryKey: string[]; total: number };
     columns: DatabaseColumn[];
     rows: PaginatedData<DatabaseRow>;
+    /** Names behind the foreign-key ids on this page: `{column: {id: name}}`. The id stays the stored value. */
+    foreignLabels: Record<string, Record<string, string>>;
     filters: DatabaseTableFilters;
 }

@@ -9,6 +9,7 @@ use App\Models\Depense;
 use App\Models\Employee;
 use App\Models\Group;
 use App\Domain\Finance\Support\CaisseLedger;
+use App\Domain\Finance\Support\GardeSoldeCaisse;
 use App\Services\Context\CurrentContext;
 use App\Support\Settings\AppSettings;
 use Illuminate\Support\Facades\DB;
@@ -27,12 +28,20 @@ use Illuminate\Support\Facades\DB;
  *
  * Either way caisses.solde only ever moves through CaisseLedger
  * (CLAUDE.md §11), so every movement stays in the audit journal.
+ *
+ * The approval-OFF branch is an approval path like any other — the row is
+ * born « Approuvée » and the till is debited on the spot — so it carries the
+ * same overspend guard as ApprouverDepense (GardeSoldeCaisse, 09/09/2026):
+ * the till is locked and must cover the amount, or nothing is written.
  */
 final class EnregistrerDepense
 {
+    public const MESSAGE_SOLDE_INSUFFISANT = 'Cannot record this expense: the till only holds :solde DH, the requested amount is :montant DH.';
+
     public function __construct(
         private readonly CaisseLedger $ledger,
         private readonly CurrentContext $context,
+        private readonly GardeSoldeCaisse $garde,
     ) {}
 
     /**
@@ -43,6 +52,18 @@ final class EnregistrerDepense
         $requiresApproval = AppSettings::expenseApprovalEnabled();
 
         return DB::transaction(function () use ($data, $agent, $requiresApproval): Depense {
+            if (! $requiresApproval) {
+                // Checked BEFORE the row exists: a refused expense must leave
+                // no trace at all (no DEP- reference burnt, no Approuvée row
+                // that never debited anything).
+                $this->garde->verrouillerEtVerifier(
+                    (int) $data['caisse_id'],
+                    (float) $data['montant'],
+                    self::MESSAGE_SOLDE_INSUFFISANT,
+                    'montant',
+                );
+            }
+
             $depense = Depense::create([
                 ...$data,
                 'reference' => ReferenceGenerator::make('DEP', 'depenses'),

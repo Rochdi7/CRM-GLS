@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Backoffice\Finance;
 
+use App\Domain\Finance\Queries\GetCaisseDetails;
 use App\Domain\Finance\Queries\GetCaisseJournal;
+use App\Domain\Finance\Queries\GetComptesCaisse;
 use App\Domain\Payments\Actions\EnregistrerEncaissement;
 use App\Models\Activity;
 use App\Models\AnneeScolaire;
@@ -241,5 +243,88 @@ final class CaisseVentilationCentreTest extends TestCase
         // Inchangé : la ventilation lit `encaissements.etablissement_id`.
         $this->assertSame('6200.00', $this->journalFor($agent, $this->marrakech->id)['solde']);
         $this->assertSame('4100.00', $this->journalFor($agent, $this->online->id)['solde']);
+    }
+
+    /**
+     * La fiche d'une caisse (`GetCaisseDetails`) était le SEUL écran finance
+     * resté non ventilé (09/09/2026).
+     *
+     * Signalé sur la prod : la caisse de Yassine Ouled Laghzal, étiquetée GLS
+     * Kénitra, annonçait 72 740,00 DH sur sa fiche et listait des paiements
+     * Casablanca / Kénitra / Online pêle-mêle, pendant que « Comptes de
+     * caisse » — ventilé, lui — donnait 1 300,00 DH pour le MÊME compte sur le
+     * MÊME centre actif. Deux écrans du même argent qui se contredisent.
+     *
+     * @return array<string, mixed>
+     */
+    private function detailsFor(Employee $agent, ?int $centreId): array
+    {
+        $this->actingAs($agent->user->fresh());
+
+        app()->forgetInstance(CurrentContext::class);
+        app(CurrentContext::class)->setEtablissement($centreId);
+
+        return app(GetCaisseDetails::class)($agent->till()->firstOrFail());
+    }
+
+    public function test_la_fiche_caisse_ventile_son_solde_comme_les_autres_ecrans(): void
+    {
+        $agent = $this->latifa();
+
+        $this->assertSame('6200.00', $this->detailsFor($agent, $this->marrakech->id)['solde']);
+        $this->assertSame('4100.00', $this->detailsFor($agent, $this->online->id)['solde']);
+    }
+
+    /**
+     * Le cœur du bug signalé : la fiche et « Comptes de caisse » doivent
+     * donner le MÊME chiffre pour le même compte au même moment.
+     */
+    public function test_la_fiche_caisse_ne_contredit_jamais_l_onglet_comptes(): void
+    {
+        $agent = $this->latifa();
+        $tillId = $agent->till()->firstOrFail()->id;
+
+        foreach ([$this->marrakech->id, $this->online->id, null] as $centreId) {
+            $details = $this->detailsFor($agent, $centreId);
+
+            $compte = collect(app(GetComptesCaisse::class)('', '', 50, 1)->items())
+                ->firstWhere('id', $tillId);
+
+            $this->assertNotNull($compte, "La caisse a disparu de « Comptes de caisse » (centre {$centreId}).");
+            $this->assertSame(
+                $compte['solde'],
+                $details['solde'],
+                'La fiche caisse et « Comptes de caisse » annoncent deux soldes différents.',
+            );
+        }
+    }
+
+    /** Les lignes suivent le solde : montrer un paiement d'un autre centre le contredirait. */
+    public function test_les_listes_de_la_fiche_suivent_le_centre_actif(): void
+    {
+        $agent = $this->latifa();
+
+        $marrakech = $this->detailsFor($agent, $this->marrakech->id);
+        $this->assertCount(1, $marrakech['encaissements']);
+        $this->assertSame('6200.00', $marrakech['encaissements'][0]['montant']);
+        $this->assertTrue($marrakech['ventileParCentre']);
+
+        $online = $this->detailsFor($agent, $this->online->id);
+        $this->assertCount(1, $online['encaissements']);
+        $this->assertSame('4100.00', $online['encaissements'][0]['montant']);
+    }
+
+    /**
+     * « Tous les centres » (super-admin) ne ventile rien : le solde stocké
+     * reste l'autorité (CaisseLedger) et la somme des parts y retombe.
+     */
+    public function test_tous_les_centres_rend_la_fiche_entiere(): void
+    {
+        $agent = $this->latifa();
+        $details = $this->detailsFor($agent, null);
+
+        $this->assertSame('10300.00', $details['solde']);
+        $this->assertFalse($details['ventileParCentre']);
+        $this->assertCount(2, $details['encaissements']);
     }
 }

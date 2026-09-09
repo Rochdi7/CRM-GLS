@@ -95,10 +95,12 @@ function DetailLine({ label, value }: { label: string; value?: string | null }) 
 }
 
 /** Approval workflow statuses -> PreSkool badge variants. */
-const DEPENSE_STATUT_BADGE: Record<string, 'success' | 'warning' | 'danger'> = {
+const DEPENSE_STATUT_BADGE: Record<string, 'success' | 'warning' | 'danger' | 'secondary'> = {
     'En attente': 'warning',
     'Approuvée': 'success',
     'Refusée': 'danger',
+    // Reversed by a compensating credit — money back in the till.
+    'Annulée': 'secondary',
 };
 
 function emptyDepenseForm(): DepenseFormState {
@@ -1222,6 +1224,15 @@ export default function DepensesIndex({
                         )}
                         {detailsRow.isRefusee && detailsRow.motifRefus && (
                             <div className="col-12"><DetailLine label="Motif du refus" value={detailsRow.motifRefus} /></div>
+                        )}
+                        {detailsRow.isAnnulee && (
+                            <div className="col-12">
+                                <div className="alert alert-secondary mb-0">
+                                    <i className="ti ti-receipt-refund me-1" />
+                                    Correction comptable : cette dépense a été annulée par une écriture
+                                    compensatoire et la caisse a été recréditée. Le détail figure dans la note.
+                                </div>
+                            </div>
                         )}
 
                         <div className="col-12"><DetailLine label="Description" value={detailsRow.description} /></div>

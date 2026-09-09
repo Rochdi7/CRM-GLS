@@ -48,6 +48,19 @@ function preview(value: string | null): string {
     return value.length > PREVIEW_LENGTH ? `${value.slice(0, PREVIEW_LENGTH)}…` : value;
 }
 
+/** Name behind a foreign-key id on this page, or null when there is none. */
+function labelFor(
+    foreignLabels: Record<string, Record<string, string>>,
+    column: string,
+    value: string | null,
+): string | null {
+    if (value === null || value === '') {
+        return null;
+    }
+
+    return foreignLabels[column]?.[value] ?? null;
+}
+
 function describeKey(key: Record<string, string | null>): string {
     return Object.entries(key)
         .map(([column, value]) => `${column} = ${value ?? 'NULL'}`)
@@ -87,8 +100,14 @@ function placeholderFor(column: DatabaseColumn): string {
  * column with a default lets PostgreSQL apply that default (identity ids,
  * timestamps, statut). The database's own refusal (type, constraint, FK) is
  * shown verbatim inside the modal.
+ *
+ * A foreign key reads as a NAME next to its id (« 34 · GLS-A1-SOIR »),
+ * resolved server-side by the same `AuditValueResolver` the audit journal
+ * uses. The id stays the value that is stored and submitted — showing only
+ * the name would hide which row is referenced, and a later rename would
+ * silently change what the screen claims (CLAUDE.md §11).
  */
-export default function DatabaseTable({ table, columns, rows, filters }: DatabaseTablePageProps) {
+export default function DatabaseTable({ table, columns, rows, foreignLabels, filters }: DatabaseTablePageProps) {
     const loading = useInertiaLoading();
     const baseUrl = `/backoffice/database-management/${encodeURIComponent(table.name)}`;
     const canEdit = !table.readOnly && table.primaryKey.length > 0;
@@ -220,6 +239,11 @@ export default function DatabaseTable({ table, columns, rows, filters }: Databas
             .filter(Boolean)
             .join(' · ');
 
+        // The row being edited already carries the name behind each of its
+        // foreign keys; typing another id simply drops the hint until the
+        // next reload, rather than guessing at a name we have not resolved.
+        const referenced = column.references ? labelFor(foreignLabels, column.name, value) : null;
+
         let control;
 
         if (column.input === 'boolean') {
@@ -269,6 +293,12 @@ export default function DatabaseTable({ table, columns, rows, filters }: Databas
                 </label>
                 {control}
                 {error && <div className="invalid-feedback d-block">{error}</div>}
+                {referenced && (
+                    <div className="form-text fs-12 text-normal-case text-success">
+                        <i className="ti ti-arrow-narrow-right me-1" />
+                        {referenced}
+                    </div>
+                )}
                 <div className="form-text fs-12 text-normal-case">{hint}</div>
             </div>
         );
@@ -451,18 +481,24 @@ export default function DatabaseTable({ table, columns, rows, filters }: Databas
                             <tr key={`${describeKey(row.key)}-${index}`}>
                                 {columns.map((c) => {
                                     const value = row.values[c.name] ?? null;
+                                    const label = labelFor(foreignLabels, c.name, value);
 
                                     return (
                                         <td
                                             key={c.name}
                                             className="text-normal-case"
                                             style={{ whiteSpace: 'nowrap', maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis' }}
-                                            title={value ?? 'NULL'}
+                                            title={label ? `${value} · ${label}` : value ?? 'NULL'}
                                         >
                                             {value === null ? (
                                                 <span className="text-muted fst-italic">NULL</span>
                                             ) : value === '' ? (
                                                 <span className="text-muted fst-italic">{t('empty')}</span>
+                                            ) : label ? (
+                                                <>
+                                                    <span className="fw-medium">{preview(label)}</span>
+                                                    <span className="text-muted ms-2 fs-12">#{value}</span>
+                                                </>
                                             ) : (
                                                 preview(value)
                                             )}

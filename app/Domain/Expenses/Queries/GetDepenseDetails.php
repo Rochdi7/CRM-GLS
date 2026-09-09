@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Expenses\Queries;
 
+use App\Models\Activity;
 use App\Models\Depense;
 use Illuminate\Support\Facades\Gate;
 
@@ -51,6 +52,11 @@ final class GetDepenseDetails
                 && $depense->updated_at !== null
                 && abs($depense->updated_at->diffInSeconds($depense->created_at)) > 1,
             'statut' => $depense->statut,
+            'isAnnulee' => $depense->isAnnulee(),
+            // The compensating credit that cancelled this dépense, read from
+            // the caisse journal at render time (never stored twice): what
+            // was corrected, why, how much, when, by whom.
+            'annulation' => $depense->isAnnulee() ? $this->annulation($depense) : null,
             'methodePaiement' => $depense->methode_paiement,
             'referenceFacture' => $depense->reference_facture,
             'groupe' => $depense->group?->nom,
@@ -69,6 +75,36 @@ final class GetDepenseDetails
                 'mimeType' => (string) $media->mime_type,
                 'size' => (int) $media->size,
             ])->values()->all(),
+        ];
+    }
+
+    /**
+     * @return array{correction: string|null, montant: string, date: string|null, par: string|null, motif: string|null, caisse: string|null}|null
+     */
+    private function annulation(Depense $depense): ?array
+    {
+        $entry = Activity::query()
+            ->where('log_name', 'caisse')
+            ->where('event', 'solde_movement')
+            ->where('properties->origine_type', Depense::class)
+            ->where('properties->origine_id', (string) $depense->getKey())
+            ->where('properties->sens', 'Entrée')
+            ->orderByDesc('id')
+            ->first();
+
+        if ($entry === null) {
+            return null;
+        }
+
+        $props = $entry->properties;
+
+        return [
+            'correction' => $props['correction'] ?? null,
+            'montant' => number_format((float) ($props['montant'] ?? 0), 2, '.', ''),
+            'date' => $entry->created_at?->format('d/m/Y H:i'),
+            'par' => $props['annulee_par'] ?? $entry->causer_label ?? null,
+            'motif' => $props['motif_correction'] ?? null,
+            'caisse' => $props['caisse'] ?? null,
         ];
     }
 }

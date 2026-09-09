@@ -95,6 +95,14 @@ final class GetDashboardStats
         // A dépense has no inscription, so its year is the year its date
         // falls in (same rule as the Dépenses list's default window).
         $depensesMonthQuery = Depense::query()
+            // Approuvée ONLY — the same definition of « argent sorti » as
+            // every caisse screen (GetDepensesList, GetCaisseJournal,
+            // VentilationCentre…). Without it the card counted money still
+            // held « En attente », money « Refusée » that never moved, and
+            // — since 09/09/2026 — money given back by a compensating
+            // entry (« Annulée »), so the dashboard contradicted the
+            // Dépenses list it links to.
+            ->where('statut', Depense::STATUT_APPROUVEE)
             ->whereBetween('date_depense', [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()])
             ->when($anneeRange, fn ($q, $r) => $q->whereBetween('date_depense', $r))
             ->when($centreId, fn ($q) => $q->whereHas('caisse', fn ($c) => $c->where('etablissement_id', $centreId)));

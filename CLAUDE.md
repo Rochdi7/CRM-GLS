@@ -359,6 +359,32 @@ the database layer. Non-negotiable invariants already enforced in code:
   keeps its stored meaning** — never reinterpret it at read time (e.g. via
   the responsable's primary centre) to make a screen look right. Tests:
   `tests/Feature/Backoffice/Finance/CentreDimensionLedgerTest.php`.
+- **⚠ TOUS les écrans finance ventilent par centre — la fiche caisse comprise**
+  (09/09/2026). Une caissière n'a qu'UNE caisse à vie mais encaisse pour
+  plusieurs centres, donc la part d'un centre dans une caisse se dérive
+  TOUJOURS via la source unique `Domain\Finance\Support\VentilationCentre`
+  (`soldeDuCentre()` / `scopeDepensesAuCentre()`). Quatre écrans la partagent
+  désormais : « Comptes de caisse » (`GetComptesCaisse`), « Caisse globale »
+  (`GetCaisseGlobale`), le journal (`GetCaisseJournal`) et **la fiche d'une
+  caisse (`GetCaisseDetails`)** — cette dernière était la seule oubliée : elle
+  affichait le `caisses.solde` ENTIER au-dessus de listes entières, si bien
+  que la caisse de Yassine Ouled Laghzal annonçait 72 740,00 DH sur sa fiche
+  et 1 300,00 DH dans « Comptes de caisse » AU MÊME MOMENT, avec des paiements
+  Casablanca / Kénitra / Online mêlés. Deux écrans du même argent qui se
+  contredisent : l'utilisateur ne peut plus savoir lequel croire. Trois bornes :
+  (1) **un total se calcule sur les MÊMES colonnes que les lignes qu'il
+  chapeaute** — solde ventilé ⇒ listes ventilées, sinon la page se contredit
+  elle-même ; (2) **un transfert n'a pas de centre propre** (il déplace de
+  l'argent PHYSIQUE) : il est imputé au centre de rattachement de la caisse,
+  donc il DISPARAÎT des listes d'un autre centre, exactement comme
+  `VentilationCentre::transfertsDuCentre()` l'exclut du solde ; (3) sur
+  « Tous les centres » **rien n'est ventilé** — `caisses.solde` reste
+  l'autorité (CaisseLedger) et la somme des parts y retombe. Un écran qui
+  affiche un solde ventilé doit le DIRE (`ventileParCentre`), sinon le chiffre
+  se lit comme le total du compte. Le modal de transfert est l'exception
+  assumée : il montre le solde ENTIER, parce que `DemanderTransfertCaisse`
+  valide contre lui. Tests :
+  `tests/Feature/Backoffice/Finance/CaisseVentilationCentreTest.php`.
 - **One dirham = one `caisses` row — payment-method accounts per centre**
   (24/08/2026, `docs/caisse-comptes-methode-architecture.md`). `Caisse::TYPES`
   = Caissière / Externe (physical CASH) + TPE / Chèque / Virement (ONE account
@@ -450,6 +476,46 @@ the database layer. Non-negotiable invariants already enforced in code:
   double-click can't double-spend. The Dépenses list reports **approved** money
   as `montantTotal` and pending money separately as `montantEnAttente` — never
   fold the two together.
+- **⚠ A dépense is never approved beyond what its till holds** (09/09/2026,
+  after five dépenses totalling 22 500 DH were approved on a till that had
+  received 15 250 DH — El Mehdi Bakhach's till at -7 250 DH, one of them,
+  DEP-014, a copy of DEP-012). `Domain\Finance\Support\GardeSoldeCaisse`
+  locks the till row FOR UPDATE inside the approval transaction and refuses
+  when `montant > solde` (equality is allowed — emptying a till to 0,00 is
+  legitimate, same bound as `ValiderTransfertCaisse`). Both money-moving
+  paths call it: `ApprouverDepense` and the approval-OFF branch of
+  `EnregistrerDepense` (that branch IS an approval: the row is born
+  `Approuvée` and debits at once). The till checked is ALWAYS
+  `depenses.caisse_id`, the stored row — the same one `CaisseLedger` debits
+  in the same call — never a till re-derived from the approver's context, so
+  a multi-centre super-admin can never "borrow" another centre's balance.
+  Two concurrent approvals on one till serialize on that row lock; the
+  second re-reads the reduced balance. The guard runs INSIDE
+  `DB::transaction` — moved outside, it proves nothing (§11 above).
+  A dépense keyed twice is undone by **compensating entry**, never deleted:
+  `Domain\Expenses\Actions\AnnulerDepense` credits the till back through
+  `CaisseLedger` (stamping the centre of the ORIGINAL debit), sets
+  `statut = Annulée` (`Depense::STATUT_ANNULEE` — every read model already
+  sums `Approuvée` only, so the money drops out of the totals without any
+  of them learning the concept) and appends `[ANNULÉE] … CORRECTION-<ref>-DUPLICATE`
+  to the note. No screen calls it: the operator runs
+  `php artisan depenses:annuler-doublon DEP-014 DEP-012` (dry-run by
+  default, `--apply`), which names BOTH rows and refuses unless every proof
+  matches (same till, amount, date, description, both `Approuvée`, keyed
+  within 60 min, exactly one journaled debit, no prior credit) — it never
+  guesses which row is the duplicate, and it has no `--force`. Idempotent on
+  the stable `correction` reference in the ledger AND the statut.
+  **« Argent sorti » a UNE seule définition — `statut = Approuvée` — et tout
+  écran qui somme des dépenses doit la porter.** Les lectures de caisse le
+  faisaient déjà ; `GetDashboardStats` (carte « Dépenses du mois ») et
+  `GetAnnualFraisSummary` (récapitulatif annuel) lisaient `depenses` sans
+  aucun filtre de statut et comptaient donc l'argent encore « En attente »,
+  celui d'une dépense « Refusée » qui n'a jamais bougé, et désormais celui
+  rendu par une annulation — trois écrans du même argent qui se
+  contredisent. Corrigé le 09/09/2026 ; tout nouvel écran qui agrège des
+  dépenses reprend ce filtre. Tests:
+  `tests/Feature/Backoffice/Finance/DepenseSoldeInsuffisantTest.php`,
+  `AnnulerDepenseDoublonTest.php`.
 - **A dépense and a « Paiement prof » are the SAME table but two different
   forms** (26/08/2026). Gestion des dépenses has one modal per tab, and the
   contract is enforced server-side by
@@ -1235,7 +1301,26 @@ keeps the primary column stable when an edit merely adds a center. Enforcing
   SEULE (`DatabaseBrowser::READ_ONLY_TABLES`) : le journal est append-only
   au niveau modèle et cet outil contourne Eloquent, il doit donc refuser
   lui-même. Hors de la barre latérale, comme les deux autres outils de
-  maintenance — et ce n'est pas ce qui le protège. Tests :
+  maintenance — et ce n'est pas ce qui le protège. Deux règles de LECTURE
+  ajoutées le 09/09/2026 après usage réel : (a) **une clé étrangère se lit
+  comme un NOM à côté de son id** (« Herr Driss 13h #2 »), résolu par le
+  MÊME `Support\Audit\AuditValueResolver` que le journal d'audit — un
+  écran de plus qui lit un id ne redéfinit jamais sa propre table de
+  correspondance ; le nom est un CONFORT D'AFFICHAGE, l'id reste la valeur
+  stockée, soumise et toujours visible (n'afficher que le nom masquerait
+  quelle ligne est référencée, et un renommage réécrirait en silence ce que
+  l'écran prétend montrer, §11). Les noms sont chargés EN LOT (une requête
+  par table référencée, jamais une par ligne) et le schéma est mémoïsé par
+  requête ; (b) **une table que le rôle applicatif ne peut pas lire ne fait
+  pas tomber la page** — production 09/09/2026, `tmp_caisse_snapshot_0901`,
+  un instantané de réparation créé par le superutilisateur `postgres` : le
+  `count()` levait « permission denied » et emportait tout l'index. Elle est
+  désormais signalée en rouge (« Accès refusé au rôle applicatif ») et
+  l'ouvrir renvoie à la liste avec la raison de PostgreSQL. Le correctif est
+  côté serveur (`ALTER TABLE … OWNER TO gls_crm_app`, ou supprimer la
+  table) — l'écran ne fait que le signaler. La liste des tables est aussi
+  bornée au schéma de la connexion (`public`), sans quoi une table d'un
+  autre schéma revient sous son nom nu et 500 à la lecture. Tests :
   `tests/Feature/Backoffice/Access/DatabaseManagementAccessTest.php`,
   `tests/Feature/Backoffice/Maintenance/DatabaseManagementTest.php`.
 - **⚠ Only super-admin deletes.** `PermissionRegistry::superAdminOnly()`

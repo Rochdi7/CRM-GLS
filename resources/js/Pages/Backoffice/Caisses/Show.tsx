@@ -2,6 +2,7 @@ import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import DetailRow from '@/Components/Details/DetailRow';
 import RelatedRecordsTable from '@/Components/Details/RelatedRecordsTable';
+import { t } from '@/Lib/i18n';
 import type { CaisseDetails } from '@/Types';
 
 interface CaisseShowProps {
@@ -27,7 +28,9 @@ export default function CaisseShow({ caisse }: CaisseShowProps) {
                 <div className="col-xl-4">
                     <Card title="Caisse">
                         <div className="text-center border-bottom pb-3 mb-3">
-                            <p className="text-muted mb-1">Solde</p>
+                            <p className="text-muted mb-1">
+                                {caisse.ventileParCentre ? t('Balance for this center') : t('Balance')}
+                            </p>
                             <h3 className="mb-0">{Number(caisse.solde).toFixed(2)} DH</h3>
                         </div>
                         <DetailRow label="Centre" value={caisse.centre} />
@@ -44,6 +47,16 @@ export default function CaisseShow({ caisse }: CaisseShowProps) {
                         Le solde est maintenu par l'application : il ne bouge qu'à travers les paiements, dépenses,
                         remboursements et transferts validés.
                     </div>
+
+                    {/* Une caissière n'a qu'UNE caisse à vie mais encaisse pour
+                        plusieurs centres : sans cette phrase, un solde ventilé
+                        se lit comme le total du compte et contredit « Comptes
+                        de caisse ». */}
+                    {caisse.ventileParCentre && (
+                        <div className="alert alert-warning d-flex align-items-center" role="alert">
+                            {t('Only this center’s share of the account is shown, matching the movements listed. Switch to all centers to see the full balance.')}
+                        </div>
+                    )}
                 </div>
 
                 <div className="col-xl-8">

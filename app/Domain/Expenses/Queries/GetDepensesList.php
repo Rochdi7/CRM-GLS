@@ -166,6 +166,7 @@ final class GetDepensesList
             'statut' => $d->statut,
             'isEnAttente' => $d->isEnAttente(),
             'isRefusee' => $d->isRefusee(),
+            'isAnnulee' => $d->isAnnulee(),
             'approvedBy' => $d->approvedBy?->nomComplet(),
             'approvedAt' => $d->approved_at?->toDateTimeString(),
             'motifRefus' => $d->motif_refus,

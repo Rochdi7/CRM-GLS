@@ -249,6 +249,8 @@ final class CaisseAuditFixesTest extends TestCase
         AppSettings::setBool(AppSettings::EXPENSE_APPROVAL, true);
 
         $depense = $this->pendingDepenseIn($this->marrakech);
+        // The till must cover the amount (GardeSoldeCaisse, 09/09/2026).
+        $depense->caisse->update(['solde' => '500.00']);
 
         $approver = $this->userIn($this->marrakech, ['expenses.view', 'expenses.approve'], allCenters: true);
 
@@ -258,8 +260,8 @@ final class CaisseAuditFixesTest extends TestCase
         $this->put(route('backoffice.depenses.approve', $depense))->assertSessionHasNoErrors();
 
         $this->assertSame(Depense::STATUT_APPROUVEE, $depense->fresh()->statut);
-        // Approval is the moment the money leaves: 0 - 200.
-        $this->assertSame('-200.00', (string) $depense->caisse->fresh()->solde);
+        // Approval is the moment the money leaves: 500 - 200.
+        $this->assertSame('300.00', (string) $depense->caisse->fresh()->solde);
     }
 
     // ── P1-7 · an inactive expense type can no longer be chosen ──────────

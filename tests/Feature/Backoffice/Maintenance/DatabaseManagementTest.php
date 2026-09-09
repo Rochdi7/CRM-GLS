@@ -7,6 +7,7 @@ namespace Tests\Feature\Backoffice\Maintenance;
 use App\Models\Activity;
 use App\Models\Employee;
 use App\Models\Etablissement;
+use App\Models\Salle;
 use App\Models\User;
 use App\Support\Access\HiddenAccount;
 use App\Support\Database\DatabaseBrowser;
@@ -124,6 +125,56 @@ final class DatabaseManagementTest extends TestCase
                         && $columns['id']['autoIncrement'] === true
                         && $columns['etablissement_id']['references'] === ['table' => 'etablissements', 'column' => 'id'];
                 }));
+    }
+
+    /**
+     * Une clé étrangère se lit comme un NOM à côté de son id — même
+     * résolveur que le journal d'audit (`AuditValueResolver`), donc les deux
+     * écrans lisent un id de la même façon. L'id reste la valeur stockée :
+     * n'afficher que le nom masquerait quelle ligne est référencée.
+     */
+    public function test_les_cles_etrangeres_se_lisent_comme_des_noms(): void
+    {
+        $centre = Etablissement::query()->firstOrFail();
+        $salle = Salle::factory()->create([
+            'etablissement_id' => $centre->id,
+        ]);
+
+        $this->actingAs($this->maintainer)
+            ->get('/backoffice/database-management/salles')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('rows.data.0.values.etablissement_id', (string) $centre->id)
+                ->where(
+                    'foreignLabels.etablissement_id.'.$centre->id,
+                    $centre->nom_centre,
+                ));
+
+        $this->assertSame($centre->id, $salle->fresh()->etablissement_id);
+    }
+
+    /** Le nombre de requêtes suit le nombre de TABLES référencées, jamais le nombre de lignes. */
+    public function test_les_noms_sont_charges_en_lot(): void
+    {
+        $centre = Etablissement::query()->firstOrFail();
+        Salle::factory()->count(12)->create(['etablissement_id' => $centre->id]);
+
+        $browser = app(DatabaseBrowser::class);
+        $rows = $browser->rows('salles', ['perPage' => 50]);
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $labels = $browser->foreignKeyLabels('salles', $rows->items());
+        $queries = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        $this->assertGreaterThanOrEqual(12, count($rows->items()));
+        $this->assertSame($centre->nom_centre, $labels['etablissement_id'][(string) $centre->id]);
+        $this->assertLessThanOrEqual(
+            2,
+            $queries,
+            'les noms doivent être chargés en lot, pas une requête par ligne'
+        );
     }
 
     public function test_une_table_inconnue_repond_404(): void

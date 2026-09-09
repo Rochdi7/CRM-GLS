@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Expenses\Actions;
 
 use App\Domain\Finance\Support\CaisseLedger;
+use App\Domain\Finance\Support\GardeSoldeCaisse;
 use App\Models\Depense;
 use App\Models\Employee;
 use App\Models\Group;
@@ -20,10 +21,22 @@ use Illuminate\Validation\ValidationException;
  * for that expense. Guarded against double-spend: a dépense that already has
  * a decision is refused outright, and the check + the debit share one
  * transaction with the row locked.
+ *
+ * Guarded against OVERSPEND too (09/09/2026): the till is locked and its
+ * balance compared to the amount BEFORE the debit, in the same transaction
+ * (GardeSoldeCaisse). Five dépenses had been approved in a row against a till
+ * holding 15 250 DH for 22 500 DH of expenses, leaving it at -7 250 DH — a
+ * balance no physical till can hold. Refusal leaves the row « En attente »
+ * so a human decides: fund the till, or refuse the expense.
  */
 final class ApprouverDepense
 {
-    public function __construct(private readonly CaisseLedger $ledger) {}
+    public const MESSAGE_SOLDE_INSUFFISANT = 'Cannot approve this expense: the till only holds :solde DH, the requested amount is :montant DH.';
+
+    public function __construct(
+        private readonly CaisseLedger $ledger,
+        private readonly GardeSoldeCaisse $garde,
+    ) {}
 
     public function handle(Depense $depense, Employee $approvedBy): Depense
     {
@@ -38,6 +51,17 @@ final class ApprouverDepense
                     'statut' => __('Cette dépense a déjà été traitée.'),
                 ]);
             }
+
+            // The till that will be debited is the one STORED on the row —
+            // never re-derived from the approver's context. Locked FOR
+            // UPDATE here, so a concurrent approval on the same till waits
+            // for this transaction and re-reads the reduced balance.
+            $this->garde->verrouillerEtVerifier(
+                (int) $locked->caisse_id,
+                (float) $locked->montant,
+                self::MESSAGE_SOLDE_INSUFFISANT,
+                'statut',
+            );
 
             $this->ledger->debit(
                 (int) $locked->caisse_id,

@@ -61,7 +61,7 @@ final class DatabaseManagementController extends Controller
         ]);
     }
 
-    public function show(Request $request, string $table): Response
+    public function show(Request $request, string $table): Response|RedirectResponse
     {
         abort_unless($request->user()->can(self::ABILITY), 403);
         abort_unless($this->browser->exists($table), 404);
@@ -73,17 +73,36 @@ final class DatabaseManagementController extends Controller
             'perPage' => (string) $request->query('perPage', '25'),
         ];
 
-        return Inertia::render('Backoffice/DatabaseManagement/Table', [
-            'table' => [
-                'name' => $table,
-                'readOnly' => $this->browser->isReadOnly($table),
-                'primaryKey' => $this->browser->primaryKey($table),
-                'total' => DB::table($table)->count(),
-            ],
-            'columns' => $this->browser->columns($table),
-            'rows' => $this->browser->rows($table, $filters),
-            'filters' => $filters,
-        ]);
+        try {
+            $rows = $this->browser->rows($table, $filters);
+
+            $props = [
+                'table' => [
+                    'name' => $table,
+                    'readOnly' => $this->browser->isReadOnly($table),
+                    'primaryKey' => $this->browser->primaryKey($table),
+                    'total' => DB::table($table)->count(),
+                ],
+                'columns' => $this->browser->columns($table),
+                'rows' => $rows,
+                // Names behind the foreign-key ids on THIS page — the id
+                // stays the value, the name is shown beside it.
+                'foreignLabels' => $this->browser->foreignKeyLabels($table, $rows->items()),
+                'filters' => $filters,
+            ];
+        } catch (QueryException $e) {
+            // A table the application role cannot read (a superuser-owned
+            // repair snapshot, 09/09/2026): back to the list with the
+            // database's own reason, never a 500 page.
+            return redirect()
+                ->route('backoffice.database-management.index')
+                ->with('error', __('Cannot open :table: :reason', [
+                    'table' => $table,
+                    'reason' => $this->cleanMessage($e->getMessage()),
+                ]));
+        }
+
+        return Inertia::render('Backoffice/DatabaseManagement/Table', $props);
     }
 
     public function store(SaveDatabaseRowRequest $request, string $table): RedirectResponse
@@ -190,7 +209,7 @@ final class DatabaseManagementController extends Controller
     /** Strip the "SQLSTATE[…]: … (Connection: pgsql, SQL: …)" wrapper: the SQL text says nothing the user typed. */
     private function cleanMessage(string $message): string
     {
-        $message = preg_replace('/\s*\(Connection: [^,]+, SQL: .*\)\s*$/s', '', $message) ?? $message;
+        $message = preg_replace('/\s*\(Connection: .*?, SQL: .*\)\s*$/s', '', $message) ?? $message;
         $message = preg_replace('/^SQLSTATE\[[^\]]+\]: [^:]+: \d+ /', '', $message) ?? $message;
 
         return trim($message);

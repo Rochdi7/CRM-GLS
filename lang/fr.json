@@ -133,6 +133,7 @@
     "Balance": "Solde",
     "Balance after": "Solde après",
     "Balance before": "Solde avant",
+    "Balance for this center": "Solde de ce centre",
     "Balance snapshots": "Photos des soldes",
     "Bandwidth Limit Exceeded": "Limite de bande passante dépassée",
     "Bank": "Banque",
@@ -567,6 +568,7 @@
     "Only an active registration can change group.": "Seule une inscription active peut changer de groupe.",
     "Only an external cash account can be deleted.": "Seul un compte externe peut être supprimé.",
     "Only the note can be edited while the transfer is pending — the cash registers and the amount are frozen.": "Seule la note est modifiable tant que le transfert est en attente — les caisses et le montant sont figés.",
+    "Only this center’s share of the account is shown, matching the movements listed. Switch to all centers to see the full balance.": "Seule la part de ce centre est affichée, en accord avec les mouvements listés. Basculez sur tous les centres pour voir le solde complet.",
     "Only the requester or the recipient can cancel a transfer.": "Seul le demandeur ou le destinataire peut annuler un transfert.",
     "Open": "Ouvertes",
     "Open in a current window": "Ouvrir dans une fenêtre actuelle",
@@ -672,6 +674,8 @@
     "Refund cancelled.": "Remboursement annulé. La caisse a été recréditée.",
     "The source till only holds :solde MAD — not enough for this :montant MAD transfer. It has moved since the request was filed; cancel it or file a new one for the available amount.": "La caisse source ne contient que :solde MAD — insuffisant pour ce transfert de :montant MAD. Elle a bougé depuis la demande : annulez-la ou refaites-en une pour le montant disponible.",
     "This refund has already been cancelled.": "Ce remboursement a déjà été annulé.",
+    "This expense has already been cancelled.": "Cette dépense a déjà été annulée.",
+    "Only an approved expense can be cancelled — a pending or refused one never debited the till.": "Seule une dépense approuvée peut être annulée — une dépense en attente ou refusée n'a jamais débité la caisse.",
     "This refund has no till to credit back.": "Ce remboursement n'a aucune caisse à recréditer.",
     "Refunds": "Remboursements",
     "Regards,": "Cordialement,",
@@ -1067,6 +1071,8 @@
     "Assigned to registration :reference": "Attribué à l'inscription :reference",
     "Assignment period updated.": "Période d'affectation mise à jour.",
     "At least one payment line is required.": "Au moins une ligne de paiement est requise.",
+    "Cannot approve this expense: the till only holds :solde DH, the requested amount is :montant DH.": "Impossible d'approuver cette dépense : solde disponible :solde DH, montant demandé :montant DH.",
+    "Cannot record this expense: the till only holds :solde DH, the requested amount is :montant DH.": "Impossible d'enregistrer cette dépense : solde disponible :solde DH, montant demandé :montant DH.",
     "Cash account created.": "Compte de caisse créé.",
     "Cash account deleted.": "Compte de caisse supprimé.",
     "Cash account updated.": "Compte de caisse mis à jour.",
@@ -1331,5 +1337,8 @@
     ":count rows deleted from :table.": ":count lignes supprimées de :table.",
     "The table :table is read-only.": "La table :table est en lecture seule.",
     "Invalid JSON: :error": "JSON invalide : :error",
-    "Type the exact table name to confirm.": "Saisissez le nom exact de la table pour confirmer."
+    "Type the exact table name to confirm.": "Saisissez le nom exact de la table pour confirmer.",
+    "Cannot open :table: :reason": "Impossible d'ouvrir :table : :reason",
+    "Access denied to the app role": "Accès refusé au rôle applicatif",
+    "Fix on the server: ALTER TABLE … OWNER TO the app role, or drop it.": "À corriger sur le serveur : ALTER TABLE … OWNER TO le rôle applicatif, ou supprimer la table."
 }
