@@ -551,4 +551,50 @@ final class CaisseVentilationCentreTest extends TestCase
         // Même référence des deux côtés : c'est bien UN seul mouvement.
         $this->assertSame($source['transfers'][0]['reference'], $dest['transfers'][0]['reference']);
     }
+
+    /**
+     * L'onglet « Validation de transfert » suit le centre du TRANSFERT, pas
+     * le rattachement de la caisse source (09/09/2026).
+     *
+     * Le viewer est un super-admin dont la caisse n'est à AUCUNE extrémité :
+     * l'exception « ma propre caisse est toujours visible » ne joue donc pas,
+     * et seul le filtre de centre actif décide. Avant : la ligne était
+     * filtrée sur `caisseSource.etablissement_id` (Marrakech), donc absente de
+     * l'écran Online d'où elle est pourtant partie.
+     */
+    public function test_l_inbox_suit_le_centre_du_transfert_et_non_le_rattachement(): void
+    {
+        $expediteur = $this->latifa();                 // caisse rattachée Marrakech
+        $destinataire = Employee::factory()->create(['etablissement_id' => $this->online->id]);
+
+        $this->actingAs($expediteur->user->fresh());
+        app()->forgetInstance(CurrentContext::class);
+        app(CurrentContext::class)->setEtablissement($this->online->id);
+
+        $transfert = app(\App\Domain\Finance\Actions\DemanderTransfertCaisse::class)->handle([
+            'caisse_source_id' => $expediteur->till()->firstOrFail()->id,
+            'caisse_destination_id' => $destinataire->till()->firstOrFail()->id,
+            'montant' => 1000,
+            'date_transfert' => '2026-09-09',
+        ], $expediteur);
+
+        // Viewer tiers : super-admin, sa caisse n'est ni source ni destination.
+        $viewerUser = User::factory()->create();
+        $viewerUser->assignRole('super-admin');
+        Employee::factory()->create(['user_id' => $viewerUser->id, 'etablissement_id' => $this->marrakech->id]);
+
+        $refsPour = function (int $centreId) use ($viewerUser): array {
+            $this->actingAs($viewerUser->fresh());
+            app()->forgetInstance(CurrentContext::class);
+            app(CurrentContext::class)->setEtablissement($centreId);
+
+            return collect(app(\App\Domain\Finance\Queries\GetCaisseTransfersList::class)($viewerUser->fresh(), '', '', '')['data']->items())
+                ->pluck('reference')->all();
+        };
+
+        // Parti d'Online : visible sur Online…
+        $this->assertContains($transfert->reference, $refsPour($this->online->id));
+        // …et PAS sur Marrakech, malgré le rattachement de la caisse source.
+        $this->assertNotContains($transfert->reference, $refsPour($this->marrakech->id));
+    }
 }

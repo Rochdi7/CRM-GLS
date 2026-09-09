@@ -542,7 +542,7 @@ final class GetCaisseJournal
 
         if ($wants(self::TYPE_TRANSFERT)) {
             $rows = $rows->concat(
-                CaisseTransfer::query()->with(['caisseSource.etablissement', 'caisseDestination.etablissement', 'requestedBy'])
+                CaisseTransfer::query()->with(['etablissement', 'caisseSource.etablissement', 'caisseDestination.etablissement', 'requestedBy'])
                     ->where(fn ($q) => $q->whereIn('caisse_source_id', $ids)->orWhereIn('caisse_destination_id', $ids))
                     ->where('statut', CaisseTransfer::STATUT_VALIDE)
                     // Un transfert inter-centres est un mouvement de centre
@@ -567,10 +567,17 @@ final class GetCaisseJournal
                         'date' => $t->date_transfert,
                         'note' => $t->note,
                         'agent' => $t->requestedBy?->nomComplet(),
-                        // Le centre de la jambe vue d'ici : source si la caisse
-                        // débitée est dans le scope, destination sinon.
+                        // Le centre de la jambe vue d'ici. Pour une SORTIE, c'est
+                        // le centre du TRANSFERT — là où le caissier travaillait
+                        // (09/09/2026) — et non le rattachement de sa caisse :
+                        // sinon la ligne passe le filtre Casablanca (via
+                        // idsTransfertsDuCentre) mais s'affiche étiquetée
+                        // « GLS Kénitra », et la colonne contredit le filtre
+                        // qui l'a laissée entrer. Repli sur le rattachement
+                        // pour les lignes antérieures à la colonne. Une ENTRÉE
+                        // reste au centre de la caisse qui reçoit.
                         'centre' => in_array($t->caisse_source_id, $ids, true)
-                            ? $t->caisseSource?->etablissement?->nom_centre
+                            ? ($t->etablissement?->nom_centre ?? $t->caisseSource?->etablissement?->nom_centre)
                             : $t->caisseDestination?->etablissement?->nom_centre,
                         'url' => route('backoffice.caisse-transfers.show', $t),
                     ]),

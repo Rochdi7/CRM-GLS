@@ -287,8 +287,24 @@ final class GetCaisseTransfersList
                         ->orWhereHas('caisseDestination', fn (Builder $dq) => $this->centerAccess->scopeAccessibleCenters($dq, $user));
                 });
 
+                // ⚠ Le centre du transfert est celui où le caissier
+                // TRAVAILLAIT (`caisse_transfers.etablissement_id`,
+                // 09/09/2026), pas le centre de rattachement de sa caisse.
+                // Une caissière n'a qu'un tiroir mais encaisse pour plusieurs
+                // centres (§11) : filtrer sur `caisseSource.etablissement_id`
+                // faisait disparaître de l'écran Casablanca un transfert
+                // parti de Casablanca, parce que le tiroir de Yassine Ouled
+                // Laghzal est rattaché à Kénitra. Même résolution que
+                // VentilationCentre / GetCaisseDetails / GetCaisseJournal,
+                // sinon la liste et les soldes ne montrent pas les mêmes
+                // lignes. Repli sur le centre de la caisse source pour les
+                // transferts antérieurs à la colonne (jamais de backfill).
                 if ($activeCenterId !== null) {
-                    $q->whereHas('caisseSource', fn (Builder $sq) => $this->restrictToCenter($sq, $activeCenterId));
+                    $q->where(fn (Builder $c) => $c
+                        ->where('etablissement_id', $activeCenterId)
+                        ->orWhere(fn (Builder $legacy) => $legacy
+                            ->whereNull('etablissement_id')
+                            ->whereHas('caisseSource', fn (Builder $sq) => $this->restrictToCenter($sq, $activeCenterId))));
                 }
             });
         });
