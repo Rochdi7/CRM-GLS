@@ -10,6 +10,11 @@ interface WeekTimelineProps {
     jourFilter: string;
     canUpdate: boolean;
     canDelete: boolean;
+    /**
+     * Ouvre la FICHE du créneau (lecture seule). C'est ce que fait un clic sur
+     * la carte — voir le commentaire de `activate`.
+     */
+    onView: (row: CreneauRow) => void;
     onEdit: (row: CreneauRow) => void;
     onDelete: (row: CreneauRow) => void;
 }
@@ -159,7 +164,7 @@ function SlotActions({ row, canUpdate, canDelete, onEdit, onDelete }: SlotAction
  * today's column and the current time marked. The legend highlights one
  * group across the week without touching the server-side filters (§5).
  */
-export default function WeekTimeline({ creneaux, jours, jourFilter, canUpdate, canDelete, onEdit, onDelete }: WeekTimelineProps) {
+export default function WeekTimeline({ creneaux, jours, jourFilter, canUpdate, canDelete, onView, onEdit, onDelete }: WeekTimelineProps) {
     const [highlight, setHighlight] = useState<number | null>(null);
 
     const days = useMemo(() => {
@@ -226,10 +231,27 @@ export default function WeekTimeline({ creneaux, jours, jourFilter, canUpdate, c
 
     const actionProps = { canUpdate, canDelete, onEdit, onDelete };
     const isDim = (row: CreneauRow) => highlight !== null && highlight !== row.groupId;
+    /**
+     * ⚠ Un clic sur la carte OUVRE LA FICHE, il ne modifie rien (09/09/2026).
+     *
+     * Il ouvrait le formulaire de modification : la carte est petite et
+     * dense — le nom du groupe et la salle y sont tronqués — donc on clique
+     * dessus pour LIRE, et on se retrouvait dans un formulaire prérempli
+     * qu'un simple Entrée suffisait à enregistrer. Le geste le plus courant
+     * de l'écran était donc le plus risqué, alors qu'il ne demandait qu'à
+     * consulter.
+     *
+     * Modifier reste possible d'un seul geste par l'icône crayon de la carte
+     * (SlotActions) ou par le menu de la vue « Paramétrage » : l'action
+     * destructrice s'énonce, elle ne se déduit pas d'un clic sur du texte.
+     *
+     * La carte est donc activable par TOUT LE MONDE, `canUpdate` ou non —
+     * consulter n'a jamais demandé le droit de modifier.
+     */
     const activate = (row: CreneauRow) => (event: React.KeyboardEvent) => {
-        if (canUpdate && (event.key === 'Enter' || event.key === ' ')) {
+        if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
-            onEdit(row);
+            onView(row);
         }
     };
 
@@ -342,13 +364,15 @@ export default function WeekTimeline({ creneaux, jours, jourFilter, canUpdate, c
                                                 row.clos ? 'is-clos' : '',
                                                 isDim(row) ? 'is-dim' : '',
                                                 isShort ? 'is-short' : '',
-                                                canUpdate ? 'is-editable' : '',
+                                                'is-editable',
                                             ].filter(Boolean).join(' ')}
                                             style={{ ...box, height, '--ev-h': hueFor(row.groupId) } as React.CSSProperties}
-                                            role={canUpdate ? 'button' : undefined}
-                                            tabIndex={canUpdate ? 0 : undefined}
-                                            title={`${row.groupNom} · ${timeLabel}${row.enseignant ? ` · ${row.enseignant}` : ''}${row.salle ? ` · ${row.salle}` : ''}`}
-                                            onClick={() => canUpdate && onEdit(row)}
+                                            role="button"
+                                            tabIndex={0}
+                                            /* Le survol garde le contenu COMPLET (le nom du groupe et la salle
+                                               sont tronqués sur la carte), suivi du geste. */
+                                            title={`${row.groupNom} · ${timeLabel}${row.enseignant ? ` · ${row.enseignant}` : ''}${row.salle ? ` · ${row.salle}` : ''}\n${t('View the slot')}`}
+                                            onClick={() => onView(row)}
                                             onKeyDown={activate(row)}
                                         >
                                             <div className="gls-tl-ev-head">
@@ -410,13 +434,13 @@ export default function WeekTimeline({ creneaux, jours, jourFilter, canUpdate, c
                                                         'gls-tl-stack-row',
                                                         row.clos ? 'is-clos' : '',
                                                         isDim(row) ? 'is-dim' : '',
-                                                        canUpdate ? 'is-editable' : '',
+                                                        'is-editable',
                                                     ].filter(Boolean).join(' ')}
                                                     style={{ '--ev-h': hueFor(row.groupId) } as React.CSSProperties}
-                                                    role={canUpdate ? 'button' : undefined}
-                                                    tabIndex={canUpdate ? 0 : undefined}
-                                                    title={`${row.groupNom} · ${timeLabel}${row.enseignant ? ` · ${row.enseignant}` : ''}${row.salle ? ` · ${row.salle}` : ''}`}
-                                                    onClick={() => canUpdate && onEdit(row)}
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    title={`${row.groupNom} · ${timeLabel}${row.enseignant ? ` · ${row.enseignant}` : ''}${row.salle ? ` · ${row.salle}` : ''}\n${t('View the slot')}`}
+                                                    onClick={() => onView(row)}
                                                     onKeyDown={activate(row)}
                                                 >
                                                     <div className="gls-tl-ev-head">

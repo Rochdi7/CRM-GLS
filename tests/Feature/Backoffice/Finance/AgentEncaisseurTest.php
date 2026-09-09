@@ -77,6 +77,11 @@ final class AgentEncaisseurTest extends TestCase
             'date_paiement' => '2026-04-01',
             'agent_id' => $agent->id,
             'legacy_ref' => $legacyRef,
+            // Comme en production : l'import pose TOUJOURS `legacy_source`,
+            // et c'est LUI qui dit « cette ligne vient de l'ancien CRM ».
+            // `legacy_ref` peut manquer (part secondaire d'un paiement
+            // éclaté sur plusieurs frais).
+            'legacy_source' => $legacyRef !== null ? 'ancien-crm' : null,
         ]);
     }
 
@@ -193,6 +198,37 @@ final class AgentEncaisseurTest extends TestCase
         $this->assertSame($enseignant->id, $paiement->fresh()->agent_id);
     }
 
+    /**
+     * « Tout l'importé sur Rafik » — LA règle métier (09/09/2026).
+     *
+     * Le filtre est `legacy_source`, jamais `legacy_ref` : une part
+     * secondaire d'un paiement éclaté sur plusieurs frais garde la source
+     * mais pas la référence (54 lignes en production).
+     */
+    public function test_tous_les_importes_repointe_l_historique_sans_toucher_aux_saisies(): void
+    {
+        $caissiere = $this->employe(Employee::CATEGORIE_ASSISTANTE_ADMINISTRATIVE);
+        $rafik = $this->employe(Employee::CATEGORIE_DIRECTEUR);
+
+        $importe = $this->paiement($caissiere, 300, 'P100');
+
+        // Part secondaire d'un paiement éclaté : source SANS référence.
+        $importeSansRef = $this->paiement($caissiere, 200);
+        $importeSansRef->forceFill(['legacy_source' => 'ancien-crm'])->save();
+
+        // Vraie saisie CRM de la même personne : ne doit JAMAIS bouger.
+        $saisi = $this->paiement($caissiere, 500);
+
+        $this->artisan('encaissements:reattribuer-agent', [
+            '--tous-les-importes' => true,
+            '--vers' => $rafik->id,
+        ])->assertSuccessful();
+
+        $this->assertSame($rafik->id, $importe->fresh()->agent_id);
+        $this->assertSame($rafik->id, $importeSansRef->fresh()->agent_id, 'la part sans legacy_ref a été oubliée');
+        $this->assertSame($caissiere->id, $saisi->fresh()->agent_id, 'une saisie CRM a été réécrite');
+    }
+
     /** L'audit est en LECTURE SEULE : il nomme les cas, il n'en corrige aucun. */
     public function test_l_audit_liste_sans_rien_modifier(): void
     {
@@ -202,8 +238,11 @@ final class AgentEncaisseurTest extends TestCase
         $suspect = $this->paiement($enseignant, 300, 'P4420');
         $sain = $this->paiement($comptable, 500, 'P4421');
 
+        // « (!) » marque le poste qui n'encaisse pas — c'est l'information
+        // que l'audit doit faire ressortir. Le nom, lui, peut être tronqué
+        // à 24 caractères par la mise en forme du tableau.
         $this->artisan('encaissements:reattribuer-agent', ['--auditer' => true])
-            ->expectsOutputToContain($enseignant->nom)
+            ->expectsOutputToContain('(!)')
             ->assertSuccessful();
 
         // Rien n'a bougé — ni le cas signalé, ni le cas sain.

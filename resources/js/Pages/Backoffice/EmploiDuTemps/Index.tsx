@@ -72,6 +72,9 @@ export default function EmploiDuTempsIndex({
 }: EmploiDuTempsIndexProps) {
     const [showModal, setShowModal] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
+    // Fiche du créneau (lecture seule) — ce qu'ouvre un clic sur une carte de
+    // la grille. Voir openView.
+    const [viewing, setViewing] = useState<CreneauRow | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<CreneauRow | null>(null);
     const [deleteError, setDeleteError] = useState<string>();
     const [deleting, setDeleting] = useState(false);
@@ -151,6 +154,29 @@ export default function EmploiDuTempsIndex({
     // Raccourci « Actions rapides » du tableau de bord : ?nouveau=1 ouvre
     // directement ce formulaire (confort d'interface seulement, §5).
     useAutoOpenCreate(openCreate, permissions.create);
+
+    /**
+     * Fiche du créneau, en LECTURE SEULE — ce qu'ouvre un clic sur une carte
+     * de la grille (09/09/2026).
+     *
+     * Le clic ouvrait le formulaire de modification. La carte est petite et
+     * son contenu tronqué : on clique dessus pour LIRE, et on atterrissait
+     * dans un formulaire prérempli où un Entrée suffisait à enregistrer. Le
+     * geste le plus courant de l'écran était donc le plus risqué.
+     *
+     * Depuis la fiche, « Modifier » reste à un clic pour qui en a le droit —
+     * l'action d'écriture s'énonce, elle ne se déduit pas d'un clic sur du
+     * texte.
+     */
+    function openView(row: CreneauRow) {
+        setViewing(row);
+    }
+
+    /** Passe de la fiche au formulaire, sans refermer/rouvrir la grille. */
+    function editFromView(row: CreneauRow) {
+        setViewing(null);
+        openEdit(row);
+    }
 
     function openEdit(row: CreneauRow) {
         setEditingId(row.id);
@@ -328,6 +354,7 @@ export default function EmploiDuTempsIndex({
                             jourFilter={filters.jourFilter}
                             canUpdate={permissions.update}
                             canDelete={permissions.delete}
+                            onView={openView}
                             onEdit={openEdit}
                             onDelete={(row) => {
                                 setDeleteTarget(row);
@@ -525,6 +552,75 @@ export default function EmploiDuTempsIndex({
                         <FormActions onCancel={closeModal} processing={form.processing} />
                     </div>
                 </form>
+            </Modal>
+
+            {/*
+              Fiche du créneau — LECTURE SEULE. Elle ne réaffiche que ce que la
+              grille porte déjà (CreneauRow), sans requête supplémentaire : un
+              clic sur une carte doit répondre instantanément, c'est un geste de
+              consultation.
+            */}
+            <Modal
+                show={viewing !== null}
+                title="Détail du créneau"
+                onClose={() => setViewing(null)}
+                footer={
+                    <>
+                        <button type="button" className="btn btn-light" onClick={() => setViewing(null)}>
+                            Fermer
+                        </button>
+                        {permissions.update && viewing && (
+                            <button type="button" className="btn btn-primary" onClick={() => editFromView(viewing)}>
+                                <i className="ti ti-edit me-1" />
+                                Modifier
+                            </button>
+                        )}
+                    </>
+                }
+            >
+                {viewing && (
+                    <dl className="row mb-0">
+                        <dt className="col-sm-4 text-muted fw-normal">Groupe</dt>
+                        <dd className="col-sm-8 fw-medium">
+                            {viewing.groupNom}
+                            {viewing.groupNiveau && (
+                                <span className="badge bg-primary-transparent ms-2">{viewing.groupNiveau}</span>
+                            )}
+                        </dd>
+
+                        <dt className="col-sm-4 text-muted fw-normal">Jour</dt>
+                        <dd className="col-sm-8">{jours[String(viewing.jourSemaine)] ?? '—'}</dd>
+
+                        <dt className="col-sm-4 text-muted fw-normal">Horaire</dt>
+                        <dd className="col-sm-8">de {viewing.heureDebut} à {viewing.heureFin}</dd>
+
+                        <dt className="col-sm-4 text-muted fw-normal">Enseignant</dt>
+                        <dd className="col-sm-8">{viewing.enseignant ?? '—'}</dd>
+
+                        <dt className="col-sm-4 text-muted fw-normal">Salle</dt>
+                        <dd className="col-sm-8">{viewing.salle ?? '—'}</dd>
+
+                        {/*
+                          Une case morte s'explique ici comme sur la grille : une fin
+                          de formation est NORMALE, un remplacement d'enseignant aussi
+                          — jamais présentés comme une anomalie (07/09/2026).
+                        */}
+                        {viewing.clos && (
+                            <>
+                                <dt className="col-sm-4 text-muted fw-normal">Statut</dt>
+                                <dd className="col-sm-8 mb-0">
+                                    <span className="badge bg-secondary-transparent">
+                                        {viewing.motifCloture === 'termine' ? 'Fin de formation' : 'Enseignant remplacé'}
+                                        {viewing.dateFin ? ` le ${viewing.dateFin}` : ''}
+                                    </span>
+                                    <div className="text-muted fs-13 mt-1">
+                                        Ce créneau ne génère plus de séance.
+                                    </div>
+                                </dd>
+                            </>
+                        )}
+                    </dl>
+                )}
             </Modal>
 
             <ConfirmDialog

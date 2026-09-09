@@ -233,7 +233,29 @@ Lecture seule. Une ligne par employé concerné, avec la colonne qui décide :
   poste), PAS une réécriture de l'historique : `agent_id` est une trace
   d'audit, pas un libellé (§11).
 
-## La réparation
+## Tout l'historique importé sur un seul agent
+
+Règle métier retenue le 09/09/2026 : **un encaissement importé porte
+toujours Mohamed Rafik**. Les noms de la colonne « Opérateur » de l'ancien
+CRM (loubna, khaoula22, KHADIMERRAHMAN…) étaient de la reprise de données,
+pas une trace de qui a encaissé dans CE CRM.
+
+```bash
+php artisan encaissements:reattribuer-agent --tous-les-importes --vers=1 --dry-run
+php artisan encaissements:reattribuer-agent --tous-les-importes --vers=1
+```
+
+⚠ Le filtre est **`legacy_source = 'ancien-crm'`**, jamais `legacy_ref` :
+une part secondaire d'un paiement éclaté sur plusieurs frais garde la source
+mais PAS la référence (unique par centre). Vérifié en production : 23 833
+lignes portent la source, 23 779 une référence — 54 lignes seraient oubliées
+par l'autre filtre, et aucune ligne n'a une référence sans la source.
+
+**Les saisies CRM ne sont JAMAIS touchées.** Une caissière qui enregistre un
+paiement aujourd'hui garde son nom dessus : là, `agent_id` est une vraie
+trace d'audit (§11). Seule la reprise de données est réattribuée.
+
+## La réparation ciblée
 
 ```bash
 # 1. simulation

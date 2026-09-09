@@ -2728,13 +2728,16 @@ html[data-theme='dark'] .gls-frais-legend-pill {
 .gls-tl-col.is-today {
     background-color: #f7f9ff;
 }
+/* Current-time marker — drawn BEHIND the cards (z-index 0 against their 1),
+ * so it shows in the free space and at the column edges but never slashes
+ * through a slot's text. */
 .gls-tl-now {
     position: absolute;
     left: 0;
     right: 0;
     height: 0;
     border-top: 2px solid #e82646;
-    z-index: 2;
+    z-index: 0;
     pointer-events: none;
 }
 .gls-tl-now::before {

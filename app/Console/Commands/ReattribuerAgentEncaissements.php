@@ -4,10 +4,8 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use App\Models\Activity;
 use App\Models\Employee;
 use App\Models\Encaissement;
-use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -42,12 +40,25 @@ final class ReattribuerAgentEncaissements extends Command
 {
     protected $signature = 'encaissements:reattribuer-agent
         {--auditer : Lister TOUS les agents non-encaisseurs, sans rien modifier}
+        {--tous-les-importes : Repointer TOUT l\'historique importé vers --vers (ignore --de)}
         {--de= : Employé actuellement enregistré comme agent (id)}
         {--vers= : Employé qui doit le remplacer (id)}
-        {--importes-seulement : Ne toucher que les lignes portant un legacy_ref}
+        {--importes-seulement : Ne toucher que les lignes issues de l\'import}
         {--dry-run : Afficher sans modifier}';
 
     protected $description = "Réattribue l'agent des encaissements d'un employé vers un autre (réparation du mapping d'import).";
+
+    /**
+     * Le marqueur que pose l'import (EncaissementImporter::LEGACY_SOURCE).
+     *
+     * ⚠ C'est LUI qui dit « cette ligne vient de l'ancien CRM », jamais
+     * `legacy_ref` : une part secondaire d'un paiement éclaté sur plusieurs
+     * frais garde la source mais pas la référence, qui reste unique par
+     * centre. Vérifié le 09/09/2026 : 23 833 lignes portent la source, 23 779
+     * une référence — 54 lignes seraient oubliées par l'autre filtre, et
+     * AUCUNE ligne n'a une référence sans la source.
+     */
+    private const string SOURCE_IMPORT = 'ancien-crm';
 
     public function handle(): int
     {
@@ -55,25 +66,32 @@ final class ReattribuerAgentEncaissements extends Command
             return $this->auditer();
         }
 
+        $tousLesImportes = (bool) $this->option('tous-les-importes');
         $deId = (int) $this->option('de');
         $versId = (int) $this->option('vers');
 
-        if ($deId === 0 || $versId === 0) {
-            $this->error('--de et --vers sont obligatoires (ids d\'employés).');
+        if ($versId === 0) {
+            $this->error('--vers est obligatoire (id de l\'employé destinataire).');
 
             return self::FAILURE;
         }
 
-        if ($deId === $versId) {
+        if (! $tousLesImportes && $deId === 0) {
+            $this->error('--de est obligatoire, sauf avec --tous-les-importes.');
+
+            return self::FAILURE;
+        }
+
+        if ($deId !== 0 && $deId === $versId) {
             $this->error('--de et --vers doivent différer.');
 
             return self::FAILURE;
         }
 
-        $de = Employee::withoutGlobalScopes()->find($deId);
+        $de = $deId !== 0 ? Employee::withoutGlobalScopes()->find($deId) : null;
         $vers = Employee::withoutGlobalScopes()->find($versId);
 
-        if ($de === null || $vers === null) {
+        if ($vers === null || ($deId !== 0 && $de === null)) {
             $this->error('Employé introuvable.');
 
             return self::FAILURE;
@@ -92,10 +110,22 @@ final class ReattribuerAgentEncaissements extends Command
 
         $dry = (bool) $this->option('dry-run');
 
-        $query = Encaissement::query()->where('agent_id', $deId);
+        $query = Encaissement::query();
 
-        if ($this->option('importes-seulement')) {
-            $query->whereNotNull('legacy_ref');
+        if ($tousLesImportes) {
+            // TOUT l'historique importé, quel que soit l'agent actuel.
+            // `legacy_source`, jamais `legacy_ref` : une part secondaire de
+            // paiement éclaté sur plusieurs frais garde la source mais PAS la
+            // référence (unique par centre) — 54 lignes en production le
+            // 09/09/2026. Filtrer sur legacy_ref les laisserait derrière.
+            $query->where('legacy_source', self::SOURCE_IMPORT)
+                ->where('agent_id', '!=', $versId);
+        } else {
+            $query->where('agent_id', $deId);
+
+            if ($this->option('importes-seulement')) {
+                $query->where('legacy_source', self::SOURCE_IMPORT);
+            }
         }
 
         $lignes = $query->orderBy('id')->get();
@@ -106,17 +136,36 @@ final class ReattribuerAgentEncaissements extends Command
             return self::SUCCESS;
         }
 
-        $importes = $lignes->whereNotNull('legacy_ref');
-        $saisis = $lignes->whereNull('legacy_ref');
+        $importes = $lignes->where('legacy_source', self::SOURCE_IMPORT);
+        $saisis = $lignes->where('legacy_source', '!=', self::SOURCE_IMPORT);
 
         $this->line('');
         $this->info(sprintf(
-            '%s%s %s (%s)  ->  %s %s (%s)',
+            '%s%s  ->  %s %s (%s)',
             $dry ? '[DRY-RUN] ' : '',
-            $de->prenom, $de->nom, $de->categorie,
+            $tousLesImportes
+                ? 'TOUT l\'historique importé'
+                : sprintf('%s %s (%s)', $de->prenom, $de->nom, $de->categorie),
             $vers->prenom, $vers->nom, $vers->categorie
         ));
         $this->line('');
+
+        if ($tousLesImportes) {
+            $this->line('  Agents actuellement enregistrés sur ces lignes :');
+
+            foreach ($lignes->groupBy('agent_id') as $agentId => $groupe) {
+                $agent = Employee::withoutGlobalScopes()->find($agentId);
+
+                $this->line(sprintf(
+                    '    %-26s %6d | %14s DH',
+                    mb_substr(($agent->prenom ?? '?').' '.($agent->nom ?? ''), 0, 26),
+                    $groupe->count(),
+                    number_format((float) $groupe->sum('montant'), 2, '.', ' ')
+                ));
+            }
+
+            $this->line('');
+        }
         $this->line(sprintf('  %d ligne(s) importée(s)   %s DH', $importes->count(), number_format((float) $importes->sum('montant'), 2, '.', '')));
         $this->line(sprintf('  %d ligne(s) saisie(s)     %s DH', $saisis->count(), number_format((float) $saisis->sum('montant'), 2, '.', '')));
         $this->line(sprintf('  %d au total               %s DH', $lignes->count(), number_format((float) $lignes->sum('montant'), 2, '.', '')));
@@ -141,8 +190,17 @@ final class ReattribuerAgentEncaissements extends Command
         $this->line('');
         $this->info(sprintf('%d encaissement(s) réattribué(s).', $lignes->count()));
 
-        $restant = Encaissement::where('agent_id', $deId)->count();
-        $this->line(sprintf('  Reste %d encaissement(s) sur %s %s.', $restant, $de->prenom, $de->nom));
+        if ($tousLesImportes) {
+            $restant = Encaissement::query()
+                ->where('legacy_source', self::SOURCE_IMPORT)
+                ->where('agent_id', '!=', $versId)
+                ->count();
+
+            $this->line(sprintf('  Reste %d ligne(s) importée(s) hors de %s %s.', $restant, $vers->prenom, $vers->nom));
+        } else {
+            $restant = Encaissement::where('agent_id', $deId)->count();
+            $this->line(sprintf('  Reste %d encaissement(s) sur %s %s.', $restant, $de->prenom, $de->nom));
+        }
 
         return self::SUCCESS;
     }
@@ -164,28 +222,27 @@ final class ReattribuerAgentEncaissements extends Command
     private function auditer(): int
     {
         $agents = Encaissement::query()
-            ->whereHas('agent', fn ($q) => $q
-                ->withoutGlobalScopes()
-                ->whereIn('categorie', Employee::CATEGORIES_NON_ENCAISSEUSES))
-            ->selectRaw('agent_id, count(*) as n, sum(montant) as total')
-            ->selectRaw('count(legacy_ref) as importes')
+            ->selectRaw('agent_id')
+            ->selectRaw('count(*) filter (where legacy_source = ?) as importes', [self::SOURCE_IMPORT])
+            ->selectRaw('sum(montant) filter (where legacy_source = ?) as montant_importe', [self::SOURCE_IMPORT])
+            ->selectRaw('count(*) filter (where legacy_source is distinct from ?) as saisis', [self::SOURCE_IMPORT])
             ->groupBy('agent_id')
-            ->orderByDesc('total')
+            ->havingRaw('count(*) filter (where legacy_source = ?) > 0', [self::SOURCE_IMPORT])
+            ->orderByRaw('sum(montant) filter (where legacy_source = ?) desc', [self::SOURCE_IMPORT])
             ->get();
 
         if ($agents->isEmpty()) {
-            $this->info('Aucun encaissement rattaché à un poste non-encaisseur.');
+            $this->info('Aucun encaissement importé.');
 
             return self::SUCCESS;
         }
 
         $this->line('');
-        $this->info('Encaissements dont l\'agent occupe un poste qui n\'encaisse pas');
-        $this->line('  ('.implode(' / ', Employee::CATEGORIES_NON_ENCAISSEUSES).')');
+        $this->info("Agents enregistrés sur l'historique IMPORTÉ (ancien CRM)");
         $this->line('');
 
         $lignes = [];
-        $totalGeneral = 0.0;
+        $totalImporte = 0.0;
 
         foreach ($agents as $agregat) {
             $employe = Employee::withoutGlobalScopes()->find($agregat->agent_id);
@@ -194,43 +251,35 @@ final class ReattribuerAgentEncaissements extends Command
                 continue;
             }
 
-            $user = $employe->user_id !== null ? User::find($employe->user_id) : null;
-            $connecte = $user !== null
-                ? Activity::query()
-                    ->where('log_name', 'auth')
-                    ->where('causer_id', $user->id)
-                    ->exists()
-                : false;
+            $nonEncaisseur = in_array($employe->categorie, Employee::CATEGORIES_NON_ENCAISSEUSES, true);
 
             $lignes[] = [
                 $employe->id,
                 mb_substr($employe->prenom.' '.$employe->nom, 0, 24),
-                $employe->categorie,
-                (int) $agregat->n,
+                $employe->categorie.($nonEncaisseur ? ' (!)' : ''),
                 (int) $agregat->importes,
-                (int) $agregat->n - (int) $agregat->importes,
-                number_format((float) $agregat->total, 2, '.', ' '),
-                $user === null ? 'AUCUN' : ($connecte ? 'oui' : 'jamais'),
+                number_format((float) $agregat->montant_importe, 2, '.', ' '),
+                (int) $agregat->saisis,
             ];
 
-            $totalGeneral += (float) $agregat->total;
+            $totalImporte += (float) $agregat->montant_importe;
         }
 
         $this->table(
-            ['id', 'employé', 'catégorie', 'total', 'importés', 'saisis', 'montant', 'connecté'],
+            ['id', 'employé', 'catégorie', 'importés', 'montant importé', 'saisies CRM'],
             $lignes
         );
 
         $this->line('');
-        $this->info(sprintf('%d employé(s) — %s DH au total.', count($lignes), number_format($totalGeneral, 2, '.', ' ')));
+        $this->info(sprintf("%d agent(s) — %s DH d'historique importé.", count($lignes), number_format($totalImporte, 2, '.', ' ')));
         $this->line('');
-        $this->comment('  « connecté = AUCUN/jamais » : le nom a seulement été CHOISI à l\'import,');
-        $this->comment('  la personne n\'a rien pu encaisser — réattribution sûre.');
-        $this->comment('  « connecté = oui » : quelqu\'un a réellement travaillé sous cette fiche.');
-        $this->comment('  Corriger sa CATÉGORIE dans sa fiche employé plutôt que de réécrire');
-        $this->comment('  l\'historique — agent_id est une trace d\'audit, pas un libellé.');
+        $this->comment("  (!) = poste qui n'encaisse pas — n'aurait jamais dû être proposé à l'import.");
+        $this->comment('  « saisies CRM » = paiements que cette personne a réellement enregistrés');
+        $this->comment('  dans le CRM. Ces lignes-là ne sont JAMAIS réattribuées : agent_id y est');
+        $this->comment("  une trace d'audit, pas un libellé (§11).");
         $this->line('');
-        $this->comment('  Réparer un cas : --de=<id> --vers=<id> --dry-run');
+        $this->comment("  Tout l'importé vers Rafik : --tous-les-importes --vers=1 --dry-run");
+        $this->comment('  Un seul cas              : --de=<id> --vers=1 --importes-seulement --dry-run');
 
         return self::SUCCESS;
     }
