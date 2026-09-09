@@ -500,4 +500,55 @@ final class CaisseVentilationCentreTest extends TestCase
         $marrakech = $this->journalFor($agent, $this->marrakech->id);
         $this->assertSame('0.00', $marrakech['totalTransferts']);
     }
+
+    /**
+     * Un transfert doit apparaître dans l'historique des DEUX caisses
+     * (09/09/2026).
+     *
+     * La fiche caisse masquait TOUS les transferts dès que le centre de
+     * rattachement de la caisse différait du centre actif : la sortie de
+     * 1 300,00 DH était visible chez Maria (destinataire, rattachée
+     * Casablanca) mais invisible chez Yassine (rattaché Kénitra) sur ce même
+     * centre — alors que c'est SA caisse qui l'a payée. Un historique qui
+     * n'affiche qu'un côté d'un mouvement ment par omission.
+     */
+    public function test_un_transfert_apparait_dans_l_historique_des_deux_caisses(): void
+    {
+        $agent = $this->latifa();                       // caisse rattachée Marrakech
+        $destinataire = Employee::factory()->create(['etablissement_id' => $this->online->id]);
+
+        // Demandé pendant qu'il travaille SUR Online : la sortie appartient à Online.
+        $this->actingAs($agent->user->fresh());
+        app()->forgetInstance(CurrentContext::class);
+        app(CurrentContext::class)->setEtablissement($this->online->id);
+
+        $transfert = app(\App\Domain\Finance\Actions\DemanderTransfertCaisse::class)->handle([
+            'caisse_source_id' => $agent->till()->firstOrFail()->id,
+            'caisse_destination_id' => $destinataire->till()->firstOrFail()->id,
+            'montant' => 1000,
+            'date_transfert' => '2026-09-09',
+        ], $agent);
+
+        app(\App\Domain\Finance\Actions\ValiderTransfertCaisse::class)->handle($transfert, $destinataire);
+
+        // Côté EXPÉDITEUR : la caisse est rattachée Marrakech, mais la sortie
+        // appartient à Online — elle doit s'y afficher malgré le rattachement.
+        $source = $this->detailsFor($agent, $this->online->id);
+        $this->assertCount(1, $source['transfers'], "L'expéditeur ne voit pas son propre transfert.");
+        $this->assertSame('out', $source['transfers'][0]['direction']);
+
+        // Côté DESTINATAIRE : la même ligne, en entrée.
+        $this->actingAs($destinataire->user->fresh() ?? $agent->user->fresh());
+        app()->forgetInstance(CurrentContext::class);
+        app(CurrentContext::class)->setEtablissement($this->online->id);
+
+        $dest = app(\App\Domain\Finance\Queries\GetCaisseDetails::class)(
+            $destinataire->till()->firstOrFail(),
+        );
+        $this->assertCount(1, $dest['transfers'], 'Le destinataire ne voit pas le transfert reçu.');
+        $this->assertSame('in', $dest['transfers'][0]['direction']);
+
+        // Même référence des deux côtés : c'est bien UN seul mouvement.
+        $this->assertSame($source['transfers'][0]['reference'], $dest['transfers'][0]['reference']);
+    }
 }

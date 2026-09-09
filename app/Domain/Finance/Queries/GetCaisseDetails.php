@@ -78,23 +78,42 @@ final class GetCaisseDetails
             ->when($centreId !== null, fn ($q) => $q->where('etablissement_id', $centreId))
             ->with('beneficiaire')->latest('date_remboursement')->limit(10)->get();
 
-        // Un transfert ne porte aucune dimension centre propre : il déplace de
-        // l'argent PHYSIQUE entre deux caisses, donc il est imputé au centre de
-        // rattachement de la caisse regardée — même règle que
-        // VentilationCentre::transfertsDuCentre(), sinon la liste montrerait
-        // des lignes que le solde au-dessus n'a pas comptées.
-        $transfersDuCentre = $centreId === null || (int) $caisse->etablissement_id === $centreId;
+        // ⚠ Le filtrage se fait LIGNE PAR LIGNE, jamais en bloc (09/09/2026).
+        // Une première version masquait TOUS les transferts dès que le centre
+        // de rattachement de la caisse différait du centre actif : la caisse de
+        // Yassine Ouled Laghzal (rattachée Kénitra) n'affichait donc AUCUN
+        // transfert sur Casablanca, alors que la sortie de 1 300,00 DH
+        // appartient bien à Casablanca — et la même ligne était pourtant
+        // visible chez Maria, la destinataire. Un mouvement doit apparaître des
+        // DEUX côtés, sinon l'historique d'une caisse ment par omission.
+        //
+        // Même résolution que VentilationCentre::transfertsDuCentre(), pour que
+        // les lignes affichées soient exactement celles que le solde compte :
+        //  - SORTIE  → le centre du TRANSFERT (là où le caissier travaillait),
+        //    avec repli sur le centre de la caisse pour les lignes antérieures
+        //    à la colonne (jamais de backfill, §11) ;
+        //  - ENTRÉE  → le centre de la caisse qui reçoit : les billets
+        //    rejoignent ce tiroir.
+        $transfers = CaisseTransfer::query()
+            ->with(['caisseSource', 'caisseDestination'])
+            ->where(fn ($q) => $q
+                ->where('caisse_source_id', $caisse->id)
+                ->orWhere('caisse_destination_id', $caisse->id))
+            ->latest('date_transfert')
+            ->get()
+            ->filter(function (CaisseTransfer $transfert) use ($caisse, $centreId): bool {
+                if ($centreId === null) {
+                    return true;
+                }
 
-        $transfers = $transfersDuCentre
-            ? CaisseTransfer::query()
-                ->with(['caisseSource', 'caisseDestination'])
-                ->where(fn ($q) => $q
-                    ->where('caisse_source_id', $caisse->id)
-                    ->orWhere('caisse_destination_id', $caisse->id))
-                ->latest('date_transfert')
-                ->limit(10)
-                ->get()
-            : collect();
+                $centreDuMouvement = (int) $transfert->caisse_source_id === $caisse->id
+                    ? ($transfert->etablissement_id ?? $caisse->etablissement_id)
+                    : $caisse->etablissement_id;
+
+                return (int) $centreDuMouvement === $centreId;
+            })
+            ->take(10)
+            ->values();
 
         return [
             'id' => $caisse->id,

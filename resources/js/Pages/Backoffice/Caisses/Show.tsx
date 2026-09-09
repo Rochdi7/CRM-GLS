@@ -153,19 +153,39 @@ export default function CaisseShow({ caisse }: CaisseShowProps) {
                                     <td>
                                         <code>{row.reference}</code>
                                     </td>
+                                    {/* Même vocabulaire que l'onglet « Validation
+                                        de transfert » (GetCaisseTransfersList) :
+                                        Réception quand l'argent ARRIVE dans cette
+                                        caisse, Transfert quand il en sort. Deux
+                                        mots différents pour le même mouvement
+                                        obligeraient à traduire mentalement d'un
+                                        écran à l'autre. */}
                                     <td>
                                         <span
-                                            className={`badge ${row.direction === 'out' ? 'badge-soft-danger' : 'badge-soft-success'}`}
+                                            className={`badge ${row.direction === 'out' ? 'badge-soft-info' : 'badge-soft-success'}`}
                                         >
-                                            {row.direction === 'out' ? 'Sortant' : 'Entrant'}
+                                            {row.direction === 'out' ? 'Transfert' : 'Réception'}
                                         </span>
                                     </td>
-                                    <td>{row.label}</td>
+                                    <td>
+                                        {row.direction === 'out' ? 'Vers ' : 'De '}
+                                        {row.label}
+                                    </td>
                                     <td>{row.date ?? '—'}</td>
                                     <td>
                                         <span className="badge badge-soft-info">{row.statut}</span>
                                     </td>
-                                    <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} DH</td>
+                                    {/* Montant SIGNÉ : une sortie doit se lire
+                                        comme de l'argent qui quitte la caisse,
+                                        sinon les deux sens s'affichent à
+                                        l'identique et la colonne Direction est
+                                        la seule chose qui les distingue. */}
+                                    <td
+                                        className={`text-end fw-medium ${row.direction === 'out' ? 'text-danger' : 'text-success'}`}
+                                    >
+                                        {row.direction === 'out' ? '−' : '+'}
+                                        {Number(row.montant).toFixed(2)} DH
+                                    </td>
                                 </tr>
                             ))}
                         </RelatedRecordsTable>
