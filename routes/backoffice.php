@@ -680,6 +680,12 @@ Route::prefix('backoffice')
                 ->middleware('permission:expenses.approve')->name('depenses.approve');
             Route::put('depenses/{depense}/refuse', [DepenseController::class, 'refuse'])
                 ->middleware('permission:expenses.approve')->name('depenses.refuse');
+            // Annulation par ecriture compensatoire : la caisse est
+            // recreditee, la ligne n'est jamais supprimee (§11). Reserve au
+            // super-admin — `expenses.cancel` est dans superAdminOnly(),
+            // donc aucun preset de role ne peut le porter (09/09/2026).
+            Route::post('depenses/{depense}/annuler', [DepenseController::class, 'cancel'])
+                ->middleware('permission:expenses.cancel')->name('depenses.cancel');
             Route::delete('depenses/{depense}/justificatifs/{media}', [DepenseController::class, 'removeJustificatif'])
                 ->middleware('permission:expenses.update')->name('depenses.justificatifs.destroy');
             Route::get('depenses/{depense}', [DepenseController::class, 'show'])

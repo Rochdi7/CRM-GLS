@@ -1078,6 +1078,7 @@
     "Cash account updated.": "Compte de caisse mis à jour.",
     "Context updated.": "Contexte mis à jour.",
     "Expense approved — the till has been debited.": "Dépense approuvée — la caisse a été débitée.",
+    "Expense cancelled — the till has been credited back.": "Dépense annulée — la caisse a été recréditée.",
     "Expense refused — no money was moved.": "Dépense refusée — aucun mouvement d'argent.",
     "Expense submitted — awaiting approval.": "Dépense soumise — en attente de validation.",
     "Group returned to En inscription.": "Groupe remis « En inscription ».",

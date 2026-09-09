@@ -1980,6 +1980,8 @@ export interface DepenseRow {
     isRefusee: boolean;
     /** Reversed by a compensating credit — its money is back in the till. */
     isAnnulee: boolean;
+    /** The compensating entry's reason, read from the row's note. */
+    motifAnnulation: string | null;
     approvedBy: string | null;
     approvedAt: string | null;
     motifRefus: string | null;
@@ -2096,6 +2098,8 @@ export interface DepensesPageProps {
     canApprove: boolean;
     /** UI convenience only (`refunds.cancel`, super-admin) ; la policy reste le vrai verrou. */
     canCancelRemboursement: boolean;
+    /** `expenses.cancel` — super-admin only. UI convenience; the policy is the real gate. */
+    canCancelDepense: boolean;
     /**
      * Same permission, different job: gates the « Date d'operation » column
      * and the « Validation des depenses » tab. When false the controller has

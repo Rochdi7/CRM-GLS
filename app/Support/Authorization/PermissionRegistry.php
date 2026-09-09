@@ -293,6 +293,12 @@ final class PermissionRegistry
                 // « Validation des dépenses » is ON (Paramètres → Système).
                 // Deliberately in NO role preset below — like payments.delete,
                 // a super-admin grants it by hand.
+                // ⚠ Annuler une dépense DÉJÀ APPROUVÉE : la caisse est
+                // recréditée par écriture compensatoire (la ligne n'est
+                // jamais supprimée, §11). Rendre à la caisse de l'argent
+                // qui en est sorti — même classe que refunds.cancel, donc
+                // super-admin uniquement (superAdminOnly(), 09/09/2026).
+                'expenses.cancel' => 'Annuler une dépense approuvée (super-admin)',
                 'expenses.approve' => 'Approuver ou refuser une dépense',
             ],
             'Remboursements' => [
@@ -558,6 +564,9 @@ final class PermissionRegistry
             // mouvement d'argent en sens inverse, pas une correction de
             // libellé. Même classe que payments.update-amount (03/09/2026).
             'refunds.cancel',
+            // Annuler une dépense approuvée recrédite la caisse — même
+            // mouvement, même classe que refunds.cancel (09/09/2026).
+            'expenses.cancel',
             // Moving a group between années rewrites the year of every
             // inscription, séance (and therefore payment) hanging off it —
             // a history-altering act reserved to super-admins (24/08/2026).

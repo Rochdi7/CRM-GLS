@@ -136,9 +136,13 @@ function emptyRemboursementForm(): RemboursementFormState {
  * "Gestion des dépenses" — replaces the Livewire tabbed page (Dépenses +
  * Remboursements). montant/caisse_id (and beneficiaire_id for refunds) are
  * server-derived and frozen — the forms never carry a caisse field — everything else stays editable, matching
- * DepensesIndex/RemboursementsIndex exactly. No max-refund-amount check and
- * no insufficient-balance check are added (docs/rapports/finance/phase-10-finance-mapping.md
- * Q1: preserved as-is).
+ * DepensesIndex/RemboursementsIndex exactly. No max-refund-amount check here.
+ *
+ * ⚠ Depuis le 09/09/2026 une dépense NE PEUT PLUS être approuvée au-delà du
+ * solde de sa caisse (Domain\Finance\Support\GardeSoldeCaisse) : le refus
+ * vient du SERVEUR et remonte dans la boîte de dialogue. Rien n'est
+ * revérifié ici — un contrôle côté client ne serait qu'un confort, et
+ * diverger du serveur ferait promettre à l'écran ce que la caisse refuse.
  */
 export default function DepensesIndex({
     canViewDepenses,
@@ -161,6 +165,7 @@ export default function DepensesIndex({
     remboursements,
     remboursementsTotaux,
     canCancelRemboursement,
+    canCancelDepense,
     remboursementCaisses,
     students,
     approvalEnabled,
@@ -279,6 +284,50 @@ export default function DepensesIndex({
                     setDecisionError(Object.values(errors)[0] ?? "L'opération a échoué.");
                 },
                 onFinish: () => setDecisionProcessing(false),
+            },
+        );
+    }
+
+    // --- Annulation d'une dépense approuvée (super-admin) ---
+    // La caisse est RECRÉDITÉE par écriture compensatoire : la ligne n'est
+    // jamais supprimée (§11), elle passe « Annulée ». Un motif est exigé —
+    // c'est ce que le journal et la note conserveront pour expliquer
+    // pourquoi de l'argent est revenu en caisse.
+    const [depenseToCancel, setDepenseToCancel] = useState<DepenseRow | null>(null);
+    const [cancelMotif, setCancelMotif] = useState('');
+    const [cancelError, setCancelError] = useState<string | undefined>(undefined);
+    const [cancelProcessing, setCancelProcessing] = useState(false);
+
+    function openCancel(row: DepenseRow) {
+        setDepenseToCancel(row);
+        setCancelMotif('');
+        setCancelError(undefined);
+    }
+
+    function closeCancel() {
+        setDepenseToCancel(null);
+        setCancelMotif('');
+        setCancelError(undefined);
+        setCancelProcessing(false);
+    }
+
+    function runCancel() {
+        if (!depenseToCancel) return;
+
+        setCancelProcessing(true);
+        setCancelError(undefined);
+
+        router.post(
+            `/backoffice/depenses/${depenseToCancel.id}/annuler`,
+            { motif: cancelMotif },
+            {
+                preserveScroll: true,
+                onSuccess: () => closeCancel(),
+                onError: (errors) => {
+                    setCancelProcessing(false);
+                    setCancelError(Object.values(errors)[0] ?? "L'opération a échoué.");
+                },
+                onFinish: () => setCancelProcessing(false),
             },
         );
     }
@@ -714,6 +763,9 @@ export default function DepensesIndex({
                                                 {row.isRefusee && row.motifRefus && (
                                                     <div className="text-muted fs-12 text-normal-case">{row.motifRefus}</div>
                                                 )}
+                                                {row.isAnnulee && row.motifAnnulation && (
+                                                    <div className="text-muted fs-12 text-normal-case">{row.motifAnnulation}</div>
+                                                )}
                                             </td>
                                         )}
                                         <td>{row.dateDepense ?? '—'}</td>
@@ -740,7 +792,7 @@ export default function DepensesIndex({
                                             <RowActions view={row.showUrl}>
                                                 {/* A refused depense is closed history:
                                                     the policy refuses the edit too. */}
-                                                {!row.isRefusee && (
+                                                {!row.isRefusee && !row.isAnnulee && (
                                                     <RowActionItem icon="ti-edit" onClick={() => openEditDepense(row)}>
                                                         Modifier
                                                     </RowActionItem>
@@ -753,6 +805,13 @@ export default function DepensesIndex({
                                                 {row.isEnAttente && canApprove && (
                                                     <RowActionItem icon="ti-x" onClick={() => openDecision('refuse', row)}>
                                                         Refuser
+                                                    </RowActionItem>
+                                                )}
+                                                {/* Seule une dépense APPROUVÉE est annulable : les autres
+                                                    n'ont jamais débité la caisse. */}
+                                                {!row.isEnAttente && !row.isRefusee && !row.isAnnulee && canCancelDepense && (
+                                                    <RowActionItem icon="ti-receipt-refund" onClick={() => openCancel(row)}>
+                                                        Annuler
                                                     </RowActionItem>
                                                 )}
                                             </RowActions>
@@ -829,6 +888,9 @@ export default function DepensesIndex({
                                         <th>Groupe</th>
                                         <th>Caisse</th>
                                         <th className="text-end">Montant</th>
+                                        {/* Même colonne que l'onglet Dépenses : ce sont les mêmes
+                                            lignes, une « Annulée » ne doit pas y passer pour vivante. */}
+                                        {approvalEnabled && <th>Statut</th>}
                                         <th>Date</th>
                                         <th>Période</th>
                                         {canAudit && <th>Date d'opération</th>}
@@ -838,13 +900,30 @@ export default function DepensesIndex({
                                 }
                             >
                                 {paiementsProf.data.map((row) => (
-                                    <tr key={row.id}>
+                                    <tr key={row.id} className={row.isAnnulee ? 'opacity-50' : undefined}>
                                         <td>
                                             <code>{row.reference}</code>
                                         </td>
                                         <td>{row.groupNom ?? '—'}</td>
                                         <td>{row.caisse ?? '—'}</td>
-                                        <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} MAD</td>
+                                        <td className={`text-end fw-medium${row.isAnnulee ? ' text-muted text-decoration-line-through' : ''}`}>
+                                            {Number(row.montant).toFixed(2)} MAD
+                                        </td>
+                                        {approvalEnabled && (
+                                            <td>
+                                                <StatusBadge
+                                                    label={row.statut}
+                                                    variant={DEPENSE_STATUT_BADGE[row.statut] ?? 'warning'}
+                                                    dot
+                                                />
+                                                {row.isRefusee && row.motifRefus && (
+                                                    <div className="text-muted fs-12 text-normal-case">{row.motifRefus}</div>
+                                                )}
+                                                {row.isAnnulee && row.motifAnnulation && (
+                                                    <div className="text-muted fs-12 text-normal-case">{row.motifAnnulation}</div>
+                                                )}
+                                            </td>
+                                        )}
                                         <td>{row.dateDepense ?? '—'}</td>
                                         <td>
                                             {row.periodeDebut && row.periodeFin
@@ -872,9 +951,26 @@ export default function DepensesIndex({
                                         </td>
                                         <td>
                                             <RowActions view={row.showUrl}>
-                                                <RowActionItem icon="ti-edit" onClick={() => openEditDepense(row)}>
-                                                    Modifier
-                                                </RowActionItem>
+                                                {!row.isRefusee && !row.isAnnulee && (
+                                                    <RowActionItem icon="ti-edit" onClick={() => openEditDepense(row)}>
+                                                        Modifier
+                                                    </RowActionItem>
+                                                )}
+                                                {row.isEnAttente && canApprove && (
+                                                    <RowActionItem icon="ti-check" onClick={() => openDecision('approve', row)}>
+                                                        Approuver
+                                                    </RowActionItem>
+                                                )}
+                                                {row.isEnAttente && canApprove && (
+                                                    <RowActionItem icon="ti-x" onClick={() => openDecision('refuse', row)}>
+                                                        Refuser
+                                                    </RowActionItem>
+                                                )}
+                                                {!row.isEnAttente && !row.isRefusee && !row.isAnnulee && canCancelDepense && (
+                                                    <RowActionItem icon="ti-receipt-refund" onClick={() => openCancel(row)}>
+                                                        Annuler
+                                                    </RowActionItem>
+                                                )}
                                             </RowActions>
                                         </td>
                                     </tr>
@@ -1657,6 +1753,43 @@ export default function DepensesIndex({
                         onChange={(e) => setMotifRefus(e.target.value)}
                     />
                 )}
+            </ConfirmDialog>
+
+            {/* Annulation d'une dépense approuvée (super-admin). La caisse
+                est RECRÉDITÉE par écriture compensatoire : la ligne reste
+                listée, barrée et marquée « Annulée », et sort des totaux —
+                elle n'est jamais supprimée (§11). Le motif est OBLIGATOIRE :
+                c'est ce que le journal de caisse conservera pour expliquer
+                pourquoi de l'argent est revenu. */}
+            <ConfirmDialog
+                show={depenseToCancel !== null}
+                title="Annuler la dépense"
+                message={
+                    'La caisse sera recréditée de ce montant. La dépense restera visible, '
+                    + 'barrée et marquée « Annulée », mais ne comptera plus dans les totaux.'
+                }
+                recordLabel={
+                    depenseToCancel
+                        ? depenseToCancel.reference
+                          + ' - '
+                          + Number(depenseToCancel.montant).toFixed(2)
+                          + ' MAD depuis ' + (depenseToCancel.caisse ?? 'la caisse')
+                        : ''
+                }
+                error={cancelError}
+                processing={cancelProcessing}
+                onConfirm={runCancel}
+                onCancel={closeCancel}
+                icon="ti-arrow-back-up"
+                confirmLabel="Annuler la dépense"
+                processingLabel="Annulation..."
+            >
+                <TextareaField
+                    id="dep-motif-annulation"
+                    label="Motif de l'annulation (obligatoire)"
+                    value={cancelMotif}
+                    onChange={(e) => setCancelMotif(e.target.value)}
+                />
             </ConfirmDialog>
 
             {/* Annulation d'un remboursement (super-admin). La caisse est

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Domain\Expenses\Actions\AnnulerDepense;
 use App\Domain\Expenses\Actions\ApprouverDepense;
 use App\Domain\Expenses\Actions\EnregistrerDepense;
 use App\Domain\Finance\Support\CaisseResolver;
@@ -12,6 +13,7 @@ use App\Domain\Expenses\Queries\GetDepenseDetails;
 use App\Domain\Expenses\Queries\GetDepensesList;
 use App\Domain\Finance\Queries\GetRemboursementsList;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
+use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Depenses\StoreDepenseRequest;
 use App\Http\Requests\Backoffice\Depenses\UpdateDepenseRequest;
@@ -38,6 +40,7 @@ use Inertia\Response;
 final class DepenseController extends Controller
 {
     use AssertsContextScope;
+    use RedirectsPreservingFilters;
 
     /** Mirrors Depense::registerMediaCollections()'s mime allowlist. */
     private const JUSTIFICATIF_MIMES = ['jpeg', 'jpg', 'png', 'webp', 'pdf'];
@@ -128,6 +131,10 @@ final class DepenseController extends Controller
             // filter and the approve/refuse actions are all pointless.
             'approvalEnabled' => AppSettings::expenseApprovalEnabled(),
             'canApprove' => $canAudit,
+            // Annuler une dépense approuvée recrédite la caisse : super-admin
+            // uniquement (`expenses.cancel` est dans superAdminOnly()). Prop
+            // de CONFORT — la policy reste le vrai verrou (§5).
+            'canCancelDepense' => $user->can('expenses.cancel'),
             // Drives BOTH the « Date d'opération » column and the
             // « Validation des dépenses » tab — see $canAudit above.
             'canAudit' => $canAudit,
@@ -242,6 +249,39 @@ final class DepenseController extends Controller
 
         return redirect()->route('backoffice.depenses.index')
             ->with('success', __('Expense approved — the till has been debited.'));
+    }
+
+    /**
+     * Annule une dépense APPROUVÉE : la caisse est recréditée par écriture
+     * compensatoire et la ligne est annotée — jamais supprimée (§11).
+     * Super-admin uniquement (`expenses.cancel`) ; la policy refuse une
+     * dépense non approuvée, donc la caisse ne peut pas être recréditée deux
+     * fois ni rendre de l'argent qui n'est jamais sorti.
+     */
+    public function cancel(Request $request, Depense $depense, AnnulerDepense $action): RedirectResponse
+    {
+        $this->authorize('cancel', $depense);
+        $this->assertDepenseInContext($request, $depense);
+
+        // Le verrou « année clôturée » vaut ici comme pour toute autre
+        // écriture : annuler bouge de l'argent.
+        $this->assertContextAnneeOuverte('statut');
+
+        $validated = $request->validate([
+            'motif' => ['required', 'string', 'max:255'],
+        ]);
+
+        $action->handle(
+            $depense,
+            'CORRECTION-'.$depense->reference.'-ANNULATION',
+            $validated['motif'],
+            $this->actingEmployee($request),
+        );
+
+        return $this->backToListPreservingFilters(
+            $request,
+            'backoffice.depenses.index',
+        )->with('success', __('Expense cancelled — the till has been credited back.'));
     }
 
     /** Refuse a pending expense — no money ever moves; the row is kept. */

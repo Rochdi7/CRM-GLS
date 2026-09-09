@@ -167,6 +167,10 @@ final class GetDepensesList
             'isEnAttente' => $d->isEnAttente(),
             'isRefusee' => $d->isRefusee(),
             'isAnnulee' => $d->isAnnulee(),
+            // La raison, extraite de la note que AnnulerDepense y a écrite —
+            // affichée sous le badge comme le motif de refus, pour que la
+            // ligne s'explique sans ouvrir la fiche.
+            'motifAnnulation' => $d->isAnnulee() ? self::motifAnnulation($d) : null,
             'approvedBy' => $d->approvedBy?->nomComplet(),
             'approvedAt' => $d->approved_at?->toDateTimeString(),
             'motifRefus' => $d->motif_refus,
@@ -217,6 +221,24 @@ final class GetDepensesList
     }
 
     /** id of the seeded "Paiement prof" type, or null when it isn't seeded. */
+    /**
+     * La phrase lisible de l'annulation, prise dans la dernière ligne
+     * marquée de la note (AnnulerDepense l'y ajoute en la préfixant du
+     * marqueur). La note reste la source unique : rien n'est stocké deux
+     * fois, donc rien ne peut diverger.
+     */
+    private static function motifAnnulation(Depense $depense): ?string
+    {
+        foreach (array_reverse(explode("
+", (string) $depense->note)) as $ligne) {
+            if (str_contains($ligne, Depense::MARQUEUR_ANNULE)) {
+                return trim(str_replace(Depense::MARQUEUR_ANNULE, '', $ligne));
+            }
+        }
+
+        return null;
+    }
+
     public function paiementProfTypeId(): ?int
     {
         return TypeDepense::query()
