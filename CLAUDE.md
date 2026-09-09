@@ -1193,7 +1193,9 @@ keeps the primary column stable when an edit merely adds a center. Enforcing
   (`RolesAndPermissionsSeederTest::test_every_employee_category_has_a_matching_default_role`
   enforces it).
 - **Single source of truth**: `App\Support\Authorization\PermissionRegistry`
-  (102 `module.action` permissions, French labels, role matrix). New module ⇒
+  (les `module.action` permissions — 118 au 09/09/2026, mais ne recopiez pas
+  ce nombre : `PermissionRegistry::names()` en est la seule autorité et le
+  test dérive son compte de là — French labels, role matrix). New module ⇒
   add permissions THERE, re-run `db:seed --class=RolesAndPermissionsSeeder`
   (idempotent), protect routes, add allowed+denied tests.
 - **One role per job title**: the 13 roles in `PermissionRegistry::roles()`

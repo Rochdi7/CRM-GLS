@@ -63,6 +63,29 @@ function JournalPanel({ scope, data, centerLocked }: { scope: 'mine' | 'all'; da
     const [journal, setJournal] = useState<CaisseJournalData>(data);
     const [loading, setLoading] = useState(false);
 
+    // ⚠ `journal` est un CACHE local alimenté par fetch() : il DOIT se
+    // resynchroniser dès que le serveur renvoie de nouvelles props, sinon
+    // l'onglet « Ma caisse » garde les chiffres du centre PRÉCÉDENT après un
+    // changement de contexte (signalé le 09/09/2026 : il fallait recharger la
+    // page à la main pour voir le bon solde). Le sélecteur de centre poste sur
+    // backoffice.context.update puis `back()` : Inertia re-rend cette page avec
+    // un `data` frais, que `useState(data)` — évalué une SEULE fois au montage
+    // — ignorait complètement.
+    //
+    // `contextKey` identifie le contexte serveur qui a produit ces chiffres :
+    // il change au changement de centre/année, jamais quand l'utilisateur
+    // touche un filtre. Le refetch ci-dessous s'y accroche, ce qui recharge le
+    // journal avec les filtres COURANTS de l'utilisateur — on ne les remet
+    // jamais à leur défaut au passage (CLAUDE.md §5 : « Filters are NEVER
+    // reset as a side effect » — seul le bouton « Réinitialiser les filtres »
+    // les efface).
+    const { context } = usePage<SharedProps>().props;
+    const contextKey = `${context?.etablissementId ?? 'all'}|${context?.anneeScolaireId ?? ''}`;
+
+    useEffect(() => {
+        setJournal(data);
+    }, [data]);
+
     useEffect(() => {
         setLoading(true);
         const params = new URLSearchParams({ typeFilter, dateFrom, dateTo, page: String(page) });
@@ -71,7 +94,7 @@ function JournalPanel({ scope, data, centerLocked }: { scope: 'mine' | 'all'; da
             .then((next: CaisseJournalData) => setJournal(next))
             .finally(() => setLoading(false));
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [typeFilter, dateFrom, dateTo, page]);
+    }, [typeFilter, dateFrom, dateTo, page, contextKey]);
 
     // Local state, not a server-echoed `filters` prop, so this panel wires the
     // reset by hand — the defaults it restores are today's date window, not
@@ -131,6 +154,27 @@ function JournalPanel({ scope, data, centerLocked }: { scope: 'mine' | 'all'; da
                             <div>
                                 <p className="mb-0 text-muted">Remboursements</p>
                                 <h5 className="mb-0 text-warning">{Number(journal.totalRemboursements).toFixed(2)} DH</h5>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {/* ⚠ Un transfert VALIDÉ bouge le solde autant qu'un
+                    encaissement : sans cette carte, « Encaissements 800 /
+                    Dépenses 1 000 » surplombait un solde de 69 440 DH sans
+                    rien pour expliquer l'écart (09/09/2026). Net SIGNÉ —
+                    vert quand l'argent est entré, rouge quand il est sorti. */}
+                <div className="col-md-6 col-xl-3">
+                    <div className="card">
+                        <div className="card-body d-flex align-items-center">
+                            <span className="avatar avatar-md bg-info-transparent rounded-circle me-3 d-inline-flex align-items-center justify-content-center">
+                                <i className="ti ti-arrows-exchange text-info fs-20" />
+                            </span>
+                            <div>
+                                <p className="mb-0 text-muted">Transferts</p>
+                                <h5 className={`mb-0 ${Number(journal.totalTransferts) < 0 ? 'text-danger' : 'text-info'}`}>
+                                    {Number(journal.totalTransferts) > 0 ? '+' : ''}
+                                    {Number(journal.totalTransferts).toFixed(2)} DH
+                                </h5>
                             </div>
                         </div>
                     </div>
@@ -796,11 +840,20 @@ export default function CaissesIndex({
                         <div className="col-md-6">
                             {/* Read-only live preview of the selected source caisse's balance — informational only, the server independently re-validates. */}
                             <div className="mb-3">
-                                <label className="form-label">Solde</label>
+                                <label className="form-label">Solde du tiroir</label>
                                 <div className="input-group">
                                     <input type="text" className="form-control bg-light" readOnly value={soldeSource !== null ? soldeSource.toFixed(2) : ''} />
                                     <span className="input-group-text">DH</span>
                                 </div>
+                                {/* Le tiroir est UN seul stock de billets : il se
+                                    transfère en entier. Cette ligne explique juste
+                                    l'écart avec le solde ventilé affiché ailleurs
+                                    sur l'écran — ce n'est PAS un plafond. */}
+                                {!editingTransfer && myCaisse?.soldeCentre != null && (
+                                    <small className="text-muted d-block mt-1">
+                                        dont {Number(myCaisse.soldeCentre).toFixed(2)} DH pour {myCaisse.centreNom}
+                                    </small>
+                                )}
                             </div>
                         </div>
                         <div className="col-md-6">

@@ -1571,6 +1571,8 @@ export interface CaisseJournalData {
     totalDepenses: MoneyDisplay;
     /** Refunds paid out of the till — a separate outflow from `totalDepenses`, never folded into it. */
     totalRemboursements: MoneyDisplay;
+    /** Net SIGNÉ des transferts validés : positif = entré, négatif = sorti. */
+    totalTransferts: MoneyDisplay;
     /** Solde espèces — the physical till(s) in scope, never cash + TPE + chèque + virement. */
     solde: MoneyDisplay;
     totauxParType: Record<string, MoneyDisplay>;
@@ -1618,7 +1620,15 @@ export interface CaisseTransferRow {
 }
 
 export interface CaisseTransferFormOption extends FinanceOption {
+    /** Solde ENTIER du tiroir — ce qui est réellement transférable. */
     solde: MoneyDisplay;
+    /**
+     * Part du centre actif dans ce tiroir, pour affichage seulement —
+     * jamais une limite de transfert (l'argent physique est indivisible).
+     * `null`/absent sur « Tous les centres » : rien à ventiler.
+     */
+    soldeCentre?: MoneyDisplay | null;
+    centreNom?: string | null;
 }
 
 /**

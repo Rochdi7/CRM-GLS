@@ -327,4 +327,58 @@ final class CaisseVentilationCentreTest extends TestCase
         $this->assertFalse($details['ventileParCentre']);
         $this->assertCount(2, $details['encaissements']);
     }
+
+    /**
+     * Les cartes KPI de « Ma caisse » doivent RETOMBER sur le solde affiché
+     * à côté d'elles (09/09/2026).
+     *
+     * Signalé sur la prod : la caisse de Yassine Ouled Laghzal annonçait
+     * « Encaissements 800,00 / Dépenses 1 000,00 » au-dessus d'un « Solde
+     * espèces » de 69 440,00 DH. Les 69 940 DH de transferts validés qui
+     * expliquent l'écart n'avaient AUCUNE carte : l'écran était donc
+     * arithmétiquement impossible à lire, et le seul diagnostic possible pour
+     * l'utilisateur était « le solde est faux » — alors qu'il était juste.
+     */
+    public function test_les_cartes_du_journal_retombent_sur_le_solde(): void
+    {
+        $agent = $this->latifa();
+        $till = $agent->till()->firstOrFail();
+
+        // Une caisse tierce pour transférer : l'argent doit SORTIR de la caisse
+        // de l'agent, exactement comme TRF-040 dans les captures.
+        $autre = Employee::factory()->create(['etablissement_id' => $this->marrakech->id]);
+
+        // ⚠ Le transfert passe par les VRAIES actions : la ventilation par
+        // centre lit le LEDGER (§11 « Centre dimension on the ledger »), qu'un
+        // CaisseTransfer::create() brut n'écrit pas — le mouvement serait alors
+        // invisible pour tous les écrans, ce qui est justement le trou que
+        // CaisseLedger a comblé.
+        $transfert = app(\App\Domain\Finance\Actions\DemanderTransfertCaisse::class)->handle([
+            'caisse_source_id' => $till->id,
+            'caisse_destination_id' => $autre->till()->firstOrFail()->id,
+            'montant' => 1200,
+            'date_transfert' => '2026-09-09',
+        ], $agent);
+
+        // Validé par le DESTINATAIRE : le demandeur ne valide jamais le sien.
+        app(\App\Domain\Finance\Actions\ValiderTransfertCaisse::class)->handle($transfert, $autre);
+
+        $journal = $this->journalFor($agent, $this->marrakech->id);
+
+        // Le KPI existe et porte le SIGNE du mouvement (sortie => négatif).
+        $this->assertSame('-1200.00', $journal['totalTransferts']);
+
+        // L'invariant qui manquait : encaissements - dépenses - remboursements
+        // + transferts == solde.
+        $reconstitue = (float) $journal['totalEncaissements']
+            - (float) $journal['totalDepenses']
+            - (float) $journal['totalRemboursements']
+            + (float) $journal['totalTransferts'];
+
+        $this->assertSame(
+            round((float) $journal['solde'], 2),
+            round($reconstitue, 2),
+            "Les cartes KPI ne retombent pas sur le solde affiché à côté d'elles.",
+        );
+    }
 }

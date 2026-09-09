@@ -139,6 +139,17 @@ final class GetCaisseJournal
             ->where(fn ($q) => $this->exclureAnnules($q))
             ->tap(fn ($q) => $this->scopeRecordsToActiveCenter($q))
             ->sum('montant');
+        // ⚠ Les transferts VALIDÉS bougent le solde, ils doivent donc avoir
+        // leur propre KPI (09/09/2026). Sans lui les quatre cartes ne peuvent
+        // JAMAIS retomber sur le solde affiché à côté d'elles : la caisse de
+        // Yassine Ouled Laghzal annonçait « Encaissements 800 / Dépenses
+        // 1 000 » au-dessus d'un solde de 69 440 DH, sans rien à l'écran pour
+        // expliquer l'écart — l'utilisateur ne pouvait que conclure à un bug.
+        // Calculé par le MÊME chemin que la jambe transferts de
+        // `soldeVentile()` (net signé, ventilé par le ledger), pour que la
+        // carte et le solde ne puissent pas diverger.
+        $totalTransferts = $this->transfertsNetVentile($ids);
+
         $solde = $this->soldeVentile($ids, $depenseIdsDuCentre);
 
         $rows = $this->rows($ids, $typeFilter, $dateFrom, $dateTo, $depenseIdsDuCentre);
@@ -155,6 +166,7 @@ final class GetCaisseJournal
             'encaissementsParMethode' => $encaissementsParMethode,
             'totalDepenses' => number_format($totalDepenses, 2, '.', ''),
             'totalRemboursements' => number_format($totalRemboursements, 2, '.', ''),
+            'totalTransferts' => number_format($totalTransferts, 2, '.', ''),
             'solde' => number_format($solde, 2, '.', ''),
             'totauxParType' => $totauxParType->all(),
             'total' => $rows->count(),
@@ -230,20 +242,44 @@ final class GetCaisseJournal
 
         // Les transferts validés déplacent réellement l'argent entre caisses :
         // les ignorer ferait diverger la somme des parts du solde stocké.
+        // Même méthode que le KPI « Transferts », pour qu'ils ne divergent pas.
+        $sorties -= $this->transfertsNetVentile($ids);
+
+        return round($entrees - $sorties, 2);
+    }
+
+    /**
+     * Net SIGNÉ des transferts validés du centre actif pour ces caisses :
+     * positif = l'argent est ENTRÉ, négatif = il est SORTI.
+     *
+     * Source unique du KPI « Transferts » et de la jambe transferts de
+     * `soldeVentile()` — deux calculs séparés finiraient par se contredire,
+     * et c'est précisément le genre d'écart qui rend un écran d'argent
+     * inutilisable (CLAUDE.md §11).
+     *
+     * @param  array<int, int>  $ids
+     */
+    private function transfertsNetVentile(array $ids): float
+    {
+        if ($ids === []) {
+            return 0.0;
+        }
+
         $transfertIds = $this->idsDuCentreDepuisLeLedger(CaisseTransfer::class, $ids);
-        $transferts = CaisseTransfer::query()
+
+        $net = 0.0;
+
+        foreach (CaisseTransfer::query()
             ->where(fn ($q) => $q->whereIn('caisse_source_id', $ids)->orWhereIn('caisse_destination_id', $ids))
             ->where('statut', CaisseTransfer::STATUT_VALIDE)
             ->when($transfertIds !== null, fn ($q) => $q->whereIn('id', $transfertIds))
-            ->get(['caisse_source_id', 'montant']);
-
-        foreach ($transferts as $transfert) {
-            $sorties += in_array($transfert->caisse_source_id, $ids, true)
-                ? (float) $transfert->montant
-                : -(float) $transfert->montant;
+            ->get(['caisse_source_id', 'montant']) as $transfert) {
+            $net += in_array($transfert->caisse_source_id, $ids, true)
+                ? -(float) $transfert->montant
+                : (float) $transfert->montant;
         }
 
-        return round($entrees - $sorties, 2);
+        return round($net, 2);
     }
 
     /**
