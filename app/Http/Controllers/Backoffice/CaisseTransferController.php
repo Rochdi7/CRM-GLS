@@ -121,7 +121,7 @@ final class CaisseTransferController extends Controller
             // money movement. The mandatory `motif_annulation` below is what
             // keeps that legible: it is written into the row's own note, in
             // the record itself rather than only in the activity log.
-            $isMaintainer = HiddenAccount::isViewer($request->user());
+            $isMaintainer = HiddenAccount::isMaintainer($request->user());
 
             if (! $isParty && ! $isMaintainer) {
                 throw ValidationException::withMessages([

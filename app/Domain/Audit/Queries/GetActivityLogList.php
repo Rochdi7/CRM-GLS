@@ -360,6 +360,13 @@ final class GetActivityLogList
             return null;
         }
 
+        // …and the same on the SUBJECT side (09/09/2026): a « Caisse créé »
+        // row for his till has no causer at all, so the check above lets it
+        // through and the page prints his name.
+        if (! $includeDeveloper && $this->subjectIsHidden($entry)) {
+            return null;
+        }
+
         $resolver = new AuditValueResolver();
         $resolver->warm($this->foreignKeyPairs(collect([$entry])));
 
@@ -616,15 +623,117 @@ final class GetActivityLogList
     {
         $hiddenIds = $this->hiddenUserIds();
 
-        if ($hiddenIds === []) {
+        if ($hiddenIds !== []) {
+            // `orWhereNull` matters: system/console entries have no causer at
+            // all and must never be filtered out by a causer-based rule.
+            $query->where(fn (Builder $q) => $q
+                ->whereNull('causer_id')
+                ->orWhereNotIn('causer_id', $hiddenIds));
+        }
+
+        $this->excludeHiddenSubjects($query);
+    }
+
+    /**
+     * Hide entries whose SUBJECT is a hidden account's own record.
+     *
+     * Filtering on the causer alone is not enough, and that half-filter is
+     * the leak found on 09/09/2026 by the route sweep: provisioning the
+     * maintainer writes « Caisse créé » / « Employé créé » rows whose
+     * `causer_id` is NULL (the observer runs outside a request) or is some
+     * ordinary admin, while the SUBJECT is his till or his staff row. The
+     * journal page then printed his name in `subjectRef` and in the
+     * `changes` values — the same name every other screen hides.
+     *
+     * ⚠ Still a READ filter, exactly like the causer half. The rows are
+     * written in full and « Inclure le compte technique » brings them back,
+     * so the account keeps no blind spot (CLAUDE.md §11 — never a write-time
+     * skip). The subject sets are resolved from `HiddenAccount::emails()`,
+     * so a third address stays a one-constant change.
+     *
+     * @param  Builder<Activity>  $query
+     */
+    private function excludeHiddenSubjects(Builder $query): void
+    {
+        $userIds = $this->hiddenUserIds();
+
+        if ($userIds === []) {
             return;
         }
 
-        // `orWhereNull` matters: system/console entries have no causer at all
-        // and must never be filtered out by a causer-based rule.
-        $query->where(fn (Builder $q) => $q
-            ->whereNull('causer_id')
-            ->orWhereNotIn('causer_id', $hiddenIds));
+        // withoutGlobalScopes(): Employee carries HiddenAccountScope, and a
+        // scope applies inside a nested subquery too — so a scoped lookup
+        // would find no employee row for the very account it must hide, and
+        // the filter would silently match nothing (CLAUDE.md §11).
+        $employeeIds = \App\Models\Employee::withoutGlobalScopes()
+            ->whereIn('user_id', $userIds)
+            ->pluck('id')
+            ->map(intval(...))
+            ->all();
+
+        $caisseIds = $employeeIds === []
+            ? []
+            : Caisse::query()
+                ->whereIn('responsable_employee_id', $employeeIds)
+                ->pluck('id')
+                ->map(intval(...))
+                ->all();
+
+        $hiddenSubjects = [
+            (new User)->getMorphClass() => $userIds,
+            (new \App\Models\Employee)->getMorphClass() => $employeeIds,
+            (new Caisse)->getMorphClass() => $caisseIds,
+        ];
+
+        foreach ($hiddenSubjects as $type => $ids) {
+            if ($ids === []) {
+                continue;
+            }
+
+            // `orWhereNull` on subject_id for the same reason as the causer
+            // half: an entry with no subject must never be dropped here.
+            $query->where(fn (Builder $q) => $q
+                ->where('subject_type', '!=', $type)
+                ->orWhereNull('subject_id')
+                ->orWhereNotIn('subject_id', $ids));
+        }
+    }
+
+    /**
+     * The subject-side twin of the list filter, for the detail page.
+     *
+     * Hidden in the list means hidden by direct URL too — otherwise guessing
+     * an id walks straight past the filter and the whole thing is cosmetic.
+     */
+    private function subjectIsHidden(Activity $entry): bool
+    {
+        $subjectId = $entry->subject_id;
+
+        if ($subjectId === null) {
+            return false;
+        }
+
+        $userIds = $this->hiddenUserIds();
+
+        if ($userIds === []) {
+            return false;
+        }
+
+        $employeeIds = \App\Models\Employee::withoutGlobalScopes()
+            ->whereIn('user_id', $userIds)
+            ->pluck('id')
+            ->map(intval(...))
+            ->all();
+
+        return match ($entry->subject_type) {
+            (new User)->getMorphClass() => in_array((int) $subjectId, $userIds, true),
+            (new \App\Models\Employee)->getMorphClass() => in_array((int) $subjectId, $employeeIds, true),
+            (new Caisse)->getMorphClass() => $employeeIds !== [] && Caisse::query()
+                ->whereKey($subjectId)
+                ->whereIn('responsable_employee_id', $employeeIds)
+                ->exists(),
+            default => false,
+        };
     }
 
     /** The developer account's id, or null when that login does not exist. */
@@ -774,6 +883,12 @@ final class GetActivityLogList
 
         return Caisse::query()
             ->whereIn('id', $ids)
+            // The maintainer's tills are never NAMED in a dropdown, even on
+            // the journal page: « Inclure le compte technique » governs
+            // whose ENTRIES are listed, never whether the hidden accounts
+            // appear as filter options (CLAUDE.md §11 — every list, dropdown
+            // and lookup routes through HiddenAccount).
+            ->tap(fn ($q) => HiddenAccount::hideCaisses($q))
             ->orderBy('nom')
             ->get()
             ->map(fn (Caisse $c): array => [

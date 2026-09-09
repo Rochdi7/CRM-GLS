@@ -54,9 +54,21 @@ class User extends Authenticatable
      * The staff record this login belongs to (employees.user_id).
      * Users are only ever created via EmployeeCredentialService —
      * there is no public registration (structure doc §8).
+     *
+     * ⚠ `withoutGlobalScopes()` — this relation is a login's OWN IDENTITY,
+     * not a listing. `Employee` carries `HiddenAccountScope`, so without
+     * this a hidden account resolves NULL for itself: its centre resolution
+     * (`CurrentContext`) would fall back to no primary centre and its
+     * Profil page would render with every staff field blank (09/09/2026,
+     * when the hidden list stopped implying the right to see it).
+     *
+     * This does NOT re-expose anybody: the relation is keyed on
+     * `employees.user_id = $this->id`, so it only ever returns the row that
+     * belongs to this login. Every LIST, dropdown and lookup keeps the
+     * global scope and stays filtered (CLAUDE.md §11).
      */
     public function employee(): HasOne
     {
-        return $this->hasOne(Employee::class);
+        return $this->hasOne(Employee::class)->withoutGlobalScopes();
     }
 }

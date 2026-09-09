@@ -521,7 +521,7 @@ final class GetEncaissementsList
             // The maintainer's till is never an option (HiddenAccount).
             ->tap(fn ($q) => HiddenAccount::hideCaisses($q))
             ->whereDoesntHave('responsable', fn ($e) => $e->where('categorie', Employee::CATEGORIE_ENSEIGNANT))
-            ->where(function ($q): void {
+            ->where(function ($q) use ($user): void {
                 $this->scopeToActiveCenter($q);
 
                 // The list is scoped by the student's centre, so it can show
@@ -529,10 +529,53 @@ final class GetEncaissementsList
                 // tills here keeps the filter able to reach every displayed
                 // row instead of silently emptying the page.
                 $q->orWhereHas('encaissements.student', fn ($s) => $this->scopeStudentsToActiveCenter($s));
+
+                // The signed-in employee's OWN till is always offered, even
+                // when it holds nothing yet: the page DEFAULTS to it
+                // (« Ma caisse », ownCaisseId()), and a default the dropdown
+                // cannot show is a filtered list with no way to read why. On
+                // « Tous les centres » the two clauses above degenerate to
+                // "tills that already collected something", so a cashier's
+                // first day would have hidden their own caisse.
+                if ($ownTillId = $user->employee?->till()->value('id')) {
+                    $q->orWhere('caisses.id', $ownTillId);
+                }
             })
             ->orderBy('nom')
             ->get(['id', 'nom'])
             ->map(fn (Caisse $c): array => ['id' => $c->id, 'nom' => $c->nom]);
+    }
+
+    /**
+     * The signed-in employee's OWN physical till — the « Caisse » filter's
+     * default on a bare visit (09/09/2026).
+     *
+     * A cashier opening Gestion des paiements is looking at the money that
+     * went through THEIR hands; making them pick their own name out of a list
+     * of ~7 tills at every visit is the same friction the legacy CRM avoided
+     * with its « Ma caisse » default. It stays a plain filter — clearing it
+     * (or « Réinitialiser les filtres ») widens the list back to every till
+     * they may reach, so this narrows nothing they could otherwise see.
+     *
+     * Returns null when the account has no till of its own (a super-admin
+     * with no employee row, a direction profile that never cashes in) — then
+     * the page opens on « Toutes les caisses » exactly as before.
+     *
+     * ⚠ Never provisions: `CaisseResolver::tillOf()` CREATES a missing till,
+     * which a read-only list page must never do. And the id is returned only
+     * when it is actually among `caisseOptions()`, so the default can never
+     * open the page on a till the filter cannot reach — that would show an
+     * empty list with a dropdown unable to explain why.
+     */
+    public function ownCaisseId(User $user): ?int
+    {
+        $tillId = $user->employee?->till()->value('id');
+
+        if ($tillId === null) {
+            return null;
+        }
+
+        return $this->caisseOptions($user)->contains('id', $tillId) ? $tillId : null;
     }
 
     private static function isIsoDate(string $value): bool

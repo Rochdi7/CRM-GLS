@@ -311,4 +311,106 @@ final class HiddenAccountTest extends TestCase
             ->get(route('backoffice.caisses.show', $devTill))
             ->assertOk();
     }
+
+    /**
+     * Being IN the hidden list is not permission to SEE the hidden list.
+     *
+     * Reported 09/09/2026: signed in as the GLS-domain staff account, the
+     * « Caisse » filter of Encaissements listed BOTH « Rochdi Karouali »
+     * tills. `hides()` was keyed on `emails()`, so any hidden login switched
+     * the whole display filter off for itself. Only the MAINTENANCE IDENTITY
+     * (`EMAIL`) may see them — the same distinction `GroupPolicy@updateClosed`
+     * and `MAINTAINER_ONLY_ABILITIES` already draw.
+     */
+    public function test_the_staff_account_cannot_see_the_hidden_accounts(): void
+    {
+        $dev = $this->maintainer();
+        $staff = $this->staff(HiddenAccount::STAFF_EMAIL);
+
+        $devTill = Caisse::where('responsable_employee_id', $dev->id)->firstOrFail();
+        $staffTill = Caisse::where('responsable_employee_id', $staff->id)->firstOrFail();
+
+        $this->actingAs($staff->user);
+        app(CurrentContext::class)->setEtablissement($this->centre->id);
+
+        $this->assertTrue(
+            HiddenAccount::hides(),
+            'A hidden account that is not the maintenance identity still has the filter applied.',
+        );
+
+        $query = Caisse::query();
+        HiddenAccount::hideCaisses($query);
+        $visible = $query->pluck('id');
+
+        $this->assertNotContains($devTill->id, $visible);
+        $this->assertNotContains(
+            $staffTill->id,
+            $visible,
+            'It does not even see its OWN till in a list — hiding is display-wide.',
+        );
+
+        $options = app(\App\Domain\Payments\Queries\GetEncaissementsList::class)
+            ->caisseOptions($staff->user)->pluck('id');
+        $this->assertNotContains($devTill->id, $options);
+        $this->assertNotContains($staffTill->id, $options);
+    }
+
+    /**
+     * The maintenance identity keeps seeing both, which is the whole point of
+     * the account.
+     */
+    public function test_the_maintenance_identity_sees_both_hidden_accounts(): void
+    {
+        $dev = $this->maintainer();
+        $staff = $this->staff(HiddenAccount::STAFF_EMAIL);
+
+        $devTill = Caisse::where('responsable_employee_id', $dev->id)->firstOrFail();
+        $staffTill = Caisse::where('responsable_employee_id', $staff->id)->firstOrFail();
+
+        $this->actingAs($dev->user);
+
+        $this->assertFalse(HiddenAccount::hides());
+
+        $query = Caisse::query();
+        HiddenAccount::hideCaisses($query);
+        $visible = $query->pluck('id');
+
+        $this->assertContains($devTill->id, $visible);
+        $this->assertContains($staffTill->id, $visible);
+    }
+
+    /**
+     * Hiding an account from the lists must not blind it to ITSELF: its own
+     * profile, its centre resolution and its own record pages keep working —
+     * while the OTHER hidden account stays out of reach.
+     */
+    public function test_a_hidden_account_still_resolves_its_own_identity(): void
+    {
+        $dev = $this->maintainer();
+        $staff = $this->staff(HiddenAccount::STAFF_EMAIL);
+        $staff->user->assignRole(\App\Models\Role::SUPER_ADMIN);
+
+        $devTill = Caisse::where('responsable_employee_id', $dev->id)->firstOrFail();
+        $staffTill = Caisse::where('responsable_employee_id', $staff->id)->firstOrFail();
+
+        $this->actingAs($staff->user);
+
+        // User::employee() drops the global scope — otherwise CurrentContext
+        // finds no primary centre and Profil renders every field blank.
+        $this->assertSame($staff->id, $staff->user->fresh()->employee?->id);
+        $this->assertSame(
+            $this->centre->id,
+            $staff->user->fresh()->employee?->etablissement_id,
+        );
+
+        // Its own records stay reachable...
+        $this->assertTrue(Gate::forUser($staff->user)->allows('view', $staffTill));
+        $this->assertTrue(Gate::forUser($staff->user)->allows('view', $staff->user));
+
+        // ...but the OTHER hidden account's do not.
+        $this->assertFalse(Gate::forUser($staff->user)->allows('view', $devTill));
+        $this->assertFalse(Gate::forUser($staff->user)->allows('view', $dev->user));
+
+        $this->get(route('backoffice.profile'))->assertOk();
+    }
 }

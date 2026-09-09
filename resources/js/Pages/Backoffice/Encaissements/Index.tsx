@@ -98,7 +98,7 @@ function emptyAvanceForm(): AvanceFormState {
  * directly under that row; numéro/banque/échéance are always read off that
  * Cheque record server-side (EncaissementController@store).
  */
-export default function EncaissementsIndex({ encaissements, montantTotal, caisses, students, groups, frais, methodes, banques, filters, can }: EncaissementsPageProps) {
+export default function EncaissementsIndex({ encaissements, montantTotal, caisses, students, groups, frais, methodes, banques, defaultCaisseId, filters, can }: EncaissementsPageProps) {
     const isLoading = useInertiaLoading();
     const [deleteTarget, setDeleteTarget] = useState<EncaissementRow | null>(null);
     const [deleting, setDeleting] = useState(false);
@@ -140,7 +140,13 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
     const [bulkMenuOpen, setBulkMenuOpen] = useState(false);
     const bulkMenuRef = useRef<HTMLDivElement>(null);
 
-    const caisseOptions: SelectOption[] = caisses.map((c) => ({ value: c.id, label: c.nom }));
+    // The user's own till is named « Ma caisse » in the dropdown: the page
+    // opens on it by default, so the label has to say WHY the list is already
+    // narrowed — a name among six other names does not.
+    const caisseOptions: SelectOption[] = caisses.map((c) => ({
+        value: c.id,
+        label: c.id === defaultCaisseId ? `Ma caisse (${c.nom})` : c.nom,
+    }));
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.nom }));
     const groupOptions: SelectOption[] = groups.map((g) => ({ value: g.id, label: g.nom }));
     const fraisFilterOptions: SelectOption[] = frais.map((f) => ({ value: f.id, label: f.nom }));
@@ -199,11 +205,18 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
     // window back to today on the tabs that have one — clearing them to ''
     // would show every payment ever recorded, which is not this page's
     // default view.
+    //
+    // `caisseFilter` goes back to the user's OWN till rather than to '' for
+    // the same reason: that is what a bare visit lands on (the controller's
+    // canonical redirect), so resetting must return there, not somewhere the
+    // page never opens on. `defaultCaisseId` is null for an account with no
+    // till — then the default really is « Toutes les caisses ».
     const todayIso = new Date().toISOString().slice(0, 10);
     const filterReset = useFilterReset(filters, reload, {
         view: filters.view,
         perPage: filters.perPage,
         soldeFilter: 'restant',
+        caisseFilter: defaultCaisseId != null ? String(defaultCaisseId) : '',
         dateFrom: filters.view === 'avance' ? '' : todayIso,
         dateTo: filters.view === 'avance' ? '' : todayIso,
     });

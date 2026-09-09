@@ -1791,6 +1791,13 @@ export interface EncaissementsPageProps {
     methodes: string[];
     /** Active bank names from the catalog (Paramètres → Banques) — the Chèque form's dropdown source. */
     banques: string[];
+    /**
+     * The signed-in employee's own physical till, or null when the account
+     * has none. The « Caisse » filter opens on it (the controller puts it in
+     * the canonical URL of a bare visit) and « Réinitialiser les filtres »
+     * restores it, so the button and the landing state agree.
+     */
+    defaultCaisseId?: number | null;
     filters: EncaissementsFilters;
     /**
      * UI convenience only — the endpoints re-authorize server-side.

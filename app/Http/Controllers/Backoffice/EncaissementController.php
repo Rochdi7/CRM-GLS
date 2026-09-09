@@ -106,10 +106,18 @@ final class EncaissementController extends Controller
         // unfiltered list while the sidebar link gets today's window.
         $filterQuery = Arr::except($request->query(), ['nouveau']);
 
+        // `caisseFilter` joins the date window in that canonical URL: a
+        // cashier arrives on THEIR OWN till (« Ma caisse » in the legacy CRM),
+        // not on the whole centre's payments. It is a plain filter like any
+        // other — clearing the dropdown or « Réinitialiser les filtres »
+        // widens the list back to every till the user may reach — and it is
+        // omitted entirely for an account with no till of its own
+        // (GetEncaissementsList::ownCaisseId).
         if ($filterQuery === [] && ! $request->hasHeader('X-Inertia-Partial-Data')) {
             return redirect()->route('backoffice.encaissements.index', array_filter([
                 'dateFrom' => now()->toDateString(),
                 'dateTo' => now()->toDateString(),
+                'caisseFilter' => $getEncaissementsList->ownCaisseId($request->user()),
                 'nouveau' => $request->query('nouveau'),
             ]));
         }
@@ -172,6 +180,10 @@ final class EncaissementController extends Controller
             'groups' => fn () => $getEncaissementsList->groupOptions($request->user()),
             'frais' => fn () => $getEncaissementsList->fraisOptions(),
             'methodes' => Encaissement::METHODES,
+            // The signed-in user's own till: the filter's default on a bare
+            // visit AND what « Réinitialiser les filtres » restores it to, so
+            // the button agrees with what the page opens on (§5).
+            'defaultCaisseId' => fn () => $getEncaissementsList->ownCaisseId($request->user()),
             'banques' => fn () => $getBanquesList->activeNames(),
             'filters' => [
                 'search' => $search,

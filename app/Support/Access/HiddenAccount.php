@@ -31,10 +31,20 @@ use Illuminate\Support\Facades\Auth;
  *  2. Server-side authorization is unchanged — it holds `super-admin` and
  *     `Gate::before` treats it like any other super-admin, including the
  *     deliberate NON-bypass on cash-transfer validation (CLAUDE.md §11).
- *  3. The account stays visible TO ITSELF (see `hides()`), so the developer's
- *     own profile, context switcher and center resolution keep working. The
- *     rule asked for is "others cannot see me", not "nothing can resolve me"
- *     — and a globally invisible employee row would 500 its own profile page.
+ *  3. Each account still RESOLVES ITSELF, so its own profile, context
+ *     switcher and center resolution keep working — via `denies()` for
+ *     record access and `User::employee()` (which drops the global scope)
+ *     for identity. The rule asked for is "others cannot see me", not
+ *     "nothing can resolve me": a globally invisible employee row would
+ *     leave its own profile page blank.
+ *
+ * ⚠ SEEING the hidden rows and BEING one of them are two different
+ * questions, and conflating them is the leak reported on 09/09/2026 (the
+ * Encaissements « Caisse » filter listed both « Rochdi Karouali » tills to
+ * whichever of the two accounts was signed in). `isMaintainer()` — `EMAIL`
+ * ALONE — answers "may bypass the display filter", and drives `hides()`.
+ * `isHidden()` answers "is one of the hidden logins", and only ever grants
+ * an account access to its OWN records. Never key `hides()` on `emails()`.
  *
  * TWO logins belong to him and both are hidden (`self::emails()`): the
  * technical account `EMAIL` and the GLS-domain staff account `STAFF_EMAIL`,
@@ -92,20 +102,51 @@ final class HiddenAccount
     }
 
     /**
-     * Whether the CURRENT viewer should have the account hidden from them.
+     * Whether the CURRENT viewer should have the accounts hidden from them.
      *
-     * False only for the maintainer himself — he is allowed to see his own
-     * row, which is what keeps his profile page and center resolution alive.
+     * False for the MAINTENANCE IDENTITY alone (`EMAIL`) — the one account
+     * allowed to see both hidden rows, which is what keeps its own profile
+     * page and center resolution alive.
+     *
+     * ⚠ `EMAIL`, never `emails()`. Those are two different questions and
+     * conflating them is the leak reported on 09/09/2026: signed in as the
+     * GLS-domain staff account, the « Caisse » filter of Encaissements
+     * listed BOTH « Rochdi Karouali » tills, because being *in* the hidden
+     * list was read as permission to *see* the hidden list. `STAFF_EMAIL` is
+     * a staff login of the same person, not the maintenance identity — the
+     * same distinction `GroupPolicy@updateClosed`,
+     * `MAINTAINER_ONLY_ABILITIES` and `AuditLogRegistry::DEVELOPER_EMAIL`
+     * already draw. A hidden account that is not the maintenance identity is
+     * hidden from ITSELF too, and reaches its own records through
+     * `seesOwnRecords()` below rather than by switching the filter off.
      */
     public static function hides(): bool
     {
-        return ! self::isViewer();
+        return ! self::isMaintainer();
     }
 
     /**
-     * Is the authenticated user the maintainer?
+     * Is the authenticated user the MAINTENANCE IDENTITY — the single
+     * account that may see the hidden rows?
+     *
+     * This is the "may bypass the display filter" question. For "is this
+     * account one of the hidden ones" use `isHidden()`.
      */
-    public static function isViewer(?Authenticatable $user = null): bool
+    public static function isMaintainer(?Authenticatable $user = null): bool
+    {
+        $user ??= Auth::user();
+
+        return $user instanceof User && $user->email === self::EMAIL;
+    }
+
+    /**
+     * Is this account one of the hidden logins?
+     *
+     * The membership question — used by `denies()` so a hidden account still
+     * reaches its OWN records (profile, context resolution) without being
+     * granted sight of the other one.
+     */
+    public static function isHidden(?Authenticatable $user = null): bool
     {
         $user ??= Auth::user();
 
@@ -133,9 +174,17 @@ final class HiddenAccount
             return false;
         }
 
-        // The maintainer always reaches his own records — otherwise his
-        // profile page and context resolution 403 on himself.
-        if (self::isViewer($viewer)) {
+        // The MAINTENANCE IDENTITY reaches every hidden record.
+        if (self::isMaintainer($viewer)) {
+            return false;
+        }
+
+        // A hidden account that is NOT the maintenance identity still
+        // reaches its OWN records — otherwise its profile page and context
+        // resolution 403 on itself. It does NOT thereby reach the other
+        // hidden account's records: `isHidden()` answers membership,
+        // `isMaintainer()` answers sight (09/09/2026).
+        if (self::isHidden($viewer) && self::belongsTo($subject, $viewer)) {
             return false;
         }
 
@@ -143,6 +192,33 @@ final class HiddenAccount
             $subject instanceof User => in_array($subject->email, self::emails(), true),
             $subject instanceof \App\Models\Employee => self::isMaintainerEmployee($subject),
             $subject instanceof \App\Models\Caisse => self::isMaintainerCaisse($subject),
+            default => false,
+        };
+    }
+
+    /**
+     * Is this record the VIEWER's own — their user row, their employee row,
+     * or a caisse they are responsable of?
+     *
+     * Scoped to the viewer specifically, never to "any hidden account", so
+     * one hidden login can never see the other's till.
+     */
+    private static function belongsTo(mixed $subject, ?Authenticatable $viewer): bool
+    {
+        if (! $viewer instanceof User) {
+            return false;
+        }
+
+        $employeeId = \App\Models\Employee::withoutGlobalScopes()
+            ->where('user_id', $viewer->getKey())
+            ->value('id');
+
+        return match (true) {
+            $subject instanceof User => $subject->getKey() === $viewer->getKey(),
+            $subject instanceof \App\Models\Employee => $employeeId !== null
+                && $subject->getKey() === $employeeId,
+            $subject instanceof \App\Models\Caisse => $employeeId !== null
+                && $subject->getAttribute('responsable_employee_id') === $employeeId,
             default => false,
         };
     }

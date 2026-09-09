@@ -121,7 +121,7 @@ final class GetCaisseTransfersList
                 'canCancel' => $t->statut === CaisseTransfer::STATUT_EN_ATTENTE
                     && ($t->requested_by === $myEmployeeId
                         || in_array($t->caisse_destination_id, $myCaisseIds, true)
-                        || HiddenAccount::isViewer()),
+                        || HiddenAccount::isMaintainer()),
                 // Drives the mandatory reason field: cancelling somebody
                 // else's transfer must say why.
                 'cancelNeedsMotif' => $t->statut === CaisseTransfer::STATUT_EN_ATTENTE
