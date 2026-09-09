@@ -102,8 +102,11 @@ final class AnnulerDepenseEcranTest extends TestCase
             );
         }
 
-        // …et elle n'est pas non plus attribuable à la main.
-        $this->assertNotContains('expenses.cancel', PermissionRegistry::grantable());
+        // Elle reste attribuable À LA MAIN sur l'écran Autorisations, comme
+        // refunds.cancel : superAdminOnly() ferme les PRESETS de rôle, pas la
+        // délégation nominative qu'un super-admin décide (seul
+        // GLOBAL_CENTER_ACCESS est retiré de grantable()).
+        $this->assertContains('expenses.cancel', PermissionRegistry::grantable());
     }
 
     public function test_a_non_super_admin_cannot_cancel_even_with_every_expense_permission(): void

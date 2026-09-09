@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\CaisseTransfer;
+use App\Models\Depense;
 use App\Models\Employee;
 use App\Models\Etablissement;
 use App\Models\Group;
@@ -42,23 +43,36 @@ class AppServiceProvider extends ServiceProvider
      *
      * ⚠ Keyed by MODEL, not by bare ability name: SeancePolicy also has a
      * `validate` method, and super-admins must keep bypassing that one.
+     * Chaque ability porte une LISTE de modeles — `cancel` en couvre deux
+     * (un remboursement et une depense annules recreditent tous deux une
+     * caisse), et d'autres policies peuvent avoir la meme methode sans
+     * devoir perdre le bypass.
      *
-     * @var array<string, string>
+     * @var array<string, list<string>>
      */
     private const NO_SUPER_ADMIN_BYPASS = [
-        'validate' => CaisseTransfer::class,
-        // Annuler un remboursement recredite la caisse. La policy refuse une
-        // ligne DEJA annulee — sans cette exclusion, Gate::before accorde
-        // tout au super-admin et ce garde-fou devient injoignable : deux
-        // clics recreditent la caisse deux fois pour une seule sortie
-        // (03/09/2026). La permission reste super-admin ; c'est l'etat de la
-        // ligne, pas le role, que la policy verifie ici.
-        'cancel' => Remboursement::class,
+        'validate' => [CaisseTransfer::class],
+        // Annuler un remboursement OU une depense recredite la caisse. La
+        // policy refuse une ligne DEJA annulee (ou jamais approuvee) — sans
+        // cette exclusion, Gate::before accorde tout au super-admin et ce
+        // garde-fou devient injoignable : deux clics recreditent la caisse
+        // deux fois pour une seule sortie (03/09/2026 pour le
+        // remboursement, 09/09/2026 pour la depense). La permission reste
+        // super-admin ; c'est l'etat de la ligne, pas le role, que la policy
+        // verifie ici.
+        'cancel' => [Remboursement::class, Depense::class],
         // Modifier un groupe « Fin de formation » / « Annulée » est reserve
         // au SEUL compte de maintenance (GroupPolicy@updateClosed). Sans
         // cette exclusion, Gate::before l'accorde a tous les super-admins,
         // le CEO compris, et « un dossier clos est clos » ne tient plus.
-        'updateClosed' => Group::class,
+        'updateClosed' => [Group::class],
+        // Une depense REFUSEE ou ANNULEE est de l'histoire close : la
+        // modifier desynchroniserait la ligne du mouvement de caisse qui
+        // l'explique (DepensePolicy@update). Sans cette exclusion,
+        // Gate::before l'accorde a tout super-admin et le gel n'existe que
+        // pour les autres (09/09/2026). La policy laisse passer une depense
+        // approuvee ou en attente exactement comme avant.
+        'update' => [Depense::class],
     ];
 
     /**
@@ -130,16 +144,18 @@ class AppServiceProvider extends ServiceProvider
                 return $user->email === HiddenAccount::EMAIL;
             }
 
-            $excludedModel = self::NO_SUPER_ADMIN_BYPASS[$ability] ?? null;
+            $excludedModels = self::NO_SUPER_ADMIN_BYPASS[$ability] ?? [];
 
-            if ($excludedModel !== null) {
+            if ($excludedModels !== []) {
                 $subject = $arguments[0] ?? null;
                 $subjectClass = is_object($subject) ? $subject::class : (is_string($subject) ? $subject : null);
 
-                if ($subjectClass !== null && is_a($subjectClass, $excludedModel, true)) {
-                    // Returning null defers to the policy instead of granting —
-                    // the policy still runs and decides on its own terms.
-                    return null;
+                foreach ($excludedModels as $excludedModel) {
+                    if ($subjectClass !== null && is_a($subjectClass, $excludedModel, true)) {
+                        // Returning null defers to the policy instead of granting —
+                        // the policy still runs and decides on its own terms.
+                        return null;
+                    }
                 }
             }
 

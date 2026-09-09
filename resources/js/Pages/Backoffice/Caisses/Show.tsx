@@ -42,21 +42,6 @@ export default function CaisseShow({ caisse }: CaisseShowProps) {
                             </span>
                         </div>
                     </Card>
-
-                    <div className="alert alert-info d-flex align-items-center" role="alert">
-                        Le solde est maintenu par l'application : il ne bouge qu'à travers les paiements, dépenses,
-                        remboursements et transferts validés.
-                    </div>
-
-                    {/* Une caissière n'a qu'UNE caisse à vie mais encaisse pour
-                        plusieurs centres : sans cette phrase, un solde ventilé
-                        se lit comme le total du compte et contredit « Comptes
-                        de caisse ». */}
-                    {caisse.ventileParCentre && (
-                        <div className="alert alert-warning d-flex align-items-center" role="alert">
-                            {t('Only this center’s share of the account is shown, matching the movements listed. Switch to all centers to see the full balance.')}
-                        </div>
-                    )}
                 </div>
 
                 <div className="col-xl-8">

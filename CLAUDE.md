@@ -505,6 +505,23 @@ the database layer. Non-negotiable invariants already enforced in code:
   within 60 min, exactly one journaled debit, no prior credit) — it never
   guesses which row is the duplicate, and it has no `--force`. Idempotent on
   the stable `correction` reference in the ledger AND the statut.
+  **Depuis l'écran** : « Annuler » sur la ligne (`expenses.cancel`,
+  `superAdminOnly()`, motif OBLIGATOIRE) appelle la même action —
+  `DepenseController@cancel`. Trois choses indissociables : (1) les abilities
+  `cancel` ET `update` de `Depense` sont dans
+  `AppServiceProvider::NO_SUPER_ADMIN_BYPASS` — **sans elles `Gate::before`
+  accorde tout au super-admin**, donc « on n'annule qu'une dépense
+  approuvée » et « une dépense refusée/annulée ne se modifie plus »
+  deviennent injoignables pour les seuls comptes qui peuvent cliquer (deux
+  clics recréditeraient la caisse deux fois) ; la map porte désormais une
+  LISTE de modèles par ability, `cancel` en couvrant deux (Remboursement +
+  Depense). (2) **Une ligne annulée reste affichée**, barrée, badgée
+  « Annulée » avec son motif sous le badge, dans les DEUX onglets — Dépenses
+  ET Paiements prof, qui a dû recevoir la colonne Statut qu'il n'avait jamais
+  eue : ce sont les mêmes lignes, et sans elle un montant rendu à la caisse
+  passait pour un paiement vivant (signalé le 09/09/2026 sur DEP-014).
+  (3) Le motif est requis : c'est ce que le journal conserve pour expliquer
+  pourquoi de l'argent est revenu. Tests : `AnnulerDepenseEcranTest.php`.
   **« Argent sorti » a UNE seule définition — `statut = Approuvée` — et tout
   écran qui somme des dépenses doit la porter.** Les lectures de caisse le
   faisaient déjà ; `GetDashboardStats` (carte « Dépenses du mois ») et
