@@ -7,6 +7,7 @@ namespace App\Domain\Finance\Support;
 use App\Models\Caisse;
 use App\Models\CaisseTransfer;
 use App\Models\Depense;
+use App\Models\Etablissement;
 use App\Models\Encaissement;
 use App\Models\Remboursement;
 use Illuminate\Database\Eloquent\Builder;
@@ -67,6 +68,43 @@ final class VentilationCentre
         return round($entrees - $sorties, 2);
     }
 
+    /**
+     * Montant que le centre actif peut réellement SORTIR de ce tiroir.
+     *
+     * = part ventilée du centre + part du solde qu'AUCUN centre ne revendique.
+     *
+     * La seconde moitié est indispensable : `caisses.solde` est l'autorité
+     * (CaisseLedger) et peut dépasser la somme des parts ventilables — solde
+     * d'ouverture, reprise de l'ancien CRM, correction directe (18,4 M DH sont
+     * dans ce cas au 09/09/2026). Cet argent existe physiquement dans le
+     * tiroir : le refuser au transfert le gèlerait définitivement, ce qui
+     * serait un bug pire que celui corrigé ici. On ne réserve donc que ce qui
+     * est PROUVÉ appartenir à un autre centre.
+     *
+     * Source unique du plafond serveur (DemanderTransfertCaisse) ET du montant
+     * affiché dans le modal : deux calculs séparés finiraient par proposer un
+     * plafond que le serveur refuse ensuite.
+     */
+    public function plafondTransfert(Caisse $caisse, ?int $centreId): float
+    {
+        if ($centreId === null) {
+            return (float) $caisse->solde;
+        }
+
+        $reserveAilleurs = 0.0;
+
+        foreach (Etablissement::query()->whereKeyNot($centreId)->pluck('id') as $autreId) {
+            // Une part négative (plus sorti qu'entré sur un centre) ne réserve
+            // rien : max(0, …).
+            $reserveAilleurs += max(0.0, $this->soldeDuCentre($caisse, (int) $autreId));
+        }
+
+        return round(max(
+            $this->soldeDuCentre($caisse, $centreId),
+            (float) $caisse->solde - $reserveAilleurs,
+        ), 2);
+    }
+
     /** Encaissements espèces du centre logés dans cette caisse. */
     public function encaissementsDuCentre(int $caisseId, int $centreId): float
     {
@@ -97,19 +135,34 @@ final class VentilationCentre
      */
     private function transfertsDuCentre(Caisse $caisse, int $centreId): float
     {
-        if ((int) $caisse->etablissement_id !== $centreId) {
-            return 0.0;
-        }
-
         $net = 0.0;
 
         foreach (CaisseTransfer::query()
             ->where(fn ($q) => $q->where('caisse_source_id', $caisse->id)->orWhere('caisse_destination_id', $caisse->id))
             ->where('statut', CaisseTransfer::STATUT_VALIDE)
-            ->get(['caisse_source_id', 'montant']) as $transfert) {
-            $net += (int) $transfert->caisse_source_id === $caisse->id
-                ? (float) $transfert->montant
-                : -(float) $transfert->montant;
+            ->get(['caisse_source_id', 'montant', 'etablissement_id']) as $transfert) {
+            $sortant = (int) $transfert->caisse_source_id === $caisse->id;
+
+            // ⚠ Le centre d'une SORTIE est celui du TRANSFERT (le centre où le
+            // caissier travaillait), pas celui de rattachement de la caisse
+            // (09/09/2026). L'ancienne version écartait le transfert dès que
+            // les deux différaient : 1 300,00 DH encaissés à Casablanca puis
+            // transférés laissaient Casablanca à 1 300,00 DH au lieu de 0,00 DH,
+            // le -1 300 étant imputé à Kénitra où il n'avait jamais été.
+            // Une ENTRÉE reste imputée au centre de la caisse qui reçoit : les
+            // billets rejoignent ce tiroir, et son centre de rattachement est
+            // la seule chose qu'on sache d'eux à l'arrivée.
+            // Repli sur le centre de la caisse quand la colonne est absente
+            // (transferts antérieurs — jamais de backfill, §11).
+            $centreDuMouvement = $sortant
+                ? ($transfert->etablissement_id ?? $caisse->etablissement_id)
+                : $caisse->etablissement_id;
+
+            if ((int) $centreDuMouvement !== $centreId) {
+                continue;
+            }
+
+            $net += $sortant ? (float) $transfert->montant : -(float) $transfert->montant;
         }
 
         return $net;

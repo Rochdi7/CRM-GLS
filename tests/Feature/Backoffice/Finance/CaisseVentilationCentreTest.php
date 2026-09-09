@@ -381,4 +381,80 @@ final class CaisseVentilationCentreTest extends TestCase
             "Les cartes KPI ne retombent pas sur le solde affiché à côté d'elles.",
         );
     }
+
+    /**
+     * Le scénario exact signalé le 09/09/2026 (Yassine Ouled Laghzal).
+     *
+     * Il encaisse 1 300 DH à Casablanca depuis son tiroir rattaché à Kénitra,
+     * puis transfère ces 1 300 DH à Maria pendant qu'il travaille SUR
+     * Casablanca. Elle accepte. Casablanca doit donc retomber à 0,00 DH.
+     *
+     * Avant le correctif, `transfertsDuCentre()` écartait le transfert dès que
+     * le centre de RATTACHEMENT de la caisse différait du centre regardé : le
+     * -1 300 était imputé à Kénitra (où l'argent n'avait jamais été) et
+     * Casablanca restait affiché à 1 300,00 DH — de l'argent déjà remis.
+     */
+    public function test_un_transfert_sort_du_centre_ou_le_caissier_travaille(): void
+    {
+        $user = User::factory()->create();
+        $user->assignRole('super-admin');
+        // Tiroir rattaché à MARRAKECH, mais qui encaisse pour ONLINE.
+        $agent = Employee::factory()->create([
+            'user_id' => $user->id,
+            'etablissement_id' => $this->marrakech->id,
+        ]);
+        $agent->syncEtablissements([$this->marrakech->id, $this->online->id]);
+
+        $destinataire = Employee::factory()->create(['etablissement_id' => $this->marrakech->id]);
+
+        // 1 300 DH encaissés SUR Online.
+        $this->cash($agent, $this->online, 1300.0);
+
+        // Puis transférés pendant qu'il travaille SUR Online.
+        $this->actingAs($user->fresh());
+        app()->forgetInstance(CurrentContext::class);
+        app(CurrentContext::class)->setEtablissement($this->online->id);
+
+        $transfert = app(\App\Domain\Finance\Actions\DemanderTransfertCaisse::class)->handle([
+            'caisse_source_id' => $agent->till()->firstOrFail()->id,
+            'caisse_destination_id' => $destinataire->till()->firstOrFail()->id,
+            'montant' => 1300,
+            'date_transfert' => '2026-09-09',
+        ], $agent);
+
+        // Le transfert MÉMORISE le centre où le caissier travaillait.
+        $this->assertSame($this->online->id, $transfert->etablissement_id);
+
+        app(\App\Domain\Finance\Actions\ValiderTransfertCaisse::class)->handle($transfert, $destinataire);
+
+        // Online est soldé : l'argent encaissé là-bas en est ressorti.
+        $this->assertSame('0.00', $this->journalFor($agent, $this->online->id)['solde']);
+    }
+
+    /**
+     * Un centre ne peut pas emporter l'argent d'un autre : le tiroir est
+     * unique, mais chaque centre ne solde que le sien. Sans ce plafond, un
+     * caissier vidait Casablanca en puisant dans Kénitra et la part d'un
+     * centre devenait NÉGATIVE — ce qu'aucune caisse ne peut tenir.
+     */
+    public function test_un_transfert_ne_peut_pas_emporter_l_argent_d_un_autre_centre(): void
+    {
+        $agent = $this->latifa(); // 6 200 Marrakech + 4 100 Online = 10 300
+        $destinataire = Employee::factory()->create(['etablissement_id' => $this->marrakech->id]);
+
+        $this->actingAs($agent->user->fresh());
+        app()->forgetInstance(CurrentContext::class);
+        app(CurrentContext::class)->setEtablissement($this->online->id);
+
+        // Online ne détient que 4 100 DH : 5 000 doit être refusé, même si le
+        // tiroir contient bien 10 300 DH en billets.
+        $this->expectException(\Illuminate\Validation\ValidationException::class);
+
+        app(\App\Domain\Finance\Actions\DemanderTransfertCaisse::class)->handle([
+            'caisse_source_id' => $agent->till()->firstOrFail()->id,
+            'caisse_destination_id' => $destinataire->till()->firstOrFail()->id,
+            'montant' => 5000,
+            'date_transfert' => '2026-09-09',
+        ], $agent);
+    }
 }

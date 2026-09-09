@@ -38,7 +38,7 @@ class CaisseTransfer extends Model
         'reference', 'caisse_source_id', 'caisse_destination_id', 'montant',
         'date_transfert', 'solde_source_avant', 'solde_source_apres',
         'solde_dest_avant', 'solde_dest_apres', 'statut', 'note',
-        'requested_by', 'validated_by',
+        'requested_by', 'validated_by', 'etablissement_id',
     ];
 
     /**
@@ -63,6 +63,17 @@ class CaisseTransfer extends Model
         ];
     }
 
+
+    /**
+     * Centre ACTIF du caissier au moment de la demande — le centre dont
+     * l'argent SORT (09/09/2026). Null sur les transferts antérieurs :
+     * la lecture retombe alors sur le centre de la caisse (jamais de
+     * backfill, §11).
+     */
+    public function etablissement(): BelongsTo
+    {
+        return $this->belongsTo(Etablissement::class);
+    }
 
     public function caisseSource(): BelongsTo
     {

@@ -673,6 +673,7 @@
     "Refund updated.": "Remboursement mis à jour.",
     "Refund cancelled.": "Remboursement annulé. La caisse a été recréditée.",
     "The source till only holds :solde MAD — not enough for this :montant MAD transfer. It has moved since the request was filed; cancel it or file a new one for the available amount.": "La caisse source ne contient que :solde MAD — insuffisant pour ce transfert de :montant MAD. Elle a bougé depuis la demande : annulez-la ou refaites-en une pour le montant disponible.",
+    "This center only holds :solde MAD in this till — the rest belongs to other centers.": "Ce centre ne détient que :solde MAD dans cette caisse — le reste appartient à d’autres centres.",
     "This refund has already been cancelled.": "Ce remboursement a déjà été annulé.",
     "This expense has already been cancelled.": "Cette dépense a déjà été annulée.",
     "Only an approved expense can be cancelled — a pending or refused one never debited the till.": "Seule une dépense approuvée peut être annulée — une dépense en attente ou refusée n'a jamais débité la caisse.",

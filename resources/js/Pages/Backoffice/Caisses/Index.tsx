@@ -840,18 +840,22 @@ export default function CaissesIndex({
                         <div className="col-md-6">
                             {/* Read-only live preview of the selected source caisse's balance — informational only, the server independently re-validates. */}
                             <div className="mb-3">
-                                <label className="form-label">Solde du tiroir</label>
+                                <label className="form-label">
+                                    {!editingTransfer && myCaisse?.centreNom
+                                        ? `Solde disponible — ${myCaisse.centreNom}`
+                                        : 'Solde'}
+                                </label>
                                 <div className="input-group">
                                     <input type="text" className="form-control bg-light" readOnly value={soldeSource !== null ? soldeSource.toFixed(2) : ''} />
                                     <span className="input-group-text">DH</span>
                                 </div>
-                                {/* Le tiroir est UN seul stock de billets : il se
-                                    transfère en entier. Cette ligne explique juste
-                                    l'écart avec le solde ventilé affiché ailleurs
-                                    sur l'écran — ce n'est PAS un plafond. */}
-                                {!editingTransfer && myCaisse?.soldeCentre != null && (
+                                {/* On ne transfère que l'argent du centre actif :
+                                    le tiroir est unique mais chaque centre solde
+                                    le sien. Rappeler le total physique évite que
+                                    le plafond paraisse arbitraire. */}
+                                {!editingTransfer && myCaisse?.centreNom && myCaisse?.soldeTiroir != null && (
                                     <small className="text-muted d-block mt-1">
-                                        dont {Number(myCaisse.soldeCentre).toFixed(2)} DH pour {myCaisse.centreNom}
+                                        Tiroir complet : {Number(myCaisse.soldeTiroir).toFixed(2)} DH (autres centres inclus)
                                     </small>
                                 )}
                             </div>

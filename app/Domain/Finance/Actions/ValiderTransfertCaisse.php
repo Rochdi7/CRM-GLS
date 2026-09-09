@@ -116,7 +116,14 @@ final class ValiderTransfertCaisse
                     // Centre dimension (01/09/2026): each leg carries its own
                     // account's centre, so a cross-centre transfer is an
                     // EXPLICIT, journaled centre movement — never a hidden one.
-                    'etablissement_id' => $source->etablissement_id,
+                    // ⚠ La SORTIE porte le centre du TRANSFERT — celui où le
+                    // caissier travaillait (09/09/2026) — et non le centre de
+                    // rattachement de la caisse : une caissière n'a qu'un
+                    // tiroir mais encaisse pour plusieurs centres, et l'argent
+                    // sort du centre qui l'avait encaissé. Repli sur le centre
+                    // de la caisse pour les transferts antérieurs à la colonne
+                    // (jamais de backfill, §11).
+                    'etablissement_id' => $transfer->etablissement_id ?? $source->etablissement_id,
                 ],
             );
 

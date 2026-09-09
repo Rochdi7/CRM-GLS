@@ -98,31 +98,32 @@ final class CaisseController extends Controller
             : null;
 
         return Inertia::render('Backoffice/Caisses/Index', [
-            // ⚠ `solde` reste le solde ENTIER, jamais ventilé — contrairement
-            // aux écrans de LECTURE (VentilationCentre). Un transfert déplace
-            // de l'argent PHYSIQUE, et un tiroir est un seul stock de billets :
-            // DemanderTransfertCaisse / ValiderTransfertCaisse valident contre
-            // `caisses.solde` en entier. Plafonner ici à la part d'un centre
-            // rendrait intransférables des billets réellement détenus (le
-            // modèle « une caisse par employé, à vie » — §11, multi-caisses
-            // REJETÉ le 01/09/2026 — n'a pas de poches par centre).
-            // `soldeCentre` ci-dessous n'est donc PAS une limite : c'est le
-            // détail qui explique l'écart avec le reste de l'écran.
+            // ⚠ `solde` est le montant TRANSFÉRABLE, c'est-à-dire la part du
+            // CENTRE ACTIF (09/09/2026) — plus le tiroir entier. Une caissière
+            // n'a qu'un tiroir mais encaisse pour plusieurs centres (§11) :
+            // proposer les 72 740,00 DH du tiroir alors que l'écran annonce
+            // 1 300,00 DH pour le centre actif laissait vider Casablanca en
+            // puisant dans l'argent de Kénitra, et la part d'un centre pouvait
+            // devenir négative. Le plafond est rejoué côté serveur par
+            // DemanderTransfertCaisse — ce prop ne fait que l'afficher (§5).
+            // Sur « Tous les centres » (super-admin) rien n'est ventilé : le
+            // tiroir entier reste disponible.
             'myCaisse' => $myCaisse !== null ? [
                 'id' => $myCaisse->id,
                 'nom' => $myCaisse->nom,
-                'solde' => number_format((float) $myCaisse->solde, 2, '.', ''),
-                // Part du CENTRE ACTIF dans ce même tiroir, affichée SOUS le
-                // solde entier (09/09/2026). Le tiroir reste transférable en
-                // entier — c'est de l'argent physique — mais sans cette ligne
-                // le modal proposait 72 740,00 DH juste à côté d'un écran qui
-                // annonçait 1 300,00 DH pour le centre actif, sans rien pour
-                // expliquer l'écart : l'utilisateur ne pouvait que conclure au
-                // bug. `null` sur « Tous les centres » : il n'y a alors rien à
-                // ventiler, le solde entier EST la réponse.
-                'soldeCentre' => $context->isAllCenters()
-                    ? null
-                    : number_format($ventilation->soldeDuCentre($myCaisse, $context->etablissementId()), 2, '.', ''),
+                // Même calcul que le plafond serveur (VentilationCentre) : le
+                // modal ne doit jamais proposer un montant que
+                // DemanderTransfertCaisse refusera ensuite.
+                'solde' => number_format(
+                    $ventilation->plafondTransfert($myCaisse, $context->etablissementId()),
+                    2,
+                    '.',
+                    '',
+                ),
+                // Le solde physique du tiroir, affiché en second : le caissier
+                // doit pouvoir rapprocher ce qu'il a en main de ce qu'il peut
+                // transférer, sinon le plafond paraît arbitraire.
+                'soldeTiroir' => number_format((float) $myCaisse->solde, 2, '.', ''),
                 'centreNom' => $context->isAllCenters()
                     ? null
                     : $context->etablissement()?->nom_centre,

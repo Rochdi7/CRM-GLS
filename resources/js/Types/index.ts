@@ -1620,14 +1620,13 @@ export interface CaisseTransferRow {
 }
 
 export interface CaisseTransferFormOption extends FinanceOption {
-    /** Solde ENTIER du tiroir — ce qui est réellement transférable. */
-    solde: MoneyDisplay;
     /**
-     * Part du centre actif dans ce tiroir, pour affichage seulement —
-     * jamais une limite de transfert (l'argent physique est indivisible).
-     * `null`/absent sur « Tous les centres » : rien à ventiler.
+     * Montant TRANSFÉRABLE : la part du centre actif, ou le tiroir entier
+     * sur « Tous les centres ». Plafond rejoué côté serveur (§5).
      */
-    soldeCentre?: MoneyDisplay | null;
+    solde: MoneyDisplay;
+    /** Solde physique du tiroir, tous centres confondus (affichage). */
+    soldeTiroir?: MoneyDisplay | null;
     centreNom?: string | null;
 }
 
