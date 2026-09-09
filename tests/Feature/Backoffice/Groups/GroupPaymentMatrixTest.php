@@ -218,6 +218,33 @@ final class GroupPaymentMatrixTest extends TestCase
         $this->assertSame('1300.00', $cells[(string) $this->frais['avril']->id]['reste']);
     }
 
+    public function test_a_fee_line_note_reaches_its_cell_for_the_tooltip(): void
+    {
+        $inscription = $this->enrol('Khaoula', 'El Hadim');
+
+        $this->addFee($inscription, 'mars', 1300, 1000)->update(['note' => 'blocage carte']);
+        // An empty / whitespace note must not reach the tooltip as an empty line.
+        $this->addFee($inscription, 'avril', 1300, 0)->update(['note' => '   ']);
+
+        $cells = $this->matrix()['rows'][0]['cells'];
+
+        $this->assertSame('blocage carte', $cells[(string) $this->frais['mars']->id]['note']);
+        $this->assertNull($cells[(string) $this->frais['avril']->id]['note']);
+    }
+
+    public function test_a_retired_fee_keeps_its_note_for_the_grey_cell(): void
+    {
+        $inscription = $this->enrol('Khaoula', 'Retiree');
+
+        $this->addFee($inscription, 'mars', 1300, 0)->update(['note' => 'reporté au groupe suivant', 'masque_le' => now()]);
+        $this->addFee($inscription, 'avril', 1300, 0)->update(['note' => '  ', 'masque_le' => now()]);
+
+        $row = $this->matrix()['rows'][0];
+
+        $this->assertArrayNotHasKey((string) $this->frais['mars']->id, $row['cells'], 'A retired fee still has no cell.');
+        $this->assertSame(['' . $this->frais['mars']->id => 'reporté au groupe suivant'], $row['notesMasquees']);
+    }
+
     public function test_a_fee_not_on_the_inscription_has_no_cell_at_all(): void
     {
         $inscription = $this->enrol('Chaimae', 'Bammadi');

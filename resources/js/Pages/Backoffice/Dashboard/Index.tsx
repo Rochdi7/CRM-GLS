@@ -14,6 +14,8 @@ interface QuickAction {
     href: string;
     /** Shown when the user holds ANY of these — UI convenience only (§5). */
     permissions: string[];
+    /** Hue of the icon disc (0–360) — one colour per action so the row reads as five distinct shortcuts. */
+    hue: number;
 }
 
 /**
@@ -30,11 +32,11 @@ interface QuickAction {
  */
 const QUICK_ACTIONS: QuickAction[] = [
     // No « Nouvel étudiant » here: the page header already carries that button.
-    { label: 'New registration', icon: 'ti-clipboard-plus', href: '/backoffice/inscriptions?nouveau=1', permissions: ['registrations.view'] },
-    { label: 'Record a payment', icon: 'ti-cash', href: '/backoffice/encaissements?nouveau=1', permissions: ['payments.view'] },
-    { label: 'Sessions', icon: 'ti-checklist', href: '/backoffice/seances?nouveau=1', permissions: ['attendance.view'] },
-    { label: 'Timetable', icon: 'ti-calendar-time', href: '/backoffice/emploi-du-temps?nouveau=1', permissions: ['attendance.view'] },
-    { label: 'Groups', icon: 'ti-users-group', href: '/backoffice/groups?nouveau=1', permissions: ['groups.view'] },
+    { label: 'New registration', icon: 'ti-clipboard-plus', href: '/backoffice/inscriptions?nouveau=1', permissions: ['registrations.view'], hue: 210 },
+    { label: 'Record a payment', icon: 'ti-cash', href: '/backoffice/encaissements?nouveau=1', permissions: ['payments.view'], hue: 150 },
+    { label: 'Sessions', icon: 'ti-checklist', href: '/backoffice/seances?nouveau=1', permissions: ['attendance.view'], hue: 35 },
+    { label: 'Timetable', icon: 'ti-calendar-time', href: '/backoffice/emploi-du-temps?nouveau=1', permissions: ['attendance.view'], hue: 275 },
+    { label: 'Groups', icon: 'ti-users-group', href: '/backoffice/groups?nouveau=1', permissions: ['groups.view'], hue: 340 },
 ];
 
 /**
@@ -109,11 +111,11 @@ export default function DashboardIndex({ stats, annualFrais, annualFraisPeriode,
                                     <p className="text-white mb-3 opacity-75">{t('Have a good day at work')}</p>
                                     <div className="d-flex align-items-center flex-wrap gap-2">
                                         <span className="gls-dash-hero-muted">{t('Showing data for')}</span>
-                                        <span className="gls-dash-chip">
+                                        <span className="gls-dash-chip gls-dash-chip-year">
                                             <i className="ti ti-calendar me-1" />
                                             {stats.anneeLabel ?? '—'}
                                         </span>
-                                        <span className="gls-dash-chip">
+                                        <span className="gls-dash-chip gls-dash-chip-centre">
                                             <i className="ti ti-building me-1" />
                                             {stats.centreLabel ?? t('All centers')}
                                         </span>
@@ -125,8 +127,15 @@ export default function DashboardIndex({ stats, annualFrais, annualFraisPeriode,
                                         <p className="gls-dash-hero-muted mb-2">{t('Quick actions')}</p>
                                         <div className="gls-dash-quick-grid">
                                             {quickActions.map((action) => (
-                                                <Link key={action.href} href={action.href} className="gls-dash-quick-btn">
-                                                    <i className={`ti ${action.icon}`} aria-hidden="true" />
+                                                <Link
+                                                    key={action.href}
+                                                    href={action.href}
+                                                    className="gls-dash-quick-btn"
+                                                    style={{ '--qa-h': action.hue } as React.CSSProperties}
+                                                >
+                                                    <span className="gls-dash-quick-icon" aria-hidden="true">
+                                                        <i className={`ti ${action.icon}`} />
+                                                    </span>
                                                     <span>{t(action.label)}</span>
                                                 </Link>
                                             ))}

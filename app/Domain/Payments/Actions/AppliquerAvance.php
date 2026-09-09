@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Domain\Payments\Actions;
 
 use App\Domain\Shared\Support\ReferenceGenerator;
-use App\Models\Encaissement;
 use App\Models\Cheque;
+use App\Models\Encaissement;
 use App\Models\InscriptionFee;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -24,6 +24,24 @@ use Illuminate\Validation\ValidationException;
  * due are both "read then insert" checks, so two concurrent applies (a
  * double-click, two tabs) would otherwise each see the full balance and
  * together spend it twice.
+ *
+ * ⚠ THE APPLICATION ROW INHERITS `caisse_id`, `agent_id` AND
+ * `date_paiement` FROM THE AVANCE — never from the employee doing the
+ * gesture, never from today. The money entered the school ONCE, into ONE
+ * till, on ONE date, under ONE person's responsibility; attaching it to a
+ * fee only re-allocates it. That is why `handle()` takes no agent and no
+ * caisse: there is nothing to choose. Two consequences worth spelling out:
+ *
+ *  - a cashier who applies someone else's avance never sees it land in HER
+ *    till (reported 09/09/2026 on Mouna Zakri — the 200 DH turned out to be
+ *    a NEW payment she had keyed in, not an application, but nothing in the
+ *    test suite proved the rule either way);
+ *  - the legacy import was loaded onto Mohamed Rafik's till, so every
+ *    imported avance stays on HIS till when applied — and still does when a
+ *    detached application row is RE-applied, since that row carries the
+ *    same three fields forward.
+ *
+ * Tests: tests/Feature/Backoffice/Finance/AvanceHeriteCaisseEtAgentTest.php
  */
 final class AppliquerAvance
 {

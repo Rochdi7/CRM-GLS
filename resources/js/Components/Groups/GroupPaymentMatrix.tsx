@@ -77,6 +77,8 @@ function echeanceLine(column: GroupPaymentColumn): string | null {
 interface MatrixTip {
     titre?: string;
     lines: string[];
+    /** The fee line's note — drawn in amber with a pencil icon so it stands out from the figures. */
+    note?: string;
 }
 
 /** Hover tooltip of a money cell (null = nothing to show). */
@@ -90,6 +92,12 @@ function cellTip(cell: GroupPaymentCell, column: GroupPaymentColumn): MatrixTip 
     const echeance = echeanceLine(column);
     if (echeance) {
         lines.push(echeance);
+    }
+
+    // The fee line's own note — the one field of the inscription modal a
+    // cashier cannot otherwise see from the matrix.
+    if (cell.note) {
+        return { lines, note: cell.note };
     }
 
     return lines.length > 0 ? { lines } : null;
@@ -193,6 +201,17 @@ function useMatrixTooltip() {
             const div = document.createElement('div');
             div.textContent = line;
             el.appendChild(div);
+        }
+
+        if (tip.note) {
+            const note = document.createElement('div');
+            note.className = 'gls-matrix-tooltip__note';
+            const icon = document.createElement('i');
+            icon.className = 'ti ti-pencil';
+            icon.setAttribute('aria-hidden', 'true');
+            note.appendChild(icon);
+            note.appendChild(document.createTextNode(tip.note));
+            el.appendChild(note);
         }
 
         // The arrow is part of the box, so it has to be re-appended after the
@@ -378,7 +397,11 @@ function MatrixBody({ matrix, loading }: { matrix: GroupPaymentMatrix | null; lo
                                                 <td
                                                     key={column.key}
                                                     style={{ ...MONEY_CELL_STYLE, background: ABSENT_FILL }}
-                                                    {...bind({ lines: ['Frais non affecté à cet étudiant'] })}
+                                                    {...bind(
+                                                        row.notesMasquees[column.key]
+                                                            ? { lines: ['Frais retiré de cette inscription'], note: row.notesMasquees[column.key] }
+                                                            : { lines: ['Frais non affecté à cet étudiant'] },
+                                                    )}
                                                 />
                                             );
                                         }

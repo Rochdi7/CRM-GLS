@@ -153,6 +153,10 @@ final class AuditLogRegistry
             'authorization' => 'Rôles et permissions',
             // Written by SystemSettingController, not by the Auditable trait.
             'system-settings' => 'Paramètres système',
+            // Written by DatabaseManagementController: raw row writes made
+            // from « Gestion de la base de données », with the row before
+            // and after — Eloquent's Auditable never sees these queries.
+            'database' => 'Gestion de la base de données',
         ];
     }
 

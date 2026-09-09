@@ -443,6 +443,107 @@ Now that HTTPS is live, confirm `.env` has `SESSION_SECURE_COOKIE=true` and
 
 ---
 
+## Step 8b — Sous-domaine des reçus (`recu.…`)
+
+Les reçus PDF envoyés aux étudiants par WhatsApp sortent sur **leur propre
+sous-domaine** au lieu du domaine applicatif : le message contient
+`https://recu.glsinstitut.com/1234?…` et non
+`https://app.glsinstitut.com/recu/1234?…`.
+
+**Pourquoi un sous-domaine plutôt qu'un chemin.** Le lien part chez un
+étudiant, qui le transfère parfois. Un hôte qui ne sert QUE des reçus
+n'expose aucune route authentifiée, aucun cookie de session backoffice, et
+donne à l'étudiant une adresse courte et lisible qui n'invite pas à aller
+fouiller le CRM.
+
+### 1. DNS
+
+Un enregistrement de plus, vers la même machine :
+
+| Type | Name   | Value          | TTL  |
+|------|--------|----------------|------|
+| A    | `recu` | `69.62.111.69` | 3600 |
+
+Vérifier avant d'aller plus loin :
+
+```bash
+nslookup recu.glsinstitut.com
+```
+
+### 2. Nginx — le MÊME bloc serveur
+
+⚠ **Le sous-domaine doit être servi par la même application** (même racine,
+même `APP_KEY`) : la signature d'une URL couvre le host, donc un lien né
+sur `recu.…` n'est vérifiable que par une application qui connaît cette
+clé. On ajoute donc simplement le nom au `server_name` existant — surtout
+pas un second bloc avec une autre racine, ni une redirection :
+
+```nginx
+server_name app.glsinstitut.com recu.glsinstitut.com;
+```
+
+```bash
+nginx -t && systemctl reload nginx
+```
+
+### 3. Certificat
+
+Le certificat doit couvrir les deux noms :
+
+```bash
+certbot --nginx -d app.glsinstitut.com -d recu.glsinstitut.com
+```
+
+(Sur un domaine déjà certifié, la même commande étend le certificat
+existant — répondre « expand » si la question est posée.)
+
+### 4. `.env`
+
+```env
+APP_URL=https://app.glsinstitut.com
+RECU_DOMAIN=recu.glsinstitut.com
+```
+
+Puis, obligatoirement (les routes sont mises en cache) :
+
+```bash
+cd /var/www/crm-gls
+php8.4 artisan config:clear && php8.4 artisan route:clear
+php8.4 artisan config:cache && php8.4 artisan route:cache
+```
+
+`RECU_DOMAIN` **vide ou absent** = comportement historique : les reçus
+restent sur `APP_URL` aux chemins `/recu/{id}` et `/recu-groupe`. C'est le
+mode local, et le repli si le DNS n'est pas encore en place.
+
+### 5. Vérifier
+
+```bash
+php8.4 artisan route:list --name=recu
+```
+
+Il doit y avoir **exactement deux** routes frontoffice, toutes deux préfixées
+du sous-domaine :
+
+```
+GET|HEAD  recu.glsinstitut.com/groupe          frontoffice.recu-groupe
+GET|HEAD  recu.glsinstitut.com/{encaissement}  frontoffice.recu
+```
+
+Puis envoyer un vrai reçu par WhatsApp depuis Gestion des paiements et
+ouvrir le lien : le PDF doit se télécharger, et l'adresse rester sur
+`recu.…`.
+
+⚠ **La bascule invalide les liens déjà envoyés** (7 jours de validité au
+maximum) : l'ancien chemin `/recu/{id}` n'existe plus sur `APP_URL`. C'est
+délibéré — garder les deux formes créerait deux routes atteignables par la
+même requête, dont une vérifiant la signature contre le mauvais host. Choisir
+un jour creux, ou renvoyer le reçu aux étudiants qui réclament.
+
+Tests : `tests/Feature/Frontoffice/RecuSousDomaineTest.php`.
+
+---
+
 ## Step 9 — Migrate and seed the database
 
 The demo seeders that used to make a bare `db:seed` dangerous

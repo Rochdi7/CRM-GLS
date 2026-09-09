@@ -91,7 +91,15 @@ final class RecuWhatsAppLink
         ];
     }
 
-    /** URL signée et expirante du PDF — la seule façon de le publier. */
+    /**
+     * URL signée et expirante du PDF — la seule façon de le publier.
+     *
+     * ⚠ L'hôte sort de la route nommée, jamais d'une réécriture : en
+     * production `frontoffice.recu` est déclarée sous `Route::domain(
+     * config('app.recu_domain'))` (routes/frontoffice.php), donc le lien
+     * naît déjà sur `recu.glsinstitut.com` et la signature couvre ce host.
+     * Remplacer le domaine dans la chaîne après coup casserait la signature.
+     */
     public function pdfUrl(Encaissement $encaissement): string
     {
         return URL::temporarySignedRoute(
@@ -132,7 +140,15 @@ final class RecuWhatsAppLink
      */
     public function pdfUrlIsPubliclyReachable(): bool
     {
-        $host = parse_url((string) config('app.url'), PHP_URL_HOST);
+        // On teste l'hôte qui apparaîtra RÉELLEMENT dans le lien : quand
+        // `RECU_DOMAIN` est défini, les reçus sortent sur le sous-domaine et
+        // c'est LUI qui doit être joignable, pas APP_URL. Sans la variable,
+        // les reçus restent sur APP_URL — le garde porte alors sur elle.
+        $recuDomain = config('app.recu_domain');
+
+        $host = is_string($recuDomain) && $recuDomain !== ''
+            ? $recuDomain
+            : parse_url((string) config('app.url'), PHP_URL_HOST);
 
         if (! is_string($host) || $host === '') {
             return false;

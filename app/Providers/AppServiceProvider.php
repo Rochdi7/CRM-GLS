@@ -80,6 +80,9 @@ class AppServiceProvider extends ServiceProvider
     private const MAINTAINER_ONLY_ABILITIES = [
         // Réconciliation des paiements importés (paiements:reconcilier).
         'legacy-payments.reconcile',
+        // Gestion de la base de données (/backoffice/database-management) :
+        // écrit directement dans les tables, hors de tout invariant.
+        'database.manage',
     ];
 
     /**

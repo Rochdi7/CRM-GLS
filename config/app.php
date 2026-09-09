@@ -56,6 +56,53 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Receipt Domain (sous-domaine des reçus étudiants)
+    |--------------------------------------------------------------------------
+    |
+    | Sous-domaine public qui sert UNIQUEMENT les reçus PDF envoyés à
+    | l'étudiant par WhatsApp (production : `recu.glsinstitut.com`). Le
+    | backoffice reste sur APP_URL : ce domaine-ci ne porte aucune route
+    | authentifiée, c'est tout son intérêt — un lien transféré n'expose que
+    | le document signé, jamais une porte vers le CRM.
+    |
+    | ⚠ La signature d'une URL couvre le HOST autant que le chemin, donc ce
+    | domaine doit être servi par la MÊME application (même APP_KEY, même
+    | racine nginx) via `Route::domain()`. Ne jamais réécrire l'hôte dans la
+    | chaîne après génération : la signature ne correspondrait plus et chaque
+    | reçu répondrait 403.
+    |
+    | Laissé vide, les reçus restent sur APP_URL avec leurs chemins
+    | historiques — c'est le comportement local et le repli tant que le DNS
+    | n'est pas en place.
+    |
+    */
+
+    'recu_domain' => env('RECU_DOMAIN'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Receipt Domain (reçus étudiants)
+    |--------------------------------------------------------------------------
+    |
+    | Sous-domaine public qui sert UNIQUEMENT les reçus PDF envoyés à
+    | l'étudiant par WhatsApp (`recu.glsinstitut.com`). Le backoffice reste
+    | sur APP_URL : ce domaine-ci ne porte aucune route authentifiée, c'est
+    | son intérêt — un lien transféré n'expose que le document signé.
+    |
+    | ⚠ La signature d'une URL couvre le HOST autant que le chemin, donc ce
+    | domaine doit être servi par la MÊME application (même APP_KEY, même
+    | racine nginx) : `Route::domain()` sur les routes reçu, pas une
+    | redirection ni une réécriture de chaîne après coup, qui invaliderait
+    | la signature. Laissé vide (null), les reçus restent sur APP_URL —
+    | c'est le comportement local et le repli si le DNS n'est pas encore
+    | en place.
+    |
+    */
+
+    'recu_domain' => env('RECU_DOMAIN'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

@@ -713,6 +713,35 @@ the database layer. Non-negotiable invariants already enforced in code:
   `php artisan inscriptions:liberer-paiements-frais-masques` (dry-run par
   défaut, `--apply`). Tests :
   `tests/Feature/Backoffice/Inscriptions/InscriptionFeeVisibilityTest.php`.
+- **⚠ Un groupe qui passe TERMINAL clôture ses inscriptions** (09/09/2026).
+  « Fin de formation » comme « Annulée » déclenchent
+  `Groups\Actions\CloturerInscriptionsGroupe`, dans la MÊME transaction que
+  la transition : chaque inscription encore `Active` passe `Annulée` avec le
+  motif système `MotifAnnulation::MOTIF_CLOTURE_GROUPE`, ses lignes de frais
+  **n'ayant reçu aucun encaissement** sont MASQUÉES (`masque_le`,
+  `MASQUE_ORIGINE_GROUPE` — jamais supprimées) et `montant_total` est
+  recalculé sur les lignes visibles. C'est le pendant à l'ÉCRITURE du filtre
+  `Active` du recouvrement (règle suivante) : sans lui, un groupe clos
+  laissait le front office réclamer des frais que plus personne ne doit.
+  Trois bornes indissociables : (1) **une ligne qui a reçu le moindre
+  dirham n'est jamais masquée** — « Payé » comme « Payé partiellement » ; le
+  critère est `whereDoesntHave('encaissements')`, pas le statut (un statut
+  dérive, un encaissement non), et un reste dû sur une prestation commencée
+  s'annule par un remboursement, pas en effaçant la créance ; par
+  construction aucun frais masqué ici ne porte d'argent, donc la règle
+  « retirer un frais payé libère son argent en avance » est sans objet et
+  `caisses.solde` n'est ni lu ni écrit ; (2) **un frais du catalogue du
+  groupe (`group_frais`) n'est détaché que si AUCUN étudiant du groupe ne
+  l'a payé** — le test porte sur toutes les inscriptions du groupe quel que
+  soit leur statut, car détacher un frais portant de l'argent rendrait son
+  montant de référence (le pivot) introuvable ; (3) **les trois chemins de
+  clôture partagent la cascade** — `GroupController@archive`, `@annuler` et
+  `transitionnerStatut()` (« Déplacer vers une autre année ») ; n'en câbler
+  qu'un ferait dépendre le sort des dossiers de l'écran emprunté. Rouvrir le
+  groupe (`groups.reopen`) ne défait RIEN : les inscriptions se réactivent
+  une par une et un frais masqué se restaure depuis la corbeille — ré-ouvrir
+  des créances en masse serait une décision monétaire prise en silence.
+  Tests : `tests/Feature/Backoffice/Groups/GroupClotureCascadeTest.php`.
 - **⚠ Le recouvrement ne poursuit QUE les inscriptions `Active`.**
   « Gestion des recouvrements » (`GetRetardsList`) est un miroir des frais
   échus non soldés, et un dossier **Annulée / Changement / Expirée /
@@ -1187,6 +1216,28 @@ keeps the primary column stable when an edit merely adds a center. Enforcing
   statut terminal passe UNIQUEMENT par `reopen`. Le prop
   `canEditClosedGroups` ne dessine que le bouton (§5). Tests :
   `tests/Feature/Backoffice/Groups/GroupUpdateClosedTest.php`.
+- **⚠ « Gestion de la base de données » est réservée au SEUL compte de
+  maintenance** (09/09/2026, `/backoffice/database-management`,
+  `DatabaseManagementController` + `App\Support\Database\DatabaseBrowser`).
+  Explorateur de tables piloté par des boutons — liste des tables, parcours
+  paginé/recherché (ILIKE sur toutes les colonnes)/trié, ajout, modification,
+  suppression d'une ligne, vidage d'une table (nom à retaper) et export CSV
+  — sans jamais saisir de SQL. Il écrit DIRECTEMENT dans les tables, hors
+  de toute action Domain, de tout observer et de tout invariant monétaire
+  (§11) : outil de réparation, pas écran d'exploitation. Trois règles :
+  (1) l'accès est une IDENTITÉ (`HiddenAccount::EMAIL` seul, ability
+  `database.manage` dans `AppServiceProvider::MAINTAINER_ONLY_ABILITIES`,
+  décidée AU-DESSUS du bypass super-admin — le CEO reçoit 403), rejouée par
+  le middleware `can:`, le contrôleur et chaque Form Request ; (2) chaque
+  écriture est journalisée sous le log `database` avec la ligne AVANT et
+  APRÈS dans la même transaction — `Auditable` ne voit pas ces requêtes,
+  c'est la seule trace ; (3) `activity_log` et `migrations` sont en LECTURE
+  SEULE (`DatabaseBrowser::READ_ONLY_TABLES`) : le journal est append-only
+  au niveau modèle et cet outil contourne Eloquent, il doit donc refuser
+  lui-même. Hors de la barre latérale, comme les deux autres outils de
+  maintenance — et ce n'est pas ce qui le protège. Tests :
+  `tests/Feature/Backoffice/Access/DatabaseManagementAccessTest.php`,
+  `tests/Feature/Backoffice/Maintenance/DatabaseManagementTest.php`.
 - **⚠ Only super-admin deletes.** `PermissionRegistry::superAdminOnly()`
   lists what no role preset may hold, and `matrix()` FILTERS every preset
   through it — so writing a `*.delete` into a preset has no effect, and a

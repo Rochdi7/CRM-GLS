@@ -15,6 +15,7 @@ use App\Http\Controllers\Backoffice\ChequeController;
 use App\Http\Controllers\Backoffice\ContextController;
 use App\Http\Controllers\Backoffice\CreneauController;
 use App\Http\Controllers\Backoffice\DashboardController;
+use App\Http\Controllers\Backoffice\DatabaseManagementController;
 use App\Http\Controllers\Backoffice\DepenseController;
 use App\Http\Controllers\Backoffice\Employees\EmployeeController;
 use App\Http\Controllers\Backoffice\EncaissementController;
@@ -570,6 +571,31 @@ Route::prefix('backoffice')
                 ->middleware('can:legacy-payments.reconcile')->name('reconciliation-paiements.index');
             Route::post('reconciliation-paiements', [LegacyReconciliationController::class, 'run'])
                 ->middleware('can:legacy-payments.reconcile')->name('reconciliation-paiements.run');
+
+            // Gestion de la base de donnees — explorateur de tables pilote par
+            // des boutons (liste, parcours, ajout, modification, suppression,
+            // vidage, export CSV) sans jamais saisir de SQL
+            // (App\Support\Database\DatabaseBrowser).
+            //
+            // ⚠ RESERVE AU COMPTE DE MAINTENANCE — identite, pas permission,
+            // accordable a personne (AppServiceProvider::MAINTAINER_ONLY_
+            // ABILITIES, decidee AU-DESSUS du bypass super-admin). L'outil
+            // ecrit directement dans les tables en contournant toute action
+            // Domain et tout invariant monetaire : outil de reparation, pas
+            // ecran d'exploitation. Hors de la barre laterale, comme les
+            // deux outils ci-dessus — et ce n'est pas ce qui le protege.
+            // `activity_log` y est en lecture seule (journal append-only).
+            Route::prefix('database-management')->name('database-management.')
+                ->middleware('can:'.DatabaseManagementController::ABILITY)
+                ->group(function (): void {
+                    Route::get('/', [DatabaseManagementController::class, 'index'])->name('index');
+                    Route::get('{table}', [DatabaseManagementController::class, 'show'])->name('show');
+                    Route::get('{table}/export', [DatabaseManagementController::class, 'export'])->name('export');
+                    Route::post('{table}/rows', [DatabaseManagementController::class, 'store'])->name('rows.store');
+                    Route::put('{table}/rows', [DatabaseManagementController::class, 'update'])->name('rows.update');
+                    Route::delete('{table}/rows', [DatabaseManagementController::class, 'destroy'])->name('rows.destroy');
+                    Route::post('{table}/truncate', [DatabaseManagementController::class, 'truncate'])->name('truncate');
+                });
 
             // Gestion des recouvrements — read-only overdue-fees report
             // (GetRetardsList). Two client-side tabs ("Retards selon la

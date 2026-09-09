@@ -58,6 +58,13 @@ class MotifAnnulation extends Model
     /** The system reason written by the "Changement de groupe" flow. */
     public const MOTIF_CHANGEMENT_GROUPE = 'Changement de groupe';
 
+    /**
+     * The system reason written on every registration cancelled in cascade
+     * when its group reaches a terminal status — see
+     * Domain\Groups\Actions\CloturerInscriptionsGroupe (09/09/2026).
+     */
+    public const MOTIF_CLOTURE_GROUPE = 'Clôture du groupe';
+
     protected $fillable = ['nom', 'is_system', 'portee', 'statut'];
 
     /**

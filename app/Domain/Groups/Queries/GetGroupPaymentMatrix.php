@@ -81,7 +81,19 @@ final class GetGroupPaymentMatrix
             ->get()
             ->groupBy('inscription_id');
 
-        $rows = $this->rows($inscriptions, $feesByInscription, $columnKeys);
+        // A fee RETIRED from an inscription (masque_le set) leaves no cell —
+        // nothing is due any more — but the note typed on it is still the
+        // cashier's explanation of WHY (« bloqué », « reporté »…). It rides
+        // per row, keyed by frais, so the grey cell can show it on hover.
+        $notesMasquees = InscriptionFee::query()
+            ->whereIn('inscription_id', $inscriptions->pluck('id'))
+            ->whereNotNull('masque_le')
+            ->whereNotNull('frais_id')
+            ->whereRaw("btrim(note) <> ''")
+            ->get(['inscription_id', 'frais_id', 'note'])
+            ->groupBy('inscription_id');
+
+        $rows = $this->rows($inscriptions, $feesByInscription, $columnKeys, $notesMasquees);
         $rows = $this->sortRows($rows, $sort);
 
         // Renumber AFTER sorting so #1 is always the first visible line.
@@ -152,12 +164,13 @@ final class GetGroupPaymentMatrix
      * @param  Collection<int, Inscription>  $inscriptions
      * @param  Collection<int, Collection<int, InscriptionFee>>  $feesByInscription
      * @param  list<string>  $columnKeys
+     * @param  Collection<int, Collection<int, InscriptionFee>>  $notesMasquees  retired fee lines that carry a note, by inscription
      * @return list<array<string, mixed>>
      */
-    private function rows(Collection $inscriptions, Collection $feesByInscription, array $columnKeys): array
+    private function rows(Collection $inscriptions, Collection $feesByInscription, array $columnKeys, Collection $notesMasquees): array
     {
         return $inscriptions
-            ->map(function (Inscription $inscription) use ($feesByInscription, $columnKeys): array {
+            ->map(function (Inscription $inscription) use ($feesByInscription, $columnKeys, $notesMasquees): array {
                 $cells = [];
                 $total = 0.0;
                 $reste = 0.0;
@@ -181,11 +194,18 @@ final class GetGroupPaymentMatrix
                         continue;
                     }
 
+                    // The note typed on the fee line in the inscription modal
+                    // (« blocage », « à régler en 2 fois »…) — shown in the
+                    // cell tooltip, so the cashier reads it where they look
+                    // for the money instead of reopening the inscription.
+                    $note = trim((string) $fee->note) !== '' ? trim((string) $fee->note) : null;
+
                     // Two lines for the same fee on one inscription should not
                     // happen, but if they do, merge rather than drop.
                     if (isset($cells[$key])) {
                         $du += (float) $cells[$key]['du'];
                         $paye += (float) $cells[$key]['montant'];
+                        $note = implode(' · ', array_filter([$cells[$key]['note'], $note])) ?: null;
                     }
 
                     $restant = max(0.0, $du - $paye);
@@ -195,6 +215,7 @@ final class GetGroupPaymentMatrix
                         'montant' => $this->money($paye),
                         'du' => $this->money($du),
                         'reste' => $this->money($restant),
+                        'note' => $note,
                     ];
                 }
 
@@ -226,6 +247,10 @@ final class GetGroupPaymentMatrix
                     // already had, so this is the enrollment note as a whole —
                     // shown as-is, never parsed apart.
                     'note' => $inscription->note,
+                    'notesMasquees' => $notesMasquees->get($inscription->id, collect())
+                        ->filter(fn (InscriptionFee $fee) => in_array((string) $fee->frais_id, $columnKeys, true))
+                        ->mapWithKeys(fn (InscriptionFee $fee) => [(string) $fee->frais_id => trim((string) $fee->note)])
+                        ->all(),
                     'dateInscription' => $inscription->date_inscription?->format('d/m/Y'),
                     'dateInscriptionIso' => $inscription->date_inscription?->format('Y-m-d'),
                     'total' => $this->money($total),

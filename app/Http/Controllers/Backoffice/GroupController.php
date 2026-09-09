@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Groups\Actions\ChangerEnseignantGroupe;
+use App\Domain\Groups\Actions\CloturerInscriptionsGroupe;
 use App\Domain\Groups\Actions\ReaffecterGroupeVersAnnee;
 use App\Domain\Groups\Actions\RetirerFraisGroupe;
 use App\Domain\Groups\Actions\SupprimerGroupe;
@@ -477,6 +478,12 @@ final class GroupController extends Controller
      */
     private function transitionnerStatut(Group $group, string $cible, ?\App\Models\Employee $par): void
     {
+        // Un statut terminal clôture les inscriptions du groupe (09/09/2026,
+        // CloturerInscriptionsGroupe) — ici aussi, pas seulement depuis les
+        // boutons « Terminer » / « Annuler » de la liste : sinon le même
+        // groupe finit clos avec ou sans ses dossiers ouverts selon l'écran
+        // emprunté.
+
         // « Fin de formation » reste fermé ICI, pour tout le monde.
         //
         // La réouverture existe depuis le 01/09/2026, mais elle a son propre
@@ -494,8 +501,8 @@ final class GroupController extends Controller
         }
 
         match ($cible) {
-            Group::STATUT_FIN_FORMATION => $group->archiverCommeTermine($par),
-            Group::STATUT_ANNULEE => $group->annuler($par),
+            Group::STATUT_FIN_FORMATION => $this->cloturer($group, fn () => $group->archiverCommeTermine($par)),
+            Group::STATUT_ANNULEE => $this->cloturer($group, fn () => $group->annuler($par)),
             Group::STATUT_EN_INSCRIPTION => $group->statut === Group::STATUT_ANNULEE
                 ? $group->reactiver()
                 : $group->retournerEnInscription(),
@@ -509,6 +516,57 @@ final class GroupController extends Controller
         };
     }
 
+    /**
+     * Passage d'un groupe dans un statut TERMINAL — « Fin de formation » ou
+     * « Annulée » — avec la clôture en cascade de ses inscriptions
+     * (09/09/2026, Domain\Groups\Actions\CloturerInscriptionsGroupe).
+     *
+     * Les deux moitiés vivent dans UNE transaction : un groupe ne doit
+     * jamais se retrouver clos alors que ses inscriptions sont restées
+     * « Active » (le recouvrement réclamerait des frais que plus personne ne
+     * doit), ni l'inverse.
+     *
+     * ⚠ La cascade tourne AVANT la transition, tant que le groupe est encore
+     * actif : elle ne lit que `date_fin_formation`, et
+     * archiverCommeTermine() écrit `nombre_etudiants_final` dans le snapshot
+     * groups_historique — l'ordre inverse ne changerait pas ce compte
+     * (les inscriptions sont annulées, jamais supprimées), mais garde la
+     * cascade indépendante de ce que la transition réécrit.
+     *
+     * @param  \Closure(): void  $transition  archiverCommeTermine() ou annuler()
+     * @return array{inscriptionsAnnulees: int, feesMasques: int, fraisDetaches: int}
+     */
+    private function cloturer(Group $group, \Closure $transition): array
+    {
+        return DB::transaction(function () use ($group, $transition): array {
+            $resultat = app(CloturerInscriptionsGroupe::class)->handle($group);
+
+            $transition();
+
+            return $resultat;
+        });
+    }
+
+    /**
+     * Message de succès annonçant ce que la clôture a réellement retiré —
+     * annuler des dossiers et masquer des créances ne doit jamais être
+     * silencieux (CLAUDE.md §11, « signaler plutôt que masquer »).
+     *
+     * @param  array{inscriptionsAnnulees: int, feesMasques: int, fraisDetaches: int}  $resultat
+     */
+    private function messageCloture(string $base, array $resultat): string
+    {
+        if ($resultat['inscriptionsAnnulees'] === 0) {
+            return $base;
+        }
+
+        return $base.' '.__(':inscriptions registration(s) cancelled, :fees unpaid fee line(s) removed, :frais fee(s) detached from the group.', [
+            'inscriptions' => $resultat['inscriptionsAnnulees'],
+            'fees' => $resultat['feesMasques'],
+            'frais' => $resultat['fraisDetaches'],
+        ]);
+    }
+
     public function archive(Request $request, Group $group): RedirectResponse
     {
         $this->authorize('archive', $group);
@@ -518,10 +576,11 @@ final class GroupController extends Controller
             return back();
         }
 
-        $group->archiverCommeTermine($request->user()?->employee);
+        $employee = $request->user()?->employee;
+        $resultat = $this->cloturer($group, fn () => $group->archiverCommeTermine($employee));
 
         return redirect()->route('backoffice.groups.show', $group)
-            ->with('success', __('Group archived (Fin de formation).'));
+            ->with('success', $this->messageCloture(__('Group archived (Fin de formation).'), $resultat));
     }
 
     /**
@@ -577,10 +636,11 @@ final class GroupController extends Controller
             return back();
         }
 
-        $group->annuler($request->user()?->employee);
+        $employee = $request->user()?->employee;
+        $resultat = $this->cloturer($group, fn () => $group->annuler($employee));
 
         return redirect()->route('backoffice.groups.index')
-            ->with('success', __('Group cancelled.'));
+            ->with('success', $this->messageCloture(__('Group cancelled.'), $resultat));
     }
 
     /**

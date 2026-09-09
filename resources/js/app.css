@@ -835,27 +835,29 @@ html[data-theme='dark'] .gls-frais-chart {
     transform: translate(8px, 0);
     background: #1b1632;
     color: #fff;
-    border-radius: 8px;
-    padding: 10px 12px;
-    font-size: 12px;
-    min-width: 190px;
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 14px;
+    min-width: 250px;
     pointer-events: none;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
     z-index: 2;
 }
 .gls-frais-tooltip-header {
     font-weight: 600;
-    margin-bottom: 6px;
+    font-size: 15px;
+    margin-bottom: 8px;
 }
 .gls-frais-tooltip-row {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
+    line-height: 1.7;
     white-space: nowrap;
 }
 .gls-frais-tooltip-dot {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
     display: inline-block;
     flex-shrink: 0;
@@ -865,7 +867,15 @@ html[data-theme='dark'] .gls-frais-chart {
 }
 .gls-frais-tooltip-value {
     margin-left: auto;
+    padding-left: 16px;
     font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.gls-frais-tooltip-value small {
+    margin-left: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    color: #c3c2b7;
 }
 
 /*
@@ -1611,6 +1621,29 @@ html[data-theme='dark'] .gls-payment-matrix > :not(caption) > * > * {
 /* Speech-bubble arrow. Positioned by the component (it tracks the hovered
    cell's centre, not the box's, since the box can be pushed sideways to stay
    on screen) and flipped to the top edge when the box sits above the cell. */
+/* The fee-line note: amber on the dark box, with a pencil, so it is the
+ * first thing the eye lands on — it is the human explanation behind the
+ * figures above it. */
+.gls-matrix-tooltip__note {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 6px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: rgba(255, 193, 7, 0.16);
+    border-left: 3px solid #ffc107;
+    color: #ffd75e;
+    font-weight: 600;
+    text-align: left;
+    white-space: normal;
+    max-width: 260px;
+}
+.gls-matrix-tooltip__note i {
+    font-size: 14px;
+    margin-top: 1px;
+    flex-shrink: 0;
+}
 .gls-matrix-tooltip__arrow {
     position: absolute;
     top: 100%;
@@ -2213,6 +2246,11 @@ html[data-theme='dark'] .card-body .border-top p {
  * beside the calendar, and legend pills on the chart.
  * Every colour has a html[data-theme='dark'] twin at the end of the block.
  * ------------------------------------------------------------------------- */
+/* Navy → indigo → primary blue, so the hero reads as the brand band rather
+ * than a flat dark slab; the theme's overlay shapes stay on top of it. */
+.gls-dash-hero.bg-dark {
+    background: linear-gradient(120deg, #17203f 0%, #23306e 45%, #3d5ee1 100%) !important;
+}
 .gls-dash-hero .card-body {
     padding: 24px 28px;
 }
@@ -2250,6 +2288,16 @@ html[data-theme='dark'] .card-body .border-top p {
     font-weight: 500;
     white-space: nowrap;
 }
+.gls-dash-chip-year {
+    background: rgba(143, 163, 255, 0.22);
+    border-color: rgba(143, 163, 255, 0.45);
+    color: #dfe6ff;
+}
+.gls-dash-chip-centre {
+    background: rgba(63, 184, 174, 0.22);
+    border-color: rgba(63, 184, 174, 0.5);
+    color: #d6f5f2;
+}
 .gls-dash-quick {
     flex: 1 1 560px;
     max-width: 760px;
@@ -2278,12 +2326,29 @@ html[data-theme='dark'] .card-body .border-top p {
     line-height: 1.2;
     transition: background-color 0.15s ease, transform 0.15s ease;
 }
+.gls-dash-quick-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: hsl(var(--qa-h) 80% 62% / 0.22);
+    color: hsl(var(--qa-h) 90% 78%);
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
 .gls-dash-quick-btn i {
     font-size: 20px;
 }
+.gls-dash-quick-btn:hover .gls-dash-quick-icon,
+.gls-dash-quick-btn:focus-visible .gls-dash-quick-icon {
+    background: hsl(var(--qa-h) 80% 60%);
+    color: #fff;
+}
 .gls-dash-quick-btn:hover,
 .gls-dash-quick-btn:focus-visible {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.16);
+    border-color: rgba(255, 255, 255, 0.3);
     color: #fff;
     transform: translateY(-1px);
 }
@@ -2728,16 +2793,18 @@ html[data-theme='dark'] .gls-frais-legend-pill {
 .gls-tl-col.is-today {
     background-color: #f7f9ff;
 }
-/* Current-time marker — drawn BEHIND the cards (z-index 0 against their 1),
- * so it shows in the free space and at the column edges but never slashes
- * through a slot's text. */
+/* Current-time marker — ABOVE the cards (a slot in progress is exactly
+ * where the eye looks for it), drawn as a light overlay: a translucent
+ * line with a soft glow and a pill for the time, so it reads as a marker
+ * laid over the card rather than a cut through its text. */
 .gls-tl-now {
     position: absolute;
     left: 0;
     right: 0;
     height: 0;
-    border-top: 2px solid #e82646;
-    z-index: 0;
+    border-top: 2px solid rgba(232, 38, 70, 0.75);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6), 0 0 6px rgba(232, 38, 70, 0.35);
+    z-index: 3;
     pointer-events: none;
 }
 .gls-tl-now::before {
@@ -2749,14 +2816,20 @@ html[data-theme='dark'] .gls-frais-legend-pill {
     height: 10px;
     border-radius: 50%;
     background: #e82646;
+    box-shadow: 0 0 0 2px #fff;
 }
 .gls-tl-now span {
     position: absolute;
     right: 4px;
-    top: -18px;
+    top: -9px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: #e82646;
+    color: #fff;
     font-size: 10px;
     font-weight: 600;
-    color: #e82646;
+    line-height: 14px;
+    font-variant-numeric: tabular-nums;
 }
 
 /* The créneau card. */
@@ -3105,6 +3178,12 @@ html[data-theme='dark'] .gls-tl-col {
 }
 html[data-theme='dark'] .gls-tl-col.is-today {
     background-color: rgba(61, 94, 225, 0.07);
+}
+html[data-theme='dark'] .gls-tl-now {
+    box-shadow: 0 0 0 1px rgba(23, 26, 34, 0.6), 0 0 6px rgba(232, 38, 70, 0.45);
+}
+html[data-theme='dark'] .gls-tl-now::before {
+    box-shadow: 0 0 0 2px #171a22;
 }
 html[data-theme='dark'] .gls-tl-ev {
     background: hsl(var(--ev-h) 35% 18%);

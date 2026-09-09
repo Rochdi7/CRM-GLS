@@ -1229,6 +1229,8 @@ export interface GroupPaymentCell {
     /** What the line is worth after remise. */
     du: string;
     reste: string;
+    /** The note typed on the fee line in the inscription modal, if any. */
+    note: string | null;
 }
 
 export interface GroupPaymentColumn {
@@ -1257,6 +1259,8 @@ export interface GroupPaymentRow {
     dateFin: string | null;
     /** Enrollment note (a cancellation appends its comment to it). */
     note: string | null;
+    /** Notes of fee lines RETIRED from this inscription, keyed by frais id — the grey cell shows them on hover. */
+    notesMasquees: Record<string, string>;
     dateInscription: string | null;
     dateInscriptionIso: string | null;
     total: string;
@@ -2329,4 +2333,65 @@ export interface RapportsPageProps {
     /** Nombre de lignes que le document contiendra avec les filtres courants. */
     nombreLignes: number;
     [key: string]: unknown;
+}
+
+// ── Gestion de la base de données (maintenance-only, DatabaseManagementController) ──
+
+export interface DatabaseTableSummary {
+    name: string;
+    rows: number;
+    columns: number;
+    /** activity_log / migrations — browsable, never written to. */
+    readOnly: boolean;
+    /** False when read-only or without a primary key (rows cannot be named one by one). */
+    editable: boolean;
+}
+
+export type DatabaseColumnInput =
+    | 'boolean'
+    | 'integer'
+    | 'decimal'
+    | 'json'
+    | 'date'
+    | 'datetime'
+    | 'time'
+    | 'text'
+    | 'string';
+
+export interface DatabaseColumn {
+    name: string;
+    /** PostgreSQL type as declared, e.g. "character varying(255)". */
+    type: string;
+    nullable: boolean;
+    default: string | null;
+    autoIncrement: boolean;
+    primary: boolean;
+    input: DatabaseColumnInput;
+    references: { table: string; column: string } | null;
+}
+
+export interface DatabaseRow {
+    /** Every column as a string (booleans as "true"/"false"), null for SQL NULL. */
+    values: Record<string, string | null>;
+    /** Primary-key values naming this row for update/delete. */
+    key: Record<string, string | null>;
+}
+
+export interface DatabaseTableFilters {
+    search: string;
+    sort: string;
+    direction: string;
+    perPage: string;
+}
+
+export interface DatabaseManagementIndexProps {
+    database: string;
+    tables: DatabaseTableSummary[];
+}
+
+export interface DatabaseTablePageProps {
+    table: { name: string; readOnly: boolean; primaryKey: string[]; total: number };
+    columns: DatabaseColumn[];
+    rows: PaginatedData<DatabaseRow>;
+    filters: DatabaseTableFilters;
 }

@@ -59,9 +59,14 @@ final class MotifAnnulationSeeder extends Seeder
         // Le motif SYSTÈME « Changement de groupe » garde updateOrCreate :
         // il est posé par le code (ChangerGroupeInscription le cherche par
         // son nom), donc il doit rester actif et is_system quoi qu'il arrive.
-        MotifAnnulation::query()->updateOrCreate(
-            ['nom' => MotifAnnulation::MOTIF_CHANGEMENT_GROUPE],
-            ['statut' => MotifAnnulation::STATUT_ACTIF, 'is_system' => true, 'portee' => MotifAnnulation::PORTEE_INSCRIPTION],
-        );
+        // Même contrat pour « Clôture du groupe » (09/09/2026) : le motif
+        // que CloturerInscriptionsGroupe pose sur chaque inscription annulée
+        // en cascade quand son groupe passe « Fin de formation » / « Annulée ».
+        foreach ([MotifAnnulation::MOTIF_CHANGEMENT_GROUPE, MotifAnnulation::MOTIF_CLOTURE_GROUPE] as $systeme) {
+            MotifAnnulation::query()->updateOrCreate(
+                ['nom' => $systeme],
+                ['statut' => MotifAnnulation::STATUT_ACTIF, 'is_system' => true, 'portee' => MotifAnnulation::PORTEE_INSCRIPTION],
+            );
+        }
     }
 }

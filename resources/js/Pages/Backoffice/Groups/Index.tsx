@@ -70,9 +70,14 @@ const LIFECYCLE_CONFIRM_COPY: Record<
     LifecycleAction,
     { title: string; message: string; icon: string; variant: 'danger' | 'primary'; confirmLabel: string; processingLabel: string }
 > = {
+    // ⚠ Les deux statuts terminaux clôturent les inscriptions du groupe
+    // (CloturerInscriptionsGroupe) : le dire ici, avant de cliquer. Retirer
+    // des créances sans le annoncer serait exactement le silence que la
+    // règle « signaler plutôt que masquer » interdit.
     archive: {
         title: 'Terminer la formation',
-        message: 'Marquer ce groupe comme terminé (Fin de formation) ? Cette action est irréversible.',
+        message:
+            'Marquer ce groupe comme terminé (Fin de formation) ? Les inscriptions actives seront annulées et leurs frais non payés retirés. Les frais déjà payés (même partiellement) sont conservés et aucun paiement n’est modifié.',
         icon: 'ti-archive',
         variant: 'danger',
         confirmLabel: 'Oui, terminer',
@@ -80,7 +85,8 @@ const LIFECYCLE_CONFIRM_COPY: Record<
     },
     annuler: {
         title: 'Annuler le groupe',
-        message: 'Voulez-vous vraiment annuler ce groupe ?',
+        message:
+            'Voulez-vous vraiment annuler ce groupe ? Les inscriptions actives seront annulées et leurs frais non payés retirés. Les frais déjà payés (même partiellement) sont conservés et aucun paiement n’est modifié.',
         icon: 'ti-x',
         variant: 'danger',
         confirmLabel: 'Oui, annuler',

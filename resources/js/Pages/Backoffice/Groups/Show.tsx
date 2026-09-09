@@ -770,7 +770,7 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                 show={archiveOpen}
                 title="Terminer la formation"
                 recordLabel={group.nom}
-                message="Marquer ce groupe comme terminé (Fin de formation) ? Cette action est irréversible."
+                message="Marquer ce groupe comme terminé (Fin de formation) ? Les inscriptions actives seront annulées et leurs frais non payés retirés. Les frais déjà payés (même partiellement) sont conservés et aucun paiement n’est modifié."
                 error={archiveError}
                 processing={archiveProcessing}
                 onConfirm={archiveGroup}

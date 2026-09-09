@@ -354,6 +354,7 @@ export default function AnnualFraisChart({ data, periode }: AnnualFraisChartProp
                                     <span className="gls-frais-tooltip-label">{t(s.label)}:</span>
                                     <span className="gls-frais-tooltip-value">
                                         {values[s.key][hoverIndex].toLocaleString('fr-FR')}
+                                        <small>DH</small>
                                     </span>
                                 </div>
                             ))}
