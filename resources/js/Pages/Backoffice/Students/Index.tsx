@@ -1,5 +1,6 @@
 import { router, useForm } from '@inertiajs/react';
 import { useRef, useState, type FormEvent } from 'react';
+import { useAutoOpenCreate } from '@/Hooks/useAutoOpenCreate';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import PageTabs from '@/Components/Navigation/PageTabs';
 import { STUDENTS_TABS } from '@/Config/pageTabs';
@@ -151,6 +152,10 @@ export default function StudentsIndex({
         form.setData(emptyForm(defaultCountry, contextCenterId));
         setShowModal(true);
     }
+
+    // Raccourci « Actions rapides » du tableau de bord : ?nouveau=1 ouvre
+    // directement ce formulaire (confort d'interface seulement, §5).
+    useAutoOpenCreate(openCreate);
 
     function openEdit(student: StudentRow) {
         setEditingStudent(student);

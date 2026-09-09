@@ -1,5 +1,6 @@
 import { router, useForm } from '@inertiajs/react';
 import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useAutoOpenCreate } from '@/Hooks/useAutoOpenCreate';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
@@ -337,6 +338,10 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
         createForm.setData(emptyCreateForm());
         setShowModal(true);
     }
+
+    // Raccourci « Actions rapides » du tableau de bord : ?nouveau=1 ouvre
+    // directement ce formulaire (confort d'interface seulement, §5).
+    useAutoOpenCreate(openCreate);
 
     function openEdit(row: EncaissementRow) {
         setEditingRow(row);

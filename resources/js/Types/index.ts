@@ -115,6 +115,8 @@ export interface NavGroup {
  */
 export interface DashboardStats {
     studentsTotal: number;
+    /** Distinct students holding an Active inscription in the active année. */
+    studentsActifs: number;
     employeesTotal: number;
     employeesActive: number;
     enseignantsTotal: number;

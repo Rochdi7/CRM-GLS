@@ -25,6 +25,7 @@ use App\Services\Import\SheetReader;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -61,8 +62,17 @@ final class EncaissementImportController extends Controller
         // employee may work in several centers, and the direction accounts
         // (super-admin / centers.access-all) sign payments in every center
         // while being attached to a single primary one.
+        //
+        // canCollectPayments(): a teacher never takes money from a student.
+        // This list used to offer EVERY employee of the centre, and 3 166
+        // imported payments (3 100 540 DH) ended up signed by an
+        // « Enseignant » or an « Autre » — one of whom has no login at all
+        // and has never signed in (audit 09/09/2026). The Form Request
+        // enforces the same bound, since a dropdown is only a convenience
+        // (§5) and a forged mapping would otherwise walk straight past it.
         $employees = Employee::query()
             ->availableForCenter($etablissementId)
+            ->canCollectPayments()
             ->orderBy('nom')
             ->get(['id', 'nom', 'prenom']);
 
@@ -172,7 +182,7 @@ final class EncaissementImportController extends Controller
         ]);
     }
 
-    /** @return \Illuminate\Support\Collection<int, array{id: int, nom_centre: string}> */
+    /** @return Collection<int, array{id: int, nom_centre: string}> */
     private function etablissementOptions(Request $request, CenterAccessService $centerAccess)
     {
         $query = Etablissement::query()->orderBy('nom_centre');
@@ -205,5 +215,4 @@ final class EncaissementImportController extends Controller
 
         return back()->with('success', __(':count rows queued for retry.', ['count' => $requeued]));
     }
-
 }

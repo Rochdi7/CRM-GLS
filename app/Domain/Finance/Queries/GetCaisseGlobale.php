@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domain\Finance\Queries;
 
-use App\Models\Activity;
 use App\Models\Caisse;
+use App\Models\CaisseTransfer;
+use App\Models\Depense;
+use App\Models\Encaissement;
+use App\Models\Remboursement;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
 use App\Domain\Finance\Support\VentilationCentre;
@@ -38,28 +41,33 @@ use App\Support\Access\HiddenAccount;
  * (03/09/2026). This screen answers « combien y a-t-il en caisse », a figure
  * that must stay reconcilable with the physical cash, so with a `dateTo` set
  * every account shows the solde it HELD at the end of that day: its stored
- * solde minus every CaisseLedger movement journalled after it. Showing the
- * period's entrées − sorties instead would print 0.00 DH for a till holding
+ * solde rebuilt from the money records dated up to and including it. Showing
+ * the period's entrées − sorties instead would print 0.00 DH for a till holding
  * 104 450 DH that simply had a quiet month — a dangerous number on a screen
  * people use to check tills. `dateFrom` therefore narrows nothing on its own;
  * it is only the readable half of the window the rest of the page filters on
  * (and it is what an « Entrées/Sorties de la période » column would use, if
  * one is ever added).
  *
- * The rewind is ONE aggregate query over the `solde_movement` entries, never
- * one query per account — the same journal `caisse:verifier-coherence`
- * reconciles the stored balances against.
+ * The rewind is a handful of GROUP BY aggregates over the source tables,
+ * never one query per account.
  *
- * ⚠ The rewind is only meaningful BACK TO the first journal entry
- * (`journalDepuis`). CaisseLedger was introduced on 26/08/2026 and the legacy
- * import wrote its 23 809 movements on that day whatever a payment's real
- * `date_paiement`, so the journal knows nothing before it. Asking for
- * 28/02/2026 subtracts EVERY known movement and prints 0.00 DH — a till that
- * held money reading as empty, on the one screen used to check tills
- * (03/09/2026). So the horizon is returned to the page, which refuses to draw
- * a balance older than it and says why instead of showing a false zero. Never
- * let this fall back to « 0.00 DH » silently: an unknown balance and an empty
- * till are not the same statement.
+ * ⚠ It rebuilds the balance from the money records themselves —
+ * encaissements, dépenses approuvées, remboursements, transferts validés —
+ * on their BUSINESS dates, NOT from the journal's write timestamps. Rewinding
+ * by the journal moved the physical tills only (09/09/2026): the TPE /
+ * Virement / Chèque accounts hold almost no `solde_movement` entries, so
+ * subtracting « what was journalled after that day » subtracted nothing and
+ * their cards kept printing TODAY's solde under a PAST date. Three of the four
+ * cards silently ignored the filter. See soldesAt().
+ *
+ * ⚠ The rewind is only meaningful BACK TO the first money record
+ * (`journalDepuis`, the oldest `date_paiement`). Before it nothing had been
+ * received, so a balance there is not a fact the data can state; the horizon
+ * is returned to the page, which refuses to draw a balance older than it and
+ * says why instead of showing a false zero (03/09/2026). Never let this fall
+ * back to « 0.00 DH » silently: an unknown balance and an empty till are not
+ * the same statement.
  */
 final class GetCaisseGlobale
 {
@@ -200,24 +208,49 @@ final class GetCaisseGlobale
     }
 
     /**
-     * Day of the OLDEST `solde_movement` entry (yyyy-mm-dd), or null when the
-     * journal is empty. Everything before it is outside what the journal can
-     * reconstruct — see the class docblock.
+     * Day of the OLDEST money record (yyyy-mm-dd), or null when there is
+     * none — the first day a rewind can answer for.
+     *
+     * ⚠ Derived from the SOURCE tables' business dates, not from the
+     * journal's `created_at`. The journal is a write log: the legacy import
+     * wrote 23 437 of its 23 810 entries on 26/08/2026 whatever each
+     * payment's real `date_paiement`, so dating the rewind by it made every
+     * balance before that day unknowable — including for accounts whose
+     * money demonstrably predates it.
      */
     private function journalDepuis(): ?string
     {
-        $premier = Activity::query()
-            ->where('log_name', 'caisse')
-            ->where('event', 'solde_movement')
-            ->min('created_at');
+        $premier = Encaissement::query()->min('date_paiement');
 
         return $premier === null ? null : substr((string) $premier, 0, 10);
     }
 
     /**
-     * Balance of each caisse at the END of $dateTo, rebuilt from the journal:
-     * stored solde − Σ(movements journalled after that day). Empty when no
-     * date is given, so the caller keeps the stored soldes untouched.
+     * Balance of each caisse at the END of $dateTo. Empty when no date is
+     * given, so the caller keeps the stored soldes untouched.
+     *
+     * ⚠ Rebuilt from the SOURCE tables (encaissements, dépenses approuvées,
+     * remboursements, transferts validés) on their BUSINESS dates —
+     * `date_paiement`, `date_depense`, `date_remboursement`,
+     * `date_transfert` — never from the journal's `created_at`.
+     *
+     * Two bugs this shape fixes at once (09/09/2026), both from the previous
+     * version subtracting `solde_movement` entries:
+     *
+     *  1. **Only « Caisse personnelle » moved.** The journal covers the
+     *     physical tills almost exclusively (23 810 entries) and the
+     *     TPE / Virement / Chèque accounts barely at all, because their
+     *     balances were re-homed by `caisse:recalculer-soldes` rather than
+     *     accumulated movement by movement. Σ(movements after $dateTo) was
+     *     therefore ~0 for those three, and their card printed today's
+     *     stored solde whatever date the user picked — a past date silently
+     *     answering with a present figure, on the one screen used to check
+     *     where the money is.
+     *  2. **Even the tills rewound by the wrong day**, since the import's
+     *     write date is not the payment's date.
+     *
+     * Same columns as the lines each card chapeaute (VentilationCentre's
+     * rule 1): a total and its rows must never read two different sources.
      *
      * @param  list<int>  $caisseIds
      * @return array<int, float>
@@ -228,29 +261,65 @@ final class GetCaisseGlobale
             return [];
         }
 
-        $posterieurs = Activity::query()
-            ->where('log_name', 'caisse')
-            ->where('event', 'solde_movement')
-            ->whereIn('subject_id', $caisseIds)
-            // Strictly after $dateTo, so a movement made ON that day is part
-            // of the balance being shown.
-            ->whereDate('created_at', '>', $dateTo)
-            ->get(['subject_id', 'properties']);
+        // Entrées — encaissements. An application row moved no money (the
+        // avance it draws on was credited when it was received), so it is
+        // excluded here exactly as VentilationCentre excludes it.
+        $entrees = Encaissement::query()
+            ->whereIn('caisse_id', $caisseIds)
+            ->whereNull('applied_from_encaissement_id')
+            ->whereDate('date_paiement', '<=', $dateTo)
+            ->groupBy('caisse_id')
+            ->selectRaw('caisse_id, SUM(montant) AS total')
+            ->pluck('total', 'caisse_id');
 
-        $aRembobiner = [];
+        // Sorties — dépenses APPROUVÉES only (a pending one never debited).
+        $depenses = Depense::query()
+            ->whereIn('caisse_id', $caisseIds)
+            ->where('statut', Depense::STATUT_APPROUVEE)
+            ->whereDate('date_depense', '<=', $dateTo)
+            ->groupBy('caisse_id')
+            ->selectRaw('caisse_id, SUM(montant) AS total')
+            ->pluck('total', 'caisse_id');
 
-        foreach ($posterieurs as $entry) {
-            $properties = $entry->properties;
-            $montant = (float) ($properties['montant'] ?? 0);
-            $id = (int) $entry->subject_id;
-            $aRembobiner[$id] = ($aRembobiner[$id] ?? 0.0)
-                + (($properties['sens'] ?? '') === 'Entrée' ? $montant : -$montant);
-        }
+        $remboursements = Remboursement::query()
+            ->whereIn('caisse_id', $caisseIds)
+            ->whereDate('date_remboursement', '<=', $dateTo)
+            ->groupBy('caisse_id')
+            ->selectRaw('caisse_id, SUM(montant) AS total')
+            ->pluck('total', 'caisse_id');
 
         $soldes = [];
 
-        foreach (Caisse::query()->whereIn('id', $caisseIds)->get(['id', 'solde']) as $caisse) {
-            $soldes[$caisse->id] = round((float) $caisse->solde - ($aRembobiner[$caisse->id] ?? 0.0), 2);
+        foreach ($caisseIds as $id) {
+            $soldes[$id] = round(
+                (float) ($entrees[$id] ?? 0)
+                    - (float) ($depenses[$id] ?? 0)
+                    - (float) ($remboursements[$id] ?? 0),
+                2,
+            );
+        }
+
+        // Transferts VALIDÉS — physical cash moved between two accounts, so
+        // each leg is applied to its own side. Ignoring them would leave the
+        // two tills of a transfer both reading as if it never happened.
+        foreach (CaisseTransfer::query()
+            ->where('statut', CaisseTransfer::STATUT_VALIDE)
+            ->whereDate('date_transfert', '<=', $dateTo)
+            ->where(fn ($q) => $q
+                ->whereIn('caisse_source_id', $caisseIds)
+                ->orWhereIn('caisse_destination_id', $caisseIds))
+            ->get(['caisse_source_id', 'caisse_destination_id', 'montant']) as $transfert) {
+            $montant = (float) $transfert->montant;
+            $source = (int) $transfert->caisse_source_id;
+            $destination = (int) $transfert->caisse_destination_id;
+
+            if (array_key_exists($source, $soldes)) {
+                $soldes[$source] = round($soldes[$source] - $montant, 2);
+            }
+
+            if (array_key_exists($destination, $soldes)) {
+                $soldes[$destination] = round($soldes[$destination] + $montant, 2);
+            }
         }
 
         return $soldes;

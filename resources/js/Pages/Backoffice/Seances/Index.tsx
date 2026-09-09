@@ -1,5 +1,6 @@
 import { Link, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
+import { useAutoOpenCreate } from '@/Hooks/useAutoOpenCreate';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import Modal from '@/Components/Modals/Modal';
@@ -101,6 +102,10 @@ export default function SeancesIndex({
         setEditingId(null);
         setShowModal(true);
     }
+
+    // Raccourci « Actions rapides » du tableau de bord : ?nouveau=1 ouvre
+    // directement ce formulaire (confort d'interface seulement, §5).
+    useAutoOpenCreate(openCreate, permissions.create);
 
     function openEdit(row: SeanceRow) {
         form.setData({
@@ -350,8 +355,12 @@ export default function SeancesIndex({
                         </tr>
                     }
                 >
-                    {seances.data.map((row) => (
-                        <tr key={row.id}>
+                    {seances.data.map((row, index) => {
+                        const next = seances.data[index + 1];
+                        const lastOfDay = next !== undefined && next.dateSeance !== row.dateSeance;
+
+                        return (
+                        <tr key={row.id} className={lastOfDay ? 'gls-day-separator' : undefined}>
                             <td className="fw-medium">
                                 <Link href={row.showUrl}>{row.dateSeance}</Link>
                             </td>
@@ -375,6 +384,11 @@ export default function SeancesIndex({
                                             {row.absentsCount} absent{row.absentsCount > 1 ? 's' : ''}
                                         </span>
                                     </>
+                                ) : row.statut === 'Annulée' ? (
+                                    <span className="text-muted d-inline-flex align-items-center">
+                                        <i className="ti ti-ban me-1" />
+                                        Séance annulée
+                                    </span>
                                 ) : (
                                     <span className="text-muted">Appel non fait</span>
                                 )}
@@ -384,7 +398,7 @@ export default function SeancesIndex({
                             </td>
                             <td className="text-end">
                                 <div className="d-flex align-items-center justify-content-end gap-2">
-                                    {permissions.mark && (
+                                    {permissions.mark && row.statut !== 'Annulée' && (
                                         <Link
                                             href={row.showUrl}
                                             className="btn btn-outline-primary btn-sm d-inline-flex align-items-center"
@@ -428,7 +442,8 @@ export default function SeancesIndex({
                                 </div>
                             </td>
                         </tr>
-                    ))}
+                        );
+                    })}
                 </RelatedRecordsTable>
                 <Pagination paginator={seances} />
             </Card>

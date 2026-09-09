@@ -21,14 +21,20 @@ interface QuickAction {
  * one is a plain link to the module's list page (every CRUD module is a
  * list + modal, §11) — the permission filter mirrors backofficeNavigation.ts
  * so a user never sees a button their sidebar would not show.
+ *
+ * `?nouveau=1` makes the destination page open its « Ajouter » modal on
+ * arrival (`Hooks/useAutoOpenCreate.ts`), so a quick action is ONE click
+ * instead of two. The parameter is a UI convenience only (§5): the page
+ * still draws the modal behind its own permission gate, and the server
+ * still authorizes the submit.
  */
 const QUICK_ACTIONS: QuickAction[] = [
     // No « Nouvel étudiant » here: the page header already carries that button.
-    { label: 'New registration', icon: 'ti-clipboard-plus', href: '/backoffice/inscriptions', permissions: ['registrations.view'] },
-    { label: 'Record a payment', icon: 'ti-cash', href: '/backoffice/encaissements', permissions: ['payments.view'] },
-    { label: 'Sessions', icon: 'ti-checklist', href: '/backoffice/seances', permissions: ['attendance.view'] },
-    { label: 'Timetable', icon: 'ti-calendar-time', href: '/backoffice/emploi-du-temps', permissions: ['attendance.view'] },
-    { label: 'Groups', icon: 'ti-users-group', href: '/backoffice/groups', permissions: ['groups.view'] },
+    { label: 'New registration', icon: 'ti-clipboard-plus', href: '/backoffice/inscriptions?nouveau=1', permissions: ['registrations.view'] },
+    { label: 'Record a payment', icon: 'ti-cash', href: '/backoffice/encaissements?nouveau=1', permissions: ['payments.view'] },
+    { label: 'Sessions', icon: 'ti-checklist', href: '/backoffice/seances?nouveau=1', permissions: ['attendance.view'] },
+    { label: 'Timetable', icon: 'ti-calendar-time', href: '/backoffice/emploi-du-temps?nouveau=1', permissions: ['attendance.view'] },
+    { label: 'Groups', icon: 'ti-users-group', href: '/backoffice/groups?nouveau=1', permissions: ['groups.view'] },
 ];
 
 /**
@@ -73,7 +79,7 @@ export default function DashboardIndex({ stats, annualFrais, annualFraisPeriode,
             actions={
                 canAny(['students.view']) && (
                     <div className="mb-2">
-                        <Link href="/backoffice/students" className="btn btn-primary d-flex align-items-center me-3">
+                        <Link href="/backoffice/students?nouveau=1" className="btn btn-primary d-flex align-items-center me-3">
                             <i className="ti ti-square-rounded-plus me-1" />
                             {t('Add a student')}
                         </Link>

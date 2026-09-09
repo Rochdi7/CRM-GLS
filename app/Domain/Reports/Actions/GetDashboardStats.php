@@ -116,9 +116,20 @@ final class GetDashboardStats
             [Group::STATUT_EN_FORMATION, Group::STATUT_EN_INSCRIPTION, Group::STATUT_FIN_FORMATION, Group::STATUT_ANNULEE],
         )->toBase()->first();
 
+        // `etudiants_actifs` counts PEOPLE, not dossiers: one student
+        // enrolled in three groups is one student, so it is a
+        // COUNT(DISTINCT student_id) — the same idiom the Groupes list uses
+        // for its « Étudiants » column (GetGroupsList:76). It rides on the
+        // inscriptions aggregate rather than the students one because the
+        // notion is année-scoped by nature: a student has no année, only
+        // their inscriptions do (§11), so « actifs » can only mean "has an
+        // Active inscription in the année the switcher shows". That is also
+        // why it stays a SECONDARY line under the students total, which
+        // deliberately spans every année — the two figures answer different
+        // questions and must not be made to agree.
         $inscriptions = $inscriptionsQuery->selectRaw(
-            'COUNT(*) AS total, COUNT(*) FILTER (WHERE statut = ?) AS actives, COUNT(*) FILTER (WHERE statut = ?) AS annulees, COUNT(*) FILTER (WHERE statut = ?) AS changement',
-            [Inscription::STATUT_ACTIVE, Inscription::STATUT_ANNULEE, Inscription::STATUT_CHANGEMENT],
+            'COUNT(*) AS total, COUNT(*) FILTER (WHERE statut = ?) AS actives, COUNT(*) FILTER (WHERE statut = ?) AS annulees, COUNT(*) FILTER (WHERE statut = ?) AS changement, COUNT(DISTINCT student_id) FILTER (WHERE statut = ?) AS etudiants_actifs',
+            [Inscription::STATUT_ACTIVE, Inscription::STATUT_ANNULEE, Inscription::STATUT_CHANGEMENT, Inscription::STATUT_ACTIVE],
         )->toBase()->first();
 
         $depenses = $depensesMonthQuery->selectRaw(
@@ -127,6 +138,7 @@ final class GetDashboardStats
 
         return new DashboardStatsData(
             studentsTotal: (int) $students->total,
+            studentsActifs: (int) $inscriptions->etudiants_actifs,
             employeesTotal: (int) $employees->total,
             employeesActive: (int) $employees->actifs,
             enseignantsTotal: (int) $employees->enseignants,

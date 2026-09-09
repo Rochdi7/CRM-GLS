@@ -1,5 +1,6 @@
 import { router, useForm } from '@inertiajs/react';
 import { useMemo, useState, type FormEvent } from 'react';
+import { useAutoOpenCreate } from '@/Hooks/useAutoOpenCreate';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import TableToolbar from '@/Components/Tables/TableToolbar';
@@ -11,6 +12,7 @@ import MultiSelectField from '@/Components/Forms/MultiSelectField';
 import FormField from '@/Components/Forms/FormField';
 import FormActions from '@/Components/Forms/FormActions';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
+import WeekTimeline from '@/Components/EmploiDuTemps/WeekTimeline';
 import type { CreneauCreateForm, CreneauForm, CreneauRow, SelectOption } from '@/Types';
 
 interface EmploiDuTempsIndexProps {
@@ -28,7 +30,7 @@ interface EmploiDuTempsIndexProps {
     permissions: { create: boolean; update: boolean; delete: boolean };
 }
 
-/** "HH:MM" → minutes since midnight, used to place créneaux on the hour grid (see heuresGrille / cellules). */
+/** "HH:MM" → minutes since midnight — the « Paramétrage » table sorts on it. */
 function toMinutes(heure: string): number {
     const [h, m] = heure.split(':').map(Number);
     return h * 60 + (m || 0);
@@ -91,68 +93,6 @@ export default function EmploiDuTempsIndex({
 
     const jourOptions: SelectOption[] = Object.entries(jours).map(([value, label]) => ({ value: Number(value), label }));
 
-    // Bucket by day-of-week for the grid columns; each cell lists every
-    // créneau whose [heure_debut, heure_fin) overlaps that row's hour.
-    const parRang = useMemo(() => {
-        const map = new Map<string, CreneauRow[]>();
-        creneaux.forEach((c) => {
-            const key = `${c.jourSemaine}`;
-            map.set(key, [...(map.get(key) ?? []), c]);
-        });
-        return map;
-    }, [creneaux]);
-
-    // Hour rows: the default 08:00–21:00 range, extended to cover any créneau
-    // starting earlier / ending later. Rows are always full hours so a
-    // créneau can span several of them with rowSpan (10:00–12:30 covers the
-    // 10h, 11h and 12h rows), instead of being pinned to its start row only.
-    const heuresGrille = useMemo(() => {
-        let first = 8;
-        let last = 21;
-        creneaux.forEach((c) => {
-            first = Math.min(first, Math.floor(toMinutes(c.heureDebut) / 60));
-            last = Math.max(last, Math.ceil(toMinutes(c.heureFin) / 60) - 1);
-        });
-        return Array.from({ length: last - first + 1 }, (_, i) => `${String(first + i).padStart(2, '0')}:00`);
-    }, [creneaux]);
-
-    // Per (jour, hour row) → the créneaux anchored in that cell and how many
-    // rows the cell spans; cells swallowed by a spanning cell above are skipped.
-    const cellules = useMemo(() => {
-        const anchors = new Map<string, { rows: CreneauRow[]; rowSpan: number }>();
-        const skipped = new Set<string>();
-        const firstHour = heuresGrille.length ? Number(heuresGrille[0].slice(0, 2)) : 8;
-
-        jourOptions.forEach((jour) => {
-            const jourKey = String(jour.value);
-            const list = [...(parRang.get(jourKey) ?? [])].sort(
-                (a, b) => toMinutes(a.heureDebut) - toMinutes(b.heureDebut),
-            );
-            let anchorIdx = -1;
-            let coveredUntil = -1; // exclusive row index covered by the current anchor
-
-            list.forEach((c) => {
-                const startIdx = Math.floor(toMinutes(c.heureDebut) / 60) - firstHour;
-                const endIdx = Math.ceil(toMinutes(c.heureFin) / 60) - firstHour; // exclusive
-                if (startIdx >= coveredUntil) {
-                    anchorIdx = startIdx;
-                    coveredUntil = startIdx;
-                }
-                const key = `${jourKey}|${anchorIdx}`;
-                const cell = anchors.get(key) ?? { rows: [], rowSpan: 1 };
-                cell.rows.push(c);
-                coveredUntil = Math.max(coveredUntil, endIdx);
-                cell.rowSpan = Math.max(1, coveredUntil - anchorIdx);
-                anchors.set(key, cell);
-                for (let i = anchorIdx + 1; i < coveredUntil; i++) {
-                    skipped.add(`${jourKey}|${i}`);
-                }
-            });
-        });
-
-        return { anchors, skipped };
-    }, [heuresGrille, jourOptions, parRang]);
-
     // Rows for the « Paramétrage » table — same créneaux as the grid, flat
     // and sorted. Default order (jour, then heure) reads like the week.
     const lignes = useMemo(() => {
@@ -207,6 +147,10 @@ export default function EmploiDuTempsIndex({
         createForm.setData(EMPTY_CREATE_FORM);
         setShowModal(true);
     }
+
+    // Raccourci « Actions rapides » du tableau de bord : ?nouveau=1 ouvre
+    // directement ce formulaire (confort d'interface seulement, §5).
+    useAutoOpenCreate(openCreate, permissions.create);
 
     function openEdit(row: CreneauRow) {
         setEditingId(row.id);
@@ -377,112 +321,19 @@ export default function EmploiDuTempsIndex({
                 </div>
 
                 {vue === 'grille' && (
-                    <div className="table-responsive px-3">
-                        <table className="table table-bordered align-middle mb-0">
-                            <thead className="table-light">
-                                <tr>
-                                    <th style={{ width: 90 }} />
-                                    {jourOptions.map((jour) => (
-                                        <th key={jour.value} className="text-uppercase text-center">
-                                            {jour.label}
-                                        </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {heuresGrille.map((heure, rowIdx) => {
-                                    const heureFin = `${String(Number(heure.slice(0, 2)) + 1).padStart(2, '0')}:00`;
-
-                                    return (
-                                        <tr key={heure}>
-                                            <td className="fw-medium text-nowrap">
-                                                {heure.slice(0, 5)} - {heureFin}
-                                            </td>
-                                            {jourOptions.map((jour) => {
-                                                const key = `${jour.value}|${rowIdx}`;
-                                                if (cellules.skipped.has(key)) {
-                                                    return null;
-                                                }
-                                                const cell = cellules.anchors.get(key);
-                                                const rows = cell?.rows ?? [];
-
-                                                return (
-                                                    <td
-                                                        key={jour.value}
-                                                        rowSpan={cell?.rowSpan ?? 1}
-                                                        style={{ minWidth: 160, verticalAlign: 'top' }}
-                                                    >
-                                                        {rows.map((row) => (
-                                                            <div
-                                                                key={row.id}
-                                                                className={`rounded p-2 mb-1 ${row.clos ? 'bg-light border opacity-75' : 'bg-primary-transparent'}`}
-                                                                style={{ cursor: permissions.update ? 'pointer' : 'default' }}
-                                                                onClick={() => permissions.update && openEdit(row)}
-                                                            >
-                                                                <div className="fw-medium fs-13">
-                                                                    {row.groupNom}
-                                                                    {row.groupNiveau && (
-                                                                        <span className="badge badge-soft-secondary ms-1">
-                                                                            {row.groupNiveau}
-                                                                        </span>
-                                                                    )}
-                                                                    {/*
-                                                                      Case morte : ce créneau ne génère plus de
-                                                                      séance. Sans ce repère, la grille donnait
-                                                                      l'illusion d'un emploi du temps en place.
-
-                                                                      ⚠ Mais une case morte n'est pas une anomalie :
-                                                                      une formation qui arrive à son terme finit
-                                                                      NORMALEMENT ainsi. Le badge rouge unique
-                                                                      « Clôturé » faisait lire un archivage comme un
-                                                                      incident (signalé le 07/09/2026). On nomme donc
-                                                                      la cause — « Terminé » / « Remplacé » — en gris
-                                                                      neutre, le rouge étant réservé à ce qui appelle
-                                                                      une correction.
-                                                                    */}
-                                                                    {row.clos && (
-                                                                        <span
-                                                                            className="badge badge-soft-secondary ms-1"
-                                                                            title={
-                                                                                row.motifCloture === 'termine'
-                                                                                    ? `Fin de formation${row.dateFin ? ` le ${row.dateFin}` : ''} — ce créneau ne génère plus de séance, c'est normal.`
-                                                                                    : `Enseignant remplacé${row.dateFin ? ` le ${row.dateFin}` : ''} — l'emploi du temps du prof sortant a été séparé pour la paie. Le nouvel enseignant a ses propres créneaux.`
-                                                                            }
-                                                                        >
-                                                                            {row.motifCloture === 'termine' ? 'Terminé' : 'Remplacé'}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                                <div className="text-muted fs-12">
-                                                                    {row.heureDebut} – {row.heureFin}
-                                                                </div>
-                                                                {row.enseignant && (
-                                                                    <div className="text-muted fs-12">{row.enseignant}</div>
-                                                                )}
-                                                                {row.salle && <div className="text-muted fs-12">{row.salle}</div>}
-                                                                {permissions.delete && (
-                                                                    <button
-                                                                        type="button"
-                                                                        className="btn btn-link btn-sm text-danger p-0 mt-1"
-                                                                        onClick={(event) => {
-                                                                            event.stopPropagation();
-                                                                            setDeleteTarget(row);
-                                                                            setDeleteError(undefined);
-                                                                        }}
-                                                                    >
-                                                                        Supprimer
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        ))}
-                                                    </td>
-                                                );
-                                            })}
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+                    <div className="px-3">
+                        <WeekTimeline
+                            creneaux={creneaux}
+                            jours={jours}
+                            jourFilter={filters.jourFilter}
+                            canUpdate={permissions.update}
+                            canDelete={permissions.delete}
+                            onEdit={openEdit}
+                            onDelete={(row) => {
+                                setDeleteTarget(row);
+                                setDeleteError(undefined);
+                            }}
+                        />
                     </div>
                 )}
 

@@ -39,13 +39,27 @@ export default function StatsGrid({ stats }: StatsGridProps) {
                 <h5 className="mb-0">{t('Overview')}</h5>
             </div>
             <div className="row">
+                {/* « Actifs » counts PEOPLE with an Active inscription in the
+                    année the switcher shows, so it is normally SMALLER than
+                    the total above it: a student carries no année (§11) and
+                    stays counted in the total for every year, while their
+                    dossier is active in one. The two are deliberately not
+                    the same figure — see GetDashboardStats. */}
                 <StatCard
                     icon="ti-school"
                     variant="danger"
                     value={<CountUp value={stats.studentsTotal} />}
                     label={t('Students')}
-                    secondaryLabel={t('Parents on file')}
-                    secondaryValue={stats.parentsTotal.toLocaleString('fr-FR')}
+                    footer={
+                        <>
+                            <span className="badge badge-soft-success">
+                                {t('With an active registration')} : {stats.studentsActifs.toLocaleString('fr-FR')}
+                            </span>
+                            <span className="badge badge-soft-info">
+                                {t('Parents on file')} : {stats.parentsTotal.toLocaleString('fr-FR')}
+                            </span>
+                        </>
+                    }
                     href={linkIf('students.view', '/backoffice/students')}
                 />
 

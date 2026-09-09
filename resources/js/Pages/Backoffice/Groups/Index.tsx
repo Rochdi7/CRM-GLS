@@ -1,6 +1,7 @@
 import { router, useForm, usePage } from '@inertiajs/react';
 import { pageWindow } from '@/Components/Tables/Pagination';
 import { useState, type FormEvent } from 'react';
+import { useAutoOpenCreate } from '@/Hooks/useAutoOpenCreate';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
@@ -426,6 +427,10 @@ export default function GroupsIndex({
         setFraisPage(1);
         setShowModal(true);
     }
+
+    // Raccourci « Actions rapides » du tableau de bord : ?nouveau=1 ouvre
+    // directement ce formulaire (confort d'interface seulement, §5).
+    useAutoOpenCreate(openCreate);
 
     function openEdit(group: GroupRow) {
         setEditingGroup(group);
@@ -934,7 +939,7 @@ export default function GroupsIndex({
                                     <td>
                                         <button
                                             type="button"
-                                            className="badge badge-soft-info border-0 d-inline-flex align-items-center gap-1"
+                                            className="badge badge-soft-info border-0 d-inline-flex align-items-center gap-1 fw-bold"
                                             title={STATS_SEGMENT_LABELS.etudiants}
                                             onClick={() => openStudentsSegment(group, 'etudiants')}
                                         >
@@ -946,7 +951,7 @@ export default function GroupsIndex({
                                         <div className="d-flex flex-wrap gap-1">
                                             <button
                                                 type="button"
-                                                className="badge badge-soft-success border-0 d-inline-flex align-items-center gap-1"
+                                                className="badge badge-soft-success border-0 d-inline-flex align-items-center gap-1 fw-bold"
                                                 title={STATS_SEGMENT_LABELS.active}
                                                 onClick={() => openStudentsSegment(group, 'active')}
                                             >
@@ -955,7 +960,7 @@ export default function GroupsIndex({
                                             </button>
                                             <button
                                                 type="button"
-                                                className="badge badge-soft-secondary border-0 d-inline-flex align-items-center gap-1"
+                                                className="badge badge-soft-secondary border-0 d-inline-flex align-items-center gap-1 fw-bold"
                                                 title={STATS_SEGMENT_LABELS.changement}
                                                 onClick={() => openStudentsSegment(group, 'changement')}
                                             >
@@ -964,7 +969,7 @@ export default function GroupsIndex({
                                             </button>
                                             <button
                                                 type="button"
-                                                className="badge badge-soft-danger border-0 d-inline-flex align-items-center gap-1"
+                                                className="badge badge-soft-danger border-0 d-inline-flex align-items-center gap-1 fw-bold"
                                                 title={STATS_SEGMENT_LABELS.annulee}
                                                 onClick={() => openStudentsSegment(group, 'annulee')}
                                             >

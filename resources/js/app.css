@@ -1993,7 +1993,10 @@ h1, .h1, h2, .h2, h3, .h3, h4, .h4, h5, .h5, h6, .h6 {
 
 .badge.badge-soft-primary { background: rgba(61, 94, 225, 0.16); }
 .badge.badge-soft-success { background: rgba(20, 145, 18, 0.16); color: #149112; }
-.badge.badge-soft-danger  { background: rgba(232, 38, 70, 0.16); }
+/* Le rouge est l'exception : fond plus CLAIR que le thème (rose jugé lourd,
+ * 08/09/2026) et écriture nette. Un statut « Annulé(e) » est TOUJOURS rouge,
+ * sur toutes les pages (décision du 08/09/2026). */
+.badge.badge-soft-danger  { background: rgba(232, 38, 70, 0.08); color: #d6203f; }
 .badge.badge-soft-warning { background: rgba(234, 179, 0, 0.2); color: #8a6a00; }
 .badge.badge-soft-info    { background: rgba(15, 101, 205, 0.16); }
 .badge.badge-soft-dark    { background: rgba(32, 44, 75, 0.14); }
@@ -2548,6 +2551,588 @@ html[data-theme='dark'] .gls-frais-legend-pill {
 }
 
 /* ---------------------------------------------------------------------------
+ * Emploi du temps — week timeline (Components/EmploiDuTemps/WeekTimeline.tsx)
+ *
+ * A continuous time axis instead of hour rows: a créneau's card is as tall
+ * as its duration, overlapping créneaux sit side by side, and every group
+ * carries one hue (`--ev-h`, set inline from the group id) on every day it
+ * appears. Colours are derived from that hue with hsl(), so the same rule
+ * serves ten groups; dark mode only swaps lightness.
+ * ------------------------------------------------------------------------- */
+.gls-tl-wrap {
+    padding-bottom: 8px;
+}
+.gls-tl-summary {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px 20px;
+    margin-bottom: 14px;
+}
+.gls-tl-stats {
+    display: flex;
+    gap: 16px;
+    font-size: 13px;
+    color: #6a7287;
+    white-space: nowrap;
+    padding-top: 4px;
+}
+.gls-tl-stats strong {
+    color: #202c4b;
+    font-size: 15px;
+    margin-right: 3px;
+}
+.gls-tl-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-end;
+}
+.gls-tl-legend-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px 3px 8px;
+    border-radius: 999px;
+    border: 1px solid hsl(var(--ev-h) 60% 85%);
+    background: hsl(var(--ev-h) 90% 97%);
+    color: hsl(var(--ev-h) 55% 30%);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s ease, box-shadow 0.15s ease;
+}
+.gls-tl-legend-chip small {
+    font-size: 10px;
+    font-weight: 600;
+    opacity: 0.8;
+}
+.gls-tl-legend-chip em {
+    font-style: normal;
+    font-size: 11px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: hsl(var(--ev-h) 55% 45%);
+    color: #fff;
+}
+.gls-tl-legend-chip.is-active {
+    box-shadow: 0 0 0 2px hsl(var(--ev-h) 55% 45%);
+}
+.gls-tl-legend-chip.is-dim {
+    opacity: 0.4;
+}
+.gls-tl-legend-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: hsl(var(--ev-h) 55% 45%);
+}
+.gls-tl-legend-clear {
+    border: 0;
+    background: transparent;
+    color: #3d5ee1;
+    font-size: 12px;
+    padding: 3px 6px;
+}
+
+.gls-tl {
+    border: 1px solid #e9edf4;
+    border-radius: 10px;
+    overflow: auto;
+    background: #fff;
+}
+.gls-tl-head,
+.gls-tl-body {
+    display: grid;
+    min-width: 100%;
+}
+.gls-tl-head {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: #f9fafb;
+    border-bottom: 1px solid #e9edf4;
+}
+.gls-tl-corner {
+    border-right: 1px solid #e9edf4;
+}
+.gls-tl-dayhead {
+    padding: 10px 8px;
+    text-align: center;
+    border-right: 1px solid #e9edf4;
+}
+.gls-tl-dayhead:last-child {
+    border-right: 0;
+}
+.gls-tl-dayname {
+    display: block;
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: #202c4b;
+}
+.gls-tl-daycount {
+    display: block;
+    font-size: 11px;
+    color: #8a91a3;
+}
+.gls-tl-dayhead.is-today .gls-tl-dayname {
+    color: #3d5ee1;
+}
+.gls-tl-dayhead.is-today .gls-tl-dayname::after {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-left: 6px;
+    border-radius: 50%;
+    background: #3d5ee1;
+    vertical-align: middle;
+}
+.gls-tl-body {
+    position: relative;
+}
+.gls-tl-axis {
+    border-right: 1px solid #e9edf4;
+}
+.gls-tl-hour {
+    position: relative;
+    border-bottom: 1px solid #f0f2f7;
+}
+.gls-tl-hour span {
+    position: absolute;
+    top: -7px;
+    right: 8px;
+    font-size: 11px;
+    color: #8a91a3;
+    background: #fff;
+    padding: 0 2px;
+}
+.gls-tl-hour:first-child span {
+    top: 4px;
+}
+.gls-tl-col {
+    position: relative;
+    border-right: 1px solid #e9edf4;
+    /* One faint line per hour, a fainter one at the half hour. */
+    background-image:
+        linear-gradient(to bottom, #eef0f5 1px, transparent 1px),
+        linear-gradient(to bottom, transparent calc(50% - 1px), #f4f5f9 calc(50% - 1px), #f4f5f9 50%, transparent 50%);
+    background-size: 100% var(--gls-tl-hour), 100% var(--gls-tl-hour);
+}
+.gls-tl-col:last-child {
+    border-right: 0;
+}
+.gls-tl-col.is-today {
+    background-color: #f7f9ff;
+}
+.gls-tl-now {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 0;
+    border-top: 2px solid #e82646;
+    z-index: 2;
+    pointer-events: none;
+}
+.gls-tl-now::before {
+    content: '';
+    position: absolute;
+    left: -5px;
+    top: -6px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #e82646;
+}
+.gls-tl-now span {
+    position: absolute;
+    right: 4px;
+    top: -18px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #e82646;
+}
+
+/* The créneau card. */
+.gls-tl-ev {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    border: 1px solid hsl(var(--ev-h) 55% 80%);
+    background: hsl(var(--ev-h) 85% 96%);
+    color: #202c4b;
+    overflow: hidden;
+    box-sizing: border-box;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+    z-index: 1;
+}
+.gls-tl-ev.is-editable {
+    cursor: pointer;
+}
+.gls-tl-ev:hover,
+.gls-tl-ev:focus-visible {
+    z-index: 2;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px hsl(var(--ev-h) 50% 40% / 0.25);
+    outline: none;
+}
+.gls-tl-ev.is-dim {
+    opacity: 0.22;
+}
+.gls-tl-ev-head {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+}
+.gls-tl-ev-title {
+    font-weight: 600;
+    font-size: 13px;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+.gls-tl-ev-level {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: hsl(var(--ev-h) 55% 45%);
+    color: #fff;
+}
+.gls-tl-ev-time,
+.gls-tl-ev-meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11.5px;
+    color: #515b73;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.gls-tl-ev-time {
+    font-variant-numeric: tabular-nums;
+    color: hsl(var(--ev-h) 50% 35%);
+    font-weight: 500;
+}
+.gls-tl-ev-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+.gls-tl-ev-meta span {
+    display: flex;
+}
+.gls-tl-ev-meta span i,
+.gls-tl-ev-time i {
+    font-size: 12px;
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+/* Under 75 minutes there is room for the name and the time only. */
+.gls-tl-ev.is-short {
+    padding-top: 4px;
+    padding-bottom: 4px;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px 8px;
+}
+.gls-tl-ev.is-short .gls-tl-ev-meta {
+    display: none;
+}
+.gls-tl-ev-clos {
+    position: absolute;
+    left: 10px;
+    bottom: 5px;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: #e5e8ef;
+    color: #515b73;
+}
+/* A closed créneau: greyed and hatched, never hidden (it is what needs fixing). */
+.gls-tl-ev.is-clos {
+    --ev-h: 220;
+    border-color: #d5dae5;
+    background: repeating-linear-gradient(135deg, #f5f6f9 0 6px, #eceef4 6px 12px);
+    color: #6a7287;
+}
+.gls-tl-ev.is-clos .gls-tl-ev-time {
+    color: #6a7287;
+}
+.gls-tl-ev.is-clos .gls-tl-ev-level {
+    background: #a5acbd;
+}
+/* Bottom-right, so the buttons never cover the group name or the level badge. */
+.gls-tl-ev-actions {
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    display: flex;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+.gls-tl-ev:hover .gls-tl-ev-actions,
+.gls-tl-ev:focus-within .gls-tl-ev-actions {
+    opacity: 1;
+}
+.gls-tl-ev-actions button {
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.9);
+    color: #3d5ee1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.15);
+}
+.gls-tl-ev-actions button.is-danger {
+    color: #e82646;
+}
+.gls-tl-ev-actions button:hover {
+    background: #fff;
+}
+.gls-tl-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 48px 16px;
+}
+
+@media (max-width: 767.98px) {
+    .gls-tl-legend {
+        justify-content: flex-start;
+    }
+    .gls-tl-stats {
+        gap: 12px;
+    }
+}
+
+/* Several groups at exactly the same time: one block for the span, one row per group. */
+.gls-tl-stack {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    border-radius: 8px;
+    border: 1px solid #dfe3ec;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06);
+    box-sizing: border-box;
+    overflow: hidden;
+    z-index: 1;
+}
+.gls-tl-stack:hover {
+    z-index: 2;
+}
+.gls-tl-stack-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 5px 8px;
+    background: #f4f6fa;
+    border-bottom: 1px solid #e9edf4;
+    font-size: 11px;
+}
+.gls-tl-stack-time {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 600;
+    color: #202c4b;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.gls-tl-stack-time i {
+    font-size: 12px;
+    opacity: 0.7;
+}
+.gls-tl-stack-n {
+    color: #6a7287;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.gls-tl-stack-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px;
+}
+.gls-tl-stack-row {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: hsl(var(--ev-h) 85% 96%);
+    color: #202c4b;
+    min-width: 0;
+    transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+.gls-tl-stack-row.is-editable {
+    cursor: pointer;
+}
+.gls-tl-stack-row:hover,
+.gls-tl-stack-row:focus-visible {
+    background: hsl(var(--ev-h) 85% 92%);
+    outline: none;
+}
+.gls-tl-stack-row.is-dim {
+    opacity: 0.22;
+}
+.gls-tl-stack-row.is-clos {
+    --ev-h: 220;
+    background: repeating-linear-gradient(135deg, #f5f6f9 0 6px, #eceef4 6px 12px);
+    color: #6a7287;
+}
+.gls-tl-stack-row.is-clos .gls-tl-ev-level {
+    background: #a5acbd;
+}
+.gls-tl-stack-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 10px;
+    min-width: 0;
+}
+.gls-tl-stack-meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: #515b73;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.gls-tl-stack-meta span i {
+    font-size: 12px;
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+.gls-tl-ev-clos.is-inline {
+    position: static;
+    flex-shrink: 0;
+}
+.gls-tl-stack-row .gls-tl-ev-actions {
+    top: 50%;
+    bottom: auto;
+    transform: translateY(-50%);
+    right: 6px;
+}
+.gls-tl-stack-row:hover .gls-tl-ev-actions,
+.gls-tl-stack-row:focus-within .gls-tl-ev-actions {
+    opacity: 1;
+}
+
+/* Dark mode. */
+html[data-theme='dark'] .gls-tl-stack {
+    background: #1b1f27;
+    border-color: #393f4d;
+}
+html[data-theme='dark'] .gls-tl-stack-head {
+    background: #22262f;
+    border-color: #393f4d;
+}
+html[data-theme='dark'] .gls-tl-stack-time {
+    color: #e6e5ee;
+}
+html[data-theme='dark'] .gls-tl-stack-row {
+    background: hsl(var(--ev-h) 35% 18%);
+    color: #e6e5ee;
+}
+html[data-theme='dark'] .gls-tl-stack-row:hover {
+    background: hsl(var(--ev-h) 35% 24%);
+}
+html[data-theme='dark'] .gls-tl-stack-row.is-clos {
+    background: repeating-linear-gradient(135deg, #1f232b 0 6px, #252932 6px 12px);
+    color: #9ca1af;
+}
+html[data-theme='dark'] .gls-tl-stack-meta span {
+    color: #b1b6c1;
+}
+html[data-theme='dark'] .gls-tl {
+    background: #171a22;
+    border-color: #393f4d;
+}
+html[data-theme='dark'] .gls-tl-head {
+    background: #1b1f27;
+    border-color: #393f4d;
+}
+html[data-theme='dark'] .gls-tl-corner,
+html[data-theme='dark'] .gls-tl-dayhead,
+html[data-theme='dark'] .gls-tl-axis,
+html[data-theme='dark'] .gls-tl-col {
+    border-color: #393f4d;
+}
+html[data-theme='dark'] .gls-tl-dayname,
+html[data-theme='dark'] .gls-tl-stats strong {
+    color: #e6e5ee;
+}
+html[data-theme='dark'] .gls-tl-hour {
+    border-color: #23272f;
+}
+html[data-theme='dark'] .gls-tl-hour span {
+    background: #171a22;
+    color: #8a91a3;
+}
+html[data-theme='dark'] .gls-tl-col {
+    background-image:
+        linear-gradient(to bottom, #252932 1px, transparent 1px),
+        linear-gradient(to bottom, transparent calc(50% - 1px), #1f232b calc(50% - 1px), #1f232b 50%, transparent 50%);
+}
+html[data-theme='dark'] .gls-tl-col.is-today {
+    background-color: rgba(61, 94, 225, 0.07);
+}
+html[data-theme='dark'] .gls-tl-ev {
+    background: hsl(var(--ev-h) 35% 18%);
+    border-color: hsl(var(--ev-h) 35% 30%);
+    color: #e6e5ee;
+}
+html[data-theme='dark'] .gls-tl-ev-time {
+    color: hsl(var(--ev-h) 70% 75%);
+}
+html[data-theme='dark'] .gls-tl-ev-meta span {
+    color: #b1b6c1;
+}
+html[data-theme='dark'] .gls-tl-ev.is-clos {
+    background: repeating-linear-gradient(135deg, #1f232b 0 6px, #252932 6px 12px);
+    border-color: #393f4d;
+    color: #9ca1af;
+}
+html[data-theme='dark'] .gls-tl-ev-clos {
+    background: #393f4d;
+    color: #d5d8de;
+}
+html[data-theme='dark'] .gls-tl-ev-actions button {
+    background: rgba(30, 34, 44, 0.95);
+}
+html[data-theme='dark'] .gls-tl-legend-chip {
+    background: hsl(var(--ev-h) 35% 18%);
+    border-color: hsl(var(--ev-h) 35% 32%);
+    color: hsl(var(--ev-h) 70% 80%);
+}
+
+/* ---------------------------------------------------------------------------
  * Passe TYPOGRAPHIE — unification de la fonte (08/09/2026)
  *
  * Demande : « une meilleure police, plus visible ». Vérification faite avant
@@ -3023,10 +3608,11 @@ html[data-theme='dark'] .sidebar .sidebar-menu > ul > li .submenu-hdr {
 }
 
 /* Les badges gardent leur code couleur : ce sont des STATUTS, pas du texte
- * courant — les noircir supprimerait l'information portée par la couleur. */
-.table tbody td .badge {
-    color: inherit;
-}
+ * courant — les noircir supprimerait l'information portée par la couleur.
+ * Aucune règle ici, à dessein : l'ancien `color: inherit` faisait exactement
+ * l'inverse (le badge prenait le NOIR de la cellule — « Espèces » en bleu
+ * marine sur bleu pâle, signalé le 08/09/2026). Les classes `.badge-soft-*`
+ * du thème posent leur propre couleur et suffisent. */
 
 /* --- Mode sombre ----------------------------------------------------------
  * Le pendant du noir est le blanc quasi pur. Même raisonnement inversé :
@@ -3053,12 +3639,33 @@ html[data-theme='dark'] .table tbody td .text-gray-5 {
     color: #b3b0be !important;
 }
 
-html[data-theme='dark'] .table tbody td .badge {
-    color: inherit !important;
-}
+/* Même chose en sombre : pas d'héritage. Les teintes du thème sont pensées
+ * pour un fond blanc ; on les éclaircit d'un cran pour qu'elles restent
+ * lisibles sur une cellule sombre, sans changer le code couleur. */
+html[data-theme='dark'] .badge.badge-soft-primary   { color: #9db2ff; }
+html[data-theme='dark'] .badge.badge-soft-info      { color: #7fb3ff; }
+html[data-theme='dark'] .badge.badge-soft-success   { color: #6fd36c; }
+html[data-theme='dark'] .badge.badge-soft-danger    { color: #ff7d92; }
+html[data-theme='dark'] .badge.badge-soft-warning   { color: #f3c95a; }
+html[data-theme='dark'] .badge.badge-soft-secondary { color: #d2d0da; }
+html[data-theme='dark'] .badge.badge-soft-dark      { color: #d2d0da; }
 
 /* Les liens de tableau restent bleus — c'est ce qui signale qu'ils sont
  * cliquables ; les noircir les rendrait indistinguables du texte. */
 html[data-theme='dark'] .table tbody td a:not(.btn):not(.dropdown-item):not(.page-link) {
     color: #9db2ff !important;
+}
+
+/* --- Séances : séparation entre les jours ----------------------------------
+ * La liste est triée par date ; la dernière ligne de chaque journée porte
+ * `.gls-day-separator` (posé côté React en comparant la date de la ligne
+ * suivante), et son trait du bas est plus épais et plus sombre que le filet
+ * ordinaire, pour lire d'un coup d'œil où un jour finit et où le suivant
+ * commence. */
+.table tbody tr.gls-day-separator > td {
+    border-bottom: 3px solid #c9d0de;
+}
+
+html[data-theme='dark'] .table tbody tr.gls-day-separator > td {
+    border-bottom-color: #3b3b4f;
 }

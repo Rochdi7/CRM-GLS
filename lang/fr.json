@@ -1013,6 +1013,7 @@
     "Welcome to GLS": "Bienvenue chez GLS",
     "Welcome to GLS CRM": "Bienvenue sur GLS CRM",
     "WhatsApp": "WhatsApp",
+    "With an active registration": "Avec inscription active",
     "Whoops!": "Oups !",
     "Year": "Année",
     "Yes": "Oui",
@@ -1263,5 +1264,17 @@
     "In training": "En formation",
     "Enrolling": "En inscription",
     "Finished": "Terminés",
-    "Cancelled (groups)": "Annulés"
+    "Cancelled (groups)": "Annulés",
+    "Replaced": "Remplacé",
+    "Finished (slot)": "Terminé",
+    "Show all": "Tout afficher",
+    "groups": "groupes",
+    "teachers": "enseignants",
+    "slots": "créneaux",
+    "free": "libre",
+    ":count slots": ":count créneau(x)",
+    "No slot for these filters.": "Aucun créneau pour ces filtres.",
+    "Adjust the filters or add a slot with the button above.": "Ajustez les filtres ou ajoutez un créneau avec le bouton ci-dessus.",
+    "Highlight a group": "Mettre un groupe en évidence",
+    ":count groups at the same time": ":count groupes en même temps"
 }

@@ -1,6 +1,7 @@
 import { router, useForm, usePage } from '@inertiajs/react';
 import { pageWindow } from '@/Components/Tables/Pagination';
 import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useAutoOpenCreate } from '@/Hooks/useAutoOpenCreate';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
@@ -622,6 +623,10 @@ export default function InscriptionsIndex({
         setAvailableFeesPage(1);
         setShowModal(true);
     }
+
+    // Raccourci « Actions rapides » du tableau de bord : ?nouveau=1 ouvre
+    // directement ce formulaire (confort d'interface seulement, §5).
+    useAutoOpenCreate(openCreate);
 
     function openEdit(inscription: InscriptionRow) {
         // The base-fields form only ever changes 6 columns, matching the

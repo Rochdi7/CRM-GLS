@@ -77,7 +77,7 @@ final class DashboardInertiaTest extends TestCase
             ->get(route('backoffice.dashboard'))
             ->assertInertia(fn (Assert $page) => $page
                 ->where('stats', fn ($stats) => collect($stats)->keys()->all() === [
-                    'studentsTotal', 'employeesTotal', 'employeesActive', 'enseignantsTotal', 'parentsTotal', 'groupsTotal',
+                    'studentsTotal', 'studentsActifs', 'employeesTotal', 'employeesActive', 'enseignantsTotal', 'parentsTotal', 'groupsTotal',
                     'groupsEnFormation', 'groupsEnInscription', 'groupsTermines', 'groupsAnnules',
                     'inscriptionsTotal', 'inscriptionsActives', 'inscriptionsAnnulees', 'inscriptionsChangement',
                     'paymentsMonth', 'depensesMonth', 'depensesMonthCount', 'anneeLabel', 'centreLabel',
@@ -240,6 +240,74 @@ final class DashboardInertiaTest extends TestCase
         $this->actingAs($admin)
             ->get(route('backoffice.dashboard'))
             ->assertInertia(fn (Assert $page) => $page->where('stats.studentsTotal', 4));
+    }
+
+    /**
+     * « Avec inscription active » counts PEOPLE, not dossiers, and only in
+     * the année the switcher shows — the deliberate counterpart to the
+     * students total above it, which spans every année (test above).
+     *
+     * Three things it must get right, each of which a naive COUNT gets
+     * wrong: a student enrolled twice in the same année is ONE student; a
+     * cancelled dossier does not make its student active; and a student
+     * active in another année is not counted in this one.
+     */
+    public function test_students_with_an_active_registration_counts_distinct_people_of_the_active_year(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole(Role::SUPER_ADMIN);
+
+        $oldYear = AnneeScolaire::create(['nom' => '2024/2025', 'date_debut' => '2024-09-01', 'date_fin' => '2025-08-31', 'par_defaut' => false, 'inscription_ouverte' => false]);
+        $newYear = AnneeScolaire::query()->where('nom', '2025/2026')->firstOrFail();
+        $centre = Etablissement::factory()->create();
+
+        $enroll = function (Student $student, AnneeScolaire $annee, string $statut) use ($centre): void {
+            $group = Group::factory()->create(['etablissement_id' => $centre->id, 'annee_scolaire_id' => $annee->id]);
+            \App\Models\Inscription::create([
+                'reference' => 'INS-'.fake()->unique()->numerify('#####'),
+                'student_id' => $student->id, 'group_id' => $group->id,
+                'etablissement_id' => $centre->id, 'annee_scolaire_id' => $annee->id,
+                'statut' => $statut, 'date_inscription' => $annee->date_debut,
+                'montant_total' => 1000,
+            ]);
+        };
+
+        // Enrolled TWICE in the active année — one person, not two.
+        $twice = Student::factory()->create(['etablissement_id' => $centre->id]);
+        $enroll($twice, $newYear, \App\Models\Inscription::STATUT_ACTIVE);
+        $enroll($twice, $newYear, \App\Models\Inscription::STATUT_ACTIVE);
+
+        // Active once — counted.
+        $once = Student::factory()->create(['etablissement_id' => $centre->id]);
+        $enroll($once, $newYear, \App\Models\Inscription::STATUT_ACTIVE);
+
+        // Cancelled in the active année — a closed dossier owes nothing and
+        // makes nobody active.
+        $cancelled = Student::factory()->create(['etablissement_id' => $centre->id]);
+        $enroll($cancelled, $newYear, \App\Models\Inscription::STATUT_ANNULEE);
+
+        // Active, but in the PREVIOUS année.
+        $lastYear = Student::factory()->create(['etablissement_id' => $centre->id]);
+        $enroll($lastYear, $oldYear, \App\Models\Inscription::STATUT_ACTIVE);
+
+        // Never enrolled at all.
+        Student::factory()->create(['etablissement_id' => $centre->id]);
+
+        $this->actingAs($admin)
+            ->get(route('backoffice.dashboard'))
+            ->assertInertia(fn (Assert $page) => $page
+                // 5 people exist in the centre whatever the year…
+                ->where('stats.studentsTotal', 5)
+                // …but only 2 hold an Active dossier in 2025/2026.
+                ->where('stats.studentsActifs', 2));
+
+        app(\App\Services\Context\CurrentContext::class)->setAnneeScolaire($oldYear->id);
+
+        $this->actingAs($admin)
+            ->get(route('backoffice.dashboard'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('stats.studentsTotal', 5)
+                ->where('stats.studentsActifs', 1));
     }
 
     public function test_all_centers_selection_aggregates_every_center(): void

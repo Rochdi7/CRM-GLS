@@ -295,6 +295,38 @@ class Employee extends Model implements HasMedia
     }
 
     /**
+     * Job titles that never take money from a student.
+     *
+     * An « Enseignant » teaches; an « Autre » has no defined job at all. The
+     * legacy Import's « Opérateur → Employé » mapping offered every employee
+     * of the centre, so a teacher could be — and was — recorded as the agent
+     * of 3 114 payments (audit 09/09/2026: Oumnya Salim « Autre » for
+     * 3 078 490 DH, Aya Figar « Enseignant » for 22 050 DH — the latter has
+     * no login and has never signed in, so she cannot have cashed anything).
+     *
+     * ⚠ This bounds a CHOICE, never an authorization. Access is decided by
+     * roles and « Centres affectés » (§16), and `categorie` is never read in
+     * an authorization check — it only stops the Import screen from offering
+     * a name that makes no business sense as a cashier.
+     */
+    public const CATEGORIES_NON_ENCAISSEUSES = [
+        self::CATEGORIE_ENSEIGNANT,
+        self::CATEGORIE_AUTRE,
+    ];
+
+    /**
+     * Employees who may legitimately be recorded as the AGENT of a payment.
+     *
+     * Used by the legacy Import's operator mapping (both the options it
+     * offers and the server-side check on what comes back — a dropdown is a
+     * convenience, never a guarantee, §5).
+     */
+    public function scopeCanCollectPayments(Builder $query): Builder
+    {
+        return $query->whereNotIn('employees.categorie', self::CATEGORIES_NON_ENCAISSEUSES);
+    }
+
+    /**
      * EVERY account this employee is responsable of — the physical till
      * provisioned for them plus any « Externe » safe an admin assigned to
      * them from Comptes de caisse. Use it for "is this one of MY accounts?"

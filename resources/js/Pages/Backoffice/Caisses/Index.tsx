@@ -44,15 +44,15 @@ function emptyTransferForm(): TransferFormState {
     return { caisse_destination_id: '', montant: '', date_transfert: todayIso(), note: '' };
 }
 
-const TRANSFER_STATUT_BADGE: Record<string, 'success' | 'secondary' | 'warning'> = {
+const TRANSFER_STATUT_BADGE: Record<string, 'success' | 'danger' | 'warning'> = {
     'Validé': 'success',
-    'Annulé': 'secondary',
+    'Annulé': 'danger',
     'En attente': 'warning',
 };
 
-const TRANSACTION_TYPE_BADGE: Record<string, 'success' | 'danger'> = {
+const TRANSACTION_TYPE_BADGE: Record<string, 'success' | 'info'> = {
     'Réception': 'success',
-    'Transfert': 'danger',
+    'Transfert': 'info',
 };
 
 function JournalPanel({ scope, data, centerLocked }: { scope: 'mine' | 'all'; data: CaisseJournalData; centerLocked: boolean }) {

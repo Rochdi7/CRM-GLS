@@ -12,6 +12,8 @@ final class DashboardStatsData
 {
     public function __construct(
         public readonly int $studentsTotal,
+        /** Distinct students holding an Active inscription in the active année. */
+        public readonly int $studentsActifs,
         public readonly int $employeesTotal,
         public readonly int $employeesActive,
         public readonly int $enseignantsTotal,
@@ -33,7 +35,7 @@ final class DashboardStatsData
     ) {}
 
     /**
-     * @return array{studentsTotal: int, employeesTotal: int, employeesActive: int,
+     * @return array{studentsTotal: int, studentsActifs: int, employeesTotal: int, employeesActive: int,
      *     enseignantsTotal: int, parentsTotal: int, groupsTotal: int, groupsEnFormation: int, groupsEnInscription: int,
      *     groupsTermines: int, groupsAnnules: int, inscriptionsTotal: int,
      *     inscriptionsActives: int, inscriptionsAnnulees: int, inscriptionsChangement: int, paymentsMonth: string,
@@ -43,6 +45,7 @@ final class DashboardStatsData
     {
         return [
             'studentsTotal' => $this->studentsTotal,
+            'studentsActifs' => $this->studentsActifs,
             'employeesTotal' => $this->employeesTotal,
             'employeesActive' => $this->employeesActive,
             'enseignantsTotal' => $this->enseignantsTotal,

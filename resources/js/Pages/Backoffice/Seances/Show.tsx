@@ -460,6 +460,11 @@ export default function SeanceShow({
                                                 {row.absentsCount} absent{row.absentsCount > 1 ? 's' : ''}
                                             </span>
                                         </>
+                                    ) : row.statut === 'Annulée' ? (
+                                        <span className="text-muted d-inline-flex align-items-center">
+                                            <i className="ti ti-ban me-1" />
+                                            Séance annulée
+                                        </span>
                                     ) : (
                                         <span className="text-muted">Appel non fait</span>
                                     )}
@@ -469,7 +474,7 @@ export default function SeanceShow({
                                 </td>
                                 <td className="text-end">
                                     <div className="d-flex align-items-center justify-content-end gap-2">
-                                        {listPermissions.mark && (
+                                        {listPermissions.mark && row.statut !== 'Annulée' && (
                                             <Link
                                                 href={row.showUrl}
                                                 className="btn btn-outline-primary btn-sm d-inline-flex align-items-center"

@@ -38,6 +38,7 @@ use App\Services\Authorization\CenterAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
@@ -97,11 +98,20 @@ final class EncaissementController extends Controller
         // `X-Inertia-Partial-Data` marks a reload driven by the page itself,
         // which always sends the full filter set — an absent key there means
         // "cleared", never "unset".
-        if ($request->query() === [] && ! $request->hasHeader('X-Inertia-Partial-Data')) {
-            return redirect()->route('backoffice.encaissements.index', [
+        //
+        // `nouveau` is not a filter: it is the dashboard quick action asking
+        // the page to open its « Enregistrer un paiement » modal on arrival
+        // (Hooks/useAutoOpenCreate.ts). It must therefore NOT make a visit
+        // look non-bare, or the shortcut would land the cashier on an
+        // unfiltered list while the sidebar link gets today's window.
+        $filterQuery = Arr::except($request->query(), ['nouveau']);
+
+        if ($filterQuery === [] && ! $request->hasHeader('X-Inertia-Partial-Data')) {
+            return redirect()->route('backoffice.encaissements.index', array_filter([
                 'dateFrom' => now()->toDateString(),
                 'dateTo' => now()->toDateString(),
-            ]);
+                'nouveau' => $request->query('nouveau'),
+            ]));
         }
 
         $search = (string) $request->string('search');

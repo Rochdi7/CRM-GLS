@@ -174,3 +174,87 @@ formes :
 Tests : `tests/Feature/Backoffice/Finance/ReconcilierPaiementsLegacyTest.php`
 (8 cas, sur un vrai .xlsx au format de l'export — fixture
 `tests/Fixtures/legacy/`).
+
+---
+
+# L'agent d'un encaissement — `encaissements:reattribuer-agent`
+
+## Le problème (audit 09/09/2026)
+
+La table « Opérateur → Employé » de l'import proposait **tous** les employés
+du centre. Un enseignant pouvait donc être enregistré comme l'agent qui a
+encaissé — ce qui n'a aucun sens métier :
+
+| Agent | Catégorie | Paiements importés | Montant |
+|---|---|---:|---:|
+| Oumnya Salim (25) | Autre | 3 114 | 3 078 490 DH |
+| Aya Figar (72) | Enseignant | 52 | 22 050 DH |
+
+Aya Figar n'a **aucun login** et ne s'est jamais connectée : elle n'a pas pu
+encaisser un dirham. Les 16 lignes non importées à son nom ont été créées par
+d'autres personnes.
+
+## La prévention (déjà en place)
+
+- `Employee::CATEGORIES_NON_ENCAISSEUSES` = « Enseignant » + « Autre ».
+- `Employee::scopeCanCollectPayments()` — la source unique.
+- L'écran d'import ne les propose plus, **et** les deux Form Requests
+  (`AnalyzeEncaissementImportRequest`, `AnalyzeCombinedImportRequest`) les
+  refusent côté serveur : une liste cliente n'est qu'un confort (§5).
+
+⚠ Ceci borne un **CHOIX**, jamais une autorisation. `categorie` n'est jamais
+lu dans un contrôle d'accès (§16) — l'accès reste décidé par les rôles et les
+« Centres affectés ».
+
+⚠ **La saisie normale n'a jamais eu ce problème** : `EnregistrerEncaissement`
+dérive `agent_id` de l'employé CONNECTÉ, il n'est pas choisissable. Seul
+l'import injectait un agent arbitraire.
+
+## L'audit — voir TOUS les cas d'abord
+
+```bash
+php artisan encaissements:reattribuer-agent --auditer
+```
+
+Lecture seule. Une ligne par employé concerné, avec la colonne qui décide :
+
+| id | employé | catégorie | total | importés | saisis | montant | connecté |
+|---:|---|---|---:|---:|---:|---:|---|
+| 25 | Oumnya Salim | Autre | 3 359 | 3 114 | 245 | 3 219 590 | jamais |
+| 72 | Aya Figar | Enseignant | 71 | 58 | 13 | 32 600 | AUCUN |
+
+**La colonne « connecté » tranche :**
+
+- **AUCUN / jamais** — le nom a seulement été CHOISI dans le mapping
+  d'import. Cette personne n'a pas de login, ou ne s'est jamais connectée :
+  elle n'a pas pu encaisser un dirham. Réattribution sûre.
+- **oui** — quelqu'un a réellement travaillé au guichet sous cette fiche. Le
+  correctif est sa **catégorie dans sa fiche employé** (lui donner son vrai
+  poste), PAS une réécriture de l'historique : `agent_id` est une trace
+  d'audit, pas un libellé (§11).
+
+## La réparation
+
+```bash
+# 1. simulation
+php artisan encaissements:reattribuer-agent --de=72 --vers=1 --dry-run
+
+# 2. sauvegarde, puis application
+sudo -u postgres pg_dump gls_crm | gzip > /root/gls_crm_$(date +%F_%H%M).sql.gz
+php artisan encaissements:reattribuer-agent --de=72 --vers=1
+
+# variante : ne toucher que les lignes importées
+php artisan encaissements:reattribuer-agent --de=72 --vers=1 --importes-seulement
+```
+
+Ce qu'elle ne touche **jamais** : `montant`, `date_paiement`, `methode`,
+`caisse_id`, `caisses.solde`, `inscription_fee_id`. Seul le nom de l'agent
+change. Chaque ligne passe par `save()` — jamais un `update()` de masse —
+donc `Auditable` journalise « avant → après » (§11).
+
+⚠ **`agent_id` est une trace d'audit, pas un libellé.** La commande est
+volontairement ciblée par employé (`--de=`) plutôt qu'un balayage
+« tous les non-encaisseurs » : réécrire l'agent d'un paiement que quelqu'un a
+réellement saisi effacerait qui l'a fait. Chaque cas se juge.
+
+Tests : `tests/Feature/Backoffice/Finance/AgentEncaisseurTest.php`.
