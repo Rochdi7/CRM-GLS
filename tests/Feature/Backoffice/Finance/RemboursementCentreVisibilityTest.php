@@ -121,12 +121,17 @@ final class RemboursementCentreVisibilityTest extends TestCase
     }
 
     /**
-     * The cashier now chooses the till, so the money must leave the till they
-     * named — not the one derived from their own employee record.
+     * Whoever may CHOOSE the till (`refunds.choose-till`, directeur —
+     * 10/09/2026) sees the money leave the till they named, not the one
+     * derived from their own employee record. Without that permission the
+     * choice is refused outright, which
+     * RemboursementCaisseChoisieTest covers.
      */
     public function test_the_chosen_till_is_the_one_debited(): void
     {
         $user = $this->cashier();
+        $user->givePermissionTo('refunds.choose-till');
+        $user = $user->fresh();
         $this->actingAs($user);
 
         $ownTill = $user->employee->till()->first();
@@ -159,7 +164,10 @@ final class RemboursementCentreVisibilityTest extends TestCase
     public function test_a_till_outside_the_users_centres_is_refused(): void
     {
         $user = User::factory()->create();
-        foreach (['refunds.view', 'refunds.create'] as $p) {
+        // Avec le droit de choisir : ce test porte sur la PORTÉE des centres,
+        // pas sur la permission — sans lui le refus viendrait de la mauvaise
+        // règle et n'assérerait plus rien.
+        foreach (['refunds.view', 'refunds.create', 'refunds.choose-till'] as $p) {
             $user->givePermissionTo($p);
         }
         Employee::factory()->create(['user_id' => $user->id, 'etablissement_id' => $this->centreCaisse->id]);

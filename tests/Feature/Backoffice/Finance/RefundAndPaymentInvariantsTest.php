@@ -51,7 +51,13 @@ final class RefundAndPaymentInvariantsTest extends TestCase
             $user->givePermissionTo($p);
         }
 
-        Employee::factory()->create(['user_id' => $user->id, 'etablissement_id' => $this->centre->id]);
+        $employee = Employee::factory()->create(['user_id' => $user->id, 'etablissement_id' => $this->centre->id]);
+
+        // Le tiroir doit contenir ce qu'il rend (GardeSoldeCaisse,
+        // 10/09/2026 — une caisse PHYSIQUE ne descend jamais sous zéro). Ce
+        // fichier épingle les PLAFONDS de remboursement, pas le solde : le
+        // financer largement garde chaque test sur son sujet.
+        $employee->till()->first()?->update(['solde' => '100000.00']);
 
         return $user->fresh();
     }

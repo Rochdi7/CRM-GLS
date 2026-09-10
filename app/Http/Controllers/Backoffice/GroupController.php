@@ -874,9 +874,14 @@ final class GroupController extends Controller
     }
 
     /**
-     * Chiffres réels affichés dans l'avertissement de suppression (ce que la
-     * destruction va emporter). Lecture seule, même garde que destroy() : un
-     * non-super-admin ne doit même pas pouvoir sonder le groupe.
+     * Chiffres réels affichés dans l'avertissement de suppression. Lecture
+     * seule, même garde que destroy() : un non-super-admin ne doit même pas
+     * pouvoir sonder le groupe.
+     *
+     * `inscriptions` / `inscriptionsActives` décrivent ce qui SURVIT à la
+     * suppression — pas ce qu'elle emporte : les dossiers sont conservés et
+     * annulés (DetacherInscriptionsGroupeSupprime). `encaissements` et
+     * `seances` restent, eux, des motifs de REFUS.
      */
     public function deletionImpact(Request $request, Group $group): JsonResponse
     {
@@ -889,6 +894,10 @@ final class GroupController extends Controller
         return response()->json([
             'nom' => $group->nom,
             'inscriptions' => $inscriptionIds->count(),
+            // Celles qui vont effectivement basculer en « Annulée » : un
+            // dossier déjà clos garde son statut et son motif d'origine.
+            'inscriptionsActives' => Inscription::query()->where('group_id', $group->id)
+                ->where('statut', Inscription::STATUT_ACTIVE)->count(),
             'etudiants' => Inscription::query()->where('group_id', $group->id)
                 ->distinct()->count('student_id'),
             'frais' => $feeIds->count(),
@@ -900,10 +909,14 @@ final class GroupController extends Controller
     }
 
     /**
-     * ⚠ Suppression DÉFINITIVE du groupe et de ses inscriptions — super-admin
-     * uniquement (`groups.delete` ∈ superAdminOnly()). REFUSÉE si le groupe
-     * porte le moindre encaissement ou la moindre séance : ce chemin ne sert
-     * qu'aux groupes créés par erreur (SupprimerGroupe).
+     * ⚠ Suppression DÉFINITIVE du groupe — super-admin uniquement
+     * (`groups.delete` ∈ superAdminOnly()). REFUSÉE si le groupe porte le
+     * moindre encaissement ou la moindre séance : ce chemin ne sert qu'aux
+     * groupes créés par erreur (SupprimerGroupe).
+     *
+     * Les INSCRIPTIONS ne sont PAS supprimées : elles sont annulées et
+     * gardent dans leur note le nom du groupe supprimé
+     * (DetacherInscriptionsGroupeSupprime).
      */
     public function destroy(Request $request, Group $group, SupprimerGroupe $supprimer): RedirectResponse
     {
@@ -925,10 +938,15 @@ final class GroupController extends Controller
         $nom = (string) $group->nom;
         $resultat = $supprimer->handle($group);
 
-        $message = __('Group :name and its :count registrations were permanently deleted.', [
-            'name' => $nom,
-            'count' => (string) $resultat['inscriptions'],
-        ]);
+        // Le message DIT ce qui a survécu, pas seulement ce qui a disparu :
+        // un utilisateur qui supprime un groupe doit savoir sur-le-champ que
+        // les dossiers des étudiants sont toujours là, annulés et annotés.
+        $message = $resultat['inscriptions'] === 0
+            ? __('Group :name was permanently deleted.', ['name' => $nom])
+            : __('Group :name was permanently deleted. Its :count registration(s) were kept and cancelled, with the group name saved in their notes.', [
+                'name' => $nom,
+                'count' => (string) $resultat['inscriptions'],
+            ]);
 
         return redirect()->route('backoffice.groups.index')->with('success', $message);
     }

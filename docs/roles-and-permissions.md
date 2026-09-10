@@ -221,6 +221,17 @@ keep the roles from drifting apart:
   garde `payments.update` pour la note et l'identité du chèque, mais ne
   déplace pas d'argent. Tests :
   `tests/Feature/Backoffice/Finance/EncaissementsInertiaCrudTest.php`.
+  ⚠ **`refunds.choose-till` (10/09/2026) n'est PAS dans `$managementEdits`.**
+  Choisir la caisse débitée par un remboursement est porté par le SEUL rôle
+  `director` (+ le bypass super-admin), pour que l'élargir reste une décision
+  explicite. Le champ « Caisse à débiter » offrait auparavant toutes les
+  caisses espèces du centre actif, soldes compris, à quiconque tenait
+  `refunds.create` : une assistante administrative pouvait rendre de l'argent
+  depuis le tiroir d'un collègue. Le front-office rend l'argent qu'il a
+  physiquement en main — sa propre caisse, dérivée au serveur. Un `caisse_id`
+  étranger soumis sans le droit est refusé (422) et la liste des caisses ne
+  lui est même pas servie. Voir CLAUDE.md §11.
+
 - **`$financeReadOnly`** — read access to every finance screen, the baseline
   the accounting/oversight roles build on.
 - **`defaultForEveryRole()`** — la base commune AJOUTÉE À TOUS les presets par

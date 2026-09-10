@@ -479,6 +479,23 @@ export interface EncaissementDetails {
         reste: MoneyDisplay;
         statut: string;
     } | null;
+    /**
+     * Set when this payment was moved from another student's fee
+     * (TransfererFraisVersAutreEtudiant). Read from the audit journal as
+     * written — `date` is the OPERATION date, distinct from the receipt's
+     * `date` which stays the original payment date.
+     */
+    transfert: {
+        date: string | null;
+        par: string | null;
+        motif: string | null;
+        ancienEtudiant: string | null;
+        ancienneInscription: string | null;
+        ancienFrais: string | null;
+        nouvelEtudiant: string | null;
+        nouvelleInscription: string | null;
+        nouveauFrais: string | null;
+    } | null;
     /** True when the row carries no fee — money received and not yet allocated. */
     isAvance: boolean;
     montantUtilise: MoneyDisplay;
@@ -652,6 +669,22 @@ export interface CreneauCreateForm {
     [key: string]: string | string[];
 }
 
+/**
+ * Retard de paiement d'un étudiant, tel que la fiche de présence l'affiche.
+ * Dérivé au serveur par RetardPaiementEtudiant (même règle que « Gestion des
+ * recouvrements ») — la page ne recalcule jamais ni les jours ni la gravité.
+ */
+export interface RetardPaiementEtudiant {
+    /** Jours écoulés depuis l'échéance impayée la plus ancienne. */
+    jours: number;
+    /** Cette échéance-là, au format 01/09/2026. */
+    dateEcheance: string;
+    /** Total encore dû sur toutes les lignes échues de l'étudiant. */
+    montant: string;
+    /** Retard de plus de 5 jours ⇒ signalé en rouge plutôt qu'en orange. */
+    grave: boolean;
+}
+
 export interface SeanceStudentLine {
     id: number;
     reference: string;
@@ -660,6 +693,8 @@ export interface SeanceStudentLine {
     photoUrl: string | null;
     statut: string | null;
     note: string;
+    /** null quand l'étudiant est à jour. */
+    retardPaiement: RetardPaiementEtudiant | null;
 }
 
 export interface SeanceDetails {
@@ -1176,7 +1211,10 @@ export interface StudentsPageProps {
  */
 export interface GroupDeletionImpact {
     nom: string;
+    /** Inscriptions CONSERVÉES (jamais supprimées avec le groupe). */
     inscriptions: number;
+    /** Celles encore Active, qui vont basculer en « Annulée ». */
+    inscriptionsActives: number;
     etudiants: number;
     frais: number;
     encaissements: number;
@@ -1768,6 +1806,21 @@ export interface EncaissementRow {
      * (super-admin only); the action refuses again server-side.
      */
     montantCorrigible?: boolean;
+    /**
+     * Combien de fois l'étudiant a été appelé dans le groupe de
+     * l'inscription qui porte ce paiement. Affiché dans le modal de
+     * transfert pour EXPLIQUER un refus plutôt que de le subir.
+     */
+    sourcePresencesCount?: number;
+    /**
+     * Whether TransfererFraisVersAutreEtudiant would accept this row — false
+     * for an advance (nothing attached to transfer), a refunded payment, a
+     * tracked-cheque payment, and above all a source registration that has
+     * ANY attendance (the place was taken, so the money stays with its
+     * student). Décidé côté serveur : ne jamais le recalculer ici, la règle
+     * vit dans GardePresencesInscription et l'action refuse à nouveau.
+     */
+    transferableAutreEtudiant?: boolean;
     studentEmail: string | null;
     showUrl: string;
     /** Printable receipt page — append ?format=a6|a5|a5x2. */
@@ -1838,7 +1891,14 @@ export interface EncaissementsPageProps {
      * (RequalifierMethodeEncaissement), and refuses a different value posted
      * without the permission.
      */
-    can?: { delete: boolean; updateDate?: boolean; updateMethode?: boolean; updateAmount?: boolean };
+    can?: {
+        delete: boolean;
+        updateDate?: boolean;
+        updateMethode?: boolean;
+        updateAmount?: boolean;
+        /** Direction + super-admin — dessine « Transférer vers un autre étudiant ». */
+        transferToStudent?: boolean;
+    };
     [key: string]: unknown;
 }
 
@@ -2099,8 +2159,17 @@ export interface DepensesPageProps {
     /** Totaux serveur sur l'ensemble filtre, remboursements annules exclus. */
     remboursementsTotaux: { montant: MoneyDisplay; count: number; annules: number } | null;
     students: FinanceOption[];
-    /** Cash tills the refund may be paid out of — active centre, reachable centres only. */
+    /**
+     * Cash tills the refund may be paid out of — active centre, reachable
+     * centres only. EMPTY unless the user holds `refunds.choose-till`: for
+     * everyone else the server debits their own till and never offers a
+     * choice (10/09/2026).
+     */
     remboursementCaisses: RemboursementCaisseOption[];
+    /** UI convenience only (`refunds.choose-till`) ; le Form Request est le vrai verrou. */
+    canChooseRemboursementCaisse: boolean;
+    /** La caisse débitée quand l'utilisateur ne choisit pas — affichée en lecture seule. */
+    remboursementCaisseParDefaut: RemboursementCaisseOption | null;
     /** Paramètres → Système « Validation des dépenses » — drives the whole approval UI. */
     approvalEnabled: boolean;
     /** UI convenience only (`expenses.approve`); the policy is the real gate. */
@@ -2339,12 +2408,22 @@ export interface RapportFilters {
     statutFilter: string;
     sexeFilter: string;
     inscriptionFilter: string;
+    methodeFilter: string;
+    caisseFilter: string;
+    typeFilter: string;
     dateFrom: string;
     dateTo: string;
 }
 
 /** Clé d'un filtre propre à un rapport (la fenêtre de dates est toujours dessinée). */
-export type RapportFiltreKey = 'groupFilter' | 'statutFilter' | 'sexeFilter' | 'inscriptionFilter';
+export type RapportFiltreKey =
+    | 'groupFilter'
+    | 'statutFilter'
+    | 'sexeFilter'
+    | 'inscriptionFilter'
+    | 'methodeFilter'
+    | 'caisseFilter'
+    | 'typeFilter';
 
 export interface RapportsPageProps {
     onglets: RapportOnglet[];
@@ -2358,8 +2437,17 @@ export interface RapportsPageProps {
     statutOptions: SelectOption[];
     sexeOptions: SelectOption[];
     inscriptionOptions: SelectOption[];
+    methodeOptions: SelectOption[];
+    caisseOptions: SelectOption[];
+    typeOptions: SelectOption[];
     /** Nombre de lignes que le document contiendra avec les filtres courants. */
     nombreLignes: number;
+    /**
+     * Le total encaissé, calculé PAR LE SERVEUR sur tout l'ensemble filtré —
+     * jamais additionné côté client. Chaîne vide pour un rapport sans colonne
+     * monétaire : la page n'affiche alors rien, plutôt que « 0,00 DH ».
+     */
+    montantTotal: string;
     [key: string]: unknown;
 }
 

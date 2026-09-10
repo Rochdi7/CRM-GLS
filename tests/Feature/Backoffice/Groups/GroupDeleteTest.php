@@ -12,6 +12,7 @@ use App\Models\Etablissement;
 use App\Models\Group;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
+use App\Models\MotifAnnulation;
 use App\Models\Role;
 use App\Models\Seance;
 use App\Models\Student;
@@ -26,6 +27,11 @@ use Tests\TestCase;
  * suppression DÉFINITIVE réservée au super-admin, et UNIQUEMENT pour un
  * groupe créé par erreur — le moindre encaissement ou la moindre séance la
  * fait refuser. Aucun argent n'est déplacé par ce chemin.
+ *
+ * ⚠ Et surtout (10/09/2026) : les INSCRIPTIONS SURVIVENT. Une inscription
+ * est le dossier d'un étudiant — elle porte des frais et, potentiellement,
+ * de l'argent. Elle est annulée et reçoit le nom du groupe supprimé dans sa
+ * note, jamais détruite en dommage collatéral.
  */
 final class GroupDeleteTest extends TestCase
 {
@@ -121,17 +127,83 @@ final class GroupDeleteTest extends TestCase
         }
     }
 
-    public function test_a_super_admin_deletes_a_group_that_never_received_money(): void
+    /**
+     * Le cœur de la règle : le GROUPE part, les DOSSIERS restent — annulés,
+     * motivés, et portant le nom du groupe dans leur note (le seul endroit
+     * où ce nom survit une fois la ligne `groups` détruite).
+     */
+    public function test_a_super_admin_deletes_a_group_and_its_registrations_survive(): void
     {
+        $nom = (string) $this->group->nom;
+
         $this->actingAs($this->superAdmin())
             ->delete(route('backoffice.groups.destroy', $this->group), [
-                'confirmation' => $this->group->nom,
+                'confirmation' => $nom,
             ])
             ->assertRedirect(route('backoffice.groups.index'));
 
         $this->assertDatabaseMissing('groups', ['id' => $this->group->id]);
-        $this->assertSame(0, Inscription::query()->where('group_id', $this->group->id)->count());
-        $this->assertSame(0, InscriptionFee::query()->count());
+
+        // Les 2 inscriptions existent toujours, détachées du groupe disparu.
+        $inscriptions = Inscription::query()->whereIn('reference', ['INS-DEL-1', 'INS-DEL-2'])->get();
+        $this->assertCount(2, $inscriptions);
+
+        foreach ($inscriptions as $inscription) {
+            $this->assertNull($inscription->group_id, 'group_id doit retomber à NULL (ON DELETE SET NULL).');
+            $this->assertSame(Inscription::STATUT_ANNULEE, $inscription->statut);
+            $this->assertSame(MotifAnnulation::MOTIF_GROUPE_SUPPRIME, $inscription->motif_annulation);
+            // Le nom du groupe supprimé doit être lisible dans la note :
+            // c'est ce qui permet de comprendre, des mois plus tard, ce qui
+            // est arrivé au dossier.
+            $this->assertStringContainsString($nom, (string) $inscription->note);
+        }
+
+        // Les lignes de frais suivent leur inscription, elles ne sont pas
+        // emportées par la cascade du groupe.
+        $this->assertSame(2, InscriptionFee::query()->count());
+    }
+
+    /**
+     * Un dossier DÉJÀ CLOS garde son statut ET son motif d'origine : la
+     * suppression du groupe n'a pas à réécrire pourquoi il avait été fermé.
+     * Il reçoit quand même la note, sinon son groupe deviendrait « — » sans
+     * la moindre explication.
+     */
+    public function test_an_already_closed_registration_keeps_its_own_reason(): void
+    {
+        $inscription = Inscription::query()->where('reference', 'INS-DEL-1')->firstOrFail();
+        $inscription->update([
+            'statut' => Inscription::STATUT_CHANGEMENT,
+            'motif_annulation' => MotifAnnulation::MOTIF_CHANGEMENT_GROUPE,
+        ]);
+
+        $nom = (string) $this->group->nom;
+
+        $this->actingAs($this->superAdmin())
+            ->delete(route('backoffice.groups.destroy', $this->group), ['confirmation' => $nom])
+            ->assertRedirect(route('backoffice.groups.index'));
+
+        $inscription->refresh();
+        $this->assertSame(Inscription::STATUT_CHANGEMENT, $inscription->statut);
+        $this->assertSame(MotifAnnulation::MOTIF_CHANGEMENT_GROUPE, $inscription->motif_annulation);
+        $this->assertStringContainsString($nom, (string) $inscription->note);
+    }
+
+    /**
+     * La note est AJOUTÉE, jamais écrasée — même règle que
+     * AnnulerInscription / CloturerInscriptionsGroupe.
+     */
+    public function test_the_existing_note_is_preserved(): void
+    {
+        $inscription = Inscription::query()->where('reference', 'INS-DEL-1')->firstOrFail();
+        $inscription->update(['note' => "Note d'origine à conserver"]);
+
+        $this->actingAs($this->superAdmin())
+            ->delete(route('backoffice.groups.destroy', $this->group), ['confirmation' => $this->group->nom]);
+
+        $note = (string) $inscription->fresh()->note;
+        $this->assertStringContainsString("Note d'origine à conserver", $note);
+        $this->assertStringContainsString((string) $this->group->nom, $note);
     }
 
     /**
@@ -213,6 +285,7 @@ final class GroupDeleteTest extends TestCase
             ->assertOk()
             ->assertJson([
                 'inscriptions' => 2,
+                'inscriptionsActives' => 2,
                 'etudiants' => 2,
                 'frais' => 2,
                 'encaissements' => 1,

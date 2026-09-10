@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Payments\Queries;
 
 use App\Domain\Payments\Support\ResoudreAllocationsAvance;
+use App\Models\Activity;
 use App\Models\Encaissement;
 
 /**
@@ -101,6 +102,16 @@ final class GetEncaissementDetails
                 'date' => $encaissement->appliedFrom->date_paiement?->format('d/m/Y'),
                 'showUrl' => route('backoffice.encaissements.show', $encaissement->appliedFrom),
             ],
+            // « Transfert vers un autre étudiant » (10/09/2026) : ce paiement
+            // a été encaissé au nom de quelqu'un d'autre, puis déplacé. La
+            // ligne elle-même n'en garde aucune trace (seuls student_id et
+            // inscription_fee_id ont été réécrits, la date de paiement est
+            // restée celle de l'encaissement d'origine) — c'est le journal
+            // qui la porte, avec le motif. Sans ce bloc, la page affiche un
+            // reçu au nom de la sœur daté d'avant son inscription, sans rien
+            // pour l'expliquer. Le DERNIER transfert gagne : une ligne peut
+            // avoir été transférée puis re-transférée.
+            'transfert' => $this->transfert($encaissement),
             'isAvance' => $encaissement->inscription_fee_id === null,
             'montantUtilise' => number_format($encaissement->montantUtilise(), 2, '.', ''),
             'montantRestant' => number_format($encaissement->montantRestant(), 2, '.', ''),
@@ -112,6 +123,43 @@ final class GetEncaissementDetails
                 'reste' => number_format($reste, 2, '.', ''),
                 'statut' => $fee->statut,
             ],
+        ];
+    }
+
+    /**
+     * L'entrée de journal du dernier transfert entre étudiants, lue telle
+     * qu'elle a été écrite par TransfererFraisVersAutreEtudiant — jamais
+     * re-résolue depuis les ids (un renommage réécrirait l'histoire,
+     * CLAUDE.md §11). `created_at` est la date de l'OPÉRATION, distincte de
+     * `date_paiement` qui reste celle de l'encaissement d'origine.
+     *
+     * @return array<string, string|null>|null
+     */
+    private function transfert(Encaissement $encaissement): ?array
+    {
+        $entry = Activity::query()
+            ->where('subject_type', Encaissement::class)
+            ->where('subject_id', $encaissement->id)
+            ->where('event', 'fee_transferred_between_students')
+            ->latest('id')
+            ->first();
+
+        if ($entry === null) {
+            return null;
+        }
+
+        $p = $entry->properties;
+
+        return [
+            'date' => $entry->created_at?->format('d/m/Y H:i'),
+            'par' => $entry->causer_label,
+            'motif' => $p['motif'] ?? null,
+            'ancienEtudiant' => $p['ancien_etudiant'] ?? null,
+            'ancienneInscription' => $p['ancienne_inscription'] ?? null,
+            'ancienFrais' => $p['ancien_frais'] ?? null,
+            'nouvelEtudiant' => $p['nouvel_etudiant'] ?? null,
+            'nouvelleInscription' => $p['nouvelle_inscription'] ?? null,
+            'nouveauFrais' => $p['nouveau_frais'] ?? null,
         ];
     }
 }

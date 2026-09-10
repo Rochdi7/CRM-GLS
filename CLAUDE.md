@@ -533,6 +533,36 @@ the database layer. Non-negotiable invariants already enforced in code:
   dépenses reprend ce filtre. Tests:
   `tests/Feature/Backoffice/Finance/DepenseSoldeInsuffisantTest.php`,
   `AnnulerDepenseDoublonTest.php`.
+- **⚠ Un remboursement ne sort JAMAIS d'une caisse qu'on n'a pas en main, ni
+  au-delà de ce qu'elle contient** (10/09/2026). Deux règles, un seul écran
+  (« Ajouter un remboursement ») :
+  (1) **Choisir la caisse débitée est une permission**,
+  `refunds.choose-till`, portée par le SEUL rôle `director` (+ super-admin) —
+  hors de `$operations` et de `$managementEdits`. Le champ « Caisse à
+  débiter » listait toutes les caisses espèces du centre actif AVEC leur
+  solde à quiconque tenait `refunds.create` : une assistante administrative
+  rendait 300 DH depuis le tiroir d'un collègue, dont le comptage de fin de
+  journée tombait faux sans rien pour l'expliquer. Le front-office rend
+  l'argent qu'il a PHYSIQUEMENT en main, donc sa propre caisse, dérivée au
+  serveur par `CaisseResolver::tillOf()`. Trois bornes indissociables : un
+  `caisse_id` étranger soumis sans le droit est **REFUSÉ (422), jamais ignoré
+  en silence** (accepter puis débiter ailleurs ferait mentir l'écran) ; la
+  LISTE des caisses n'est pas servie sans le droit (`remboursementCaisses`
+  vide — elle divulguait les soldes des collègues) et l'écran NOMME à la
+  place la caisse qui sera débitée, au lieu de masquer l'information ; sa
+  PROPRE caisse soumise explicitement reste acceptée, c'est ce que le
+  formulaire pré-remplit. L'exception chèque rejeté
+  (`CaisseResolver::forRemboursement`) prime toujours sur les deux.
+  (2) **Le solde est contrôlé, comme pour une dépense** : `EnregistrerRemboursement`
+  appelle `GardeSoldeCaisse` DANS sa transaction, sur la ligne `caisses`
+  verrouillée FOR UPDATE — la même que `CaisseLedger` débite juste après.
+  Une dépense ne pouvait plus dépasser son tiroir depuis le 09/09/2026, un
+  remboursement le pouvait encore alors qu'il débite EXACTEMENT la même
+  caisse physique : rendre 5 000 DH depuis un tiroir de 300 DH le laissait à
+  -4 700,00 DH. Deux écrans du même argent avec deux règles opposées : le
+  trou se déplace simplement vers celui qui ne contrôle rien. Borne
+  `montant <= solde`, vider un tiroir jusqu'à 0,00 reste légitime. Tests :
+  `tests/Feature/Backoffice/Finance/RemboursementCaisseChoisieTest.php`.
 - **A dépense and a « Paiement prof » are the SAME table but two different
   forms** (26/08/2026). Gestion des dépenses has one modal per tab, and the
   contract is enforced server-side by
@@ -774,6 +804,116 @@ the database layer. Non-negotiable invariants already enforced in code:
   `InscriptionFee::computeMontant()` derives the final `montant`
   (pct first, else fixed DH). Starter catalog: `FraisSeeder`. Tests:
   `tests/Feature/Backoffice/Groups/`, `Inscriptions/`.
+- **⚠ Un relevé d'argent REÇU imprime les avances et JAMAIS les applications
+  d'avance** (10/09/2026, « Relevé des encaissements », onglet Finance &
+  Paiements de Gestion des rapports, `Reports\Queries\GetEncaissementsReport`).
+  Une avance est de l'argent reçu — la caisse a bougé — simplement pas encore
+  affecté à un frais : elle FIGURE au document, et sa colonne « Type » la nomme
+  « Avance » (la colonne « Frais » porte « Avance » plutôt qu'un blanc, qu'on
+  lirait comme une donnée manquante). L'omettre ferait un relevé signé et
+  tamponné dont le total est INFÉRIEUR à ce que la caisse a encaissé.
+  Symétriquement, une ligne d'APPLICATION d'avance
+  (`applied_from_encaissement_id` non NULL) est exclue : elle repose sur un
+  frais l'argent d'une avance déjà comptée, la caisse n'a jamais bougé pour
+  elle, et l'imprimer compterait le même dirham deux fois — mesuré sur la base
+  réelle : 3 019 lignes pour **2 316 349 DH** qui auraient gonflé un relevé de
+  5,77 M DH. C'est la MÊME règle que l'onglet « Encaissements » de
+  `GetEncaissementsList`, et c'est ce qui rend le total du document égal à
+  l'argent réellement entré. Trois corollaires : (1) le total vient du SERVEUR
+  (un `SUM` SQL sur tout l'ensemble filtré), il n'est jamais réadditionné par
+  le gabarit ni par la page — sinon l'écran, le PDF et le classeur finiraient
+  par annoncer trois chiffres ; (2) une avance n'a pas de frais, donc pas
+  d'inscription, donc **pas d'année** : elle est exempte de la fenêtre d'année
+  active, comme dans la liste Encaissements ; (3) ajouter un rapport reste
+  **une entrée dans `RapportCatalogue` + sa requête Domain + sa vue Blade** —
+  jamais une modification du composant React, qui ne peut donc pas offrir un
+  filtre que la requête n'applique pas. ⚠ Les paliers mémoire de
+  `RapportPdfRenderer` sont calibrés sur des MESURES (mPDF tamponne le tableau
+  entier : 168 Mo à 1 045 lignes, 772 Mo à 7 077) — les remesurer sur un
+  rapport de cette taille avant de les rabaisser ; sur un gros volume l'Excel
+  (OpenSpout, qui STREAME) sort en 2,5 s contre 170 s pour le PDF. Tests :
+  `tests/Feature/Backoffice/Reports/RapportEncaissementsTest.php`.
+- **⚠ Un frais payé se transfère à un AUTRE étudiant — uniquement à ZÉRO
+  présence** (10/09/2026, `Payments\Actions\TransfererFraisVersAutreEtudiant`).
+  Le cas réel : un étudiant s'inscrit, paie, ne vient jamais, et sa sœur se
+  présente — « je prends la place de ma sœur, elle n'étudie pas ».
+  L'arrangement se réglait à l'oral, hors système : le CRM montrait l'argent
+  au nom de quelqu'un qui n'a jamais suivi le cours, et la personne
+  réellement en classe apparaissait comme n'ayant rien payé.
+  **Ce geste déplace UN encaissement, rien d'autre** : il ne crée aucune
+  inscription et n'en clôture aucune. La sœur est inscrite AVANT, par l'écran
+  d'inscription habituel ; le dossier du frère reste OUVERT et son frais
+  redevient simplement dû (à annuler ensuite avec son motif s'il ne vient
+  pas — décider ici de son sort serait une décision que personne n'a
+  demandée). Action de ligne sur « Gestion des paiements », jamais un onglet :
+  l'opérateur part du paiement qu'il a déjà sous les yeux.
+  C'est **l'EXCEPTION assumée** au seul garde-fou que
+  `DeplacerEncaissementVersFrais` ne relâche jamais (« l'argent d'un étudiant
+  ne solde jamais le frais d'un autre ») — ne JAMAIS assouplir cet outil-là
+  « pour faire pareil » : c'est l'action dédiée, avec ses bornes, qui porte
+  l'exception, et un test l'assère. Quatre bornes indissociables :
+  (1) **ZÉRO présence sur l'inscription SOURCE**, vérifié DANS la transaction
+  par `Registrations\Support\GardePresencesInscription` — jamais avant, sinon
+  un appel validé entre le contrôle et l'écriture passe au travers (§11).
+  **TOUTE ligne d'appel bloque, « Absent » et « Justifié » compris** : le
+  critère n'est pas « a-t-il assisté ? » mais « son nom a-t-il été appelé
+  dans ce groupe ? ». Assouplir vers « Présent/Retard uniquement » ferait de
+  la règle « transférable tant que l'étudiant sèche », l'inverse de
+  l'intention. Une présence de la CIBLE ne bloque rien (elle a pu commencer
+  avant la paperasse). Il n'existe aucune FK `presences → inscriptions` : la
+  liaison est (student × séances du groupe), et cette garde en est la SEULE
+  autorité — `GetEncaissementsList` ne fait que la porter à l'écran
+  (`sourcePresencesCount`, `transferableAutreEtudiant`).
+  (2) **AUCUN argent ne bouge** : `montant`, `methode`, `date_paiement`,
+  `caisse_id`, `agent_id` et `caisses.solde` sont inchangés — seule
+  l'AFFECTATION change. `encaissements.student_id` suit le frais, lui,
+  contrairement à `DeplacerEncaissementVersFrais` (où la cible appartient au
+  même étudiant) : sans cela la fiche du frère continuerait de compter cet
+  argent pendant que celle de la sœur affiche un frais soldé par un paiement
+  qui ne lui appartient pas. Le PAYEUR d'origine est conservé dans l'entrée
+  de journal, avec le motif.
+  (3) **MÊME CENTRE, et le frais cible est DÉTECTÉ, jamais choisi à la
+  main** (demande métier du 10/09/2026 : « no need to select Frais à
+  solder »). L'opérateur désigne l'INSCRIPTION cible ; l'action pose
+  l'argent sur la ligne du MÊME frais du catalogue (`frais_id`, repli sur le
+  `nom` pour les lignes legacy sans catalogue) — « Frais d'inscription » du
+  frère solde « Frais d'inscription » de la sœur, jamais son « Frais de
+  Mars ». Trois refus distincts, chacun nommant le frais : aucune ligne de ce
+  frais sur la cible, ligne MASQUÉE (audit R-01 : l'argent ne se pose jamais
+  sur un frais qui n'est plus dû — même garde qu'`AppliquerAvance`), reste dû
+  insuffisant (le montant n'est pas fractionné). **Cette règle a UN seul
+  code : `Payments\Support\CibleTransfertFrais::resoudre()`**, appelée sous
+  verrou par l'action ET en lecture par le dropdown du modal
+  (`EncaissementController@transferTargets`), qui n'offre que les dossiers
+  qui passeront — une inscription où ce frais est déjà soldé n'apparaît pas
+  (demande du 10/09/2026). Ne jamais recopier la règle dans le read-model
+  « pour aller plus vite » : l'écran finirait par proposer ce que le serveur
+  refuse. Un transfert inter-centres déplacerait du chiffre d'affaires d'un
+  établissement à l'autre alors que la caisse créditée ne bouge pas.
+  (4) **Motif OBLIGATOIRE** + permission dédiée `payments.transfer-student`,
+  **super-admin uniquement** (`superAdminOnly()`, décision du CEO le
+  10/09/2026 — un directeur l'a tenue quelques heures) : même classe que
+  `students.merge`, aucun preset ne peut la porter. Le détail du paiement
+  (`GetEncaissementDetails::transfert()`) affiche le transfert lu depuis le
+  journal — date de l'OPÉRATION, de → vers, motif, par qui — parce que la
+  ligne elle-même n'en garde rien : `date_paiement` reste celle de
+  l'encaissement d'origine (vérifié au journal le 10/09/2026 : seuls
+  `student_id` et `inscription_fee_id` changent), et sans ce bloc le reçu
+  porte le nom de la sœur avec une date antérieure à son inscription. **Quatre lignes ne se transfèrent JAMAIS** (audit 10/09/2026),
+  chacune pour une raison propre : une avance (rien à céder) ; une ligne
+  d'APPLICATION d'avance — elle porte un `inscription_fee_id`, donc passe le
+  test « est-ce une avance ? », mais son argent appartient à l'avance
+  PARENTE restée au nom du frère (et symétriquement un paiement qui a
+  lui-même financé des applications) ; un paiement remboursé ; **TOUT
+  chèque suivi**, pas seulement un rejeté — `cheques.student_id` désigne
+  un propriétaire et `EncaissementController@store` refuse déjà le chèque
+  d'un autre étudiant, le transfert contournerait cette invariante par la
+  porte de derrière. Un dossier source DÉTACHÉ de son groupe
+  (`group_id` NULL, `nullOnDelete`) est refusé comme INDETERMINE, jamais
+  compté 0 : sans séances, « aucune présence trouvée » ne prouve rien, et
+  c'est le sens d'erreur qui AUTORISE. L'écran AFFICHE le refus avec le
+  nombre d'appels au lieu de masquer l'option. Tests :
+  `tests/Feature/Backoffice/Finance/TransfertFraisAutreEtudiantTest.php`.
 - **⚠ Retirer un frais DÉJÀ PAYÉ libère toujours son argent en avance.**
   Trois chemins retirent un frais d'une inscription et ils doivent se
   comporter à l'identique, sinon celui que l'utilisateur emprunte change ce
@@ -796,6 +936,34 @@ the database layer. Non-negotiable invariants already enforced in code:
   `php artisan inscriptions:liberer-paiements-frais-masques` (dry-run par
   défaut, `--apply`). Tests :
   `tests/Feature/Backoffice/Inscriptions/InscriptionFeeVisibilityTest.php`.
+- **⚠ Supprimer un groupe ne supprime JAMAIS ses inscriptions** (10/09/2026,
+  `Groups\Actions\DetacherInscriptionsGroupeSupprime`). Une inscription est le
+  DOSSIER d'un étudiant : elle porte des lignes de frais et, potentiellement,
+  de l'argent. `SupprimerGroupe` faisait
+  `Inscription::where('group_id', …)->delete()` — le dossier disparaîssait de
+  la fiche de l'étudiant et plus rien nulle part n'expliquait pourquoi ; des
+  mois plus tard, personne ne pouvait comprendre. Désormais
+  `inscriptions.group_id` est **NULLABLE + ON DELETE SET NULL** (comme
+  `inscriptions_historique.group_id`, qui appartient à l'INSCRIPTION et non au
+  groupe — le laisser en CASCADE effaçait l'historique d'un dossier vivant),
+  et la suppression annule chaque inscription encore `Active` avec le motif
+  catalogué `MotifAnnulation::MOTIF_GROUPE_SUPPRIME` (« Groupe supprimé »,
+  `is_system`). Quatre bornes : (1) **la NOTE porte le nom du groupe et la
+  date** — une fois la ligne `groups` détruite c'est le SEUL endroit où ce nom
+  survit, l'écran affichant « — » ; elle est AJOUTÉE, jamais écrasée (même
+  règle que `AnnulerInscription`) ; (2) **un dossier déjà clos**
+  (Annulée/Changement/Expirée/Archivée) **garde son statut ET son motif
+  d'origine** — il reçoit la note seule, la suppression du groupe n'a pas à
+  réécrire pourquoi il avait été fermé ; (3) **aucun argent ne bouge et aucun
+  frais n'est masqué** — contrairement à `CloturerInscriptionsGroupe` (où le
+  groupe SURVIT et ses créances doivent cesser d'être réclamées), ici
+  `SupprimerGroupe` refuse en amont tout groupe portant le moindre encaissement,
+  donc ces frais n'ont par définition jamais reçu un dirham ; (4) les deux
+  verrous existants **restent** — un encaissement ou une séance refuse toujours
+  la suppression. Le modal DIT que les inscriptions sont conservées
+  (`inscriptionsActives` vient du serveur) : un avertissement qui laisse croire
+  que les dossiers partent fait renoncer à une suppression légitime. Tests :
+  `tests/Feature/Backoffice/Groups/GroupDeleteTest.php`.
 - **⚠ Un groupe qui passe TERMINAL clôture ses inscriptions** (09/09/2026).
   « Fin de formation » comme « Annulée » déclenchent
   `Groups\Actions\CloturerInscriptionsGroupe`, dans la MÊME transaction que
@@ -1193,7 +1361,7 @@ keeps the primary column stable when an edit merely adds a center. Enforcing
   (`RolesAndPermissionsSeederTest::test_every_employee_category_has_a_matching_default_role`
   enforces it).
 - **Single source of truth**: `App\Support\Authorization\PermissionRegistry`
-  (les `module.action` permissions — 118 au 09/09/2026, mais ne recopiez pas
+  (les `module.action` permissions — 120 au 10/09/2026, mais ne recopiez pas
   ce nombre : `PermissionRegistry::names()` en est la seule autorité et le
   test dérive son compte de là — French labels, role matrix). New module ⇒
   add permissions THERE, re-run `db:seed --class=RolesAndPermissionsSeeder`
@@ -1512,6 +1680,18 @@ JSONB data — don't add them speculatively.
 - Production uses `php artisan migrate --force`.
 
 ### Query rules
+
+**⚠ `select()` after a `withSum()`/`withCount()`/`addSelect()` ERASES them
+silently** (10/09/2026). `Query\Builder::select()` starts by resetting
+`$this->columns` AND `$this->bindings['select']`, so a
+`->select('encaissements.*')` added to a query that already carried
+`withSum('remboursements as remboursements_total')` dropped that column:
+`montantRembourse` read 0.00 on every partially refunded payment and three
+"can this row be edited?" flags flipped to true on rows the actions refuse.
+No error, no empty result — just a wrong number. When a read-model needs
+the base columns next to computed ones, use **`addSelect('table.*')`**,
+never `select()`; and after touching any list query, re-read one row that
+exercises the aggregate you did not write.
 
 Review every use of `DB::raw()`, `selectRaw()`, `whereRaw()`, `havingRaw()`,
 `orderByRaw()` — queries must use PostgreSQL-compatible syntax. Do not

@@ -3751,3 +3751,64 @@ html[data-theme='dark'] .table tbody td a:not(.btn):not(.dropdown-item):not(.pag
 html[data-theme='dark'] .table tbody tr.gls-day-separator > td {
     border-bottom-color: #3b3b4f;
 }
+
+/* --- Fiche de présence : retard de paiement --------------------------------
+ * Au moment de l'appel, l'étudiant qui a un frais échu non soldé porte un
+ * badge « Merci de contacter l'administration » — rouge au-delà de 5 jours de
+ * retard, orange en deçà. Le survol détaille le retard et l'échéance.
+ *
+ * L'infobulle est en CSS PURE (un pseudo-élément sur `data-retard-tooltip`) :
+ * l'application ne charge aucun JS Bootstrap ni jQuery (CLAUDE.md §3/§6), donc
+ * `data-bs-toggle="tooltip"` n'afficherait rien du tout. */
+.retard-paiement-badge {
+    position: relative;
+    /* Les cellules de tableau sont en capitales (§5) ; cette phrase se lit
+     * telle qu'elle est écrite. */
+    text-transform: none;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: help;
+}
+
+.retard-paiement-badge::after {
+    content: attr(data-retard-tooltip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1080;
+    display: none;
+    max-width: 260px;
+    width: max-content;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    background-color: #111827;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1.35;
+    text-align: center;
+    white-space: normal;
+    text-transform: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+/* La petite pointe sous la bulle. */
+.retard-paiement-badge::before {
+    content: '';
+    position: absolute;
+    bottom: calc(100% + 2px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1081;
+    display: none;
+    border: 6px solid transparent;
+    border-top-color: #111827;
+}
+
+.retard-paiement-badge:hover::after,
+.retard-paiement-badge:focus::after,
+.retard-paiement-badge:hover::before,
+.retard-paiement-badge:focus::before {
+    display: block;
+}

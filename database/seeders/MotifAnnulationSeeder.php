@@ -62,7 +62,7 @@ final class MotifAnnulationSeeder extends Seeder
         // Même contrat pour « Clôture du groupe » (09/09/2026) : le motif
         // que CloturerInscriptionsGroupe pose sur chaque inscription annulée
         // en cascade quand son groupe passe « Fin de formation » / « Annulée ».
-        foreach ([MotifAnnulation::MOTIF_CHANGEMENT_GROUPE, MotifAnnulation::MOTIF_CLOTURE_GROUPE] as $systeme) {
+        foreach ([MotifAnnulation::MOTIF_CHANGEMENT_GROUPE, MotifAnnulation::MOTIF_CLOTURE_GROUPE, MotifAnnulation::MOTIF_GROUPE_SUPPRIME] as $systeme) {
             MotifAnnulation::query()->updateOrCreate(
                 ['nom' => $systeme],
                 ['statut' => MotifAnnulation::STATUT_ACTIF, 'is_system' => true, 'portee' => MotifAnnulation::PORTEE_INSCRIPTION],

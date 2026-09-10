@@ -11,6 +11,7 @@ use App\Models\Encaissement;
 use App\Models\Remboursement;
 use App\Models\Student;
 use App\Domain\Finance\Support\CaisseLedger;
+use App\Domain\Finance\Support\GardeSoldeCaisse;
 use App\Services\Context\CurrentContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -21,9 +22,23 @@ use Illuminate\Validation\ValidationException;
  */
 final class EnregistrerRemboursement
 {
+    /**
+     * ⚠ Un remboursement ne sort jamais plus que ce que la caisse contient
+     * (10/09/2026). Une dépense ne le pouvait déjà plus (GardeSoldeCaisse,
+     * 09/09/2026) — mais un remboursement débite EXACTEMENT la même caisse
+     * physique, sans aucun contrôle : rendre 5 000 DH depuis un tiroir qui en
+     * contenait 300 laissait la caisse à -4 700,00 DH. Une caisse physique ne
+     * peut pas contenir un montant négatif ; le solde négatif est toujours
+     * soit une saisie en double, soit de l'argent sorti hors journal.
+     * Deux écrans du même argent avec deux règles opposées : le trou se
+     * déplace simplement vers celui qui ne contrôle rien.
+     */
+    public const MESSAGE_SOLDE_INSUFFISANT = 'Cannot record this refund: the till only holds :solde DH, the requested amount is :montant DH.';
+
     public function __construct(
         private readonly CaisseLedger $ledger,
         private readonly CurrentContext $context,
+        private readonly GardeSoldeCaisse $garde,
     ) {}
 
     /**
@@ -67,12 +82,15 @@ final class EnregistrerRemboursement
                 // the row already locked above, so two concurrent refunds
                 // serialize instead of both seeing the same remaining.
                 //
-                // ⚠ A refund with NO `encaissement_id` stays deliberately
-                // uncapped — that is the documented decision
-                // (docs/rapports/finance/phase-10-finance-audit.md §2.6 Q1, asserted by
-                // test_no_maximum_refund_amount_check_exists): an outflow
-                // unrelated to any tracked payment has no amount to cap
-                // against. Only the linked case is constrained.
+                // ⚠ A refund with NO `encaissement_id` is still capped by no
+                // PAYMENT — that half of the documented decision stands
+                // (docs/rapports/finance/phase-10-finance-audit.md §2.6 Q1):
+                // an outflow unrelated to any tracked payment has no amount
+                // to cap against. What no longer holds is the other half —
+                // « the till may go negative » (10/09/2026): the balance
+                // guard below bounds EVERY refund by what the till actually
+                // holds, linked or not. Only the per-payment cap is what this
+                // block decides.
                 if (! $encaissement->isAvance()) {
                     $dejaRembourse = (float) $encaissement->remboursements()->sum('montant');
                     $restant = round(max(0.0, (float) $encaissement->montant - $dejaRembourse), 2);
@@ -95,6 +113,34 @@ final class EnregistrerRemboursement
                 ?? Student::query()->whereKey((int) $data['beneficiaire_id'])->value('etablissement_id')
                 ?? $this->context->etablissementId()
                 ?? $agent->etablissement_id;
+
+            // Le solde est contrôlé DANS la transaction, sur la ligne
+            // `caisses` verrouillée FOR UPDATE — le même verrou que
+            // CaisseLedger prend juste après pour écrire le mouvement. Deux
+            // remboursements simultanés sur la même caisse sont donc
+            // sérialisés : le second relit le solde déjà diminué (CLAUDE.md
+            // §11). La caisse contrôlée est celle qui sera DÉBITÉE, jamais
+            // une caisse re-dérivée. Borne `montant <= solde` : vider un
+            // tiroir jusqu'à 0,00 reste légitime.
+            //
+            // ⚠ Le contrôle ne vaut que pour une caisse PHYSIQUE (Caissière /
+            // Externe). Un compte de MÉTHODE (TPE / Chèque / Virement) n'est
+            // pas un tiroir : c'est le compte du centre pour cette méthode, et
+            // le seul remboursement qui l'atteint est la contrepassation d'un
+            // chèque REJETÉ (CaisseResolver::forRemboursement). Cet argent
+            // n'a jamais existé — la banque l'a refusé — donc le compte peut
+            // légitimement ne rien contenir au moment où on l'annule. Y
+            // appliquer la borne du tiroir bloquerait le remède même du
+            // chèque en bois, ce qui est l'inverse du but.
+            $caisseADebiter = Caisse::query()->whereKey((int) $data['caisse_id'])->firstOrFail();
+
+            if ($caisseADebiter->isEspeces()) {
+                $this->garde->verrouillerEtVerifier(
+                    (int) $data['caisse_id'],
+                    (float) $data['montant'],
+                    self::MESSAGE_SOLDE_INSUFFISANT,
+                );
+            }
 
             $remboursement = Remboursement::create([
                 ...$data,

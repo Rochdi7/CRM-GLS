@@ -179,6 +179,10 @@ final class CentreDimensionLedgerTest extends TestCase
         app(CurrentContext::class)->setEtablissement($this->rabat->id);
 
         $agent = Employee::factory()->create(['etablissement_id' => $this->online->id]);
+        // Aucun paiement ne l'a alimenté ici : le tiroir doit contenir ce
+        // qu'il rend (GardeSoldeCaisse, 10/09/2026). Ce test épingle le
+        // CENTRE estampillé au journal, pas le solde.
+        $agent->till()->firstOrFail()->update(['solde' => '50.00']);
 
         app(EnregistrerRemboursement::class)->handle([
             'beneficiaire_id' => Student::factory()->create(['etablissement_id' => $this->rabat->id])->id,

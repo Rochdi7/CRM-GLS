@@ -12,14 +12,20 @@ import type { RapportFiltreKey, RapportsPageProps, SelectOption } from '@/Types'
  * Gestion des rapports — édition de documents : un sélecteur « Rapport », les
  * filtres de ce rapport, et les deux boutons de téléchargement.
  *
- * Pas de barre d'onglets : un seul domaine (Inscriptions) a un rapport, et six
- * onglets qui ne mènent nulle part sont du décor. Le catalogue serveur
- * (RapportCatalogue) porte toujours les autres domaines — le jour où l'un
- * d'eux reçoit un rapport, il apparaîtra dans le sélecteur sans changer ce
- * composant, et la barre d'onglets pourra revenir si elle a alors un sens.
+ * ⚠ La barre d'onglets est de retour (10/09/2026), parce qu'elle a désormais
+ * un sens : deux domaines servent des rapports (Inscriptions, Finance &
+ * Paiements). Elle avait été retirée quand un seul en servait — six onglets
+ * qui ne mènent nulle part sont du décor.
  *
- * Les rapports proposés viennent du SERVEUR : le sélecteur ne peut jamais
- * offrir un rapport que le contrôleur ne sert pas.
+ * Elle ne dessine QUE les domaines qui servent au moins un rapport
+ * (`rapports.length > 0`), et elle disparaît d'elle-même s'il n'en reste
+ * qu'un : un onglet vide ne se clique pas, et une barre à un seul onglet
+ * n'oriente rien. Le jour où « Caisse » ou « Dépenses » reçoit son rapport,
+ * son onglet apparaît SANS toucher à ce composant — c'est le catalogue
+ * serveur (RapportCatalogue) qui décide, ici comme pour les filtres.
+ *
+ * Les rapports proposés viennent du SERVEUR : ni les onglets ni le sélecteur
+ * ne peuvent offrir un rapport que le contrôleur ne sert pas.
  *
  * Les téléchargements sont des GET vers `rapports.pdf` / `rapports.excel` avec
  * les MÊMES filtres que l'aperçu — même requête Domain côté serveur, donc le
@@ -27,6 +33,21 @@ import type { RapportFiltreKey, RapportsPageProps, SelectOption } from '@/Types'
  * de fichier, pas des visites Inertia : `window.open` / `location.assign`, sinon
  * Inertia tenterait de lire un PDF comme une réponse de page.
  */
+/**
+ * L'icône de chaque onglet, par clé de domaine du catalogue serveur. Un
+ * domaine sans entrée retombe sur une icône générique plutôt que de casser la
+ * barre — la clé vient du serveur, ce composant ne peut pas la garantir.
+ */
+const ONGLET_ICONES: Record<string, string> = {
+    inscriptions: 'ti ti-file-text',
+    admissions: 'ti ti-user-plus',
+    finance: 'ti ti-cash-banknote',
+    caisse: 'ti ti-wallet',
+    depenses: 'ti ti-receipt',
+    'vie-scolaire': 'ti ti-school',
+    employes: 'ti ti-users',
+};
+
 export default function RapportsIndex({
     onglets,
     filters,
@@ -35,16 +56,38 @@ export default function RapportsIndex({
     statutOptions,
     sexeOptions,
     inscriptionOptions,
+    methodeOptions,
+    caisseOptions,
+    typeOptions,
     nombreLignes,
+    montantTotal,
 }: RapportsPageProps) {
     const isLoading = useInertiaLoading();
 
-    // Le sélecteur « Rapport » liste les rapports RÉELLEMENT servis, pris dans
-    // le catalogue serveur (RapportCatalogue) plutôt qu'écrits en dur ici : il
-    // ne peut donc pas proposer un rapport que le contrôleur refuserait.
+    // Les onglets RÉELLEMENT servis : un domaine sans rapport n'en reçoit pas.
+    // Filtré ici plutôt que côté serveur parce que le catalogue continue de
+    // décrire les domaines visés (ils servent de point d'accroche au prochain
+    // rapport) — c'est l'ÉCRAN qui n'a pas à montrer une porte fermée.
+    const ongletsServis = useMemo(() => onglets.filter((o) => o.rapports.length > 0), [onglets]);
+
+    // L'onglet actif est déduit du rapport choisi, jamais mémorisé à part :
+    // deux sources pourraient diverger, et l'onglet finirait par désigner un
+    // domaine dont le rapport affiché ne fait pas partie. Le rapport reste
+    // donc l'unique état — il est déjà dans l'URL, donc partageable et
+    // rechargeable.
+    const ongletActif = useMemo(
+        () => ongletsServis.find((o) => o.rapports.some((r) => r.value === filters.rapport)) ?? ongletsServis[0],
+        [ongletsServis, filters.rapport],
+    );
+
+    // Le sélecteur « Rapport » ne liste que les rapports de l'onglet ouvert —
+    // c'est ce qui donne un rôle à la barre : l'onglet choisit le domaine, le
+    // sélecteur le rapport à l'intérieur. Les valeurs viennent du catalogue
+    // serveur, donc il ne peut pas proposer un rapport que le contrôleur
+    // refuserait.
     const rapportOptions = useMemo(
-        () => onglets.flatMap((o) => o.rapports).map((r) => ({ value: r.value, label: r.label })),
-        [onglets],
+        () => (ongletActif?.rapports ?? []).map((r) => ({ value: r.value, label: r.label })),
+        [ongletActif],
     );
 
     /**
@@ -80,6 +123,21 @@ export default function RapportsIndex({
             placeholder: t('All'),
             options: inscriptionOptions,
         },
+        methodeFilter: {
+            label: t('Payment method'),
+            placeholder: t('All methods'),
+            options: methodeOptions,
+        },
+        caisseFilter: {
+            label: t('Cash register'),
+            placeholder: t('All cash registers'),
+            options: caisseOptions,
+        },
+        typeFilter: {
+            label: t('Type'),
+            placeholder: t('All types'),
+            options: typeOptions,
+        },
     };
 
     /**
@@ -88,16 +146,26 @@ export default function RapportsIndex({
      * que l'utilisateur s'apprête à télécharger. Défaut = inscriptions, pour
      * que le premier rapport garde son libellé exact.
      */
-    const messages =
-        filters.rapport === 'liste-etudiants'
-            ? {
-                  vide: t('No student matches these filters.'),
-                  unite: nombreLignes === 1 ? t('student') : t('students'),
-              }
-            : {
-                  vide: t('No registration matches these filters.'),
-                  unite: nombreLignes === 1 ? t('registration') : t('registrations'),
-              };
+    const messages = (() => {
+        if (filters.rapport === 'liste-etudiants') {
+            return {
+                vide: t('No student matches these filters.'),
+                unite: nombreLignes === 1 ? t('student') : t('students'),
+            };
+        }
+
+        if (filters.rapport === 'releve-encaissements') {
+            return {
+                vide: t('No payment matches these filters.'),
+                unite: nombreLignes === 1 ? t('payment') : t('payments'),
+            };
+        }
+
+        return {
+            vide: t('No registration matches these filters.'),
+            unite: nombreLignes === 1 ? t('registration') : t('registrations'),
+        };
+    })();
 
     function reload(nextFilters: Partial<typeof filters>) {
         const next = { ...filters, ...nextFilters };
@@ -148,7 +216,53 @@ export default function RapportsIndex({
                 { label: t('Reports management') },
             ]}
         >
-            <Card title={t('Reports management')}>
+            {/* La barre d'onglets : un onglet par DOMAINE servi. Elle n'est
+                dessinée qu'à partir de deux — à un seul, elle n'oriente rien
+                et le sélecteur « Rapport » suffit.
+
+                Changer d'onglet sélectionne le PREMIER rapport du domaine :
+                un onglet ouvert sur le rapport d'un autre domaine se
+                contredirait lui-même. Les filtres propres à l'ancien rapport
+                partent avec lui — le contrôleur n'applique de toute façon que
+                ceux que le nouveau rapport déclare
+                (RapportCatalogue::filtres()), mais les laisser dans l'URL
+                ferait revenir un filtre invisible si l'utilisateur revenait
+                sur ses pas. La fenêtre de dates, elle, est commune à tous les
+                rapports : elle SURVIT au changement d'onglet, sinon la période
+                que l'utilisateur vient de choisir serait perdue à chaque
+                clic. */}
+            {ongletsServis.length > 1 && (
+                <ul className="nav nav-tabs p-0 border-bottom rounded-0 mb-4" role="tablist">
+                    {ongletsServis.map((onglet) => (
+                        <li className="nav-item" key={onglet.key} role="presentation">
+                            <button
+                                type="button"
+                                className={`nav-link d-inline-flex align-items-center${
+                                    ongletActif?.key === onglet.key ? ' active' : ''
+                                }`}
+                                aria-current={ongletActif?.key === onglet.key ? 'page' : undefined}
+                                onClick={() =>
+                                    reload({
+                                        rapport: onglet.rapports[0].value,
+                                        groupFilter: '',
+                                        statutFilter: '',
+                                        sexeFilter: '',
+                                        inscriptionFilter: '',
+                                        methodeFilter: '',
+                                        caisseFilter: '',
+                                        typeFilter: '',
+                                    })
+                                }
+                            >
+                                <i className={`${ONGLET_ICONES[onglet.key] ?? 'ti ti-report'} me-2`} aria-hidden="true" />
+                                {onglet.label}
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            )}
+
+            <Card title={ongletActif?.label ?? t('Reports management')}>
                 {/* Les cinq filtres tiennent sur UNE ligne en grand écran : la
                     grille précédente les empilait 2 par 2 en `col-lg-4` et
                     laissait tout le tiers droit de la carte vide. Les colonnes
@@ -245,6 +359,18 @@ export default function RapportsIndex({
                         que dans un PDF d'une page blanche. */}
                     <p className="text-muted mb-3 me-3">
                         {nombreLignes === 0 ? messages.vide : `${nombreLignes} ${messages.unite}`}
+                        {/* Le total vient du SERVEUR, calculé sur tout
+                            l'ensemble filtré — jamais additionné à partir de
+                            lignes rendues ici (la page n'en reçoit aucune).
+                            C'est le MÊME chiffre que le pied du PDF et que
+                            l'en-tête du classeur, donc l'utilisateur sait
+                            avant de cliquer ce que son document totalisera.
+                            Vide pour un rapport sans colonne monétaire. */}
+                        {montantTotal !== '' && nombreLignes > 0 && (
+                            <span className="ms-2 fw-semibold text-dark">
+                                — {t('Total collected')} : {montantTotal}
+                            </span>
+                        )}
                     </p>
                     {/* Rouge pour le PDF, vert pour l'Excel : les couleurs des
                         deux formats eux-mêmes, ce qui permet de viser le bon

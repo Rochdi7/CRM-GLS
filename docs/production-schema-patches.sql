@@ -289,3 +289,56 @@ ALTER TABLE caisse_transfers
 CREATE INDEX CONCURRENTLY IF NOT EXISTS caisse_transfers_etablissement_id_idx
     ON caisse_transfers (etablissement_id);
 -- ---------------------------------------------------------------------------
+-- 10/09/2026 — inscriptions.group_id / inscriptions_historique.group_id
+--              NOT NULL -> NULLABLE, et ON DELETE -> SET NULL
+--
+-- Une inscription SURVIT désormais à la suppression de son groupe.
+--
+-- Avant : `inscriptions.group_id` était NOT NULL + ON DELETE RESTRICT, ce qui
+-- obligeait SupprimerGroupe à DÉTRUIRE les inscriptions du groupe pour pouvoir
+-- supprimer le groupe. Le dossier de l'étudiant — ses lignes de frais, ses
+-- livres, son historique — disparaissait de sa fiche, et plus rien nulle part
+-- n'expliquait pourquoi. Des mois plus tard, personne ne pouvait comprendre.
+--
+-- Après : Domain\Groups\Actions\DetacherInscriptionsGroupeSupprime annule
+-- chaque inscription encore Active (motif catalogué « Groupe supprimé ») et
+-- écrit le NOM du groupe dans sa note — le seul endroit où ce nom survit une
+-- fois la ligne `groups` détruite. PostgreSQL remet ensuite `group_id` à NULL
+-- tout seul. Tous les chemins de lecture accèdent déjà au groupe en `?->`.
+--
+-- `inscriptions_historique.group_id` suit la MÊME règle, et pour une raison
+-- distincte : ce snapshot appartient à l'INSCRIPTION, pas au groupe. Le laisser
+-- en ON DELETE CASCADE effacerait en silence l'historique d'un dossier bien
+-- vivant (un changement de groupe passé disparaîtrait de la fiche étudiant).
+--
+-- ⚠ Aucune donnée n'est modifiée par ce patch : il ne change que des
+-- contraintes. Aucun `caisses.solde`, aucun encaissement, aucun montant.
+-- SupprimerGroupe refuse toujours un groupe portant le moindre encaissement ou
+-- la moindre séance.
+ALTER TABLE inscriptions ALTER COLUMN group_id DROP NOT NULL;
+ALTER TABLE inscriptions DROP CONSTRAINT IF EXISTS inscriptions_group_id_foreign;
+ALTER TABLE inscriptions ADD CONSTRAINT inscriptions_group_id_foreign
+    FOREIGN KEY (group_id) REFERENCES groups (id) ON DELETE SET NULL;
+
+ALTER TABLE inscriptions_historique ALTER COLUMN group_id DROP NOT NULL;
+ALTER TABLE inscriptions_historique DROP CONSTRAINT IF EXISTS inscriptions_historique_group_id_foreign;
+ALTER TABLE inscriptions_historique ADD CONSTRAINT inscriptions_historique_group_id_foreign
+    FOREIGN KEY (group_id) REFERENCES groups (id) ON DELETE SET NULL;
+-- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 10/09/2026 — `refunds.choose-till` (AUCUN changement de schéma)
+--
+-- Choisir la caisse débitée par un remboursement devient une permission,
+-- portée par le seul rôle `director` (+ le bypass super-admin). Sans elle,
+-- l'argent sort TOUJOURS de la caisse de l'agent qui enregistre (CLAUDE.md
+-- §11). La permission est une LIGNE de `permissions`, pas une colonne : elle
+-- est créée par le seeder, jamais par un ALTER.
+--
+--   php artisan db:seed --class=RolesAndPermissionsSeeder --force
+--
+-- Idempotent, comme tout le reste du seeder. À exécuter au déploiement :
+-- sans lui, `refunds.choose-till` n'existe pas en base et PERSONNE ne voit le
+-- champ « Caisse à débiter » — pas même un directeur (le super-admin passe
+-- par Gate::before et n'est donc pas affecté).
+-- ---------------------------------------------------------------------------

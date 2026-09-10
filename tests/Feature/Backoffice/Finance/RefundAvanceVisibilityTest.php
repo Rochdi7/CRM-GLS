@@ -279,6 +279,11 @@ final class RefundAvanceVisibilityTest extends TestCase
         $this->assertSame(Encaissement::METHODE_CHEQUE, $rows[0]['methode']);
 
         $till = $user->employee->till()->firstOrFail();
+        // Le paiement était un CHÈQUE : il a crédité le compte du centre, pas
+        // le tiroir. Celui-ci doit donc contenir les espèces qu'il rend
+        // (GardeSoldeCaisse, 10/09/2026 — une caisse PHYSIQUE ne descend
+        // jamais sous zéro). Ce test épingle QUEL compte paie, pas le solde.
+        $till->update(['solde' => '2000.00']);
         $soldeTill = (float) $till->fresh()->solde;
 
         $this->refund($user, $student, $encaissement->id, '2000.00')->assertSessionHasNoErrors();

@@ -167,6 +167,8 @@ export default function DepensesIndex({
     canCancelRemboursement,
     canCancelDepense,
     remboursementCaisses,
+    canChooseRemboursementCaisse,
+    remboursementCaisseParDefaut,
     students,
     approvalEnabled,
     canApprove,
@@ -445,7 +447,14 @@ export default function DepensesIndex({
     // preselect it so the common case stays one click. With several, the
     // cashier must pick: guessing is what silently drained the wrong centre's
     // till before (03/09/2026).
-    const defaultCaisseId = remboursementCaisses.length === 1 ? remboursementCaisses[0].id : '';
+    // Sans `refunds.choose-till` il n'y a rien à choisir : le serveur débite
+    // la caisse de l'utilisateur. On la pré-remplit quand même pour que le
+    // payload reste identique à ce que le Form Request accepte (10/09/2026).
+    const defaultCaisseId = !canChooseRemboursementCaisse
+        ? (remboursementCaisseParDefaut?.id ?? '')
+        : remboursementCaisses.length === 1
+            ? remboursementCaisses[0].id
+            : '';
 
     function openCreateRemboursement() {
         setEditingRemboursement(null);
@@ -498,7 +507,7 @@ export default function DepensesIndex({
         remboursementForm.setData({
             beneficiaire_id: Number(prefillBeneficiaire),
             encaissement_id: prefillEncaissement !== null ? Number(prefillEncaissement) : '',
-            caisse_id: remboursementCaisses.length === 1 ? remboursementCaisses[0].id : '',
+            caisse_id: defaultCaisseId,
             montant: prefillMontant ?? '',
             date_remboursement: new Date().toISOString().slice(0, 10),
             motif: prefillMotif ?? '',
@@ -1619,7 +1628,7 @@ export default function DepensesIndex({
                             <span className="text-muted">Caisse débitée</span>
                             <span className="fw-medium">{editingRemboursement.caisse ?? '—'}</span>
                         </div>
-                    ) : (
+                    ) : canChooseRemboursementCaisse ? (
                         <div className="row">
                             <div className="col-md-8">
                                 <SelectField
@@ -1638,6 +1647,18 @@ export default function DepensesIndex({
                                     L&apos;argent sort de cette caisse. Seules les caisses espèces du centre actif sont proposées.
                                 </div>
                             </div>
+                        </div>
+                    ) : (
+                        /* Sans `refunds.choose-till` : l'argent sort de SA
+                           caisse. On le DIT au lieu de masquer l'information —
+                           il doit savoir d'où part l'argent qu'il rend. */
+                        <div className="alert alert-info d-flex justify-content-between align-items-center">
+                            <span>L&apos;argent sortira de votre caisse</span>
+                            <span className="fw-semibold">
+                                {remboursementCaisseParDefaut !== null
+                                    ? `${remboursementCaisseParDefaut.nom} (${Number(remboursementCaisseParDefaut.solde).toFixed(2)} MAD)`
+                                    : '—'}
+                            </span>
                         </div>
                     )}
 

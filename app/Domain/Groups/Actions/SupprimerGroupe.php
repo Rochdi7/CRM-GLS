@@ -15,7 +15,7 @@ use Illuminate\Validation\ValidationException;
 /**
  * ⚠ L'EXCEPTION à « un groupe ne se supprime jamais » (CLAUDE.md §11).
  *
- * Détruit DÉFINITIVEMENT un groupe et ses inscriptions. Réservé au
+ * Détruit DÉFINITIVEMENT un groupe. Réservé au
  * super-admin (`groups.delete` ∈ PermissionRegistry::superAdminOnly(),
  * GroupPolicy@delete) pour les groupes créés par erreur : import raté,
  * doublon, groupe de test. Ce n'est PAS le chemin normal de clôture — un
@@ -36,11 +36,26 @@ use Illuminate\Validation\ValidationException;
  * Les dépenses « Paiement prof » du groupe ne sont pas supprimées non plus
  * (depenses.group_id est ON DELETE SET NULL) : ce sont des enregistrements
  * monétaires, elles se détachent simplement du groupe.
+ *
+ * ⚠ Les INSCRIPTIONS ne sont plus supprimées non plus (10/09/2026). Une
+ * inscription est le dossier d'un étudiant : elle porte des lignes de frais
+ * et, potentiellement, de l'argent. La détruire en dommage collatéral la
+ * faisait disparaître de la fiche de l'étudiant sans laisser la moindre
+ * explication. Désormais
+ * DetacherInscriptionsGroupeSupprime l'annule (motif « Groupe supprimé ») et
+ * lui écrit le NOM du groupe dans sa note — le seul endroit où ce nom
+ * survit — puis `inscriptions.group_id` retombe à NULL tout seul
+ * (ON DELETE SET NULL). Les frais et livres de l'inscription restent
+ * attachés à elle, donc rien n'est perdu.
  */
 final class SupprimerGroupe
 {
+    public function __construct(
+        private readonly DetacherInscriptionsGroupeSupprime $detacher,
+    ) {}
+
     /**
-     * @return array{inscriptions:int}
+     * @return array{inscriptions:int, inscriptionsAnnulees:int}
      */
     public function handle(Group $group): array
     {
@@ -84,17 +99,22 @@ final class SupprimerGroupe
                 ]);
             }
 
-            // inscription_fees / inscription_livres / inscriptions_historique
-            // partent en cascade (FK ON DELETE CASCADE) ; le refus ci-dessus
-            // garantit qu'aucun encaissement ne pointe vers ces frais.
-            Inscription::query()->where('group_id', $group->id)->delete();
+            // ⚠ Les inscriptions SURVIVENT. Elles sont annulées et reçoivent
+            // dans leur note le nom du groupe supprimé ; leurs frais, livres
+            // et historique restent attachés à elles. C'est le seul moyen
+            // pour qu'un étudiant garde son dossier — et qu'on comprenne,
+            // des mois plus tard, ce qui est arrivé à son groupe.
+            $detache = $this->detacher->handle($group);
 
             // creneaux / group_frais / group_enseignants / groups_historique
             // sont en ON DELETE CASCADE.
+            // `inscriptions.group_id` retombe à NULL ici (ON DELETE SET NULL),
+            // sans que rien n'ait à l'écrire à la main.
             $group->delete();
 
             return [
                 'inscriptions' => $inscriptions->count(),
+                'inscriptionsAnnulees' => $detache['inscriptionsAnnulees'],
             ];
         });
     }

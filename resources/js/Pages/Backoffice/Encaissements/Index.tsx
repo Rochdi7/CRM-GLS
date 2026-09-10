@@ -23,6 +23,26 @@ import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { t } from '@/Lib/i18n';
 import type { EncaissementRow, EncaissementsPageProps, InscriptionPaymentRow, PaymentLine, SelectOption, StudentChequeOption, UnpaidFee } from '@/Types';
 
+/**
+ * ⚠ « Transfert vers un autre étudiant » — MASQUÉ à la demande du CEO le
+ * 10/09/2026 : « this tool not ready on production, when I'm ready I will
+ * tell you restore it ». Repasser à `true` pour le réafficher — c'est le
+ * SEUL geste nécessaire, rien d'autre n'a été démonté.
+ *
+ * Ce qui reste en place et testé (24/24) : l'action
+ * TransfererFraisVersAutreEtudiant, sa route, sa permission
+ * (`payments.transfer-student`, super-admin uniquement) et le bloc
+ * « Transféré depuis un autre étudiant » sur la fiche d'un paiement — un
+ * transfert déjà effectué reste donc lisible et traçable.
+ *
+ * ⚠ Cacher l'entrée de menu n'est PAS une protection (CLAUDE.md §16 : « un
+ * écran absent de la barre latérale n'est pas un écran protégé ») : la
+ * route reste atteignable par son URL et c'est la permission qui décide.
+ * C'est une décision d'ergonomie — ne jamais s'en servir comme d'un
+ * verrou de sécurité.
+ */
+const TRANSFERT_ETUDIANT_ACTIF = false;
+
 interface CreateFormState {
     student_id: number | '';
     inscription_id: number | '';
@@ -120,6 +140,13 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
     const [applyFeeOptions, setApplyFeeOptions] = useState<Array<SelectOption & { reste: string }>>([]);
     const [loadingApplyInscriptions, setLoadingApplyInscriptions] = useState(false);
     const [loadingApplyFees, setLoadingApplyFees] = useState(false);
+    // « Transférer vers un autre étudiant » — le frère qui a payé sans venir
+    // cède ses frais à la sœur qui prend la place. Cascade en trois temps :
+    // étudiant bénéficiaire → son inscription (déjà créée par l'écran
+    // d'inscription habituel) → la ligne de frais que l'argent vient solder.
+    const [transferTarget, setTransferTarget] = useState<EncaissementRow | null>(null);
+    const [transferInscriptionOptions, setTransferInscriptionOptions] = useState<SelectOption[]>([]);
+    const [loadingTransferInscriptions, setLoadingTransferInscriptions] = useState(false);
     const [studentCheques, setStudentCheques] = useState<StudentChequeOption[]>([]);
     const [emailTarget, setEmailTarget] = useState<EncaissementRow | null>(null);
     // Why the WhatsApp send could not happen (no reachable number, or an
@@ -164,6 +191,16 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
     });
     const avanceForm = useForm<AvanceFormState>(emptyAvanceForm());
     const applyForm = useForm<ApplyAvanceFormState>({ inscription_id: '', fee_id: '', montant: '' });
+    // Aucun montant, aucune date, aucun frais ici : le paiement n'est jamais
+    // réécrit, seule son affectation change — et le frais cible est DÉTECTÉ
+    // par le serveur (même entrée du catalogue que le frais quitté), jamais
+    // choisi à la main.
+    const transferForm = useForm<{
+        encaissement_id: number | '';
+        student_id: number | '';
+        inscription_id: number | '';
+        motif: string;
+    }>({ encaissement_id: '', student_id: '', inscription_id: '', motif: '' });
     const emailForm = useForm<{ email: string }>({ email: '' });
 
     // Partial reload: only the paginated rows, the echoed filters and the
@@ -623,6 +660,69 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
         applyForm.post(`/backoffice/avances/${applyTarget.id}/apply`, {
             preserveScroll: true,
             onSuccess: () => closeApplyModal(),
+        });
+    }
+
+    function openTransfer(row: EncaissementRow) {
+        setTransferTarget(row);
+        transferForm.clearErrors();
+        transferForm.setData({
+            encaissement_id: row.id,
+            student_id: '',
+            inscription_id: '',
+            motif: '',
+        });
+        setTransferInscriptionOptions([]);
+    }
+
+    function closeTransfer() {
+        setTransferTarget(null);
+        setTransferInscriptionOptions([]);
+        transferForm.clearErrors();
+    }
+
+    async function onTransferStudentChange(studentId: number | '') {
+        transferForm.setData((previous) => ({
+            ...previous,
+            student_id: studentId,
+            inscription_id: '',
+        }));
+        setTransferInscriptionOptions([]);
+
+        if (studentId === '') {
+            return;
+        }
+
+        if (!transferTarget) {
+            return;
+        }
+
+        setLoadingTransferInscriptions(true);
+        try {
+            // Endpoint DÉDIÉ : il ne liste que les inscriptions actives du
+            // bénéficiaire qui peuvent RECEVOIR ce paiement — ligne du même
+            // frais présente, visible, et pas déjà soldée. Un dossier où ce
+            // frais est déjà payé n'apparaît pas (10/09/2026). La règle est
+            // celle de l'action (CibleTransfertFrais), pas une copie.
+            const response = await fetch(`/backoffice/encaissements/${transferTarget.id}/transfer-targets/${studentId}`);
+            const data: { inscriptions: Array<{ id: number; label: string; reste: string }> } = await response.json();
+            setTransferInscriptionOptions(
+                data.inscriptions.map((i) => ({
+                    value: i.id,
+                    label: `${i.label} — reste dû ${Number(i.reste).toFixed(2)} MAD`,
+                })),
+            );
+        } finally {
+            setLoadingTransferInscriptions(false);
+        }
+    }
+
+    function submitTransfer(event: FormEvent) {
+        event.preventDefault();
+        if (!transferTarget) return;
+        transferForm.post('/backoffice/encaissements/transferer-frais-etudiant', {
+            preserveScroll: true,
+            onSuccess: () => closeTransfer(),
         });
     }
 
@@ -1303,6 +1403,20 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                 >
                                                     Générer le reçu format A5
                                                 </RowActionItem>
+                                                {/* « Transfert vers un autre étudiant » — le frère qui a
+                                                    payé sans jamais venir cède ses frais à la sœur qui prend
+                                                    la place. L'entrée reste VISIBLE quand la règle refuse :
+                                                    le modal explique alors pourquoi (présences, avance,
+                                                    remboursement). Une option qui disparaît sans raison
+                                                    envoie chercher un bug là où il y a une règle. */}
+                                                {TRANSFERT_ETUDIANT_ACTIF && can?.transferToStudent && !row.isAvance && (
+                                                    <>
+                                                        <RowActionDivider />
+                                                        <RowActionItem icon="ti-users-group" onClick={() => openTransfer(row)}>
+                                                            Transférer vers un autre étudiant
+                                                        </RowActionItem>
+                                                    </>
+                                                )}
                                                 <RowActionDivider />
                                                 <RowActionItem icon="ti-mail" onClick={() => openEmailRecu(row)}>
                                                     Envoyer le reçu par email
@@ -2010,6 +2124,156 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                             error={applyForm.errors.montant}
                         />
                     </form>
+                )}
+            </Modal>
+
+            {/* « Transfert vers un autre étudiant » — déplace CE paiement du
+                frais où il est vers le frais d'une inscription d'une AUTRE
+                personne (le frère qui a payé sans venir, la sœur qui prend la
+                place). Rien n'est créé ni clôturé : la sœur est inscrite
+                avant, par l'écran d'inscription habituel, et le dossier du
+                frère reste ouvert — son frais redevient simplement dû. */}
+            <Modal
+                show={transferTarget !== null}
+                title={transferTarget ? `Transférer le frais — ${transferTarget.reference}` : ''}
+                onClose={closeTransfer}
+                processing={transferForm.processing}
+                size="lg"
+                footer={
+                    transferTarget?.transferableAutreEtudiant ? (
+                        <FormActions
+                            form="transfer-fee-form"
+                            onCancel={closeTransfer}
+                            processing={transferForm.processing}
+                            submitLabel="Confirmer le transfert"
+                        />
+                    ) : (
+                        <button type="button" className="btn btn-light" onClick={closeTransfer}>
+                            Fermer
+                        </button>
+                    )
+                }
+            >
+                {transferTarget && (
+                    transferTarget.transferableAutreEtudiant ? (
+                        <form id="transfer-fee-form" onSubmit={submitTransfer}>
+                            <div className="alert alert-warning">
+                                <strong>{Number(transferTarget.montant).toFixed(2)} MAD</strong> quittent le
+                                frais « {transferTarget.feeNom} » de <strong>{transferTarget.student}</strong>{' '}
+                                pour solder celui de l'étudiant choisi ci-dessous.
+                                <div className="fs-13 mt-2 mb-0">
+                                    Aucune caisse ne bouge. Le dossier de {transferTarget.student} reste ouvert,
+                                    son frais redevient dû.
+                                </div>
+                            </div>
+
+                            <div className="form-text text-success mb-3">
+                                <i className="ti ti-circle-check me-1" aria-hidden="true" />
+                                Aucune présence sur l'inscription d'origine : le dossier n'a jamais été consommé.
+                            </div>
+
+                            <div className="row">
+                                <div className="col-md-6">
+                                    <SelectField
+                                        id="tf-student"
+                                        label="Étudiant bénéficiaire"
+                                        options={studentOptions.filter((o) => o.value !== transferTarget.studentId)}
+                                        placeholder="Sélectionner un étudiant"
+                                        required
+                                        value={transferForm.data.student_id}
+                                        onChange={(e) =>
+                                            onTransferStudentChange(e.target.value === '' ? '' : Number(e.target.value))
+                                        }
+                                        error={transferForm.errors.student_id}
+                                    />
+                                </div>
+                                <div className="col-md-6">
+                                    <SelectField
+                                        id="tf-inscription"
+                                        label="Inscription"
+                                        options={transferInscriptionOptions}
+                                        placeholder={
+                                            loadingTransferInscriptions ? 'Chargement…' : 'Sélectionner une inscription'
+                                        }
+                                        required
+                                        disabled={transferForm.data.student_id === '' || loadingTransferInscriptions}
+                                        value={transferForm.data.inscription_id}
+                                        onChange={(e) =>
+                                            transferForm.setData(
+                                                'inscription_id',
+                                                e.target.value === '' ? '' : Number(e.target.value),
+                                            )
+                                        }
+                                        error={transferForm.errors.inscription_id}
+                                    />
+                                    {/* Le frais n'est pas un champ : le serveur pose l'argent
+                                        sur la ligne « même frais du catalogue » de la cible, et
+                                        refuse s'il n'y en a pas de disponible. */}
+                                    <div className="form-text">
+                                        Le paiement sera posé sur la ligne « {transferTarget.feeNom} » de cette
+                                        inscription — détectée automatiquement.
+                                    </div>
+                                </div>
+                            </div>
+
+                            {transferForm.data.student_id !== '' && !loadingTransferInscriptions
+                                && transferInscriptionOptions.length === 0 && (
+                                <div className="alert alert-info py-2 fs-13">
+                                    Aucune inscription de cet étudiant ne peut recevoir ce paiement : soit il n'a
+                                    pas d'inscription active dans ce centre, soit sa ligne « {transferTarget.feeNom} »
+                                    est déjà payée ou absente. Inscrivez-le d'abord par l'écran « Inscriptions »
+                                    si nécessaire, puis revenez transférer le frais.
+                                </div>
+                            )}
+
+                            <TextareaField
+                                id="tf-motif"
+                                label="Motif du transfert"
+                                required
+                                value={transferForm.data.motif}
+                                onChange={(e) => transferForm.setData('motif', e.target.value)}
+                                error={transferForm.errors.motif}
+                            />
+                            <div className="form-text">
+                                Obligatoire : c'est ce qui expliquera, plus tard, pourquoi cet argent a payé pour
+                                quelqu'un d'autre.
+                            </div>
+
+                            {transferForm.errors.encaissement_id && (
+                                <div className="text-danger fs-13 mt-2">{transferForm.errors.encaissement_id}</div>
+                            )}
+                        </form>
+                    ) : (
+                        /* Le refus est EXPLIQUÉ, pas seulement appliqué : sans
+                           la raison, l'opérateur cherche un bug là où il y a
+                           une règle. */
+                        <div className="alert alert-danger mb-0">
+                            <h6 className="mb-2">Transfert impossible</h6>
+                            {(transferTarget.sourcePresencesCount ?? 0) > 0 ? (
+                                <>
+                                    <p className="mb-2">
+                                        L'inscription qui porte ce paiement compte{' '}
+                                        <strong>
+                                            {transferTarget.sourcePresencesCount} présence
+                                            {(transferTarget.sourcePresencesCount ?? 0) > 1 ? 's' : ''}
+                                        </strong>
+                                        .
+                                    </p>
+                                    <p className="mb-0 fs-13">
+                                        Un dossier dont le nom a déjà été appelé appartient définitivement à son
+                                        étudiant : la place a été occupée, la prestation a commencé. Toutes les
+                                        lignes d'appel comptent — y compris « Absent » et « Justifié ».
+                                    </p>
+                                </>
+                            ) : (
+                                <p className="mb-0 fs-13">
+                                    Ce paiement ne peut pas être transféré : il n'est rattaché à aucun frais (une
+                                    avance n'a rien à céder), ou il a déjà été remboursé, ou il est adossé à un
+                                    chèque suivi.
+                                </p>
+                            )}
+                        </div>
+                    )
                 )}
             </Modal>
 

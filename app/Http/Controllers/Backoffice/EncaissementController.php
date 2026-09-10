@@ -15,6 +15,8 @@ use App\Domain\Payments\Mail\EncaissementRecuMail;
 use App\Domain\Payments\Support\RecuPdfRenderer;
 use App\Domain\Payments\Support\RecuWhatsAppLink;
 use App\Domain\Payments\Actions\SupprimerEncaissement;
+use App\Domain\Payments\Actions\TransfererFraisVersAutreEtudiant;
+use App\Domain\Payments\Support\CibleTransfertFrais;
 use App\Domain\Payments\Queries\GetEncaissementDetails;
 use App\Domain\Payments\Queries\GetEncaissementsList;
 use App\Domain\Payments\Queries\GetInscriptionPayments;
@@ -28,6 +30,7 @@ use App\Http\Requests\Backoffice\Encaissements\ConvertAvanceRequest;
 use App\Http\Requests\Backoffice\Encaissements\SendRecuEmailRequest;
 use App\Http\Requests\Backoffice\Encaissements\StoreAvanceRequest;
 use App\Http\Requests\Backoffice\Encaissements\StoreEncaissementRequest;
+use App\Http\Requests\Backoffice\Encaissements\TransfererFraisEtudiantRequest;
 use App\Http\Requests\Backoffice\Encaissements\UpdateEncaissementRequest;
 use App\Models\Cheque;
 use App\Models\Encaissement;
@@ -35,6 +38,7 @@ use App\Models\Inscription;
 use App\Models\InscriptionFee;
 use App\Models\Student;
 use App\Services\Authorization\CenterAccessService;
+use App\Services\Context\CurrentContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -224,6 +228,13 @@ final class EncaissementController extends Controller
                 // Confort d'interface seulement — update() refuse un montant
                 // different sans la permission.
                 'updateAmount' => $request->user()?->can('payments.update-amount') ?? false,
+                // Transférer un frais payé vers l'inscription d'un AUTRE
+                // étudiant (le frère qui a payé sans venir, la sœur qui prend
+                // la place) : direction + super-admin (10/09/2026). Dessine
+                // l'entrée de menu ; transfererFraisEtudiant() ré-autorise,
+                // et la règle des zéro présence est appliquée dans la
+                // transaction de l'action.
+                'transferToStudent' => $request->user()?->can('payments.transfer-student') ?? false,
             ],
         ]);
     }
@@ -559,6 +570,102 @@ final class EncaissementController extends Controller
 
         return $this->backToListPreservingFilters($request, 'backoffice.encaissements.index', ['view' => 'avance'])
             ->with('success', __('Advance applied.'));
+    }
+
+    /**
+     * « Transfert d'un frais payé vers l'inscription d'un autre étudiant » —
+     * le frère qui a payé sans jamais venir cède ses frais à la sœur qui
+     * prend la place (10/09/2026).
+     *
+     * Rien n'est créé ni clôturé ici : la sœur est inscrite AVANT, par
+     * l'écran d'inscription habituel, et l'inscription du frère reste
+     * ouverte (son frais redevient simplement dû). Seule l'AFFECTATION du
+     * paiement change.
+     *
+     * Les trois bornes du geste — zéro présence sur le dossier source, même
+     * centre, et le reste dû du frais cible — vivent dans
+     * TransfererFraisVersAutreEtudiant, sous verrou : elles lisent des
+     * données avant d'écrire, donc les recopier ici les ferait diverger de
+     * celles qui décident vraiment, sans protéger les appelants non-HTTP
+     * (CLAUDE.md §11).
+     */
+    public function transfererFraisEtudiant(
+        TransfererFraisEtudiantRequest $request,
+        TransfererFraisVersAutreEtudiant $action,
+    ): RedirectResponse {
+        $this->authorize('transferToStudent', Encaissement::class);
+        $this->assertContextAnneeOuverte('motif');
+
+        $data = $request->validated();
+
+        $encaissement = Encaissement::findOrFail((int) $data['encaissement_id']);
+        $cible = Inscription::findOrFail((int) $data['inscription_id']);
+
+        // L'inscription cible arrive choisie depuis le navigateur : sa portée
+        // est revérifiée à l'écriture, jamais seulement dans le read-model
+        // qui a alimenté la liste (ids forgeables).
+        $this->assertInscriptionInContext($request, $cible, 'inscription_id');
+        // L'argent va solder un dossier que l'étudiant suit vraiment : le
+        // verser sur une inscription close le remettrait dans la situation
+        // exacte qu'on est en train de corriger.
+        $this->assertInscriptionPayable($cible, 'inscription_id');
+
+        // Le frais cible n'est PAS un champ : l'action le détecte (même
+        // entrée du catalogue que le frais quitté), sous verrou.
+        $action->handle($encaissement, $cible, $data['motif']);
+
+        return $this->backToListPreservingFilters($request, 'backoffice.encaissements.index')
+            ->with('success', __('Fee transferred to the other student.'));
+    }
+
+    /**
+     * Les inscriptions d'un étudiant qui peuvent RECEVOIR ce paiement — le
+     * dropdown « Inscription » du modal de transfert (10/09/2026 : « si le
+     * frais est déjà payé sur cette inscription, ne pas la proposer »).
+     *
+     * Même filtre que studentInscriptions() (Active, année active, centre
+     * accessible), PUIS la règle d'éligibilité de
+     * Support\CibleTransfertFrais — celle-là même que l'action applique
+     * sous verrou à l'écriture. Un dossier dont la ligne du même frais est
+     * absente, masquée ou déjà soldée n'apparaît pas, au lieu d'être offert
+     * puis refusé.
+     */
+    public function transferTargets(Request $request, Encaissement $encaissement, int $student, CibleTransfertFrais $cible): JsonResponse
+    {
+        $this->authorize('transferToStudent', Encaissement::class);
+        $this->assertCenterAccess($request, Student::query()->findOrFail($student)->etablissement_id);
+
+        $source = $encaissement->fee;
+
+        if ($source === null) {
+            return response()->json(['inscriptions' => []]);
+        }
+
+        $context = app(CurrentContext::class);
+
+        $inscriptions = Inscription::query()
+            ->with('group')
+            ->where('student_id', $student)
+            ->where('statut', Inscription::STATUT_ACTIVE)
+            ->when($context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
+            ->get()
+            ->map(function (Inscription $i) use ($cible, $source, $encaissement): ?array {
+                $resolution = $cible->resoudre($source, $i, (float) $encaissement->montant, verrouiller: false);
+
+                if ($resolution['frais'] === null) {
+                    return null;
+                }
+
+                return [
+                    'id' => $i->id,
+                    'label' => $i->reference.' — '.($i->group?->nom ?? '—'),
+                    'reste' => number_format($resolution['reste'], 2, '.', ''),
+                ];
+            })
+            ->filter()
+            ->values();
+
+        return response()->json(['inscriptions' => $inscriptions]);
     }
 
     /**

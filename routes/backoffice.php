@@ -628,6 +628,21 @@ Route::prefix('backoffice')
                 ->middleware('permission:payments.create')->name('avances.convert');
             Route::post('avances/{encaissement}/apply', [EncaissementController::class, 'applyAvance'])
                 ->middleware('permission:payments.create')->name('avances.apply');
+            // « Transfert d'un frais payé vers l'inscription d'un AUTRE
+            // étudiant » — le frère qui a payé sans jamais venir cède ses
+            // frais à la sœur qui prend la place (10/09/2026). Permission
+            // dédiée (direction + super-admin) : c'est l'exception assumée
+            // au garde-fou « l'argent d'un étudiant ne solde jamais le frais
+            // d'un autre ». Bornée à ZÉRO présence sur le dossier source et
+            // au MÊME centre — gardes appliquées dans
+            // TransfererFraisVersAutreEtudiant, pas ici.
+            Route::post('encaissements/transferer-frais-etudiant', [EncaissementController::class, 'transfererFraisEtudiant'])
+                ->middleware('permission:payments.transfer-student')->name('encaissements.transferer-frais-etudiant');
+            // Dropdown du modal : les inscriptions du bénéficiaire qui
+            // peuvent RECEVOIR ce paiement (même frais, visible, reste dû
+            // suffisant) — même règle que l'action, jamais une copie.
+            Route::get('encaissements/{encaissement}/transfer-targets/{student}', [EncaissementController::class, 'transferTargets'])
+                ->middleware('permission:payments.transfer-student')->name('encaissements.transfer-targets');
             // Détacher UN paiement de son frais depuis sa page de détail :
             // le frais redevient dû et l'argent repart en avance. Réservé au
             // super-admin (payments.detach ∈ superAdminOnly).

@@ -150,11 +150,27 @@ final class RemboursementsInertiaCrudTest extends TestCase
         $this->assertSame('850.00', (string) $caisse->fresh()->solde);
     }
 
-    public function test_no_maximum_refund_amount_check_exists(): void
+    /**
+     * ⚠ Remplace `test_no_maximum_refund_amount_check_exists` (10/09/2026).
+     *
+     * L'absence de plafond était une décision documentée
+     * (docs/rapports/finance/phase-10-finance-audit.md §2.6 Q1) : un
+     * remboursement supérieur au solde du tiroir était accepté tel quel. Elle
+     * ne tient plus, pour une raison qui n'existait pas alors — depuis le
+     * 09/09/2026 une DÉPENSE ne peut plus dépasser sa caisse
+     * (GardeSoldeCaisse), et un remboursement débite EXACTEMENT la même
+     * caisse physique. Laisser l'un descendre sous zéro pendant que l'autre
+     * est bloqué ne protège rien : le trou se déplace simplement vers l'écran
+     * qui ne contrôle rien, et une caisse PHYSIQUE ne contient jamais un
+     * montant négatif.
+     *
+     * Ce qui reste vrai de la décision d'origine : un remboursement SANS
+     * `encaissement_id` n'est toujours plafonné par AUCUN paiement — seul le
+     * solde réel du tiroir le borne, ce qu'assère
+     * `test_an_unlinked_refund_is_still_uncapped`.
+     */
+    public function test_a_refund_cannot_exceed_the_tills_balance(): void
     {
-        // Confirms the deliberate absence of a cap (docs/phase-10-finance-
-        // mapping.md Q1) — a refund larger than the till's balance is still
-        // accepted, matching current live behavior exactly.
         $user = $this->userWith('refunds.view', 'refunds.create');
         $this->actingAs($user);
         $caisse = $user->employee->caisses()->first();
@@ -166,9 +182,10 @@ final class RemboursementsInertiaCrudTest extends TestCase
             'caisse_id' => $caisse->id,
             'montant' => '5000',
             'date_remboursement' => '2025-09-20',
-        ])->assertSessionDoesntHaveErrors();
+        ])->assertSessionHasErrors('montant');
 
-        $this->assertSame('-4900.00', (string) $caisse->fresh()->solde);
+        $this->assertSame('100.00', (string) $caisse->fresh()->solde);
+        $this->assertSame(0, Remboursement::query()->count());
     }
 
     public function test_montant_and_caisse_are_frozen_on_update_even_when_tampered(): void

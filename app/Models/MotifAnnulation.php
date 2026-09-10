@@ -65,6 +65,16 @@ class MotifAnnulation extends Model
      */
     public const MOTIF_CLOTURE_GROUPE = 'Clôture du groupe';
 
+    /**
+     * The system reason written on every registration of a group that is
+     * PERMANENTLY DELETED — see
+     * Domain\Groups\Actions\DetacherInscriptionsGroupeSupprime (10/09/2026).
+     * Distinct from MOTIF_CLOTURE_GROUPE on purpose: there the group survives
+     * and can be reopened, here the group row is gone for good and the
+     * registration's note is the only place its name still exists.
+     */
+    public const MOTIF_GROUPE_SUPPRIME = 'Groupe supprimé';
+
     protected $fillable = ['nom', 'is_system', 'portee', 'statut'];
 
     /**

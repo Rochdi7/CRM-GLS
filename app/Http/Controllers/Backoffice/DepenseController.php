@@ -168,7 +168,30 @@ final class DepenseController extends Controller
             // Cash tills of the active centre — the refund form now names the
             // till (and therefore the employee) the money leaves, instead of
             // silently draining the acting cashier's own (03/09/2026).
-            'remboursementCaisses' => $user->can('refunds.view') ? $getRemboursementsList->caisseOptions($user) : [],
+            // ⚠ Les options ne sont servies qu'à qui peut CHOISIR
+            // (`refunds.choose-till`, 10/09/2026). Pour tous les autres la
+            // caisse débitée est la leur, dérivée au serveur : envoyer
+            // quand même la liste des caisses des collègues afficherait un
+            // choix que le Form Request refuse, et divulguerait leurs soldes.
+            'remboursementCaisses' => $user->can('refunds.view') && $user->can('refunds.choose-till')
+                ? $getRemboursementsList->caisseOptions($user)
+                : [],
+            // UI convenience only (§5) : dessine le champ « Caisse à débiter ».
+            // Le vrai verrou est StoreRemboursementRequest + le contrôleur.
+            'canChooseRemboursementCaisse' => $user->can('refunds.choose-till'),
+            // La caisse qui sera débitée quand l'utilisateur ne choisit pas —
+            // affichée en lecture seule pour qu'il sache d'où sort l'argent.
+            'remboursementCaisseParDefaut' => $user->can('refunds.create') && $employee !== null
+                ? (function () use ($employee): ?array {
+                    $till = $employee->till()->first();
+
+                    return $till === null ? null : [
+                        'id' => $till->id,
+                        'nom' => $till->nom,
+                        'solde' => number_format((float) $till->solde, 2, '.', ''),
+                    ];
+                })()
+                : null,
             'filters' => [
                 'search' => $search,
                 'typeFilter' => $typeFilter,

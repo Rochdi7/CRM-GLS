@@ -96,7 +96,16 @@ final class RemboursementController extends Controller
         // No caisse_id submitted ⇒ the acting employee's own till, exactly as
         // before this change. Keeping that fallback is what stops an omitted
         // field from failing the whole submission silently.
-        $caisseId = $chequeReversal || empty($data['caisse_id'])
+        //
+        // And the choice is a PERMISSION (10/09/2026, `refunds.choose-till`,
+        // directeur + super-admin). Une assistante administrative ou un
+        // consultant rend l'argent qu'il a physiquement en main : sa propre
+        // caisse, dérivée ici. Le Form Request refuse déjà un `caisse_id`
+        // étranger soumis sans le droit, donc cette ligne n'écrase rien en
+        // silence — elle couvre le cas normal où le champ n'est pas envoyé.
+        $peutChoisir = $request->user()->can('refunds.choose-till');
+
+        $caisseId = $chequeReversal || ! $peutChoisir || empty($data['caisse_id'])
             ? $resolved->id
             : (int) $data['caisse_id'];
 

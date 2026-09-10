@@ -14,6 +14,7 @@ use App\Models\Frais;
 use App\Models\Group;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
+use App\Models\Presence;
 use App\Models\Student;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
@@ -247,6 +248,18 @@ final class GetEncaissementsList
             : (clone $base)->sum('montant');
 
         $encaissements = (clone $base)
+            // ⚠ `addSelect`, JAMAIS `select` : `Query\Builder::select()`
+            // commence par vider `$this->columns` ET
+            // `$this->bindings['select']`, ce qui EFFACE la sous-requête
+            // `withSum('remboursements as remboursements_total')` posée sur
+            // `$base` plus haut. La colonne revenait alors toujours à 0 :
+            // « Remboursé : X MAD » disparaissait de l'écran d'un paiement
+            // partiellement remboursé, et `methodeRequalifiable`,
+            // `montantCorrigible`, `transferableAutreEtudiant` passaient à
+            // true sur une ligne que les actions refusent (audit 10/09/2026).
+            // `encaissements.*` reste nécessaire : sans lui, les colonnes
+            // calculées ajoutées plus bas seraient les seules sélectionnées.
+            ->addSelect('encaissements.*')
             // `cheque` feeds the per-row `applicable` flag below — a bounced
             // cheque's money cannot be applied, and the UI must know that
             // without asking the DB once per row.
@@ -258,6 +271,39 @@ final class GetEncaissementsList
             // utilisé / restant" on the Avances tab and the « Avance » cell of
             // the Encaissements tab (an avance there shows what is applied).
             ->when($view !== 'cheque', fn ($q) => $q->withSum('applications', 'montant'))
+            // Nombre de lignes d'appel portées par l'inscription SOURCE de ce
+            // paiement — ce qui autorise ou interdit « Transférer vers un
+            // autre étudiant » (0 = le dossier n'a jamais été consommé).
+            //
+            // Il n'existe aucune FK presences → inscriptions : la liaison est
+            // (student de l'inscription × séances de son groupe), la même
+            // définition que Registrations\Support\GardePresencesInscription,
+            // qui reste la SEULE autorité — cette colonne ne fait que porter
+            // l'information à l'écran, elle ne décide rien (CLAUDE.md §5).
+            //
+            // Une sous-requête corrélée, jamais un compte par ligne dans la
+            // boucle de rendu : le coût reste constant quel que soit le
+            // nombre de lignes (CLAUDE.md §17 perf).
+            ->addSelect(['source_presences_count' => Presence::query()
+                ->selectRaw('count(*)')
+                ->join('seances', 'seances.id', '=', 'presences.seance_id')
+                ->join('inscription_fees', 'inscription_fees.id', '=', 'encaissements.inscription_fee_id')
+                ->join('inscriptions', 'inscriptions.id', '=', 'inscription_fees.inscription_id')
+                ->whereColumn('presences.student_id', 'inscriptions.student_id')
+                ->whereColumn('seances.group_id', 'inscriptions.group_id'),
+            ])
+            // Le groupe de l'inscription SOURCE. `inscriptions.group_id` est
+            // nullable (`nullOnDelete`) : sans cette colonne, le compte de
+            // présences ci-dessus vaut 0 pour un dossier dont le groupe a été
+            // supprimé, ce qui se lit « jamais consommé » alors que plus rien
+            // n'est vérifiable. La règle est portée par
+            // `transferableAutreEtudiant` plus bas.
+            ->addSelect(['source_group_id' => InscriptionFee::query()
+                ->select('inscriptions.group_id')
+                ->join('inscriptions', 'inscriptions.id', '=', 'inscription_fees.inscription_id')
+                ->whereColumn('inscription_fees.id', 'encaissements.inscription_fee_id')
+                ->limit(1),
+            ])
             ->paginate($perPage)
             ->withQueryString();
 
@@ -338,6 +384,34 @@ final class GetEncaissementsList
                 'methodeRequalifiable' => $e->applied_from_encaissement_id === null
                     && $e->cheque_id === null
                     && (float) ($e->remboursements_total ?? 0) <= 0.0,
+                // Combien de fois l'étudiant a été appelé dans le groupe de
+                // l'inscription qui porte ce paiement. Affiché tel quel dans
+                // le modal de transfert pour que l'opérateur voie POURQUOI
+                // c'est refusé, au lieu d'un bouton inerte sans explication.
+                'sourcePresencesCount' => (int) ($e->source_presences_count ?? 0),
+                // Même principe que methodeRequalifiable : le read-model
+                // PORTE la règle de TransfererFraisVersAutreEtudiant au lieu
+                // de laisser l'UI la redécouvrir. Un transfert suppose un
+                // paiement réellement attaché à un frais (une avance n'a rien
+                // à céder), non remboursé, hors chèque suivi — et surtout un
+                // dossier source JAMAIS consommé (zéro ligne d'appel).
+                // ⚠ `applications_sum_montant` et `source_group_id` portent
+                // les deux refus qu'une simple lecture du compte de présences
+                // ne verrait pas : une ligne qui a financé des applications
+                // d'avance, et un dossier DÉTACHÉ DE SON GROUPE — pour ce
+                // dernier la sous-requête renvoie 0 (aucune séance à
+                // comparer), ce qui se lirait « jamais consommé » alors que
+                // c'est « invérifiable ». L'action refuse les deux
+                // (GardePresencesInscription::INDETERMINE) ; sans ces
+                // clauses, l'écran promettrait un transfert que le serveur
+                // rejette.
+                'transferableAutreEtudiant' => $e->inscription_fee_id !== null
+                    && $e->applied_from_encaissement_id === null
+                    && $e->cheque_id === null
+                    && (float) ($e->remboursements_total ?? 0) <= 0.0
+                    && (float) ($e->applications_sum_montant ?? 0) <= 0.0
+                    && $e->source_group_id !== null
+                    && (int) ($e->source_presences_count ?? 0) === 0,
                 // Meme principe pour CorrigerMontantEncaissement : le
                 // read-model porte la regle de l'action au lieu de laisser
                 // l'UI la redecouvrir. Aux trois cas ci-dessus s'ajoute

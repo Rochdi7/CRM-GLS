@@ -65,6 +65,14 @@ type PresenceLine = { statut: string; note: string };
 const TOGGLE_STATUTS = ['Présent', 'Absent'] as const;
 
 /**
+ * Seuil de gravité du retard de paiement, en jours — doit rester aligné sur
+ * `RetardPaiementEtudiant::SEUIL_JOURS` côté serveur, qui est l'autorité :
+ * le drapeau `grave` vient de LUI, cette constante ne sert qu'à rédiger le
+ * texte de l'infobulle.
+ */
+const RETARD_SEUIL_JOURS = 5;
+
+/**
  * Fiche de présence — "Saisir absence" design: Date / Employé / Séances
  * pickers on top (they re-query the séance list server-side and navigate
  * between séances), a "Suivi des présences" tab, the collapsible
@@ -645,6 +653,23 @@ export default function SeanceShow({
                                                     <span className="fw-medium text-uppercase">
                                                         {student.prenom} {student.nom}
                                                     </span>
+                                                    {student.retardPaiement && (
+                                                        <span
+                                                            className={`badge ms-2 retard-paiement-badge ${
+                                                                student.retardPaiement.grave
+                                                                    ? 'bg-danger'
+                                                                    : 'bg-warning text-dark'
+                                                            }`}
+                                                            // Infobulle CSS pure — aucun JS Bootstrap/jQuery (§3/§6).
+                                                            data-retard-tooltip={`${
+                                                                student.retardPaiement.grave
+                                                                    ? `Retard de plus de ${RETARD_SEUIL_JOURS} jours`
+                                                                    : `Retard inférieur à ${RETARD_SEUIL_JOURS} jours`
+                                                            } (échéance : ${student.retardPaiement.dateEcheance})`}
+                                                        >
+                                                            Merci de contacter l&rsquo;administration
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </td>
                                             {TOGGLE_STATUTS.map((statut) => (

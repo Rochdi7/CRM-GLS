@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Attendance\Queries;
 
+use App\Domain\Payments\Support\RetardPaiementEtudiant;
 use App\Models\Inscription;
 use App\Models\Seance;
 
@@ -11,9 +12,19 @@ use App\Models\Seance;
  * Read-model for the fiche de présence (Seances/Show): the séance header +
  * one line per actively-enrolled student of its group, pre-filled with any
  * roll call already saved.
+ *
+ * Chaque ligne porte aussi l'état de RETARD DE PAIEMENT de l'étudiant, pour
+ * que la personne qui fait l'appel voie immédiatement qui renvoyer vers
+ * l'administration. La règle n'est pas redéfinie ici : elle vient de
+ * `RetardPaiementEtudiant`, la même que « Gestion des recouvrements »
+ * (CLAUDE.md §11).
  */
 final class GetSeanceDetails
 {
+    public function __construct(
+        private readonly RetardPaiementEtudiant $retards,
+    ) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -33,7 +44,14 @@ final class GetSeanceDetails
             ->filter(fn (Inscription $inscription): bool => $inscription->student !== null)
             ->unique('student_id')
             ->sortBy(fn (Inscription $i): string => mb_strtolower("{$i->student->prenom} {$i->student->nom}"))
-            ->values()
+            ->values();
+
+        // Une seule requête pour TOUTE la liste — jamais une par ligne.
+        $retards = $this->retards->pourEtudiants(
+            $students->map(fn (Inscription $i): int => $i->student->id)->all(),
+        );
+
+        $students = $students
             ->map(fn (Inscription $inscription): array => [
                 'id' => $inscription->student->id,
                 'reference' => $inscription->student->reference,
@@ -42,6 +60,7 @@ final class GetSeanceDetails
                 'photoUrl' => $inscription->student->avatarUrl(),
                 'statut' => $existing->get($inscription->student->id)?->statut,
                 'note' => $existing->get($inscription->student->id)?->note ?? '',
+                'retardPaiement' => $retards[$inscription->student->id] ?? null,
             ]);
 
         return [

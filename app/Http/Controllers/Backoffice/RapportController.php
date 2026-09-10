@@ -6,10 +6,13 @@ namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Reports\Exports\ExporterRapportExcel;
 use App\Domain\Reports\Exports\RapportPdfRenderer;
+use App\Domain\Reports\Queries\GetEncaissementsReport;
 use App\Domain\Reports\Queries\GetInscriptionsReport;
 use App\Domain\Reports\Queries\GetStudentsReport;
 use App\Domain\Reports\Support\RapportCatalogue;
 use App\Http\Controllers\Controller;
+use App\Models\Caisse;
+use App\Models\Encaissement;
 use App\Models\Group;
 use App\Models\Inscription;
 use App\Models\Student;
@@ -58,10 +61,24 @@ final class RapportController extends Controller
         ['value' => 'none', 'label' => 'Sans inscription'],
     ];
 
+    /**
+     * Les libellés du filtre « Type » du relevé des encaissements, clé machine
+     * => libellé français. Mêmes mots que la colonne « Type » du document :
+     * filtrer sur « Avance » sort exactement les lignes que le PDF marque
+     * « Avance ».
+     *
+     * @var list<array{value: string, label: string}>
+     */
+    private const TYPES_ENCAISSEMENT_LABELS = [
+        ['value' => GetEncaissementsReport::TYPE_REGLEMENT, 'label' => 'Règlement'],
+        ['value' => GetEncaissementsReport::TYPE_AVANCE, 'label' => 'Avance'],
+    ];
+
     public function index(
         Request $request,
         GetInscriptionsReport $getInscriptionsReport,
         GetStudentsReport $getStudentsReport,
+        GetEncaissementsReport $getEncaissementsReport,
     ): Response|RedirectResponse {
         abort_unless($request->user()->can('reports.view'), 403);
 
@@ -99,6 +116,14 @@ final class RapportController extends Controller
                 $filters['sexeFilter'],
                 $filters['inscriptionFilter'],
             ),
+            GetEncaissementsReport::KEY => $getEncaissementsReport->count(
+                $request->user(),
+                $filters['dateFrom'],
+                $filters['dateTo'],
+                $filters['methodeFilter'],
+                $filters['caisseFilter'],
+                $filters['typeFilter'],
+            ),
         };
 
         return Inertia::render('Backoffice/Rapports/Index', [
@@ -125,7 +150,29 @@ final class RapportController extends Controller
             // Mêmes clés machine et mêmes libellés que la liste Étudiants —
             // le rapport et la liste nomment le même filtre pareil.
             'inscriptionOptions' => self::ETATS_INSCRIPTION_LABELS,
+            'methodeOptions' => array_map(
+                static fn (string $m): array => ['value' => $m, 'label' => $m],
+                Encaissement::METHODES,
+            ),
+            // Closure : un rechargement partiel déclenché par un changement de
+            // filtre n'a pas à relire le catalogue des caisses.
+            'caisseOptions' => fn () => $getEncaissementsReport->caisseOptions($request->user()),
+            'typeOptions' => self::TYPES_ENCAISSEMENT_LABELS,
             'nombreLignes' => $lignes,
+            // Le total n'est calculé QUE pour le rapport qui l'imprime : les
+            // deux autres n'ont pas de colonne monétaire, et une chaîne vide
+            // dit à la page de ne rien afficher plutôt que « 0,00 DH », qu'on
+            // lirait comme « rien encaissé ».
+            'montantTotal' => $filters['rapport'] === GetEncaissementsReport::KEY
+                ? $getEncaissementsReport->total(
+                    $request->user(),
+                    $filters['dateFrom'],
+                    $filters['dateTo'],
+                    $filters['methodeFilter'],
+                    $filters['caisseFilter'],
+                    $filters['typeFilter'],
+                )
+                : '',
         ]);
     }
 
@@ -134,6 +181,7 @@ final class RapportController extends Controller
         Request $request,
         GetInscriptionsReport $getInscriptionsReport,
         GetStudentsReport $getStudentsReport,
+        GetEncaissementsReport $getEncaissementsReport,
         RapportPdfRenderer $renderer,
         CurrentContext $context,
     ): \Symfony\Component\HttpFoundation\Response {
@@ -141,7 +189,7 @@ final class RapportController extends Controller
 
         $filters = $this->filters($request);
         $cle = $filters['rapport'];
-        $lignes = $this->lignes($request, $getInscriptionsReport, $getStudentsReport, $filters);
+        $lignes = $this->lignes($request, $getInscriptionsReport, $getStudentsReport, $getEncaissementsReport, $filters);
 
         $pdf = $renderer->render(
             RapportCatalogue::vuePdf($cle),
@@ -156,6 +204,9 @@ final class RapportController extends Controller
                 $this->formatDate($filters['dateFrom']),
                 $this->formatDate($filters['dateTo']),
                 $this->filtresAppliques($filters),
+                // Le « Total encaissé » du relevé — calculé en SQL sur tout
+                // l'ensemble filtré, jamais réadditionné par le gabarit.
+                $this->supplementsPdf($request, $getEncaissementsReport, $filters),
             ),
         );
 
@@ -174,6 +225,7 @@ final class RapportController extends Controller
         Request $request,
         GetInscriptionsReport $getInscriptionsReport,
         GetStudentsReport $getStudentsReport,
+        GetEncaissementsReport $getEncaissementsReport,
         ExporterRapportExcel $exporter,
         CurrentContext $context,
     ): StreamedResponse {
@@ -181,7 +233,7 @@ final class RapportController extends Controller
 
         $filters = $this->filters($request);
         $cle = $filters['rapport'];
-        $lignes = $this->lignes($request, $getInscriptionsReport, $getStudentsReport, $filters);
+        $lignes = $this->lignes($request, $getInscriptionsReport, $getStudentsReport, $getEncaissementsReport, $filters);
 
         // Les mêmes lignes de contexte que le PDF, dans le même ordre, et
         // construites depuis le MÊME dictionnaire : le classeur ne peut pas
@@ -190,6 +242,21 @@ final class RapportController extends Controller
 
         foreach ($this->filtresAppliques($filters) as $libelle => $valeur) {
             $sousTitres[] = $libelle.' : '.$valeur;
+        }
+
+        // Le total encaissé est rappelé dans le bloc d'en-tête du classeur :
+        // il n'a pas de ligne de pied comme le PDF, et sans lui le lecteur
+        // devrait faire la somme lui-même — donc obtenir un chiffre que rien
+        // ne garantit égal à celui de l'écran.
+        if ($cle === GetEncaissementsReport::KEY) {
+            $sousTitres[] = 'Total encaissé : '.$getEncaissementsReport->total(
+                $request->user(),
+                $filters['dateFrom'],
+                $filters['dateTo'],
+                $filters['methodeFilter'],
+                $filters['caisseFilter'],
+                $filters['typeFilter'],
+            );
         }
 
         return $exporter(
@@ -214,6 +281,7 @@ final class RapportController extends Controller
         Request $request,
         GetInscriptionsReport $getInscriptionsReport,
         GetStudentsReport $getStudentsReport,
+        GetEncaissementsReport $getEncaissementsReport,
         array $filters,
     ): Collection {
         return match ($filters['rapport']) {
@@ -231,7 +299,47 @@ final class RapportController extends Controller
                 $filters['sexeFilter'],
                 $filters['inscriptionFilter'],
             ),
+            GetEncaissementsReport::KEY => $getEncaissementsReport(
+                $request->user(),
+                $filters['dateFrom'],
+                $filters['dateTo'],
+                $filters['methodeFilter'],
+                $filters['caisseFilter'],
+                $filters['typeFilter'],
+            ),
         };
+    }
+
+    /**
+     * Ce qu'un rapport imprime EN PLUS du tronc commun de l'en-tête.
+     *
+     * Aujourd'hui le seul supplément est le « Total encaissé » du relevé, et
+     * il n'est calculé que pour ce rapport : lancer la requête d'agrégat pour
+     * un rapport qui n'a pas de colonne monétaire serait une requête pour
+     * rien.
+     *
+     * @param  array<string, string>  $filters
+     * @return array<string, mixed>
+     */
+    private function supplementsPdf(
+        Request $request,
+        GetEncaissementsReport $getEncaissementsReport,
+        array $filters,
+    ): array {
+        if ($filters['rapport'] !== GetEncaissementsReport::KEY) {
+            return [];
+        }
+
+        return [
+            'totalMontant' => $getEncaissementsReport->total(
+                $request->user(),
+                $filters['dateFrom'],
+                $filters['dateTo'],
+                $filters['methodeFilter'],
+                $filters['caisseFilter'],
+                $filters['typeFilter'],
+            ),
+        ];
     }
 
     /**
@@ -271,7 +379,49 @@ final class RapportController extends Controller
             $libelles["État d'inscription"] = $this->etatInscriptionLabel($filters['inscriptionFilter']);
         }
 
+        if (in_array('methodeFilter', $visibles, true) && $filters['methodeFilter'] !== '') {
+            $libelles['Méthode'] = $filters['methodeFilter'];
+        }
+
+        if (in_array('caisseFilter', $visibles, true) && ($caisse = $this->caisseLabel($filters['caisseFilter'])) !== null) {
+            $libelles['Caisse'] = $caisse;
+        }
+
+        if (in_array('typeFilter', $visibles, true) && $filters['typeFilter'] !== '') {
+            $libelles['Type'] = $this->typeEncaissementLabel($filters['typeFilter']);
+        }
+
         return $libelles;
+    }
+
+    /**
+     * Le libellé français d'un type d'encaissement — « avance » en clé machine
+     * ne s'imprime pas en tête d'un document signé.
+     */
+    private function typeEncaissementLabel(string $type): string
+    {
+        foreach (self::TYPES_ENCAISSEMENT_LABELS as $option) {
+            if ($option['value'] === $type) {
+                return $option['label'];
+            }
+        }
+
+        return $type;
+    }
+
+    /**
+     * Le NOM de la caisse filtrée, pour le rappeler en tête du document. Lu
+     * sans scoping supplémentaire, comme groupLabel() : la requête du rapport
+     * a déjà borné les lignes, donc une caisse hors portée ne sort aucune
+     * ligne et l'en-tête ne nommerait qu'un document vide.
+     */
+    private function caisseLabel(string $caisseFilter): ?string
+    {
+        if ($caisseFilter === '') {
+            return null;
+        }
+
+        return Caisse::query()->whereKey((int) $caisseFilter)->value('nom');
     }
 
     /** Le libellé français d'un état d'inscription — la clé machine seule ne se lit pas. */
@@ -313,6 +463,8 @@ final class RapportController extends Controller
         $statutFilter = (string) $request->string('statutFilter');
         $sexeFilter = (string) $request->string('sexeFilter');
         $inscriptionFilter = (string) $request->string('inscriptionFilter');
+        $methodeFilter = (string) $request->string('methodeFilter');
+        $typeFilter = (string) $request->string('typeFilter');
 
         return [
             'rapport' => in_array($rapport, RapportCatalogue::clesImplementees(), true)
@@ -324,6 +476,9 @@ final class RapportController extends Controller
             'inscriptionFilter' => in_array($inscriptionFilter, GetStudentsReport::ETATS_INSCRIPTION, true)
                 ? $inscriptionFilter
                 : '',
+            'methodeFilter' => in_array($methodeFilter, Encaissement::METHODES, true) ? $methodeFilter : '',
+            'caisseFilter' => (string) $request->string('caisseFilter'),
+            'typeFilter' => in_array($typeFilter, GetEncaissementsReport::TYPES, true) ? $typeFilter : '',
             'dateFrom' => self::filterValue($request->string('dateFrom')),
             'dateTo' => self::filterValue($request->string('dateTo')),
         ];

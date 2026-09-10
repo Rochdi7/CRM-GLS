@@ -207,13 +207,31 @@ final class RapportPdfRenderer
             return;
         }
 
-        // 60 s couvrent largement le plus gros rapport mesuré (30 s) ; au-delà,
-        // c'est une requête qui a dérapé et il vaut mieux qu'elle meure.
-        set_time_limit(120);
+        // Le temps suit le même profil super-linéaire que la mémoire : 40 s
+        // mesurées à 1 900 lignes, donc un relevé d'année pleine dépasse
+        // largement 120 s. Au-delà de ce plafond, c'est une requête qui a
+        // dérapé et il vaut mieux qu'elle meure.
+        set_time_limit($lignes > 3000 ? 600 : 120);
 
-        // Palier, et non « illimité » : une fuite ou un filtre absurde doit
+        // Paliers, et non « illimité » : une fuite ou un filtre absurde doit
         // toujours finir par heurter un plafond.
-        $requis = $lignes > 1500 ? '512M' : '256M';
+        //
+        // ⚠ Mesuré sur les données réelles (relevé des encaissements, 09/2026,
+        // PostgreSQL de production) : mPDF tamponne le tableau ENTIER pour
+        // calculer la largeur des colonnes, donc le coût monte plus vite que
+        // le nombre de lignes — 168 Mo à 1 045 lignes, 256 Mo à 1 908, et
+        // 7 077 lignes épuisaient 512 Mo. Les deux paliers d'origine (256/512)
+        // avaient été calibrés sur le rapport des inscriptions, trois fois
+        // plus léger à période égale ; un relevé d'année pleine mourait donc
+        // en « Allowed memory size exhausted », c'est-à-dire sur un document
+        // parfaitement légitime. Ne pas rabaisser ces paliers sans remesurer
+        // sur un rapport de cette taille.
+        $requis = match (true) {
+            $lignes > 5000 => '1536M',
+            $lignes > 3000 => '1024M',
+            $lignes > 1500 => '512M',
+            default => '256M',
+        };
 
         if ($this->limiteActuelleEnOctets() < $this->enOctets($requis)) {
             ini_set('memory_limit', $requis);
@@ -257,7 +275,17 @@ final class RapportPdfRenderer
      * Le contrôleur passe le MÊME dictionnaire au classeur Excel, donc les deux
      * documents rappellent le périmètre à l'identique.
      *
+     * `$extra` porte ce qu'UN rapport donné imprime en plus du tronc commun
+     * (le « Total encaissé » du relevé, par exemple). C'est un sac ouvert et
+     * non un paramètre nommé de plus : chaque rapport a ses propres suppléments
+     * et une signature qui les énumérerait tous grossirait à chaque rapport
+     * ajouté, en laissant les autres passer des `null`. Les clés du tronc
+     * commun ne sont PAS écrasables — un rapport ne doit pas pouvoir
+     * réécrire son titre ou sa période par ce biais, sinon l'en-tête cesserait
+     * d'être construit en un seul endroit.
+     *
      * @param  array<string, string>  $filtresAppliques
+     * @param  array<string, mixed>  $extra
      * @return array<string, mixed>
      */
     public function entete(
@@ -266,8 +294,10 @@ final class RapportPdfRenderer
         string $periodeDebut,
         string $periodeFin,
         array $filtresAppliques = [],
+        array $extra = [],
     ): array {
         return [
+            ...$extra,
             'titre' => $titre,
             'centre' => $centre,
             'periodeDebut' => $periodeDebut,

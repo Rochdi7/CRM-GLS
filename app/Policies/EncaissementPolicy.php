@@ -30,6 +30,27 @@ final class EncaissementPolicy extends ResourcePolicy
     }
 
     /**
+     * Transférer un frais payé vers l'inscription d'un AUTRE étudiant — le
+     * frère qui a payé sans jamais venir cède sa place à sa sœur
+     * (10/09/2026, direction + super-admin).
+     *
+     * Permission DÉDIÉE, jamais `payments.update` : ce geste fait qu'une
+     * somme encaissée au nom d'une personne solde le dossier d'une autre.
+     * C'est l'exception assumée au garde-fou que movePayment() ci-dessus ne
+     * relâche jamais.
+     *
+     * Aucun contrôle de centre ICI (l'ability ne reçoit pas de modèle : le
+     * paiement et le frais cible arrivent du formulaire). Il est fait deux
+     * fois là où il a du sens : le contrôleur borne le frais cible au
+     * contexte actif, et l'action refuse deux inscriptions de centres
+     * différents.
+     */
+    public function transferToStudent(User $user): bool
+    {
+        return $user->can('payments.transfer-student');
+    }
+
+    /**
      * A payment reaches its center through the STUDENT it is for — the same
      * definition the list query uses (GetEncaissementsList) and the one the
      * schema documents ("this table has no etablissement_id: the centre is

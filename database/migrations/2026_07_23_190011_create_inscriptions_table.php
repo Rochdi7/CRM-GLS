@@ -18,7 +18,26 @@ return new class extends Migration
             $table->string('legacy_ref', 50)->nullable();
             $table->string('legacy_source', 30)->nullable();
             $table->foreignId('student_id')->constrained('students')->restrictOnDelete();
-            $table->foreignId('group_id')->constrained('groups')->restrictOnDelete();
+            // ⚠ NULLABLE + ON DELETE SET NULL (10/09/2026) — une inscription
+            // SURVIT à la suppression de son groupe.
+            //
+            // Auparavant NOT NULL + restrictOnDelete, ce qui forçait
+            // SupprimerGroupe à DÉTRUIRE les inscriptions du groupe pour
+            // pouvoir supprimer le groupe : le dossier de l'étudiant
+            // disparaissait de sa fiche, sans aucune trace de ce qui avait
+            // existé. Une inscription est un dossier d'étudiant — elle porte
+            // des frais et, potentiellement, de l'argent : elle n'est jamais
+            // détruite en dommage collatéral.
+            //
+            // Désormais la suppression du groupe passe par
+            // Groups\Actions\DetacherInscriptionsGroupeSupprime, qui annule
+            // chaque inscription et lui écrit dans sa note le NOM du groupe
+            // supprimé — le seul endroit où ce nom survit une fois la ligne
+            // `groups` partie. Tous les chemins de lecture accèdent déjà au
+            // groupe en `?->` (GetInscriptionsList, GetInscriptionDetails,
+            // GetStudentDetails, les rapports…), donc un groupe absent
+            // s'affiche « — » sans casser d'écran.
+            $table->foreignId('group_id')->nullable()->constrained('groups')->nullOnDelete();
             $table->foreignId('etablissement_id')->nullable()->constrained('etablissements')->nullOnDelete();
             $table->foreignId('annee_scolaire_id')->nullable()->constrained('annees_scolaires')->nullOnDelete();
             $table->string('statut', 30)->default('Active'); // Active / Expirée / Archivée / Annulée

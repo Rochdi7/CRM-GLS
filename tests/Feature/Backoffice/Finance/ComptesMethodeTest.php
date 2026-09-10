@@ -402,13 +402,17 @@ final class ComptesMethodeTest extends TestCase
         $this->payLine($user, $student, $inscription, $fee, '1000', Encaissement::METHODE_TPE);
         $encaissement = Encaissement::query()->firstOrFail();
         $till = $user->employee->caisses()->first();
+        // Le paiement était TPE : il a crédité le compte du centre, pas le
+        // tiroir. Celui-ci doit donc contenir les espèces qu'il rend
+        // (GardeSoldeCaisse, 10/09/2026). Ce test épingle QUEL compte bouge.
+        $till->update(['solde' => '200.00']);
 
         $this->actingAs($user)->post(route('backoffice.remboursements.store'), [
             'beneficiaire_id' => $student->id, 'encaissement_id' => $encaissement->id,
             'montant' => '200', 'date_remboursement' => '2025-09-23', 'motif' => 'Test',
         ])->assertSessionHasNoErrors();
 
-        $this->assertSame('-200.00', (string) $till->fresh()->solde);
+        $this->assertSame('0.00', (string) $till->fresh()->solde);
         // The TPE account keeps the 1000: cash left the till, not the card account.
         $this->assertSame('1000.00', (string) $this->compte($this->centre, Encaissement::METHODE_TPE)->solde);
     }
@@ -475,6 +479,14 @@ final class ComptesMethodeTest extends TestCase
         ])->assertSessionHasNoErrors();
         $encaissement = Encaissement::query()->firstOrFail();
 
+        // Le tiroir contient de l'argent : un remboursement en espèces ne peut
+        // plus descendre sous zéro (GardeSoldeCaisse, 10/09/2026 — une caisse
+        // PHYSIQUE ne contient jamais un montant négatif). Ce test porte sur
+        // le COMPTE débité, pas sur le solde : le financer explicitement garde
+        // son sujet intact au lieu de s'appuyer sur un découvert.
+        $till = $user->employee->caisses()->first();
+        $till->update(['solde' => 400]);
+
         // A student cancels: the cheque was good, cash is handed back from the till.
         $this->post(route('backoffice.remboursements.store'), [
             'beneficiaire_id' => $student->id, 'encaissement_id' => $encaissement->id,
@@ -482,7 +494,7 @@ final class ComptesMethodeTest extends TestCase
         ])->assertSessionHasNoErrors();
 
         $this->assertSame('1000.00', (string) $this->compte($this->centre, Encaissement::METHODE_CHEQUE)->solde);
-        $this->assertSame('-400.00', (string) $user->employee->caisses()->first()->fresh()->solde);
+        $this->assertSame('0.00', (string) $till->fresh()->solde);
     }
 
     // ── Transfers: cash only ───────────────────────────────────────────

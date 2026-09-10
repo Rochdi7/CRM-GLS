@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Reports\Support;
 
+use App\Domain\Reports\Queries\GetEncaissementsReport;
 use App\Domain\Reports\Queries\GetInscriptionsReport;
 use App\Domain\Reports\Queries\GetStudentsReport;
 
@@ -49,7 +50,16 @@ final class RapportCatalogue
                 ],
             ],
             ['key' => 'admissions', 'label' => 'Admissions & CRM', 'rapports' => []],
-            ['key' => 'finance', 'label' => 'Finance & Paiements', 'rapports' => []],
+            [
+                'key' => 'finance',
+                'label' => 'Finance & Paiements',
+                'rapports' => [
+                    [
+                        'value' => GetEncaissementsReport::KEY,
+                        'label' => 'Relevé des encaissements',
+                    ],
+                ],
+            ],
             ['key' => 'caisse', 'label' => 'Caisse', 'rapports' => []],
             ['key' => 'depenses', 'label' => 'Dépenses', 'rapports' => []],
             ['key' => 'vie-scolaire', 'label' => 'Vie scolaire', 'rapports' => []],
@@ -60,7 +70,7 @@ final class RapportCatalogue
     /** Les clés de rapport réellement servies — ce que le contrôleur accepte. */
     public static function clesImplementees(): array
     {
-        return [GetInscriptionsReport::KEY, GetStudentsReport::KEY];
+        return [GetInscriptionsReport::KEY, GetStudentsReport::KEY, GetEncaissementsReport::KEY];
     }
 
     /**
@@ -79,6 +89,7 @@ final class RapportCatalogue
         return match ($cle) {
             GetInscriptionsReport::KEY => ['groupFilter', 'statutFilter'],
             GetStudentsReport::KEY => ['sexeFilter', 'inscriptionFilter'],
+            GetEncaissementsReport::KEY => ['methodeFilter', 'caisseFilter', 'typeFilter'],
             default => [],
         };
     }
@@ -89,6 +100,7 @@ final class RapportCatalogue
         return match ($cle) {
             GetInscriptionsReport::KEY => "Liste d'inscriptions",
             GetStudentsReport::KEY => 'Liste des étudiants',
+            GetEncaissementsReport::KEY => 'Relevé des Encaissements',
             default => 'Rapport',
         };
     }
@@ -99,6 +111,7 @@ final class RapportCatalogue
         return match ($cle) {
             GetInscriptionsReport::KEY => 'backoffice.rapports.inscriptions-pdf',
             GetStudentsReport::KEY => 'backoffice.rapports.etudiants-pdf',
+            GetEncaissementsReport::KEY => 'backoffice.rapports.encaissements-pdf',
             default => throw new \InvalidArgumentException("Rapport inconnu : {$cle}"),
         };
     }
@@ -136,6 +149,22 @@ final class RapportCatalogue
                 ['key' => 'niveau', 'label' => 'Niveau', 'width' => 12.0],
                 ['key' => 'dateCreation', 'label' => "Date d'ajout", 'width' => 14.0],
             ],
+            // ⚠ « Type » est une colonne du document, pas un détail d'écran :
+            // c'est elle qui distingue une AVANCE (argent reçu, pas encore
+            // affecté à un frais) d'un règlement ordinaire. Sans elle, les
+            // deux se liraient pareil dans le classeur.
+            GetEncaissementsReport::KEY => [
+                ['key' => 'numero', 'label' => "N° d'ordre", 'width' => 9.0],
+                ['key' => 'reference', 'label' => 'Réf', 'width' => 14.0],
+                ['key' => 'etudiant', 'label' => 'Élève / Payeur', 'width' => 30.0],
+                ['key' => 'type', 'label' => 'Type', 'width' => 12.0],
+                ['key' => 'montant', 'label' => 'Montant', 'width' => 14.0],
+                ['key' => 'methode', 'label' => 'Méthode', 'width' => 12.0],
+                ['key' => 'frais', 'label' => 'Frais', 'width' => 22.0],
+                ['key' => 'groupe', 'label' => 'Groupe', 'width' => 22.0],
+                ['key' => 'date', 'label' => 'Date', 'width' => 12.0],
+                ['key' => 'operateur', 'label' => 'Opérateur', 'width' => 20.0],
+            ],
             default => throw new \InvalidArgumentException("Rapport inconnu : {$cle}"),
         };
     }
@@ -150,6 +179,7 @@ final class RapportCatalogue
         $prefixe = match ($cle) {
             GetInscriptionsReport::KEY => 'liste-inscriptions',
             GetStudentsReport::KEY => 'liste-etudiants',
+            GetEncaissementsReport::KEY => 'releve-encaissements',
             default => 'rapport',
         };
 

@@ -253,6 +253,17 @@ final class PermissionRegistry
                 // Rien ne bouge sauf `inscription_fee_id` — ni la date, ni la
                 // caisse, ni l'agent, ni le montant (DeplacerEncaissementVersFrais).
                 'payments.move-fee' => "Déplacer un paiement vers le frais d'une autre inscription (super-admin)",
+                // ⚠ L'EXCEPTION assumée au garde-fou « l'argent d'un étudiant
+                // ne solde jamais le frais d'un autre » : le frère qui a payé
+                // sans jamais venir cède ses frais à sa sœur qui prend la
+                // place (10/09/2026). Bornée à ZÉRO présence sur le dossier
+                // source, au MÊME centre, et avec motif obligatoire
+                // (TransfererFraisVersAutreEtudiant). Délibérément SÉPARÉE de
+                // payments.move-fee, qui reste same-student : ce sont deux
+                // gestes différents, et les confondre rendrait invisible
+                // celui qui franchit la frontière entre deux personnes.
+                // Super-admin uniquement (superAdminOnly() ci-dessous).
+                'payments.transfer-student' => "Transférer un frais payé vers l'inscription d'un autre étudiant (super-admin)",
             ],
             'Recouvrement' => [
                 'collections.view' => 'Consulter la gestion des recouvrements',
@@ -312,6 +323,17 @@ final class PermissionRegistry
                 // payments.update-amount, donc super-admin uniquement
                 // (superAdminOnly() ci-dessous, 03/09/2026).
                 'refunds.cancel' => 'Annuler un remboursement (super-admin)',
+                // ⚠ Choisir la caisse DÉBITÉE par un remboursement (10/09/2026).
+                // Sans ce droit, un remboursement sort TOUJOURS de la caisse
+                // physique de l'agent qui l'enregistre (CaisseResolver::tillOf,
+                // CLAUDE.md §11) : le front-office rend de l'argent qu'il a
+                // en main, jamais celui d'un collègue. Le directeur (+
+                // super-admin) désigne la caisse d'un autre employé — un
+                // arbitrage, pas un geste de guichet. Hors de $operations et
+                // de $managementEdits pour que l'élargir reste une décision
+                // explicite. Un caisse_id soumis sans ce droit est REFUSÉ
+                // (422), jamais accepté en silence.
+                'refunds.choose-till' => "Choisir la caisse à débiter d'un remboursement (directeur)",
             ],
             'Chèques' => [
                 'cheques.view' => 'Consulter les chèques',
@@ -589,6 +611,14 @@ final class PermissionRegistry
             // de l'app applique. Même classe que payments.reallocate, dont
             // c'est la variante ligne à ligne (05/09/2026).
             'payments.move-fee',
+            // Faire qu'une somme encaissée au nom d'une personne solde le
+            // dossier d'une AUTRE (« ma sœur n'étudie pas, je prends sa
+            // place »). Un directeur l'a tenu quelques heures le 10/09/2026,
+            // puis décision du CEO le même jour : super-admin uniquement —
+            // c'est l'exception au garde-fou « l'argent d'un étudiant ne
+            // solde jamais le frais d'un autre », même classe que
+            // students.merge juste en dessous.
+            'payments.transfer-student',
             // Fusionner deux fiches étudiant réunit DEUX historiques
             // financiers. Aucun montant ne bouge, mais viser la mauvaise
             // paire attribue les paiements de quelqu'un d'autre — et la
@@ -866,6 +896,9 @@ final class PermissionRegistry
             'director' => [
                 ...$operations,
                 ...$managementEdits,
+                // Rembourser depuis la caisse d'un AUTRE employé : le seul
+                // rôle qui le porte (10/09/2026, voir le groupe Remboursements).
+                'refunds.choose-till',
                 'academic-years.create', 'academic-years.update',
                 'fees.create', 'fees.update',
                 'employees.view', 'employees.update',

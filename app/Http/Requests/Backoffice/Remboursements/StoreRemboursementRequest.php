@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Backoffice\Remboursements;
 
+use App\Domain\Finance\Support\CaisseResolver;
 use App\Models\Caisse;
 use App\Rules\AccessibleCaisse;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -50,6 +52,40 @@ final class StoreRemboursementRequest extends FormRequest
                 'nullable',
                 Rule::exists('caisses', 'id')->whereIn('type', Caisse::TYPES_ESPECES),
                 new AccessibleCaisse(),
+                // ⚠ Sans `refunds.choose-till`, nommer une caisse est REFUSÉ
+                // (10/09/2026) — jamais ignoré en silence. Le front-office
+                // rend l'argent qu'il a physiquement en main : son propre
+                // tiroir, que le contrôleur dérive. Accepter puis ignorer la
+                // valeur ferait mentir l'écran (« j'ai débité la caisse de
+                // Achraf ») ; refuser dit ce qui s'est passé. Une valeur
+                // égale à sa PROPRE caisse passe : c'est ce que le formulaire
+                // envoie quand il n'y a rien à choisir.
+                function (string $attribute, mixed $value, Closure $fail): void {
+                    $user = $this->user();
+
+                    if ($user === null || $user->can('refunds.choose-till')) {
+                        return;
+                    }
+
+                    $employee = $user->employee;
+
+                    // ⚠ Passe par le MÊME CaisseResolver que le contrôleur —
+                    // jamais un `till()->first()` nu. Un compte antérieur au
+                    // provisionneur n'a pas encore de ligne « Caissière » :
+                    // le resolver la crée, le lookup nu rendrait null et
+                    // refuserait l'agent qui soumet pourtant SA propre caisse.
+                    // Les deux doivent désigner le même tiroir, sinon le
+                    // formulaire est refusé par ce qu'il a lui-même prérempli.
+                    $till = $employee === null
+                        ? null
+                        : app(CaisseResolver::class)->tillOf($employee);
+
+                    if ($till !== null && (int) $value === (int) $till->id) {
+                        return;
+                    }
+
+                    $fail(__('You can only refund from your own till.'));
+                },
             ],
             'montant' => ['required', 'numeric', 'min:0.01'],
             'date_remboursement' => ['required', 'date'],

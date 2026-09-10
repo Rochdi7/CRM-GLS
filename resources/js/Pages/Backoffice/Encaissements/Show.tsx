@@ -125,6 +125,34 @@ export default function EncaissementShow({ encaissement, canDetach = false }: En
                                 <p className="mb-0">{encaissement.note}</p>
                             </div>
                         )}
+
+                        {/* Ce paiement a été encaissé au nom d'un AUTRE étudiant puis
+                            transféré : sans ce bloc, le reçu porte le nom de la sœur
+                            avec une date antérieure à son inscription, et rien ne
+                            l'explique. La date de l'opération est distincte de la
+                            date de paiement (qui n'a pas bougé). */}
+                        {encaissement.transfert && (
+                            <div className="alert alert-info mt-3 mb-0">
+                                <div className="d-flex align-items-center mb-2">
+                                    <i className="ti ti-users-group me-2" aria-hidden="true" />
+                                    <span className="fw-semibold">Transféré depuis un autre étudiant</span>
+                                </div>
+                                <DetailRow label="Date de l'opération" value={encaissement.transfert.date} />
+                                <DetailRow
+                                    label="De"
+                                    value={`${encaissement.transfert.ancienEtudiant ?? '—'} — ${encaissement.transfert.ancienneInscription ?? '—'}`}
+                                />
+                                <DetailRow
+                                    label="Vers"
+                                    value={`${encaissement.transfert.nouvelEtudiant ?? '—'} — ${encaissement.transfert.nouvelleInscription ?? '—'}`}
+                                />
+                                <DetailRow label="Par" value={encaissement.transfert.par} />
+                                <div className="border-top pt-2 mt-2">
+                                    <span className="text-muted d-block mb-1">Motif du transfert</span>
+                                    <p className="mb-0">{encaissement.transfert.motif ?? '—'}</p>
+                                </div>
+                            </div>
+                        )}
                     </Card>
                 </div>
 

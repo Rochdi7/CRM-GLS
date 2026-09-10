@@ -1461,9 +1461,8 @@ export default function GroupsIndex({
                     <div>
                         <p className="fw-semibold mb-1">Cette action est irréversible.</p>
                         <p className="mb-0 fs-13">
-                            Le groupe <strong>{deleteTarget?.nom}</strong> et toutes ses inscriptions seront
-                            supprimés définitivement de la base. Il n'existe aucun moyen de les restaurer
-                            depuis l'application.
+                            Le groupe <strong>{deleteTarget?.nom}</strong> sera supprimé définitivement de la
+                            base. Il n'existe aucun moyen de le restaurer depuis l'application.
                         </p>
                     </div>
                 </div>
@@ -1472,16 +1471,41 @@ export default function GroupsIndex({
 
                 {deleteImpact && (
                     <>
-                        <p className="fw-semibold mb-2">Ce qui va être supprimé :</p>
-                        <ul className="mb-3 fs-13">
-                            <li>
-                                <strong>{deleteImpact.inscriptions}</strong> inscription(s), concernant{' '}
-                                <strong>{deleteImpact.etudiants}</strong> étudiant(s)
-                            </li>
-                            <li>
-                                <strong>{deleteImpact.frais}</strong> ligne(s) de frais
-                            </li>
-                        </ul>
+                        {/*
+                          * ⚠ Les inscriptions NE SONT PAS supprimées (10/09/2026).
+                          * Le modal doit le dire explicitement : c'est
+                          * exactement l'inquiétude de l'utilisateur au moment
+                          * de cliquer, et un avertissement qui laisse croire
+                          * que les dossiers partent fait renoncer à une
+                          * suppression légitime.
+                          */}
+                        {deleteImpact.inscriptions > 0 ? (
+                            <div className="alert alert-info fs-13" role="alert">
+                                <p className="fw-semibold mb-1">
+                                    <i className="ti ti-shield-check me-1" />
+                                    Les inscriptions sont CONSERVÉES.
+                                </p>
+                                <p className="mb-0">
+                                    Les <strong>{deleteImpact.inscriptions}</strong> inscription(s) de ce
+                                    groupe, concernant <strong>{deleteImpact.etudiants}</strong> étudiant(s)
+                                    et <strong>{deleteImpact.frais}</strong> ligne(s) de frais, ne seront pas
+                                    supprimées.{' '}
+                                    {deleteImpact.inscriptionsActives > 0 && (
+                                        <>
+                                            <strong>{deleteImpact.inscriptionsActives}</strong> d'entre elles
+                                            passeront automatiquement en « Annulée » avec le motif
+                                            « Groupe supprimé ».{' '}
+                                        </>
+                                    )}
+                                    Le nom du groupe sera écrit dans la note de chaque dossier, pour qu'on
+                                    puisse comprendre plus tard ce qui s'est passé.
+                                </p>
+                            </div>
+                        ) : (
+                            <p className="fs-13 text-muted">
+                                Ce groupe ne porte aucune inscription.
+                            </p>
+                        )}
 
                         {deleteImpact.encaissements > 0 && (
                             <div className="alert alert-danger fs-13" role="alert">

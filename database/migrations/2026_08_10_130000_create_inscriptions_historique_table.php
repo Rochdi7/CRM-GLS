@@ -23,7 +23,16 @@ return new class extends Migration
             $table->foreignId('inscription_id')->constrained('inscriptions')->cascadeOnDelete();
             $table->foreignId('new_inscription_id')->nullable()->constrained('inscriptions')->nullOnDelete();
             $table->foreignId('student_id')->constrained('students')->cascadeOnDelete();
-            $table->foreignId('group_id')->constrained('groups')->cascadeOnDelete();
+            // ⚠ NULLABLE + ON DELETE SET NULL (10/09/2026), comme
+            // `inscriptions.group_id`. Ce snapshot appartient à l'INSCRIPTION,
+            // pas au groupe : depuis que l'inscription survit à la suppression
+            // de son groupe (SupprimerGroupe), un `cascadeOnDelete` ici
+            // effacerait en silence l'historique d'un dossier bien vivant —
+            // un changement de groupe passé disparaîtrait de la fiche de
+            // l'étudiant. Le snapshot reste donc, avec un groupe « — » ; le
+            // nom du groupe supprimé est conservé dans la note de
+            // l'inscription (DetacherInscriptionsGroupeSupprime).
+            $table->foreignId('group_id')->nullable()->constrained('groups')->nullOnDelete();
             $table->decimal('montant_paye', 12, 2)->default(0);
             $table->date('date_fin');
             $table->text('note')->nullable();
