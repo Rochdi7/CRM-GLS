@@ -665,7 +665,17 @@ export default function SeanceShow({
                                                                 student.retardPaiement.grave
                                                                     ? `Retard de plus de ${RETARD_SEUIL_JOURS} jours`
                                                                     : `Retard inférieur à ${RETARD_SEUIL_JOURS} jours`
-                                                            } (échéance : ${student.retardPaiement.dateEcheance})`}
+                                                            } (${
+                                                                // Le serveur affiche l'échéance du mois en cours quand il
+                                                                // y en a une impayée ; sinon la plus ancienne dette, et
+                                                                // l'infobulle le DIT pour qu'une date de janvier ne se
+                                                                // lise pas comme l'échéance du mois.
+                                                                student.retardPaiement.moisCourant
+                                                                    ? 'échéance'
+                                                                    : 'échéance la plus ancienne'
+                                                            } : ${student.retardPaiement.dateEcheance} — ${
+                                                                student.retardPaiement.montant
+                                                            } MAD dus)`}
                                                         >
                                                             Merci de contacter l&rsquo;administration
                                                         </span>

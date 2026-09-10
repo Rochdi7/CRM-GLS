@@ -1010,6 +1010,29 @@ the database layer. Non-negotiable invariants already enforced in code:
   les inscriptions déjà closes en base, et ne couvre pas `Changement`.
   Tests :
   `tests/Feature/Backoffice/Finance/RecouvrementInscriptionActiveTest.php`.
+- **⚠ Le retard de paiement est signalé PENDANT l'appel** (10/09/2026,
+  fiche de présence `Seances/Show`). L'étudiant qui a un frais échu non
+  soldé porte, sur sa ligne d'appel, un badge « Merci de contacter
+  l'administration » — rouge au-delà de
+  `RetardPaiementEtudiant::SEUIL_JOURS` (5) jours de retard, orange en deçà —
+  dont le survol détaille l'échéance et le total dû. Quatre bornes :
+  (1) **la règle n'est pas redéfinie ici** : « frais non masqué + échéance
+  passée + reste dû > 0 + inscription `Active` » vit dans
+  `Payments\Support\RetardPaiementEtudiant`, la MÊME définition que
+  « Gestion des recouvrements » — un deuxième écran qui recopierait le
+  critère finirait par accuser un étudiant que le recouvrement ne poursuit
+  pas (§5 « un read-model ne redérive jamais une règle métier ») ;
+  (2) **la date affichée est celle du MOIS EN COURS quand il en existe une
+  impayée, sinon la plus ancienne dette — et l'infobulle DIT laquelle**
+  (`moisCourant`) : une échéance de janvier sur un appel de septembre se
+  lisait comme le rappel du mois. Le repli n'est pas cosmétique : une vieille
+  dette reste due, et n'afficher que le mois courant la ferait disparaître de
+  l'écran ; (3) **le montant CUMULE toutes les lignes échues**, quelle que
+  soit la date montrée ; (4) le calcul est fait **EN LOT pour toute la
+  liste** (une requête, pas une par étudiant — § perf) et l'infobulle est en
+  **CSS pure**, l'application ne chargeant aucun JS Bootstrap ni jQuery
+  (§3/§6). Tests :
+  `tests/Feature/Backoffice/Attendance/RetardPaiementFichePresenceTest.php`.
 - **⚠ Un groupe ne peut avoir DEUX créneaux ouverts sur la même case
   horaire** (07/09/2026). `GenererSeancesDepuisCreneau` est idempotent PAR
   CRÉNEAU : il ne recrée pas la séance du jour d'un créneau qui en a déjà une.

@@ -675,10 +675,15 @@ export interface CreneauCreateForm {
  * recouvrements ») — la page ne recalcule jamais ni les jours ni la gravité.
  */
 export interface RetardPaiementEtudiant {
-    /** Jours écoulés depuis l'échéance impayée la plus ancienne. */
+    /** Jours écoulés depuis l'échéance affichée. */
     jours: number;
-    /** Cette échéance-là, au format 01/09/2026. */
+    /**
+     * L'échéance impayée du MOIS EN COURS quand il en existe une, sinon la
+     * plus ancienne dette (format 01/09/2026).
+     */
     dateEcheance: string;
+    /** true quand `dateEcheance` tombe dans le mois en cours. */
+    moisCourant: boolean;
     /** Total encore dû sur toutes les lignes échues de l'étudiant. */
     montant: string;
     /** Retard de plus de 5 jours ⇒ signalé en rouge plutôt qu'en orange. */

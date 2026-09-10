@@ -29,11 +29,12 @@ final class RetardPaiementEtudiant
 
     /**
      * @param  list<int>  $studentIds
-     * @return array<int, array{jours:int, dateEcheance:string, montant:string, grave:bool}>
-     *                                                                                       Indexé par student_id ; seuls les étudiants EN RETARD y figurent.
-     *                                                                                       La ligne retenue est la plus ANCIENNE échéance impayée (le
-     *                                                                                       retard le plus long), et `montant` est le total encore dû sur
-     *                                                                                       toutes les lignes échues de cet étudiant.
+     * @return array<int, array{jours:int, dateEcheance:string, moisCourant:bool, montant:string, grave:bool}>
+     *                                                                                                         Indexé par student_id ; seuls les étudiants EN RETARD y figurent.
+     *                                                                                                         La date retenue est celle de l'échéance impayée du MOIS EN COURS
+     *                                                                                                         quand il en existe une, sinon la plus ancienne dette (`moisCourant`
+     *                                                                                                         dit laquelle). `montant` cumule le reste dû de TOUTES les lignes
+     *                                                                                                         échues, quelle que soit la date affichée.
      */
     public function pourEtudiants(array $studentIds, ?int $groupId = null): array
     {
@@ -60,6 +61,7 @@ final class RetardPaiementEtudiant
             ->get();
 
         $retards = [];
+        $moisCourant = now()->format('Y-m');
 
         foreach ($fees as $fee) {
             $paye = (float) ($fee->encaissements_sum_montant ?? 0);
@@ -71,25 +73,45 @@ final class RetardPaiementEtudiant
 
             $studentId = (int) $fee->retard_student_id;
             $jours = (int) $fee->date_echeance->diffInDays(now());
+            $duMoisCourant = $fee->date_echeance->format('Y-m') === $moisCourant;
 
             if (! isset($retards[$studentId])) {
-                $retards[$studentId] = ['jours' => -1, 'dateEcheance' => '', 'montant' => 0.0];
+                $retards[$studentId] = [
+                    'jours' => -1,
+                    'dateEcheance' => '',
+                    'moisCourant' => false,
+                    'montant' => 0.0,
+                ];
             }
 
-            // On retient l'échéance la PLUS ANCIENNE — c'est elle qui
-            // qualifie la gravité — et on CUMULE le reste dû de toutes les
-            // lignes échues de cet étudiant.
-            if ($jours > $retards[$studentId]['jours']) {
+            // La date AFFICHÉE est celle de l'échéance du MOIS EN COURS quand
+            // il en existe une impayée — c'est le rappel que l'étudiant
+            // attend au moment de l'appel. À défaut (le mois courant est
+            // soldé, ou aucune ligne n'y tombe), on retombe sur la plus
+            // ancienne dette : elle reste due, et la masquer reviendrait à
+            // faire disparaître de l'écran de l'argent que l'étudiant doit.
+            $remplace = $retards[$studentId]['moisCourant']
+                // Déjà une ligne du mois courant : seule une autre ligne du
+                // mois courant, plus ancienne, peut la remplacer.
+                ? ($duMoisCourant && $jours > $retards[$studentId]['jours'])
+                // Sinon : une ligne du mois courant prime, à défaut la plus ancienne.
+                : ($duMoisCourant || $jours > $retards[$studentId]['jours']);
+
+            if ($remplace) {
                 $retards[$studentId]['jours'] = $jours;
                 $retards[$studentId]['dateEcheance'] = $fee->date_echeance->format('d/m/Y');
+                $retards[$studentId]['moisCourant'] = $duMoisCourant;
             }
 
+            // Le montant CUMULE toutes les lignes échues, quelle que soit
+            // celle dont on montre la date.
             $retards[$studentId]['montant'] += $reste;
         }
 
         return array_map(fn (array $r): array => [
             'jours' => $r['jours'],
             'dateEcheance' => $r['dateEcheance'],
+            'moisCourant' => $r['moisCourant'],
             'montant' => number_format($r['montant'], 2, '.', ''),
             'grave' => $r['jours'] > self::SEUIL_JOURS,
         ], $retards);
