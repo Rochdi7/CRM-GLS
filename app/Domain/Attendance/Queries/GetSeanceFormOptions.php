@@ -44,6 +44,40 @@ final class GetSeanceFormOptions
     }
 
     /**
+     * Groups selectable on a READ-ONLY attendance screen (« Absence par
+     * groupe »): EVERY statut, « Fin de formation » and « Annulée » included.
+     *
+     * groups() above deliberately lists only schedulable groups — one does not
+     * plan a séance in a closed group. Consulting the presence matrix of a
+     * finished group is the opposite gesture: that is precisely when one looks
+     * back at who attended. Filtering the closed ones out of the dropdown made
+     * their whole attendance history unreachable from the screen built to read
+     * it, while GetAbsencesParGroupe itself carries no statut restriction at
+     * all — the matrix was only ever hidden by its own filter.
+     *
+     * Same centre/année scope as groups(); a closed group carries its statut
+     * in the label, so the reader knows the file is over.
+     *
+     * @return list<array{value: int, label: string}>
+     */
+    public function allGroups(User $user): array
+    {
+        return Group::query()
+            ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+            ->tap(fn ($q) => $this->scopeToActiveCenter($q))
+            ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
+            ->orderBy('nom')
+            ->get(['id', 'nom', 'niveau', 'statut'])
+            ->map(fn (Group $group): array => [
+                'value' => $group->id,
+                'label' => in_array($group->statut, Group::STATUTS_HISTORIQUE, true)
+                    ? "{$group->nom} ({$group->niveau}) — {$group->statut}"
+                    : "{$group->nom} ({$group->niveau})",
+            ])
+            ->all();
+    }
+
+    /**
      * Teachers selectable on this screen: the ACTIVE centre only.
      *
      * Reach follows the `employee_etablissement` pivot, not only

@@ -184,7 +184,11 @@ final class SeanceController extends Controller
         return Inertia::render('Backoffice/Seances/AbsenceParGroupe', [
             'matrice' => $getAbsencesParGroupe($user, $filters),
             'filters' => $filters,
-            'groupOptions' => $formOptions->groups($user),
+            // allGroups(), not groups(): reading a finished group's attendance
+            // is exactly when one consults this matrix, so « Fin de formation »
+            // and « Annulée » belong in the dropdown here — unlike the séance
+            // modal, which may only schedule into a live group.
+            'groupOptions' => $formOptions->allGroups($user),
             'statuts' => Seance::STATUTS,
             'presenceStatuts' => Presence::STATUTS,
         ]);

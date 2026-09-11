@@ -131,27 +131,31 @@ final class GetCaisseGlobale
             ->orderBy('nom')
             ->get();
 
-        // Balances as they stood at the end of $dateTo (no date ⇒ the stored
-        // soldes, i.e. the unfiltered screen).
-        $soldes = $avantJournal
-            ? []
-            : $this->soldesAt($caisses->pluck('id')->all(), $dateTo);
-
         // Part du centre actif, dérivée des mêmes tables que les écrans de
         // détail (VentilationCentre) : sans elle, sélectionner un centre
         // affichait la TOTALITÉ de chaque caisse, y compris l'argent d'un
         // autre centre. Sur « Tous les centres » rien n'est ventilé.
         $centreId = $this->context->etablissementId();
 
+        // Balances as they stood at the end of $dateTo (no date ⇒ the stored
+        // soldes, i.e. the unfiltered screen), VENTILÉES sur le centre actif
+        // comme la vue courante — voir soldesAt().
+        $soldes = $avantJournal
+            ? []
+            : $this->soldesAt($caisses->all(), $dateTo, $centreId);
+
         foreach ($caisses as $caisse) {
             $solde = $soldes[$caisse->id] ?? (float) $caisse->solde;
 
-            // ⚠ Rembobinage et ventilation ne se composent pas : le premier
-            // reconstruit un solde PASSÉ depuis le journal, la seconde
-            // découpe le solde ACTUEL par centre. Les combiner donnerait un
-            // nombre qui n'est ni l'un ni l'autre, donc la ventilation ne
-            // s'applique qu'à la vue courante — une date choisie reste un
-            // état global, ce que la page annonce déjà (`asOf`).
+            // Rembobinage ET ventilation : un écran qui NOMME un centre ne
+            // doit jamais afficher l'argent d'un autre, date ou pas. Sans
+            // date, la part vient de VentilationCentre (source unique,
+            // partagée avec « Comptes de caisse ») ; avec une date, soldesAt()
+            // rebâtit cette MÊME part sur les mêmes colonnes, à la date
+            // demandée. L'ancienne version rendait la main au solde ENTIER dès
+            // qu'une date était posée : la page listait les caisses d'un
+            // centre en annonçant les montants du réseau, et contredisait
+            // « Comptes de caisse » au même instant (§11).
             if ($centreId !== null && $dateTo === null) {
                 $solde = $this->ventilation->soldeDuCentre($caisse, $centreId);
             }
@@ -226,8 +230,9 @@ final class GetCaisseGlobale
     }
 
     /**
-     * Balance of each caisse at the END of $dateTo. Empty when no date is
-     * given, so the caller keeps the stored soldes untouched.
+     * Balance of each caisse at the END of $dateTo, restricted to $centreId
+     * when a centre is active. Empty when no date is given, so the caller
+     * keeps the stored soldes untouched.
      *
      * ⚠ Rebuilt from the SOURCE tables (encaissements, dépenses approuvées,
      * remboursements, transferts validés) on their BUSINESS dates —
@@ -249,17 +254,27 @@ final class GetCaisseGlobale
      *  2. **Even the tills rewound by the wrong day**, since the import's
      *     write date is not the payment's date.
      *
-     * Same columns as the lines each card chapeaute (VentilationCentre's
-     * rule 1): a total and its rows must never read two different sources.
+     * ⚠ Et il ventile (11/09/2026). Une caissière n'a qu'UNE caisse à vie
+     * mais encaisse pour plusieurs centres (§11) : rembobiner sans borne de
+     * centre rendait le solde RÉSEAU de chaque tiroir sous une liste qui ne
+     * montrait que les caisses d'un centre — « Caisse globale » annonçait
+     * 2 843 190,00 DH là où « Comptes de caisse » en annonçait une fraction,
+     * AU MÊME INSTANT. Les colonnes de centre sont donc exactement celles de
+     * VentilationCentre (`encaissements.etablissement_id`,
+     * `remboursements.etablissement_id`, dépenses résolues par groupe puis
+     * par caisse, transfert imputé au centre du mouvement) : un total et les
+     * lignes qu'il chapeaute ne lisent jamais deux sources différentes.
      *
-     * @param  list<int>  $caisseIds
+     * @param  list<Caisse>  $caisses
      * @return array<int, float>
      */
-    private function soldesAt(array $caisseIds, ?string $dateTo): array
+    private function soldesAt(array $caisses, ?string $dateTo, ?int $centreId): array
     {
-        if ($dateTo === null || $caisseIds === []) {
+        if ($dateTo === null || $caisses === []) {
             return [];
         }
+
+        $caisseIds = array_map(static fn (Caisse $c): int => $c->id, $caisses);
 
         // Entrées — encaissements. An application row moved no money (the
         // avance it draws on was credited when it was received), so it is
@@ -267,6 +282,7 @@ final class GetCaisseGlobale
         $entrees = Encaissement::query()
             ->whereIn('caisse_id', $caisseIds)
             ->whereNull('applied_from_encaissement_id')
+            ->when($centreId !== null, fn ($q) => $q->where('etablissement_id', $centreId))
             ->whereDate('date_paiement', '<=', $dateTo)
             ->groupBy('caisse_id')
             ->selectRaw('caisse_id, SUM(montant) AS total')
@@ -276,6 +292,7 @@ final class GetCaisseGlobale
         $depenses = Depense::query()
             ->whereIn('caisse_id', $caisseIds)
             ->where('statut', Depense::STATUT_APPROUVEE)
+            ->when($centreId !== null, fn ($q) => $this->ventilation->scopeDepensesAuCentre($q, $centreId))
             ->whereDate('date_depense', '<=', $dateTo)
             ->groupBy('caisse_id')
             ->selectRaw('caisse_id, SUM(montant) AS total')
@@ -283,6 +300,7 @@ final class GetCaisseGlobale
 
         $remboursements = Remboursement::query()
             ->whereIn('caisse_id', $caisseIds)
+            ->when($centreId !== null, fn ($q) => $q->where('etablissement_id', $centreId))
             ->whereDate('date_remboursement', '<=', $dateTo)
             ->groupBy('caisse_id')
             ->selectRaw('caisse_id, SUM(montant) AS total')
@@ -302,23 +320,45 @@ final class GetCaisseGlobale
         // Transferts VALIDÉS — physical cash moved between two accounts, so
         // each leg is applied to its own side. Ignoring them would leave the
         // two tills of a transfer both reading as if it never happened.
+        //
+        // Imputation identique à VentilationCentre::transfertsDuCentre() : une
+        // SORTIE appartient au centre du transfert (là où la caissière
+        // travaillait), une ENTRÉE au centre de rattachement de la caisse qui
+        // reçoit les billets. Deux règles d'imputation différentes feraient
+        // diverger la vue datée de la vue courante.
+        $centreDeCaisse = [];
+
+        foreach ($caisses as $caisse) {
+            $centreDeCaisse[$caisse->id] = $caisse->etablissement_id === null
+                ? null
+                : (int) $caisse->etablissement_id;
+        }
+
         foreach (CaisseTransfer::query()
             ->where('statut', CaisseTransfer::STATUT_VALIDE)
             ->whereDate('date_transfert', '<=', $dateTo)
             ->where(fn ($q) => $q
                 ->whereIn('caisse_source_id', $caisseIds)
                 ->orWhereIn('caisse_destination_id', $caisseIds))
-            ->get(['caisse_source_id', 'caisse_destination_id', 'montant']) as $transfert) {
+            ->get(['caisse_source_id', 'caisse_destination_id', 'montant', 'etablissement_id']) as $transfert) {
             $montant = (float) $transfert->montant;
             $source = (int) $transfert->caisse_source_id;
             $destination = (int) $transfert->caisse_destination_id;
 
             if (array_key_exists($source, $soldes)) {
-                $soldes[$source] = round($soldes[$source] - $montant, 2);
+                $centreSortie = $transfert->etablissement_id === null
+                    ? $centreDeCaisse[$source]
+                    : (int) $transfert->etablissement_id;
+
+                if ($centreId === null || $centreSortie === $centreId) {
+                    $soldes[$source] = round($soldes[$source] - $montant, 2);
+                }
             }
 
             if (array_key_exists($destination, $soldes)) {
-                $soldes[$destination] = round($soldes[$destination] + $montant, 2);
+                if ($centreId === null || $centreDeCaisse[$destination] === $centreId) {
+                    $soldes[$destination] = round($soldes[$destination] + $montant, 2);
+                }
             }
         }
 

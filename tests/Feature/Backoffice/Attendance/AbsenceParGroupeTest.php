@@ -294,6 +294,68 @@ final class AbsenceParGroupeTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->count('matrice.seances', 0));
     }
 
+    /**
+     * Reading a finished group's attendance is exactly when one opens this
+     * matrix, so « Fin de formation » and « Annulée » belong in the Groupe
+     * dropdown — unlike the séance modal, which may only schedule into a live
+     * group (GetSeanceFormOptions::groups() vs allGroups()).
+     */
+    public function test_closed_groups_are_offered_in_the_group_dropdown(): void
+    {
+        $termine = Group::factory()->create([
+            'nom' => 'Groupe terminé',
+            'statut' => Group::STATUT_FIN_FORMATION,
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+        $annule = Group::factory()->create([
+            'nom' => 'Groupe annulé',
+            'statut' => Group::STATUT_ANNULEE,
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $this->actingAs($this->userWith('attendance.view'))
+            ->get(route('backoffice.seances.absence-par-groupe'))
+            ->assertOk()
+            ->assertInertia(function (Assert $page) use ($termine, $annule): void {
+                $values = array_column($page->toArray()['props']['groupOptions'], 'value');
+                $this->assertContains($termine->id, $values);
+                $this->assertContains($annule->id, $values);
+                $this->assertContains($this->group->id, $values);
+            });
+    }
+
+    /**
+     * The matrix of a closed group must actually build — the dropdown would be
+     * a lie otherwise. The group's séances and students are unaffected by its
+     * statut (GetAbsencesParGroupe carries no statut restriction).
+     */
+    public function test_the_matrix_of_a_closed_group_is_readable(): void
+    {
+        $this->group->update(['statut' => Group::STATUT_FIN_FORMATION]);
+        $student = $this->enrollStudent('Yasmine');
+        $seance = Seance::create([
+            'group_id' => $this->group->id,
+            'date_seance' => '2025-10-06',
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'statut' => Seance::STATUT_EFFECTUEE,
+        ]);
+        Presence::create([
+            'seance_id' => $seance->id,
+            'student_id' => $student->id,
+            'statut' => Presence::STATUT_PRESENT,
+        ]);
+
+        $this->actingAs($this->userWith('attendance.view'))
+            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $this->group->id]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->count('matrice.seances', 1)
+                ->count('matrice.students', 1));
+    }
+
     public function test_export_streams_an_xlsx_file(): void
     {
         $alice = $this->enrollStudent('Alice');

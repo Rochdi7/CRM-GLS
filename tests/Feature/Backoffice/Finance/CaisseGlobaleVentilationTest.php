@@ -174,6 +174,50 @@ final class CaisseGlobaleVentilationTest extends TestCase
     }
 
     /**
+     * Le bug du 11/09/2026 : dès qu'une date de fin était posée, la
+     * ventilation était ABANDONNÉE et le rembobinage rendait le solde RÉSEAU
+     * de chaque caisse — l'écran listait les caisses d'un centre en annonçant
+     * les montants de tout le réseau (2 843 190,00 DH là où « Comptes de
+     * caisse » en affichait une fraction). Une date rembobine ET ventile : la
+     * part d'un centre à une date passée se calcule sur les mêmes colonnes que
+     * sa part d'aujourd'hui.
+     */
+    public function test_une_date_de_fin_rembobine_sans_abandonner_la_ventilation(): void
+    {
+        $agent = $this->caissiere();
+        $admin = $this->superAdmin();
+        $till = $agent->till()->firstOrFail();
+
+        // Un paiement Online ultérieur, que la date de fin doit couper.
+        app(EnregistrerEncaissement::class)->handle([
+            'student_id' => Student::factory()->create(['etablissement_id' => $this->online->id])->id,
+            'inscription_fee_id' => null,
+            'montant' => 250.0,
+            'methode' => Encaissement::METHODE_ESPECES,
+            'date_paiement' => '2026-11-15',
+            'caisse_id' => $till->id,
+        ], $agent);
+
+        $this->assertSame('8750.00', (string) $till->fresh()->solde);
+
+        $this->actingAs($admin);
+
+        foreach ([
+            [$this->rabat->id, '8000.00'],
+            [$this->online->id, '500.00'],
+            // « Tous les centres » : rien n'est ventilé, seule la date coupe.
+            [null, '8500.00'],
+        ] as [$centreId, $attendu]) {
+            app()->forgetInstance(CurrentContext::class);
+            app(CurrentContext::class)->setEtablissement($centreId);
+
+            $globale = app(GetCaisseGlobale::class)($admin->fresh(), ['dateTo' => '2026-10-31']);
+
+            $this->assertSame($attendu, $this->soldeDe($globale, $till->id), 'centre '.($centreId ?? 'TOUS'));
+        }
+    }
+
+    /**
      * Le total des cartes d'en-tête doit décrire les lignes affichées
      * dessous : c'est la leçon du bug « 2 transactions, 500 DH au-dessus d'un
      * solde à 0,00 DH » — un total et sa liste ne lisent jamais deux sources.
