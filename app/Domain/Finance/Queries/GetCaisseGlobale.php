@@ -321,17 +321,16 @@ final class GetCaisseGlobale
         // each leg is applied to its own side. Ignoring them would leave the
         // two tills of a transfer both reading as if it never happened.
         //
-        // Imputation identique à VentilationCentre::transfertsDuCentre() : une
-        // SORTIE appartient au centre du transfert (là où la caissière
-        // travaillait), une ENTRÉE au centre de rattachement de la caisse qui
-        // reçoit les billets. Deux règles d'imputation différentes feraient
-        // diverger la vue datée de la vue courante.
-        $centreDeCaisse = [];
+        // ⚠ Centre of a leg = VentilationCentre::centreDeLaJambe(), the ONE
+        // implementation (11/09/2026): BOTH legs carry the centre the money
+        // LEAVES. This block used to book the entry on the receiving till's
+        // centre, so with a date set a Casablanca → Kénitra-till transfer
+        // moved from Casablanca to Kénitra on the same screen the undated
+        // view showed it on Casablanca. Never re-derive the rule here.
+        $parId = [];
 
         foreach ($caisses as $caisse) {
-            $centreDeCaisse[$caisse->id] = $caisse->etablissement_id === null
-                ? null
-                : (int) $caisse->etablissement_id;
+            $parId[$caisse->id] = $caisse;
         }
 
         foreach (CaisseTransfer::query()
@@ -340,25 +339,20 @@ final class GetCaisseGlobale
             ->where(fn ($q) => $q
                 ->whereIn('caisse_source_id', $caisseIds)
                 ->orWhereIn('caisse_destination_id', $caisseIds))
+            ->with('caisseSource:id,etablissement_id')
             ->get(['caisse_source_id', 'caisse_destination_id', 'montant', 'etablissement_id']) as $transfert) {
             $montant = (float) $transfert->montant;
-            $source = (int) $transfert->caisse_source_id;
-            $destination = (int) $transfert->caisse_destination_id;
 
-            if (array_key_exists($source, $soldes)) {
-                $centreSortie = $transfert->etablissement_id === null
-                    ? $centreDeCaisse[$source]
-                    : (int) $transfert->etablissement_id;
-
-                if ($centreId === null || $centreSortie === $centreId) {
-                    $soldes[$source] = round($soldes[$source] - $montant, 2);
+            foreach ([(int) $transfert->caisse_source_id => -$montant, (int) $transfert->caisse_destination_id => $montant] as $id => $delta) {
+                if (! array_key_exists($id, $soldes)) {
+                    continue;
                 }
-            }
 
-            if (array_key_exists($destination, $soldes)) {
-                if ($centreId === null || $centreDeCaisse[$destination] === $centreId) {
-                    $soldes[$destination] = round($soldes[$destination] + $montant, 2);
+                if ($centreId !== null && $this->ventilation->centreDeLaJambe($transfert, $parId[$id]) !== $centreId) {
+                    continue;
                 }
+
+                $soldes[$id] = round($soldes[$id] + $delta, 2);
             }
         }
 

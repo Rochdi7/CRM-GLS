@@ -260,7 +260,14 @@ final class CentreDimensionLedgerTest extends TestCase
     // Transfers
     // ---------------------------------------------------------------
 
-    public function test_cross_centre_transfer_stamps_each_leg_with_its_own_caisse_centre(): void
+    /**
+     * Un transfert change de TIROIR, jamais de CENTRE (11/09/2026) : les DEUX
+     * jambes portent le centre d'où l'argent SORT — ici Rabat, par repli sur
+     * la caisse source puisque ce transfert n'a pas de colonne centre. Le
+     * crédit portait auparavant le centre du tiroir qui reçoit (Online), et
+     * l'argent changeait de centre en chemin.
+     */
+    public function test_cross_centre_transfer_stamps_both_legs_with_the_source_centre(): void
     {
         $source = Employee::factory()->create(['etablissement_id' => $this->rabat->id]);
         $dest = Employee::factory()->create(['etablissement_id' => $this->online->id]);
@@ -289,7 +296,11 @@ final class CentreDimensionLedgerTest extends TestCase
         $byCaisse = $legs->keyBy('subject_id');
 
         $this->assertSame($this->rabat->id, $byCaisse[$sourceTill->id]->properties['etablissement_id']);
-        $this->assertSame($this->online->id, $byCaisse[$destTill->id]->properties['etablissement_id']);
+        $this->assertSame(
+            $this->rabat->id,
+            $byCaisse[$destTill->id]->properties['etablissement_id'],
+            'le crédit porte le centre SOURCE, jamais celui du tiroir qui reçoit'
+        );
         $this->assertSame('600.00', (string) $sourceTill->fresh()->solde);
         $this->assertSame('400.00', (string) $destTill->fresh()->solde);
     }

@@ -252,6 +252,34 @@ final class VentilationCentre
                     ->where('etablissement_id', $centreId)
                     ->orWhereHas('etablissements', fn ($p) => $p->where('etablissements.id', $centreId))))
             ->orWhereHas('encaissements', fn ($e) => $e->where('etablissement_id', $centreId))
-            ->orWhereHas('remboursements', fn ($r) => $r->where('etablissement_id', $centreId)));
+            ->orWhereHas('remboursements', fn ($r) => $r->where('etablissement_id', $centreId))
+            // 4. elle a REÇU (ou envoyé) un transfert validé imputé à ce
+            //    centre — même règle que centreDeLaJambe() : la colonne du
+            //    transfert, repli sur le centre de la caisse SOURCE. Sans
+            //    cette voie, les 69 440 DH de TRF-032 étaient bien imputés à
+            //    Casablanca par soldeDuCentre() mais le tiroir de Yassine
+            //    (rattaché Kénitra, aucun encaissement Casablanca) n'apparaissait
+            //    pas sur l'écran Casablanca : « Caisse globale » et « Comptes
+            //    de caisse » y perdaient l'argent en silence (11/09/2026).
+            ->orWhereHas('transfersEntrants', fn ($t) => $this->scopeTransfertsDuCentre($t, $centreId))
+            ->orWhereHas('transfersSortants', fn ($t) => $this->scopeTransfertsDuCentre($t, $centreId)));
+    }
+
+    /**
+     * Transferts VALIDÉS dont la jambe est imputée au centre — la forme
+     * « requête » de centreDeLaJambe() : colonne du transfert, repli sur le
+     * centre de la caisse SOURCE (jamais celui du tiroir qui reçoit).
+     *
+     * @param  Builder<CaisseTransfer>  $query
+     */
+    public function scopeTransfertsDuCentre(Builder $query, int $centreId): void
+    {
+        $query
+            ->where('statut', CaisseTransfer::STATUT_VALIDE)
+            ->where(fn ($w) => $w
+                ->where('etablissement_id', $centreId)
+                ->orWhere(fn ($legacy) => $legacy
+                    ->whereNull('etablissement_id')
+                    ->whereHas('caisseSource', fn ($c) => $c->where('etablissement_id', $centreId))));
     }
 }

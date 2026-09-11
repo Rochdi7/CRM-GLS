@@ -6,6 +6,7 @@ namespace Tests\Feature\Backoffice\Finance;
 
 use App\Domain\Finance\Actions\DemanderTransfertCaisse;
 use App\Domain\Finance\Actions\ValiderTransfertCaisse;
+use App\Domain\Finance\Queries\GetCaisseGlobale;
 use App\Domain\Finance\Support\VentilationCentre;
 use App\Domain\Payments\Actions\EnregistrerEncaissement;
 use App\Models\AnneeScolaire;
@@ -213,5 +214,40 @@ final class TransfertCentreDesDeuxJambesTest extends TestCase
             $ventilation->soldeDuCentre($tiroirYassine, $this->casablanca->id),
             'le repli doit suivre la caisse SOURCE, pas le tiroir qui reçoit'
         );
+    }
+
+    /**
+     * « Caisse globale » AVEC une date rembobine les soldes depuis les tables
+     * source (GetCaisseGlobale::soldesAt) et doit imputer chaque jambe par la
+     * MÊME règle que la vue courante — centreDeLaJambe(). Jusqu'au 11/09/2026
+     * l'entrée y retombait sur le centre du tiroir qui reçoit : le même écran
+     * montrait 69 440 DH à Casablanca sans date et à Kénitra avec une date.
+     */
+    public function test_caisse_globale_datee_impute_l_entree_au_centre_source(): void
+    {
+        $this->encaisser($this->maria, $this->casablanca, 69440);
+        $this->transferer($this->maria, $this->yassine, 69440, $this->casablanca->id);
+
+        $demain = now()->addDay()->toDateString();
+        $user = $this->maria->user->fresh();
+
+        foreach ([$this->casablanca, $this->kenitra] as $centre) {
+            $this->contexte($this->maria, $centre->id);
+
+            $sansDate = app(GetCaisseGlobale::class)($user, []);
+            $avecDate = app(GetCaisseGlobale::class)($user, ['dateTo' => $demain]);
+
+            $this->assertSame(
+                $sansDate['total'],
+                $avecDate['total'],
+                "sur {$centre->nom_centre}, la vue datée doit annoncer le même total que la vue courante"
+            );
+        }
+
+        $this->contexte($this->maria, $this->casablanca->id);
+        $this->assertSame('69440.00', app(GetCaisseGlobale::class)($user, ['dateTo' => $demain])['total']);
+
+        $this->contexte($this->maria, $this->kenitra->id);
+        $this->assertSame('0.00', app(GetCaisseGlobale::class)($user, ['dateTo' => $demain])['total']);
     }
 }

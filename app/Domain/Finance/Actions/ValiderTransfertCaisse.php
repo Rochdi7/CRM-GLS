@@ -135,7 +135,14 @@ final class ValiderTransfertCaisse
                 [
                     'caisse_source' => $source->nom,
                     'valide_par' => $validatedBy->nomComplet(),
-                    'etablissement_id' => $destination->etablissement_id,
+                    // ⚠ L'ENTRÉE porte le MÊME centre que la sortie (11/09/2026,
+                    // VentilationCentre::centreDeLaJambe) : un transfert change
+                    // de tiroir, jamais de centre. Stamper ici le centre du
+                    // tiroir qui reçoit faisait changer l'argent de centre en
+                    // chemin (228 840 DH sur 6 transferts inter-centres) et
+                    // « Ma caisse » — qui lisait ce stamp — contredisait
+                    // « Comptes de caisse ».
+                    'etablissement_id' => $transfer->etablissement_id ?? $source->etablissement_id,
                 ],
             );
 

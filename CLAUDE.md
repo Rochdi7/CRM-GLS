@@ -343,8 +343,12 @@ the database layer. Non-negotiable invariants already enforced in code:
   - **dépense** → group centre (Paiement prof) else active context else
     creator primary; at APPROVAL → group centre else CREATOR's primary,
     never the approver's context (approvers work from « Tous les centres »);
-  - **transfert** → each leg stamps its own caisse's centre (a cross-centre
-    transfer is an explicit, journaled centre movement).
+  - **transfert** → BOTH legs stamp the centre the money LEAVES
+    (`caisse_transfers.etablissement_id`, fallback source caisse) — a
+    transfer changes TILL, never CENTRE (11/09/2026, see the ventilation
+    rule below). Historical credit legs stamped the receiving till's centre;
+    no read path may rely on that stamp — `GetCaisseJournal` resolves both
+    legs through `VentilationCentre::centreDeLaJambe()`.
   Query the entries with `event = 'solde_movement'` — the Caisse model's own
   Auditable entries share `log_name = 'caisse'`. Historical entries lack the
   key: read-time fallback (« Centre du compte »), NEVER a backfill.
@@ -383,9 +387,17 @@ the database layer. Non-negotiable invariants already enforced in code:
   transferts inter-centres — 157 600,00 DH remis par Rabat à la caisse
   centrale devenaient du Marrakech, 69 440,00 DH versés par Casablanca à
   Yassine (TRF-032) devenaient du Kénitra. La règle a UNE implémentation,
-  `VentilationCentre::centreDeLaJambe()`, partagée par le solde ET par les
-  lignes de `GetCaisseDetails` — jamais recopiée, sinon l'écran montre des
-  lignes que son total ne compte pas. Tests :
+  `VentilationCentre::centreDeLaJambe()`, partagée par le solde, par les
+  lignes de `GetCaisseDetails`, par le rembobinage daté de
+  `GetCaisseGlobale::soldesAt()` et par `GetCaisseJournal` (qui ne lit plus
+  le stamp du ledger pour un transfert — les crédits historiques portent
+  l'ancien centre et sont append-only) — jamais recopiée, sinon l'écran
+  montre des lignes que son total ne compte pas. Corollaire : **un tiroir
+  qui a REÇU un transfert validé du centre X est LISTÉ sur les écrans de X**
+  (`scopeCaissesDuCentre`, voie 4) — sans quoi les 69 440 DH de TRF-032
+  étaient imputés à Casablanca par `soldeDuCentre()` mais aucune ligne de
+  « Caisse globale » / « Comptes de caisse » Casablanca ne les portait.
+  Tests :
   `tests/Feature/Backoffice/Finance/TransfertCentreDesDeuxJambesTest.php` ; (3) sur
   « Tous les centres » **rien n'est ventilé** — `caisses.solde` reste
   l'autorité (CaisseLedger) et la somme des parts y retombe. Un écran qui

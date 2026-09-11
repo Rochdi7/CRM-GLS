@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Finance\Queries;
 
 use App\Models\Activity;
+use App\Domain\Finance\Support\VentilationCentre;
 use App\Models\Caisse;
 use App\Models\CaisseTransfer;
 use App\Models\Depense;
@@ -48,6 +49,7 @@ final class GetCaisseJournal
     public const TYPE_TRANSFERT = 'transfert';
 
     public function __construct(
+        private readonly VentilationCentre $ventilation,
         private readonly CenterAccessService $centerAccess,
         private readonly CurrentContext $context,
         private readonly CaisseProvisioner $provisioner,
@@ -313,8 +315,9 @@ final class GetCaisseJournal
      * fiche caisse, qui lit la colonne, affichait déjà 0,00 DH : deux écrans
      * du même argent qui se contredisent.
      *
-     * Repli sur le ledger (puis sur le centre de la caisse) tant que la
-     * colonne est nulle — les transferts antérieurs ne sont jamais backfillés.
+     * Repli sur le centre de la caisse SOURCE tant que la colonne est nulle
+     * (centreDeLaJambe) — les transferts antérieurs ne sont jamais backfillés,
+     * et le ledger n'est plus consulté pour un transfert.
      *
      * @param  array<int, int>  $caisseIds
      * @return array<int, int>|null  null = aucun centre actif ⇒ ne rien filtrer
@@ -327,33 +330,27 @@ final class GetCaisseJournal
             return null;
         }
 
-        $parLedger = $this->idsDuCentreDepuisLeLedger(CaisseTransfer::class, $caisseIds) ?? [];
+        // ⚠ Les DEUX jambes sont imputées par VentilationCentre::centreDeLaJambe()
+        // (11/09/2026) : colonne du transfert, repli sur le centre de la caisse
+        // SOURCE — jamais le ledger. Le stamp de l'ENTRÉE y portait le centre
+        // du tiroir qui reçoit (ancienne règle, append-only donc jamais corrigé),
+        // si bien que « Ma caisse » comptait 69 440 DH sur Kénitra pendant que
+        // « Comptes de caisse » les comptait sur Casablanca. Une seule
+        // implémentation de la règle, ou deux écrans qui se contredisent.
+        $caisses = Caisse::query()->whereIn('id', $caisseIds)->get(['id', 'etablissement_id'])->keyBy('id');
 
         $ids = [];
 
         foreach (CaisseTransfer::query()
             ->where(fn ($q) => $q->whereIn('caisse_source_id', $caisseIds)->orWhereIn('caisse_destination_id', $caisseIds))
-            ->get(['id', 'etablissement_id', 'caisse_source_id']) as $transfert) {
-            // Une ENTRÉE garde la résolution du ledger : les billets rejoignent
-            // ce tiroir, la colonne décrit le centre d'où ils SORTENT.
-            if (! in_array((int) $transfert->caisse_source_id, $caisseIds, true)) {
-                if (in_array((int) $transfert->id, $parLedger, true)) {
+            ->with('caisseSource:id,etablissement_id')
+            ->get(['id', 'etablissement_id', 'caisse_source_id', 'caisse_destination_id']) as $transfert) {
+            foreach ([(int) $transfert->caisse_source_id, (int) $transfert->caisse_destination_id] as $caisseId) {
+                $caisse = $caisses->get($caisseId);
+
+                if ($caisse !== null && $this->ventilation->centreDeLaJambe($transfert, $caisse) === $centreId) {
                     $ids[] = (int) $transfert->id;
                 }
-
-                continue;
-            }
-
-            if ($transfert->etablissement_id !== null) {
-                if ((int) $transfert->etablissement_id === $centreId) {
-                    $ids[] = (int) $transfert->id;
-                }
-
-                continue;
-            }
-
-            if (in_array((int) $transfert->id, $parLedger, true)) {
-                $ids[] = (int) $transfert->id;
             }
         }
 
