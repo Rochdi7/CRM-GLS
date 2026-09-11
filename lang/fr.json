@@ -1367,5 +1367,6 @@
     "Type the exact table name to confirm.": "Saisissez le nom exact de la table pour confirmer.",
     "Cannot open :table: :reason": "Impossible d'ouvrir :table : :reason",
     "Access denied to the app role": "Accès refusé au rôle applicatif",
-    "Fix on the server: ALTER TABLE … OWNER TO the app role, or drop it.": "À corriger sur le serveur : ALTER TABLE … OWNER TO le rôle applicatif, ou supprimer la table."
+    "Fix on the server: ALTER TABLE … OWNER TO the app role, or drop it.": "À corriger sur le serveur : ALTER TABLE … OWNER TO le rôle applicatif, ou supprimer la table.",
+    "Select a center in the top bar before requesting a transfer — money always leaves one specific center.": "Sélectionnez un centre dans la barre du haut avant de demander un transfert — l'argent sort toujours d'un centre précis."
 }

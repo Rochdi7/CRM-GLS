@@ -39,7 +39,7 @@ final class GetCaisseTransfersList
     public const TYPE_RECU = 'recu';
 
     /**
-     * @return array{data: LengthAwarePaginator, montantTotal: string, soldeCaisse: string|null}
+     * @return array{data: LengthAwarePaginator, montantTotal: string, soldeCaisse: string|null, montantsParStatut: array<string, string>}
      */
     public function __invoke(
         User $user,
@@ -146,7 +146,38 @@ final class GetCaisseTransfersList
             // the rows above, which would ignore payments, expenses and
             // refunds. Null when the account has no till at all.
             'soldeCaisse' => $this->soldeDeMaCaisse($user),
+            // « Validés » / « En attente » of the ACTIVE CENTRE (11/09/2026):
+            // one GROUP BY over the same funnel as statutCounts() — reach +
+            // switcher, never the statut dropdown. Keyed on the filters, the
+            // pending figure would read 0.00 DH the moment « Validé » is
+            // selected, which is not what « en attente » means.
+            'montantsParStatut' => $this->montantsParStatut($user, $myCaisseIds),
         ];
+    }
+
+    /**
+     * Montant summed per statut over the centre-scoped set, every statut
+     * present as a key (« 0.00 » when nothing), so the page never has to
+     * guess whether a missing key means zero or not computed.
+     *
+     * @param  list<int>  $myCaisseIds
+     * @return array<string, string>
+     */
+    private function montantsParStatut(User $user, array $myCaisseIds): array
+    {
+        $sums = CaisseTransfer::query()
+            ->tap(fn ($q) => $this->scopeReachableEnds($q, $user, $myCaisseIds))
+            ->selectRaw('statut, SUM(montant) AS total')
+            ->groupBy('statut')
+            ->pluck('total', 'statut');
+
+        $out = [];
+
+        foreach (CaisseTransfer::STATUTS as $statut) {
+            $out[$statut] = number_format((float) ($sums[$statut] ?? 0), 2, '.', '');
+        }
+
+        return $out;
     }
 
     /**
@@ -238,8 +269,8 @@ final class GetCaisseTransfersList
      * single centre — whose SOURCE till belongs to THAT centre.
      *
      * CLAUDE.md §11 names this inbox a deliberate exception to context
-     * scoping, and it still is: a transfer with one of the viewer's OWN
-     * tills at either end is always listed, whatever the active centre. That
+     * scoping, and it still is: a PENDING transfer with one of the viewer's
+     * OWN tills at either end is always listed, whatever the active centre. That
      * is the whole point of the exception — only the employee owning the
      * DESTINATION till may validate (ValiderTransfertCaisse), so a pending
      * row that hid behind a centre switch could never be cleared by anyone
@@ -258,11 +289,21 @@ final class GetCaisseTransfersList
         $activeCenterId = $this->context->etablissementId();
 
         $query->where(function (Builder $outer) use ($user, $myCaisseIds, $activeCenterId): void {
-            // Always visible: a transfer touching one of my own tills — the
-            // row I may have to validate, or the one I sent.
+            // Always visible: a PENDING transfer touching one of my own
+            // tills — the row I may have to validate, or the one I sent and
+            // may still cancel. That is the whole exception, and it is
+            // bounded to « En attente » (11/09/2026): a validated or
+            // cancelled row asks nothing of anyone, so it follows the
+            // switcher like every other finance record. Keying the clause on
+            // ANY status put the CEO's till — one end of nearly every
+            // transfer in the network — on all seven centres' screens,
+            // Kénitra's and Rabat's history included under « GLS Online ».
             if ($myCaisseIds !== []) {
-                $outer->whereIn('caisse_source_id', $myCaisseIds)
-                    ->orWhereIn('caisse_destination_id', $myCaisseIds);
+                $outer->where(fn (Builder $mine) => $mine
+                    ->where('statut', CaisseTransfer::STATUT_EN_ATTENTE)
+                    ->where(fn (Builder $end) => $end
+                        ->whereIn('caisse_source_id', $myCaisseIds)
+                        ->orWhereIn('caisse_destination_id', $myCaisseIds)));
             }
 
             // ⚠ The SENDER's centre decides, not either leg (07/09/2026).

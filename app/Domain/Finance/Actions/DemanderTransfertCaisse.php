@@ -28,7 +28,7 @@ final class DemanderTransfertCaisse
     ) {}
 
     /**
-     * @param array<string, mixed> $data validated StoreCaisseTransferRequest data
+     * @param  array<string, mixed>  $data  validated StoreCaisseTransferRequest data
      */
     public function handle(array $data, Employee $requestedBy): CaisseTransfer
     {
@@ -56,13 +56,38 @@ final class DemanderTransfertCaisse
         // de 0,00 DH.
         $centreId = $this->context->etablissementId();
 
+        // ⚠ La colonne n'est JAMAIS laissée NULL (11/09/2026). Sur « Tous les
+        // centres » (super-admin), `etablissementId()` ne résout rien : les
+        // 37 transferts d'avant cette date sont dans ce cas, et la
+        // ventilation les replie alors sur `caisses.etablissement_id` À
+        // CHAQUE LECTURE. Ce repli tombe juste tant qu'un tiroir ne sert
+        // qu'un centre — puis se trompe. Cas réel : la caisse d'Ahmed
+        // Khadimerrahman (rattachée à GLS Online) encaisse 500 DH pour Online
+        // et 1 800 DH pour Kénitra ; TRF-028 sort les 1 800 DH de Kénitra
+        // mais en débite Online, qui affiche -1 800,00 DH pendant que Kénitra
+        // garde un argent qui n'y est plus.
+        //
+        // On FIGE donc la même valeur à l'écriture plutôt que de la
+        // re-dériver : le comportement est identique, mais l'imputation
+        // devient une donnée écrite une fois, auditée et stable — au lieu
+        // d'un résultat qui change si la caisse est un jour re-rattachée.
+        // Refuser le transfert serait plus strict, mais bloquerait un geste
+        // légitime du super-admin depuis la vue réseau.
+        // ⚠ Le PLAFOND reste conditionné au centre ACTIF, pas au repli : sur
+        // « Tous les centres » rien n'est ventilé et le tiroir entier reste
+        // disponible, comme avant. Appliquer le plafond au centre replié
+        // changerait une règle métier au passage.
+        $centreActif = $centreId;
+
+        $centreId ??= Caisse::query()
+            ->whereKey((int) $data['caisse_source_id'])
+            ->value('etablissement_id');
+
         // ⚠ On ne transfère que l'argent DU CENTRE ACTIF. Le tiroir est
         // physiquement unique, mais chaque centre doit pouvoir solder le sien
         // sans emporter celui d'un autre : autrement un caissier vide
         // Casablanca en puisant dans l'argent de Kénitra, et la part d'un
         // centre peut devenir négative — ce qu'aucune caisse ne peut tenir.
-        // Sur « Tous les centres » (super-admin) rien n'est ventilé : le
-        // tiroir entier reste disponible, comme avant.
         //
         // ⚠ Le plafond est la part du centre, MAIS jamais moins que la part
         // NON ATTRIBUABLE du tiroir. Un solde peut exister sans mouvement
@@ -72,9 +97,9 @@ final class DemanderTransfertCaisse
         // INTRANSFÉRABLE à vie, ce qui serait un bug bien pire que celui
         // corrigé ici. On ne bloque donc que ce qu'on sait appartenir à un
         // AUTRE centre — jamais ce qu'on ne sait pas rattacher.
-        if ($centreId !== null) {
+        if ($centreActif !== null) {
             $source = Caisse::query()->findOrFail((int) $data['caisse_source_id']);
-            $disponible = $this->ventilation->plafondTransfert($source, $centreId);
+            $disponible = $this->ventilation->plafondTransfert($source, $centreActif);
 
             if ((float) $data['montant'] > $disponible) {
                 throw ValidationException::withMessages([

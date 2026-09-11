@@ -329,6 +329,7 @@ export default function CaissesIndex({
     transfers,
     transfersMontantTotal,
     transfersSoldeCaisse,
+    transfersMontantsParStatut,
     transferCaisses,
     transferStatuts,
     myCaisse,
@@ -653,6 +654,16 @@ export default function CaissesIndex({
                         )}
                         <span className="fw-semibold">
                             Total des transferts : {Number(transfersMontantTotal ?? 0).toFixed(2)} DH
+                        </span>
+                        {/* Per-centre figures by statut — scope only, so they
+                            hold still while the Statut dropdown changes. */}
+                        <span className="fw-semibold text-success">
+                            <i className="ti ti-circle-check me-1" />
+                            Validés : {Number(transfersMontantsParStatut?.['Validé'] ?? 0).toFixed(2)} DH
+                        </span>
+                        <span className="fw-semibold text-warning">
+                            <i className="ti ti-clock me-1" />
+                            En attente : {Number(transfersMontantsParStatut?.['En attente'] ?? 0).toFixed(2)} DH
                         </span>
                     </div>
 

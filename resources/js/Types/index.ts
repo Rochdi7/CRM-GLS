@@ -1728,6 +1728,12 @@ export interface CaissesPageProps {
      * view ». Null when the account has no till.
      */
     transfersSoldeCaisse: MoneyDisplay | null;
+    /**
+     * Montant per statut over the centre-scoped set (reach + switcher), NOT
+     * the statut dropdown — « Validé » / « En attente » / « Annulé » are
+     * always present, « 0.00 » when nothing.
+     */
+    transfersMontantsParStatut: Record<string, MoneyDisplay>;
     transferStatutCounts: Record<string, number>;
     transferCaisses: CaisseTransferFormOption[];
     transferStatuts: string[];

@@ -156,6 +156,9 @@ final class CaisseController extends Controller
             // The viewer's own till balance, shown beside that total: « how
             // much do I hold » next to « how much has moved in this view ».
             'transfersSoldeCaisse' => $transfersList['soldeCaisse'] ?? null,
+            // « Validés » / « En attente » of the active centre — scope only,
+            // never the statut dropdown (see GetCaisseTransfersList).
+            'transfersMontantsParStatut' => $transfersList['montantsParStatut'] ?? [],
             'transferStatutCounts' => $canViewTransfers && $tab === 'transferts'
                 ? $getCaisseTransfersList->statutCounts($user)
                 : [],
