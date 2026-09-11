@@ -87,13 +87,11 @@ final class GetCaisseDetails
         // visible chez Maria, la destinataire. Un mouvement doit apparaître des
         // DEUX côtés, sinon l'historique d'une caisse ment par omission.
         //
-        // Même résolution que VentilationCentre::transfertsDuCentre(), pour que
-        // les lignes affichées soient exactement celles que le solde compte :
-        //  - SORTIE  → le centre du TRANSFERT (là où le caissier travaillait),
-        //    avec repli sur le centre de la caisse pour les lignes antérieures
-        //    à la colonne (jamais de backfill, §11) ;
-        //  - ENTRÉE  → le centre de la caisse qui reçoit : les billets
-        //    rejoignent ce tiroir.
+        // La règle vient de `VentilationCentre::centreDeLaJambe()` — la MÊME
+        // méthode que le solde ventilé appelle, pas une copie : les lignes
+        // affichées sont exactement celles que le total compte. Les DEUX
+        // jambes portent le centre d'où l'argent SORT (11/09/2026) : un
+        // transfert change de tiroir, jamais de centre.
         $transfers = CaisseTransfer::query()
             ->with(['caisseSource', 'caisseDestination'])
             ->where(fn ($q) => $q
@@ -106,11 +104,7 @@ final class GetCaisseDetails
                     return true;
                 }
 
-                $centreDuMouvement = (int) $transfert->caisse_source_id === $caisse->id
-                    ? ($transfert->etablissement_id ?? $caisse->etablissement_id)
-                    : $caisse->etablissement_id;
-
-                return (int) $centreDuMouvement === $centreId;
+                return $this->ventilation->centreDeLaJambe($transfert, $caisse) === $centreId;
             })
             ->take(10)
             ->values();

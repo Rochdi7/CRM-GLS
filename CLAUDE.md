@@ -374,10 +374,19 @@ the database layer. Non-negotiable invariants already enforced in code:
   contredisent : l'utilisateur ne peut plus savoir lequel croire. Trois bornes :
   (1) **un total se calcule sur les MÊMES colonnes que les lignes qu'il
   chapeaute** — solde ventilé ⇒ listes ventilées, sinon la page se contredit
-  elle-même ; (2) **un transfert n'a pas de centre propre** (il déplace de
-  l'argent PHYSIQUE) : il est imputé au centre de rattachement de la caisse,
-  donc il DISPARAÎT des listes d'un autre centre, exactement comme
-  `VentilationCentre::transfertsDuCentre()` l'exclut du solde ; (3) sur
+  elle-même ; (2) **un transfert change de TIROIR, jamais de CENTRE**
+  (11/09/2026) : ses DEUX jambes sont imputées au centre d'où l'argent
+  SORT — `caisse_transfers.etablissement_id`, avec repli sur le centre de
+  la caisse SOURCE pour les lignes antérieures à la colonne (jamais de
+  backfill). L'entrée retombait auparavant sur le tiroir qui reçoit, si
+  bien que l'argent changeait de centre en chemin : 228 840,00 DH sur 6
+  transferts inter-centres — 157 600,00 DH remis par Rabat à la caisse
+  centrale devenaient du Marrakech, 69 440,00 DH versés par Casablanca à
+  Yassine (TRF-032) devenaient du Kénitra. La règle a UNE implémentation,
+  `VentilationCentre::centreDeLaJambe()`, partagée par le solde ET par les
+  lignes de `GetCaisseDetails` — jamais recopiée, sinon l'écran montre des
+  lignes que son total ne compte pas. Tests :
+  `tests/Feature/Backoffice/Finance/TransfertCentreDesDeuxJambesTest.php` ; (3) sur
   « Tous les centres » **rien n'est ventilé** — `caisses.solde` reste
   l'autorité (CaisseLedger) et la somme des parts y retombe. Un écran qui
   affiche un solde ventilé doit le DIRE (`ventileParCentre`), sinon le chiffre

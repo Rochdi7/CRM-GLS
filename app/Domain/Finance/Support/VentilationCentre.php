@@ -7,8 +7,8 @@ namespace App\Domain\Finance\Support;
 use App\Models\Caisse;
 use App\Models\CaisseTransfer;
 use App\Models\Depense;
-use App\Models\Etablissement;
 use App\Models\Encaissement;
+use App\Models\Etablissement;
 use App\Models\Remboursement;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -126,12 +126,28 @@ final class VentilationCentre
     }
 
     /**
-     * Solde net des transferts validés touchant cette caisse.
+     * Le centre auquel une jambe de transfert est imputée, vue depuis $caisse.
      *
-     * Un transfert ne porte aucune dimension centre propre : il déplace de
-     * l'argent PHYSIQUE entre deux caisses, donc il est imputé au centre de
-     * rattachement de la caisse concernée. Les ignorer ferait diverger la
-     * somme des parts du solde stocké.
+     * SOURCE UNIQUE de la règle : le solde ventilé l'utilise ici, et
+     * `GetCaisseDetails` l'utilise pour filtrer les LIGNES affichées. Deux
+     * copies de ce calcul finiraient par diverger, et l'écran afficherait
+     * alors des lignes que son propre total ne compte pas (bug du 09/09/2026).
+     */
+    public function centreDeLaJambe(CaisseTransfer $transfert, Caisse $caisse): ?int
+    {
+        $sortant = (int) $transfert->caisse_source_id === $caisse->id;
+
+        $centre = $transfert->etablissement_id
+            ?? ($sortant ? $caisse->etablissement_id : $transfert->caisseSource?->etablissement_id);
+
+        return $centre === null ? null : (int) $centre;
+    }
+
+    /**
+     * Solde net des transferts validés touchant cette caisse, pour un centre.
+     *
+     * Chaque jambe est imputée par `centreDeLaJambe()`. Ignorer les
+     * transferts ferait diverger la somme des parts du solde stocké.
      */
     private function transfertsDuCentre(Caisse $caisse, int $centreId): float
     {
@@ -140,23 +156,29 @@ final class VentilationCentre
         foreach (CaisseTransfer::query()
             ->where(fn ($q) => $q->where('caisse_source_id', $caisse->id)->orWhere('caisse_destination_id', $caisse->id))
             ->where('statut', CaisseTransfer::STATUT_VALIDE)
+            ->with('caisseSource:id,etablissement_id')
             ->get(['caisse_source_id', 'montant', 'etablissement_id']) as $transfert) {
             $sortant = (int) $transfert->caisse_source_id === $caisse->id;
 
-            // ⚠ Le centre d'une SORTIE est celui du TRANSFERT (le centre où le
-            // caissier travaillait), pas celui de rattachement de la caisse
-            // (09/09/2026). L'ancienne version écartait le transfert dès que
-            // les deux différaient : 1 300,00 DH encaissés à Casablanca puis
-            // transférés laissaient Casablanca à 1 300,00 DH au lieu de 0,00 DH,
-            // le -1 300 étant imputé à Kénitra où il n'avait jamais été.
-            // Une ENTRÉE reste imputée au centre de la caisse qui reçoit : les
-            // billets rejoignent ce tiroir, et son centre de rattachement est
-            // la seule chose qu'on sache d'eux à l'arrivée.
-            // Repli sur le centre de la caisse quand la colonne est absente
-            // (transferts antérieurs — jamais de backfill, §11).
-            $centreDuMouvement = $sortant
-                ? ($transfert->etablissement_id ?? $caisse->etablissement_id)
-                : $caisse->etablissement_id;
+            // ⚠ LES DEUX JAMBES D'UN TRANSFERT PORTENT LE MÊME CENTRE : celui
+            // d'où l'argent SORT (11/09/2026). Un transfert ne transforme pas
+            // le rattachement de l'argent en le déplaçant — il change de
+            // tiroir, pas de centre.
+            //
+            // La sortie suivait déjà cette règle depuis le 09/09 ; l'entrée,
+            // elle, retombait sur le centre de rattachement du tiroir qui
+            // reçoit. Asymétrie mesurée sur la prod le 11/09/2026 :
+            // 6 transferts inter-centres, 228 840,00 DH changeaient de centre
+            // en chemin — 157 600,00 DH remis par Rabat à la caisse centrale
+            // devenaient du Marrakech, et les 69 440,00 DH versés par
+            // Casablanca à Yassine devenaient du Kénitra. Casablanca voyait
+            // son argent quitter ses comptes sans que personne ne le reçoive.
+            //
+            // ⚠ Le repli d'une ENTRÉE est le centre de la caisse SOURCE, pas
+            // celui de la caisse destinataire : reprendre le tiroir d'arrivée
+            // réintroduirait exactement le bug corrigé ici pour les 35
+            // transferts antérieurs à la colonne (jamais de backfill, §11).
+            $centreDuMouvement = $this->centreDeLaJambe($transfert, $caisse);
 
             if ((int) $centreDuMouvement !== $centreId) {
                 continue;
