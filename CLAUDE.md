@@ -402,9 +402,11 @@ the database layer. Non-negotiable invariants already enforced in code:
   « Tous les centres » **rien n'est ventilé** — `caisses.solde` reste
   l'autorité (CaisseLedger) et la somme des parts y retombe. Un écran qui
   affiche un solde ventilé doit le DIRE (`ventileParCentre`), sinon le chiffre
-  se lit comme le total du compte. Le modal de transfert est l'exception
-  assumée : il montre le solde ENTIER, parce que `DemanderTransfertCaisse`
-  valide contre lui. Tests :
+  se lit comme le total du compte. Le modal de transfert et « Ma caisse
+  (transférable) » sur l'onglet Validation de transfert montrent le
+  PLAFOND du centre actif (`VentilationCentre::plafondTransfert`, le même
+  calcul que `DemanderTransfertCaisse`), à côté du solde physique du
+  tiroir. Tests :
   `tests/Feature/Backoffice/Finance/CaisseVentilationCentreTest.php`.
 - **One dirham = one `caisses` row — payment-method accounts per centre**
   (24/08/2026, `docs/caisse-comptes-methode-architecture.md`). `Caisse::TYPES`
@@ -482,6 +484,20 @@ the database layer. Non-negotiable invariants already enforced in code:
   `Domain\Finance\Actions\ValiderTransfertCaisse` (authoritative, also
   covers non-HTTP callers), and the `canValidate` flag
   `GetCaisseTransfersList` computes per row for the UI.
+- **⚠ Un transfert « En attente » RÉSERVE son montant** (11/09/2026,
+  `Domain\Finance\Support\ReservationTransferts`). Une demande ne bouge
+  pas `caisses.solde`, mais elle a promis l'argent : entre la demande et la
+  réception, une dépense, un remboursement ou une SECONDE demande
+  pouvaient le sortir, et la validation tombait ensuite sur un tiroir vide
+  (TRF-021). Tout ce qui fait sortir de l'argent se contrôle donc contre
+  `solde − réservé` : `GardeSoldeCaisse` (dépenses, remboursements) et
+  `VentilationCentre::plafondTransfert()` (demandes, par centre ET sur
+  « Tous les centres », qui n'avait AUCUN plafond) — et le refus NOMME les
+  transferts qui réservent (« dont 600,00 DH réservés par des transferts en
+  attente (TRF-045) »). `DemanderTransfertCaisse` lit le plafond sous
+  verrou FOR UPDATE dans une transaction (§11). Une demande annulée libère
+  aussitôt. Un tiroir à 0,00 DH ne demande rien. Tests :
+  `tests/Feature/Backoffice/Finance/ReservationTransfertEnAttenteTest.php`.
 - **Dépenses are a REQUEST flow when approval is on** (default). Paramètres →
   Système « Validation des dépenses » (`AppSettings::EXPENSE_APPROVAL`,
   `system-settings.update`) switches it:
@@ -1156,6 +1172,32 @@ the database layer. Non-negotiable invariants already enforced in code:
     stock movements, groupes (every mutation), séances, créneaux and
     dépenses « Paiement prof ». A new module's write path adds the same
     call. Tests: `tests/Feature/Backoffice/Context/ContextScopeWriteGuardTest.php`.
+  - **⚠ Les années scolaires COUVRENT le calendrier sans trou ni
+    chevauchement** (11/09/2026,
+    `Requests\Backoffice\AnneesScolaires\Concerns\CouvertureAnneesRules`,
+    appliqué par les Form Requests Store ET Update). Une année n'est pas une
+    étiquette : c'est la FENÊTRE DE LECTURE
+    (`CurrentContext::anneeDateRange()`) qui rattache les enregistrements
+    datés SANS FK d'année — dépenses, remboursements, chèques, lignes du
+    journal de caisse. Déplacer une borne ne déplace donc aucune ligne, elle
+    décide si un écran les voit ENCORE. Deux défauts sont refusés, aucun des
+    deux visible au moment où on le crée : (1) un **TROU** — une date
+    n'appartenant à aucune fenêtre rend la ligne invisible dans TOUS les
+    contextes, présente en base et caisse engagée, mais ni listable, ni
+    approuvable, ni refusable ; signalé le 11/09/2026, 2025/2026 clôturée au
+    26/08 pendant que 2026/2027 ouvrait le **27/09** (un « 09 » pour « 08 »)
+    laissait 32 jours orphelins et la dépense DEP-040 du 31/08/2026
+    (140,00 DH « En attente ») injoignable ; (2) un **CHEVAUCHEMENT** — une
+    date dans deux fenêtres est comptée dans les totaux des DEUX années, deux
+    écrans du même argent qui se contredisent. Trois bornes : le refus
+    **NOMME** l'année voisine, l'intervalle découvert et les lignes
+    orphelines avec leur montant (§11 « signaler plutôt que masquer » — sans
+    cela l'utilisateur ne peut pas savoir quelle date choisir) ; un trou
+    **VIDE reste permis**, la règle protège de l'argent perdu et n'impose pas
+    un calendrier continu ; des années **CONTIGUËS** (26/08 → 27/08) sont la
+    configuration correcte et ne doivent jamais être refusées, sinon le
+    garde-fou empêche la clôture qu'il protège. Tests :
+    `tests/Feature/Backoffice/Settings/CouvertureAnneesScolairesTest.php`.
   - **Deliberate exceptions** (do not "fix"): employees/users (staff has no
     year), stock (physical inventory), the transfer-validation inbox (a
     pending transfer must never hide behind a year switch), the caisse

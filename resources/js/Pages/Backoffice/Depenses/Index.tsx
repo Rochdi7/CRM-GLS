@@ -159,6 +159,7 @@ export default function DepensesIndex({
     typesDepenses,
     paiementProfTypeId,
     groups,
+    groupsAnneesPrecedentes,
     methodes,
     justificatifMimes,
     justificatifMaxKb,
@@ -225,6 +226,17 @@ export default function DepensesIndex({
     const filterTypeOptions: SelectOption[] = typeOptions.filter((o) => o.value !== paiementProfTypeId);
     const paiementProfLabel = typeOptions.find((o) => o.value === paiementProfTypeId)?.label ?? 'Paiement prof';
     const groupOptions: SelectOption[] = groups.map((g) => ({ value: g.id, label: g.nom }));
+    // « Afficher les groupes des années précédentes » — un enseignant est
+    // réglé APRÈS la prestation, souvent une fois l'année scolaire tournée
+    // (11/09/2026). La case AJOUTE les groupes des années passées à la
+    // liste, elle ne la remplace pas : le cas normal reste l'année active,
+    // en tête. Les libellés des anciens portent leur année, sans quoi deux
+    // groupes homonymes seraient indiscernables. La case n'ouvre QUE
+    // l'année : le centre reste celui du contexte, côté serveur.
+    const [groupesAnneesPrecedentes, setGroupesAnneesPrecedentes] = useState(false);
+    const groupSelectOptions: SelectOption[] = groupesAnneesPrecedentes
+        ? [...groupOptions, ...groupsAnneesPrecedentes.map((g) => ({ value: g.id, label: g.nom }))]
+        : groupOptions;
     const methodeOptions: SelectOption[] = methodes.map((m) => ({ value: m, label: m }));
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.nom }));
     // Balance in the label: the cashier picks the till knowing what is in it.
@@ -362,6 +374,9 @@ export default function DepensesIndex({
     function openCreatePaiementProf() {
         setEditingDepense(null);
         setProfMode(true);
+        // Une saisie neuve repart de l'année active : la case est un geste
+        // explicite, jamais un état qui traîne d'un paiement précédent.
+        setGroupesAnneesPrecedentes(false);
         depenseForm.clearErrors();
         depenseForm.setData({ ...emptyDepenseForm(), type_depense_id: paiementProfTypeId ?? '' });
         setShowDepenseModal(true);
@@ -372,6 +387,15 @@ export default function DepensesIndex({
         // Which modal an edit opens follows the ROW, not the tab it was
         // clicked from — the Validation tab lists both kinds.
         setProfMode(paiementProfTypeId !== null && row.typeDepenseId === paiementProfTypeId);
+        // Éditer un paiement prof dont le groupe appartient à une année
+        // passée doit COCHER la case : sinon le groupe enregistré est
+        // absent des options et le select s'affiche vide, ce qui se lit
+        // comme un champ non renseigné — et le réenregistrer écraserait
+        // l'attribution.
+        setGroupesAnneesPrecedentes(
+            row.groupId !== null
+            && groupsAnneesPrecedentes.some((g) => g.id === row.groupId),
+        );
         depenseForm.clearErrors();
         depenseForm.setData({
             type_depense_id: row.typeDepenseId ?? '',
@@ -1421,13 +1445,42 @@ export default function DepensesIndex({
                                 <SelectField
                                     id="d-group"
                                     label="Groupe"
-                                    options={groupOptions}
+                                    options={groupSelectOptions}
                                     placeholder="Sélectionner un groupe"
                                     required
                                     value={depenseForm.data.group_id}
                                     onChange={(e) => depenseForm.setData('group_id', e.target.value === '' ? '' : Number(e.target.value))}
                                     error={depenseForm.errors.group_id}
                                 />
+                                {/* Un enseignant est réglé APRÈS la
+                                    prestation : le groupe terminé en juin
+                                    se paie en septembre, année déjà
+                                    tournée. Décocher REMET le choix à zéro
+                                    s'il portait sur une année passée —
+                                    laisser un id que la liste n'offre plus
+                                    ferait enregistrer un groupe que l'écran
+                                    n'affiche pas. */}
+                                {groupsAnneesPrecedentes.length > 0 && (
+                                    <div className="form-check mt-2">
+                                        <input
+                                            className="form-check-input"
+                                            type="checkbox"
+                                            id="d-group-annees"
+                                            checked={groupesAnneesPrecedentes}
+                                            onChange={(e) => {
+                                                const coche = e.target.checked;
+                                                setGroupesAnneesPrecedentes(coche);
+
+                                                if (! coche && groupsAnneesPrecedentes.some((g) => g.id === depenseForm.data.group_id)) {
+                                                    depenseForm.setData('group_id', '');
+                                                }
+                                            }}
+                                        />
+                                        <label className="form-check-label fs-13" htmlFor="d-group-annees">
+                                            Afficher les groupes des années précédentes
+                                        </label>
+                                    </div>
+                                )}
                             </div>
                         )}
                         <div className="col-md-4">

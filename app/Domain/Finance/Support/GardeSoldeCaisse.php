@@ -35,8 +35,12 @@ use Illuminate\Validation\ValidationException;
  * read-a-balance-then-write check runs INSIDE the transaction on a
  * lockForUpdate() row »).
  *
- * La règle est `montant <= solde` : vider la caisse jusqu'à 0,00 est
- * légitime (même borne que ValiderTransfertCaisse).
+ * La règle est `montant <= solde − réservé` : vider la caisse jusqu'à 0,00
+ * est légitime (même borne que ValiderTransfertCaisse). « Réservé » = les
+ * transferts « En attente » qui SORTENT de cette caisse (11/09/2026,
+ * ReservationTransferts) : une demande ne bouge pas le solde, mais elle a
+ * promis l'argent, et une dépense saisie avant la réception l'aurait
+ * dépensé deux fois. Le message nomme les transferts qui réservent.
  *
  * La caisse contrôlée est TOUJOURS `depenses.caisse_id`, la ligne stockée —
  * jamais une caisse re-dérivée du contexte actif ou de l'approbateur. C'est
@@ -49,6 +53,10 @@ use Illuminate\Validation\ValidationException;
  */
 final class GardeSoldeCaisse
 {
+    public function __construct(
+        private readonly ReservationTransferts $reservations,
+    ) {}
+
     /**
      * Verrouille la caisse et vérifie qu'elle couvre le montant.
      *
@@ -86,20 +94,44 @@ final class GardeSoldeCaisse
         /** @var Caisse $caisse */
         $caisse = Caisse::query()->whereKey($caisseId)->lockForUpdate()->firstOrFail();
 
+        // L'argent promis par un transfert en attente n'est plus disponible :
+        // lu sous le même verrou, donc une demande concurrente est sérialisée.
+        $reserve = $this->reservations->enAttente($caisseId);
+        $disponible = round((float) $caisse->solde - $reserve, 2);
+
         // Comparaison en centimes entiers : deux décimales stockées, aucun
         // arrondi flottant ne doit transformer 7 650,00 <= 7 650,00 en refus.
-        $soldeCentimes = (int) round(((float) $caisse->solde) * 100);
+        $disponibleCentimes = (int) round($disponible * 100);
         $montantCentimes = (int) round($montant * 100);
 
-        if ($montantCentimes > $soldeCentimes) {
-            throw ValidationException::withMessages([
-                $errorKey => __($messageKey, [
-                    'solde' => number_format((float) $caisse->solde, 2, ',', ' '),
-                    'montant' => number_format($montant, 2, ',', ' '),
-                ]),
+        if ($montantCentimes > $disponibleCentimes) {
+            $message = __($messageKey, [
+                'solde' => number_format($disponible, 2, ',', ' '),
+                'montant' => number_format($montant, 2, ',', ' '),
             ]);
+
+            if ($reserve > 0) {
+                $message .= ' '.self::messageReserve((float) $caisse->solde, $reserve, $this->reservations->references($caisseId));
+            }
+
+            throw ValidationException::withMessages([$errorKey => $message]);
         }
 
         return $caisse;
+    }
+
+    /**
+     * La phrase qui explique un refus dû à une réservation — partagée avec
+     * DemanderTransfertCaisse pour que les deux écrans disent la même chose.
+     *
+     * @param  list<string>  $references
+     */
+    public static function messageReserve(float $soldeTiroir, float $reserve, array $references): string
+    {
+        return __('The till holds :tiroir DH, of which :reserve DH are reserved by pending transfers (:refs).', [
+            'tiroir' => number_format($soldeTiroir, 2, ',', ' '),
+            'reserve' => number_format($reserve, 2, ',', ' '),
+            'refs' => implode(', ', $references),
+        ]);
     }
 }

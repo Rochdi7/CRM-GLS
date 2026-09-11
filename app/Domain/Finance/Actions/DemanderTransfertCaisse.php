@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Domain\Finance\Actions;
 
+use App\Domain\Finance\Support\GardeSoldeCaisse;
+use App\Domain\Finance\Support\ReservationTransferts;
 use App\Domain\Finance\Support\VentilationCentre;
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Models\Caisse;
 use App\Models\CaisseTransfer;
 use App\Models\Employee;
 use App\Services\Context\CurrentContext;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -25,6 +28,7 @@ final class DemanderTransfertCaisse
     public function __construct(
         private readonly CurrentContext $context,
         private readonly VentilationCentre $ventilation,
+        private readonly ReservationTransferts $reservations,
     ) {}
 
     /**
@@ -97,29 +101,47 @@ final class DemanderTransfertCaisse
         // INTRANSFÉRABLE à vie, ce qui serait un bug bien pire que celui
         // corrigé ici. On ne bloque donc que ce qu'on sait appartenir à un
         // AUTRE centre — jamais ce qu'on ne sait pas rattacher.
-        if ($centreActif !== null) {
-            $source = Caisse::query()->findOrFail((int) $data['caisse_source_id']);
+        //
+        // ⚠ Et une demande RÉSERVE (11/09/2026) : le plafond déduit les
+        // transferts déjà « En attente » sur ce tiroir (ReservationTransferts),
+        // et sur « Tous les centres » — où rien n'est ventilé — le tiroir
+        // physique moins ce qui est réservé reste la borne. Lu sous verrou
+        // FOR UPDATE dans une transaction : deux demandes simultanées sont
+        // sérialisées, la seconde relit un plafond déjà diminué (§11).
+        return DB::transaction(function () use ($data, $requestedBy, $centreId, $centreActif): CaisseTransfer {
+            $source = Caisse::query()->whereKey((int) $data['caisse_source_id'])->lockForUpdate()->firstOrFail();
             $disponible = $this->ventilation->plafondTransfert($source, $centreActif);
 
             if ((float) $data['montant'] > $disponible) {
-                throw ValidationException::withMessages([
-                    'montant' => __(
+                $message = $centreActif !== null
+                    ? __(
                         'This center only holds :solde MAD in this till — the rest belongs to other centers.',
-                        ['solde' => number_format($disponible, 2, ',', ' ')],
-                    ),
-                ]);
-            }
-        }
+                        ['solde' => number_format(max(0.0, $disponible), 2, ',', ' ')],
+                    )
+                    : __(
+                        'The till only has :solde MAD available for a transfer.',
+                        ['solde' => number_format(max(0.0, $disponible), 2, ',', ' ')],
+                    );
 
-        return CaisseTransfer::create([
-            ...$data,
-            'reference' => ReferenceGenerator::make('TRF', 'caisse_transfers'),
-            'date_transfert' => now(),
-            'etablissement_id' => $centreId,
-            'solde_source_avant' => Caisse::query()->whereKey($data['caisse_source_id'])->value('solde'),
-            'solde_dest_avant' => Caisse::query()->whereKey($data['caisse_destination_id'])->value('solde'),
-            'statut' => CaisseTransfer::STATUT_EN_ATTENTE,
-            'requested_by' => $requestedBy->id,
-        ]);
+                $reserve = $this->reservations->enAttente($source->id);
+
+                if ($reserve > 0) {
+                    $message .= ' '.GardeSoldeCaisse::messageReserve((float) $source->solde, $reserve, $this->reservations->references($source->id));
+                }
+
+                throw ValidationException::withMessages(['montant' => $message]);
+            }
+
+            return CaisseTransfer::create([
+                ...$data,
+                'reference' => ReferenceGenerator::make('TRF', 'caisse_transfers'),
+                'date_transfert' => now(),
+                'etablissement_id' => $centreId,
+                'solde_source_avant' => $source->solde,
+                'solde_dest_avant' => Caisse::query()->whereKey($data['caisse_destination_id'])->value('solde'),
+                'statut' => CaisseTransfer::STATUT_EN_ATTENTE,
+                'requested_by' => $requestedBy->id,
+            ]);
+        });
     }
 }

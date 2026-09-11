@@ -106,6 +106,7 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
     {
         $sender = $this->userWith('cash-transfers.view', 'cash-transfers.create');
         $senderCaisse = $sender->employee->caisses()->first();
+        $senderCaisse->update(['solde' => 1000]);
         $receiver = $this->userWith('cash-transfers.view');
         $receiverCaisse = $receiver->employee->caisses()->first();
         $receiverCaisse->update(['solde' => 500]);
@@ -220,6 +221,7 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
     {
         $user = $this->userWith('cash-transfers.view', 'cash-transfers.create');
         $this->actingAs($user);
+        $user->employee->caisses()->first()->update(['solde' => 1000]);
         $ownCaisse = $user->employee->caisses()->first();
         $foreignCaisse = $this->caisse(9999);
         $destination = $this->caisse(500);
@@ -323,6 +325,7 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
     {
         $requester = $this->userWith('cash-transfers.view', 'cash-transfers.create');
         $this->actingAs($requester);
+        $requester->employee->caisses()->first()->update(['solde' => 1000]);
         $destination = $this->caisse(500);
         $this->post(route('backoffice.caisse-transfers.store'), [
             'caisse_destination_id' => $destination->id, 'montant' => '100',
@@ -534,6 +537,7 @@ final class CaisseTransfersInertiaCrudTest extends TestCase
         $otherCentre = Etablissement::factory()->create();
         $requester = $this->userWith('cash-transfers.view', 'cash-transfers.create');
         $this->actingAs($requester);
+        $requester->employee->caisses()->first()->update(['solde' => 1000]);
         $destination = $this->caisse(500);
         $this->post(route('backoffice.caisse-transfers.store'), [
             'caisse_destination_id' => $destination->id, 'montant' => '300',

@@ -7,6 +7,7 @@ namespace App\Domain\Finance\Queries;
 use App\Models\Caisse;
 use App\Models\CaisseTransfer;
 use App\Models\User;
+use App\Domain\Finance\Support\VentilationCentre;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
 use App\Support\Access\DormantTill;
@@ -32,6 +33,7 @@ final class GetCaisseTransfersList
     public function __construct(
         private readonly CenterAccessService $centerAccess,
         private readonly CurrentContext $context,
+        private readonly VentilationCentre $ventilation,
     ) {}
 
     public const TYPE_ENVOYE = 'envoye';
@@ -134,10 +136,11 @@ final class GetCaisseTransfersList
         return [
             'data' => $transfers,
             'montantTotal' => number_format((float) $montantTotal, 2, '.', ''),
-            // The viewer's OWN till balance — what they can actually transfer
-            // right now, shown beside the filtered transfer total so the two
-            // answer different questions: « how much do I hold » next to
-            // « how much has moved in this view » (07/09/2026).
+            // The viewer's OWN till — what they can actually transfer right
+            // now from the ACTIVE centre (per-centre share minus pending
+            // reservations, see soldeDeMaCaisse), shown beside the filtered
+            // transfer total so the two answer different questions: « how
+            // much can I send » next to « how much has moved in this view ».
             //
             // Deliberately their own till and nobody else's: a colleague's
             // balance is not this screen's business, and the figure exists so
@@ -260,7 +263,17 @@ final class GetCaisseTransfersList
     {
         $till = $user->employee?->till()->first();
 
-        return $till === null ? null : number_format((float) $till->solde, 2, '.', '');
+        // Ce que le caissier peut RÉELLEMENT transférer depuis le centre
+        // actif (11/09/2026) : la part du centre, moins ce que des transferts
+        // « En attente » ont déjà promis — le même plafond que le modal et que
+        // DemanderTransfertCaisse (VentilationCentre::plafondTransfert). Le
+        // solde entier du tiroir, lui, est celui d'un autre centre pour
+        // partie : l'afficher ici faisait lire à un caissier de Marrakech
+        // l'argent de Kénitra comme le sien. Sur « Tous les centres » rien
+        // n'est ventilé : tiroir entier moins le réservé.
+        return $till === null
+            ? null
+            : number_format($this->ventilation->plafondTransfert($till, $this->context->etablissementId()), 2, '.', '');
     }
 
     /**

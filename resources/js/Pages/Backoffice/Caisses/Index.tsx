@@ -158,6 +158,19 @@ function JournalPanel({ scope, data, centerLocked }: { scope: 'mine' | 'all'; da
                         </div>
                     </div>
                 </div>
+                <div className="col-md-6 col-xl-3">
+                    <div className="card bg-primary-transparent border border-primary">
+                        <div className="card-body d-flex align-items-center">
+                            <span className="avatar avatar-md bg-primary rounded-circle me-3 d-inline-flex align-items-center justify-content-center">
+                                <i className="ti ti-currency-dollar text-white fs-20" />
+                            </span>
+                            <div>
+                                <p className="mb-0 text-muted">Solde espèces</p>
+                                <h5 className="mb-0 text-primary">{Number(journal.solde).toFixed(2)} DH</h5>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 {/* ⚠ Un transfert VALIDÉ bouge le solde autant qu'un
                     encaissement : sans cette carte, « Encaissements 800 /
                     Dépenses 1 000 » surplombait un solde de 69 440 DH sans
@@ -175,19 +188,6 @@ function JournalPanel({ scope, data, centerLocked }: { scope: 'mine' | 'all'; da
                                     {Number(journal.totalTransferts) > 0 ? '+' : ''}
                                     {Number(journal.totalTransferts).toFixed(2)} DH
                                 </h5>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div className="col-md-6 col-xl-3">
-                    <div className="card">
-                        <div className="card-body d-flex align-items-center">
-                            <span className="avatar avatar-md bg-primary-transparent rounded-circle me-3 d-inline-flex align-items-center justify-content-center">
-                                <i className="ti ti-currency-dollar text-primary fs-20" />
-                            </span>
-                            <div>
-                                <p className="mb-0 text-muted">Solde espèces</p>
-                                <h5 className="mb-0 text-primary">{Number(journal.solde).toFixed(2)} DH</h5>
                             </div>
                         </div>
                     </div>
@@ -649,7 +649,7 @@ export default function CaissesIndex({
                         {transfersSoldeCaisse !== null && (
                             <span className="fw-semibold">
                                 <i className="ti ti-wallet me-1 text-success" />
-                                Ma caisse : {Number(transfersSoldeCaisse).toFixed(2)} DH
+                                Ma caisse (transférable) : {Number(transfersSoldeCaisse).toFixed(2)} DH
                             </span>
                         )}
                         <span className="fw-semibold">

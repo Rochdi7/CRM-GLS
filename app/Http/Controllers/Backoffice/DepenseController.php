@@ -149,6 +149,15 @@ final class DepenseController extends Controller
             // create/edit modal still offers every type.
             'paiementProfTypeId' => $user->can('expenses.view') ? $getDepensesList->paiementProfTypeId() : null,
             'groups' => $user->can('expenses.view') ? $getDepensesList->groupOptions($user) : [],
+            // Case « Afficher les groupes des années précédentes » du modal
+            // « Paiement prof » : un enseignant est payé APRÈS la fin de la
+            // formation, souvent une fois l'année scolaire tournée. Liste
+            // servie à part (jamais fondue dans `groups`) pour que l'écran
+            // dise clairement quand il sort de l'année active — et elle
+            // n'ouvre QUE l'année : même centre, années clôturées exclues.
+            'groupsAnneesPrecedentes' => $user->can('expenses.view')
+                ? $getDepensesList->groupOptionsAnneesPrecedentes($user)
+                : [],
             'methodes' => Depense::METHODES,
             'justificatifMimes' => self::JUSTIFICATIF_MIMES,
             'justificatifMaxKb' => self::JUSTIFICATIF_MAX_KB,
@@ -229,7 +238,7 @@ final class DepenseController extends Controller
         // the ONLY type that carries a group at all: PaiementProfRules makes
         // group_id required for it and prohibited for every other type.
         if (($request->validated('group_id') ?? null) !== null) {
-            $this->assertGroupInContext($request, Group::findOrFail((int) $request->validated('group_id')));
+            $this->assertPaiementProfGroupInContext($request, Group::findOrFail((int) $request->validated('group_id')));
         }
 
         // A dépense is ALWAYS debited from the acting employee's own physical
@@ -348,6 +357,45 @@ final class DepenseController extends Controller
     }
 
     /**
+     * ⚠ Un « Paiement prof » peut viser un groupe d'une année PRÉCÉDENTE —
+     * jamais un autre centre (11/09/2026).
+     *
+     * Un enseignant est réglé APRÈS la prestation : un groupe terminé en
+     * juin se paie en septembre, quand le sélecteur du haut est déjà passé
+     * à la nouvelle année. Le garde générique refusait ce groupe (422), si
+     * bien que le paiement se saisissait sans groupe — hors de tout
+     * récapitulatif par groupe — ou sur un homonyme de l'année en cours.
+     * C'est la MÊME exception assumée que « Changement de groupe » (§11) :
+     * la moitié ANNÉE du garde tombe, `$anneeId: null`, et rien d'autre.
+     *
+     * Ce qui NE tombe pas, et ne doit jamais tomber :
+     *  - la portée centre de l'utilisateur (403) et le centre actif (422) —
+     *    une dépense imputée au groupe d'un autre centre déplacerait de la
+     *    charge d'un établissement à l'autre ;
+     *  - le verrou « année clôturée », que `assertRecordInContext` applique
+     *    à l'année ACTIVE comme à celle du groupe : une année close
+     *    n'accepte aucune écriture, pour personne (§11). Le read-model
+     *    exclut déjà ces groupes de la liste, mais l'id arrive du
+     *    navigateur : c'est ici qu'il est refusé, jamais seulement à
+     *    l'affichage.
+     */
+    private function assertPaiementProfGroupInContext(Request $request, Group $group): void
+    {
+        $this->assertRecordInContext(
+            $request,
+            'group_id',
+            $group->etablissement_id,
+            null,
+            __('This group belongs to another centre than the active one.'),
+            '',
+        );
+
+        // L'année du groupe est délibérément hors du contrôle de contexte
+        // ci-dessus, mais elle reste soumise au verrou de clôture.
+        $this->assertAnneeNotCloturee('group_id', $group->annee_scolaire_id);
+    }
+
+    /**
      * The Employee record behind the acting user — every approval decision is
      * attributed to a person, so a user with no employee row cannot decide.
      */
@@ -411,7 +459,7 @@ final class DepenseController extends Controller
         $this->assertContextAnneeOuverte('type_depense_id');
 
         if (($request->validated('group_id') ?? null) !== null) {
-            $this->assertGroupInContext($request, Group::findOrFail((int) $request->validated('group_id')));
+            $this->assertPaiementProfGroupInContext($request, Group::findOrFail((int) $request->validated('group_id')));
         }
 
         $payload = collect($request->validated())->except(['justificatifs'])->all();

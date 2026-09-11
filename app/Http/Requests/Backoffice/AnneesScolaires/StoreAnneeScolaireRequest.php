@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Backoffice\AnneesScolaires;
 
+use App\Http\Requests\Backoffice\AnneesScolaires\Concerns\CouvertureAnneesRules;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 
 final class StoreAnneeScolaireRequest extends FormRequest
 {
+    use CouvertureAnneesRules;
+
     public function authorize(): bool
     {
         return true;
@@ -26,5 +30,10 @@ final class StoreAnneeScolaireRequest extends FormRequest
             'inscription_ouverte' => ['sometimes', 'boolean'],
             'cloturee' => ['sometimes', 'boolean'],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(fn (Validator $v) => $this->validerCouvertureAnnees($v));
     }
 }

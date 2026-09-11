@@ -1722,10 +1722,11 @@ export interface CaissesPageProps {
     /** Montant summed over the WHOLE filtered set of transfers, not the visible page. */
     transfersMontantTotal: MoneyDisplay;
     /**
-     * The viewer's OWN till balance — what they can actually transfer right
-     * now. Shown beside the transfer total because the two answer different
-     * questions: « how much do I hold » vs « how much has moved in this
-     * view ». Null when the account has no till.
+     * What the viewer can actually transfer right now from the ACTIVE centre:
+     * their own till's share of that centre minus the amount already reserved
+     * by « En attente » transfers (VentilationCentre::plafondTransfert — the
+     * same ceiling the modal and the server use). Null when the account has
+     * no till.
      */
     transfersSoldeCaisse: MoneyDisplay | null;
     /**
@@ -2163,6 +2164,12 @@ export interface DepensesPageProps {
     /** id of the "Paiement prof" type — filtered out of the Dépenses tab's Type filter. */
     paiementProfTypeId: number | null;
     groups: FinanceOption[];
+    /**
+     * Groupes des années PRÉCÉDENTES — affichés dans le modal « Paiement
+     * prof » quand la case est cochée. Même centre, années clôturées
+     * exclues ; le `nom` porte déjà l'année (« Ilyass 19H — 2024/2025 »).
+     */
+    groupsAnneesPrecedentes: FinanceOption[];
     methodes: string[];
     justificatifMimes: string[];
     justificatifMaxKb: number;

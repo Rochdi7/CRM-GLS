@@ -220,6 +220,55 @@ final class GetDepensesList
             ->map(fn (Group $g): array => ['id' => $g->id, 'nom' => $g->nom]);
     }
 
+    /**
+     * Les groupes des années PRÉCÉDENTES, pour la case « Afficher les
+     * groupes des années précédentes » du modal « Paiement prof »
+     * (11/09/2026). Un enseignant est réglé APRÈS coup : la prestation
+     * d'un groupe terminé en juin se paie en septembre, quand le sélecteur
+     * du haut est déjà passé à la nouvelle année. Sans cette liste le
+     * paiement se saisissait sans groupe — donc hors de tout récapitulatif
+     * par groupe — ou pire, sur un homonyme de l'année en cours.
+     *
+     * Deux bornes que cette liste ne relâche JAMAIS :
+     *  - le CENTRE reste celui du contexte actif et de la portée de
+     *    l'utilisateur (`scopeAccessibleCenters` + `scopeToActiveCenter`) —
+     *    c'est l'année seule qui s'ouvre, jamais le centre ;
+     *  - une année CLÔTURÉE est exclue : aucune écriture n'y est acceptée
+     *    (`AssertsContextScope::assertAnneeNotCloturee`), donc l'offrir ici
+     *    ferait proposer un choix que le serveur refuse (§5 : un
+     *    read-model ne promet jamais ce que l'action interdit).
+     *
+     * Le libellé PORTE l'année (« Ilyass 19H — 2024/2025 ») : deux groupes
+     * homonymes d'années différentes sont indiscernables sans elle, et
+     * c'est précisément l'erreur que la case ouvre la porte à commettre.
+     *
+     * @return Collection<int, array{id:int, nom:string}>
+     */
+    public function groupOptionsAnneesPrecedentes(User $user): Collection
+    {
+        $anneeActive = $this->context->anneeScolaireId();
+
+        if ($anneeActive === null) {
+            return collect();
+        }
+
+        return Group::query()
+            ->with('anneeScolaire')
+            ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+            ->tap(fn ($q) => $this->scopeToActiveCenter($q))
+            ->where('annee_scolaire_id', '!=', $anneeActive)
+            ->whereHas('anneeScolaire', fn ($q) => $q->ouvertes())
+            ->orderByDesc('annee_scolaire_id')
+            ->orderBy('nom')
+            ->get()
+            ->map(fn (Group $g): array => [
+                'id' => $g->id,
+                'nom' => $g->anneeScolaire !== null
+                    ? $g->nom.' — '.$g->anneeScolaire->nom
+                    : $g->nom,
+            ]);
+    }
+
     /** id of the seeded "Paiement prof" type, or null when it isn't seeded. */
     /**
      * La phrase lisible de l'annulation, prise dans la dernière ligne

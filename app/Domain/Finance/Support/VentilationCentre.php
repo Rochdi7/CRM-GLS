@@ -44,6 +44,10 @@ use Illuminate\Database\Eloquent\Builder;
  */
 final class VentilationCentre
 {
+    public function __construct(
+        private readonly ReservationTransferts $reservations,
+    ) {}
+
     /**
      * Part du centre dans le solde d'une caisse.
      *
@@ -87,21 +91,34 @@ final class VentilationCentre
      */
     public function plafondTransfert(Caisse $caisse, ?int $centreId): float
     {
+        // ⚠ Un transfert « En attente » a déjà PROMIS son montant (11/09/2026,
+        // ReservationTransferts) : il sort du plafond, sinon deux demandes
+        // successives engagent deux fois le même argent et la seconde
+        // validation trouve un tiroir vide. Le plafond ne dépasse JAMAIS
+        // `solde − réservé` : c'est ce que le tiroir contient physiquement,
+        // et une part ventilée peut le dépasser quand une autre est négative.
+        $physique = round((float) $caisse->solde - $this->reservations->enAttente($caisse->id), 2);
+
         if ($centreId === null) {
-            return (float) $caisse->solde;
+            return $physique;
         }
+
+        $partNette = fn (int $id): float => round(
+            $this->soldeDuCentre($caisse, $id) - $this->reservations->enAttente($caisse->id, $id),
+            2,
+        );
 
         $reserveAilleurs = 0.0;
 
         foreach (Etablissement::query()->whereKeyNot($centreId)->pluck('id') as $autreId) {
             // Une part négative (plus sorti qu'entré sur un centre) ne réserve
             // rien : max(0, …).
-            $reserveAilleurs += max(0.0, $this->soldeDuCentre($caisse, (int) $autreId));
+            $reserveAilleurs += max(0.0, $partNette((int) $autreId));
         }
 
-        return round(max(
-            $this->soldeDuCentre($caisse, $centreId),
-            (float) $caisse->solde - $reserveAilleurs,
+        return round(min(
+            $physique,
+            max($partNette($centreId), $physique - $reserveAilleurs),
         ), 2);
     }
 
