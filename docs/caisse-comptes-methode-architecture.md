@@ -323,3 +323,60 @@ immuable et déjà auditée.
    (motif « Reclassement par méthode de paiement »). Rejouable sans effet.
 5. Vérifier « Comptes de caisse » : Σ par centre = espèces + TPE + Chèque +
    Virement, et « Ma caisse » n'affiche plus que les espèces.
+
+---
+
+# `finance:auditer` — l'audit hebdomadaire des défauts de ventilation
+
+`caisse:verifier-coherence` garde les invariants **structurels** (compte ↔
+méthode, une seule caisse par employé, solde ↔ journal). Il ne voit pas les
+défauts d'**imputation** : ceux qui laissent `caisses.solde` parfaitement
+juste mais font mentir un écran.
+
+```bash
+php artisan finance:auditer            # lecture seule
+php artisan finance:auditer --strict   # exit 1 si un point à traiter (CI / cron)
+```
+
+## Les sept sections
+
+| # | Ce qu'elle cherche | Découverte par | Remède |
+|---|---|---|---|
+| 1 | Part de centre **négative** | Ahmed Khadimerrahman, −1 800 DH sur Online | `transferts:imputer-centre` |
+| 2 | Somme des parts ≠ solde | 300 DH chez Rafik | **informatif** — petit écart = normal |
+| 3 | Transfert sans centre dont le repli **creuse une part** | idem §1 | `transferts:imputer-centre` |
+| 4 | Avances importées dont le fichier nomme un frais | SOKAYNA AIT SI HAMMOU | `paiements:reconcilier` |
+| 5 | Frais à 0 DH avec initial > 0 | Frais de Décembre, mis à 0 le 01/09 | vérifier au journal, puis décider |
+| 6 | Trop-perçu ≥ 500 DH | — | **indicatif, non compté** |
+| 7 | Agent non-encaisseur sur saisies récentes | Aya Figar, Oumnya Salim | corriger la **catégorie** de la fiche employé |
+
+## ⚠ Les critères ont survécu à trois faux positifs (11/09/2026)
+
+La première version de cet audit criait au loup sur des données saines. Un
+audit qu'on apprend à ignorer est pire que pas d'audit du tout — d'où les
+critères actuels, plus étroits :
+
+- **« La caisse sert deux centres » ne prouve rien.** Hafssa Elkhattabi
+  encaissait 500 DH pour Online contre 168 100 DH pour Rabat : ses trois
+  transferts sans centre se repliaient sur Rabat, et c'était exact.
+- **« Elle a transféré plus qu'elle n'a encaissé » ne prouve rien non
+  plus.** Maria Nezha Jalloul a reversé 69 440 DH pour 54 400 DH encaissés
+  — les 15 040 DH venaient des remises d'Ikram Boussila, qu'elle
+  centralise. Tout se réconciliait au dirham.
+- **Un petit écart parts/solde est normal.** 300 DH sur 17,6 M DH, issus du
+  reclassement par méthode du 28/08, antérieur à la dimension centre sur le
+  ledger (§11 : repli en lecture, jamais de backfill).
+
+Le seul critère qui **prouve** une mauvaise imputation est donc une **part
+de centre négative** : de l'argent est sorti d'un centre qui ne l'avait pas.
+
+## Ce que l'audit ne fait jamais
+
+Aucune écriture, dans aucune section — un test le vérifie. Chaque ligne
+signalée nomme sa commande de réparation, toutes en dry-run par défaut.
+
+⚠ La **section 6 n'est pas une liste de réparations** : une avance
+volontaire y apparaît exactement comme un double encaissement. Elle est un
+point de départ pour une vérification humaine, et n'entre pas dans le total.
+
+Tests : `tests/Feature/Backoffice/Finance/AuditFinanceTest.php`.
