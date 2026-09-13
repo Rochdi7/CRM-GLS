@@ -49,14 +49,51 @@ export function pageWindow(current: number, last: number, sides: number): Array<
     return pages;
 }
 
-/** Any link URL of the paginator, with its `page` query param replaced. */
+/**
+ * The paginator's OWN page query-string key — `page` for most lists, but a
+ * screen showing several paginated lists at once gives each one its own
+ * (`paginate($n, ['*'], 'pageValidation')`) so the tabs page independently.
+ *
+ * ⚠ Writing `page` there moves a DIFFERENT list and leaves this one exactly
+ * where it was: on « Gestion des dépenses » the Validation and Paiements
+ * prof pagers did strictly nothing — clicking « 2 » only appended `page=2`,
+ * which paginated the (hidden) Dépenses tab (reported 14/09/2026). The three
+ * lists of an import Result screen (`failed_page` / `skipped_page` /
+ * `unresolved_page`) were stuck on page 1 for the same reason.
+ *
+ * The key is READ BACK from the link URLs rather than passed as a prop, so a
+ * new multi-list page cannot forget it: it is the only query param that
+ * equals its own link's page number on EVERY numbered link (`perPage=10`
+ * matches the link labelled « 10 », never the others).
+ */
+export function pageNameOf(paginator: PaginatedData<unknown>): string {
+    const numbered = paginator.links.flatMap((l) =>
+        l.url !== null && /^\d+$/.test(l.label)
+            ? [{ params: new URL(l.url, window.location.origin).searchParams, label: l.label }]
+            : [],
+    );
+
+    if (numbered.length === 0) {
+        return 'page';
+    }
+
+    for (const key of Array.from(numbered[0].params.keys())) {
+        if (numbered.every((l) => l.params.get(key) === l.label)) {
+            return key;
+        }
+    }
+
+    return 'page';
+}
+
+/** Any link URL of the paginator, with its own page query param replaced. */
 function urlForPage(paginator: PaginatedData<unknown>, page: number): string | null {
     const sample = paginator.links.find((l) => l.url)?.url;
     if (!sample) {
         return null;
     }
     const url = new URL(sample, window.location.origin);
-    url.searchParams.set('page', String(page));
+    url.searchParams.set(pageNameOf(paginator), String(page));
     return url.pathname + url.search;
 }
 
