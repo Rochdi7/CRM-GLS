@@ -15,6 +15,7 @@ use App\Observers\EtablissementObserver;
 use App\Services\Context\CurrentContext;
 use App\Support\Access\HiddenAccount;
 use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
@@ -161,6 +162,40 @@ class AppServiceProvider extends ServiceProvider
 
             return $user->hasRole(Role::SUPER_ADMIN) ? true : null;
         });
+
+        // ⚠ Un filtre EFFACÉ doit survivre au changement de page.
+        //
+        // `ConvertEmptyStringsToNull` (middleware global de Laravel) convertit
+        // `?dateFrom=` en NULL avant le contrôleur. `withQueryString()` range
+        // donc un null dans la query du paginateur, et `http_build_query()`
+        // OMET purement et simplement une valeur nulle — là où une chaîne vide
+        // aurait produit `dateFrom=`. Chaque lien de pagination perdait ainsi
+        // les filtres effacés, et la page 2 arrivait au serveur SANS eux.
+        //
+        // Conséquence sur tout écran qui distingue « jamais touché » (clé
+        // absente) de « effacé » (clé vide) — `$dateFilterEngaged`, §5
+        // « effacer un filtre ne peut qu'ÉLARGIR » : la fenêtre de l'année
+        // active se réarmait à la page 2. Signalé le 14/09/2026 sur
+        // « Validation des dépenses » : 48 lignes et 5 pages à la page 1,
+        // « Aucune dépense » et « Montant total : 0.00 MAD » à la page 2 —
+        // les lignes étant datées de l'année précédente, elles sortaient
+        // toutes de la fenêtre rearmée. Le total tombait à zéro LUI AUSSI,
+        // ce qu'un simple bug de pagination n'aurait jamais fait : c'est ce
+        // qui distingue les deux diagnostics.
+        //
+        // Corrigé ICI, au SEUL point par lequel passent les ~20 read-models
+        // qui appellent `withQueryString()` (dépenses, chèques,
+        // remboursements, mais aussi tout `search=`/`statutFilter=` effacé de
+        // n'importe quelle liste), plutôt que filtre par filtre : une liste
+        // future hérite du correctif sans avoir à y penser. On ne touche PAS
+        // au middleware global — les Form Requests comptent sur le null pour
+        // que `nullable` se comporte comme prévu ; seule la reconstruction du
+        // lien de pagination reprend la chaîne vide que le navigateur a
+        // réellement envoyée.
+        Paginator::queryStringResolver(fn (): array => array_map(
+            fn ($value) => $value === null ? '' : $value,
+            $this->app['request']->query(),
+        ));
 
         // Point the password-reset email at the Backoffice reset page.
         ResetPassword::createUrlUsing(
