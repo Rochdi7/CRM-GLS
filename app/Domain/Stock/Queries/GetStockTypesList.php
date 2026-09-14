@@ -21,7 +21,15 @@ final class GetStockTypesList
             // System types first, then custom ones alphabetically.
             ->orderByDesc('is_system')
             ->orderBy('nom')
-            ->paginate($perPage);
+            // ⚠ `withQueryString()` n'est pas cosmétique ici : cette liste est
+            // l'onglet « Types » de /backoffice/stock?tab=types. Sans lui les
+            // liens de pagination ne portent QUE `?page=N` — le `tab` tombe,
+            // la page 2 revient sur l'onglet « Articles », et l'utilisateur
+            // qui a simplement cliqué « 2 » se retrouve ailleurs : lu comme un
+            // rechargement de la page (signalé le 14/09/2026). Toute liste
+            // paginée doit le chaîner, sinon son pager efface le contexte.
+            ->paginate($perPage)
+            ->withQueryString();
 
         $types->through(fn (StockType $type): array => [
             'id' => $type->id,

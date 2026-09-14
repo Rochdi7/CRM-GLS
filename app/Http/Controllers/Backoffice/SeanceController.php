@@ -19,6 +19,7 @@ use App\Http\Requests\Backoffice\Attendance\UpdateSeanceRequest;
 use App\Models\Group;
 use App\Models\Presence;
 use App\Models\Seance;
+use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
 use Illuminate\Http\RedirectResponse;
@@ -282,6 +283,28 @@ final class SeanceController extends Controller
             ? ($request->integer('enseignant') ?: null)
             : $seance?->enseignant_id;
 
+        // ⚠ La séance AFFICHÉE doit toujours correspondre aux filtres, sinon
+        // l'écran se contredit (signalé le 14/09/2026, capture à l'appui).
+        //
+        // Sur `show()` la séance vient du paramètre de ROUTE et n'était jamais
+        // ré-résolue : changer « Employé » rechargeait la même URL avec un
+        // `?enseignant=` différent, le sélecteur était reconstruit par
+        // `seancesFor($filterDate, $filterEnseignant)` — donc SANS la séance
+        // chargée — et la page affichait « Choisir une séance… » au-dessus de
+        // l'appel d'un AUTRE enseignant. La liste d'étudiants ne changeait
+        // pas, puisque GetSeanceDetails la construit depuis le groupe de la
+        // séance restée en place.
+        //
+        // On ré-résout donc vers la première séance qui satisfait les filtres
+        // (même tri que le sélecteur : heure_debut puis id, pour que « la
+        // séance affichée » soit toujours la première option proposée).
+        // `presences()` faisait déjà ce travail ; la règle vit désormais ICI,
+        // à l'endroit partagé par les DEUX entrées, pour qu'elles ne puissent
+        // plus diverger.
+        if ($seance !== null && ! $this->seanceMatchesFilters($seance, $filterDate, $filterEnseignant)) {
+            $seance = $this->premiereSeancePour($user, $filterDate, $filterEnseignant);
+        }
+
         // "Séances" tab — same list/filters as Index, scoped to this page so
         // switching tabs never navigates away from the fiche de présence.
         $listFilters = [
@@ -477,5 +500,54 @@ final class SeanceController extends Controller
 
         return redirect()->back()
             ->with('success', __('Session cancelled.'));
+    }
+
+    /**
+     * La séance chargée satisfait-elle les filtres Date / Employé ?
+     *
+     * « Aucun enseignant choisi » (null) n'exclut rien : c'est le cas où
+     * l'utilisateur regarde toutes les séances de la journée.
+     */
+    private function seanceMatchesFilters(Seance $seance, string $date, ?int $enseignantId): bool
+    {
+        if ($seance->date_seance->toDateString() !== $date) {
+            return false;
+        }
+
+        return $enseignantId === null || $seance->enseignant_id === $enseignantId;
+    }
+
+    /**
+     * La première séance correspondant aux filtres, dans le MÊME ordre que
+     * le sélecteur (`GetSeanceFormOptions::seancesFor`) — sans quoi la séance
+     * affichée ne serait pas celle que l'utilisateur voit en tête de liste.
+     *
+     * Mêmes bornes que partout ailleurs : portée de l'utilisateur, centre
+     * actif, année active (§11), puis la policy `view` — une ré-résolution ne
+     * doit jamais ouvrir une séance que l'utilisateur n'aurait pas le droit
+     * d'ouvrir en tapant son URL.
+     */
+    private function premiereSeancePour(User $user, string $date, ?int $enseignantId): ?Seance
+    {
+        $centerAccess = app(CenterAccessService::class);
+        $context = app(CurrentContext::class);
+
+        $seance = Seance::query()
+            ->tap(fn ($q) => $centerAccess->scopeAccessibleCenters($q, $user))
+            ->tap(function ($q) use ($context): void {
+                $etablissementId = $context->etablissementId();
+
+                if ($etablissementId !== null) {
+                    $q->where(fn ($sub) => $sub->whereNull('etablissement_id')->orWhere('etablissement_id', $etablissementId));
+                }
+            })
+            ->when($context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
+            ->whereDate('date_seance', $date)
+            ->when($enseignantId, fn ($q, $id) => $q->where('enseignant_id', $id))
+            ->orderBy('heure_debut')
+            ->orderBy('id')
+            ->first();
+
+        return $seance !== null && $user->can('view', $seance) ? $seance : null;
     }
 }

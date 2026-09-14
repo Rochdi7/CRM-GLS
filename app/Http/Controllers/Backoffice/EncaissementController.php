@@ -170,6 +170,19 @@ final class EncaissementController extends Controller
             $soldeFilter,
             $groupFilter,
             $fraisFilter,
+            // « Jamais touché » vs « effacé » : seul le request les
+            // distingue, et la fenêtre de l'année active ne doit pas se
+            // réarmer dans le second cas (§5 : effacer un filtre ne peut
+            // qu'ÉLARGIR).
+            //
+            // ⚠ Ici le signal est le marqueur « - », PAS `has()` comme sur
+            // DepenseController / ChequeController. Sur cet écran une clé
+            // présente mais VIDE (`?dateFrom=&dateTo=`) reste un cas où le
+            // cloisonnement par année doit s'appliquer — `has()` y répond
+            // vrai et supprimerait le cloisonnement de toute la liste. Seul
+            // « - », qu'écrit `reload()` pour une date effacée à la main,
+            // signifie réellement « l'utilisateur a vidé ce champ ».
+            $request->query('dateFrom') === '-' || $request->query('dateTo') === '-',
         );
 
         return Inertia::render('Backoffice/Encaissements/Index', [

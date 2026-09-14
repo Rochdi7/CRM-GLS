@@ -36,7 +36,12 @@ final class GetGroupsHistorique
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
             ->orderByDesc('archived_at')
-            ->paginate($perPage);
+            // Cette page n'expose aucun filtre aujourd'hui, mais le pager doit
+            // reporter la query string comme partout ailleurs : le jour où un
+            // filtre s'y ajoute, l'oubli se paierait par une page 2 qui
+            // l'efface (14/09/2026).
+            ->paginate($perPage)
+            ->withQueryString();
 
         $historiques->through(fn (GroupHistorique $historique): array => [
             'id' => $historique->id,

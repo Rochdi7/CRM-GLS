@@ -29,7 +29,23 @@ final class RecouvrementController extends Controller
         // canonical URL carrying it explicitly. Every later request reads
         // the literal values it sends — otherwise clearing the dates then
         // paginating re-applied the default (26/08/2026).
-        if ($request->query() === []) {
+        //
+        // ⚠ Only a TRULY bare visit redirects, never a partial reload driven
+        // by the page itself. `useFilterReset` sends every key back at '',
+        // and `router.get` omits empty strings, so « effacer tous les
+        // filtres » arrived here with NO query string at all —
+        // indistinguable d'une première visite. Le contrôleur redirigeait
+        // donc en réinjectant `subMonth()`/`now()` : effacer un filtre
+        // RÉTRÉCISSAIT le résultat, ce que §5 interdit.
+        //
+        // C'est la régression déjà corrigée sur Encaissements le 27/08/2026 ;
+        // cet écran-là s'en protège AUSSI avec le marqueur « - », que
+        // Recouvrement n'a pas — l'en-tête partiel est donc sa seule borne.
+        // `X-Inertia-Partial-Data` marque un rechargement piloté par la page,
+        // qui envoie toujours le jeu de filtres COMPLET : une clé absente y
+        // signifie « effacée », jamais « jamais posée ».
+        // Tests : tests/Feature/Backoffice/Finance/RecouvrementDateWindowTest.php
+        if ($request->query() === [] && ! $request->hasHeader('X-Inertia-Partial-Data')) {
             return redirect()->route('backoffice.recouvrement.index', [
                 'dateFrom' => now()->subMonth()->toDateString(),
                 'dateTo' => now()->toDateString(),

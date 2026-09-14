@@ -222,6 +222,12 @@ final class CaisseController extends Controller
             (string) $request->string('dateFrom'),
             (string) $request->string('dateTo'),
             (int) $request->integer('page', 1),
+            // « Jamais touché » (aucune clé) vs « effacé » (clé vide) : seul
+            // le request peut les distinguer, et la fenêtre de l'année active
+            // ne doit pas se réarmer dans le second cas (§5 : effacer un
+            // filtre ne peut qu'ÉLARGIR). Même drapeau que DepenseController
+            // et ChequeController.
+            $request->has('dateFrom') || $request->has('dateTo'),
         );
 
         return response()->json($journal);

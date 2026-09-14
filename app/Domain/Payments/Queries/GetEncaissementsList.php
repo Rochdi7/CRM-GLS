@@ -67,6 +67,7 @@ final class GetEncaissementsList
         string $soldeFilter = '',
         string $groupFilter = '',
         string $fraisFilter = '',
+        bool $dateFilterEngaged = false,
     ): array {
         $base = Encaissement::query()
             // What has been given back on this payment (Remboursement.
@@ -130,8 +131,28 @@ final class GetEncaissementsList
             // moment the date came off, because every remaining row was
             // either an avance dated outside the active year or a fee of the
             // previous one. A cleared filter must never REMOVE rows.
+            // ⚠ Décidé sur `$dateFilterEngaged` — « l'utilisateur a-t-il
+            // TOUCHÉ au filtre ? » — et non plus sur « les deux bornes
+            // sont-elles vides ? ». Keyé sur les bornes, la fenêtre se
+            // réarmait au moment où la DERNIÈRE date était effacée : une
+            // ligne rattachée à un frais d'une année antérieure, que
+            // l'utilisateur avait fait apparaître avec « Date de début »,
+            // disparaissait dès qu'il vidait le champ. L'exemption par ligne
+            // des avances (ci-dessous) masquait la moitié des cas, jamais
+            // celui-là. §5 : effacer un filtre ne peut qu'ÉLARGIR.
+            //
+            // Le contrôleur seul distingue « jamais touché » de « effacé » :
+            // sur cet écran la page envoie « - » pour une date vidée (le
+            // marqueur de `filterValue()`), donc la CLÉ est présente ; une
+            // requête qui n'en porte aucune est un lien qui les a perdues
+            // (un `?page=2` périmé, un rechargement dur), cas où la fenêtre
+            // de l'année reste le repli voulu — la redirection canonique
+            // garantissant qu'une vraie première visite arrive AVEC ses dates.
+            // Même drapeau que GetDepensesList / GetChequesList.
+            // Tests : tests/Feature/Backoffice/Finance/EncaissementsDateWindowTest.php
             ->when(
                 $this->context->anneeScolaire()
+                    && ! $dateFilterEngaged
                     && ! self::isIsoDate($dateFrom)
                     && ! self::isIsoDate($dateTo),
                 function ($q): void {

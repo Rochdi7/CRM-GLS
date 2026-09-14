@@ -362,6 +362,38 @@ export default function CaissesIndex({
         initialGlobaleFilters ?? { globaleDateFrom: '', globaleDateTo: '' },
     );
 
+    // ⚠ Ces trois états sont des MIROIRS de props réémises par le serveur à
+    // chaque visite (CaisseController@index). `useState(prop)` n'est évalué
+    // qu'au MONTAGE : sans les resynchronisations ci-dessous, la barre de
+    // filtres continue d'afficher les valeurs du contexte PRÉCÉDENT après un
+    // changement de centre/année (le sélecteur poste sur
+    // backoffice.context.update puis `back()`, ce qu'Inertia rend avec des
+    // props fraîches sans démonter le composant). Le tableau se recharge,
+    // pas la barre : l'écran se contredit lui-même.
+    //
+    // C'est exactement le correctif déjà appliqué au cache `journal` de
+    // JournalPanel (signalé le 09/09/2026) ; il manquait aux trois miroirs de
+    // filtres. On se cale sur la PROP, jamais sur un défaut : remettre les
+    // filtres à vide ici les réinitialiserait comme effet de bord, ce que
+    // §5 interdit — seul le bouton « Réinitialiser les filtres » les efface.
+    useEffect(() => {
+        if (initialTransferFilters) {
+            setTransferFilters(initialTransferFilters);
+        }
+    }, [initialTransferFilters]);
+
+    useEffect(() => {
+        if (initialCompteFilters) {
+            setCompteFilters(initialCompteFilters);
+        }
+    }, [initialCompteFilters]);
+
+    useEffect(() => {
+        if (initialGlobaleFilters) {
+            setGlobaleFilters(initialGlobaleFilters);
+        }
+    }, [initialGlobaleFilters]);
+
     // Client-side permission checks — UI convenience only (hide affordances
     // the server would refuse anyway); real enforcement stays in the
     // policies/controllers (CLAUDE.md §5/§16).
@@ -440,7 +472,7 @@ export default function CaissesIndex({
     function reloadGlobale(next: Partial<typeof globaleFilters>) {
         const merged = { ...globaleFilters, ...next };
         setGlobaleFilters(merged);
-        router.get('/backoffice/caisses', { tab: 'globale', ...merged }, {
+        router.get('/backoffice/caisses', { tab: 'globale', ...merged, page: undefined }, {
             preserveState: true,
             preserveScroll: true,
             replace: true,

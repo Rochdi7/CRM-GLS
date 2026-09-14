@@ -71,6 +71,7 @@ final class GetCaisseJournal
         string $dateFrom,
         string $dateTo,
         int $page,
+        bool $dateFilterEngaged = false,
     ): array {
         $scope = $scope === 'all' ? 'all' : 'mine';
 
@@ -80,7 +81,22 @@ final class GetCaisseJournal
         // (totalEncaissements/totalDepenses/totalRemboursements/solde) stay
         // all-time on purpose: they must keep reconciling with the till's
         // running balance, which spans years.
-        if ($dateFrom === '' && $dateTo === '' && ($range = $this->context->anneeDateRange()) !== null) {
+        //
+        // ⚠ La fenêtre est décidée sur `$dateFilterEngaged` — « l'utilisateur
+        // a-t-il TOUCHÉ au filtre ? » — jamais sur « les deux bornes sont-elles
+        // vides ? ». Vider les deux champs à la main envoie '' + '', ce que la
+        // condition précédente confondait avec « jamais touché » : l'année
+        // active se réarmait en silence et les mouvements des années
+        // antérieures disparaissaient. Effacer un filtre ne peut qu'ÉLARGIR
+        // (§5) — c'est le même défaut que celui corrigé le 14/09/2026 sur
+        // Dépenses / Chèques / Remboursements, qui reçoivent tous ce drapeau
+        // de leur contrôleur.
+        //
+        // Cet écran ne pouvait PAS être couvert par le correctif
+        // `Paginator::queryStringResolver` : c'est un endpoint JSON qui
+        // pagine sur un entier `page` explicite, sans `withQueryString()`.
+        // Tests : tests/Feature/Backoffice/Finance/JournalDateWindowTest.php
+        if (! $dateFilterEngaged && ($range = $this->context->anneeDateRange()) !== null) {
             [$dateFrom, $dateTo] = $range;
         }
 

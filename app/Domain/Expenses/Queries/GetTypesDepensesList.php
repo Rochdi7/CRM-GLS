@@ -21,7 +21,11 @@ final class GetTypesDepensesList
             // System types first, then custom ones alphabetically.
             ->orderByDesc('is_system')
             ->orderBy('nom')
-            ->paginate($perPage);
+            // Sans `withQueryString()` les liens ne portent que `?page=N` :
+            // la recherche saisie au-dessus du tableau disparaît à la page 2
+            // et la liste repart entière (14/09/2026).
+            ->paginate($perPage)
+            ->withQueryString();
 
         $types->through(fn (TypeDepense $type): array => [
             'id' => $type->id,

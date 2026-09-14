@@ -51,7 +51,11 @@ final class GetRolesList
                 });
             })
             ->orderBy('name')
-            ->paginate($perPage);
+            // Sans `withQueryString()` les liens ne portent que `?page=N` :
+            // la recherche disparaît à la page 2 et la liste repart entière
+            // (14/09/2026).
+            ->paginate($perPage)
+            ->withQueryString();
     }
 
     /**
