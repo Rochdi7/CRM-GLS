@@ -539,6 +539,9 @@ export default function InscriptionsIndex({
     // (PUT .../fees), independent processing/errors from the base-fields form.
     const feesForm = useForm<{ fee_lines: InscriptionFeeLine[] }>({ fee_lines: [] });
     const feesSaveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Lines edited in a numeric cell that has not been left yet — held here
+    // instead of being scheduled, see setEditingLine()'s COMMIT_ON_BLUR note.
+    const pendingFeesSave = useRef<InscriptionFeeLine[] | null>(null);
 
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.label }));
     const groupOptions: SelectOption[] = groups.map((g) => ({ value: g.id, label: g.label }));
@@ -911,11 +914,66 @@ export default function InscriptionsIndex({
         feesSaveTimeout.current = setTimeout(() => persistFees(lines), 600);
     }
 
+    /**
+     * ⚠ A NUMERIC cell is never auto-saved while it is being typed.
+     *
+     * The debounce fires 600 ms after the last keystroke, and on an amount
+     * field every intermediate keystroke is a COMPLETE, VALID number — not a
+     * half-finished one. Typing a 600 DH remise on a line that already
+     * received 600 DH walks through 6 → 60 → 600: the first two are fine, and
+     * « 6000 » (one digit too many, then corrected) prices the fee at 0, which
+     * the server correctly refuses as « un frais ne peut pas être fixé en
+     * dessous du montant déjà payé (600.00 DH) ». The user never asked for any
+     * of those values, yet the refusal latched on the banner and the whole
+     * table — one payload — stopped saving. Reported 16/09/2026 (« when i try
+     * to make remise i can't fix this bug »).
+     *
+     * So: text-ish cells (nom, note, échéance) keep the debounce, while
+     * montantInitial / remisePct / remiseMontant commit on BLUR — the moment
+     * the user has finished stating the number. `dirtyLines` holds the typed
+     * value meanwhile so the Montant/Reste columns still preview live.
+     */
+    const COMMIT_ON_BLUR: ReadonlySet<keyof InscriptionFeeLine> = new Set([
+        'montantInitial',
+        'remisePct',
+        'remiseMontant',
+    ]);
+
     function setEditingLine(index: number, field: keyof InscriptionFeeLine, value: string) {
         updateLine(feesForm.data.fee_lines, (next) => {
             feesForm.setData('fee_lines', next);
+
+            if (COMMIT_ON_BLUR.has(field)) {
+                // Cancel any save still pending from a previous cell: the
+                // table is one payload, so letting it fire mid-typing would
+                // submit this half-typed number anyway.
+                if (feesSaveTimeout.current) {
+                    clearTimeout(feesSaveTimeout.current);
+                    feesSaveTimeout.current = null;
+                }
+                pendingFeesSave.current = next;
+
+                return;
+            }
+
             scheduleFeesSave(next);
         }, index, field, value);
+    }
+
+    /**
+     * Commits a numeric cell once the user leaves it. Also used by the modal's
+     * own submit + close paths through flushFeesSave(), so a value typed and
+     * then immediately confirmed is never dropped.
+     */
+    function commitEditingLine() {
+        const pending = pendingFeesSave.current;
+
+        if (pending === null) {
+            return;
+        }
+
+        pendingFeesSave.current = null;
+        persistFees(pending);
     }
 
     /**
@@ -973,6 +1031,9 @@ export default function InscriptionsIndex({
         if (feesSaveTimeout.current) {
             clearTimeout(feesSaveTimeout.current);
         }
+        // …and the un-committed numeric cell too: committing it after the row
+        // is gone would resubmit the PRE-hide array and undo the hide.
+        pendingFeesSave.current = null;
 
         // fetch(), not router.post(): an Inertia visit re-runs the index
         // controller and rebuilds the entire page payload (paginated list +
@@ -1011,6 +1072,7 @@ export default function InscriptionsIndex({
         if (feesSaveTimeout.current) {
             clearTimeout(feesSaveTimeout.current);
         }
+        pendingFeesSave.current = null;
 
         // fetch() — see removeEditingLine(). The response carries the restored
         // line's full shape, so it is spliced straight back into the table
@@ -1093,10 +1155,18 @@ export default function InscriptionsIndex({
         // window would close the modal with the timer still pending, so the
         // last edit to an amount/discount would be thrown away — flush it
         // now, before anything else runs.
+        //
+        // A NUMERIC cell has no timer at all (COMMIT_ON_BLUR): pressing
+        // Enregistrer straight after typing an amount fires submit before the
+        // input's own blur, so its value would be dropped without the
+        // commitEditingLine() flush below.
         if (feesSaveTimeout.current) {
             clearTimeout(feesSaveTimeout.current);
             feesSaveTimeout.current = null;
+            pendingFeesSave.current = null;
             persistFees(feesForm.data.fee_lines);
+        } else {
+            commitEditingLine();
         }
 
         const options = {
@@ -2063,6 +2133,7 @@ export default function InscriptionsIndex({
                                                                         className={`form-control form-control-sm${montantError ? ' is-invalid' : ''}`}
                                                                         value={line.montantInitial}
                                                                         onChange={(event) => setEditingLine(index, 'montantInitial', event.target.value)}
+                                                                        onBlur={commitEditingLine}
                                                                     />
                                                                 </td>
                                                                 <td style={{ width: 210, minWidth: 210 }}>
@@ -2077,6 +2148,7 @@ export default function InscriptionsIndex({
                                                                             placeholder="%"
                                                                             value={line.remisePct}
                                                                             onChange={(event) => setEditingLine(index, 'remisePct', event.target.value)}
+                                                                            onBlur={commitEditingLine}
                                                                         />
                                                                         <span className="input-group-text">%</span>
                                                                         <input
@@ -2088,6 +2160,7 @@ export default function InscriptionsIndex({
                                                                             placeholder="DH"
                                                                             value={line.remiseMontant}
                                                                             onChange={(event) => setEditingLine(index, 'remiseMontant', event.target.value)}
+                                                                            onBlur={commitEditingLine}
                                                                         />
                                                                         <span className="input-group-text">DH</span>
                                                                     </div>
