@@ -154,14 +154,17 @@ final class MettreAJourFraisInscription
                             continue;
                         }
 
-                        // SOLDÉ = payé EXACTEMENT son prix (à 1 centime près).
-                        // Une ligne SUR-payée (600 DH sur un frais de 300,
-                        // doublon d'import) n'est pas « soldée » : c'est une
-                        // anomalie, et la remiser reste permis — le surplus
-                        // repart en avance comme partout ailleurs. Seule
-                        // l'égalité exacte décrit le dossier clos que cette
-                        // règle protège.
-                        $estSolde = abs($paye - $montantActuel) < 0.005;
+                        // SOLDÉ = il ne RESTE plus rien à payer, c'est-à-dire
+                        // payé >= prix — l'exact ET le sur-payé. Le critère
+                        // est la colonne « RESTE » à 0,00 que l'utilisateur a
+                        // sous les yeux, pas l'égalité parfaite : une ligne de
+                        // 300 DH ayant reçu 600 DH n'a plus rien à devoir, et
+                        // la remiser à 0 libérait 600 DH en avance sur un
+                        // frais que l'étudiant avait déjà entièrement réglé
+                        // (signalé le 16/09/2026 sur « Frais d'inscription
+                        // A1/A2/B1 »). Le sur-payé se corrige par un
+                        // remboursement, jamais en réécrivant le prix.
+                        $estSolde = $paye + 0.005 >= $montantActuel && $paye > 0.0;
 
                         if ($montant + 0.005 < $paye && $estSolde) {
                             throw ValidationException::withMessages([

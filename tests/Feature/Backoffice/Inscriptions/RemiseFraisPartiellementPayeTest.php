@@ -278,17 +278,38 @@ final class RemiseFraisPartiellementPayeTest extends TestCase
     }
 
     /**
-     * Une ligne SUR-payée n'est pas « soldée » : c'est une anomalie, et la
-     * remiser reste permis — le surplus repart en avance comme ailleurs.
+     * ⚠ Une ligne SUR-payée est soldée elle aussi : son RESTE est à 0,00.
+     * La remiser à 0 libérait 600 DH en avance sur un frais que l'étudiant
+     * avait déjà entièrement réglé (signalé le 16/09/2026). Le critère est la
+     * colonne « RESTE » que l'utilisateur a sous les yeux, pas l'égalité
+     * exacte entre payé et prix.
      */
-    public function test_an_overpaid_line_can_itself_be_discounted(): void
+    public function test_an_overpaid_line_refuses_a_discount_too(): void
     {
         [$inscription, $fee] = $this->inscriptionWithFee(300.0);
-        $this->pay($inscription, $fee, 600.0);
+        $encaissement = $this->pay($inscription, $fee, 600.0);
 
-        $this->putFee($inscription, $fee, ['montant_initial' => '300', 'remise_montant' => '100'])
-            ->assertSessionHasNoErrors();
+        $this->putFee($inscription, $fee, ['montant_initial' => '300', 'remise_montant' => '300'])
+            ->assertSessionHasErrors('fee_lines');
 
-        $this->assertSame('200.00', (string) $fee->fresh()->montant);
+        $this->assertSame('300.00', (string) $fee->fresh()->montant);
+        $this->assertSame($fee->id, $encaissement->fresh()->inscription_fee_id);
+    }
+
+    /**
+     * Le cas exact de la capture : remise de 300 DH sur un frais de 300 DH
+     * déjà couvert ⇒ 0,00 DH. Refusé, et AUCUNE avance n'est créée.
+     */
+    public function test_discounting_a_settled_fee_to_zero_releases_nothing(): void
+    {
+        [$inscription, $fee] = $this->inscriptionWithFee(300.0);
+        $encaissement = $this->pay($inscription, $fee, 600.0);
+
+        $this->putFee($inscription, $fee, ['montant_initial' => '300', 'remise_pct' => '100'])
+            ->assertSessionHasErrors('fee_lines');
+
+        // Rien n'a été libéré : l'argent est toujours affecté au frais.
+        $this->assertNotNull($encaissement->fresh()->inscription_fee_id);
+        $this->assertSame(600.0, $fee->fresh()->montantPaye());
     }
 }

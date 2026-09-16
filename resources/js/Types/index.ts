@@ -1485,6 +1485,15 @@ export interface InscriptionFeeLine {
     statut?: string;
     /** Server-computed, informational only on the edit table (amount already paid — drives "Reste à payer"). Absent on create-form lines. */
     paye?: string;
+    /**
+     * The montant as STORED (not the live-edited one). Lets the table tell a
+     * SETTLED line — reste already at 0, i.e. `paye >= montantEnregistre` —
+     * from one that still owes something, which is the single case where a
+     * remise is refused (MettreAJourFraisInscription). Judged on the saved
+     * price so typing in the discount box can't make the line look unsettled.
+     * Absent on create-form lines.
+     */
+    montantEnregistre?: string;
 }
 
 /** One hidden ("masqué") fee line on an existing inscription — read-only, restorable via inscriptions.fees.restore. */

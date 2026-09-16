@@ -186,6 +186,10 @@ final class InscriptionController extends Controller
                 // Informational only (never submitted back) — drives the
                 // "Reste à payer" column in the edit table.
                 'paye' => number_format((float) ($fee->paye_sum ?? 0), 2, '.', ''),
+                // Le prix ENREGISTRÉ : la table s'en sert pour savoir si
+                // la ligne est soldée (reste déjà à 0) et, dans ce cas,
+                // désactiver la remise — même critère que l'action.
+                'montantEnregistre' => number_format((float) $fee->montant, 2, '.', ''),
             ])->values(),
             // Hidden fees — feeds the edit modal's "Frais masqués" list, the
             // only place a hidden fee can be restored from.
@@ -286,6 +290,7 @@ final class InscriptionController extends Controller
                 'dateEcheance' => $fee->date_echeance?->toDateString() ?? '',
                 'statut' => $fee->statut,
                 'paye' => number_format($fee->montantPaye(), 2, '.', ''),
+                'montantEnregistre' => number_format((float) $fee->montant, 2, '.', ''),
             ],
         ]);
     }
