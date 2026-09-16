@@ -232,4 +232,63 @@ final class RemiseFraisPartiellementPayeTest extends TestCase
 
         $this->assertSame('1500.00', (string) $fee->fresh()->montant);
     }
+
+    /**
+     * ⚠ Le cas réellement signalé (inscription 807) : la table entière est UN
+     * payload, donc remiser « Frais de Février » renvoyait aussi « Frais
+     * d'inscription A1/A2/B1 », une ligne SUR-PAYÉE par l'import legacy
+     * (600 DH sur un frais de 300 — 155 lignes en base). La règle butait sur
+     * cette ligne-là et nommait, dans son refus, un frais auquel
+     * l'utilisateur n'avait pas touché.
+     */
+    public function test_an_untouched_overpaid_line_never_blocks_an_edit_to_another_line(): void
+    {
+        [$inscription, $cible] = $this->inscriptionWithFee(1300.0);
+
+        // La ligne parasite : 300 DH de frais, 600 DH encaissés.
+        $overpaid = InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => "Frais d'inscription A1/A2/B1",
+            'montant_initial' => 300.0, 'montant' => 300.0,
+            'date_echeance' => '2025-10-01', 'statut' => InscriptionFee::STATUT_PAYE,
+        ]);
+        $this->pay($inscription, $overpaid, 600.0);
+
+        // On remise la CIBLE, en renvoyant les deux lignes comme le fait la
+        // table réelle — la ligne sur-payée est soumise INCHANGÉE.
+        $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
+            ->put(route('backoffice.inscriptions.fees.update', $inscription), [
+                'fee_lines' => [
+                    [
+                        'id' => $cible->id, 'nom' => $cible->nom,
+                        'montant_initial' => '1300', 'remise_montant' => '200',
+                        'date_echeance' => '2025-10-01',
+                    ],
+                    [
+                        'id' => $overpaid->id, 'nom' => $overpaid->nom,
+                        'montant_initial' => '300', 'date_echeance' => '2025-10-01',
+                    ],
+                ],
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('1100.00', (string) $cible->fresh()->montant);
+        // La ligne parasite est restée exactement comme elle était.
+        $this->assertSame('300.00', (string) $overpaid->fresh()->montant);
+        $this->assertSame(600.0, $overpaid->fresh()->montantPaye());
+    }
+
+    /**
+     * Une ligne SUR-payée n'est pas « soldée » : c'est une anomalie, et la
+     * remiser reste permis — le surplus repart en avance comme ailleurs.
+     */
+    public function test_an_overpaid_line_can_itself_be_discounted(): void
+    {
+        [$inscription, $fee] = $this->inscriptionWithFee(300.0);
+        $this->pay($inscription, $fee, 600.0);
+
+        $this->putFee($inscription, $fee, ['montant_initial' => '300', 'remise_montant' => '100'])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('200.00', (string) $fee->fresh()->montant);
+    }
 }

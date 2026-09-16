@@ -126,10 +126,44 @@ final class MettreAJourFraisInscription
                         // l'argent, ce qui se fait par un remboursement (qui,
                         // lui, sort réellement de la caisse et porte ses
                         // propres autorisations) — pas en réécrivant le prix.
+                        //
+                        // ⚠ ET LA RÈGLE NE JUGE QUE LES LIGNES DONT LE PRIX
+                        // CHANGE (16/09/2026, second signalement). La table
+                        // entière est UN SEUL payload : chaque enregistrement
+                        // renvoie les onze lignes, donc contrôler toutes les
+                        // lignes faisait échouer l'édition d'un frais à cause
+                        // d'une AUTRE ligne que l'utilisateur n'avait pas
+                        // touchée. Sur l'inscription 807, « Frais d'inscription
+                        // A1/A2/B1 » porte 600 DH sur un frais de 300 (doublon
+                        // de l'import legacy — 155 lignes sont dans ce cas en
+                        // base) : modifier « Frais de Février » butait sur ce
+                        // frais-là, et le message nommait une ligne dont
+                        // l'utilisateur n'avait rien fait. Une ligne déjà
+                        // sur-payée AVANT cette requête est donc laissée telle
+                        // quelle : elle n'est pas le sujet de l'édition, et
+                        // c'est un remboursement qui la corrigera.
                         $paye = $existing->montantPaye();
                         $montantActuel = (float) $existing->montant;
+                        $prixInchange = abs($montant - $montantActuel) < 0.005;
 
-                        if ($montant + 0.005 < $paye && $paye + 0.005 >= $montantActuel) {
+                        if ($prixInchange) {
+                            $existing->update($attributes);
+                            $this->recalculerStatut($existing);
+                            $keptIds[] = $existing->id;
+
+                            continue;
+                        }
+
+                        // SOLDÉ = payé EXACTEMENT son prix (à 1 centime près).
+                        // Une ligne SUR-payée (600 DH sur un frais de 300,
+                        // doublon d'import) n'est pas « soldée » : c'est une
+                        // anomalie, et la remiser reste permis — le surplus
+                        // repart en avance comme partout ailleurs. Seule
+                        // l'égalité exacte décrit le dossier clos que cette
+                        // règle protège.
+                        $estSolde = abs($paye - $montantActuel) < 0.005;
+
+                        if ($montant + 0.005 < $paye && $estSolde) {
                             throw ValidationException::withMessages([
                                 'fee_lines' => __('« :fee » is fully paid (:paye DH) — a discount can no longer be applied to it. Refund the student instead.', [
                                     'fee' => $existing->nom,
