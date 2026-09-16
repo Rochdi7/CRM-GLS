@@ -45,14 +45,6 @@ use Illuminate\Validation\ValidationException;
  */
 final class MettreAJourFraisInscription
 {
-    /**
-     * Montant total détaché en avance par le dernier handle() — surplus
-     * libéré par une remise appliquée sous ce qui avait déjà été payé. Lu par
-     * InscriptionController::updateFees() pour l'annoncer à l'écran : de
-     * l'argent qui change d'affectation sans que rien ne le dise serait
-     * indiscernable d'un montant perdu.
-     */
-    public float $montantLibere = 0.0;
 
     public function __construct(
         private readonly ConvertirEncaissementsEnAvance $convertirEnAvance,
@@ -63,12 +55,9 @@ final class MettreAJourFraisInscription
      */
     public function handle(Inscription $inscription, array $lines): Inscription
     {
-        $this->montantLibere = 0.0;
-
         try {
             return DB::transaction(function () use ($inscription, $lines): Inscription {
                 $keptIds = [];
-                $montantLibere = 0.0;
 
                 foreach ($lines as $line) {
                     $initial = (float) ($line['montant_initial'] ?? 0);
@@ -154,40 +143,43 @@ final class MettreAJourFraisInscription
                             continue;
                         }
 
-                        // SOLDÉ = il ne RESTE plus rien à payer, c'est-à-dire
-                        // payé >= prix — l'exact ET le sur-payé. Le critère
-                        // est la colonne « RESTE » à 0,00 que l'utilisateur a
-                        // sous les yeux, pas l'égalité parfaite : une ligne de
-                        // 300 DH ayant reçu 600 DH n'a plus rien à devoir, et
-                        // la remiser à 0 libérait 600 DH en avance sur un
-                        // frais que l'étudiant avait déjà entièrement réglé
-                        // (signalé le 16/09/2026 sur « Frais d'inscription
-                        // A1/A2/B1 »). Le sur-payé se corrige par un
-                        // remboursement, jamais en réécrivant le prix.
-                        $estSolde = $paye + 0.005 >= $montantActuel && $paye > 0.0;
-
-                        if ($montant + 0.005 < $paye && $estSolde) {
+                        // ⚠ LA SEULE BORNE : un frais n'est jamais fixé SOUS
+                        // ce qu'il a déjà encaissé (décision du 16/09/2026,
+                        // après plusieurs essais trop larges).
+                        //
+                        // La remise reste donc MODIFIABLE en permanence, y
+                        // compris sur une ligne dont le reste est à 0,00 :
+                        // 1 200 DH remisés de 200 et payés 1 000 sont soldés,
+                        // mais corriger cette remise (200 → 150, ou → 0) doit
+                        // rester possible — c'est une créance qu'on rouvre,
+                        // pas de l'argent qu'on rend. Verrouiller le champ dès
+                        // « RESTE = 0 » rendait au contraire toute remise
+                        // définitive à la seconde où l'étudiant réglait le
+                        // montant remisé.
+                        //
+                        // Ce qui est refusé est exactement le geste qui REND
+                        // de l'argent : descendre sous les 1 000 DH reçus.
+                        // Cela se fait par un remboursement, qui sort
+                        // réellement de la caisse et porte ses propres
+                        // autorisations — jamais en réécrivant un prix.
+                        // AUGMENTER reste toujours permis.
+                        if ($montant + 0.005 < $paye) {
                             throw ValidationException::withMessages([
-                                'fee_lines' => __('« :fee » is fully paid (:paye DH) — a discount can no longer be applied to it. Refund the student instead.', [
+                                'fee_lines' => __('« :fee » has already received :paye DH — it cannot be priced below that. Refund the student instead.', [
                                     'fee' => $existing->nom,
                                     'paye' => number_format($paye, 2, '.', ''),
                                 ]),
                             ]);
                         }
 
+                        // Aucune libération d'avance ici : le garde-fou
+                        // ci-dessus interdit qu'un frais descende sous ce
+                        // qu'il a encaissé, donc il n'existe jamais de
+                        // surplus à détacher. L'argent ne quitte une ligne
+                        // que par le RETRAIT du frais (plus bas) ou par un
+                        // remboursement — deux gestes explicites.
                         $existing->update($attributes);
                         $fee = $existing;
-
-                        // Le surplus part en avance APRÈS l'écriture du
-                        // nouveau montant, pour que le statut recalculé par le
-                        // convertisseur porte déjà sur le prix remisé.
-                        if ($paye > $montant + 0.005) {
-                            $libere = $this->libererSurplusEnAvance($inscription, $fee, $montant);
-
-                            if ($libere > 0.0) {
-                                $montantLibere += $libere;
-                            }
-                        }
                     } else {
                         // The same catalog fee already exists on this
                         // registration as a hidden line: adding it again would
@@ -241,8 +233,6 @@ final class MettreAJourFraisInscription
                     'montant_total' => $inscription->fees()->whereNull('masque_le')->sum('montant') ?: null,
                 ]);
 
-                $this->montantLibere = round($montantLibere, 2);
-
                 return $inscription->fresh('fees');
             });
         } catch (QueryException) {
@@ -250,58 +240,6 @@ final class MettreAJourFraisInscription
                 'fee_lines' => __('One of the removed fees has payments and cannot be deleted.'),
             ]);
         }
-    }
-
-    /**
-     * Détache, du frais qui vient d'être remisé, juste assez d'encaissements
-     * pour que ce qui y reste ne dépasse plus le nouveau montant. Les lignes
-     * détachées redeviennent des AVANCES réapplicables sur n'importe quel
-     * frais de l'étudiant (ConvertirEncaissementsEnAvance) — l'encaissement
-     * n'est jamais supprimé et la caisse n'est pas touchée (§11).
-     *
-     * Trois bornes :
-     *  (1) on libère les paiements les PLUS RÉCENTS d'abord, et on s'arrête
-     *      dès que le reste tient sous le nouveau montant — le frais conserve
-     *      ainsi le maximum de son affectation d'origine ;
-     *  (2) un paiement REMBOURSÉ n'est jamais détaché : son argent a déjà
-     *      quitté la caisse, le convertisseur le refuse (le retrait de ligne
-     *      l'écarte de la même façon) ;
-     *  (3) un paiement ne se FRACTIONNE pas — si aucune combinaison n'amène
-     *      exactement au montant, on en libère un de plus : le frais se
-     *      retrouve sous-payé plutôt que sur-payé, et le solde redevient dû,
-     *      ce qui est la situation qu'un écran sait montrer et corriger.
-     *
-     * @return float le montant réellement libéré
-     */
-    private function libererSurplusEnAvance(Inscription $inscription, InscriptionFee $fee, float $nouveauMontant): float
-    {
-        $encaissements = $fee->encaissements()
-            ->whereDoesntHave('remboursements')
-            ->orderByDesc('date_paiement')
-            ->orderByDesc('id')
-            ->get();
-
-        $restant = (float) $fee->encaissements()->sum('montant');
-        $aLiberer = [];
-        $total = 0.0;
-
-        foreach ($encaissements as $encaissement) {
-            if ($restant <= $nouveauMontant + 0.005) {
-                break;
-            }
-
-            $aLiberer[] = $encaissement->id;
-            $total += (float) $encaissement->montant;
-            $restant -= (float) $encaissement->montant;
-        }
-
-        if ($aLiberer === []) {
-            return 0.0;
-        }
-
-        $this->convertirEnAvance->handle($inscription, $aLiberer);
-
-        return $total;
     }
 
     private function recalculerStatut(InscriptionFee $fee): void

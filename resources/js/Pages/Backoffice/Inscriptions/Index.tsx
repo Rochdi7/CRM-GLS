@@ -277,7 +277,9 @@ export default function InscriptionsIndex({
     // frais payé n'a été retiré. Voir removeEditingLine().
     // Pourquoi la remise est grisée sur une ligne soldée — dit la règle ET
     // le chemin de sortie, plutôt que de laisser un champ inerte sans raison.
-    const remiseBloqueeTitre = 'Ce frais est déjà soldé — une remise n\'est plus possible. Passez par un remboursement.';
+    // Pourquoi une remise est refusée : elle descendrait sous l'argent déjà
+    // reçu, ce qui reviendrait à en rendre — un remboursement, pas un prix.
+    const remiseBloqueeTitre = "Le montant ne peut pas descendre sous ce qui a déjà été payé sur ce frais. Passez par un remboursement.";
     const [montantLibere, setMontantLibere] = useState<number | null>(null);
     const [restoreProcessingId, setRestoreProcessingId] = useState<number | null>(null);
     const [availableFeesPage, setAvailableFeesPage] = useState(1);
@@ -2110,21 +2112,18 @@ export default function InscriptionsIndex({
                                                         // a negative.
                                                         const paye = parseFloat(line.paye ?? '0') || 0;
                                                         const reste = Math.max(0, final - paye);
-                                                        // ⚠ Ligne SOLDÉE : il ne reste plus rien à payer sur le
-                                                        // prix ENREGISTRÉ (payé >= montant stocké). Une remise y
-                                                        // est refusée par le serveur
-                                                        // (MettreAJourFraisInscription) — rendre de l'argent passe
-                                                        // par un remboursement. Les champs sont donc désactivés
-                                                        // ici pour que la règle se VOIE avant la frappe, au lieu
-                                                        // de se découvrir sur un refus. Le critère porte sur le
-                                                        // montant enregistré, jamais sur `final` : sinon taper la
-                                                        // remise ferait elle-même « dé-solder » la ligne et
-                                                        // rouvrirait le champ. Confort d'interface seulement, le
-                                                        // serveur reste l'autorité (§5).
-                                                        const montantEnregistre = parseFloat(line.montantEnregistre ?? '') ;
-                                                        const estSolde = line.montantEnregistre !== undefined
-                                                            && paye > 0
-                                                            && paye + 0.005 >= montantEnregistre;
+                                                        // ⚠ La remise reste TOUJOURS modifiable — y compris sur une
+                                                        // ligne dont le reste est à 0,00, qui y est souvent
+                                                        // arrivée PAR une remise (1 200 remisés de 200 et payés
+                                                        // 1 000) : la corriger rouvre une créance, cela ne rend
+                                                        // aucun argent. Verrouiller le champ rendait toute remise
+                                                        // définitive dès que l'étudiant réglait le montant remisé.
+                                                        //
+                                                        // La seule borne est le PLANCHER : le prix ne descend
+                                                        // jamais sous ce qui a été encaissé. On la signale en
+                                                        // direct pendant la frappe (le serveur refuse de toute
+                                                        // façon, §5) plutôt que de désactiver quoi que ce soit.
+                                                        const sousLePaye = paye > 0 && final + 0.005 < paye;
                                                         const rowErrors = feesForm.errors as Record<string, string>;
                                                         const montantError = rowErrors[`fee_lines.${index}.montant_initial`];
 
@@ -2166,8 +2165,8 @@ export default function InscriptionsIndex({
                                                                             value={line.remisePct}
                                                                             onChange={(event) => setEditingLine(index, 'remisePct', event.target.value)}
                                                                             onBlur={commitEditingLine}
-                                                                            disabled={!canManageFees || estSolde}
-                                                                            title={estSolde ? remiseBloqueeTitre : undefined}
+                                                                            disabled={!canManageFees}
+                                                                            title={sousLePaye ? remiseBloqueeTitre : undefined}
                                                                         />
                                                                         <span className="input-group-text">%</span>
                                                                         <input
@@ -2179,8 +2178,8 @@ export default function InscriptionsIndex({
                                                                             value={line.remiseMontant}
                                                                             onChange={(event) => setEditingLine(index, 'remiseMontant', event.target.value)}
                                                                             onBlur={commitEditingLine}
-                                                                            disabled={!canManageFees || estSolde}
-                                                                            title={estSolde ? remiseBloqueeTitre : undefined}
+                                                                            disabled={!canManageFees}
+                                                                            title={sousLePaye ? remiseBloqueeTitre : undefined}
                                                                         />
                                                                         <span className="input-group-text">DH</span>
                                                                     </div>
@@ -2194,7 +2193,14 @@ export default function InscriptionsIndex({
                                                                         onChange={(event) => setEditingLine(index, 'note', event.target.value)}
                                                                     />
                                                                 </td>
-                                                                <td className="text-end fw-semibold" style={{ width: 110 }}>
+                                                                {/* Le montant vire au rouge dès qu'il passe sous
+                                                                    l'argent déjà reçu : le serveur refusera, autant
+                                                                    le voir pendant la frappe. */}
+                                                                <td
+                                                                    className={`text-end fw-semibold${sousLePaye ? ' text-danger' : ''}`}
+                                                                    style={{ width: 110 }}
+                                                                    title={sousLePaye ? remiseBloqueeTitre : undefined}
+                                                                >
                                                                     {final.toFixed(2)} DH
                                                                 </td>
                                                                 <td

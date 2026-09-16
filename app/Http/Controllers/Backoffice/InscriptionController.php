@@ -329,17 +329,6 @@ final class InscriptionController extends Controller
 
         $action->handle($inscription, $lines);
 
-        // Une remise passée sous le montant déjà encaissé détache le surplus
-        // en avance (MettreAJourFraisInscription) : de l'argent qui change
-        // d'affectation sans que l'écran le dise se lirait comme un montant
-        // disparu. Le message NOMME la somme et où elle est repartie.
-        if ($action->montantLibere > 0.0) {
-            return redirect()->route('backoffice.inscriptions.index')
-                ->with('success', __('Registration fees updated. :montant DH have been released as a re-applicable advance.', [
-                    'montant' => number_format($action->montantLibere, 2, '.', ''),
-                ]));
-        }
-
         return redirect()->route('backoffice.inscriptions.index')
             ->with('success', __('Registration fees updated.'));
     }

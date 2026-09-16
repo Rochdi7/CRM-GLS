@@ -27,11 +27,15 @@ use Tests\TestCase;
  * était refusé, sans aucun autre chemin pour l'utilisateur — alors que
  * RETIRER la ligne libérait déjà cet argent sans difficulté.
  *
- * La règle qui la remplace tient en deux temps :
- *  - partiellement payé ⇒ remise LIBRE ; le surplus éventuel est détaché en
- *    avance réapplicable (jamais supprimé, caisse inchangée) ;
- *  - entièrement payé ⇒ remise REFUSÉE : le frais est soldé, et rendre de
- *    l'argent passe par un remboursement.
+ * La règle qui la remplace tient en UNE phrase : un frais n'est jamais fixé
+ * SOUS ce qu'il a déjà encaissé. Tout le reste est permis —
+ *  - la remise se pose, se corrige et se retire à tout moment, y compris sur
+ *    une ligne dont le RESTE est à 0,00 (souvent parce qu'une remise l'y a
+ *    amenée) : la corriger rouvre une créance, cela ne rend aucun argent ;
+ *  - augmenter un frais reste toujours possible ;
+ *  - descendre sous le payé est le seul geste refusé, parce qu'il REND de
+ *    l'argent — ce qui passe par un remboursement, jamais par un prix
+ *    réécrit. Aucune avance n'est donc jamais créée par une remise.
  */
 final class RemiseFraisPartiellementPayeTest extends TestCase
 {
@@ -128,89 +132,31 @@ final class RemiseFraisPartiellementPayeTest extends TestCase
     }
 
     /**
-     * Le cas signalé : 1 300 DH dont 600 déjà encaissés, remise de 60 %
-     * (520 DH) — refusée jusqu'au 16/09/2026 alors que 50 % passait.
+     * Le cas signalé : 1 300 DH dont 600 déjà encaissés, remise de 50 %
+     * (650 DH) — au-dessus du payé, donc parfaitement légitime.
      */
-    public function test_a_discount_below_the_paid_amount_is_accepted_on_a_partially_paid_fee(): void
+    public function test_a_discount_is_allowed_on_a_partially_paid_fee(): void
     {
         [$inscription, $fee] = $this->inscriptionWithFee(1300.0);
         $this->pay($inscription, $fee, 600.0);
 
-        $this->putFee($inscription, $fee, ['remise_pct' => '60'])
+        $this->putFee($inscription, $fee, ['remise_pct' => '50'])
             ->assertSessionHasNoErrors();
 
-        $this->assertSame('520.00', (string) $fee->fresh()->montant);
+        $this->assertSame('650.00', (string) $fee->fresh()->montant);
     }
 
     /**
-     * Le surplus ne disparaît pas : il est DÉTACHÉ en avance réapplicable —
-     * l'encaissement survit, la caisse ne bouge pas.
+     * ⚠ La SEULE borne : descendre sous l'argent déjà reçu. 1 300 DH payés
+     * 600, remisés à 520 (60 %) ⇒ refusé — cela rendrait 80 DH, ce qui passe
+     * par un remboursement.
      */
-    public function test_the_surplus_is_released_as_a_reapplicable_advance(): void
-    {
-        [$inscription, $fee] = $this->inscriptionWithFee(1300.0);
-        $encaissement = $this->pay($inscription, $fee, 600.0);
-        $soldeAvant = Caisse::find($encaissement->caisse_id)->solde;
-
-        $this->putFee($inscription, $fee, ['remise_pct' => '60'])
-            ->assertSessionHasNoErrors();
-
-        $encaissement->refresh();
-        // La ligne existe toujours (les enregistrements monétaires sont
-        // append-only) mais n'est plus affectée au frais : c'est une avance.
-        $this->assertNull($encaissement->inscription_fee_id);
-        $this->assertSame('600.00', (string) $encaissement->montant);
-        $this->assertSame($soldeAvant, Caisse::find($encaissement->caisse_id)->solde);
-        // Le frais remisé redevient dû en entier.
-        $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $fee->fresh()->statut);
-    }
-
-    /**
-     * On ne libère que ce qu'il faut, les paiements les plus RÉCENTS d'abord :
-     * 1 300 payés en 300 + 600, remisés à 400 ⇒ seul le paiement de 600 part,
-     * les 300 restent affectés au frais.
-     */
-    public function test_only_the_surplus_payments_are_released_newest_first(): void
-    {
-        [$inscription, $fee] = $this->inscriptionWithFee(1300.0);
-        $ancien = $this->pay($inscription, $fee, 300.0, '2025-10-01');
-        $recent = $this->pay($inscription, $fee, 600.0, '2025-11-01');
-
-        $this->putFee($inscription, $fee, ['remise_montant' => '900'])
-            ->assertSessionHasNoErrors();
-
-        $this->assertSame('400.00', (string) $fee->fresh()->montant);
-        $this->assertSame($fee->id, $ancien->fresh()->inscription_fee_id);
-        $this->assertNull($recent->fresh()->inscription_fee_id);
-        $this->assertSame(300.0, $fee->fresh()->montantPaye());
-    }
-
-    /**
-     * Une remise qui reste AU-DESSUS du payé ne libère rien du tout.
-     */
-    public function test_a_discount_above_the_paid_amount_releases_nothing(): void
+    public function test_pricing_a_fee_below_what_it_received_is_refused(): void
     {
         [$inscription, $fee] = $this->inscriptionWithFee(1300.0);
         $encaissement = $this->pay($inscription, $fee, 600.0);
 
-        $this->putFee($inscription, $fee, ['remise_pct' => '20'])
-            ->assertSessionHasNoErrors();
-
-        $this->assertSame('1040.00', (string) $fee->fresh()->montant);
-        $this->assertSame($fee->id, $encaissement->fresh()->inscription_fee_id);
-        $this->assertSame(InscriptionFee::STATUT_PAYE_PARTIELLEMENT, $fee->fresh()->statut);
-    }
-
-    /**
-     * L'unique situation refusée : le frais est SOLDÉ. Le remiser reviendrait
-     * à rendre de l'argent, ce qui passe par un remboursement.
-     */
-    public function test_a_discount_on_a_fully_paid_fee_is_refused(): void
-    {
-        [$inscription, $fee] = $this->inscriptionWithFee(1300.0);
-        $encaissement = $this->pay($inscription, $fee, 1300.0);
-
-        $this->putFee($inscription, $fee, ['remise_pct' => '20'])
+        $this->putFee($inscription, $fee, ['remise_pct' => '60'])
             ->assertSessionHasErrors('fee_lines');
 
         // Rien n'a bougé : ni le prix, ni l'affectation de l'argent.
@@ -219,8 +165,60 @@ final class RemiseFraisPartiellementPayeTest extends TestCase
     }
 
     /**
-     * Un frais entièrement payé peut toujours être AUGMENTÉ — seule la remise
-     * (descendre sous le payé) est refusée.
+     * ⚠ Le cas du 16/09/2026 : 1 200 DH remisés de 200 et PAYÉS 1 000, donc
+     * reste à 0,00. La remise doit rester CORRIGEABLE — la ramener à 150
+     * rouvre une créance de 50 DH, cela ne rend aucun argent. Verrouiller le
+     * champ dès « RESTE = 0 » rendait toute remise définitive à la seconde
+     * où l'étudiant réglait le montant remisé.
+     */
+    public function test_a_discount_stays_editable_on_a_settled_fee(): void
+    {
+        [$inscription, $fee] = $this->inscriptionWithFee(1200.0);
+        $fee->update(['montant_initial' => 1200.0, 'remise_montant' => 200.0, 'montant' => 1000.0]);
+        $this->pay($inscription, $fee, 1000.0);
+
+        $this->putFee($inscription, $fee, ['montant_initial' => '1200', 'remise_montant' => '150'])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('1050.00', (string) $fee->fresh()->montant);
+    }
+
+    /**
+     * Et on peut retirer la remise entièrement : le frais repart à 1 200 DH,
+     * l'étudiant doit de nouveau 200 DH.
+     */
+    public function test_a_discount_can_be_removed_entirely_on_a_settled_fee(): void
+    {
+        [$inscription, $fee] = $this->inscriptionWithFee(1200.0);
+        $fee->update(['montant_initial' => 1200.0, 'remise_montant' => 200.0, 'montant' => 1000.0]);
+        $this->pay($inscription, $fee, 1000.0);
+
+        $this->putFee($inscription, $fee, ['montant_initial' => '1200'])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('1200.00', (string) $fee->fresh()->montant);
+        $this->assertSame(InscriptionFee::STATUT_PAYE_PARTIELLEMENT, $fee->fresh()->statut);
+    }
+
+    /**
+     * Mais pas AUGMENTER la remise sous le payé : 1 200 payés 1 000, remise
+     * portée à 300 (⇒ 900) rendrait 100 DH.
+     */
+    public function test_deepening_a_discount_below_the_paid_amount_is_refused(): void
+    {
+        [$inscription, $fee] = $this->inscriptionWithFee(1200.0);
+        $fee->update(['montant_initial' => 1200.0, 'remise_montant' => 200.0, 'montant' => 1000.0]);
+        $this->pay($inscription, $fee, 1000.0);
+
+        $this->putFee($inscription, $fee, ['montant_initial' => '1200', 'remise_montant' => '300'])
+            ->assertSessionHasErrors('fee_lines');
+
+        $this->assertSame('1000.00', (string) $fee->fresh()->montant);
+    }
+
+    /**
+     * Un frais entièrement payé peut toujours être AUGMENTÉ — seule la baisse
+     * sous le payé est refusée.
      */
     public function test_a_fully_paid_fee_can_still_be_raised(): void
     {
@@ -231,6 +229,23 @@ final class RemiseFraisPartiellementPayeTest extends TestCase
             ->assertSessionHasNoErrors();
 
         $this->assertSame('1500.00', (string) $fee->fresh()->montant);
+    }
+
+    /**
+     * ⚠ Aucune AVANCE n'est jamais créée par une remise : le plancher garantit
+     * qu'il n'existe pas de surplus à détacher. L'argent ne quitte une ligne
+     * que par le retrait du frais ou par un remboursement.
+     */
+    public function test_a_discount_never_releases_money_as_an_advance(): void
+    {
+        [$inscription, $fee] = $this->inscriptionWithFee(1300.0);
+        $encaissement = $this->pay($inscription, $fee, 600.0);
+
+        $this->putFee($inscription, $fee, ['remise_pct' => '50'])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame($fee->id, $encaissement->fresh()->inscription_fee_id);
+        $this->assertSame(600.0, $fee->fresh()->montantPaye());
     }
 
     /**
@@ -275,41 +290,5 @@ final class RemiseFraisPartiellementPayeTest extends TestCase
         // La ligne parasite est restée exactement comme elle était.
         $this->assertSame('300.00', (string) $overpaid->fresh()->montant);
         $this->assertSame(600.0, $overpaid->fresh()->montantPaye());
-    }
-
-    /**
-     * ⚠ Une ligne SUR-payée est soldée elle aussi : son RESTE est à 0,00.
-     * La remiser à 0 libérait 600 DH en avance sur un frais que l'étudiant
-     * avait déjà entièrement réglé (signalé le 16/09/2026). Le critère est la
-     * colonne « RESTE » que l'utilisateur a sous les yeux, pas l'égalité
-     * exacte entre payé et prix.
-     */
-    public function test_an_overpaid_line_refuses_a_discount_too(): void
-    {
-        [$inscription, $fee] = $this->inscriptionWithFee(300.0);
-        $encaissement = $this->pay($inscription, $fee, 600.0);
-
-        $this->putFee($inscription, $fee, ['montant_initial' => '300', 'remise_montant' => '300'])
-            ->assertSessionHasErrors('fee_lines');
-
-        $this->assertSame('300.00', (string) $fee->fresh()->montant);
-        $this->assertSame($fee->id, $encaissement->fresh()->inscription_fee_id);
-    }
-
-    /**
-     * Le cas exact de la capture : remise de 300 DH sur un frais de 300 DH
-     * déjà couvert ⇒ 0,00 DH. Refusé, et AUCUNE avance n'est créée.
-     */
-    public function test_discounting_a_settled_fee_to_zero_releases_nothing(): void
-    {
-        [$inscription, $fee] = $this->inscriptionWithFee(300.0);
-        $encaissement = $this->pay($inscription, $fee, 600.0);
-
-        $this->putFee($inscription, $fee, ['montant_initial' => '300', 'remise_pct' => '100'])
-            ->assertSessionHasErrors('fee_lines');
-
-        // Rien n'a été libéré : l'argent est toujours affecté au frais.
-        $this->assertNotNull($encaissement->fresh()->inscription_fee_id);
-        $this->assertSame(600.0, $fee->fresh()->montantPaye());
     }
 }
