@@ -63,6 +63,97 @@ flowchart LR
     C --> D[(caisses.solde<br>+ audit log)]
 ```
 
+## ⚡ Real-time, multi-centre cash — read this before touching money code
+
+> **For AI assistants and new contributors.** This section describes the model
+> the finance code actually implements. Several rules look redundant until you
+> hit the production case that created them. **Do not "simplify" them.**
+
+**The system is real-time across all centres.** There is no batch, no nightly
+job and no per-centre database: every payment, expense, refund and transfer
+is written and visible **immediately, in every centre**, through one PostgreSQL
+database. A cashier in Rabat and a director in Marrakech reading the same
+screen at the same moment see the same figures. Consequences you must respect:
+
+- **Never cache a balance, never recompute one "later".** `caisses.solde` is
+  the authoritative total and it is application-maintained inside the same
+  transaction as the record that moved it. No queue, no scheduled
+  reconciliation, no eventual consistency.
+- **Every "read a balance, then write" check runs INSIDE the transaction on a
+  `lockForUpdate()` row.** Two cashiers in two centres can act on the same
+  till in the same second; a guard evaluated before `DB::transaction` is a
+  double-spend, not a guard.
+- **The balance moves ONLY through `Domain\Finance\Support\CaisseLedger`**
+  (`credit()` / `debit()`). Never `increment('solde')`, `decrement()` or a raw
+  update: those fire no events and leave the movement **invisible to the audit
+  journal** — the exact fraud hole the ledger replaced.
+
+### One employee = one till, for life — but they collect for many centres
+
+An employee keeps **exactly one** « Caissière » till forever (a DB constraint
+enforces it). They may nevertheless work in several centres, so:
+
+- Every ledger entry stamps `etablissement_id`, so one till **breaks down per
+  centre** from the journal alone.
+- Per-centre figures are always **derived**, never stored, and always through
+  the single source `Domain\Finance\Support\VentilationCentre`.
+- **A total must be computed on the same columns as the rows it sits above.**
+  A ventilated balance over unventilated rows means one screen contradicts
+  another, and the user can no longer tell which to believe.
+- **A transfer changes TILL, never CENTRE**: both legs are booked to the
+  centre the money *leaves*.
+
+### Which account receives the money
+
+Decided **only** by `Domain\Finance\Support\CaisseResolver` — never re-derived
+in a controller or a screen:
+
+| Operation | Account debited / credited |
+|---|---|
+| Payment, Espèces | the cashier's own physical till |
+| Payment, TPE / Chèque / Virement | the **active centre's** account for that method (the physical till never moves) |
+| Expense, refund | **always** the acting employee's physical till, whatever the method says |
+| Transfer | cash accounts only |
+
+`caisse_id` is stored on the row and **immutable**, so cancelling, approving or
+applying an advance reverses or follows the *same* account with no guessing.
+
+### Advances (`avances`) — where most of the subtlety lives
+
+An **avance** is money received but not yet allocated to a fee
+(`inscription_fee_id IS NULL`). Applying it to a fee creates a **second row**
+(`applied_from_encaissement_id` → the avance); the avance row itself is never
+edited, and **no till moves** — the money already arrived, only its allocation
+changes.
+
+- **An application row inherits `caisse_id`, `agent_id`, `date_paiement` and
+  `methode` from the avance** — never from the employee clicking, never from
+  today. Stamping today would rewrite when GLS was paid.
+- **Application rows are excluded from every "money received" total** (journal,
+  cash accounts, reports). Counting them double-counts the same dirham.
+- **A payment can be SPLIT when converting to an avance** (« À libérer »): part
+  stays on the original fee, the rest becomes an avance. This is *composed*
+  from the two existing primitives — detach, then re-apply the kept part — so
+  no amount is edited and no new money row is created. Typical case: a student
+  studies two weeks in group A, moves to group B; 700 DH stays on A, 700 DH
+  follows them to B.
+- **The chain can be several levels deep** (applied → reconverted → re-applied).
+  Always read it through `ResoudreAllocationsAvance`, never one hop.
+- **The cheque behind an avance is read through the chain**
+  (`Domain\Payments\Support\ChequeOrigine`) — an application row carries no
+  `cheque_id` of its own, so testing `$row->cheque_id` directly misses a
+  rejected cheque and lets non-existent money be applied or refunded from the
+  till.
+
+### The rule behind the rules
+
+**Two screens must never show two different truths about the same dirham.**
+When a number looks wrong, fix the single shared definition — don't add a
+second calculation next to it. And when a read-model needs to know whether an
+action will be accepted, it must **carry that action's own rule**
+(`applicable`, `splittable`, `methodeRequalifiable`…) rather than re-deriving
+one, or the screen will offer what the server refuses.
+
 ## 🚀 Quick start
 
 ### Requirements

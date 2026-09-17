@@ -349,7 +349,21 @@ final class ComptesMethodeTest extends TestCase
         $this->assertSame('0.00', (string) $till->fresh()->solde);
     }
 
-    public function test_the_method_of_a_recorded_payment_is_frozen(): void
+    /**
+     * ⚠ Ce test asserait « la méthode est GELÉE pour tout le monde » jusqu'au
+     * 01/09/2026, date à laquelle `payments.update-method` a ouvert la
+     * correction aux rôles de direction + super-admin. Il est donc resté
+     * rouge depuis, à demander une erreur que le contrôleur ne lève plus —
+     * un test périmé qui décrit une règle abandonnée, pas un bug.
+     *
+     * Ce qu'il pin désormais est le contrat RÉEL : la méthode n'est pas une
+     * étiquette, elle a décidé quelle caisse a été créditée, donc la corriger
+     * DÉPLACE l'argent (RequalifierMethodeEncaissement, les deux jambes
+     * journalisées). Ce qui reste gelé pour TOUT LE MONDE, super-admin
+     * compris, ce sont `montant` et `caisse_id` — des invariants monétaires
+     * (§11), pas des permissions.
+     */
+    public function test_correcting_the_method_moves_the_money_between_accounts(): void
     {
         $user = $this->superAdmin();
         [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
@@ -358,17 +372,63 @@ final class ComptesMethodeTest extends TestCase
         $this->payLine($user, $student, $inscription, $fee, '1000', Encaissement::METHODE_TPE);
         $encaissement = Encaissement::query()->firstOrFail();
 
-        $this->actingAs($user)->put(route('backoffice.encaissements.update', $encaissement), [
-            'methode' => Encaissement::METHODE_ESPECES, 'date_paiement' => '2025-09-21',
-        ])->assertSessionHasErrors('methode');
+        $compteTpe = $this->compte($this->centre, Encaissement::METHODE_TPE);
+        $till = $user->employee->till()->firstOrFail();
+        $this->assertSame($compteTpe->id, $encaissement->caisse_id);
+        $this->assertSame('1000.00', (string) $compteTpe->fresh()->solde);
+        $tillAvant = (float) $till->fresh()->solde;
 
-        // Echoing the stored value back is fine (the edit modal does that).
+        // Echoing the stored value back is fine (the edit modal does that)
+        // and moves nothing.
         $this->actingAs($user)->put(route('backoffice.encaissements.update', $encaissement), [
             'methode' => Encaissement::METHODE_TPE, 'date_paiement' => '2025-09-21',
         ])->assertSessionHasNoErrors();
+        $this->assertSame($compteTpe->id, $encaissement->fresh()->caisse_id);
+        $this->assertSame('1000.00', (string) $compteTpe->fresh()->solde);
 
-        $this->assertSame(Encaissement::METHODE_TPE, $encaissement->fresh()->methode);
-        $this->assertSame('2025-09-21', $encaissement->fresh()->date_paiement->toDateString());
+        // A real correction: TPE → Espèces debits the centre's TPE account
+        // and credits the cashier's physical till, in one transaction.
+        $this->actingAs($user)->put(route('backoffice.encaissements.update', $encaissement), [
+            'methode' => Encaissement::METHODE_ESPECES, 'date_paiement' => '2025-09-21',
+        ])->assertSessionHasNoErrors();
+
+        $encaissement = $encaissement->fresh();
+        $this->assertSame(Encaissement::METHODE_ESPECES, $encaissement->methode);
+        $this->assertSame($till->id, $encaissement->caisse_id);
+        $this->assertSame('0.00', (string) $compteTpe->fresh()->solde);
+        $this->assertEqualsWithDelta($tillAvant + 1000, (float) $till->fresh()->solde, 0.001);
+        $this->assertSame('2025-09-21', $encaissement->date_paiement->toDateString());
+
+        // Both legs are journaled — the movement is never invisible (§11).
+        $this->assertGreaterThanOrEqual(2, Activity::query()
+            ->where('log_name', 'caisse')->where('event', 'solde_movement')
+            ->whereIn('subject_id', [$compteTpe->id, $till->id])
+            ->count());
+    }
+
+    /** `montant` and `caisse_id` stay frozen for EVERYONE — money invariants, not permissions. */
+    public function test_the_till_of_a_recorded_payment_can_never_be_rewritten_by_hand(): void
+    {
+        $user = $this->superAdmin();
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
+        $this->actingAs($user);
+        app(CurrentContext::class)->setEtablissement($this->centre->id);
+        $this->payLine($user, $student, $inscription, $fee, '1000', Encaissement::METHODE_TPE);
+        $encaissement = Encaissement::query()->firstOrFail();
+
+        $compteTpe = $this->compte($this->centre, Encaissement::METHODE_TPE);
+        $till = $user->employee->till()->firstOrFail();
+
+        $this->actingAs($user)->put(route('backoffice.encaissements.update', $encaissement), [
+            'methode' => Encaissement::METHODE_TPE,
+            'date_paiement' => '2025-09-21',
+            'caisse_id' => $till->id,
+        ])->assertSessionHasNoErrors();
+
+        // The submitted caisse_id is ignored, not obeyed: the money is where
+        // the method put it.
+        $this->assertSame($compteTpe->id, $encaissement->fresh()->caisse_id);
+        $this->assertSame('1000.00', (string) $compteTpe->fresh()->solde);
     }
 
     // ── Dépenses & remboursements: always the physical till ──────────────
