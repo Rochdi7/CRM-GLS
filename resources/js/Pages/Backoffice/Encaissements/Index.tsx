@@ -70,6 +70,13 @@ interface AvanceFormState {
     student_id: number | '';
     inscription_id: number | '';
     encaissement_ids: number[];
+    /**
+     * « Scinder » — amount to RELEASE per ticked payment, keyed by
+     * encaissement id. Empty/absent = the whole row (the historical
+     * behaviour). Anything below the row's montant stays on the original
+     * fee, re-applied server-side (ConvertirEncaissementsEnAvance).
+     */
+    montants: Record<number, string>;
 }
 
 interface ApplyAvanceFormState {
@@ -99,6 +106,7 @@ function emptyAvanceForm(): AvanceFormState {
         student_id: '',
         inscription_id: '',
         encaissement_ids: [],
+        montants: {},
     };
 }
 
@@ -531,7 +539,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
     }
 
     async function onAvanceStudentChange(studentId: number | '') {
-        avanceForm.setData({ student_id: studentId, inscription_id: '', encaissement_ids: [] });
+        avanceForm.setData({ student_id: studentId, inscription_id: '', encaissement_ids: [], montants: {} });
         setAvanceInscriptionOptions([]);
         setAvancePayments([]);
 
@@ -554,7 +562,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
     }
 
     async function onAvanceInscriptionChange(inscriptionId: number | '') {
-        avanceForm.setData((previous) => ({ ...previous, inscription_id: inscriptionId, encaissement_ids: [] }));
+        avanceForm.setData((previous) => ({ ...previous, inscription_id: inscriptionId, encaissement_ids: [], montants: {} }));
         setAvancePayments([]);
 
         if (inscriptionId === '') {
@@ -572,24 +580,52 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
     }
 
     function toggleAvancePayment(id: number) {
-        avanceForm.setData((previous) => ({
-            ...previous,
-            encaissement_ids: previous.encaissement_ids.includes(id)
-                ? previous.encaissement_ids.filter((selected) => selected !== id)
-                : [...previous.encaissement_ids, id],
-        }));
+        avanceForm.setData((previous) => {
+            const selected = previous.encaissement_ids.includes(id);
+            // Unticking a row forgets its split amount: re-ticking it later
+            // must start again from « la ligne entière », never from a stale
+            // figure typed for a decision that was abandoned.
+            const { [id]: _dropped, ...montants } = previous.montants;
+
+            return {
+                ...previous,
+                encaissement_ids: selected
+                    ? previous.encaissement_ids.filter((current) => current !== id)
+                    : [...previous.encaissement_ids, id],
+                montants: selected ? montants : previous.montants,
+            };
+        });
+    }
+
+    function setAvanceMontant(id: number, value: string) {
+        avanceForm.setData((previous) => ({ ...previous, montants: { ...previous.montants, [id]: value } }));
+    }
+
+    /** The amount a ticked row will actually RELEASE: its split amount when one is typed, else the whole row. */
+    function avanceMontantLibere(payment: InscriptionPaymentRow): number {
+        const typed = Number(avanceForm.data.montants[payment.id] ?? '');
+        const total = Number(payment.montant);
+
+        return avanceForm.data.montants[payment.id] !== undefined && avanceForm.data.montants[payment.id] !== '' && Number.isFinite(typed) && typed > 0 && typed <= total
+            ? typed
+            : total;
     }
 
     const convertiblePayments = avancePayments.filter((p) => !p.rembourse);
     const allAvanceSelected = convertiblePayments.length > 0 && convertiblePayments.every((p) => avanceForm.data.encaissement_ids.includes(p.id));
     const avanceSelectedTotal = avancePayments
         .filter((p) => avanceForm.data.encaissement_ids.includes(p.id))
-        .reduce((sum, p) => sum + Number(p.montant), 0);
+        .reduce((sum, p) => sum + avanceMontantLibere(p), 0);
+    const avanceSelectedConserve = avancePayments
+        .filter((p) => avanceForm.data.encaissement_ids.includes(p.id))
+        .reduce((sum, p) => sum + (Number(p.montant) - avanceMontantLibere(p)), 0);
+    const avanceErrors = avanceForm.errors as Record<string, string | undefined>;
 
     function toggleAllAvancePayments() {
         avanceForm.setData((previous) => ({
             ...previous,
             encaissement_ids: allAvanceSelected ? [] : convertiblePayments.map((p) => p.id),
+            montants: allAvanceSelected ? {} : previous.montants,
         }));
     }
 
@@ -1974,11 +2010,6 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                         </div>
                     </div>
 
-                    <p className="text-muted fs-13">
-                        Les inscriptions clôturées (annulée, archivée, changement de groupe) de l'année active sont listées —
-                        pour convertir les paiements d'une autre année, basculez d'abord le sélecteur d'année en haut de page.
-                    </p>
-
                     {avanceForm.data.inscription_id !== '' && (
                         loadingAvancePayments ? (
                             <p className="text-muted mb-0">Chargement des paiements…</p>
@@ -1986,12 +2017,6 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                             <p className="text-muted mb-0">Aucun paiement enregistré sur cette inscription.</p>
                         ) : (
                             <>
-                                <p className="text-muted fs-13">
-                                    Les paiements cochés seront détachés de leurs frais (qui redeviennent à payer)
-                                    et leur montant sera disponible en avance, à appliquer ensuite sur les frais
-                                    d'une autre inscription. Aucun paiement n'est supprimé et la caisse n'est pas
-                                    modifiée.
-                                </p>
                                 <div className="table-responsive">
                                     <table className="table table-sm align-middle mb-2">
                                         <thead>
@@ -2008,47 +2033,90 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                 <th>Référence</th>
                                                 <th>Frais</th>
                                                 <th className="text-end">Montant</th>
+                                                <th style={{ width: '11rem' }}>À libérer</th>
                                                 <th>Méthode</th>
                                                 <th>Date</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {avancePayments.map((payment) => (
-                                                <tr key={payment.id}>
-                                                    <td>
-                                                        <input
-                                                            type="checkbox"
-                                                            className="form-check-input"
-                                                            aria-label={`Sélectionner ${payment.reference}`}
-                                                            disabled={payment.rembourse}
-                                                            checked={avanceForm.data.encaissement_ids.includes(payment.id)}
-                                                            onChange={() => toggleAvancePayment(payment.id)}
-                                                        />
-                                                    </td>
-                                                    <td>
-                                                        <code>{payment.reference}</code>
-                                                    </td>
-                                                    <td>
-                                                        {payment.feeNom ?? '—'}
-                                                        {payment.rembourse && (
-                                                            <span className="badge badge-soft-danger ms-2">Remboursé</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="text-end fw-medium">{Number(payment.montant).toFixed(2)} MAD</td>
-                                                    <td>
-                                                        <span className="badge badge-soft-info">{payment.methode}</span>
-                                                    </td>
-                                                    <td>{payment.datePaiement ?? '—'}</td>
-                                                </tr>
-                                            ))}
+                                            {avancePayments.map((payment) => {
+                                                const ticked = avanceForm.data.encaissement_ids.includes(payment.id);
+                                                const libere = avanceMontantLibere(payment);
+                                                const conserve = Number(payment.montant) - libere;
+                                                const rowError = avanceErrors[`montants.${payment.id}`];
+
+                                                return (
+                                                    <tr key={payment.id}>
+                                                        <td>
+                                                            <input
+                                                                type="checkbox"
+                                                                className="form-check-input"
+                                                                aria-label={`Sélectionner ${payment.reference}`}
+                                                                disabled={payment.rembourse}
+                                                                checked={ticked}
+                                                                onChange={() => toggleAvancePayment(payment.id)}
+                                                            />
+                                                        </td>
+                                                        <td>
+                                                            <code>{payment.reference}</code>
+                                                        </td>
+                                                        <td>
+                                                            {payment.feeNom ?? '—'}
+                                                            {payment.rembourse && (
+                                                                <span className="badge badge-soft-danger ms-2">Remboursé</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="text-end fw-medium">{Number(payment.montant).toFixed(2)} MAD</td>
+                                                        <td>
+                                                            {/* Split input — enabled only on a ticked, splittable row.
+                                                                Empty = whole row. `splittable` is the ACTION's rule
+                                                                (hidden fee / rejected cheque), never re-derived here. */}
+                                                            <input
+                                                                type="number"
+                                                                inputMode="decimal"
+                                                                step="0.01"
+                                                                min="0.01"
+                                                                max={payment.montant}
+                                                                className={`form-control form-control-sm text-end${rowError ? ' is-invalid' : ''}`}
+                                                                aria-label={`Montant à libérer pour ${payment.reference}`}
+                                                                placeholder={Number(payment.montant).toFixed(2)}
+                                                                disabled={!ticked || !payment.splittable}
+                                                                title={!payment.splittable && payment.splitBlocker ? payment.splitBlocker : undefined}
+                                                                value={avanceForm.data.montants[payment.id] ?? ''}
+                                                                onChange={(e) => setAvanceMontant(payment.id, e.target.value)}
+                                                            />
+                                                            {ticked && conserve > 0 && (
+                                                                <div className="fs-12 text-muted mt-1">
+                                                                    Reste sur le frais : <span className="fw-medium">{conserve.toFixed(2)} MAD</span>
+                                                                </div>
+                                                            )}
+                                                            {ticked && !payment.splittable && payment.splitBlocker && (
+                                                                <div className="fs-12 text-muted mt-1">{payment.splitBlocker}</div>
+                                                            )}
+                                                            {rowError && <div className="text-danger fs-12 mt-1">{rowError}</div>}
+                                                        </td>
+                                                        <td>
+                                                            <span className="badge badge-soft-info">{payment.methode}</span>
+                                                        </td>
+                                                        <td>{payment.datePaiement ?? '—'}</td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>
-                                <div className="d-flex justify-content-between border-top pt-2">
+                                <div className="d-flex justify-content-between align-items-start border-top pt-2">
                                     <span className="text-muted">
                                         {avanceForm.data.encaissement_ids.length} paiement(s) sélectionné(s)
                                     </span>
-                                    <span className="fw-medium">Total à convertir : {avanceSelectedTotal.toFixed(2)} MAD</span>
+                                    <span className="text-end">
+                                        <span className="fw-medium d-block">Total à libérer en avance : {avanceSelectedTotal.toFixed(2)} MAD</span>
+                                        {avanceSelectedConserve > 0 && (
+                                            <span className="text-muted fs-13 d-block">
+                                                Conservé sur les frais d'origine : {avanceSelectedConserve.toFixed(2)} MAD
+                                            </span>
+                                        )}
+                                    </span>
                                 </div>
                             </>
                         )

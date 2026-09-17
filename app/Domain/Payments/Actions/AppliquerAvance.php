@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domain\Payments\Actions;
 
+use App\Domain\Payments\Support\ChequeOrigine;
 use App\Domain\Shared\Support\ReferenceGenerator;
-use App\Models\Cheque;
 use App\Models\Encaissement;
 use App\Models\InscriptionFee;
 use Illuminate\Support\Facades\DB;
@@ -75,7 +75,9 @@ final class AppliquerAvance
 
             // An avance funded by a cheque the bank bounced is not money
             // (audit DB-05): the Chèque account was reversed, nothing to apply.
-            if ($avance->cheque_id !== null && $avance->cheque?->statut === Cheque::STATUT_REJETE) {
+            // Read through the applied_from chain: a reconverted application
+            // carries no cheque_id of its own (ChequeOrigine).
+            if (ChequeOrigine::estRejete($avance)) {
                 throw ValidationException::withMessages([
                     'avance' => __('This advance was funded by a rejected cheque and cannot be applied.'),
                 ]);

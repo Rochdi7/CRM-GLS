@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Payments\Actions;
 
-use App\Models\Cheque;
+use App\Domain\Payments\Support\ChequeOrigine;
 use App\Models\Encaissement;
 use App\Models\InscriptionFee;
 use Illuminate\Support\Facades\DB;
@@ -62,7 +62,7 @@ final class DeplacerEncaissementVersFrais
 
             // Un chèque rejeté n'est pas de l'argent : le compte Chèque a
             // déjà été contre-passé (cf. AppliquerAvance).
-            if ($cible !== null && $row->cheque_id !== null && $row->cheque?->statut === Cheque::STATUT_REJETE) {
+            if ($cible !== null && ChequeOrigine::estRejete($row)) {
                 throw ValidationException::withMessages([
                     'encaissement_id' => __('This payment was funded by a rejected cheque and cannot be moved.'),
                 ]);

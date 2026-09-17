@@ -1373,5 +1373,10 @@
     "Cannot open :table: :reason": "Impossible d'ouvrir :table : :reason",
     "Access denied to the app role": "Accès refusé au rôle applicatif",
     "Fix on the server: ALTER TABLE … OWNER TO the app role, or drop it.": "À corriger sur le serveur : ALTER TABLE … OWNER TO le rôle applicatif, ou supprimer la table.",
-    "Select a center in the top bar before requesting a transfer — money always leaves one specific center.": "Sélectionnez un centre dans la barre du haut avant de demander un transfert — l'argent sort toujours d'un centre précis."
+    "Select a center in the top bar before requesting a transfer — money always leaves one specific center.": "Sélectionnez un centre dans la barre du haut avant de demander un transfert — l'argent sort toujours d'un centre précis.",
+    "The amount to release must be between 0.01 and the payment amount (:montant DH).": "Le montant à libérer doit être compris entre 0,01 et le montant du paiement (:montant DH).",
+    "A payment attached to a hidden fee can only be converted in full — nothing can stay on a fee that is no longer due.": "Un paiement rattaché à un frais masqué ne peut être converti qu'en entier — rien ne peut rester sur un frais qui n'est plus dû.",
+    "A payment funded by a rejected cheque cannot be split.": "Un paiement financé par un chèque rejeté ne peut pas être scindé.",
+    "Hidden fee: the payment can only be converted in full.": "Frais masqué : le paiement ne peut être converti qu'en entier.",
+    "Rejected cheque: the payment cannot be split.": "Chèque rejeté : le paiement ne peut pas être scindé."
 }

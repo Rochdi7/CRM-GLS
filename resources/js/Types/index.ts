@@ -2025,6 +2025,15 @@ export interface InscriptionPaymentRow {
     datePaiement: string | null;
     /** Already refunded — cannot be converted into an advance. */
     rembourse: boolean;
+    /**
+     * Whether a PARTIAL conversion (« scinder ») is accepted for this row —
+     * the action's own rule (hidden fee / rejected cheque refuse it), carried
+     * here so the modal disables the amount input instead of re-deriving it.
+     * A whole-row conversion stays possible when false.
+     */
+    splittable: boolean;
+    /** French reason when `splittable` is false, null otherwise. */
+    splitBlocker: string | null;
 }
 
 /** One editable payment line in the create-form's cascade table — mirrors Livewire's $paymentLines shape. */

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Domain\Payments\Support\ChequeOrigine;
 use App\Models\Activity;
 use App\Models\Caisse;
 use App\Models\CaisseTransfer;
@@ -150,15 +151,20 @@ final class VerifierCoherenceCaisses extends Command
                 ];
             });
 
-        Remboursement::query()
-            ->with(['caisse', 'encaissement.cheque'])
+        $remboursements = Remboursement::query()
+            ->with(['caisse', 'encaissement'])
             ->whereHas('caisse', fn ($q) => $q->whereIn('type', Caisse::TYPES_METHODE))
             ->orderBy('id')
-            ->get()
-            ->each(function (Remboursement $r) use (&$rows): void {
+            ->get();
+        // Same chain-aware lookup as CaisseResolver::forRemboursement(): a
+        // refund of a reconverted application of a bounced cheque legitimately
+        // reverses the Chèque account too.
+        $chequesOrigine = ChequeOrigine::pour($remboursements->pluck('encaissement_id')->filter()->map(fn ($id) => (int) $id)->all());
+
+        $remboursements
+            ->each(function (Remboursement $r) use (&$rows, $chequesOrigine): void {
                 $legit = $r->encaissement !== null
-                    && $r->encaissement->cheque !== null
-                    && $r->encaissement->cheque->statut === Cheque::STATUT_REJETE
+                    && ($chequesOrigine[(int) $r->encaissement_id] ?? null)?->statut === Cheque::STATUT_REJETE
                     && (int) $r->encaissement->caisse_id === (int) $r->caisse_id;
 
                 if ($legit) {

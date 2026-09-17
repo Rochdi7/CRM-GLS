@@ -7,6 +7,7 @@ namespace App\Domain\Payments\Queries;
 use App\Domain\Payments\Support\ResoudreAllocationsAvance;
 use App\Models\Activity;
 use App\Models\Caisse;
+use App\Domain\Payments\Support\ChequeOrigine;
 use App\Models\Cheque;
 use App\Models\Employee;
 use App\Models\Encaissement;
@@ -339,7 +340,15 @@ final class GetEncaissementsList
             ? $this->fraisAppliques($encaissements->getCollection()->pluck('id')->all())
             : [];
 
-        $encaissements->through(function (Encaissement $e) use ($view, $anciensFrais, $fraisAppliques): array {
+        // The cheque behind every row on the page, read THROUGH the
+        // applied_from chain (one query per depth level for the whole page):
+        // a reconverted application of a bounced cheque carries no cheque_id
+        // of its own, yet its money is exactly as non-existent as the root's.
+        $chequesOrigine = $view !== 'cheque'
+            ? ChequeOrigine::pour($encaissements->getCollection()->pluck('id')->all())
+            : [];
+
+        $encaissements->through(function (Encaissement $e) use ($view, $anciensFrais, $fraisAppliques, $chequesOrigine): array {
             $isAvance = $e->inscription_fee_id === null;
             $utilise = $isAvance && $view !== 'cheque' ? (float) ($e->applications_sum_montant ?? 0) : null;
 
@@ -354,8 +363,7 @@ final class GetEncaissementsList
             // amount. Refunding such a row stays allowed — that reversal is
             // the intended remedy, and it debits the Chèque account, not the
             // till (CaisseResolver::forRemboursement).
-            $chequeRejete = $e->cheque_id !== null
-                && $e->cheque?->statut === Cheque::STATUT_REJETE;
+            $chequeRejete = ($chequesOrigine[$e->id] ?? $e->cheque)?->statut === Cheque::STATUT_REJETE;
             $feeTotal = $e->fee !== null ? (float) $e->fee->montant : null;
             $feePaye = $e->fee !== null ? (float) ($e->fee->encaissements_sum_montant ?? 0) : null;
 

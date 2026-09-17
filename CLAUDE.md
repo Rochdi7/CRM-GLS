@@ -951,6 +951,59 @@ the database layer. Non-negotiable invariants already enforced in code:
   c'est le sens d'erreur qui AUTORISE. L'écran AFFICHE le refus avec le
   nombre d'appels au lieu de masquer l'option. Tests :
   `tests/Feature/Backoffice/Finance/TransfertFraisAutreEtudiantTest.php`.
+- **⚠ « Scinder » un paiement à la conversion en avance — COMPOSÉ, jamais
+  une nouvelle écriture** (17/09/2026). Cas réel : 1 400 DH payés sur le
+  groupe A, deux semaines suivies, changement de groupe ; l'école garde
+  700 DH sur le frais A et libère 700 DH pour le groupe B. Convertir la
+  ligne ENTIÈRE remettait le frais A « Non payé » et effaçait les deux
+  semaines payées. `ConvertirEncaissementsEnAvance::handle($inscription,
+  $ids, $montants = [])` — `$montants` (indexé par id) est le montant À
+  LIBÉRER par ligne ; clé absente = ligne entière, donc les 7 commandes
+  console et 3 actions Domain qui l'appellent gardent leur comportement.
+  Une scission = dans UNE transaction, sous verrou : (1) détacher la ligne
+  (conversion ordinaire) ; (2) ré-appliquer la part CONSERVÉE au MÊME frais
+  via `AppliquerAvance` — ligne d'application habituelle, caisse/agent/date
+  HÉRITÉS. Ni `montant` ni `caisse_id` ne sont édités, aucune colonne
+  ajoutée, `caisses.solde` ne bouge pas, et AUCUNE lecture n'apprend un
+  concept nouveau : journal/comptes/`verifier-coherence` excluent déjà les
+  lignes d'application, le remboursement de l'avance est plafonné à son
+  restant (la part libérée), `SupprimerEncaissement` refuse l'avance tant
+  qu'elle porte une application, `ResoudreAllocationsAvance` suit la chaîne
+  (y compris quand la ligne scindée est elle-même une application). Trois
+  bornes : un montant hors `]0, montant]` ou invalide sur UNE ligne refuse
+  le LOT ENTIER (§11 « signaler plutôt que masquer ») ; un frais MASQUÉ et
+  un chèque REJETÉ refusent la scission (rien ne se repose sur un frais qui
+  n'est plus dû / de l'argent qui n'a jamais existé) mais acceptent la
+  conversion entière — `GetInscriptionPayments` porte cette règle à l'écran
+  (`splittable` / `splitBlocker`), le modal ne la redérive pas ; l'entrée de
+  journal `avance_split` nomme conservé / libéré / frais. Ne JAMAIS
+  « simplifier » en éditant `montant` ou en créant une seconde ligne
+  monétaire : la somme des lignes `applied_from IS NULL` par caisse est ce
+  que l'auditeur de cohérence rapproche du solde. Tests :
+  `tests/Feature/Backoffice/Finance/AvanceScindeeSurConversionTest.php`.
+- **⚠ Le chèque derrière un encaissement se lit À TRAVERS la chaîne
+  `applied_from`** (17/09/2026, `Domain\Payments\Support\ChequeOrigine`).
+  Une ligne d'application hérite caisse / agent / date / méthode de son
+  avance mais PAS `cheque_id` — voulu : la somme des `montant` portant un
+  `cheque_id` est le montant UTILISÉ du chèque, recopier la clé le
+  compterait deux fois. Conséquence trouvée en bouclant
+  « convertir → appliquer → reconvertir » : une application RECONVERTIE d'un
+  chèque REJETÉ ne savait plus d'où venait son argent — la liste l'offrait
+  (`applicable`), `AppliquerAvance` l'acceptait, et un remboursement la
+  faisait sortir de la caisse PHYSIQUE alors que ce chèque n'y est jamais
+  entré (seul le compte Chèque du centre avait été crédité puis
+  contre-passé). `ChequeOrigine::pour([ids])` (lot, une requête par niveau)
+  / `de($row)` / `estRejete($row)` est la SEULE définition, partagée par
+  `AppliquerAvance`, `DeplacerEncaissementVersFrais`, la scission de
+  `ConvertirEncaissementsEnAvance`, `GetEncaissementsList`,
+  `GetInscriptionPayments`, `CaisseResolver::forRemboursement` ET
+  `caisse:verifier-coherence` (son « exception légitime » suit la même
+  chaîne, sinon l'auditeur signale le remboursement correct). Ne jamais
+  réécrire `$row->cheque_id !== null && $row->cheque->statut === REJETE`
+  sur une ligne d'avance : ça ne voit que la racine. Le multi-tour lui-même
+  est sain — 4 conversions avec une scission au milieu, un seul dirham
+  reçu, chaque lecture concorde, auditeur strict à 0. Tests :
+  `tests/Feature/Backoffice/Finance/AvanceConvertieEnBoucleTest.php`.
 - **⚠ Retirer un frais DÉJÀ PAYÉ libère toujours son argent en avance.**
   Trois chemins retirent un frais d'une inscription et ils doivent se
   comporter à l'identique, sinon celui que l'utilisateur emprunte change ce

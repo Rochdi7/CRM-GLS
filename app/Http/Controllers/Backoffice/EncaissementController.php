@@ -552,7 +552,20 @@ final class EncaissementController extends Controller
         // annulation) vers des avances réutilisables. L'exiger active
         // emprisonnerait le versement sur le dossier qu'on vient de fermer —
         // c'est le sens inverse d'un encaissement.
-        $action->handle($inscription, array_map('intval', $data['encaissement_ids']));
+        //
+        // `montants` (facultatif, indexé par id) scinde un paiement : la part
+        // saisie est libérée en avance, le reste demeure sur le frais
+        // d'origine — cf. ConvertirEncaissementsEnAvance. Une entrée vide
+        // vaut « la ligne entière ».
+        $montants = [];
+
+        foreach ($data['montants'] ?? [] as $id => $montant) {
+            if ($montant !== null && $montant !== '') {
+                $montants[(int) $id] = (float) $montant;
+            }
+        }
+
+        $action->handle($inscription, array_map('intval', $data['encaissement_ids']), $montants);
 
         return $this->backToListPreservingFilters($request, 'backoffice.encaissements.index', ['view' => 'avance'])
             ->with('success', __('Payments converted into advances.'));

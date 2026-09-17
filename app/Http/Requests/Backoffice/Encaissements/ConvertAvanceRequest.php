@@ -28,6 +28,12 @@ final class ConvertAvanceRequest extends FormRequest
             'inscription_id' => ['required', 'integer', 'exists:inscriptions,id'],
             'encaissement_ids' => ['required', 'array', 'min:1'],
             'encaissement_ids.*' => ['required', 'integer', 'exists:encaissements,id'],
+            // Partial conversion (« scinder ») — the amount to RELEASE per
+            // ticked payment, keyed by encaissement id. An absent or empty
+            // entry means the whole row. The upper bound (≤ the row's own
+            // montant) is checked in the action on the LOCKED row, not here.
+            'montants' => ['sometimes', 'array'],
+            'montants.*' => ['nullable', 'numeric', 'min:0.01'],
         ];
     }
 

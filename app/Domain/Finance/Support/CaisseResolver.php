@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domain\Finance\Support;
 
+use App\Domain\Payments\Support\ChequeOrigine;
 use App\Models\Caisse;
 use App\Models\Employee;
-use App\Models\Cheque;
 use App\Models\Encaissement;
 use App\Services\CaisseProvisioner;
 use App\Services\Context\CurrentContext;
@@ -78,9 +78,12 @@ final class CaisseResolver
      */
     public function forRemboursement(Employee $agent, ?Encaissement $encaissement): Caisse
     {
+        // The cheque is read THROUGH the applied_from chain (ChequeOrigine):
+        // a reconverted application of a bounced cheque carries no cheque_id
+        // of its own, but it inherited the Chèque account as caisse_id, and
+        // refunding it from the till would take out cash that never came in.
         if ($encaissement !== null
-            && $encaissement->cheque_id !== null
-            && $encaissement->cheque?->statut === Cheque::STATUT_REJETE
+            && ChequeOrigine::estRejete($encaissement)
             && $encaissement->caisse !== null
             && $encaissement->caisse->isCompteMethode()) {
             return $encaissement->caisse;

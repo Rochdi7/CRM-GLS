@@ -525,6 +525,7 @@ final class GetActivityLogList
             'password_reset' => 'Réinitialisation du mot de passe',
             'solde_movement' => 'Mouvement de caisse',
             'avance_applied' => "Avance affectée à un frais",
+            'avance_split' => 'Paiement scindé (conversion partielle en avance)',
             'cheque_statut' => 'Changement de statut du chèque',
             null => null,
             default => $event,
