@@ -165,6 +165,71 @@ final class ValidationDepensesScopeTest extends TestCase
             });
     }
 
+    /**
+     * ⚠ A pending dépense is listed under the centre it was KEYED IN, on both
+     * the browsing tab and the validation tab — never under the centre its
+     * till happens to be attached to.
+     *
+     * An employee owns ONE till for life, attached to their PRIMARY centre
+     * (§11), yet works in several centres. Before `depenses.etablissement_id`
+     * (18/09/2026) the centre was resolved through that till, so an expense
+     * keyed while working in another centre disappeared from the screen it
+     * had just been created on — and, being pending, could not be approved
+     * there either: its money stayed held in the till with no screen able to
+     * decide it.
+     */
+    public function test_a_pending_expense_is_listed_under_the_centre_it_was_keyed_in(): void
+    {
+        $autre = Etablissement::factory()->create();
+
+        // The agent's till belongs to $this->centre (their primary), but the
+        // expense was keyed while working in $autre.
+        $ailleurs = $this->pending($this->type, '354.00');
+        $ailleurs->update(['etablissement_id' => $autre->id]);
+
+        $ici = $this->pending($this->type, '120.00');
+        $ici->update(['etablissement_id' => $this->centre->id]);
+
+        $approver = $this->approver();
+
+        // Working in the OTHER centre: only the row keyed there is listed —
+        // on the browsing tab AND on the tab that can approve it.
+        $this->actingAs($approver)
+            ->post(route('backoffice.context.update'), ['etablissement_id' => $autre->id]);
+
+        $this->actingAs($approver)
+            ->get(route('backoffice.depenses.index'))
+            ->assertInertia(function ($page) use ($ailleurs, $ici): void {
+                $props = $page->toArray()['props'];
+                $depenses = collect($props['depenses']['data'])->pluck('reference')->all();
+                $validation = collect($props['validationDepenses']['data'])->pluck('reference')->all();
+
+                $this->assertContains($ailleurs->reference, $depenses);
+                $this->assertNotContains($ici->reference, $depenses);
+
+                // Pending money must be decidable from the centre it belongs to.
+                $this->assertContains($ailleurs->reference, $validation);
+                $this->assertSame('354.00', $props['validationMontantEnAttente']);
+                $this->assertSame(1, $props['validationEnAttenteCount']);
+            });
+
+        // And symmetrically from the primary centre — the till's centre does
+        // not drag the other row along with it.
+        $this->actingAs($approver)
+            ->post(route('backoffice.context.update'), ['etablissement_id' => $this->centre->id]);
+
+        $this->actingAs($approver)
+            ->get(route('backoffice.depenses.index'))
+            ->assertInertia(function ($page) use ($ailleurs, $ici): void {
+                $props = $page->toArray()['props'];
+                $depenses = collect($props['depenses']['data'])->pluck('reference')->all();
+
+                $this->assertContains($ici->reference, $depenses);
+                $this->assertNotContains($ailleurs->reference, $depenses);
+                $this->assertSame('120.00', $props['validationMontantEnAttente']);
+            });
+    }
+
     public function test_a_paiement_prof_can_actually_be_approved(): void
     {
         $prof = $this->pending($this->profType, '7650.00', $this->group());
