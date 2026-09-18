@@ -24,6 +24,7 @@ import TextareaField from '@/Components/Forms/TextareaField';
 import PhoneField from '@/Components/Forms/PhoneField';
 import FormActions from '@/Components/Forms/FormActions';
 import StatusBadge from '@/Components/Details/StatusBadge';
+import { statutVariant } from '@/Lib/inscriptionStatut';
 import type {
     HiddenInscriptionFee,
     InscriptionFeeLine,
@@ -163,13 +164,10 @@ function emptyForm(defaultCountry: string): InscriptionFormState {
     };
 }
 
-/** Statut → badge color (Inscription::STATUTS: Active/Annulée/Changement/Expirée/Archivée). */
-function statutVariant(statut: string): 'success' | 'danger' | 'warning' | 'secondary' {
-    if (statut === 'Active') return 'success';
-    if (statut === 'Annulée') return 'danger';
-    if (statut === 'Changement') return 'warning';
-    return 'secondary';
-}
+// Statut → badge colour now lives in @/Lib/inscriptionStatut (imported
+// above): the « Appliquer l'avance » dropdown paints its options with the
+// SAME map, so a « Changement » cannot read yellow on one screen and grey on
+// the other.
 
 /**
  * Mirrors InscriptionFee::computeMontant() exactly — display-only preview;

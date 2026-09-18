@@ -113,8 +113,25 @@ export default function SelectField({
     }
 
     function choose(option: SelectOption | null) {
+        // A disabled option is listed for CONTEXT, never selectable: picking
+        // it would submit a value the server refuses.
+        if (option?.disabled) {
+            return;
+        }
+
         emit(option === null ? '' : String(option.value));
         close(true);
+    }
+
+    /** Next selectable index in `direction`, skipping disabled rows. */
+    function nextEnabled(from: number, direction: 1 | -1): number {
+        for (let i = from; i >= 0 && i < shown.length; i += direction) {
+            if (!shown[i]?.disabled) {
+                return i;
+            }
+        }
+
+        return highlight;
     }
 
     useEffect(() => {
@@ -166,10 +183,10 @@ export default function SelectField({
             close(true);
         } else if (event.key === 'ArrowDown') {
             event.preventDefault();
-            setHighlight((h) => Math.min(h + 1, shown.length - 1));
+            setHighlight((h) => nextEnabled(Math.min(h + 1, shown.length - 1), 1));
         } else if (event.key === 'ArrowUp') {
             event.preventDefault();
-            setHighlight((h) => Math.max(h - 1, 0));
+            setHighlight((h) => nextEnabled(Math.max(h - 1, 0), -1));
         } else if (event.key === 'Enter') {
             event.preventDefault();
             if (shown[highlight]) {
@@ -321,23 +338,34 @@ export default function SelectField({
                                     {shown.map((option, index) => (
                                         <li
                                             key={option.value}
-                                            className={`select2-results__option${index === highlight ? ' select2-results__option--highlighted' : ''}`}
+                                            className={`select2-results__option${index === highlight && !option.disabled ? ' select2-results__option--highlighted' : ''}${option.disabled ? ' select2-results__option--disabled' : ''}`}
                                             role="option"
                                             aria-selected={selected ? String(option.value) === String(selected.value) : false}
-                                            onMouseEnter={() => setHighlight(index)}
+                                            aria-disabled={option.disabled ? true : undefined}
+                                            title={option.disabledReason}
+                                            onMouseEnter={() => {
+                                                if (!option.disabled) {
+                                                    setHighlight(index);
+                                                }
+                                            }}
                                             onMouseDown={(e) => {
                                                 e.preventDefault();
                                                 choose(option);
                                             }}
                                         >
-                                            {option.icon ? (
-                                                <span className="d-inline-flex align-items-center gap-2">
-                                                    {option.icon}
-                                                    {option.label}
-                                                </span>
-                                            ) : (
-                                                option.label
-                                            )}
+                                            <span className="d-flex align-items-center justify-content-between gap-2">
+                                                {option.icon ? (
+                                                    <span className="d-inline-flex align-items-center gap-2">
+                                                        {option.icon}
+                                                        {option.label}
+                                                    </span>
+                                                ) : (
+                                                    <span>{option.label}</span>
+                                                )}
+                                                {option.disabled && option.disabledReason && (
+                                                    <small className="text-muted flex-shrink-0">{option.disabledReason}</small>
+                                                )}
+                                            </span>
                                         </li>
                                     ))}
                                 </ul>

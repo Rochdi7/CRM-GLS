@@ -740,28 +740,44 @@ final class GetEncaissementsList
     }
 
     /**
-     * A student's registrations in the active academic year — mirrors
-     * EncaissementsIndex::render()'s `inscriptions` cascade data exactly.
+     * A student's registrations in the active academic year, for the payment
+     * and « Appliquer l'avance » cascades — EVERY dossier, payable first,
+     * each carrying its `statut` and whether it can actually receive money.
      *
-     * @return Collection<int, array{id:int, label:string}>
+     * @return Collection<int, array{id:int, label:string, statut:string, payable:bool}>
      */
     public function studentInscriptions(int $studentId): Collection
     {
+        // ⚠ TOUS les dossiers de l'étudiant sont RENDUS, plus seulement les
+        // « Active » (17/09/2026, demande du CEO : « so if want to apply
+        // other frais to other groups i can »). Une caissière qui ne voyait
+        // qu'un seul dossier ne pouvait pas savoir si l'étudiant en avait
+        // d'autres, ni pourquoi celui qu'elle cherchait manquait — la liste
+        // MONTRE donc le dossier clos et DIT qu'il n'est pas payable, au lieu
+        // de le masquer (§11 « signaler plutôt que masquer »).
+        //
+        // La règle métier ne bouge pas : seule une inscription ACTIVE se
+        // paie — une annulée / archivée / expirée / remplacée par un
+        // changement de groupe n'a plus de frais dus, et l'argent reçu pour
+        // un tel dossier est une AVANCE. C'est `payable` qui porte ici la
+        // règle de `EncaissementController::assertInscriptionPayable()`
+        // jusqu'à l'écran (§5 : un read-model ne redérive jamais une règle,
+        // il la PORTE) ; l'option est donc listée mais désactivée, jamais
+        // sélectionnable, et le serveur refuse de toute façon.
         return Inscription::query()
             ->with('group')
             ->where('student_id', $studentId)
-            // Seule une inscription ACTIVE se paie. Une inscription annulée,
-            // archivée, expirée ou remplacée par un changement de groupe n'a
-            // plus de frais dus : l'argent reçu pour un tel dossier est une
-            // avance (elle sera appliquée à une inscription active), jamais un
-            // encaissement sur ses frais. Le garde serveur correspondant est
-            // EncaissementController::assertInscriptionPayable().
-            ->where('statut', Inscription::STATUT_ACTIVE)
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
+            // Les dossiers PAYABLES d'abord : c'est sur eux que l'argent se
+            // pose, les autres ne sont là que pour le contexte.
+            ->orderByRaw('case when statut = ? then 0 else 1 end', [Inscription::STATUT_ACTIVE])
+            ->orderByDesc('id')
             ->get()
             ->map(fn (Inscription $i): array => [
                 'id' => $i->id,
                 'label' => $i->reference.' — '.($i->group?->nom ?? '—'),
+                'statut' => $i->statut,
+                'payable' => $i->statut === Inscription::STATUT_ACTIVE,
             ]);
     }
 

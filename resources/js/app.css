@@ -327,6 +327,26 @@ input.gls-select2-search__field::-webkit-search-decoration {
     color: #3d5ee1;
     font-weight: 500;
 }
+/*
+ * An option listed for CONTEXT but not selectable (a closed inscription in
+ * « Appliquer l'avance »): it stays readable — hiding it would look like
+ * missing data — but reads as unavailable and never highlights on hover.
+ */
+.select2-results__option--disabled,
+.select2-results__option--disabled[aria-selected='true'] {
+    opacity: 0.62;
+    cursor: not-allowed;
+    background-color: transparent;
+    font-weight: 400;
+}
+/* Statut dot in front of an option label (Active/Changement/Annulée…). */
+.gls-option-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: inline-block;
+}
 html[data-theme='dark'] .select2-results__option--highlighted[aria-selected],
 html[data-theme='dark'] .select2-results__option--highlighted[aria-selected='true'] {
     background-color: #2a2a3c;

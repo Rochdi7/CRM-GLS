@@ -433,9 +433,12 @@ final class EncaissementsInertiaCrudTest extends TestCase
         // celui dont on convertit les paiements en avances.
         $inscription->update(['statut' => Inscription::STATUT_ANNULEE]);
 
-        // Le cascade « payer » ne l'offre plus…
+        // Le cascade « payer » le liste, mais marqué NON payable (17/09/2026 —
+        // il le masquait auparavant)…
         $payable = $this->get(route('backoffice.students.inscriptions-for-payment', $student))->json();
-        $this->assertCount(0, $payable['inscriptions']);
+        $this->assertCount(1, $payable['inscriptions']);
+        $this->assertFalse($payable['inscriptions'][0]['payable']);
+        $this->assertSame(Inscription::STATUT_ANNULEE, $payable['inscriptions'][0]['statut']);
 
         // …mais le cascade « convertir en avance » le liste, statut visible.
         $convertible = $this->get(route('backoffice.students.inscriptions-for-conversion', $student))->json();
@@ -1756,10 +1759,12 @@ final class EncaissementsInertiaCrudTest extends TestCase
     // --- Une inscription non ACTIVE ne se paie pas ----------------------
     // Annulée / Archivée / Expirée / Changement : le dossier est clos, ses
     // frais ne sont plus dus. L'argent reçu s'enregistre en avance, puis
-    // s'applique à une inscription active. Le dropdown filtre, le serveur
-    // refuse (le filtre client n'est qu'un confort d'interface, §5).
+    // s'applique à une inscription active. Le dossier clos est LISTÉ (sinon
+    // l'opérateur ne sait pas qu'il existe) mais marqué non payable, et le
+    // serveur refuse de toute façon (§5 : le prop client n'est qu'un confort
+    // d'interface).
 
-    public function test_the_registration_lookup_lists_only_active_registrations(): void
+    public function test_the_registration_lookup_lists_closed_registrations_as_not_payable(): void
     {
         $user = $this->userWith('payments.view', 'payments.create');
         $this->actingAs($user);
@@ -1768,11 +1773,60 @@ final class EncaissementsInertiaCrudTest extends TestCase
         [, $archivee] = $this->enrolledStudentWithFee(1000);
         $archivee->update(['student_id' => $student->id, 'statut' => Inscription::STATUT_ARCHIVEE]);
 
-        $ids = collect($this->get(route('backoffice.students.inscriptions-for-payment', $student))->json('inscriptions'))
-            ->pluck('id');
+        $rows = collect($this->get(route('backoffice.students.inscriptions-for-payment', $student))->json('inscriptions'));
+        $byId = $rows->keyBy('id');
 
-        $this->assertTrue($ids->contains($active->id));
-        $this->assertFalse($ids->contains($archivee->id));
+        // Les DEUX dossiers sont visibles (17/09/2026) : « je veux pouvoir
+        // appliquer un frais à un autre groupe » suppose de les voir tous.
+        $this->assertTrue($byId->has($active->id));
+        $this->assertTrue($byId->has($archivee->id));
+
+        // Chacun porte la règle du serveur, pas seulement son statut.
+        $this->assertTrue($byId[$active->id]['payable']);
+        $this->assertSame(Inscription::STATUT_ACTIVE, $byId[$active->id]['statut']);
+        $this->assertFalse($byId[$archivee->id]['payable']);
+        $this->assertSame(Inscription::STATUT_ARCHIVEE, $byId[$archivee->id]['statut']);
+
+        // Les dossiers payables passent EN PREMIER : c'est sur eux que
+        // l'argent se pose.
+        $this->assertSame($active->id, $rows->first()['id']);
+    }
+
+    /**
+     * Le pendant du test ci-dessus : le dossier clos est LISTÉ, donc le
+     * serveur doit rester celui qui refuse. Sans cette garde, rendre l'option
+     * visible reviendrait à la rendre acceptable.
+     */
+    public function test_applying_an_advance_to_a_closed_registration_is_refused(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update');
+        $this->actingAs($user);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
+        $caisse = $user->employee->caisses()->first();
+
+        $avance = Encaissement::create([
+            'reference' => 'ENC-AVCLOS',
+            'etablissement_id' => $this->centre->id,
+            'student_id' => $student->id,
+            'inscription_fee_id' => null,
+            'caisse_id' => $caisse->id,
+            'montant' => 500,
+            'methode' => 'Espèces',
+            'date_paiement' => '2025-09-20',
+            'agent_id' => $user->employee->id,
+        ]);
+
+        $inscription->update(['statut' => Inscription::STATUT_ANNULEE]);
+
+        $this->from(route('backoffice.encaissements.index'))
+            ->post(route('backoffice.avances.apply', $avance), [
+                'fee_id' => $fee->id,
+                'montant' => '500',
+            ])->assertSessionHasErrors('fee_id');
+
+        // L'avance est intacte : rien n'a été alloué.
+        $this->assertSame(500.0, $avance->fresh()->montantRestant());
+        $this->assertSame(0.0, $fee->fresh()->montantPaye());
     }
 
     public function test_a_payment_on_a_non_active_registration_is_refused(): void

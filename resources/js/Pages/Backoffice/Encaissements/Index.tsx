@@ -21,7 +21,8 @@ import TextareaField from '@/Components/Forms/TextareaField';
 import FormActions from '@/Components/Forms/FormActions';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { t } from '@/Lib/i18n';
-import type { EncaissementRow, EncaissementsPageProps, InscriptionPaymentRow, PaymentLine, SelectOption, StudentChequeOption, UnpaidFee } from '@/Types';
+import { statutColor } from '@/Lib/inscriptionStatut';
+import type { EncaissementRow, EncaissementsPageProps, InscriptionPaymentRow, PaymentLine, SelectOption, StudentChequeOption, StudentInscriptionOption, UnpaidFee } from '@/Types';
 
 /**
  * ⚠ « Transfert vers un autre étudiant » — MASQUÉ à la demande du CEO le
@@ -92,6 +93,31 @@ function emptyCreateForm(): CreateFormState {
         date_paiement: new Date().toISOString().slice(0, 10),
         note: '',
         payment_lines: [],
+    };
+}
+
+/**
+ * One registration as the payment / apply-avance dropdowns show it: a statut
+ * dot in the theme's own colours (vert Active, jaune Changement, rouge
+ * Annulée, gris le reste — `statutVariant`, the SAME map the Inscriptions
+ * list badges use), the statut spelled out, and the row disabled when the
+ * server would refuse it.
+ */
+function inscriptionOption(inscription: StudentInscriptionOption): SelectOption {
+    return {
+        value: inscription.id,
+        label: inscription.payable ? inscription.label : `${inscription.label} (${inscription.statut})`,
+        icon: (
+            <span
+                className="gls-option-dot"
+                style={{ backgroundColor: statutColor(inscription.statut) }}
+                title={inscription.statut}
+                aria-hidden="true"
+            />
+        ),
+        disabled: !inscription.payable,
+        // Names the refusal instead of leaving a greyed row unexplained.
+        disabledReason: inscription.payable ? undefined : t('Closed — not payable'),
     };
 }
 
@@ -655,8 +681,15 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
         setLoadingApplyInscriptions(true);
         try {
             const response = await fetch(`/backoffice/students/${row.studentId}/inscriptions-for-payment`);
-            const data: { inscriptions: Array<{ id: number; label: string }> } = await response.json();
-            setApplyInscriptionOptions(data.inscriptions.map((i) => ({ value: i.id, label: i.label })));
+            const data: { inscriptions: StudentInscriptionOption[] } = await response.json();
+            // ALL the student's dossiers of the active year are listed —
+            // Active first, then the closed ones — so the cashier sees every
+            // group the money could go to instead of wondering why one is
+            // missing. A closed dossier is shown but NOT selectable:
+            // assertInscriptionPayable() refuses it server-side, and
+            // `payable` is that rule carried here, never re-derived from the
+            // statut string (§5).
+            setApplyInscriptionOptions(data.inscriptions.map(inscriptionOption));
         } finally {
             setLoadingApplyInscriptions(false);
         }
@@ -781,8 +814,11 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
         setLoadingInscriptions(true);
         try {
             const response = await fetch(`/backoffice/students/${studentId}/inscriptions-for-payment`);
-            const data: { inscriptions: Array<{ id: number; label: string }> } = await response.json();
-            setInscriptionOptions(data.inscriptions.map((i) => ({ value: i.id, label: i.label })));
+            const data: { inscriptions: StudentInscriptionOption[] } = await response.json();
+            // Same list, same rule: a closed dossier is visible (so the
+            // operator knows it exists) but cannot receive a payment —
+            // EncaissementController@store refuses it too.
+            setInscriptionOptions(data.inscriptions.map(inscriptionOption));
         } finally {
             setLoadingInscriptions(false);
         }

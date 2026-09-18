@@ -1004,6 +1004,27 @@ the database layer. Non-negotiable invariants already enforced in code:
   est sain — 4 conversions avec une scission au milieu, un seul dirham
   reçu, chaque lecture concorde, auditeur strict à 0. Tests :
   `tests/Feature/Backoffice/Finance/AvanceConvertieEnBoucleTest.php`.
+- **⚠ Le cascade « inscription » LISTE tous les dossiers, et DIT lesquels ne
+  se paient pas** (17/09/2026, `GetEncaissementsList::studentInscriptions`).
+  Il ne renvoyait que les `Active` : la caissière voyait UN dossier sans
+  savoir que l'étudiant en avait d'autres, ni pourquoi celui qu'elle
+  cherchait manquait — un écran qui masque ressemble à un écran qui n'a pas
+  la donnée. Désormais chaque ligne porte `statut` + `payable`, les payables
+  d'abord, et le composant peint le statut avec `Lib/inscriptionStatut`
+  (vert Active, **jaune Changement, rouge Annulée**, gris le reste) — la
+  MÊME table que les badges de la liste Inscriptions, extraite pour ne pas
+  exister en double. La règle métier est INCHANGÉE : seule une inscription
+  `Active` reçoit de l'argent (`assertInscriptionPayable`, encaissement ET
+  application d'avance) ; un dossier clos est donc **affiché mais
+  DÉSACTIVÉ** dans le dropdown, avec le motif à côté (« Clôturée — non
+  payable »), jamais sélectionnable — `payable` PORTE la règle du serveur,
+  le composant ne la redérive pas depuis la chaîne de statut (§5).
+  `SelectField` gère ça génériquement (`disabled` / `disabledReason` sur
+  `SelectOption`, options ignorées au clavier) : tout futur dropdown qui
+  doit montrer une option que le serveur refuserait reprend ce mécanisme au
+  lieu de la retirer de la liste. Tests :
+  `EncaissementsInertiaCrudTest::test_the_registration_lookup_lists_closed_registrations_as_not_payable`,
+  `::test_applying_an_advance_to_a_closed_registration_is_refused`.
 - **⚠ Retirer un frais DÉJÀ PAYÉ libère toujours son argent en avance.**
   Trois chemins retirent un frais d'une inscription et ils doivent se
   comporter à l'identique, sinon celui que l'utilisateur emprunte change ce

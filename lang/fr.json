@@ -1378,5 +1378,6 @@
     "A payment attached to a hidden fee can only be converted in full — nothing can stay on a fee that is no longer due.": "Un paiement rattaché à un frais masqué ne peut être converti qu'en entier — rien ne peut rester sur un frais qui n'est plus dû.",
     "A payment funded by a rejected cheque cannot be split.": "Un paiement financé par un chèque rejeté ne peut pas être scindé.",
     "Hidden fee: the payment can only be converted in full.": "Frais masqué : le paiement ne peut être converti qu'en entier.",
-    "Rejected cheque: the payment cannot be split.": "Chèque rejeté : le paiement ne peut pas être scindé."
+    "Rejected cheque: the payment cannot be split.": "Chèque rejeté : le paiement ne peut pas être scindé.",
+    "Closed — not payable": "Clôturée — non payable"
 }

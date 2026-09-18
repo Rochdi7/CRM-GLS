@@ -775,6 +775,28 @@ export interface SelectOption {
     icon?: ReactNode;
     /** Optional compact label shown in the closed control only (e.g. a dial code); the option list always shows the full `label`. */
     shortLabel?: string;
+    /**
+     * Listed but not selectable — used when an option must stay VISIBLE so the
+     * user understands the whole picture, while the server would refuse it
+     * (e.g. a closed inscription in « Appliquer l'avance »). Prefer this over
+     * dropping the row: a missing option looks like missing data.
+     */
+    disabled?: boolean;
+    /** Why `disabled` — shown next to the label so the refusal explains itself. */
+    disabledReason?: string;
+}
+
+/**
+ * One registration of a student as the payment/avance cascades list it
+ * (`GetEncaissementsList::studentInscriptions`). `payable` carries
+ * `EncaissementController::assertInscriptionPayable()`'s own rule to the UI —
+ * never re-derived from `statut` in a component.
+ */
+export interface StudentInscriptionOption {
+    id: number;
+    label: string;
+    statut: string;
+    payable: boolean;
 }
 
 /** Machine-readable subset of Laravel validation errors (Inertia's `errors` shared prop shape). */
