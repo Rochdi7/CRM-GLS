@@ -13,12 +13,13 @@ final class DepensePolicy extends ResourcePolicy
 {
     protected string $module = 'expenses';
 
-    // An expense reaches its center through the till it came out of.
+    // An expense belongs to the centre it was KEYED in (group, else its own
+    // column, else the till's for rows older than the column) — see
+    // Depense::centreId(). Reaching it through the till alone tied every
+    // expense to the employee's PRIMARY centre (18/09/2026).
     protected function centerId(Model $model): ?int
     {
-        $id = $model->caisse?->etablissement_id;
-
-        return $id === null ? null : (int) $id;
+        return $model instanceof Depense ? $model->centreId() : null;
     }
 
     /**

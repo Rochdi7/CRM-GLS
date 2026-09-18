@@ -20,6 +20,7 @@ import TagsInput from '@/Components/Forms/TagsInput';
 import FormActions from '@/Components/Forms/FormActions';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { useFilterReset } from '@/Hooks/useFilterReset';
+import { t } from '@/Lib/i18n';
 import type { DepenseRow, DepensesPageProps, EncaissementFormOption, RemboursementCaisseOption, RemboursementRow, SelectOption, SharedProps } from '@/Types';
 
 type Tab = 'depenses' | 'paiements-prof' | 'remboursements' | 'validation';
@@ -148,6 +149,8 @@ export default function DepensesIndex({
     canViewDepenses,
     canViewRemboursements,
     soldeActuel,
+    soldeTiroir,
+    soldeVentileParCentre,
     depenses,
     montantTotal,
     paiementsProf,
@@ -182,7 +185,7 @@ export default function DepensesIndex({
     const isLoading = useInertiaLoading();
     // The Types de dépenses tab links to its own page — UI-gate it like the
     // sidebar does (server enforcement unchanged).
-    const { auth } = usePage<SharedProps>().props;
+    const { auth, context } = usePage<SharedProps>().props;
     const canViewTypes = auth.isSuperAdmin || auth.permissions.includes('expense-types.view');
     const requestedTab = new URLSearchParams(window.location.search).get('tab');
     const initialTab: Tab = requestedTab === 'remboursements' && canViewRemboursements
@@ -1403,9 +1406,20 @@ export default function DepensesIndex({
                         </div>
                     )}
                     {!editingDepense && soldeActuel !== null && (
-                        <div className="alert alert-info d-flex justify-content-between align-items-center">
-                            <span>Solde actuel de votre caisse</span>
-                            <span className="fw-semibold">{Number(soldeActuel).toFixed(2)} MAD</span>
+                        <div className="alert alert-info">
+                            <div className="d-flex justify-content-between align-items-center">
+                                <span>
+                                    {soldeVentileParCentre
+                                        ? t('Available for :centre in your till', { centre: context?.currentCenter?.name ?? '' })
+                                        : t('Current balance of your till')}
+                                </span>
+                                <span className="fw-semibold">{Number(soldeActuel).toFixed(2)} MAD</span>
+                            </div>
+                            {soldeVentileParCentre && soldeTiroir !== null && soldeTiroir !== soldeActuel && (
+                                <div className="fs-13 text-muted mt-1">
+                                    {t('Your till physically holds :tiroir MAD, all centres together.', { tiroir: Number(soldeTiroir).toFixed(2) })}
+                                </div>
+                            )}
                         </div>
                     )}
                     <div className="row">

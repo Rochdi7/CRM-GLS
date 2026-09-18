@@ -8,7 +8,6 @@ use App\Domain\Finance\Support\CaisseLedger;
 use App\Domain\Finance\Support\GardeSoldeCaisse;
 use App\Models\Depense;
 use App\Models\Employee;
-use App\Models\Group;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -52,6 +51,15 @@ final class ApprouverDepense
                 ]);
             }
 
+            // The centre this expense belongs to — Depense::centreId(), the
+            // same rule every screen reads (group, else the centre it was
+            // keyed in, else the till's for rows older than the column). The
+            // creator's primary centre only serves a row whose till has no
+            // centre either.
+            $centreId = $locked->centreId()
+                ?? Employee::query()->whereKey($locked->agent_id)->value('etablissement_id');
+            $centreId = $centreId === null ? null : (int) $centreId;
+
             // The till that will be debited is the one STORED on the row —
             // never re-derived from the approver's context. Locked FOR
             // UPDATE here, so a concurrent approval on the same till waits
@@ -61,6 +69,9 @@ final class ApprouverDepense
                 (float) $locked->montant,
                 self::MESSAGE_SOLDE_INSUFFISANT,
                 'statut',
+                // Bound by the CENTRE's share of the till, not the whole
+                // drawer (18/09/2026) — see GardeSoldeCaisse « PAR CENTRE ».
+                $centreId,
             );
 
             $this->ledger->debit(
@@ -72,18 +83,20 @@ final class ApprouverDepense
                     'type_depense_id' => $locked->type_depense_id,
                     'methode' => $locked->methode_paiement,
                     'approuve_par' => $approvedBy->nomComplet(),
-                    // Centre dimension (01/09/2026): the group's centre for
-                    // a « Paiement prof », else the CREATOR's primary centre
-                    // — never the approver's context: the approver is a
-                    // super-admin possibly working from « Tous les centres »,
-                    // and the expense belongs to where it was incurred, not
-                    // where it was approved. (The creation-time context is
-                    // not persisted — depenses has no centre column — so the
-                    // creator's primary is the best stable derivation.)
-                    'etablissement_id' => ($locked->group_id !== null
-                            ? Group::query()->whereKey($locked->group_id)->value('etablissement_id')
-                            : null)
-                        ?? Employee::query()->whereKey($locked->agent_id)->value('etablissement_id'),
+                    // Centre dimension: the group's centre for a « Paiement
+                    // prof », else the centre the CREATOR was working in when
+                    // they keyed it (`depenses.etablissement_id`, persisted
+                    // since 18/09/2026) — never the approver's context: the
+                    // approver is a super-admin possibly working from « Tous
+                    // les centres », and the expense belongs to where it was
+                    // incurred, not where it was approved. Before the column
+                    // existed this was the creator's PRIMARY centre, so an
+                    // expense keyed in GLS Online was journaled against the
+                    // primary centre the moment it was approved.
+                    //
+                    // ONE value for the balance guard above AND this stamp, so
+                    // the share that was checked is the share that is debited.
+                    'etablissement_id' => $centreId,
                 ],
             );
 

@@ -55,7 +55,7 @@ class Depense extends Model implements HasMedia
     public const MARQUEUR_ANNULE = '[ANNULÉE]';
 
     protected $fillable = [
-        'reference', 'type_depense_id', 'caisse_id', 'group_id', 'montant',
+        'reference', 'type_depense_id', 'caisse_id', 'etablissement_id', 'group_id', 'montant',
         'methode_paiement', 'date_depense', 'periode_debut', 'periode_fin',
         'reference_facture',
         'description', 'mots_cles', 'note', 'agent_id',
@@ -134,6 +134,41 @@ class Depense extends Model implements HasMedia
     public function caisse(): BelongsTo
     {
         return $this->belongsTo(Caisse::class);
+    }
+
+    /**
+     * The centre the agent was WORKING IN when the expense was keyed
+     * (18/09/2026) — not the centre the till is attached to. NULL on rows
+     * older than the column: read the centre through centreId(), never
+     * through this relation alone.
+     */
+    public function etablissement(): BelongsTo
+    {
+        return $this->belongsTo(Etablissement::class);
+    }
+
+    /**
+     * The centre this expense belongs to — the PHP form of
+     * VentilationCentre::scopeDepensesAuCentre(), which is the query form of
+     * the SAME rule (keep the two in step):
+     *
+     *  1. the GROUP's centre for a « Paiement prof »;
+     *  2. else the centre stamped at creation (active context);
+     *  3. else — rows older than the column — the centre of the till that
+     *     paid (read-time fallback).
+     *
+     * An employee owns ONE till for life, attached to their primary centre,
+     * yet works in several centres (§11): resolving through the till alone
+     * filed an expense keyed in GLS Online under the employee's primary
+     * centre.
+     */
+    public function centreId(): ?int
+    {
+        $id = $this->group?->etablissement_id
+            ?? $this->etablissement_id
+            ?? $this->caisse?->etablissement_id;
+
+        return $id === null ? null : (int) $id;
     }
 
     /** Optional link to the class/group this expense belongs to. */

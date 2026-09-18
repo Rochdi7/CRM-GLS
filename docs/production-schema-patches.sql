@@ -342,3 +342,29 @@ ALTER TABLE inscriptions_historique ADD CONSTRAINT inscriptions_historique_group
 -- champ « Caisse à débiter » — pas même un directeur (le super-admin passe
 -- par Gate::before et n'est donc pas affecté).
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 18/09/2026 — `depenses.etablissement_id` : le centre de SAISIE d'une dépense
+--
+-- Une employée n'a qu'UNE caisse à vie, rattachée à son centre principal, mais
+-- travaille dans plusieurs centres (CLAUDE.md §11). `depenses` ne portait pas
+-- de centre : celui d'une dépense ordinaire retombait sur
+-- `caisses.etablissement_id`, donc une dépense saisie sur GLS Online était
+-- listée — et sa part de caisse débitée — sur le centre principal de
+-- l'employée, et restait invisible sur Online.
+--
+-- Nullable, AUCUN backfill : les lignes antérieures gardent NULL et se lisent
+-- avec le repli existant (groupe, sinon caisse) — `Depense::centreId()` /
+-- `VentilationCentre::scopeDepensesAuCentre()`. Aucun montant, aucun
+-- `caisses.solde`, aucune écriture de journal n'est touché.
+ALTER TABLE depenses ADD COLUMN IF NOT EXISTS etablissement_id bigint NULL;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'depenses_etablissement_id_foreign') THEN
+    ALTER TABLE depenses ADD CONSTRAINT depenses_etablissement_id_foreign
+      FOREIGN KEY (etablissement_id) REFERENCES etablissements (id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS depenses_centre_date_idx ON depenses (etablissement_id, date_depense);
+-- ---------------------------------------------------------------------------

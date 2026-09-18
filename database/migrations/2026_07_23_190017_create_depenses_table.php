@@ -19,6 +19,16 @@ return new class extends Migration
             $table->string('reference', 20)->unique();
             $table->foreignId('type_depense_id')->constrained('types_depenses')->restrictOnDelete();
             $table->foreignId('caisse_id')->constrained('caisses')->restrictOnDelete();
+            // Centre ACTIF de l'agent au moment de la SAISIE (18/09/2026). Une
+            // employée n'a qu'UNE caisse à vie, rattachée à son centre
+            // principal, mais travaille dans plusieurs centres (§11) : sans
+            // cette colonne, le centre d'une dépense retombait sur
+            // `caisses.etablissement_id`, si bien qu'une dépense saisie sur
+            // GLS Online était classée — et sa part de caisse débitée — sur
+            // le centre principal de l'employée. Même correctif que
+            // `caisse_transfers.etablissement_id`. Nullable : les lignes
+            // antérieures se lisent avec un repli (groupe, sinon caisse).
+            $table->foreignId('etablissement_id')->nullable()->constrained('etablissements')->nullOnDelete();
             $table->decimal('montant', 12, 2);
             // Approval workflow (CLAUDE.md §11 finance invariants). "En attente"
             // HOLDS the money — the till is not debited — until a super-admin
@@ -57,6 +67,9 @@ return new class extends Migration
             // not index a FK/filter column on its own (CLAUDE.md §17).
             $table->index(['statut', 'date_depense']);
             $table->index('approved_by', 'depenses_approved_by_idx');
+            // Every list / ventilation query filters the centre together
+            // with the date window (§17: no automatic FK index).
+            $table->index(['etablissement_id', 'date_depense'], 'depenses_centre_date_idx');
         });
     }
 

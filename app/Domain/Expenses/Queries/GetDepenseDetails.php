@@ -22,7 +22,7 @@ final class GetDepenseDetails
      */
     public function __invoke(Depense $depense): array
     {
-        $depense->loadMissing(['typeDepense', 'caisse.etablissement', 'agent', 'group', 'approvedBy']);
+        $depense->loadMissing(['typeDepense', 'caisse.etablissement', 'etablissement', 'agent', 'group.etablissement', 'approvedBy']);
 
         $motsCles = $depense->mots_cles
             ? array_values(array_filter(array_map('trim', explode(',', $depense->mots_cles))))
@@ -38,7 +38,11 @@ final class GetDepenseDetails
             'periodeDebut' => $depense->periode_debut?->format('d/m/Y'),
             'periodeFin' => $depense->periode_fin?->format('d/m/Y'),
             'caisse' => $depense->caisse?->nom,
-            'centre' => $depense->caisse?->etablissement?->nom_centre,
+            // Same order as Depense::centreId() — the centre the expense
+            // was keyed in, not the one its till is attached to.
+            'centre' => $depense->group?->etablissement?->nom_centre
+                ?? $depense->etablissement?->nom_centre
+                ?? $depense->caisse?->etablissement?->nom_centre,
             'agent' => $depense->agent?->nomComplet(),
             'recordedAt' => $depense->created_at?->format('d/m/Y H:i'),
             // Operation trail — see GetDepensesList for why these are kept

@@ -742,9 +742,17 @@ final class GetEncaissementsList
     /**
      * A student's registrations in the active academic year, for the payment
      * and « Appliquer l'avance » cascades — EVERY dossier, payable first,
-     * each carrying its `statut` and whether it can actually receive money.
+     * each carrying its `statut` and the TWO rules that differ between the
+     * two screens:
      *
-     * @return Collection<int, array{id:int, label:string, statut:string, payable:bool}>
+     *  - `payable`      : can receive a NEW payment — Active only
+     *                     (`assertInscriptionPayable`, money entering the till
+     *                     on a closed dossier);
+     *  - `avanceApplicable` : can receive an ALREADY-COLLECTED avance — any
+     *                     statut (18/09/2026), because the money is already in
+     *                     the caisse and only its allocation is being decided.
+     *
+     * @return Collection<int, array{id:int, label:string, statut:string, payable:bool, avanceApplicable:bool}>
      */
     public function studentInscriptions(int $studentId): Collection
     {
@@ -778,6 +786,11 @@ final class GetEncaissementsList
                 'label' => $i->reference.' — '.($i->group?->nom ?? '—'),
                 'statut' => $i->statut,
                 'payable' => $i->statut === Inscription::STATUT_ACTIVE,
+                // Une avance s'applique quel que soit le statut : l'argent est
+                // déjà encaissé, seule son AFFECTATION se décide ici. Les
+                // gardes qui comptent (même étudiant, frais non masqué, reste
+                // dû) vivent dans AppliquerAvance, sous verrou.
+                'avanceApplicable' => true,
             ]);
     }
 

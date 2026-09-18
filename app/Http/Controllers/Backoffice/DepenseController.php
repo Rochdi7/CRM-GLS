@@ -8,6 +8,7 @@ use App\Domain\Expenses\Actions\AnnulerDepense;
 use App\Domain\Expenses\Actions\ApprouverDepense;
 use App\Domain\Expenses\Actions\EnregistrerDepense;
 use App\Domain\Finance\Support\CaisseResolver;
+use App\Domain\Finance\Support\VentilationCentre;
 use App\Domain\Expenses\Actions\RefuserDepense;
 use App\Domain\Expenses\Queries\GetDepenseDetails;
 use App\Domain\Expenses\Queries\GetDepensesList;
@@ -19,6 +20,7 @@ use App\Http\Requests\Backoffice\Depenses\StoreDepenseRequest;
 use App\Http\Requests\Backoffice\Depenses\UpdateDepenseRequest;
 use App\Models\Depense;
 use App\Models\Group;
+use App\Services\Context\CurrentContext;
 use App\Support\Settings\AppSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -105,15 +107,31 @@ final class DepenseController extends Controller
         // against (same till StoreDepenseRequest silently derives on save).
         // The physical till only (Employee::till()) — the same account
         // CaisseResolver::tillOf() debits on save, never an Externe safe.
+        //
+        // ⚠ What the ACTIVE CENTRE may spend from that till, not the whole
+        // drawer (18/09/2026): one till holds several centres' money, and
+        // GardeSoldeCaisse bounds a dépense by its centre's share
+        // (VentilationCentre::plafondTransfert — the SAME figure, so the
+        // modal never promises an amount the server refuses). The drawer's
+        // physical balance is sent alongside so the two are never confused.
         $employee = $user->employee;
-        $soldeActuel = $employee !== null
-            ? (string) ($employee->till()->first()?->solde ?? '0.00')
+        $till = $employee?->till()->first();
+        $centreActifId = app(CurrentContext::class)->etablissementId();
+        $soldeTiroir = $employee !== null
+            ? number_format((float) ($till?->solde ?? 0), 2, '.', '')
             : null;
+        $soldeActuel = $employee === null ? null : ($till === null
+            ? '0.00'
+            : number_format(app(VentilationCentre::class)->plafondTransfert($till, $centreActifId), 2, '.', ''));
 
         return Inertia::render('Backoffice/Depenses/Index', [
             'canViewDepenses' => $user->can('expenses.view'),
             'canViewRemboursements' => $user->can('refunds.view'),
             'soldeActuel' => $soldeActuel,
+            'soldeTiroir' => $soldeTiroir,
+            // True when `soldeActuel` is a centre's SHARE — the page must SAY
+            // so, or the figure reads as the till's total (§11).
+            'soldeVentileParCentre' => $centreActifId !== null,
             'depenses' => $this->scrubOperationDates($depensesList['data'] ?? null, $canAudit),
             'montantTotal' => $depensesList['montantTotal'] ?? null,
             'montantEnAttente' => $depensesList['montantEnAttente'] ?? null,
@@ -262,10 +280,12 @@ final class DepenseController extends Controller
 
         // When approval is ON the money has NOT left the till yet — say so,
         // otherwise staff assume the expense is already settled.
-        return redirect()->route('backoffice.depenses.index')
-            ->with('success', $depense->isEnAttente()
-                ? __('Expense submitted — awaiting approval.')
-                : __('Expense recorded.'));
+        return $this->backToListPreservingFilters(
+            $request,
+            'backoffice.depenses.index',
+        )->with('success', $depense->isEnAttente()
+            ? __('Expense submitted — awaiting approval.')
+            : __('Expense recorded.'));
     }
 
     /**
@@ -279,8 +299,19 @@ final class DepenseController extends Controller
 
         $action->handle($depense, $this->actingEmployee($request));
 
-        return redirect()->route('backoffice.depenses.index')
-            ->with('success', __('Expense approved — the till has been debited.'));
+        // ⚠ JAMAIS `redirect()->route(...)` nu ici (§5). Sans la query string
+        // du referer, `tab` et surtout `dateFrom`/`dateTo` disparaissent :
+        // l'écran retombe sur l'onglet par défaut ET le read-model, ne voyant
+        // plus AUCUNE clé de date, ré-arme la fenêtre de l'année active. Une
+        // dépense datée hors de cette fenêtre sort alors de la liste, si bien
+        // que l'onglet « Validation des dépenses » s'affichait VIDE
+        // (« Montant total : 0,00 MAD ») juste après une approbation ou un
+        // refus, et qu'il fallait recharger la page à la main pour revoir les
+        // lignes restantes (signalé le 18/09/2026).
+        return $this->backToListPreservingFilters(
+            $request,
+            'backoffice.depenses.index',
+        )->with('success', __('Expense approved — the till has been debited.'));
     }
 
     /**
@@ -328,17 +359,20 @@ final class DepenseController extends Controller
 
         $action->handle($depense, $this->actingEmployee($request), $validated['motif_refus'] ?? null);
 
-        return redirect()->route('backoffice.depenses.index')
-            ->with('success', __('Expense refused — no money was moved.'));
+        return $this->backToListPreservingFilters(
+            $request,
+            'backoffice.depenses.index',
+        )->with('success', __('Expense refused — no money was moved.'));
     }
 
     /**
-     * A dépense carries no `etablissement_id` of its own — its centre is the
-     * one of the till it settles from (CaisseResolver always books it to the
-     * acting employee's physical till). Approving is the moment the money
-     * actually leaves, so the record must belong to the ACTIVE centre and not
-     * merely to one the user may reach: a multi-centre employee working in
-     * Marrakech must not debit the Rabat till from that screen
+     * A dépense's centre is Depense::centreId() — the group's, else the centre
+     * it was keyed in (`depenses.etablissement_id`), else the till's for rows
+     * older than the column. NEVER the till's alone: the acting employee's
+     * single till is attached to their PRIMARY centre, so that reading made
+     * an expense keyed in GLS Online un-approvable from Online (18/09/2026).
+     * Approving is the moment the money actually leaves, so the record must
+     * belong to the ACTIVE centre and not merely to one the user may reach
      * (CLAUDE.md §11, « Writes are guarded, not just reads »).
      *
      * No année check — dépenses carry no `annee_scolaire_id` (they are date
@@ -349,7 +383,7 @@ final class DepenseController extends Controller
         $this->assertRecordInContext(
             $request,
             'id',
-            $depense->caisse?->etablissement_id,
+            $depense->centreId(),
             null,
             __('This expense belongs to another centre than the active one.'),
             '',
@@ -484,12 +518,14 @@ final class DepenseController extends Controller
         // storeJustificatifs() regardless of the create/edit branch.
         $this->storeJustificatifs($request, $depense);
 
-        return redirect()->route('backoffice.depenses.index')
-            ->with('success', __('Expense updated.'));
+        return $this->backToListPreservingFilters(
+            $request,
+            'backoffice.depenses.index',
+        )->with('success', __('Expense updated.'));
     }
 
     /** Detach one stored receipt while editing (the expense itself stays). */
-    public function removeJustificatif(Depense $depense, int $media): RedirectResponse
+    public function removeJustificatif(Request $request, Depense $depense, int $media): RedirectResponse
     {
         $this->authorize('update', $depense);
 
@@ -497,8 +533,10 @@ final class DepenseController extends Controller
 
         $item?->delete();
 
-        return redirect()->route('backoffice.depenses.index')
-            ->with('success', __('Receipt removed.'));
+        return $this->backToListPreservingFilters(
+            $request,
+            'backoffice.depenses.index',
+        )->with('success', __('Receipt removed.'));
     }
 
     private function storeJustificatifs(Request $request, Depense $depense): void

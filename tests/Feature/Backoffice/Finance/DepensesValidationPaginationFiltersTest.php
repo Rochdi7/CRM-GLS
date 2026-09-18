@@ -165,4 +165,86 @@ final class DepensesValidationPaginationFiltersTest extends TestCase
         $this->assertCount(2, $props['validationDepenses']['data']);
         $this->assertSame(12, $props['validationDepenses']['total']);
     }
+
+    /**
+     * Même cause, autre geste (18/09/2026) : approuver ou refuser depuis
+     * l'onglet « Validation des dépenses » répondait par un
+     * `redirect()->route('backoffice.depenses.index')` NU. La query string
+     * disparaissait, donc `tab` ET les clés de date vidées avec elle : le
+     * read-model ré-armait la fenêtre de l'année active et l'onglet
+     * s'affichait « Aucune dépense / Montant total : 0,00 MAD » — il fallait
+     * recharger la page à la main pour revoir les lignes restantes.
+     */
+    public function test_refusing_returns_to_the_validation_tab_with_its_filters(): void
+    {
+        $this->seedDepenses();
+        $depense = Depense::query()->firstOrFail();
+
+        $filtered = route('backoffice.depenses.index', [
+            'tab' => 'validation', 'perPage' => 10,
+            'dateFrom' => '', 'dateTo' => '',
+            'search' => '', 'typeFilter' => '', 'caisseFilter' => '', 'statutFilter' => '',
+        ]);
+
+        $response = $this->actingAs($this->approver())
+            ->from($filtered)
+            ->put(route('backoffice.depenses.refuse', $depense), ['motif_refus' => 'Doublon']);
+
+        parse_str((string) parse_url((string) $response->headers->get('Location'), PHP_URL_QUERY), $query);
+
+        $this->assertSame('validation', $query['tab'] ?? null, 'The redirect dropped the open tab.');
+        $this->assertArrayHasKey('dateFrom', $query, 'The redirect dropped the cleared dateFrom.');
+        $this->assertArrayHasKey('dateTo', $query, 'The redirect dropped the cleared dateTo.');
+    }
+
+    /** Le même pour l'approbation — c'est le geste qui débite la caisse. */
+    public function test_approving_returns_to_the_validation_tab_with_its_filters(): void
+    {
+        $this->seedDepenses();
+        $depense = Depense::query()->firstOrFail();
+
+        $filtered = route('backoffice.depenses.index', [
+            'tab' => 'validation', 'perPage' => 10, 'dateFrom' => '', 'dateTo' => '',
+        ]);
+
+        $response = $this->actingAs($this->approver())
+            ->from($filtered)
+            ->put(route('backoffice.depenses.approve', $depense));
+
+        parse_str((string) parse_url((string) $response->headers->get('Location'), PHP_URL_QUERY), $query);
+
+        $this->assertSame('validation', $query['tab'] ?? null);
+        $this->assertArrayHasKey('dateFrom', $query);
+    }
+
+    /**
+     * Et le bout en bout : la page servie APRÈS le refus liste encore les
+     * lignes restantes, sans rechargement manuel.
+     */
+    public function test_the_list_served_after_a_refusal_still_has_rows(): void
+    {
+        $this->seedDepenses();
+        $depense = Depense::query()->firstOrFail();
+
+        $filtered = route('backoffice.depenses.index', [
+            'tab' => 'validation', 'perPage' => 10,
+            'dateFrom' => '', 'dateTo' => '',
+            'search' => '', 'typeFilter' => '', 'caisseFilter' => '', 'statutFilter' => '',
+        ]);
+
+        $user = $this->approver();
+
+        $location = (string) $this->actingAs($user)
+            ->from($filtered)
+            ->put(route('backoffice.depenses.refuse', $depense), ['motif_refus' => 'Doublon'])
+            ->headers->get('Location');
+
+        $props = [];
+        $this->actingAs($user)->get($location)->assertInertia(function ($page) use (&$props): void {
+            $props = $page->toArray()['props'];
+        });
+
+        $this->assertSame(12, $props['validationDepenses']['total']);
+        $this->assertSame('110.00', $props['validationMontantEnAttente']);
+    }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Expenses\Queries;
 
+use App\Domain\Finance\Support\VentilationCentre;
 use App\Models\Depense;
 use App\Models\Group;
 use App\Models\TypeDepense;
@@ -51,6 +52,7 @@ final class GetDepensesList
     public function __construct(
         private readonly CenterAccessService $centerAccess,
         private readonly CurrentContext $context,
+        private readonly VentilationCentre $ventilation,
     ) {}
 
     /**
@@ -71,10 +73,18 @@ final class GetDepensesList
         $paiementProfId = $this->paiementProfTypeId();
 
         $base = Depense::query()
-            ->whereHas('caisse', function (Builder $q) use ($user): void {
-                $this->centerAccess->scopeAccessibleCenters($q, $user);
-                $this->scopeToActiveCenter($q);
-            })
+            // ⚠ A dépense is scoped by ITS OWN centre (VentilationCentre —
+            // group, else the centre it was keyed in, else the till's for
+            // rows older than the column), never by `caisses.etablissement_id`
+            // alone (18/09/2026): an employee's single till is attached to
+            // their PRIMARY centre, so an expense keyed while working in GLS
+            // Online was listed under the primary centre and missing from
+            // Online — the screen it had just been created on.
+            ->tap(fn (Builder $q) => $this->scopeToReachableCenters($q, $user))
+            ->when(
+                $this->context->etablissementId() !== null,
+                fn (Builder $q) => $this->ventilation->scopeDepensesAuCentre($q, (int) $this->context->etablissementId(), true),
+            )
             ->when($typeFilter !== '', fn ($q) => $q->where('type_depense_id', (int) $typeFilter))
             // Tab split. When the type row is missing (never seeded), the
             // Paiements prof tab is simply empty and nothing is hidden from
@@ -305,6 +315,24 @@ final class GetDepensesList
             ->orderBy('nom')
             ->get()
             ->map(fn (TypeDepense $t): array => ['id' => $t->id, 'nom' => $t->nom]);
+    }
+
+    /**
+     * Centre REACH (« Centres affectés », §16) — super-admins see every
+     * centre; everyone else the centres they are assigned to, resolved with
+     * the same rule as the active-centre filter above.
+     */
+    private function scopeToReachableCenters(Builder $query, User $user): void
+    {
+        if ($this->centerAccess->hasGlobalAccess($user)) {
+            return;
+        }
+
+        $this->ventilation->scopeDepensesAuxCentres(
+            $query,
+            $this->centerAccess->accessibleCenterIds($user),
+            true,
+        );
     }
 
     private function scopeToActiveCenter($query): void

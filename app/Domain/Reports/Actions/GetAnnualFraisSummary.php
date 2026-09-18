@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Reports\Actions;
 
+use App\Domain\Finance\Support\VentilationCentre;
 use App\Models\Depense;
 use App\Models\Inscription;
 use App\Services\Context\CurrentContext;
@@ -43,6 +44,7 @@ final class GetAnnualFraisSummary
 {
     public function __construct(
         private readonly CurrentContext $context,
+        private readonly VentilationCentre $ventilation,
     ) {}
 
     /** The chart header label — the année scolaire the window covers. */
@@ -102,13 +104,14 @@ final class GetAnnualFraisSummary
         // cancelled dépense never left (or came back), so counting it here
         // would make the annual total disagree with the Dépenses list.
         $depenses = $this->byMonth(
-            DB::table('depenses')
+            // Centre = the dépense's OWN (VentilationCentre: group, else the
+            // centre it was keyed in, else the till's for older rows) — the
+            // same rule as the Dépenses list this total must agree with.
+            Depense::query()
                 ->where('statut', Depense::STATUT_APPROUVEE)
                 ->whereBetween('date_depense', $range)
-                ->when($centreId, fn (Builder $q) => $q->whereIn(
-                    'caisse_id',
-                    DB::table('caisses')->select('id')->where('etablissement_id', $centreId),
-                )),
+                ->when($centreId, fn ($q) => $this->ventilation->scopeDepensesAuCentre($q, (int) $centreId))
+                ->toBase(),
             'date_depense',
         );
 

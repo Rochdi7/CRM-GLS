@@ -114,8 +114,11 @@ final class RemboursementController extends Controller
             'caisse_id' => $caisseId,
         ], $agent);
 
-        return redirect()->route('backoffice.depenses.index', ['tab' => 'remboursements'])
-            ->with('success', __('Refund recorded.'));
+        return $this->backToListPreservingFilters(
+            $request,
+            'backoffice.depenses.index',
+            ['tab' => 'remboursements'],
+        )->with('success', __('Refund recorded.'));
     }
 
     public function update(UpdateRemboursementRequest $request, Remboursement $remboursement): RedirectResponse
@@ -130,8 +133,11 @@ final class RemboursementController extends Controller
         // balance already moved (UpdateRemboursementRequest excludes them).
         $remboursement->update($request->validated());
 
-        return redirect()->route('backoffice.depenses.index', ['tab' => 'remboursements'])
-            ->with('success', __('Refund updated.'));
+        return $this->backToListPreservingFilters(
+            $request,
+            'backoffice.depenses.index',
+            ['tab' => 'remboursements'],
+        )->with('success', __('Refund updated.'));
     }
 
     /**

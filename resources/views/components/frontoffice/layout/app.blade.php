@@ -36,6 +36,15 @@
     @endif
     <link rel="stylesheet" href="{{ asset('assets/crm-gls/plugins/tabler-icons/tabler-icons.css') }}">
 
+    {{-- Scroll-reveal start states apply only under .has-reveal (see _motion.scss).
+         Set before first paint to avoid a flash; withdrawn if the Vite bundle never boots. --}}
+    <script>
+        document.documentElement.classList.add('has-reveal');
+        setTimeout(function () {
+            if (!window.__glsMotionReady) document.documentElement.classList.remove('has-reveal');
+        }, 3000);
+    </script>
+
     @stack('styles')
     @vite(['resources/scss/frontoffice/app.scss', 'resources/js/frontoffice/app.js'])
 </head>

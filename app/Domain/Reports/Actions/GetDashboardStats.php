@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Reports\Actions;
 
+use App\Domain\Finance\Support\VentilationCentre;
 use App\Domain\Reports\DTOs\DashboardStatsData;
 use App\Models\Depense;
 use App\Models\Employee;
@@ -105,7 +106,10 @@ final class GetDashboardStats
             ->where('statut', Depense::STATUT_APPROUVEE)
             ->whereBetween('date_depense', [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()])
             ->when($anneeRange, fn ($q, $r) => $q->whereBetween('date_depense', $r))
-            ->when($centreId, fn ($q) => $q->whereHas('caisse', fn ($c) => $c->where('etablissement_id', $centreId)));
+            // The dépense's OWN centre (VentilationCentre), never the till's
+            // alone: an employee's single till sits in their primary centre,
+            // so the card missed every expense keyed from another centre.
+            ->when($centreId, fn ($q) => app(VentilationCentre::class)->scopeDepensesAuCentre($q, (int) $centreId));
 
         // One aggregate query per table (PostgreSQL `COUNT(*) FILTER (WHERE …)`)
         // instead of one COUNT round-trip per card — the row set is scanned

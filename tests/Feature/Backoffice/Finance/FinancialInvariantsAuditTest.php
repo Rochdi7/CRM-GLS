@@ -182,8 +182,16 @@ final class FinancialInvariantsAuditTest extends TestCase
         // And the screens show the till, not the safe.
         $this->get(route('backoffice.caisses.index', ['tab' => 'transferts']))
             ->assertInertia(fn ($page) => $page->where('myCaisse.id', $till->id));
+        // `soldeTiroir` is the DRAWER (850,00 = 1000 − 100 − 50), while
+        // `soldeActuel` is what the active centre may still SPEND from it —
+        // the same plafond GardeSoldeCaisse enforces, so the 10,00 reserved
+        // by the pending transfer above is already deducted (§11). The two
+        // are asserted together: sending only one would let the screen show
+        // a figure the server would refuse.
         $this->get(route('backoffice.depenses.index'))
-            ->assertInertia(fn ($page) => $page->where('soldeActuel', '850.00'));
+            ->assertInertia(fn ($page) => $page
+                ->where('soldeTiroir', '850.00')
+                ->where('soldeActuel', '840.00'));
     }
 
     public function test_the_provisioner_still_creates_the_till_of_an_employee_who_only_holds_an_externe_safe(): void

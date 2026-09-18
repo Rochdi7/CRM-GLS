@@ -796,7 +796,14 @@ export interface StudentInscriptionOption {
     id: number;
     label: string;
     statut: string;
+    /** Can receive a NEW payment — Active only (money entering the till). */
     payable: boolean;
+    /**
+     * Can receive an ALREADY-COLLECTED avance — true whatever the statut
+     * (18/09/2026): the money is already in the caisse, only its allocation is
+     * being decided, so a closed dossier whose fee is still due can be settled.
+     */
+    avanceApplicable: boolean;
 }
 
 /** Machine-readable subset of Laravel validation errors (Inertia's `errors` shared prop shape). */
@@ -2178,8 +2185,15 @@ export interface EncaissementFormOption {
 export interface DepensesPageProps {
     canViewDepenses: boolean;
     canViewRemboursements: boolean;
-    /** The acting employee's own till balance — null if they have no employee record. */
+    /**
+     * What the ACTIVE CENTRE may spend from the acting employee's till — the
+     * server's own ceiling (GardeSoldeCaisse). Null without an employee record.
+     */
     soldeActuel: MoneyDisplay | null;
+    /** The drawer's physical balance, all centres together. */
+    soldeTiroir: MoneyDisplay | null;
+    /** True when `soldeActuel` is one centre's share rather than the whole till. */
+    soldeVentileParCentre: boolean;
     depenses: PaginatedData<DepenseRow> | null;
     /** Approved only — money that actually left the tills. */
     montantTotal: MoneyDisplay | null;

@@ -341,8 +341,11 @@ the database layer. Non-negotiable invariants already enforced in code:
     a financial context — never the student's CURRENT centre, they may have
     moved); **non lié** → active context, fallback agent primary;
   - **dépense** → group centre (Paiement prof) else active context else
-    creator primary; at APPROVAL → group centre else CREATOR's primary,
-    never the approver's context (approvers work from « Tous les centres »);
+    creator primary — and that centre is now STORED on the row
+    (`depenses.etablissement_id`, 18/09/2026); at APPROVAL → group centre
+    else the row's stored centre (creator's primary only for rows older than
+    the column), never the approver's context (approvers work from « Tous
+    les centres »);
   - **transfert** → BOTH legs stamp the centre the money LEAVES
     (`caisse_transfers.etablissement_id`, fallback source caisse) — a
     transfer changes TILL, never CENTRE (11/09/2026, see the ventilation
@@ -408,6 +411,43 @@ the database layer. Non-negotiable invariants already enforced in code:
   calcul que `DemanderTransfertCaisse`), à côté du solde physique du
   tiroir. Tests :
   `tests/Feature/Backoffice/Finance/CaisseVentilationCentreTest.php`.
+- **⚠ Une dépense appartient au centre où elle a été SAISIE, jamais à celui
+  de sa caisse** (18/09/2026, `depenses.etablissement_id`). Une employée n'a
+  qu'UNE caisse à vie, rattachée à son centre principal, mais travaille dans
+  plusieurs centres. `depenses` ne portait aucun centre : celui d'une dépense
+  ordinaire retombait sur `caisses.etablissement_id`, si bien qu'une dépense
+  saisie sur GLS Online était listée — et sa part de caisse débitée — sur le
+  centre principal, restait INVISIBLE sur Online (l'écran où elle venait
+  d'être créée) et n'y était donc pas approuvable ; l'approbation stampait en
+  plus le centre principal du créateur dans le ledger. Trois bornes :
+  (1) **le tiroir débité ne change PAS** — c'est toujours
+  `CaisseResolver::tillOf()`, un seul par employé ; c'est l'IMPUTATION qui
+  suit le centre actif, exactement comme un encaissement ; (2) **la règle a
+  DEUX formes et une seule définition** — `Depense::centreId()` (PHP : policy,
+  garde de contexte, fiche) et `VentilationCentre::scopeDepensesAuCentre()` /
+  `scopeDepensesAuxCentres()` (requête : liste Dépenses, journal, fiche
+  caisse, Caisse globale, Comptes de caisse, dashboard, récapitulatif
+  annuel) : groupe (Paiement prof), sinon colonne, sinon caisse pour les
+  lignes ANTÉRIEURES à la colonne (NULL, aucun backfill) — ne jamais réécrire
+  `whereHas('caisse', …etablissement_id…)` sur une requête de dépenses ;
+  (3) la colonne vient du CONTEXTE serveur dans `EnregistrerDepense`, jamais
+  du client (les Form Requests ne la connaissent pas). Le journal de caisse
+  ne lit plus le ledger pour le centre d'une dépense — même raison que pour
+  les transferts : le ledger est append-only et portait l'ancien centre.
+  (4) **le SOLDE contrôlé est la part du CENTRE, pas le tiroir entier —
+  super-admin compris** : `GardeSoldeCaisse::verrouillerEtVerifier(…,
+  $centreId)` borne la dépense par `VentilationCentre::plafondTransfert()`,
+  le MÊME plafond que le modal de transfert (part du centre + argent
+  qu'aucun centre ne revendique, jamais au-delà de `solde − réservé`), dans
+  les DEUX chemins qui débitent (`ApprouverDepense`, branche approbation-OFF
+  d'`EnregistrerDepense`) et avec UNE valeur partagée par la garde et le
+  stamp du ledger. Sans cela une dépense saisie sur Online dépensait l'argent
+  encaissé pour Rabat : le tiroir restait positif, la part d'Online passait
+  en négatif. Le refus NOMME le centre et rappelle le solde physique ; le
+  modal « Ajouter une dépense » affiche ce même plafond (`soldeActuel`,
+  `soldeVentileParCentre`) à côté du solde du tiroir (`soldeTiroir`). Les
+  remboursements gardent la borne du tiroir entier (`$centreId` null).
+  Tests : `tests/Feature/Backoffice/Finance/DepenseCentreActifTest.php`.
 - **One dirham = one `caisses` row — payment-method accounts per centre**
   (24/08/2026, `docs/caisse-comptes-methode-architecture.md`). `Caisse::TYPES`
   = Caissière / Externe (physical CASH) + TPE / Chèque / Virement (ONE account
@@ -1013,18 +1053,37 @@ the database layer. Non-negotiable invariants already enforced in code:
   d'abord, et le composant peint le statut avec `Lib/inscriptionStatut`
   (vert Active, **jaune Changement, rouge Annulée**, gris le reste) — la
   MÊME table que les badges de la liste Inscriptions, extraite pour ne pas
-  exister en double. La règle métier est INCHANGÉE : seule une inscription
-  `Active` reçoit de l'argent (`assertInscriptionPayable`, encaissement ET
-  application d'avance) ; un dossier clos est donc **affiché mais
-  DÉSACTIVÉ** dans le dropdown, avec le motif à côté (« Clôturée — non
-  payable »), jamais sélectionnable — `payable` PORTE la règle du serveur,
-  le composant ne la redérive pas depuis la chaîne de statut (§5).
+  exister en double.
+  **⚠ Les deux écrans n'ont PAS la même règle, et le read-model porte les
+  DEUX** (18/09/2026, décision du CEO « make it payable on avances only,
+  even if status changement ou annuler ») :
+  - `payable` (**encaissement**) ⇒ `Active` SEULEMENT. De l'argent NEUF qui
+    entre en caisse sur un dossier clos rouvrirait une créance que plus
+    personne ne doit (`assertInscriptionPayable`, toujours dans `store()`).
+  - `avanceApplicable` (**application d'avance**) ⇒ **tout statut**. Une
+    avance n'est pas un encaissement : l'argent est DÉJÀ dans la caisse et
+    déjà compté comme reçu, `caisses.solde` ne bouge pas, seule
+    l'AFFECTATION se décide. Le cas réel est un dossier fermé par un
+    changement de groupe dont un frais reste dû : refuser laissait l'argent
+    en suspens ET la dette affichée, les deux se répondant pourtant.
+  Ce qui protège cette écriture reste ENTIER et vit dans `AppliquerAvance`,
+  sous verrou dans la transaction : **même étudiant**, **frais NON MASQUÉ**
+  (c'est par là que passe « la créance a été annulée » — la clôture de
+  groupe masque les frais non payés) et **jamais au-delà du reste dû**. Ne
+  jamais « rétablir la symétrie » en remettant `assertInscriptionPayable()`
+  dans `applyAvance()` : les deux gestes ne sont pas de même nature.
+  Un dossier que le serveur refuserait est **affiché mais DÉSACTIVÉ** avec
+  le motif à côté (« Clôturée — non payable »), jamais masqué —
   `SelectField` gère ça génériquement (`disabled` / `disabledReason` sur
-  `SelectOption`, options ignorées au clavier) : tout futur dropdown qui
-  doit montrer une option que le serveur refuserait reprend ce mécanisme au
-  lieu de la retirer de la liste. Tests :
+  `SelectOption`, options ignorées au clavier), et tout futur dropdown
+  reprend ce mécanisme au lieu de retirer la ligne. Le statut est écrit sur
+  l'option même quand elle est sélectionnable : la caissière doit voir
+  qu'elle solde un dossier clos. Tests :
   `EncaissementsInertiaCrudTest::test_the_registration_lookup_lists_closed_registrations_as_not_payable`,
-  `::test_applying_an_advance_to_a_closed_registration_is_refused`.
+  `::test_the_lookup_marks_every_registration_as_advance_applicable`,
+  `::test_an_advance_can_be_applied_to_a_closed_registration`,
+  `::test_an_advance_is_still_refused_on_a_hidden_fee_of_a_closed_registration`,
+  `::test_an_advance_is_still_refused_on_another_students_closed_registration`.
 - **⚠ Retirer un frais DÉJÀ PAYÉ libère toujours son argent en avance.**
   Trois chemins retirent un frais d'une inscription et ils doivent se
   comporter à l'identique, sinon celui que l'utilisateur emprunte change ce

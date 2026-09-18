@@ -587,9 +587,26 @@ final class EncaissementController extends Controller
         // The fee's registration must be in the active context — an avance
         // applied to last year's fee would book the allocation into a year
         // the cashier is not working in.
+        //
+        // ⚠ PAS d'assertInscriptionPayable() ici, volontairement (18/09/2026,
+        // décision du CEO : « make it payable on avances only ! even if
+        // status changement ou annuler »). Une AVANCE n'est pas un
+        // encaissement : l'argent est DÉJÀ dans la caisse, il a déjà été
+        // compté comme reçu, et l'appliquer ne fait que décider quel frais il
+        // solde — `caisses.solde` ne bouge pas (AppliquerAvance). Le cas réel
+        // est un dossier fermé par un changement de groupe dont un frais
+        // reste dû : refuser l'affectation laissait l'argent en suspens et la
+        // dette affichée, alors que les deux se répondent.
+        //
+        // Ce qui protège cette écriture reste ENTIER, dans la transaction et
+        // sous verrou (AppliquerAvance) : le frais doit appartenir au MÊME
+        // étudiant, ne pas être MASQUÉ (un frais retiré/masqué à la clôture
+        // n'est plus dû — c'est là que passe « la créance a été annulée »),
+        // et le montant ne peut dépasser ni le reste de l'avance ni le reste
+        // dû du frais. L'interdiction ne vaut donc que pour un ENCAISSEMENT
+        // (store()), où de l'argent NEUF entre en caisse sur un dossier clos.
         if ($fee->inscription !== null) {
             $this->assertInscriptionInContext($request, $fee->inscription, 'fee_id');
-            $this->assertInscriptionPayable($fee->inscription, 'fee_id');
         }
 
         $action->handle($encaissement, $fee, (float) $data['montant']);

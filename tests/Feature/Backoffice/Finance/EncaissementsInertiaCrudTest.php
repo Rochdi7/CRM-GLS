@@ -1793,30 +1793,66 @@ final class EncaissementsInertiaCrudTest extends TestCase
     }
 
     /**
-     * Le pendant du test ci-dessus : le dossier clos est LISTÉ, donc le
-     * serveur doit rester celui qui refuse. Sans cette garde, rendre l'option
-     * visible reviendrait à la rendre acceptable.
+     * ⚠ Une AVANCE s'applique à un dossier CLOS (18/09/2026, décision du
+     * CEO). Elle n'est pas un encaissement : l'argent est déjà dans la
+     * caisse, déjà compté comme reçu, et l'appliquer ne fait que décider quel
+     * frais il solde — `caisses.solde` ne bouge pas. Le cas réel est un
+     * dossier fermé par un changement de groupe dont un frais reste dû :
+     * refuser laissait l'argent en suspens ET la dette affichée.
+     *
+     * Ce qui protège l'écriture reste entier et vit dans AppliquerAvance,
+     * sous verrou (voir les deux tests suivants) : même étudiant, frais non
+     * masqué, jamais au-delà du reste dû.
      */
-    public function test_applying_an_advance_to_a_closed_registration_is_refused(): void
+    public function test_an_advance_can_be_applied_to_a_closed_registration(): void
     {
         $user = $this->userWith('payments.view', 'payments.create', 'payments.update');
-        $this->actingAs($user);
         [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
         $caisse = $user->employee->caisses()->first();
+        $avance = $this->avanceFor($student, $user, 500);
+        $soldeAvant = (string) $caisse->fresh()->solde;
 
-        $avance = Encaissement::create([
-            'reference' => 'ENC-AVCLOS',
-            'etablissement_id' => $this->centre->id,
-            'student_id' => $student->id,
-            'inscription_fee_id' => null,
-            'caisse_id' => $caisse->id,
-            'montant' => 500,
-            'methode' => 'Espèces',
-            'date_paiement' => '2025-09-20',
-            'agent_id' => $user->employee->id,
-        ]);
+        foreach ([Inscription::STATUT_CHANGEMENT, Inscription::STATUT_ANNULEE] as $statut) {
+            $inscription->update(['statut' => $statut]);
+            $fee->update(['statut' => InscriptionFee::STATUT_NON_PAYE]);
+            Encaissement::where('applied_from_encaissement_id', $avance->id)->delete();
+
+            $this->from(route('backoffice.encaissements.index'))
+                ->post(route('backoffice.avances.apply', $avance), [
+                    'fee_id' => $fee->id,
+                    'montant' => '500',
+                ])->assertSessionHasNoErrors();
+
+            $this->assertSame(500.0, $fee->fresh()->montantPaye(), $statut);
+            // Aucun argent n'entre : seule l'affectation change.
+            $this->assertSame($soldeAvant, (string) $caisse->fresh()->solde, $statut);
+        }
+    }
+
+    /** Le dropdown dit la même chose que l'action : tout dossier reçoit une avance. */
+    public function test_the_lookup_marks_every_registration_as_advance_applicable(): void
+    {
+        $this->actingAs($this->userWith('payments.view', 'payments.create'));
+        [$student, $inscription] = $this->enrolledStudentWithFee();
+        $inscription->update(['statut' => Inscription::STATUT_CHANGEMENT]);
+
+        $row = collect($this->get(route('backoffice.students.inscriptions-for-payment', $student))->json('inscriptions'))
+            ->firstWhere('id', $inscription->id);
+
+        $this->assertTrue($row['avanceApplicable']);
+        // …mais un PAIEMENT neuf reste refusé sur ce même dossier.
+        $this->assertFalse($row['payable']);
+    }
+
+    /** Un frais MASQUÉ n'est plus dû : l'avance ne s'y pose pas, dossier clos ou non. */
+    public function test_an_advance_is_still_refused_on_a_hidden_fee_of_a_closed_registration(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update');
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
+        $avance = $this->avanceFor($student, $user, 500);
 
         $inscription->update(['statut' => Inscription::STATUT_ANNULEE]);
+        $fee->forceFill(['masque_le' => now(), 'masque_origine' => InscriptionFee::MASQUE_ORIGINE_GROUPE])->save();
 
         $this->from(route('backoffice.encaissements.index'))
             ->post(route('backoffice.avances.apply', $avance), [
@@ -1824,9 +1860,32 @@ final class EncaissementsInertiaCrudTest extends TestCase
                 'montant' => '500',
             ])->assertSessionHasErrors('fee_id');
 
-        // L'avance est intacte : rien n'a été alloué.
         $this->assertSame(500.0, $avance->fresh()->montantRestant());
-        $this->assertSame(0.0, $fee->fresh()->montantPaye());
+    }
+
+    /**
+     * L'argent d'un étudiant ne solde jamais le frais d'un autre, dossier
+     * clos ou non — la garde vit dans AppliquerAvance et ne dépend pas du
+     * statut (test_an_avance_cannot_be_applied_to_another_students_fee couvre
+     * le cas Active).
+     */
+    public function test_an_advance_is_still_refused_on_another_students_closed_registration(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update');
+        [$payeur] = $this->enrolledStudentWithFee(1000);
+        [, $autreInscription, $autreFee] = $this->enrolledStudentWithFee(1000);
+        $avance = $this->avanceFor($payeur, $user, 500);
+
+        $autreInscription->update(['statut' => Inscription::STATUT_ANNULEE]);
+
+        $this->from(route('backoffice.encaissements.index'))
+            ->post(route('backoffice.avances.apply', $avance), [
+                'fee_id' => $autreFee->id,
+                'montant' => '500',
+            ])->assertSessionHasErrors('fee_id');
+
+        $this->assertSame(500.0, $avance->fresh()->montantRestant());
+        $this->assertSame(0.0, $autreFee->fresh()->montantPaye());
     }
 
     public function test_a_payment_on_a_non_active_registration_is_refused(): void
@@ -1855,7 +1914,19 @@ final class EncaissementsInertiaCrudTest extends TestCase
         }
     }
 
-    public function test_an_advance_cannot_be_applied_to_a_non_active_registrations_fee(): void
+    /**
+     * ⚠ RÈGLE INVERSÉE le 18/09/2026 (décision du CEO). Ce test exigeait un
+     * refus : une avance ne s'appliquait qu'à une inscription ACTIVE. C'était
+     * la symétrie de l'encaissement, mais les deux gestes ne sont pas de même
+     * nature — un encaissement fait ENTRER de l'argent en caisse sur un
+     * dossier clos, une avance ne fait que décider quel frais solde un argent
+     * DÉJÀ encaissé. Un dossier fermé par un changement de groupe gardait
+     * ainsi un frais dû que l'argent du même étudiant ne pouvait pas payer.
+     *
+     * Le refus demeure là où il protège vraiment (frais masqué, autre
+     * étudiant, reste dû dépassé) — voir les tests dédiés.
+     */
+    public function test_an_advance_can_be_applied_to_a_non_active_registrations_fee(): void
     {
         $user = $this->userWith('payments.view', 'payments.create', 'payments.update');
         [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
@@ -1864,9 +1935,10 @@ final class EncaissementsInertiaCrudTest extends TestCase
 
         $this->from(route('backoffice.encaissements.index'))
             ->post(route('backoffice.avances.apply', $avance), ['fee_id' => $fee->id, 'montant' => '600'])
-            ->assertSessionHasErrors('fee_id');
+            ->assertSessionHasNoErrors();
 
-        $this->assertSame(600.0, (float) $avance->fresh()->montantRestant());
+        $this->assertSame(0.0, (float) $avance->fresh()->montantRestant());
+        $this->assertSame(600.0, $fee->fresh()->montantPaye());
     }
 
     /**

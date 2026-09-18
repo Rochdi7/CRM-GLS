@@ -1569,14 +1569,17 @@ export default function InscriptionsIndex({
                                                 Suivi des paiements
                                             </RowActionItem>
 
-                                            {/* Active only: settling frais from here on a
-                                                cancelled/archived registration would book money
-                                                against one the student no longer holds. Depuis le
-                                                31/08/2026 la page Encaissements applique la même
-                                                règle (dropdown filtré + garde serveur
-                                                assertInscriptionPayable) — l'argent reçu pour un
-                                                dossier clos s'enregistre en avance, puis
-                                                s'applique à une inscription active. */}
+                                            {/* Active only: un ENCAISSEMENT fait entrer de
+                                                l'argent neuf en caisse, et le poser sur un dossier
+                                                clos rouvrirait une créance que plus personne ne
+                                                doit. Même règle sur la page Encaissements depuis
+                                                le 31/08/2026 (garde serveur
+                                                assertInscriptionPayable dans store()) — l'argent
+                                                reçu pour un dossier clos s'enregistre en avance.
+                                                ⚠ L'APPLICATION d'une avance, elle, est permise
+                                                quel que soit le statut depuis le 18/09/2026 :
+                                                l'argent est déjà encaissé, seule son affectation
+                                                se décide (CLAUDE.md §11). */}
                                             {canCreatePayment && inscription.statut === 'Active' && (
                                                 <RowActionItem icon="ti-credit-card" onClick={() => openPaiement(inscription)}>
                                                     Ajouter un paiement

@@ -210,20 +210,49 @@ final class VentilationCentre
     /**
      * Restreint une requête de dépenses au centre donné.
      *
-     * `depenses` ne porte PAS de colonne `etablissement_id` (vérifié en base
-     * le 04/09/2026) : son centre est celui du GROUPE pour un « Paiement
-     * prof », sinon celui de la caisse qui a payé — la même résolution que la
-     * colonne Centre du journal, pour que les écrans ne divergent pas.
+     * Forme « requête » de `Depense::centreId()` — la MÊME règle, à garder en
+     * phase : centre du GROUPE pour un « Paiement prof », sinon centre ACTIF
+     * de l'agent à la saisie (`depenses.etablissement_id`, 18/09/2026), sinon
+     * — lignes antérieures à la colonne — centre de la caisse qui a payé.
+     *
+     * ⚠ Le repli sur la caisse ne vaut QUE pour une colonne NULLE. Jusqu'au
+     * 18/09/2026 c'était la seule résolution d'une dépense ordinaire : une
+     * employée n'ayant qu'UNE caisse, rattachée à son centre principal, toute
+     * dépense saisie sur GLS Online était classée sur ce centre principal, et
+     * c'est sa part de caisse qui était débitée.
      *
      * @param  Builder<Depense>  $query
      */
-    public function scopeDepensesAuCentre(Builder $query, int $centreId): void
+    public function scopeDepensesAuCentre(Builder $query, int $centreId, bool $avecSansCentre = false): void
+    {
+        $this->scopeDepensesAuxCentres($query, [$centreId], $avecSansCentre);
+    }
+
+    /**
+     * La même résolution sur une LISTE de centres — la portée d'un
+     * utilisateur (« Centres affectés », §16).
+     *
+     * `$avecSansCentre` garde les dépenses dont AUCUN centre n'est résoluble
+     * (caisse globale, colonne nulle, pas de groupe) : les LISTES les
+     * affichent partout, comme tout enregistrement sans centre ; la
+     * VENTILATION d'un solde ne les impute à personne et laisse donc `false`.
+     *
+     * @param  Builder<Depense>  $query
+     * @param  list<int>  $centreIds
+     */
+    public function scopeDepensesAuxCentres(Builder $query, array $centreIds, bool $avecSansCentre = false): void
     {
         $query->where(fn ($q) => $q
-            ->whereHas('group', fn ($g) => $g->where('etablissement_id', $centreId))
+            ->whereHas('group', fn ($g) => $g->whereIn('etablissement_id', $centreIds))
             ->orWhere(fn ($w) => $w
                 ->whereDoesntHave('group')
-                ->whereHas('caisse', fn ($c) => $c->where('etablissement_id', $centreId))));
+                ->where(fn ($c) => $c
+                    ->whereIn('depenses.etablissement_id', $centreIds)
+                    ->orWhere(fn ($legacy) => $legacy
+                        ->whereNull('depenses.etablissement_id')
+                        ->whereHas('caisse', fn ($k) => $k->where(fn ($kk) => $kk
+                            ->whereIn('etablissement_id', $centreIds)
+                            ->when($avecSansCentre, fn ($n) => $n->orWhereNull('etablissement_id'))))))));
     }
 
     /**

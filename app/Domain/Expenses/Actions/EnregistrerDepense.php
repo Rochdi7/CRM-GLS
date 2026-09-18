@@ -52,6 +52,23 @@ final class EnregistrerDepense
         $requiresApproval = AppSettings::expenseApprovalEnabled();
 
         return DB::transaction(function () use ($data, $agent, $requiresApproval): Depense {
+            // Centre dimension: a « Paiement prof » belongs to its GROUP's
+            // centre; an ordinary dépense to the centre the agent is WORKING
+            // IN (active context), falling back to their primary centre only
+            // on « Tous les centres ».
+            //
+            // ⚠ Stored on the ROW (18/09/2026), not only stamped on the
+            // ledger: the agent's single till is attached to their PRIMARY
+            // centre, so resolving the centre through the till filed an
+            // expense keyed in GLS Online under that primary centre — and a
+            // pending dépense has no ledger entry at all to read it from.
+            // Never client input: the payload comes from validated() and the
+            // Form Requests do not know this key.
+            $etablissementId = ($data['group_id'] ?? null) !== null
+                ? Group::query()->whereKey($data['group_id'])->value('etablissement_id')
+                : null;
+            $etablissementId ??= $this->context->etablissementId() ?? $agent->etablissement_id;
+
             if (! $requiresApproval) {
                 // Checked BEFORE the row exists: a refused expense must leave
                 // no trace at all (no DEP- reference burnt, no Approuvée row
@@ -61,11 +78,15 @@ final class EnregistrerDepense
                     (float) $data['montant'],
                     self::MESSAGE_SOLDE_INSUFFISANT,
                     'montant',
+                    // The CENTRE's share of the till, not the whole drawer —
+                    // same bound as ApprouverDepense (GardeSoldeCaisse).
+                    $etablissementId === null ? null : (int) $etablissementId,
                 );
             }
 
             $depense = Depense::create([
                 ...$data,
+                'etablissement_id' => $etablissementId,
                 'reference' => ReferenceGenerator::make('DEP', 'depenses'),
                 'agent_id' => $agent->id,
                 'statut' => $requiresApproval
@@ -86,15 +107,9 @@ final class EnregistrerDepense
                     [
                         'type_depense_id' => $depense->type_depense_id,
                         'methode' => $depense->methode_paiement,
-                        // Centre dimension (01/09/2026): a « Paiement prof »
-                        // belongs to its GROUP's centre; an ordinary dépense
-                        // to the centre the cashier is working in (active
-                        // context), falling back to their primary centre.
-                        'etablissement_id' => ($depense->group_id !== null
-                                ? Group::query()->whereKey($depense->group_id)->value('etablissement_id')
-                                : null)
-                            ?? $this->context->etablissementId()
-                            ?? $agent->etablissement_id,
+                        // Same centre as the row itself — one value, computed
+                        // once above, so the ledger and the list cannot disagree.
+                        'etablissement_id' => $etablissementId,
                     ],
                 );
             }

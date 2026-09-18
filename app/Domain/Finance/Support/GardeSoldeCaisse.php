@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Finance\Support;
 
 use App\Models\Caisse;
+use App\Models\Etablissement;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -48,6 +49,19 @@ use Illuminate\Validation\ValidationException;
  * contrôle et le débit ne peuvent pas viser deux comptes différents
  * (isolation par centre : une caisse est rattachée à UN centre).
  *
+ * PAR CENTRE (18/09/2026)
+ * ------------------------
+ * Une employée — ou un super-admin — affectée à plusieurs centres n'a qu'UN
+ * tiroir, mais l'argent qu'il contient appartient à plusieurs centres. Quand
+ * l'appelant passe `$centreId`, la borne n'est plus le tiroir entier mais ce
+ * que CE centre peut en sortir : `VentilationCentre::plafondTransfert()`, le
+ * MÊME calcul que le plafond d'un transfert (part ventilée du centre + part
+ * du solde qu'aucun centre ne revendique, jamais au-delà de `solde − réservé`).
+ * Sans cela une dépense saisie sur GLS Online dépensait l'argent encaissé
+ * pour Rabat : le tiroir restait positif, mais la part d'Online passait en
+ * négatif sur « Comptes de caisse ». `null` (remboursements, « Tous les
+ * centres ») garde la borne du tiroir entier.
+ *
  * ⚠ Doit être appelé DANS `DB::transaction` — hors transaction, le verrou est
  * relâché immédiatement et la garantie disparaît.
  */
@@ -55,6 +69,7 @@ final class GardeSoldeCaisse
 {
     public function __construct(
         private readonly ReservationTransferts $reservations,
+        private readonly VentilationCentre $ventilation,
     ) {}
 
     /**
@@ -64,6 +79,7 @@ final class GardeSoldeCaisse
      * @param  float   $montant     montant à sortir (strictement positif)
      * @param  string  $messageKey  clé lang (placeholders :solde et :montant)
      * @param  string  $errorKey    champ porteur de l'erreur de validation
+     * @param  int|null  $centreId  centre auquel la sortie est imputée ; null = tiroir entier
      * @return Caisse la ligne verrouillée, relue en base
      *
      * @throws ValidationException quand le solde est insuffisant
@@ -73,6 +89,7 @@ final class GardeSoldeCaisse
         float $montant,
         string $messageKey,
         string $errorKey = 'montant',
+        ?int $centreId = null,
     ): Caisse {
         // Hors transaction, `lockForUpdate()` relâche son verrou aussitôt et
         // la garantie anti-double-approbation disparaît en silence — un bug
@@ -97,7 +114,11 @@ final class GardeSoldeCaisse
         // L'argent promis par un transfert en attente n'est plus disponible :
         // lu sous le même verrou, donc une demande concurrente est sérialisée.
         $reserve = $this->reservations->enAttente($caisseId);
-        $disponible = round((float) $caisse->solde - $reserve, 2);
+        $physique = round((float) $caisse->solde - $reserve, 2);
+
+        // Lu sous le même verrou : plafondTransfert() ne dépasse jamais
+        // `$physique` et vaut exactement lui quand aucun centre n'est donné.
+        $disponible = $this->ventilation->plafondTransfert($caisse, $centreId);
 
         // Comparaison en centimes entiers : deux décimales stockées, aucun
         // arrondi flottant ne doit transformer 7 650,00 <= 7 650,00 en refus.
@@ -109,6 +130,16 @@ final class GardeSoldeCaisse
                 'solde' => number_format($disponible, 2, ',', ' '),
                 'montant' => number_format($montant, 2, ',', ' '),
             ]);
+
+            // Le refus vient de la PART du centre, pas du tiroir : le dire,
+            // sinon « la caisse ne contient que 0,00 DH » contredit le solde
+            // que l'agent a sous les yeux.
+            if ($centreId !== null && $disponible < $physique) {
+                $message .= ' '.__('This is the share of :centre in the till, which physically holds :tiroir DH.', [
+                    'centre' => Etablissement::query()->whereKey($centreId)->value('nom_centre') ?? '—',
+                    'tiroir' => number_format((float) $caisse->solde, 2, ',', ' '),
+                ]);
+            }
 
             if ($reserve > 0) {
                 $message .= ' '.self::messageReserve((float) $caisse->solde, $reserve, $this->reservations->references($caisseId));

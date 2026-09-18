@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Domain\Finance\Queries;
 
-use App\Models\Activity;
 use App\Domain\Finance\Support\VentilationCentre;
 use App\Models\Caisse;
 use App\Models\CaisseTransfer;
@@ -136,7 +135,7 @@ final class GetCaisseJournal
             ->mapWithKeys(fn (string $m) => [$m => number_format((float) ($parMethode[$m] ?? 0), 2, '.', '')])
             ->all();
         $totalEncaissements = (float) $parMethode->sum();
-        $depenseIdsDuCentre = $this->idsDuCentreDepuisLeLedger(Depense::class, $ids);
+        $depenseIdsDuCentre = $this->idsDepensesDuCentre($ids);
         $totalDepenses = (float) Depense::query()
             ->whereIn('caisse_id', $ids)
             ->where('statut', Depense::STATUT_APPROUVEE)
@@ -227,7 +226,7 @@ final class GetCaisseJournal
      * quel : rien n'est ventilé, donc rien n'est masqué.
      *
      * @param  array<int, int>  $ids
-     * @param  array<int, int>|null  $depenseIdsDuCentre  dépenses du centre (le ledger reste leur seule dimension)
+     * @param  array<int, int>|null  $depenseIdsDuCentre  dépenses du centre (idsDepensesDuCentre)
      */
     private function soldeVentile(array $ids, ?array $depenseIdsDuCentre): float
     {
@@ -301,25 +300,6 @@ final class GetCaisseJournal
     }
 
     /**
-     * Ids des enregistrements d'un modèle qui appartiennent au centre actif,
-     * d'après le LEDGER.
-     *
-     * `depenses` et `caisse_transfers` ne portent aucune colonne
-     * `etablissement_id` (vérifié en base le 04/09/2026) : leur centre n'existe
-     * que dans les propriétés jsonb de l'écriture de caisse (§11 « Centre
-     * dimension on the ledger »). C'est donc la seule façon de les ventiler.
-     *
-     * Retourne `null` quand aucun centre n'est actif — l'appelant ne filtre
-     * alors rien, au lieu de filtrer sur une liste vide qui masquerait tout.
-     *
-     * Le fallback de lecture reste le même que `soldeVentile()` : une écriture
-     * historique sans la clé est rattachée au centre de sa caisse, jamais
-     * réécrite.
-     *
-     * @param  array<int, int>  $caisseIds
-     * @return array<int, int>|null
-     */
-    /**
      * Ids des transferts VALIDÉS appartenant au centre actif.
      *
      * ⚠ La colonne `caisse_transfers.etablissement_id` PRIME sur l'écriture de
@@ -373,7 +353,24 @@ final class GetCaisseJournal
         return array_values(array_unique($ids));
     }
 
-    private function idsDuCentreDepuisLeLedger(string $modelClass, array $caisseIds): ?array
+    /**
+     * Ids des dépenses appartenant au centre actif.
+     *
+     * ⚠ MÊME règle que les trois autres écrans finance
+     * (`VentilationCentre::scopeDepensesAuCentre()` : groupe, sinon
+     * `depenses.etablissement_id`, sinon caisse pour les lignes antérieures à
+     * la colonne) — le ledger n'est plus consulté (18/09/2026). Il stampait à
+     * l'APPROBATION le centre PRINCIPAL du créateur : une dépense saisie sur
+     * GLS Online sortait donc du journal d'Online, et ce journal lisait une
+     * autre source que « Comptes de caisse » / « Caisse globale » / la fiche
+     * caisse — deux écrans du même argent qui se contredisent (§11). Comme
+     * pour les transferts, la colonne de la ligne prime : le ledger est
+     * append-only et ne peut pas porter une correction.
+     *
+     * @param  array<int, int>  $caisseIds
+     * @return array<int, int>|null  null = aucun centre actif ⇒ ne rien filtrer
+     */
+    private function idsDepensesDuCentre(array $caisseIds): ?array
     {
         $centreId = $this->context->etablissementId();
 
@@ -381,27 +378,11 @@ final class GetCaisseJournal
             return null;
         }
 
-        $centreDeLaCaisse = Caisse::query()->whereIn('id', $caisseIds)->pluck('etablissement_id', 'id');
-
-        return Activity::query()
-            ->where('log_name', 'caisse')
-            ->where('event', 'solde_movement')
-            ->where('subject_type', Caisse::class)
-            ->whereIn('subject_id', $caisseIds)
-            ->where('properties->origine_type', $modelClass)
-            ->get(['subject_id', 'properties'])
-            ->filter(function (Activity $entry) use ($centreId, $centreDeLaCaisse): bool {
-                $etab = $entry->properties['etablissement_id']
-                    ?? $centreDeLaCaisse[$entry->subject_id]
-                    ?? null;
-
-                return $etab !== null && (int) $etab === $centreId;
-            })
-            ->pluck('properties.origine_id')
-            ->filter()
+        return Depense::query()
+            ->whereIn('caisse_id', $caisseIds)
+            ->tap(fn ($q) => $this->ventilation->scopeDepensesAuCentre($q, $centreId))
+            ->pluck('id')
             ->map(fn ($id): int => (int) $id)
-            ->unique()
-            ->values()
             ->all();
     }
 
@@ -409,9 +390,9 @@ final class GetCaisseJournal
      * Restreint une requête au centre actif via la colonne `etablissement_id`
      * que porte la table elle-même.
      *
-     * Vaut pour `encaissements` et `remboursements` uniquement : `depenses` et
-     * `caisse_transfers` n'ont PAS cette colonne (vérifié en base le
-     * 04/09/2026), leur centre ne vit que dans le ledger.
+     * Vaut pour `encaissements` et `remboursements` uniquement : une dépense
+     * et un transfert portent la colonne aussi, mais avec un REPLI pour leurs
+     * lignes antérieures (idsDepensesDuCentre / idsTransfertsDuCentre).
      */
     private function scopeRecordsToActiveCenter($query): void
     {
@@ -496,7 +477,7 @@ final class GetCaisseJournal
 
         if ($wants(self::TYPE_DEPENSE)) {
             $rows = $rows->concat(
-                Depense::query()->with(['typeDepense', 'agent', 'group.etablissement'])
+                Depense::query()->with(['typeDepense', 'agent', 'group.etablissement', 'etablissement', 'caisse.etablissement'])
                     ->whereIn('caisse_id', $ids)
                     ->where('statut', Depense::STATUT_APPROUVEE)
                     ->when($depenseIdsDuCentre !== null, fn ($q) => $q->whereIn('id', $depenseIdsDuCentre))
@@ -513,10 +494,11 @@ final class GetCaisseJournal
                         'date' => $d->date_depense,
                         'note' => $d->note,
                         'agent' => $d->agent?->nomComplet(),
-                        // `depenses` ne porte pas de colonne centre : celui du
-                        // groupe quand il y en a un (Paiement prof), sinon
-                        // celui de la caisse qui a payé.
+                        // Même ordre que Depense::centreId() : groupe
+                        // (Paiement prof), sinon centre de SAISIE, sinon
+                        // caisse pour les lignes antérieures à la colonne.
                         'centre' => $d->group?->etablissement?->nom_centre
+                            ?? $d->etablissement?->nom_centre
                             ?? $d->caisse?->etablissement?->nom_centre,
                         'url' => route('backoffice.depenses.show', $d),
                     ]),

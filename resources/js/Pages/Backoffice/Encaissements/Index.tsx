@@ -103,10 +103,19 @@ function emptyCreateForm(): CreateFormState {
  * list badges use), the statut spelled out, and the row disabled when the
  * server would refuse it.
  */
-function inscriptionOption(inscription: StudentInscriptionOption): SelectOption {
+function inscriptionOption(inscription: StudentInscriptionOption, mode: 'paiement' | 'avance' = 'paiement'): SelectOption {
+    // Which rule applies depends on the screen, and BOTH come from the server:
+    //  - « Nouveau paiement » ⇒ `payable` (Active only: new money entering
+    //    the till must not land on a closed dossier);
+    //  - « Appliquer l'avance » ⇒ `avanceApplicable` (any statut: the money is
+    //    already collected, only its allocation is decided here).
+    const allowed = mode === 'avance' ? inscription.avanceApplicable : inscription.payable;
+
     return {
         value: inscription.id,
-        label: inscription.payable ? inscription.label : `${inscription.label} (${inscription.statut})`,
+        // The statut is always spelled out on a non-Active dossier — even when
+        // it is selectable, the cashier must see they are settling a closed one.
+        label: inscription.statut === 'Active' ? inscription.label : `${inscription.label} (${inscription.statut})`,
         icon: (
             <span
                 className="gls-option-dot"
@@ -115,9 +124,9 @@ function inscriptionOption(inscription: StudentInscriptionOption): SelectOption 
                 aria-hidden="true"
             />
         ),
-        disabled: !inscription.payable,
+        disabled: !allowed,
         // Names the refusal instead of leaving a greyed row unexplained.
-        disabledReason: inscription.payable ? undefined : t('Closed — not payable'),
+        disabledReason: allowed ? undefined : t('Closed — not payable'),
     };
 }
 
@@ -683,13 +692,12 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
             const response = await fetch(`/backoffice/students/${row.studentId}/inscriptions-for-payment`);
             const data: { inscriptions: StudentInscriptionOption[] } = await response.json();
             // ALL the student's dossiers of the active year are listed —
-            // Active first, then the closed ones — so the cashier sees every
-            // group the money could go to instead of wondering why one is
-            // missing. A closed dossier is shown but NOT selectable:
-            // assertInscriptionPayable() refuses it server-side, and
-            // `payable` is that rule carried here, never re-derived from the
-            // statut string (§5).
-            setApplyInscriptionOptions(data.inscriptions.map(inscriptionOption));
+            // Active first, then the closed ones — and here they are all
+            // SELECTABLE (18/09/2026): applying an avance moves no money, it
+            // only decides which fee the already-collected amount settles, so
+            // a dossier closed by a changement de groupe whose fee is still
+            // due can be settled. The statut stays written on the option.
+            setApplyInscriptionOptions(data.inscriptions.map((i) => inscriptionOption(i, 'avance')));
         } finally {
             setLoadingApplyInscriptions(false);
         }
@@ -818,7 +826,9 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
             // Same list, same rule: a closed dossier is visible (so the
             // operator knows it exists) but cannot receive a payment —
             // EncaissementController@store refuses it too.
-            setInscriptionOptions(data.inscriptions.map(inscriptionOption));
+            // ⚠ Wrapped, never passed bare to map(): the array index would
+            // land in `mode` and silently turn every row into « avance ».
+            setInscriptionOptions(data.inscriptions.map((i) => inscriptionOption(i, 'paiement')));
         } finally {
             setLoadingInscriptions(false);
         }
