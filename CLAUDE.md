@@ -445,7 +445,9 @@ the database layer. Non-negotiable invariants already enforced in code:
   encaissé pour Rabat : le tiroir restait positif, la part d'Online passait
   en négatif. Le refus NOMME le centre et rappelle le solde physique ; le
   modal « Ajouter une dépense » affiche ce même plafond (`soldeActuel`,
-  `soldeVentileParCentre`) à côté du solde du tiroir (`soldeTiroir`). Les
+  servi en CLOSURE — c'est une somme par centre, elle n'a pas à être payée
+  par un rechargement partiel, §17) et le dit (`soldeVentileParCentre`) à
+  côté du solde du tiroir (`soldeTiroir`). Les
   remboursements gardent la borne du tiroir entier (`$centreId` null).
   Tests : `tests/Feature/Backoffice/Finance/DepenseCentreActifTest.php`.
 - **One dirham = one `caisses` row — payment-method accounts per centre**
