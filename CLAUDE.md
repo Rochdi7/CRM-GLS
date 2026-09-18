@@ -1078,7 +1078,15 @@ the database layer. Non-negotiable invariants already enforced in code:
   `SelectOption`, options ignorées au clavier), et tout futur dropdown
   reprend ce mécanisme au lieu de retirer la ligne. Le statut est écrit sur
   l'option même quand elle est sélectionnable : la caissière doit voir
-  qu'elle solde un dossier clos. Tests :
+  qu'elle solde un dossier clos.
+  **Les TROIS cascades d'inscription de la page partagent ce rendu** —
+  nouveau paiement, « Appliquer l'avance » et « Convertir des paiements en
+  avance » (`studentInscriptionsForConversion`, alignée le 18/09/2026) : même
+  forme d'option, `statut` en CHAMP À PART (jamais collé au libellé, sinon
+  la pastille ne peut plus être peinte), actifs d'abord. Seul le droit de
+  SÉLECTIONNER diffère, et il vient du serveur : rien n'est désactivé dans
+  « Convertir » (libérer l'argent d'un dossier clos est l'objet même du
+  modal). Tests :
   `EncaissementsInertiaCrudTest::test_the_registration_lookup_lists_closed_registrations_as_not_payable`,
   `::test_the_lookup_marks_every_registration_as_advance_applicable`,
   `::test_an_advance_can_be_applied_to_a_closed_registration`,

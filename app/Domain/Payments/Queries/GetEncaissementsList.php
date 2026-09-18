@@ -802,10 +802,16 @@ final class GetEncaissementsList
      * converting frees the money of a CLOSED dossier (annulée, archivée,
      * expirée, changement de groupe) into reusable avances — the exact
      * opposite of studentInscriptions(), which lists only payable (Active)
-     * dossiers. The statut is appended to the label so the cashier can tell
-     * a closed dossier from the live one.
+     * dossiers.
      *
-     * @return Collection<int, array{id:int, label:string}>
+     * Same shape as studentInscriptions() so both cascades render with the
+     * same coloured statut dot (18/09/2026): `statut` is its OWN field, not
+     * glued into the label, because the colour is what the cashier reads
+     * first. Every dossier is convertible — freeing money is precisely what
+     * this modal does — so `payable`/`avanceApplicable` are both true here;
+     * they exist only to keep one option shape across the page.
+     *
+     * @return Collection<int, array{id:int, label:string, statut:string, payable:bool, avanceApplicable:bool}>
      */
     public function studentInscriptionsForConversion(int $studentId): Collection
     {
@@ -813,11 +819,16 @@ final class GetEncaissementsList
             ->with('group')
             ->where('student_id', $studentId)
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
+            // Dossiers ACTIFS d'abord, comme l'autre cascade.
+            ->orderByRaw('case when statut = ? then 0 else 1 end', [Inscription::STATUT_ACTIVE])
+            ->orderByDesc('id')
             ->get()
             ->map(fn (Inscription $i): array => [
                 'id' => $i->id,
-                'label' => $i->reference.' — '.($i->group?->nom ?? '—')
-                    .($i->statut === Inscription::STATUT_ACTIVE ? '' : ' ('.$i->statut.')'),
+                'label' => $i->reference.' — '.($i->group?->nom ?? '—'),
+                'statut' => $i->statut,
+                'payable' => true,
+                'avanceApplicable' => true,
             ]);
     }
 

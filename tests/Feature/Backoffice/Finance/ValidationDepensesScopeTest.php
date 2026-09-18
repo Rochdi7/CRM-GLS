@@ -14,6 +14,7 @@ use App\Models\TypeDepense;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -83,9 +84,14 @@ final class ValidationDepensesScopeTest extends TestCase
         return $caisse->fresh();
     }
 
-    private function pending(TypeDepense $type, string $montant, ?Group $group = null): Depense
+    /**
+     * `$agent` est réutilisable : créer un Employee déclenche
+     * `EmployeeObserver` (login + caisse), donc chaque ligne ferait bouger des
+     * requêtes étrangères à ce qu'un test de coût mesure.
+     */
+    private function pending(TypeDepense $type, string $montant, ?Group $group = null, ?Employee $agent = null): Depense
     {
-        $agent = Employee::factory()->create(['etablissement_id' => $this->centre->id]);
+        $agent ??= Employee::factory()->create(['etablissement_id' => $this->centre->id]);
 
         return Depense::query()->create([
             'reference' => 'DEP-'.str_pad((string) random_int(1, 99999), 5, '0', STR_PAD_LEFT),
@@ -228,6 +234,101 @@ final class ValidationDepensesScopeTest extends TestCase
                 $this->assertNotContains($ailleurs->reference, $depenses);
                 $this->assertSame('120.00', $props['validationMontantEnAttente']);
             });
+    }
+
+    /**
+     * La colonne « Centre » porte le centre d'IMPUTATION, et son coût ne
+     * grandit pas avec le nombre de lignes.
+     *
+     * Deux choses indissociables : (1) la valeur affichée vient de
+     * `Depense::centreId()` — la règle qui a filtré la liste — donc une
+     * dépense saisie ailleurs que dans le centre de sa caisse affiche le
+     * centre de SAISIE, sinon la colonne contredirait le filtre ; (2) les
+     * relations sont eager-loadées, sinon chaque ligne déclenche sa propre
+     * requête (§17 perf : le nombre de requêtes ne suit jamais le nombre de
+     * lignes).
+     */
+    public function test_the_centre_column_shows_the_charged_centre_at_a_constant_query_cost(): void
+    {
+        $autre = Etablissement::factory()->create();
+
+        $ailleurs = $this->pending($this->type, '354.00');
+        $ailleurs->update(['etablissement_id' => $autre->id]);
+
+        $approver = $this->approver();
+
+        // « Tous les centres » — le seul contexte où la colonne est dessinée.
+        $this->actingAs($approver)
+            ->post(route('backoffice.context.update'), ['etablissement_id' => '']);
+
+        $this->actingAs($approver)
+            ->get(route('backoffice.depenses.index'))
+            ->assertInertia(function ($page) use ($ailleurs, $autre): void {
+                $props = $page->toArray()['props'];
+
+                // Sur « Tous les centres » la colonne s'affiche…
+                $this->assertFalse($props['centerLocked']);
+
+                $ligne = collect($props['validationDepenses']['data'])
+                    ->firstWhere('reference', $ailleurs->reference);
+
+                // …et porte le centre de SAISIE, pas celui de la caisse.
+                $this->assertSame($autre->nom_centre, $ligne['etablissement']);
+            });
+
+        // Le coût ne suit pas le nombre de lignes. On compte les requêtes qui
+        // LISENT les trois tables de `centreNom()` : eager-loadées elles
+        // arrivent en un `where … in (…)` par table, donc leur NOMBRE est
+        // constant ; sans eager load il en naîtrait une PAR LIGNE.
+        //
+        // ⚠ On ne compare pas le total brut du rendu : créer une dépense crée
+        // aussi un Employee, et `EmployeeObserver` provisionne login + caisse,
+        // si bien que d'autres requêtes bougent pour des raisons étrangères à
+        // la colonne. C'est précisément ce qu'un compteur global masquerait.
+        // Un SEUL agent et un SEUL groupe, créés AVANT la mesure : les créer
+        // entre les deux relevés ferait bouger le compteur pour une raison
+        // étrangère à la colonne (EmployeeObserver provisionne login + caisse).
+        $agent = Employee::factory()->create(['etablissement_id' => $this->centre->id]);
+        $groupe = $this->group();
+
+        $this->pending($this->type, '10.00', null, $agent)->update(['etablissement_id' => $autre->id]);
+        $this->pending($this->profType, '90.00', $groupe, $agent);
+
+        $avant = $this->centreQueryCount($approver);
+
+        // 6 lignes de plus sur les MÊMES agent et groupe : les trois branches
+        // de centreId() sont déjà représentées ci-dessus, donc un eager load
+        // correct ne coûte pas une requête de plus.
+        for ($i = 0; $i < 5; $i++) {
+            $this->pending($this->type, '10.00', null, $agent)->update(['etablissement_id' => $autre->id]);
+        }
+        $this->pending($this->profType, '90.00', $groupe, $agent);
+
+        $this->assertSame(
+            $avant,
+            $this->centreQueryCount($approver),
+            'La colonne Centre déclenche une requête par ligne — vérifier les eager loads de GetDepensesList.',
+        );
+    }
+
+    /**
+     * Combien de requêtes lisent `etablissements`, `caisses` ou `groups`
+     * pendant un rendu de l'écran Dépenses.
+     */
+    private function centreQueryCount(User $user): int
+    {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $this->actingAs($user)->get(route('backoffice.depenses.index'))->assertOk();
+
+        $log = DB::getQueryLog();
+        DB::disableQueryLog();
+
+        return count(array_filter(
+            $log,
+            fn (array $q): bool => (bool) preg_match('/\bfrom "(etablissements|caisses|groups)"/i', $q['query']),
+        ));
     }
 
     public function test_a_paiement_prof_can_actually_be_approved(): void

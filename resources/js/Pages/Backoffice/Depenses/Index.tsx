@@ -151,6 +151,7 @@ export default function DepensesIndex({
     soldeActuel,
     soldeTiroir,
     soldeVentileParCentre,
+    centerLocked,
     depenses,
     montantTotal,
     paiementsProf,
@@ -772,6 +773,7 @@ export default function DepensesIndex({
                                         <th>Référence</th>
                                         <th>Type</th>
                                         <th>Caisse</th>
+                                        {!centerLocked && <th>Centre</th>}
                                         <th className="text-end">Montant</th>
                                         {approvalEnabled && <th>Statut</th>}
                                         <th>Date</th>
@@ -788,6 +790,7 @@ export default function DepensesIndex({
                                         </td>
                                         <td>{row.typeDepense ?? '—'}</td>
                                         <td>{row.caisse ?? '—'}</td>
+                                        {!centerLocked && <td>{row.etablissement ?? '—'}</td>}
                                         <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} MAD</td>
                                         {approvalEnabled && (
                                             <td>
@@ -923,6 +926,7 @@ export default function DepensesIndex({
                                         <th>Référence</th>
                                         <th>Groupe</th>
                                         <th>Caisse</th>
+                                        {!centerLocked && <th>Centre</th>}
                                         <th className="text-end">Montant</th>
                                         {/* Même colonne que l'onglet Dépenses : ce sont les mêmes
                                             lignes, une « Annulée » ne doit pas y passer pour vivante. */}
@@ -942,6 +946,7 @@ export default function DepensesIndex({
                                         </td>
                                         <td>{row.groupNom ?? '—'}</td>
                                         <td>{row.caisse ?? '—'}</td>
+                                        {!centerLocked && <td>{row.etablissement ?? '—'}</td>}
                                         <td className={`text-end fw-medium${row.isAnnulee ? ' text-muted text-decoration-line-through' : ''}`}>
                                             {Number(row.montant).toFixed(2)} MAD
                                         </td>
@@ -1216,6 +1221,7 @@ export default function DepensesIndex({
                                     <tr>
                                         <th>Référence</th>
                                         <th>Type</th>
+                                        {!centerLocked && <th>Centre</th>}
                                         <th>Statut</th>
                                         <th>Date</th>
                                         <th>Date d'opération</th>
@@ -1233,6 +1239,7 @@ export default function DepensesIndex({
                                             <code>{row.reference}</code>
                                         </td>
                                         <td>{row.typeDepense ?? '—'}</td>
+                                        {!centerLocked && <td>{row.etablissement ?? '—'}</td>}
                                         <td>
                                             <StatusBadge
                                                 label={row.statut}

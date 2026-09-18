@@ -116,11 +116,15 @@ final class DepenseController extends Controller
         // physical balance is sent alongside so the two are never confused.
         $employee = $user->employee;
         $till = $employee?->till()->first();
-        $centreActifId = app(CurrentContext::class)->etablissementId();
+        $context = app(CurrentContext::class);
+        $centreActifId = $context->etablissementId();
         $soldeTiroir = $employee !== null
             ? number_format((float) ($till?->solde ?? 0), 2, '.', '')
             : null;
-        $soldeActuel = $employee === null ? null : ($till === null
+        // Closure: the ceiling runs a per-centre sum, and this prop is only
+        // read when the create modal opens — a partial reload (`only: [...]`)
+        // for search/pagination must not pay for it (§17 perf).
+        $soldeActuel = fn (): ?string => $employee === null ? null : ($till === null
             ? '0.00'
             : number_format(app(VentilationCentre::class)->plafondTransfert($till, $centreActifId), 2, '.', ''));
 
@@ -132,6 +136,12 @@ final class DepenseController extends Controller
             // True when `soldeActuel` is a centre's SHARE — the page must SAY
             // so, or the figure reads as the till's total (§11).
             'soldeVentileParCentre' => $centreActifId !== null,
+            // La colonne « Centre » n'apparaît que sur « Tous les centres »
+            // (§5) : dès qu'un centre est actif, `CurrentContext` a déjà
+            // filtré la liste, et répéter ce centre sur chaque ligne induit
+            // en erreur. Jamais un test de rôle dans le composant — ce prop
+            // reste automatiquement en phase avec le sélecteur.
+            'centerLocked' => ! $context->isAllCenters(),
             'depenses' => $this->scrubOperationDates($depensesList['data'] ?? null, $canAudit),
             'montantTotal' => $depensesList['montantTotal'] ?? null,
             'montantEnAttente' => $depensesList['montantEnAttente'] ?? null,

@@ -444,7 +444,10 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $convertible = $this->get(route('backoffice.students.inscriptions-for-conversion', $student))->json();
         $this->assertCount(1, $convertible['inscriptions']);
         $this->assertSame($inscription->id, $convertible['inscriptions'][0]['id']);
-        $this->assertStringContainsString('(Annulée)', $convertible['inscriptions'][0]['label']);
+        // Le statut est un CHAMP à part (18/09/2026) et non plus collé au
+        // libellé : c'est lui qui peint la pastille colorée du dropdown.
+        $this->assertSame(Inscription::STATUT_ANNULEE, $convertible['inscriptions'][0]['statut']);
+        $this->assertStringNotContainsString('(Annulée)', $convertible['inscriptions'][0]['label']);
     }
 
     public function test_conversion_lookup_follows_the_active_year_switcher(): void

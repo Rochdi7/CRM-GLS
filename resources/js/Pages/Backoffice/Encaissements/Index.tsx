@@ -589,8 +589,12 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
             // converted, so it must be listed here — unlike the payable
             // cascade, which only offers Active inscriptions.
             const response = await fetch(`/backoffice/students/${studentId}/inscriptions-for-conversion`);
-            const data: { inscriptions: Array<{ id: number; label: string }> } = await response.json();
-            setAvanceInscriptionOptions(data.inscriptions.map((i) => ({ value: i.id, label: i.label })));
+            const data: { inscriptions: StudentInscriptionOption[] } = await response.json();
+            // Même rendu que les deux autres cascades — pastille de statut
+            // colorée, actifs d'abord. Ici AUCUNE option n'est désactivée :
+            // libérer l'argent d'un dossier clos est précisément l'objet de
+            // ce modal.
+            setAvanceInscriptionOptions(data.inscriptions.map((i) => inscriptionOption(i, 'avance')));
         } finally {
             setLoadingAvanceInscriptions(false);
         }

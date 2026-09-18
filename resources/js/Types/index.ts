@@ -2087,6 +2087,13 @@ export interface DepenseRow {
     typeDepenseId: number | null;
     caisse: string | null;
     caisseId: number | null;
+    /**
+     * The centre the expense is CHARGED to — group, else the centre it was
+     * keyed in, else the till's (Depense::centreId(), the same rule that
+     * filtered the list). Not the till's centre alone: one employee holds a
+     * single till attached to their primary centre.
+     */
+    etablissement: string | null;
     groupId: number | null;
     groupNom: string | null;
     montant: MoneyDisplay;
@@ -2194,6 +2201,12 @@ export interface DepensesPageProps {
     soldeTiroir: MoneyDisplay | null;
     /** True when `soldeActuel` is one centre's share rather than the whole till. */
     soldeVentileParCentre: boolean;
+    /**
+     * False only on « Tous les centres » — the one case where the Centre
+     * column and filter are drawn (§5). When a centre is active the list is
+     * already scoped to it server-side, so repeating it on every row misleads.
+     */
+    centerLocked: boolean;
     depenses: PaginatedData<DepenseRow> | null;
     /** Approved only — money that actually left the tills. */
     montantTotal: MoneyDisplay | null;

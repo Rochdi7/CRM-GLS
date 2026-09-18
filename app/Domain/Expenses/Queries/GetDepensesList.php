@@ -139,7 +139,12 @@ final class GetDepensesList
         $depenses = $base
             // `group` is eager-loaded for the Validation tab's Groupe column
             // — without it every row would fire its own query.
-            ->with(['typeDepense', 'caisse', 'agent', 'approvedBy', 'group'])
+            // Les trois chaînes de `centreNom()` sont chargées ici : sans
+            // elles la colonne Centre déclencherait une requête PAR LIGNE.
+            ->with([
+                'typeDepense', 'agent', 'approvedBy',
+                'caisse.etablissement', 'group.etablissement', 'etablissement',
+            ])
             ->withCount('media')
             ->latest()
             // Each tab paginates independently, so the Paiements prof tab
@@ -158,6 +163,15 @@ final class GetDepensesList
             'typeDepenseId' => $d->type_depense_id,
             'caisse' => $d->caisse?->nom,
             'caisseId' => $d->caisse_id,
+            // Le centre auquel la dépense est IMPUTÉE — `Depense::centreId()`,
+            // la même règle que le filtrage ci-dessus (groupe, sinon centre de
+            // saisie, sinon caisse pour les lignes antérieures à la colonne).
+            // Jamais `caisse.etablissement_id` seul : une employée n'a qu'UNE
+            // caisse, rattachée à son centre principal, donc la colonne
+            // afficherait ce centre-là pour une dépense saisie ailleurs — et
+            // contredirait le filtre qui, lui, l'a bien classée (§11 : un
+            // écran ne montre jamais une valeur que son propre filtre ignore).
+            'etablissement' => self::centreNom($d),
             'groupId' => $d->group_id,
             'groupNom' => $d->group?->nom,
             'montant' => number_format((float) $d->montant, 2, '.', ''),
@@ -296,6 +310,29 @@ final class GetDepensesList
         }
 
         return null;
+    }
+
+    /**
+     * Le NOM du centre auquel la dépense est imputée.
+     *
+     * Résolu via `Depense::centreId()` — forme PHP de
+     * `VentilationCentre::scopeDepensesAuCentre()`, la règle qui a filtré la
+     * liste : groupe, sinon centre de saisie, sinon caisse. Les trois
+     * relations (`group`, `etablissement`, `caisse.etablissement`) sont
+     * eager-loadées par `__invoke()`, donc aucune requête par ligne (§17
+     * perf : un read-model n'appelle jamais un accesseur par ligne).
+     */
+    private static function centreNom(Depense $depense): ?string
+    {
+        $id = $depense->centreId();
+
+        if ($id === null) {
+            return null;
+        }
+
+        return $depense->group?->etablissement?->nom_centre
+            ?? $depense->etablissement?->nom_centre
+            ?? $depense->caisse?->etablissement?->nom_centre;
     }
 
     public function paiementProfTypeId(): ?int
