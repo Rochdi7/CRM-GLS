@@ -104,12 +104,28 @@ final class GetDashboardStats
             // entry (« Annulée »), so the dashboard contradicted the
             // Dépenses list it links to.
             ->where('statut', Depense::STATUT_APPROUVEE)
+            // ⚠ « Ce mois-ci » est la SEULE fenêtre de cette carte — jamais
+            // croisée avec l'année scolaire active (18/09/2026). Les deux
+            // `whereBetween` s'ajoutaient, donc sur une année déjà clôturée
+            // ils ne se recouvrent JAMAIS et la carte ne pouvait afficher que
+            // 0,00 MAD alors que des dépenses approuvées du mois existaient.
+            // Le mois courant tombe dans exactement une année scolaire (elles
+            // couvrent le calendrier sans trou ni chevauchement, §11), donc
+            // la borne d'année n'ajoutait rien quand l'année était la bonne
+            // et vidait la carte quand elle ne l'était pas. Le libellé dit
+            // « ce mois-ci » : c'est la date qui décide, pas le sélecteur.
             ->whereBetween('date_depense', [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()])
-            ->when($anneeRange, fn ($q, $r) => $q->whereBetween('date_depense', $r))
             // The dépense's OWN centre (VentilationCentre), never the till's
             // alone: an employee's single till sits in their primary centre,
             // so the card missed every expense keyed from another centre.
-            ->when($centreId, fn ($q) => app(VentilationCentre::class)->scopeDepensesAuCentre($q, (int) $centreId));
+            //
+            // ⚠ `$avecSansCentre: true` — LE MÊME appel que la liste Dépenses
+            // vers laquelle la carte pointe (GetDepensesList:86). Une dépense
+            // dont aucun centre n'est résoluble (colonne nulle ET caisse sans
+            // centre — un coffre « Externe », la caisse centrale) est listée
+            // partout comme tout enregistrement sans centre ; l'exclure de la
+            // carte faisait dire deux chiffres différents au même argent.
+            ->when($centreId, fn ($q) => app(VentilationCentre::class)->scopeDepensesAuCentre($q, (int) $centreId, true));
 
         // One aggregate query per table (PostgreSQL `COUNT(*) FILTER (WHERE …)`)
         // instead of one COUNT round-trip per card — the row set is scanned
