@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Domain\Payments\Actions\RestituerChequeGarantie;
 use App\Domain\Payments\Queries\GetChequesList;
 use App\Domain\Payments\Queries\GetEncaissementsList;
 use App\Domain\Settings\Queries\GetBanquesList;
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
+use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Http\Requests\Backoffice\Cheques\StoreChequeRequest;
 use App\Http\Requests\Backoffice\Cheques\UpdateChequeRequest;
 use App\Models\Cheque;
@@ -43,6 +45,7 @@ use Inertia\Response;
 final class ChequeController extends Controller
 {
     use AssertsContextScope;
+    use RedirectsPreservingFilters;
 
     public function index(
         Request $request,
@@ -97,7 +100,12 @@ final class ChequeController extends Controller
             'perPageOptions' => GetChequesList::PER_PAGE_OPTIONS,
             'sources' => Cheque::SOURCES,
             'types' => Cheque::TYPES,
-            'statuts' => Cheque::STATUTS,
+            // Le pseudo-statut « Restitué » est proposé au filtre comme les
+            // autres : il est AFFICHÉ dans la colonne Statut, il doit donc
+            // être filtrable. Il n'existe pas en base (dérivé de
+            // retourne_le) — Cheque::STATUTS reste la liste des vraies
+            // valeurs stockées, et c'est elle que valident les formulaires.
+            'statuts' => [...Cheque::STATUTS, GetChequesList::STATUT_RESTITUE],
             'banques' => $getBanquesList->activeNames(),
             'students' => $getEncaissementsList->studentOptions($request->user()),
             'parents' => $getChequesList->parentOptions($request->user()),
@@ -316,6 +324,50 @@ final class ChequeController extends Controller
     }
 
     /**
+     * Rend un chèque de GARANTIE à son propriétaire parce que l'étudiant a
+     * réglé autrement (espèces / TPE / virement). Distinct de
+     * markRetourne(), qui rend un chèque REJETÉ : ce sont deux faits
+     * différents, avec deux conditions différentes, qui écrivent les mêmes
+     * colonnes off-ledger.
+     *
+     * La règle entière vit dans RestituerChequeGarantie (sous verrou) — ce
+     * contrôleur n'ajoute que l'autorisation et la portée de contexte, et
+     * ne redérive rien (§5).
+     */
+    public function restituerGarantie(
+        Request $request,
+        Cheque $cheque,
+        RestituerChequeGarantie $action,
+    ): RedirectResponse {
+        // Même famille que markRetourne()/updateStatut() : le parcours
+        // PHYSIQUE du chèque, ouvert à tous les rôles (`cheques.deposit`).
+        // Ce n'est pas `cheques.update` — l'employé qui rend le papier au
+        // guichet n'est pas celui qui a le droit de réécrire son montant.
+        $this->authorize('deposit', $cheque);
+        $this->assertRecordInContext(
+            $request,
+            'motif',
+            $cheque->etablissement_id,
+            null,
+            __('This cheque belongs to another centre than the active one.'),
+            '',
+        );
+
+        $agent = $request->user()->employee;
+
+        if ($agent === null) {
+            throw ValidationException::withMessages([
+                'motif' => __('Your account is not linked to any employee record.'),
+            ]);
+        }
+
+        $action->handle($cheque, (string) $request->string('motif'), $agent);
+
+        return $this->backToListPreservingFilters($request, 'backoffice.cheques.index')
+            ->with('success', __('Guarantee cheque returned to its owner.'));
+    }
+
+    /**
      * A student's chèques still holding value (Reste > 0) — feeds the
      * "Payer avec un chèque" dropdown in the Encaissements payment form.
      */
@@ -327,20 +379,48 @@ final class ChequeController extends Controller
         $cheques = Cheque::query()
             ->where('student_id', $student->id)
             ->whereNotIn('statut', [Cheque::STATUT_REJETE])
+            // ⚠ Un chèque RESTITUÉ n'est plus chez nous. L'étudiant a réglé
+            // autrement et il est reparti avec son papier : l'offrir encore
+            // ici laisserait dépenser dans le CRM une feuille qui n'existe
+            // plus physiquement — la même garantie servirait deux fois.
+            // C'est l'autre moitié de RestituerChequeGarantie : sans elle,
+            // l'action rend le chèque mais l'écran continue de le proposer.
+            ->whereNull('retourne_le')
             ->orderByDesc('date_reception')
-            ->get()
-            ->map(fn (Cheque $cheque): array => [
-                'id' => $cheque->id,
-                'numeroCheque' => $cheque->numero_cheque,
-                'banque' => $cheque->banque,
-                'montant' => number_format((float) $cheque->montant, 2, '.', ''),
-                'reste' => number_format($cheque->montantRestant(), 2, '.', ''),
-                'statut' => $cheque->statut,
-            ])
-            ->filter(fn (array $c): bool => (float) $c['reste'] > 0)
-            ->values();
+            // withSum plutôt que montantRestant() par ligne : l'accesseur tire
+            // son propre SUM à chaque appel (§17 — un read model n'appelle
+            // jamais un accesseur monétaire dans une boucle).
+            ->withSum('encaissements as utilise_total', 'montant')
+            ->get();
 
-        return response()->json(['cheques' => $cheques]);
+        $mapped = $cheques->map(fn (Cheque $cheque): array => [
+            'id' => $cheque->id,
+            'numeroCheque' => $cheque->numero_cheque,
+            'banque' => $cheque->banque,
+            'montant' => number_format((float) $cheque->montant, 2, '.', ''),
+            'reste' => number_format(
+                round(max(0.0, (float) $cheque->montant - (float) ($cheque->utilise_total ?? 0)), 2),
+                2, '.', ''
+            ),
+            'statut' => $cheque->statut,
+            'type' => $cheque->type,
+        ]);
+
+        return response()->json([
+            'cheques' => $mapped
+                ->filter(fn (array $c): bool => (float) $c['reste'] > 0)
+                ->values(),
+            // Les chèques de GARANTIE encore en main de cet étudiant. Ils ne
+            // servent PAS à payer — ils sont rappelés dans le formulaire pour
+            // que la caissière qui encaisse en espèces / TPE / virement
+            // n'oublie pas de rendre le papier (c'est exactement le moment où
+            // l'étudiant est au guichet). La restitution elle-même reste un
+            // geste séparé et tracé, sur la page Chèques.
+            'garanties' => $mapped
+                ->filter(fn (array $c): bool => $c['type'] === Cheque::TYPE_GARANTIE
+                    && $c['statut'] === Cheque::STATUT_EN_POSSESSION)
+                ->values(),
+        ]);
     }
 
     /**

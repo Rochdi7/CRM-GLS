@@ -191,6 +191,12 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
     const [transferInscriptionOptions, setTransferInscriptionOptions] = useState<SelectOption[]>([]);
     const [loadingTransferInscriptions, setLoadingTransferInscriptions] = useState(false);
     const [studentCheques, setStudentCheques] = useState<StudentChequeOption[]>([]);
+    // Chèques de GARANTIE encore en main de l'étudiant sélectionné. Ils ne
+    // servent pas à payer : ils sont rappelés dans le formulaire pour que le
+    // papier ne reste pas à l'école alors que l'étudiant vient justement de
+    // régler autrement et qu'il est devant le guichet. La restitution reste
+    // un geste séparé, tracé, sur la page Chèques.
+    const [studentGaranties, setStudentGaranties] = useState<StudentChequeOption[]>([]);
     const [emailTarget, setEmailTarget] = useState<EncaissementRow | null>(null);
     // Why the WhatsApp send could not happen (no reachable number, or an
     // APP_URL the student's phone cannot open) — the server owns that
@@ -426,6 +432,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
         setEditingRow(null);
         setInscriptionOptions([]);
         setStudentCheques([]);
+        setStudentGaranties([]);
         setFeeLinesPage(1);
         createForm.clearErrors();
         createForm.setData(emptyCreateForm());
@@ -817,6 +824,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
         }));
         setInscriptionOptions([]);
         setStudentCheques([]);
+        setStudentGaranties([]);
         setFeeLinesPage(1);
 
         if (studentId === '') {
@@ -844,8 +852,9 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
         try {
             const chequesResponse = await fetch(`/backoffice/students/${studentId}/cheques`, { headers: { Accept: 'application/json' } });
             if (chequesResponse.ok) {
-                const chequesData: { cheques: StudentChequeOption[] } = await chequesResponse.json();
+                const chequesData: { cheques: StudentChequeOption[]; garanties: StudentChequeOption[] } = await chequesResponse.json();
                 setStudentCheques(chequesData.cheques);
+                setStudentGaranties(chequesData.garanties ?? []);
             }
         } catch {
             // Network hiccup — the row's cheque dropdown just stays empty;
@@ -1578,6 +1587,43 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                             />
                         </div>
                     </div>
+
+                    {/* ⚠ Rappel de garantie — l'étudiant a laissé un chèque en
+                        garantie et il est DEVANT le guichet en train de régler
+                        autrement : c'est le seul moment où on peut lui rendre
+                        son papier. Sans ce rappel, le chèque reste à l'école
+                        indéfiniment (c'est le cas réel qui a motivé l'écran).
+
+                        Simple information : la restitution est un geste tracé,
+                        avec motif obligatoire, sur la page Chèques — elle ne
+                        se déclenche pas en même temps qu'un encaissement, pour
+                        que chaque fait garde sa propre écriture et son propre
+                        auteur. Aucun argent n'est en jeu des deux côtés. */}
+                    {studentGaranties.length > 0 && (
+                        <div className="alert alert-warning d-flex align-items-start gap-2 py-2" role="alert">
+                            <i className="ti ti-alert-triangle fs-18 mt-1" />
+                            <div className="text-normal-case">
+                                <strong>
+                                    {studentGaranties.length === 1
+                                        ? 'Chèque de garantie en main pour cet étudiant'
+                                        : `${studentGaranties.length} chèques de garantie en main pour cet étudiant`}
+                                </strong>
+                                <ul className="mb-1 mt-1 ps-3">
+                                    {studentGaranties.map((g) => (
+                                        <li key={g.id}>
+                                            {g.numeroCheque}
+                                            {g.banque ? ` — ${g.banque}` : ''} — {Number(g.montant).toFixed(2)} DH
+                                        </li>
+                                    ))}
+                                </ul>
+                                <span className="fs-12">
+                                    Si ce règlement remplace la garantie, rendez-lui son chèque depuis{' '}
+                                    <a href="/backoffice/cheques" className="alert-link">Chèques</a>
+                                    {' '}(action « Restituer au client »).
+                                </span>
+                            </div>
+                        </div>
+                    )}
 
                     {loadingFees && <p className="text-muted">Chargement des frais…</p>}
 

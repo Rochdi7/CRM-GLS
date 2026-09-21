@@ -24,6 +24,15 @@ use Tests\TestCase;
  * The pager is NOT the culprit: it navigates to the paginator's own link URL.
  * The rows vanish because those links drop the CLEARED date filters, which
  * re-arms the active-year window server-side (`$dateFilterEngaged`).
+ *
+ * ⚠ « Effacé » s'écrit '-', et non une clé présente-mais-vide (21/09/2026).
+ * La page réétale tout son prop `filters` dans chaque `router.get` — un clic
+ * d'onglet compris — si bien qu'une date JAMAIS TOUCHÉE arrivait elle aussi
+ * comme une clé présente et vide : indiscernable d'un effacement, la fenêtre
+ * d'année sautait et l'onglet Dépenses répondait autre chose sur l'URL nue
+ * que sur l'URL d'après-clic. Le marqueur explicite sépare les deux cas, et
+ * `withQueryString()` le reporte sur les liens du pager — ce qui garde le
+ * bug du 14/09/2026 corrigé. Voir DepensesTabSwitchDateWindowTest.
  */
 final class DepensesValidationPaginationFiltersTest extends TestCase
 {
@@ -104,8 +113,9 @@ final class DepensesValidationPaginationFiltersTest extends TestCase
     }
 
     /**
-     * Page 1 with the date filters PRESENT-BUT-EMPTY (the URL the filter bar
-     * produces) lists the rows — the year window is deliberately not armed.
+     * Page 1 with the date filters EXPLICITLY CLEARED ('-', what the filter
+     * bar sends when the user empties a date field) lists the rows — the year
+     * window is deliberately not armed.
      */
     public function test_cleared_date_filters_widen_the_validation_tab(): void
     {
@@ -113,7 +123,7 @@ final class DepensesValidationPaginationFiltersTest extends TestCase
 
         $props = $this->props([
             'tab' => 'validation', 'perPage' => 10,
-            'dateFrom' => '', 'dateTo' => '',
+            'dateFrom' => '-', 'dateTo' => '-',
             'search' => '', 'typeFilter' => '', 'caisseFilter' => '', 'statutFilter' => '',
         ]);
 
@@ -132,7 +142,7 @@ final class DepensesValidationPaginationFiltersTest extends TestCase
 
         $props = $this->props([
             'tab' => 'validation', 'perPage' => 10,
-            'dateFrom' => '', 'dateTo' => '',
+            'dateFrom' => '-', 'dateTo' => '-',
             'search' => '', 'typeFilter' => '', 'caisseFilter' => '', 'statutFilter' => '',
         ]);
 
@@ -157,7 +167,7 @@ final class DepensesValidationPaginationFiltersTest extends TestCase
 
         $props = $this->props([
             'tab' => 'validation', 'perPage' => 10, 'pageValidation' => 2,
-            'dateFrom' => '', 'dateTo' => '',
+            'dateFrom' => '-', 'dateTo' => '-',
             'search' => '', 'typeFilter' => '', 'caisseFilter' => '', 'statutFilter' => '',
         ]);
 
@@ -182,7 +192,7 @@ final class DepensesValidationPaginationFiltersTest extends TestCase
 
         $filtered = route('backoffice.depenses.index', [
             'tab' => 'validation', 'perPage' => 10,
-            'dateFrom' => '', 'dateTo' => '',
+            'dateFrom' => '-', 'dateTo' => '-',
             'search' => '', 'typeFilter' => '', 'caisseFilter' => '', 'statutFilter' => '',
         ]);
 
@@ -204,7 +214,7 @@ final class DepensesValidationPaginationFiltersTest extends TestCase
         $depense = Depense::query()->firstOrFail();
 
         $filtered = route('backoffice.depenses.index', [
-            'tab' => 'validation', 'perPage' => 10, 'dateFrom' => '', 'dateTo' => '',
+            'tab' => 'validation', 'perPage' => 10, 'dateFrom' => '-', 'dateTo' => '-',
         ]);
 
         $response = $this->actingAs($this->approver())
@@ -228,7 +238,7 @@ final class DepensesValidationPaginationFiltersTest extends TestCase
 
         $filtered = route('backoffice.depenses.index', [
             'tab' => 'validation', 'perPage' => 10,
-            'dateFrom' => '', 'dateTo' => '',
+            'dateFrom' => '-', 'dateTo' => '-',
             'search' => '', 'typeFilter' => '', 'caisseFilter' => '', 'statutFilter' => '',
         ]);
 

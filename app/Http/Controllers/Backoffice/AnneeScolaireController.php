@@ -36,10 +36,9 @@ final class AnneeScolaireController extends Controller
 
     public function store(StoreAnneeScolaireRequest $request): RedirectResponse
     {
-        $this->persist($this->guardCloture($request, $request->validated()));
+        $glissements = $this->persist($this->guardCloture($request, $request->validated()));
 
-        return redirect()->route('backoffice.settings', ['tab' => 'annees-scolaires'])
-            ->with('success', __('Année scolaire créée.'));
+        return $this->retourAvecGlissements(__('Année scolaire créée.'), $glissements);
     }
 
     public function edit(AnneeScolaire $annees_scolaire): RedirectResponse
@@ -49,10 +48,12 @@ final class AnneeScolaireController extends Controller
 
     public function update(UpdateAnneeScolaireRequest $request, AnneeScolaire $annees_scolaire): RedirectResponse
     {
-        $this->persist($this->guardCloture($request, $request->validated(), $annees_scolaire), $annees_scolaire);
+        $glissements = $this->persist(
+            $this->guardCloture($request, $request->validated(), $annees_scolaire),
+            $annees_scolaire,
+        );
 
-        return redirect()->route('backoffice.settings', ['tab' => 'annees-scolaires'])
-            ->with('success', __('Année scolaire mise à jour.'));
+        return $this->retourAvecGlissements(__('Année scolaire mise à jour.'), $glissements);
     }
 
     /**
@@ -160,9 +161,15 @@ final class AnneeScolaireController extends Controller
      *
      * @param  array<string, mixed>  $data
      */
-    private function persist(array $data, ?AnneeScolaire $annee = null): void
+    private function persist(array $data, ?AnneeScolaire $annee = null): array
     {
-        DB::transaction(function () use ($data, $annee): void {
+        // Posés par la validation (CouvertureAnneesRules) quand la fenêtre
+        // soumise ouvre un trou qu'une année VOISINE peut absorber. Ils sont
+        // joués ICI, dans la même transaction : écrits à part, un échec du
+        // second laisserait la base dans le trou que la règle refuse.
+        $glissements = AnneeScolaire::prendreGlissements();
+
+        DB::transaction(function () use ($data, $annee, $glissements): void {
             if (($data['par_defaut'] ?? false)) {
                 AnneeScolaire::query()->where('par_defaut', true)->update(['par_defaut' => false]);
             }
@@ -170,6 +177,58 @@ final class AnneeScolaireController extends Controller
             $annee === null
                 ? AnneeScolaire::create($data)
                 : $annee->update($data);
+
+            foreach ($glissements as $glissement) {
+                // save() sur le modèle, jamais un update() de masse : sans
+                // cela Auditable ne journalise pas le décalage (§11), et
+                // c'est la seule trace expliquant pourquoi une année que
+                // personne n'a éditée a changé de bornes.
+                $glissement['annee']->forceFill([
+                    $glissement['colonne'] => $glissement['valeur'],
+                ])->save();
+            }
         });
+
+        return $glissements;
+    }
+
+    /**
+     * @param  array<int, array{annee: AnneeScolaire, colonne: string, valeur: \Illuminate\Support\Carbon}>  $glissements
+     */
+    private function retourAvecGlissements(string $succes, array $glissements): RedirectResponse
+    {
+        $redirection = redirect()->route('backoffice.settings', ['tab' => 'annees-scolaires'])
+            ->with('success', $succes);
+
+        $message = $this->messageGlissements($glissements);
+
+        // Pas de clé `warning` du tout quand rien n'a glissé — une valeur
+        // nulle flashée allumerait quand même la bannière, vide.
+        return $message === null ? $redirection : $redirection->with('warning', $message);
+    }
+
+    /**
+     * Une année que l'utilisateur n'a PAS éditée vient de changer de dates :
+     * le taire ferait découvrir le décalage des mois plus tard, sur un total
+     * qui ne tombe plus juste. Le message NOMME l'année et sa nouvelle borne.
+     *
+     * @param  array<int, array{annee: AnneeScolaire, colonne: string, valeur: \Illuminate\Support\Carbon}>  $glissements
+     */
+    private function messageGlissements(array $glissements): ?string
+    {
+        if ($glissements === []) {
+            return null;
+        }
+
+        $parties = array_map(
+            fn (array $g): string => __(':name now :boundary :date', [
+                'name' => $g['annee']->nom,
+                'boundary' => $g['colonne'] === 'date_debut' ? __('starts on') : __('ends on'),
+                'date' => $g['valeur']->format('d/m/Y'),
+            ]),
+            $glissements,
+        );
+
+        return __('To leave no date uncovered, :changes.', ['changes' => implode(' ; ', $parties)]);
     }
 }

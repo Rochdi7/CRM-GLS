@@ -414,6 +414,19 @@ final class EncaissementController extends Controller
                     ]);
                 }
 
+                // ⚠ Relu SOUS VERROU, comme le reste : entre le chargement du
+                // formulaire et l'envoi, un collègue a pu rendre le chèque de
+                // garantie à l'étudiant qui réglait en espèces au guichet
+                // d'à côté. Le papier n'est plus chez nous — il ne peut plus
+                // rien payer. Le menu déroulant l'exclut déjà
+                // (ChequeController@studentCheques), mais un prop client n'est
+                // jamais une garde (§5) : c'est ici que la règle est tenue.
+                if ($cheque->estRetourne()) {
+                    throw ValidationException::withMessages([
+                        'payment_lines' => __('This cheque was returned to its owner and can no longer be used to pay.'),
+                    ]);
+                }
+
                 $chequeTotal = round((float) $touchedLines
                     ->filter(fn ($l) => $l['methode'] === Encaissement::METHODE_CHEQUE && (int) $l['cheque_id'] === $chequeId)
                     ->sum(fn ($l) => (float) $l['montant']), 2);

@@ -72,10 +72,26 @@ function rejectedChequeNote(cheque: ChequeRow): string {
     return `${parts.join(' — ')}.`;
 }
 
+/**
+ * Libellé AFFICHÉ d'un type de chèque. « Garantie (À encaisser) » est la
+ * valeur STOCKÉE — elle est en base sur chaque ligne, dans le journal
+ * d'audit et dans les exports, et n'est pas réécrite (§11 : on ne
+ * réinterprète pas une valeur stockée). Seul l'écran raccourcit, parce que
+ * « (À encaisser) » n'apprend rien à qui lit la colonne Type : un chèque de
+ * garantie est par définition là pour être encaissé si l'étudiant ne paie
+ * pas. La valeur soumise par le formulaire reste la vraie.
+ */
+function typeLabel(type: string): string {
+    return type === 'Garantie (À encaisser)' ? 'Garantie' : type;
+}
+
 function statutVariant(statut: string): 'primary' | 'warning' | 'success' | 'danger' {
     if (statut === 'Déposé') return 'warning';
     if (statut === 'Encaissé') return 'success';
     if (statut === 'Rejeté') return 'danger';
+    // Le papier a quitté l'école et le dossier est clos : vert, comme
+    // « Encaissé ». Il ne reste rien à faire sur cette ligne.
+    if (statut === 'Restitué') return 'success';
     return 'primary';
 }
 
@@ -115,12 +131,22 @@ export default function ChequesIndex({
     const [retourTarget, setRetourTarget] = useState<ChequeRow | null>(null);
     const [retourError, setRetourError] = useState<string | undefined>(undefined);
     const [retourProcessing, setRetourProcessing] = useState(false);
+    // Restitution d'un chèque de GARANTIE réglé autrement (espèces / TPE /
+    // virement). Distinct de retourTarget ci-dessus, qui rend un chèque
+    // REJETÉ : deux faits différents, deux conditions différentes, qui
+    // écrivent les mêmes colonnes off-ledger.
+    const [garantieTarget, setGarantieTarget] = useState<ChequeRow | null>(null);
+    const [garantieMotif, setGarantieMotif] = useState('');
+    const [garantieError, setGarantieError] = useState<string | undefined>(undefined);
+    const [garantieProcessing, setGarantieProcessing] = useState(false);
     const [detailsCheque, setDetailsCheque] = useState<ChequeRow | null>(null);
 
     const form = useForm<ChequeFormState>(emptyForm());
 
     const sourceOptions: SelectOption[] = sources.map((s) => ({ value: s, label: s }));
-    const typeOptions: SelectOption[] = types.map((t) => ({ value: t, label: t }));
+    // La VALEUR reste celle de la base (c'est elle qui est soumise et
+    // filtrée) ; seul le libellé est raccourci.
+    const typeOptions: SelectOption[] = types.map((t) => ({ value: t, label: typeLabel(t) }));
     const statutFilterOptions: SelectOption[] = statuts.map((s) => ({ value: s, label: s }));
     const banqueOptions: SelectOption[] = banques.map((b) => ({ value: b, label: b }));
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.nom }));
@@ -268,6 +294,47 @@ export default function ChequesIndex({
                     setRetourError(errors.statut ?? 'Action impossible.');
                 },
                 onFinish: () => setRetourProcessing(false),
+            },
+        );
+    }
+
+    // --- Restitution d'un chèque de GARANTIE (l'étudiant a réglé autrement) ---
+    // Aucun argent ne bouge : un chèque est un inventaire off-ledger, et le
+    // paiement qui le remplace est un encaissement ordinaire enregistré à
+    // part, avec sa propre méthode. Le motif est OBLIGATOIRE — c'est ce que
+    // le journal conservera pour expliquer pourquoi la garantie est sortie.
+    function openRestituerGarantie(cheque: ChequeRow) {
+        setGarantieTarget(cheque);
+        setGarantieMotif('');
+        setGarantieError(undefined);
+    }
+
+    function closeRestituerGarantie() {
+        setGarantieTarget(null);
+        setGarantieMotif('');
+        setGarantieError(undefined);
+        setGarantieProcessing(false);
+    }
+
+    function runRestituerGarantie() {
+        if (!garantieTarget) {
+            return;
+        }
+
+        setGarantieProcessing(true);
+        setGarantieError(undefined);
+
+        router.patch(
+            `/backoffice/cheques/${garantieTarget.id}/restituer-garantie`,
+            { motif: garantieMotif },
+            {
+                preserveScroll: true,
+                onSuccess: () => closeRestituerGarantie(),
+                onError: (errors) => {
+                    setGarantieProcessing(false);
+                    setGarantieError(Object.values(errors)[0] ?? "L'opération a échoué.");
+                },
+                onFinish: () => setGarantieProcessing(false),
             },
         );
     }
@@ -421,8 +488,19 @@ export default function ChequesIndex({
                 </div>
 
 
+                {/* ⚠ Le total exclut les chèques RESTITUÉS : ce sont des
+                    papiers que l'école n'a plus. Il faut le DIRE, sinon le
+                    chiffre se lit comme « la somme de toutes les lignes
+                    affichées » et l'utilisateur ne peut pas comprendre
+                    pourquoi une ligne visible n'y pèse pas (§11 : signaler
+                    plutôt que masquer). */}
                 <p className="fw-medium px-3 mb-3">
                     Montant total : {Number(montantTotal).toFixed(2)} MAD
+                    {filters.statutFilter !== 'Restitué' && (
+                        <span className="text-muted fw-normal fs-13 ms-2 text-normal-case">
+                            (chèques en main — hors restitués)
+                        </span>
+                    )}
                 </p>
 
                 {cheques.data.length === 0 ? (
@@ -465,11 +543,21 @@ export default function ChequesIndex({
                                     <td>{Number(cheque.montant).toFixed(2)} DH</td>
                                     <td className="fw-medium">{Number(cheque.reste).toFixed(2)} DH</td>
                                     <td>{cheque.banque ?? '—'}</td>
-                                    <td>{cheque.type}</td>
+                                    <td>{typeLabel(cheque.type)}</td>
                                     <td>{cheque.dateEcheance ?? '—'}</td>
                                     <td>
                                         <div className="d-flex align-items-center gap-2">
-                                            <StatusBadge label={cheque.statut} variant={statutVariant(cheque.statut)} dot />
+                                            {/* ⚠ `statutAffiche`, pas `statut` : un chèque de
+                                                garantie rendu au client n'est plus « En
+                                                possession », et l'afficher ainsi ferait mentir
+                                                l'écran. Le verdict vient du SERVEUR (§5) ; la
+                                                colonne stockée, elle, ne connaît pas « Restitué »
+                                                — aucun statut n'a été ajouté en base. */}
+                                            <StatusBadge
+                                                label={cheque.statutAffiche}
+                                                variant={statutVariant(cheque.statutAffiche)}
+                                                dot
+                                            />
                                             {cheque.statut === 'Rejeté' && (
                                                 <button
                                                     type="button"
@@ -495,6 +583,16 @@ export default function ChequesIndex({
                                                     <RowActionItem icon="ti-building-bank" onClick={() => confirmStatut(cheque, 'Déposé')}>
                                                         Remise à la banque
                                                     </RowActionItem>
+                                                    {/* L'étudiant a réglé en espèces / TPE / virement : il
+                                                        repart avec sa garantie. `restituable` vient du
+                                                        SERVEUR (GetChequesList) — la page n'a pas à savoir
+                                                        que la règle exige un chèque de type Garantie
+                                                        n'ayant financé aucun paiement (§5). */}
+                                                    {cheque.restituable && (
+                                                        <RowActionItem icon="ti-corner-up-left" onClick={() => openRestituerGarantie(cheque)}>
+                                                            Restituer au client
+                                                        </RowActionItem>
+                                                    )}
                                                 </>
                                             )}
                                             {canDeposit && cheque.statut === 'Déposé' && (
@@ -696,6 +794,51 @@ export default function ChequesIndex({
                     setRetourError(undefined);
                 }}
             />
+
+            {/* Restitution d'un chèque de GARANTIE : l'étudiant avait laissé
+                le chèque en garantie, il revient régler en espèces / TPE /
+                virement et repart avec son papier.
+
+                ⚠ Aucun argent ne bouge ici. Le chèque est un inventaire
+                OFF-LEDGER : la caisse n'a pas bougé quand il est entré, elle
+                ne bouge pas quand il sort. Le paiement qui le remplace est un
+                encaissement ORDINAIRE, enregistré séparément avec sa propre
+                méthode — il n'est pas lié à ce chèque, et c'est tout l'objet
+                de l'opération.
+
+                Le motif est OBLIGATOIRE : c'est ce que le journal d'audit et
+                la note conserveront pour expliquer, dans six mois, pourquoi
+                une garantie de ce montant a quitté l'école. */}
+            <ConfirmDialog
+                show={garantieTarget !== null}
+                title="Restituer le chèque de garantie"
+                recordLabel={
+                    garantieTarget
+                        ? `${garantieTarget.numeroCheque} — ${Number(garantieTarget.montant).toFixed(2)} MAD`
+                          + (garantieTarget.proprietaire ? ` — ${garantieTarget.proprietaire}` : '')
+                        : ''
+                }
+                message={
+                    "Le chèque sort de l'inventaire des garanties et ne pourra plus servir à payer. "
+                    + "Aucun montant n'est débité ni crédité : enregistrez le règlement reçu "
+                    + "(espèces, TPE ou virement) comme un encaissement ordinaire."
+                }
+                icon="ti-corner-up-left"
+                variant="primary"
+                confirmLabel="Restituer au client"
+                processingLabel="Enregistrement…"
+                error={garantieError}
+                processing={garantieProcessing}
+                onConfirm={runRestituerGarantie}
+                onCancel={closeRestituerGarantie}
+            >
+                <TextareaField
+                    id="chq-motif-restitution"
+                    label="Motif de la restitution (obligatoire)"
+                    value={garantieMotif}
+                    onChange={(e) => setGarantieMotif(e.target.value)}
+                />
+            </ConfirmDialog>
 
             {/* After marking a chèque Rejeté: offer the refund follow-up. Never
                 auto-created — EnregistrerRemboursement always stays a reviewed,

@@ -64,6 +64,7 @@ class Group extends Model
         'nom', 'niveau', 'enseignant_id', 'salle_id', 'etablissement_id',
         'annee_scolaire_id', 'capacite_max', 'statut',
         'date_debut_formation', 'date_fin_formation',
+        'montant_par_etudiant_prof', 'taux_horaire_prof',
     ];
 
     /**
@@ -87,6 +88,8 @@ class Group extends Model
         return [
             'date_debut_formation' => 'date',
             'date_fin_formation' => 'date',
+            'montant_par_etudiant_prof' => 'decimal:2',
+            'taux_horaire_prof' => 'decimal:2',
         ];
     }
 

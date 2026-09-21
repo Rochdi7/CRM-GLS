@@ -1978,10 +1978,25 @@ export interface ChequeRow {
     type: string;
     dateEcheance: string | null;
     statut: string;
+    /**
+     * Ce que la colonne Statut AFFICHE : « Restitué » dès que le chèque a
+     * été rendu à son propriétaire, sinon la valeur stockée. Calculé par le
+     * serveur (GetChequesList) — `statut` garde sa valeur de base, qui
+     * décrit le parcours BANCAIRE et ne connaît pas « Restitué ».
+     */
+    statutAffiche: string;
     note: string;
     agentNom: string | null;
     retourneLe: string | null;
     retourneParNom: string | null;
+    /**
+     * Ce chèque de GARANTIE peut-il être rendu à son propriétaire ?
+     * Calculé par le serveur (GetChequesList) avec les mêmes bornes que
+     * RestituerChequeGarantie vérifie sous verrou — type Garantie, statut
+     * En possession, jamais restitué, et n'ayant financé aucun paiement.
+     * La page l'AFFICHE, elle ne le redérive jamais (§5).
+     */
+    restituable: boolean;
     encaissements: ChequeLinkedEncaissement[];
 }
 
@@ -2031,6 +2046,8 @@ export interface StudentChequeOption {
     montant: MoneyDisplay;
     reste: MoneyDisplay;
     statut: string;
+    /** Garantie (À encaisser) | À déposer — voir Cheque::TYPES. */
+    type: string;
 }
 
 /** One "Frais disponible" line loaded from the selected inscription (GetInscriptionUnpaidFees). */

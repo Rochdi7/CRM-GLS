@@ -672,6 +672,13 @@ Route::prefix('backoffice')
             // every other chèque lifecycle move.
             Route::patch('cheques/{cheque}/retour', [ChequeController::class, 'markRetourne'])
                 ->middleware('permission:cheques.deposit')->name('cheques.retour');
+            // Rend un chèque de GARANTIE à son propriétaire parce que
+            // l'étudiant a réglé autrement (espèces / TPE / virement) :
+            // le papier sort de l'école, aucun argent ne bouge. Même
+            // permission que le reste du parcours physique du chèque —
+            // c'est l'employé de guichet qui rend la feuille.
+            Route::patch('cheques/{cheque}/restituer-garantie', [ChequeController::class, 'restituerGarantie'])
+                ->middleware('permission:cheques.deposit')->name('cheques.restituer-garantie');
             // Feeds the "Payer avec un chèque" dropdown in the payment form.
             Route::get('students/{student}/cheques', [ChequeController::class, 'studentCheques'])
                 ->name('students.cheques');

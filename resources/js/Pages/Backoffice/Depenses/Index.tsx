@@ -260,6 +260,23 @@ export default function DepensesIndex({
         });
     }
 
+    /**
+     * A date EDIT, as opposed to any other reload. Emptying a date field is a
+     * deliberate clear, and it must reach the server as the explicit '-'
+     * marker: an empty string is dropped from the query string, and the
+     * controller reads an absent/empty date as « never touched » — which
+     * re-arms the active-year window and would REMOVE rows the user had
+     * surfaced (§5: clearing a filter must only ever widen).
+     *
+     * ⚠ Only this path marks. The page spreads its whole `filters` prop into
+     * every reload and into switchTab(), so marking inside reload() itself
+     * would make an untouched date look cleared, and every tab click would
+     * drop the year window — the 21/09/2026 bug in reverse.
+     */
+    function reloadDate(edge: 'dateFrom' | 'dateTo', value: string) {
+        reload({ [edge]: value === '' ? '-' : value });
+    }
+
     const filterReset = useFilterReset(filters, reload, { perPage: filters.perPage });
 
     // --- Approval flow (Paramètres → Système « Validation des dépenses ») ---
@@ -727,7 +744,7 @@ export default function DepensesIndex({
                                 <DateField
                                     id="dep-f-du"
                                     value={filters.dateFrom}
-                                    onChange={(event) => reload({ dateFrom: event.target.value })}
+                                    onChange={(event) => reloadDate('dateFrom', event.target.value)}
                                 />
                             </div>
                             <div style={{ width: 170 }}>
@@ -737,7 +754,7 @@ export default function DepensesIndex({
                                 <DateField
                                     id="dep-f-au"
                                     value={filters.dateTo}
-                                    onChange={(event) => reload({ dateTo: event.target.value })}
+                                    onChange={(event) => reloadDate('dateTo', event.target.value)}
                                 />
                             </div>
                         </TableToolbar>
@@ -891,7 +908,7 @@ export default function DepensesIndex({
                                 <DateField
                                     id="prof-f-du"
                                     value={filters.dateFrom}
-                                    onChange={(event) => reload({ dateFrom: event.target.value })}
+                                    onChange={(event) => reloadDate('dateFrom', event.target.value)}
                                 />
                             </div>
                             <div style={{ width: 170 }}>
@@ -901,7 +918,7 @@ export default function DepensesIndex({
                                 <DateField
                                     id="prof-f-au"
                                     value={filters.dateTo}
-                                    onChange={(event) => reload({ dateTo: event.target.value })}
+                                    onChange={(event) => reloadDate('dateTo', event.target.value)}
                                 />
                             </div>
                         </TableToolbar>
@@ -1179,7 +1196,7 @@ export default function DepensesIndex({
                                 <DateField
                                     id="val-f-du"
                                     value={filters.dateFrom}
-                                    onChange={(event) => reload({ dateFrom: event.target.value })}
+                                    onChange={(event) => reloadDate('dateFrom', event.target.value)}
                                 />
                             </div>
                             <div style={{ width: 170 }}>
@@ -1189,7 +1206,7 @@ export default function DepensesIndex({
                                 <DateField
                                     id="val-f-au"
                                     value={filters.dateTo}
-                                    onChange={(event) => reload({ dateTo: event.target.value })}
+                                    onChange={(event) => reloadDate('dateTo', event.target.value)}
                                 />
                             </div>
                         </TableToolbar>

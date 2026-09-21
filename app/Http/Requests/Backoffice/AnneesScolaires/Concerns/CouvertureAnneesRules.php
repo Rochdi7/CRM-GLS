@@ -57,6 +57,13 @@ trait CouvertureAnneesRules
 
     protected function validerCouvertureAnnees(Validator $validator, ?AnneeScolaire $annee = null): void
     {
+        // Repartir d'une ardoise vide : une requête précédente ayant échoué
+        // APRÈS avoir calculé un glissement (autre règle en erreur, 403,
+        // année clôturée) laisserait son décalage en attente, et la
+        // prochaine écriture le jouerait sur des dates qui n'ont plus rien
+        // à voir. Le conteneur survit à la requête sous Octane et en test.
+        AnneeScolaire::prendreGlissements();
+
         if ($validator->errors()->hasAny(['date_debut', 'date_fin'])) {
             return;
         }
@@ -97,6 +104,38 @@ trait CouvertureAnneesRules
      * volontairement détachée) reste légitime tant qu'aucun argent ne tombe
      * dans l'intervalle découvert.
      *
+     * ⚠ **FRONTIÈRE GLISSANTE** (21/09/2026). Déplacer la frontière entre
+     * deux années ADJACENTES était une impasse : les deux ordres possibles
+     * sont refusés. Clôturer 2025/2026 au 26-08-2026 alors que 2026/2027
+     * ouvre le 01-09-2026 crée un trou (refusé, ci-dessous) ; avancer
+     * d'abord 2026/2027 au 27-08-2026 chevauche 2025/2026 qui court encore
+     * jusqu'au 31-08 (refusé plus haut). Aucune séquence de deux
+     * enregistrements ne mène à l'état voulu, et il n'existe pas d'écran
+     * pour éditer les deux bornes ensemble : le garde-fou interdisait
+     * exactement le geste légitime qu'il est censé protéger (signalé le
+     * 21/09/2026, 66 dépenses / 5 remboursements / 14 chèques dans le trou).
+     *
+     * Le trou est donc COMBLÉ plutôt que refusé, quand il peut l'être sans
+     * rien casser : la voisine qui BORDE le trou voit sa borne proche
+     * glisser jusqu'à toucher la fenêtre soumise. C'est sûr par
+     * construction — la voisine ne fait que GRANDIR dans un intervalle que
+     * personne ne couvre, donc aucun chevauchement ne peut naître (une
+     * troisième année dans le trou impliquerait qu'elle chevauche déjà la
+     * voisine, ce que la règle interdit). Deux bornes :
+     *
+     *  - le glissement est **appliqué dans la MÊME transaction** que
+     *    l'année soumise (`AnneeScolaire::glissementsEnAttente()`, joué par
+     *    `AnneeScolaireController::persist()`). Écrit à part, il laisserait
+     *    la base en trou si le second écrit échouait — exactement l'état
+     *    que la règle refuse ;
+     *  - il est **annoncé à l'utilisateur** (flash nommant l'année et sa
+     *    nouvelle borne). Une année qu'on n'a pas éditée change de dates :
+     *    le taire ferait découvrir le décalage des mois plus tard, sur un
+     *    total qui ne tombe plus juste (§11 « signaler plutôt que masquer »).
+     *
+     * Reste refusé le trou qu'aucune voisine ne borde — il n'y a alors rien
+     * à faire glisser, et l'argent serait bel et bien perdu de vue.
+     *
      * @param  \Illuminate\Support\Collection<int, AnneeScolaire>  $autres
      */
     private function refuserTrou(Validator $validator, $autres, Carbon $debut, Carbon $fin): void
@@ -109,11 +148,15 @@ trait CouvertureAnneesRules
             if ($vDebut > $fin) {
                 $trouDebut = $fin->copy()->addDay();
                 $trouFin = $vDebut->copy()->subDay();
+                $colonneAGlisser = 'date_debut';
+                $nouvelleBorne = $trouDebut;
             }
             // Trou AVANT la fenêtre soumise (la voisine se termine plus tôt).
             elseif ($vFin < $debut) {
                 $trouDebut = $vFin->copy()->addDay();
                 $trouFin = $debut->copy()->subDay();
+                $colonneAGlisser = 'date_fin';
+                $nouvelleBorne = $trouFin;
             } else {
                 continue;
             }
@@ -128,17 +171,15 @@ trait CouvertureAnneesRules
                 continue;
             }
 
-            $validator->errors()->add('date_fin', __(
-                'This leaves :from to :to covered by no academic year, and :details would become invisible on every screen. Extend this year or :name to cover those dates.',
-                [
-                    'from' => $trouDebut->format('d/m/Y'),
-                    'to' => $trouFin->format('d/m/Y'),
-                    'details' => implode(', ', $orphelines),
-                    'name' => $voisine->nom,
-                ],
-            ));
-
-            return;
+            // La voisine borde le trou : elle l'absorbe. Rien n'est écrit
+            // ici — un FormRequest valide, il n'écrit pas ; le glissement
+            // est mis en attente pour la transaction du contrôleur.
+            //
+            // ⚠ Pas de `return` : rétrécir une année du MILIEU ouvre un trou
+            // de CHAQUE côté, et n'en combler qu'un laisserait l'autre
+            // orphelin sans que rien ne le signale — la boucle doit voir
+            // toutes les voisines.
+            AnneeScolaire::enregistrerGlissement($voisine, $colonneAGlisser, $nouvelleBorne);
         }
     }
 

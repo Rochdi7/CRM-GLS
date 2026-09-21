@@ -23,6 +23,14 @@ final class GetChequesList
 
     public const DEFAULT_PER_PAGE = 10;
 
+    /**
+     * Pseudo-statut d'AFFICHAGE : un chèque rendu à son propriétaire.
+     * Il n'existe pas dans `cheques.statut` (qui décrit le parcours
+     * BANCAIRE) — il est dérivé de retourne_le, et n'a donc coûté ni
+     * colonne, ni migration, ni patch de production.
+     */
+    public const STATUT_RESTITUE = 'Restitué';
+
     public function __construct(
         private readonly CenterAccessService $centerAccess,
         private readonly CurrentContext $context,
@@ -63,7 +71,17 @@ final class GetChequesList
                     ->orWhere('prenom', 'ilike', "%{$proprietaireFilter}%"))))
             ->when($banqueFilter !== '', fn ($q) => $q->where('banque', $banqueFilter))
             ->when($typeFilter !== '', fn ($q) => $q->where('type', $typeFilter))
-            ->when($statutFilter !== '', fn ($q) => $q->where('statut', $statutFilter))
+            // « Restitué » n'est pas une valeur de la colonne : c'est le
+            // statut AFFICHÉ, porté par retourne_le (voir statutAffiche
+            // plus bas). Le filtre doit donc le comprendre, sinon l'écran
+            // propose un badge qu'aucun filtre ne retrouve — et, dans
+            // l'autre sens, « En possession » ne doit plus ramener les
+            // chèques rendus, qui ne s'affichent plus ainsi.
+            ->when($statutFilter === self::STATUT_RESTITUE, fn ($q) => $q->whereNotNull('retourne_le'))
+            ->when(
+                $statutFilter !== '' && $statutFilter !== self::STATUT_RESTITUE,
+                fn ($q) => $q->where('statut', $statutFilter)->whereNull('retourne_le'),
+            )
             ->when($dateEcheanceFrom !== '', fn ($q) => $q->whereDate('date_echeance', '>=', $dateEcheanceFrom))
             ->when($dateEcheanceTo !== '', fn ($q) => $q->whereDate('date_echeance', '<=', $dateEcheanceTo))
             // Year switcher: a cheque follows its échéance into the year it
@@ -88,7 +106,24 @@ final class GetChequesList
 
         // Total over every chèque matching the current filters (not just the
         // page shown) — same convention as GetDepensesList/GetEncaissementsList.
-        $montantTotal = (clone $base)->sum('montant');
+        //
+        // ⚠ Les chèques RESTITUÉS en sont exclus (19/09/2026). « Montant
+        // total » chapeaute une liste de papiers que l'école DÉTIENT ; un
+        // chèque rendu à son propriétaire n'est plus là, et le compter
+        // gonfle ce que l'école croit avoir en garantie — l'écran se
+        // contredirait lui-même, avec une ligne badgée « Restitué » qui pèse
+        // quand même dans le total au-dessus (§11 : un total se calcule sur
+        // les MÊMES lignes que celles qu'il chapeaute).
+        //
+        // EXCEPTION : quand l'utilisateur DEMANDE explicitement les
+        // restitués (statutFilter = « Restitué »), le total porte sur eux,
+        // sinon la page afficherait des lignes et un total à 0,00.
+        $montantTotal = (clone $base)
+            ->when(
+                $statutFilter !== self::STATUT_RESTITUE,
+                fn ($q) => $q->whereNull('retourne_le'),
+            )
+            ->sum('montant');
 
         $cheques = (clone $base)
             ->with(['student', 'agent', 'retournePar', 'encaissements' => fn ($q) => $q->with('student')])
@@ -121,10 +156,32 @@ final class GetChequesList
             'type' => $cheque->type,
             'dateEcheance' => $cheque->date_echeance?->toDateString(),
             'statut' => $cheque->statut,
+            // ⚠ Ce que l'utilisateur LIT dans la colonne Statut n'est pas
+            // « où en est le parcours bancaire » mais « où est le chèque
+            // maintenant ». Un chèque de garantie rendu au client n'est plus
+            // « En possession » — l'afficher ainsi fait mentir l'écran
+            // (signalé le 19/09/2026). La colonne `statut` garde sa valeur
+            // stockée, qui décrit le parcours BANCAIRE et n'a pas de valeur
+            // « Restitué » ; c'est l'AFFICHAGE qui dit la vérité physique,
+            // dérivé de retourne_le. Aucune colonne, aucun statut ajouté.
+            'statutAffiche' => $cheque->estRetourne()
+                ? 'Restitué'
+                : $cheque->statut,
             'note' => $cheque->note ?? '',
             'agentNom' => $cheque->agent?->nomComplet(),
             'retourneLe' => $cheque->retourne_le?->toDateTimeString(),
             'retourneParNom' => $cheque->retournePar?->nomComplet(),
+            // Peut-on rendre CE chèque de garantie à son propriétaire ?
+            // Les mêmes bornes que RestituerChequeGarantie vérifie sous
+            // verrou — portées à l'écran, jamais redérivées par le composant
+            // (§5) : une page qui recopie la règle finit par proposer un
+            // bouton que le serveur refuse. Le « reste » est calculé sur la
+            // relation DÉJÀ chargée, pas via montantUtilise(), qui tirerait
+            // son propre SUM par ligne (§17).
+            'restituable' => $cheque->type === Cheque::TYPE_GARANTIE
+                && $cheque->statut === Cheque::STATUT_EN_POSSESSION
+                && ! $cheque->estRetourne()
+                && round((float) $cheque->encaissements->sum('montant'), 2) <= 0.0,
             'encaissements' => $cheque->encaissements->map(fn ($e): array => [
                 'id' => $e->id,
                 'reference' => $e->reference,

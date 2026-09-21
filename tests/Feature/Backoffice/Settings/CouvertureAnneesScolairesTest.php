@@ -76,23 +76,40 @@ final class CouvertureAnneesScolairesTest extends TestCase
         ]);
     }
 
-    public function test_a_gap_that_strands_money_is_refused(): void
+    /**
+     * ⚠ Le geste central (21/09/2026) : DÉPLACER LA FRONTIÈRE entre deux
+     * années adjacentes. Les deux ordres possibles étaient refusés —
+     * raccourcir l'ancienne ouvre un trou, avancer la suivante chevauche
+     * l'ancienne — et aucun écran n'édite les deux bornes ensemble. Le
+     * garde-fou interdisait donc exactement le geste légitime qu'il protège.
+     *
+     * La voisine qui BORDE le trou l'absorbe : elle ne fait que grandir
+     * dans un intervalle que personne ne couvre.
+     */
+    public function test_shrinking_a_year_slides_the_neighbours_boundary_instead_of_refusing(): void
     {
         $ancienne = $this->annee('2025/2026', '2025-09-01', '2026-08-31');
-        $this->annee('2026/2027', '2026-09-27', '2027-08-31');
+        $suivante = $this->annee('2026/2027', '2026-09-27', '2027-08-31');
 
         $this->depenseLe('2026-08-31');
 
-        // Rétrécir l'ancienne année au 26/08 ouvre un trou du 27/08 au 26/09
-        // qui contient la dépense.
         $this->put(route('backoffice.annees-scolaires.update', $ancienne), [
             'nom' => '2025/2026', 'date_debut' => '2025-09-01', 'date_fin' => '2026-08-26',
-        ])->assertSessionHasErrors('date_fin');
+        ])->assertSessionHasNoErrors();
 
-        $this->assertSame('2026-08-31', $ancienne->fresh()->date_fin->toDateString());
+        // L'année soumise a bien été raccourcie...
+        $this->assertSame('2026-08-26', $ancienne->fresh()->date_fin->toDateString());
+        // ...et la voisine a glissé pour reprendre le lendemain : plus un
+        // seul jour à découvert, et la dépense du 31/08 reste visible.
+        $this->assertSame('2026-08-27', $suivante->fresh()->date_debut->toDateString());
     }
 
-    public function test_the_refusal_names_the_stranded_money(): void
+    /**
+     * Une année que l'utilisateur n'a PAS éditée vient de changer de dates.
+     * Le taire ferait découvrir le décalage des mois plus tard, sur un
+     * total qui ne tombe plus juste (§11 « signaler plutôt que masquer »).
+     */
+    public function test_the_slide_is_announced_and_names_the_year_and_its_new_boundary(): void
     {
         $ancienne = $this->annee('2025/2026', '2025-09-01', '2026-08-31');
         $this->annee('2026/2027', '2026-09-27', '2027-08-31');
@@ -103,13 +120,67 @@ final class CouvertureAnneesScolairesTest extends TestCase
                 'nom' => '2025/2026', 'date_debut' => '2025-09-01', 'date_fin' => '2026-08-26',
             ]);
 
-        $response->assertSessionHasErrors('date_fin');
+        $response->assertSessionHasNoErrors();
 
-        $message = $response->baseResponse->getSession()
-            ->get('errors')->getBag('default')->first('date_fin');
+        $message = (string) $response->baseResponse->getSession()->get('warning');
 
+        $this->assertStringContainsString('2026/2027', $message);
         $this->assertStringContainsString('27/08/2026', $message);
-        $this->assertStringContainsString('140', $message);
+    }
+
+    /**
+     * Rien n'a glissé ⇒ AUCUNE clé `warning`. Une valeur nulle flashée
+     * allumerait quand même la bannière, vide.
+     */
+    public function test_nothing_is_announced_when_no_boundary_moved(): void
+    {
+        $ancienne = $this->annee('2025/2026', '2025-09-01', '2026-08-31');
+        $this->annee('2026/2027', '2026-09-01', '2027-08-31');
+
+        $this->put(route('backoffice.annees-scolaires.update', $ancienne), [
+            'nom' => '2025/2026 bis', 'date_debut' => '2025-09-01', 'date_fin' => '2026-08-31',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertNull(session('warning'));
+    }
+
+    /**
+     * Le glissement et l'année soumise sont écrits dans la MÊME
+     * transaction : si l'écriture échoue, la base ne reste pas dans le trou
+     * que la règle refuse. Ici l'échec vient du garde-fou « clôture »
+     * (seul un super-admin y touche) — vérifié depuis l'autre bout : après
+     * un refus, AUCUNE des deux années n'a bougé.
+     */
+    public function test_a_refused_write_slides_nothing(): void
+    {
+        $ancienne = $this->annee('2025/2026', '2025-09-01', '2026-08-31');
+        $suivante = $this->annee('2026/2027', '2026-09-27', '2027-08-31');
+        $this->depenseLe('2026-08-31');
+
+        // Un nom déjà pris : la validation échoue APRÈS que la règle de
+        // couverture a calculé son glissement.
+        $this->put(route('backoffice.annees-scolaires.update', $ancienne), [
+            'nom' => '2026/2027', 'date_debut' => '2025-09-01', 'date_fin' => '2026-08-26',
+        ])->assertSessionHasErrors('nom');
+
+        $this->assertSame('2026-08-31', $ancienne->fresh()->date_fin->toDateString());
+        $this->assertSame('2026-09-27', $suivante->fresh()->date_debut->toDateString());
+    }
+
+    /**
+     * Le trou qu'AUCUNE voisine ne borde reste refusé : il n'y a rien à
+     * faire glisser, et l'argent serait bel et bien perdu de vue.
+     */
+    public function test_a_gap_with_no_neighbour_to_absorb_it_is_still_refused(): void
+    {
+        $seule = $this->annee('2025/2026', '2025-09-01', '2026-08-31');
+        $this->depenseLe('2026-08-31');
+
+        $this->put(route('backoffice.annees-scolaires.update', $seule), [
+            'nom' => '2025/2026', 'date_debut' => '2025-09-01', 'date_fin' => '2026-08-26',
+        ])->assertSessionHasErrors('date_fin');
+
+        $this->assertSame('2026-08-31', $seule->fresh()->date_fin->toDateString());
     }
 
     /**
@@ -158,13 +229,22 @@ final class CouvertureAnneesScolairesTest extends TestCase
         ])->assertSessionHasErrors('date_fin');
     }
 
-    public function test_a_new_year_cannot_open_a_gap_over_money(): void
+    /**
+     * À la CRÉATION, la voisine qui précède absorbe le trou par sa borne de
+     * FIN — le glissement marche dans les deux sens, pas seulement vers
+     * l'année suivante.
+     */
+    public function test_a_new_year_slides_the_previous_years_end_to_cover_the_gap(): void
     {
-        $this->annee('2025/2026', '2025-09-01', '2026-08-26');
+        $precedente = $this->annee('2025/2026', '2025-09-01', '2026-08-26');
         $this->depenseLe('2026-08-31');
 
         $this->post(route('backoffice.annees-scolaires.store'), [
             'nom' => '2026/2027', 'date_debut' => '2026-09-27', 'date_fin' => '2027-08-31',
-        ])->assertSessionHasErrors('date_fin');
+        ])->assertSessionHasNoErrors();
+
+        // La précédente s'étend jusqu'à la veille de la nouvelle : la
+        // dépense du 31/08 reste rattachée à 2025/2026.
+        $this->assertSame('2026-09-26', $precedente->fresh()->date_fin->toDateString());
     }
 }

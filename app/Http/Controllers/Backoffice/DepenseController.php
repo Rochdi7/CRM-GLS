@@ -49,6 +49,14 @@ final class DepenseController extends Controller
 
     private const JUSTIFICATIF_MAX_KB = 5120;
 
+    /** '-' means the user cleared this filter; anything else is a literal value. */
+    private static function filterValue(mixed $value): string
+    {
+        $value = (string) $value;
+
+        return $value === '-' ? '' : $value;
+    }
+
     public function index(
         Request $request,
         GetDepensesList $getDepensesList,
@@ -68,17 +76,35 @@ final class DepenseController extends Controller
         $search = (string) $request->string('search');
         $typeFilter = (string) $request->string('typeFilter');
         $caisseFilter = (string) $request->string('caisseFilter');
-        $dateFrom = (string) $request->string('dateFrom');
-        $dateTo = (string) $request->string('dateTo');
+        // '-' is the page's explicit « cleared » marker (see reload() and
+        // switchTab() in Depenses/Index.tsx) — same mechanism as the
+        // Encaissements page.
+        $dateFrom = self::filterValue($request->string('dateFrom'));
+        $dateTo = self::filterValue($request->string('dateTo'));
         $statutFilter = (string) $request->string('statutFilter');
         $perPage = (int) $request->integer('perPage', GetDepensesList::DEFAULT_PER_PAGE);
 
         // Has the user engaged the date filter AT ALL? Only the request can
-        // tell « never touched » (no key) from « cleared » (key present,
-        // empty) — and the read model must not re-arm the active-year window
-        // in the second case, or clearing a date REMOVES rows (audit
-        // 07/09/2026, H-1; §5 clearing must only widen).
-        $dateFilterEngaged = $request->has('dateFrom') || $request->has('dateTo');
+        // tell « never touched » from « cleared » — and the read model must
+        // not re-arm the active-year window in the second case, or clearing a
+        // date REMOVES rows (audit 07/09/2026, H-1; §5 clearing must only
+        // widen).
+        //
+        // ⚠ The test is on the VALUE, never on `has()` (21/09/2026). The page
+        // spreads its whole `filters` prop into every `router.get` — a tab
+        // switch included — so an untouched, empty `dateFrom` came back as a
+        // PRESENT but empty key. `has()` read that as « engaged », the year
+        // window was dropped, and merely clicking a tab silently WIDENED the
+        // list: the Dépenses tab opened empty on the bare sidebar URL and
+        // filled up the moment the user visited another tab and came back
+        // (reported 21/09/2026, prod — two URLs asking two different
+        // questions). An empty value is now always « never touched »; only
+        // the literal '-' the page sends on an explicit clear counts as
+        // engaged.
+        $dateFilterEngaged = $request->string('dateFrom')->toString() === '-'
+            || $request->string('dateTo')->toString() === '-'
+            || $dateFrom !== ''
+            || $dateTo !== '';
 
         $depensesList = $user->can('expenses.view')
             ? $getDepensesList($user, $search, $typeFilter, $caisseFilter, $dateFrom, $dateTo, $perPage, GetDepensesList::SCOPE_HORS_PAIEMENT_PROF, $statutFilter, $dateFilterEngaged)
