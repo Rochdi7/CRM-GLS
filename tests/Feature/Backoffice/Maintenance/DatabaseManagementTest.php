@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Backoffice\Maintenance;
 
 use App\Models\Activity;
+use App\Models\Depense;
 use App\Models\Employee;
 use App\Models\Etablissement;
 use App\Models\Salle;
@@ -151,6 +152,102 @@ final class DatabaseManagementTest extends TestCase
                 ));
 
         $this->assertSame($centre->id, $salle->fresh()->etablissement_id);
+    }
+
+    /**
+     * Une clé étrangère se CHOISIT dans une liste de noms : le mainteneur
+     * connaît « GLS Rabat », pas « 3 ». L'option porte les DEUX et la valeur
+     * soumise reste l'id.
+     */
+    public function test_une_cle_etrangere_est_servie_comme_une_liste_de_noms(): void
+    {
+        $centre = Etablissement::query()->firstOrFail();
+
+        $options = app(DatabaseBrowser::class)->foreignOptions('salles');
+
+        $this->assertArrayHasKey('etablissement_id', $options);
+        $this->assertContains(
+            ['value' => (string) $centre->id, 'label' => $centre->nom_centre.' · #'.$centre->id],
+            $options['etablissement_id']['options'],
+            "l'option doit porter le nom ET l'id"
+        );
+
+        $this->actingAs($this->maintainer)
+            ->get('/backoffice/database-management/salles')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('foreignOptions.etablissement_id.options'));
+    }
+
+    /**
+     * Une table référencée trop grande n'est PAS servie à moitié : le champ
+     * retombe sur la saisie de l'id. Une liste qui omet silencieusement la
+     * plupart des lignes est pire que pas de liste — on ne distingue plus la
+     * ligne manquante de la ligne inexistante.
+     */
+    public function test_une_table_referencee_trop_grande_ne_sert_aucune_option(): void
+    {
+        $centre = Etablissement::query()->firstOrFail();
+
+        Salle::factory()->count(3)->create(['etablissement_id' => $centre->id]);
+
+        $this->assertArrayHasKey(
+            'salle_id',
+            (new DatabaseBrowser)->foreignOptions('creneaux'),
+            'sous le plafond, les salles se choisissent par leur nom'
+        );
+
+        // Insérées directement : la factory ne sait produire qu'une centaine
+        // de noms uniques, et seul le NOMBRE de lignes compte ici.
+        $now = now();
+        $rows = [];
+
+        for ($i = 0; $i <= DatabaseBrowser::FOREIGN_OPTIONS_CAP; $i++) {
+            $rows[] = [
+                'nom' => 'Salle plafond '.$i,
+                'etablissement_id' => $centre->id,
+                'capacite' => 10,
+                'statut' => Salle::STATUT_ACTIVE,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
+
+        DB::table('salles')->insert($rows);
+
+        $this->assertArrayNotHasKey(
+            'salle_id',
+            (new DatabaseBrowser)->foreignOptions('creneaux'),
+            'au-delà du plafond, le champ redevient une saisie d’id'
+        );
+    }
+
+    /**
+     * Une colonne à valeurs fermées est servie avec SON vocabulaire, pris sur
+     * la constante du modèle — et la table décide : `statut` ne veut pas dire
+     * la même chose sur `depenses` et sur `salles`.
+     */
+    public function test_les_colonnes_a_valeurs_fermees_portent_le_vocabulaire_de_leur_table(): void
+    {
+        $browser = app(DatabaseBrowser::class);
+
+        $statutOf = function (string $table) use ($browser): ?array {
+            foreach ($browser->columns($table) as $column) {
+                if ($column['name'] === 'statut') {
+                    return $column['values'];
+                }
+            }
+
+            return null;
+        };
+
+        $this->assertSame(array_values(Depense::STATUTS), $statutOf('depenses'));
+        $this->assertSame(array_values(Salle::STATUTS), $statutOf('salles'));
+        $this->assertNotSame($statutOf('depenses'), $statutOf('salles'));
+
+        // Une colonne libre n'est jamais transformée en liste : `inscriptions`
+        // stocke des statuts hérités (Expirée / Archivée) que la constante ne
+        // liste pas, et les réparer est précisément l'objet de cet écran.
+        $this->assertNull($statutOf('inscriptions'));
     }
 
     /** Le nombre de requêtes suit le nombre de TABLES référencées, jamais le nombre de lignes. */

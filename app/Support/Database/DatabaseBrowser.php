@@ -49,6 +49,94 @@ final class DatabaseBrowser
     private const TEXT_TYPES = ['text', 'json', 'jsonb'];
 
     /**
+     * Columns whose allowed values are a CLOSED set, as `table.column` =>
+     * the model constant that defines it — so the edit modal offers them as
+     * a dropdown instead of asking the maintainer to spell « Payé
+     * partiellement » or « Fin de formation » exactly right.
+     *
+     * ⚠ Keyed by TABLE AND COLUMN, never by column name alone. `statut`
+     * exists on eighteen tables with sets that are NOT interchangeable —
+     * Actif/Inactif on `banques`, Active/Inactive on `caisses` and `salles`,
+     * En attente/Approuvée/Refusée/Annulée on `depenses`. A map keyed on
+     * `statut` would offer a repair tool the wrong vocabulary on most of the
+     * tables it covers, which is worse than a free-text box: the value would
+     * look validated while being wrong.
+     *
+     * The VALUES are read from the model constant at request time, never
+     * copied here (CLAUDE.md §11: these columns are plain VARCHARs validated
+     * against model constants, and those constants are the authority). A
+     * value added to `Depense::STATUTS` therefore appears in this dropdown
+     * with no change to this file.
+     *
+     * Deliberately ABSENT — a repair tool must be able to write what the
+     * model does not list:
+     *  - `inscriptions.statut`, whose constant is narrower than what is
+     *    stored (`Expirée` / `Archivée` legacy rows exist, and repairing one
+     *    is exactly why this screen is open);
+     *  - `import_batches.status`, which has no enumerating constant;
+     *  - every behavioural SUBSET (`Caisse::TYPES_ESPECES`,
+     *    `Group::STATUTS_HISTORIQUE`, …) — those are `whereIn` filters, not
+     *    the column's value domain.
+     * The dropdown keeps an unlisted stored value as an option (see the page
+     * component), so a column that IS mapped still never blanks a row it
+     * does not recognise.
+     *
+     * @var array<string, array<string, array{class-string, string}>>
+     */
+    private const VALUE_SETS = [
+        'banques' => ['statut' => [\App\Models\Banque::class, 'STATUTS']],
+        'caisses' => [
+            'type' => [\App\Models\Caisse::class, 'TYPES'],
+            'statut' => [\App\Models\Caisse::class, 'STATUTS'],
+        ],
+        'caisse_transfers' => ['statut' => [\App\Models\CaisseTransfer::class, 'STATUTS']],
+        'cheques' => [
+            'source' => [\App\Models\Cheque::class, 'SOURCES'],
+            'type' => [\App\Models\Cheque::class, 'TYPES'],
+            'statut' => [\App\Models\Cheque::class, 'STATUTS'],
+        ],
+        'depenses' => [
+            'statut' => [\App\Models\Depense::class, 'STATUTS'],
+            'methode_paiement' => [\App\Models\Depense::class, 'METHODES'],
+        ],
+        'employees' => [
+            'categorie' => [\App\Models\Employee::class, 'CATEGORIES'],
+            'statut' => [\App\Models\Employee::class, 'STATUTS'],
+            'sexe' => [\App\Models\Employee::class, 'SEXES'],
+        ],
+        'encaissements' => ['methode' => [\App\Models\Encaissement::class, 'METHODES']],
+        'frais' => ['statut' => [\App\Models\Frais::class, 'STATUTS']],
+        'groups' => [
+            'statut' => [\App\Models\Group::class, 'STATUTS'],
+            'niveau' => [\App\Models\Group::class, 'NIVEAUX'],
+        ],
+        'group_enseignants' => ['statut' => [\App\Models\GroupEnseignant::class, 'STATUTS']],
+        'group_frais' => ['classification' => [\App\Models\Group::class, 'NIVEAUX']],
+        'import_batches' => ['module' => [\App\Models\ImportBatch::class, 'MODULES']],
+        'import_rows' => ['status' => [\App\Models\ImportRow::class, 'STATUTS']],
+        'inscription_fees' => ['statut' => [\App\Models\InscriptionFee::class, 'STATUTS']],
+        'motifs_annulation' => [
+            'statut' => [\App\Models\MotifAnnulation::class, 'STATUTS'],
+            'portee' => [\App\Models\MotifAnnulation::class, 'PORTEES'],
+        ],
+        'presences' => ['statut' => [\App\Models\Presence::class, 'STATUTS']],
+        'salles' => ['statut' => [\App\Models\Salle::class, 'STATUTS']],
+        'seances' => ['statut' => [\App\Models\Seance::class, 'STATUTS']],
+        'stock_articles' => ['statut' => [\App\Models\StockArticle::class, 'STATUTS']],
+        'stock_mouvements' => ['type' => [\App\Models\StockMouvement::class, 'TYPES']],
+        'stock_types' => ['statut' => [\App\Models\StockType::class, 'STATUTS']],
+        'students' => [
+            'niveau' => [\App\Models\Student::class, 'NIVEAUX'],
+            'domaine' => [\App\Models\Student::class, 'DOMAINES'],
+            'examen_type' => [\App\Models\Student::class, 'EXAMEN_TYPES'],
+            'sexe' => [\App\Models\Student::class, 'SEXES'],
+            'parent_sexe' => [\App\Models\Student::class, 'SEXES'],
+            'parent_relation' => [\App\Models\Student::class, 'PARENT_RELATIONS'],
+        ],
+        'types_depenses' => ['statut' => [\App\Models\TypeDepense::class, 'STATUTS']],
+    ];
+
+    /**
      * Resolves a foreign-key id to the name it points at, shared with the
      * audit journal so both screens read an id the same way.
      */
@@ -162,7 +250,8 @@ final class DatabaseBrowser
      * @return list<array{
      *     name: string, type: string, nullable: bool, default: string|null,
      *     autoIncrement: bool, primary: bool, input: string,
-     *     references: array{table: string, column: string}|null
+     *     references: array{table: string, column: string}|null,
+     *     values: list<string>|null
      * }>
      */
     public function columns(string $table): array
@@ -198,6 +287,7 @@ final class DatabaseBrowser
                 'primary' => in_array($column['name'], $primary, true),
                 'input' => $this->inputKind($column['type_name'], $column['type']),
                 'references' => $foreign[$column['name']] ?? null,
+                'values' => $this->valueSetOf($table, $column['name']),
             ];
         }
 
@@ -336,6 +426,191 @@ final class DatabaseBrowser
         }
 
         return $labels;
+    }
+
+    /**
+     * Ceiling on the options served for ONE foreign-key column. Past it the
+     * field stays a plain id box rather than serving a half-list: a dropdown
+     * that silently omits most rows is worse than no dropdown, because the
+     * maintainer cannot tell the missing row from a row that does not exist.
+     */
+    public const FOREIGN_OPTIONS_CAP = 500;
+
+    /**
+     * The choosable rows behind every foreign-key column of a table —
+     * `{"etablissement_id": {"options": [{"value": "3", "label": "GLS Rabat"}],
+     * "truncated": false}, …}` — so the edit modal offers a NAME instead of
+     * asking the maintainer to know an id by heart.
+     *
+     * The label comes from the same `AuditValueResolver` the audit journal
+     * and `foreignKeyLabels()` use when the column is one it knows; otherwise
+     * it is built from the referenced table's own first text-ish column, so
+     * a pivot or a table the resolver never heard of still reads as a name.
+     * The id stays the value that is stored and submitted, and is shown
+     * inside the label (« GLS Rabat · #3 ») — a screen that showed only the
+     * name would hide which row is referenced (CLAUDE.md §11).
+     *
+     * A referenced table the application role cannot read, or one larger
+     * than the cap, yields no options and the field falls back to the id
+     * box — never a broken page.
+     *
+     * @return array<string, array{options: list<array{value: string, label: string}>, truncated: bool}>
+     */
+    public function foreignOptions(string $table): array
+    {
+        $this->assertExists($table);
+
+        $out = [];
+
+        foreach ($this->columns($table) as $column) {
+            $reference = $column['references'];
+
+            if ($reference === null || isset($out[$column['name']])) {
+                continue;
+            }
+
+            $options = $this->optionsOf($reference['table'], $reference['column'], $column['name']);
+
+            if ($options === null) {
+                continue;
+            }
+
+            $out[$column['name']] = $options;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Options for ONE referenced table, or null when it cannot be listed
+     * (unreadable, no such table, or above the cap).
+     *
+     * @return array{options: list<array{value: string, label: string}>, truncated: bool}|null
+     */
+    private function optionsOf(string $referencedTable, string $referencedColumn, string $column): ?array
+    {
+        if (! $this->exists($referencedTable)) {
+            return null;
+        }
+
+        try {
+            $count = DB::table($referencedTable)->count();
+
+            if ($count > self::FOREIGN_OPTIONS_CAP) {
+                return null;
+            }
+
+            $labelColumns = $this->labelColumnsOf($referencedTable, $referencedColumn);
+
+            $rows = DB::table($referencedTable)
+                ->select(array_values(array_unique([$referencedColumn, ...$labelColumns])))
+                ->orderBy($referencedColumn)
+                ->get();
+        } catch (\Throwable) {
+            return null;
+        }
+
+        // The resolver names a known column far better than raw columns do
+        // (it appends the student behind an inscription, for instance), so
+        // warm it once for the whole list and prefer its answer per row.
+        $resolver = $this->resolver ??= new AuditValueResolver;
+        $ids = $rows->pluck($referencedColumn)->filter(fn ($v) => is_numeric($v))->all();
+        $resolver->warm(array_map(fn ($id) => [$column, $id], $ids));
+
+        $options = [];
+
+        foreach ($rows as $row) {
+            $row = (array) $row;
+            $id = $row[$referencedColumn] ?? null;
+
+            if ($id === null) {
+                continue;
+            }
+
+            $name = $resolver->resolve($column, $id);
+
+            if ($name === null) {
+                $parts = [];
+
+                foreach ($labelColumns as $labelColumn) {
+                    $value = $row[$labelColumn] ?? null;
+
+                    if (is_scalar($value) && trim((string) $value) !== '') {
+                        $parts[] = trim((string) $value);
+                    }
+                }
+
+                $name = $parts === [] ? '#'.$id : implode(' ', $parts);
+            }
+
+            $options[] = [
+                'value' => (string) $id,
+                'label' => $name.' · #'.$id,
+            ];
+        }
+
+        usort($options, fn (array $a, array $b): int => strnatcasecmp($a['label'], $b['label']));
+
+        return ['options' => $options, 'truncated' => false];
+    }
+
+    /**
+     * The columns that read as a name on a referenced table, in the order a
+     * human would say them — the same preference list `AuditValueResolver`
+     * uses for a model, applied to a raw table.
+     *
+     * @return list<string>
+     */
+    private function labelColumnsOf(string $table, string $referencedColumn): array
+    {
+        $available = array_column($this->columns($table), 'name');
+
+        foreach ([['prenom', 'nom'], ['nom_centre'], ['nom'], ['name'], ['libelle'], ['label'], ['reference'], ['titre']] as $candidate) {
+            if (array_diff($candidate, $available) === []) {
+                return array_values(array_diff($candidate, [$referencedColumn]));
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * The closed value set of a column, read from the model constant that
+     * defines it, or null when the column accepts free text.
+     *
+     * @return list<string>|null
+     */
+    private function valueSetOf(string $table, string $column): ?array
+    {
+        $mapped = self::VALUE_SETS[$table][$column] ?? null;
+
+        if ($mapped === null) {
+            return null;
+        }
+
+        [$class, $constant] = $mapped;
+
+        if (! defined($class.'::'.$constant)) {
+            return null;
+        }
+
+        $values = constant($class.'::'.$constant);
+
+        if (! is_array($values) || $values === []) {
+            return null;
+        }
+
+        // An int-keyed label map (Creneau::JOURS) is not a VARCHAR domain;
+        // only a plain list of string values is offered as options.
+        $values = array_values($values);
+
+        foreach ($values as $value) {
+            if (! is_string($value)) {
+                return null;
+            }
+        }
+
+        return $values;
     }
 
     /**

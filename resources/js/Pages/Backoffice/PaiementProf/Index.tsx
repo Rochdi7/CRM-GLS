@@ -119,6 +119,68 @@ export default function PaiementProfIndex({
 
     const semaines = [1, 2, 3, 4];
 
+    /**
+     * Jour (« YYYY-MM-DD ») → semaine de paie (1..4).
+     *
+     * Le serveur envoie `decoupageSemaines` indexé par semaine ISO
+     * (« GGGG-WW ») : c'est LUI qui décide du découpage, y compris la fusion
+     * d'une semaine écourtée par un férié. L'écran se contente de le
+     * reprojeter sur les jours pour teinter les colonnes — il ne redérive
+     * jamais la règle (§5), sinon la couleur pourrait désigner une autre
+     * semaine que celle qui a payé.
+     */
+    const semaineParJour = useMemo(() => {
+        const map: Record<string, number> = {};
+
+        if (calcul === null) {
+            return map;
+        }
+
+        for (const date of calcul.datesDeCours) {
+            const d = new Date(date + 'T00:00:00');
+            // Semaine ISO : jeudi de la semaine courante décide de l'année.
+            const jeudi = new Date(d);
+            jeudi.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+            const premierJanvier = new Date(jeudi.getFullYear(), 0, 1);
+            const numero = Math.ceil(((jeudi.getTime() - premierJanvier.getTime()) / 86400000 + 1) / 7);
+            const cle = `${jeudi.getFullYear()}-${String(numero).padStart(2, '0')}`;
+
+            const bucket = calcul.decoupageSemaines[cle];
+            if (bucket !== undefined) {
+                map[date] = bucket;
+            }
+        }
+
+        return map;
+    }, [calcul]);
+
+    /** Première colonne de chaque semaine — reçoit le trait de séparation. */
+    const debutsDeSemaine = useMemo(() => {
+        const vus = new Set<number>();
+        const debuts = new Set<string>();
+
+        if (calcul === null) {
+            return debuts;
+        }
+
+        for (const date of calcul.datesDeCours) {
+            const bucket = semaineParJour[date];
+            if (bucket !== undefined && !vus.has(bucket)) {
+                vus.add(bucket);
+                debuts.add(date);
+            }
+        }
+
+        return debuts;
+    }, [calcul, semaineParJour]);
+
+    function classeSemaine(date: string): string {
+        const bucket = semaineParJour[date];
+        const teinte = bucket !== undefined ? ` pp-w${bucket}` : '';
+
+        return teinte + (debutsDeSemaine.has(date) ? ' pp-wstart' : '');
+    }
+
     function statutCellule(statut: string | undefined): { texte: string; classe: string } {
         if (statut === 'Présent') {
             return { texte: 'P', classe: 'pp-present' };
@@ -162,16 +224,45 @@ export default function PaiementProfIndex({
                 .pp-nom  { position: sticky; left: 38px;  z-index: 4; min-width: 180px; max-width: 180px; overflow: hidden; text-overflow: ellipsis;
                            background: var(--bs-body-bg); box-shadow: 3px 0 6px -3px rgba(0,0,0,.18); }
                 .pp-wrap thead .pp-num, .pp-wrap thead .pp-nom { z-index: 12; background: var(--bs-dark); }
-                .pp-jour { width: 34px; min-width: 34px; text-align: center; padding: 2px 0; font-weight: 700; font-size: .72rem; }
-                .pp-present { background: rgba(25,135,84,.16); color: var(--bs-success); }
-                .pp-absent  { background: rgba(220,53,69,.14); color: var(--bs-danger); }
-                .pp-ignore  { background: rgba(108,117,125,.12); color: var(--bs-secondary); }
-                .pp-vide    { color: var(--bs-secondary-color); opacity: .5; }
-                .pp-sem { min-width: 96px; text-align: center; padding: 4px 6px; border-left: 1px solid var(--bs-border-color); }
-                .pp-total { position: sticky; right: 0; z-index: 4; min-width: 120px; text-align: right; font-weight: 700;
+                .pp-jour { width: 34px; min-width: 34px; text-align: center; padding: 3px 0; font-weight: 700; font-size: .72rem; }
+
+                /* Pastilles d'appel — même code couleur que la fiche de
+                   présence : vert = présent, rouge = absent. Un Retard ou un
+                   Justifié est ÉCARTÉ du calcul (ni pour, ni contre), donc
+                   volontairement NEUTRE : le peindre en vert ou en rouge
+                   ferait croire qu'il compte. */
+                .pp-pastille { display: inline-flex; align-items: center; justify-content: center;
+                               width: 22px; height: 22px; border-radius: 50%; font-size: .68rem; line-height: 1; }
+                .pp-present .pp-pastille { background: rgba(25,135,84,.18); color: #0f7a43; }
+                .pp-absent  .pp-pastille { background: rgba(220,53,69,.18); color: #c32232; }
+                .pp-ignore  .pp-pastille { background: rgba(108,117,125,.16); color: var(--bs-secondary); }
+                .pp-vide    { color: var(--bs-secondary-color); opacity: .35; }
+
+                /* ── Bandes de semaine ──────────────────────────────────
+                   Un mois de colonnes se lit mal en bloc : chaque semaine de
+                   PAIE reçoit sa teinte, et sa première colonne un trait
+                   vertical marqué. C'est la même semaine que celle qui
+                   qualifie plus à droite — la couleur relie les deux. */
+                .pp-w1 { background: rgba(99,102,241,.05); }
+                .pp-w2 { background: rgba(14,165,233,.05); }
+                .pp-w3 { background: rgba(168,85,247,.05); }
+                .pp-w4 { background: rgba(236,72,153,.05); }
+                .pp-wstart { border-left: 2px solid var(--bs-border-color) !important; }
+                .pp-wrap thead th.pp-w1 { background: #3d3f6b; }
+                .pp-wrap thead th.pp-w2 { background: #1f4f6b; }
+                .pp-wrap thead th.pp-w3 { background: #4a3566; }
+                .pp-wrap thead th.pp-w4 { background: #5f2d4a; }
+
+                .pp-sem { min-width: 104px; text-align: center; padding: 5px 6px; border-left: 2px solid var(--bs-border-color); }
+                .pp-total { position: sticky; right: 0; z-index: 4; min-width: 128px; text-align: right; font-weight: 700;
                             background: var(--bs-body-bg); box-shadow: -3px 0 6px -3px rgba(0,0,0,.18); }
                 .pp-wrap thead .pp-total { z-index: 12; background: var(--bs-dark); }
-                .pp-ajust { width: 92px; text-align: right; }
+                .pp-ajust { width: 104px; text-align: right; font-weight: 600; }
+                /* Un montant corrigé à la main doit se REMARQUER : c'est une
+                   dérogation au calcul, pas une saisie ordinaire. */
+                .pp-ajust.pp-modifie { border-color: var(--bs-warning) !important; background: rgba(255,193,7,.08); }
+                .pp-wrap tbody tr:hover td { background: rgba(13,110,253,.04); }
+                .pp-legende { font-size: .78rem; }
             `}</style>
 
             {/* Barre d'action — le calcul se LANCE depuis un modal (« Nouveau
@@ -405,12 +496,23 @@ export default function PaiementProfIndex({
                         title={`${calcul.group.nom} — ${calcul.group.enseignantNom ?? t('No teacher assigned')}`}
                         bodyClassName="p-0 py-3"
                         tools={
-                            canCreateDepense && totalAffiche > 0 ? (
-                                <button type="button" className="btn btn-primary btn-sm" onClick={creerDepense}>
-                                    <i className="ti ti-cash me-1" />
-                                    {t('Record the expense')}
-                                </button>
-                            ) : null
+                            <div className="d-flex align-items-center gap-2">
+                                {/* Ce que l'écran EST : une proposition. Rien
+                                    n'est enregistré tant que la dépense n'a pas
+                                    été saisie, et le badge doit le dire — un
+                                    total affiché se lit sinon comme une paie
+                                    déjà actée. */}
+                                <span className="badge badge-soft-warning">
+                                    <i className="ti ti-file-pencil me-1" />
+                                    {t('Draft')}
+                                </span>
+                                {canCreateDepense && totalAffiche > 0 && (
+                                    <button type="button" className="btn btn-primary btn-sm" onClick={creerDepense}>
+                                        <i className="ti ti-cash me-1" />
+                                        {t('Record the expense')}
+                                    </button>
+                                )}
+                            </div>
                         }
                     >
                         <div className="pp-wrap">
@@ -420,10 +522,18 @@ export default function PaiementProfIndex({
                                         <th className="pp-num">#</th>
                                         <th className="pp-nom text-start ps-2">{t('Student')}</th>
                                         {calcul.datesDeCours.map((date) => {
-                                            const d = new Date(date);
+                                            // ⚠ « T00:00:00 » : sans lui, new Date('2026-06-01')
+                                            // est lu en UTC et le jour AFFICHÉ recule d'un cran
+                                            // dans un fuseau négatif — l'en-tête annoncerait
+                                            // « LUN 31 » au-dessus des appels du mardi 1er.
+                                            const d = new Date(date + 'T00:00:00');
 
                                             return (
-                                                <th key={date} className="pp-jour" title={date}>
+                                                <th
+                                                    key={date}
+                                                    className={`pp-jour${classeSemaine(date)}`}
+                                                    title={`${d.toLocaleDateString('fr-FR')} — ${t('W')}${semaineParJour[date] ?? '?'}`}
+                                                >
                                                     {d.toLocaleDateString('fr-FR', { weekday: 'short' })
                                                         .slice(0, 3)
                                                         .toUpperCase()}
@@ -433,7 +543,7 @@ export default function PaiementProfIndex({
                                             );
                                         })}
                                         {semaines.map((s) => (
-                                            <th key={s} className="pp-sem">
+                                            <th key={s} className={`pp-sem pp-w${s}`}>
                                                 {t('W')}
                                                 {s}
                                             </th>
@@ -446,8 +556,9 @@ export default function PaiementProfIndex({
                                     {calcul.lignes.map((ligne, index) => {
                                         const appels = calcul.grille[ligne.studentId] ?? {};
                                         const saisi = ajustements[ligne.studentId];
+                                        const estModifie = saisi !== undefined && saisi !== '';
                                         const effectif =
-                                            saisi !== undefined && saisi !== '' && Number.isFinite(Number(saisi))
+                                            estModifie && Number.isFinite(Number(saisi))
                                                 ? Number(saisi)
                                                 : ligne.montantEffectif;
 
@@ -458,14 +569,19 @@ export default function PaiementProfIndex({
 
                                                 {calcul.datesDeCours.map((date) => {
                                                     const cellule = statutCellule(appels[date]);
+                                                    const statut = appels[date];
 
                                                     return (
                                                         <td
                                                             key={date}
-                                                            className={`pp-jour ${cellule.classe}`}
-                                                            title={`${date} — ${appels[date] ?? t('No roll call')}`}
+                                                            className={`pp-jour ${cellule.classe}${classeSemaine(date)}`}
+                                                            title={`${new Date(date + 'T00:00:00').toLocaleDateString('fr-FR')} — ${statut ?? t('No roll call')}`}
                                                         >
-                                                            {cellule.texte}
+                                                            {statut !== undefined ? (
+                                                                <span className="pp-pastille">{cellule.texte}</span>
+                                                            ) : (
+                                                                cellule.texte
+                                                            )}
                                                         </td>
                                                     );
                                                 })}
@@ -487,18 +603,32 @@ export default function PaiementProfIndex({
                                                         );
                                                     }
 
+                                                    const qualifiee = montant > 0;
+
                                                     return (
-                                                        <td key={s} className="pp-sem">
+                                                        <td
+                                                            key={s}
+                                                            className={`pp-sem pp-w${s}`}
+                                                            title={
+                                                                qualifiee
+                                                                    ? t('Qualifying week')
+                                                                    : t('Below the threshold — earns nothing')
+                                                            }
+                                                        >
                                                             <span
                                                                 className={`badge ${
-                                                                    montant > 0
-                                                                        ? 'bg-success-subtle text-success'
-                                                                        : 'bg-danger-subtle text-danger'
+                                                                    qualifiee
+                                                                        ? 'badge-soft-success'
+                                                                        : 'badge-soft-danger'
                                                                 }`}
                                                             >
                                                                 {jours} {t('d')}
                                                             </span>
-                                                            <div className="fs-12 mt-1">{montant.toFixed(2)}</div>
+                                                            <div
+                                                                className={`fs-12 mt-1 ${qualifiee ? 'fw-semibold' : 'text-muted'}`}
+                                                            >
+                                                                {montant.toFixed(2)}
+                                                            </div>
                                                         </td>
                                                     );
                                                 })}
@@ -506,9 +636,12 @@ export default function PaiementProfIndex({
                                                 <td className="pp-sem">
                                                     <input
                                                         type="number"
-                                                        className="form-control form-control-sm pp-ajust"
+                                                        className={`form-control form-control-sm pp-ajust${
+                                                            estModifie ? ' pp-modifie' : ''
+                                                        }`}
                                                         step="0.01"
                                                         min="0"
+                                                        aria-label={`${t('Adjustment')} — ${ligne.nom}`}
                                                         placeholder={ligne.montantAuto.toFixed(2)}
                                                         value={saisi ?? ''}
                                                         onChange={(event) =>
@@ -518,12 +651,38 @@ export default function PaiementProfIndex({
                                                             }))
                                                         }
                                                     />
+                                                    {estModifie && (
+                                                        <button
+                                                            type="button"
+                                                            className="btn btn-link btn-sm p-0 fs-12 text-decoration-none"
+                                                            // Revenir au montant CALCULÉ : sans ce
+                                                            // retour en arrière, une correction
+                                                            // tapée par erreur ne peut plus être
+                                                            // annulée qu'en relançant tout le calcul.
+                                                            onClick={() =>
+                                                                setAjustements((previous) => {
+                                                                    const suite = { ...previous };
+                                                                    delete suite[ligne.studentId];
+
+                                                                    return suite;
+                                                                })
+                                                            }
+                                                        >
+                                                            <i className="ti ti-arrow-back-up me-1" />
+                                                            {t('Reset')}
+                                                        </button>
+                                                    )}
                                                 </td>
 
-                                                <td className="pp-total">
+                                                <td
+                                                    className={`pp-total ${effectif > 0 ? '' : 'text-muted'}`}
+                                                >
                                                     {effectif.toFixed(2)} MAD
-                                                    {saisi !== undefined && saisi !== '' && (
-                                                        <div className="fs-12 text-warning">{t('adjusted')}</div>
+                                                    {estModifie && (
+                                                        <div className="fs-12 text-warning fw-normal">
+                                                            <i className="ti ti-pencil me-1" />
+                                                            {t('adjusted')} ({ligne.montantAuto.toFixed(2)})
+                                                        </div>
                                                     )}
                                                 </td>
                                             </tr>
@@ -535,16 +694,56 @@ export default function PaiementProfIndex({
                                         <td className="pp-num" />
                                         <td className="pp-nom ps-2">{t('Total')}</td>
                                         {calcul.datesDeCours.map((date) => (
-                                            <td key={date} className="pp-jour" />
+                                            <td key={date} className={`pp-jour${classeSemaine(date)}`} />
                                         ))}
                                         {semaines.map((s) => (
-                                            <td key={s} className="pp-sem" />
+                                            <td key={s} className={`pp-sem pp-w${s}`} />
                                         ))}
                                         <td className="pp-sem" />
                                         <td className="pp-total">{totalAffiche.toFixed(2)} MAD</td>
                                     </tr>
                                 </tfoot>
                             </table>
+                        </div>
+
+                        {/* Légende — la grille ne se lit pas sans elle : « R »
+                            et « J » sont NEUTRES parce qu'ils sont écartés du
+                            calcul, ce qu'aucune couleur ne peut dire seule. */}
+                        <div className="d-flex flex-wrap align-items-center gap-3 px-3 pt-3 pp-legende text-muted">
+                            <span>
+                                <span className="pp-present">
+                                    <span className="pp-pastille me-1">P</span>
+                                </span>
+                                {t('Present — counts')}
+                            </span>
+                            <span>
+                                <span className="pp-absent">
+                                    <span className="pp-pastille me-1">A</span>
+                                </span>
+                                {t('Absent')}
+                            </span>
+                            <span>
+                                <span className="pp-ignore">
+                                    <span className="pp-pastille me-1">R</span>
+                                </span>
+                                {t('Late / excused — ignored, neither for nor against')}
+                            </span>
+                            <span className="ms-auto d-flex align-items-center gap-2">
+                                {semaines.map((s) => (
+                                    <span key={s} className="d-inline-flex align-items-center">
+                                        <span
+                                            className={`pp-w${s} d-inline-block rounded me-1`}
+                                            style={{
+                                                width: 14,
+                                                height: 14,
+                                                border: '1px solid var(--bs-border-color)',
+                                            }}
+                                        />
+                                        {t('W')}
+                                        {s}
+                                    </span>
+                                ))}
+                            </span>
                         </div>
                     </Card>
                 </>

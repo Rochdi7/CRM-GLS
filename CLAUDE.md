@@ -1364,6 +1364,23 @@ the database layer. Non-negotiable invariants already enforced in code:
     exception assumée à la règle des listes, de la même famille que les
     cartes « ce mois-ci ». Test :
     `FinancialInvariantsAuditTest::test_the_annual_chart_files_a_row_by_its_month_whatever_annee_its_inscription_carries`.
+  - **⚠ Sur ce graphique, un dossier CLOS ne compte que pour ce qui a été
+    PAYÉ** (21/09/2026). Le frais d'une inscription « Active » entre au
+    chiffre d'affaire pour son `montant` entier ; celui d'un dossier
+    « Changement » / « Expirée » / « Archivée » n'y entre que pour la somme
+    encaissée dessus (« Annulée » reste exclue des deux séries). L'import
+    legacy a donné à chaque dossier clos son échéancier mensuel COMPLET : la
+    série facturée était une ligne PLATE (Salé 572 000 DH tous les mois de
+    janvier à août, Rabat 823 000 DH) sous ~2 M DH mensuels de « Reste à
+    payer » que personne ne doit — l'étudiant avait quitté le groupe. Le
+    graphique WimSchool de référence montre l'inverse sur les mêmes données
+    (06/2026 : 146 100 facturés / 145 800 collectés). C'est la MÊME règle que
+    le recouvrement (« ne poursuit que les inscriptions Active »), et elle
+    n'efface AUCUN dirham collecté — ce qui avait fait rejeter « Active
+    seulement » le même jour. La formule serveur de WimSchool n'est PAS dans
+    son bundle JS (il ne fait qu'afficher `totalPrice` / `paidAmount` /
+    `restAmount`) : la règle est inférée de sa courbe, pas recopiée. Test :
+    `FinancialInvariantsAuditTest::test_the_annual_chart_bills_a_closed_dossier_only_for_what_was_paid`.
   - **⚠ « Changement de groupe » may cross an ANNÉE — never a CENTRE**
     (02/09/2026). It is the only write allowed past the année half of the
     guard: a student whose course is interrupted mid-year is moved into

@@ -794,6 +794,7 @@
     "Select a role on the left to grant permissions.": "Sélectionnez un rôle à gauche pour accorder des permissions.",
     "Select a student and a registration to see its fees.": "Sélectionnez un étudiant et une inscription pour voir ses frais.",
     "Select all": "Tout sélectionner",
+    "Select…": "Sélectionner…",
     "Select at least one center.": "Sélectionnez au moins un centre.",
     "The primary center must be one of the assigned centers.": "Le centre principal doit faire partie des centres affectés.",
     "You cannot assign an employee to centers you do not have access to.": "Vous ne pouvez pas affecter un employé à des centres auxquels vous n'avez pas accès.",
@@ -1003,6 +1004,7 @@
     "Unavailable For Legal Reasons": "Indisponible pour des raisons légales",
     "Unknown Error": "Erreur inconnue",
     "Unknown payment method.": "Méthode de paiement inconnue.",
+    "Unknown row": "Ligne inconnue",
     "Unknown status.": "Statut inconnu.",
     "Unlinked fee": "Frais non lié",
     "Refunded": "Remboursée",
@@ -1429,5 +1431,11 @@
     "Calculate": "Calculer",
     "Leave empty to use the group rate (:rate MAD).": "Laisser vide pour utiliser le taux du groupe (:rate MAD).",
     "This group has no rate set — enter one here.": "Ce groupe n’a pas de taux défini — saisissez-le ici.",
-    "A week counts when the student attended at least this many days.": "Une semaine compte dès que l’étudiant a suivi au moins ce nombre de jours."
+    "A week counts when the student attended at least this many days.": "Une semaine compte dès que l’étudiant a suivi au moins ce nombre de jours.",
+    "Draft": "Brouillon",
+    "Qualifying week": "Semaine qualifiée",
+    "Below the threshold — earns nothing": "Sous le seuil — ne rapporte rien",
+    "Present — counts": "Présent — compte",
+    "Absent": "Absent",
+    "Late / excused — ignored, neither for nor against": "Retard / justifié — ignoré, ni pour ni contre"
 }

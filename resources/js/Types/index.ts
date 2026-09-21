@@ -2691,6 +2691,12 @@ export interface DatabaseColumn {
     primary: boolean;
     input: DatabaseColumnInput;
     references: { table: string; column: string } | null;
+    /**
+     * The closed set of values this column accepts, read from the model
+     * constant that defines it (`Depense::STATUTS`…), or null when the
+     * column is free text.
+     */
+    values: string[] | null;
 }
 
 export interface DatabaseRow {
@@ -2718,5 +2724,11 @@ export interface DatabaseTablePageProps {
     rows: PaginatedData<DatabaseRow>;
     /** Names behind the foreign-key ids on this page: `{column: {id: name}}`. The id stays the stored value. */
     foreignLabels: Record<string, Record<string, string>>;
+    /**
+     * Choosable rows behind each foreign-key column, so the edit modal offers
+     * a name instead of an id typed from memory. A column absent here (its
+     * referenced table is too large or unreadable) keeps the plain id box.
+     */
+    foreignOptions: Record<string, { options: SelectOption[]; truncated: boolean }>;
     filters: DatabaseTableFilters;
 }
