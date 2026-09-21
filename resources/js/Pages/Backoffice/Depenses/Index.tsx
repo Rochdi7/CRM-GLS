@@ -182,6 +182,7 @@ export default function DepensesIndex({
     montantEnAttente,
     enAttenteCount,
     filters,
+    dateFilterEngaged,
 }: DepensesPageProps) {
     const isLoading = useInertiaLoading();
     // The Types de dépenses tab links to its own page — UI-gate it like the
@@ -253,7 +254,19 @@ export default function DepensesIndex({
     const remboursementForm = useForm<RemboursementFormState>(emptyRemboursementForm());
 
     function reload(nextFilters: Partial<typeof filters>) {
-        router.get('/backoffice/depenses', { ...filters, ...nextFilters, page: undefined, pageProf: undefined, pageValidation: undefined, tab }, {
+        const next = { ...filters, ...nextFilters };
+
+        // ⚠ Un effacement de date doit SURVIVRE aux rechargements suivants.
+        // Le serveur renvoie les champs vides (« - » n'est pas une date
+        // affichable), donc sans ce report une recherche ou un changement de
+        // type renverrait '' et RÉARMERAIT la fenêtre d'année : des lignes
+        // disparaîtraient en modifiant un filtre sans rapport (§5). Le
+        // drapeau vient du serveur, seul à connaître l'état réel.
+        const carried = dateFilterEngaged && next.dateFrom === '' && next.dateTo === ''
+            ? { ...next, dateFrom: '-', dateTo: '-' }
+            : next;
+
+        router.get('/backoffice/depenses', { ...carried, page: undefined, pageProf: undefined, pageValidation: undefined, tab }, {
             preserveState: true,
             preserveScroll: true,
             replace: true,
@@ -277,7 +290,16 @@ export default function DepensesIndex({
         reload({ [edge]: value === '' ? '-' : value });
     }
 
-    const filterReset = useFilterReset(filters, reload, { perPage: filters.perPage });
+    const baseFilterReset = useFilterReset(filters, reload, { perPage: filters.perPage });
+    // Effacer une date laisse les DEUX champs vides tout en gardant la
+    // fenêtre d'année levée côté serveur ('-' dans l'URL) : le bouton se
+    // croirait alors sans effet et l'utilisateur resterait bloqué sur une
+    // liste élargie. Le drapeau vient du serveur (`dateFilterEngaged`), qui
+    // seul sait si la fenêtre est armée ; le reset renvoie '' et la réarme.
+    const filterReset = {
+        reset: baseFilterReset.reset,
+        active: baseFilterReset.active || dateFilterEngaged,
+    };
 
     // --- Approval flow (Paramètres → Système « Validation des dépenses ») ---
     // A pending dépense has debited NOTHING: approving is what moves the
@@ -500,6 +522,46 @@ export default function DepensesIndex({
         : remboursementCaisses.length === 1
             ? remboursementCaisses[0].id
             : '';
+
+    /**
+     * Ouverture pré-remplie depuis « Calcul paiement prof »
+     * (/backoffice/paiement-prof) — même canal que le lien « rembourser »
+     * d'un chèque rejeté ci-dessous : la query string est le SEUL lien entre
+     * les deux écrans.
+     *
+     * ⚠ Rien n'est créé automatiquement. L'écran de calcul ne fait que
+     * PROPOSER un montant ; la dépense reste une soumission relue et validée
+     * par l'opérateur, qui passe par `EnregistrerDepense` avec tous ses
+     * invariants monétaires (§11). Le montant, le groupe et la période sont
+     * revérifiés côté serveur par PaiementProfRules — un `prefill_*` forgé
+     * n'ouvre donc aucune porte que le formulaire n'ouvrirait pas.
+     */
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+
+        if (params.get('prefill_paiement_prof') === null || !canViewDepenses) {
+            return;
+        }
+
+        const typeId = params.get('prefill_type_depense_id');
+        const groupId = params.get('prefill_group_id');
+
+        setTab('paiements-prof');
+        setProfMode(true);
+        setGroupesAnneesPrecedentes(false);
+        depenseForm.clearErrors();
+        depenseForm.setData({
+            ...emptyDepenseForm(),
+            type_depense_id: typeId !== null ? Number(typeId) : (paiementProfTypeId ?? ''),
+            group_id: groupId !== null ? Number(groupId) : '',
+            montant: params.get('prefill_montant') ?? '',
+            periode_debut: params.get('prefill_periode_debut') ?? '',
+            periode_fin: params.get('prefill_periode_fin') ?? '',
+            description: params.get('prefill_description') ?? '',
+        });
+        setShowDepenseModal(true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     function openCreateRemboursement() {
         setEditingRemboursement(null);

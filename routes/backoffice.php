@@ -34,6 +34,7 @@ use App\Http\Controllers\Backoffice\Import\StudentImportController;
 use App\Http\Controllers\Backoffice\InscriptionController;
 use App\Http\Controllers\Backoffice\LegacyReconciliationController;
 use App\Http\Controllers\Backoffice\MotifAnnulationController;
+use App\Http\Controllers\Backoffice\PaiementProfController;
 use App\Http\Controllers\Backoffice\PermissionController;
 use App\Http\Controllers\Backoffice\ProfileController;
 use App\Http\Controllers\Backoffice\RapportController;
@@ -549,6 +550,25 @@ Route::prefix('backoffice')
                 ->middleware('permission:fee-due-dates.bulk-update')->name('bulk-echeance.index');
             Route::post('bulk-echeance', [FeeDueDateBulkController::class, 'update'])
                 ->middleware('permission:fee-due-dates.bulk-update')->name('bulk-echeance.update');
+
+            // Calcul « Paiement prof » — derive, depuis les appels deja
+            // saisis, le montant du a un enseignant pour un groupe sur une
+            // periode (portage de la logique du portail GLS, a ceci pres
+            // qu'ici la donnee nous appartient : aucune table d'import,
+            // on calcule a la LECTURE depuis presences -> seances).
+            //
+            // GET SEUL, et c'est structurel : l'ecran n'ecrit rien et ne
+            // touche aucune caisse. Il PROPOSE un montant ; le paiement
+            // reste une depense « Paiement prof » ordinaire, enregistree
+            // par le modal habituel via la query string (prefill_*), avec
+            // tous ses invariants monetaires (§11). Un calcul n'est pas un
+            // paiement.
+            //
+            // Hors de la barre laterale comme bulk-echeance — et, comme
+            // elle, ce n'est pas ce qui le protege : la permission decide,
+            // et le controleur la reverifie (§5).
+            Route::get('paiement-prof', [PaiementProfController::class, 'index'])
+                ->middleware('permission:prof-payments.calculate')->name('paiement-prof.index');
 
             // Reconciliation des paiements importes — l'interface de
             // `paiements:reconcilier` (docs/legacy-import-cli.md) : compare

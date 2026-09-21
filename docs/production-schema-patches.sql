@@ -372,6 +372,17 @@ CREATE INDEX IF NOT EXISTS depenses_centre_date_idx ON depenses (etablissement_i
 -- ---------------------------------------------------------------------------
 -- 21/09/2026 — groups.montant_par_etudiant_prof / groups.taux_horaire_prof
 --
+-- ⚠ RIEN À FAIRE À LA MAIN POUR CELUI-CI : ces deux colonnes arrivent par une
+-- MIGRATION ordinaire, `2026_09_21_100000_add_taux_prof_to_groups_table.php`,
+-- jouée par le `php artisan migrate --force` du déploiement habituel. La
+-- production porte désormais des données, donc une colonne nouvelle est une
+-- migration additive et non une édition du fichier `create_*` (CLAUDE.md §17).
+--
+-- Le SQL ci-dessous est conservé pour mémoire et reste sans danger (la
+-- migration est elle-même idempotente, `hasColumn`) : si les colonnes ont déjà
+-- été posées à la main, `migrate` les saute et se contente d'enregistrer la
+-- ligne dans `migrations`.
+--
 -- Taux de rémunération de l'enseignant POUR CE GROUPE, alimentant le calcul
 -- « Paiement prof » (Domain\Payroll). Le taux appartient au GROUPE et non à
 -- l'employé : un même enseignant est payé différemment selon le groupe qu'il

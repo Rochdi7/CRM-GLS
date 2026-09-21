@@ -25,20 +25,6 @@ return new class extends Migration
             $table->foreignId('etablissement_id')->nullable()->constrained('etablissements')->nullOnDelete();
             $table->foreignId('annee_scolaire_id')->nullable()->constrained('annees_scolaires')->nullOnDelete();
             $table->integer('capacite_max')->nullable();
-            // Taux de rémunération de l'enseignant POUR CE GROUPE (21/09/2026).
-            // Le taux appartient au GROUPE, pas à l'employé : un même
-            // enseignant est payé différemment selon le groupe qu'il anime
-            // (niveau, volume, centre), et un taux porté par `employees`
-            // réécrirait le passé de tous ses groupes d'un coup.
-            //
-            // ⚠ Ces colonnes ne sont QU'UN DÉFAUT de formulaire : le montant
-            // effectivement payé est FIGÉ sur la dépense au moment du
-            // paiement (`depenses.montant`), jamais relu depuis le groupe.
-            // Corriger un taux ne doit donc jamais réécrire un paiement déjà
-            // enregistré (§11 : les enregistrements monétaires sont
-            // append-only).
-            $table->decimal('montant_par_etudiant_prof', 10, 2)->nullable();
-            $table->decimal('taux_horaire_prof', 10, 2)->nullable();
             $table->string('statut', 20)->default('En inscription');
             $table->date('date_debut_formation')->nullable();
             $table->date('date_fin_formation')->nullable();

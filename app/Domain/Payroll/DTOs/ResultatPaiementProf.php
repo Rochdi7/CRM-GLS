@@ -17,6 +17,7 @@ final readonly class ResultatPaiementProf
     /**
      * @param  list<LignePaiementProf>  $lignes
      * @param  array<string, int>       $decoupageSemaines  semaine ISO => bucket 1..4
+     * @param  list<int>                $bucketsOccupes     semaines ayant reçu des cours
      */
     public function __construct(
         public array $lignes,
@@ -28,6 +29,7 @@ final readonly class ResultatPaiementProf
         public int $semainesQualifiees,
         public int $etudiantsRemunerateurs,
         public array $decoupageSemaines,
+        public array $bucketsOccupes = [],
     ) {}
 
     /** @return array<string, mixed> */
@@ -43,6 +45,7 @@ final readonly class ResultatPaiementProf
             'semainesQualifiees' => $this->semainesQualifiees,
             'etudiantsRemunerateurs' => $this->etudiantsRemunerateurs,
             'decoupageSemaines' => $this->decoupageSemaines,
+            'bucketsOccupes' => $this->bucketsOccupes,
         ];
     }
 }

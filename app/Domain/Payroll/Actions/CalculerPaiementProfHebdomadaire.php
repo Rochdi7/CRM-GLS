@@ -55,8 +55,27 @@ final class CalculerPaiementProfHebdomadaire
         float $pourcentageHebdo = self::POURCENTAGE_HEBDO_PAR_DEFAUT,
         array $ajustements = [],
     ): ResultatPaiementProf {
-        $montantSemaine = round($montantParEtudiant * $pourcentageHebdo / 100, 2);
         $map = DecoupageSemaines::construire($datesDeCours, $seuil);
+
+        // ⚠ Le montant d'une semaine se divise par les semaines RÉELLEMENT
+        // ENSEIGNÉES, pas par 4 en aveugle (correctif du 21/09/2026, voir
+        // DecoupageSemaines::bucketsOccupes()).
+        //
+        // Un mois amputé d'un férié tient dans 3 buckets : compter le 4e,
+        // vide, comme une semaine non qualifiée faisait perdre un quart de sa
+        // paie à un enseignant dont tous les étudiants étaient présents à
+        // TOUS les cours. Diviser par le nombre de buckets occupés garantit
+        // l'invariant qui donne son sens au calcul : un étudiant présent
+        // partout vaut exactement le montant par étudiant, férié ou non.
+        //
+        // Sur un mois normal (4 buckets occupés) le résultat est identique
+        // au portail — 25 % par semaine.
+        $bucketsOccupes = DecoupageSemaines::bucketsOccupes($map);
+        $nombreOccupes = count($bucketsOccupes);
+
+        $montantSemaine = $nombreOccupes > 0
+            ? round($montantParEtudiant / $nombreOccupes, 2)
+            : round($montantParEtudiant * $pourcentageHebdo / 100, 2);
 
         $lignes = [];
         $total = 0.0;
@@ -69,16 +88,36 @@ final class CalculerPaiementProfHebdomadaire
             $montantsAuto = [];
             $totalAuto = 0.0;
             $qualifieAuMoinsUneSemaine = false;
+            $qualifieesPourCetEtudiant = 0;
 
             foreach ($comptes as $semaine => $jours) {
+                // Un bucket qui n'a reçu AUCUN jour de cours ne correspond à
+                // aucune semaine enseignée : il n'est ni gagné ni perdu, et
+                // n'apparaît pas comme une semaine ratée à l'écran.
+                if (! in_array($semaine, $bucketsOccupes, true)) {
+                    $montantsAuto[$semaine] = null;
+
+                    continue;
+                }
+
                 $qualifie = $jours >= $seuil;
                 $montantsAuto[$semaine] = $qualifie ? $montantSemaine : 0.0;
 
                 if ($qualifie) {
                     $totalAuto += $montantSemaine;
                     $semainesQualifiees++;
+                    $qualifieesPourCetEtudiant++;
                     $qualifieAuMoinsUneSemaine = true;
                 }
+            }
+
+            // L'arrondi par semaine peut faire dériver la somme de quelques
+            // centimes (500 / 3 = 166,67 × 3 = 500,01). Un étudiant qualifié
+            // sur TOUTES les semaines enseignées vaut EXACTEMENT le montant
+            // par étudiant — sinon le total du mois ne retombe pas sur un
+            // chiffre rond et personne ne sait d'où viennent les centimes.
+            if ($nombreOccupes > 0 && $qualifieesPourCetEtudiant === $nombreOccupes) {
+                $totalAuto = $montantParEtudiant;
             }
 
             // Un ajustement manuel REMPLACE le montant calculé de l'étudiant.
@@ -118,6 +157,7 @@ final class CalculerPaiementProfHebdomadaire
             semainesQualifiees: $semainesQualifiees,
             etudiantsRemunerateurs: $etudiantsRemunerateurs,
             decoupageSemaines: $map,
+            bucketsOccupes: $bucketsOccupes,
         );
     }
 }

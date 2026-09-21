@@ -1335,6 +1335,8 @@ export interface GroupPaymentRow {
     numero: string;
     student: string | null;
     studentShowUrl: string | null;
+    /** Photo de l'étudiant, ou l'avatar par défaut (Student::avatarUrl()). */
+    photoUrl: string | null;
     reference: string;
     /** Active | Changement | Annulée — drives the row colour. */
     statut: string;
@@ -2289,6 +2291,13 @@ export interface DepensesPageProps {
     canAudit: boolean;
     depenseStatuts: string[];
     filters: DepensesFilters;
+    /**
+     * La fenêtre de l'année active est-elle LEVÉE ? Décidé au serveur, jamais
+     * redérivé des champs date : après un effacement explicite ceux-ci
+     * reviennent vides alors que la liste reste élargie, et sans ce drapeau
+     * « Réinitialiser les filtres » se désactiverait à tort.
+     */
+    dateFilterEngaged: boolean;
     [key: string]: unknown;
 }
 
@@ -2368,6 +2377,81 @@ export interface EcheancesEnMassePageProps {
     /** Only the fees the chosen group's inscriptions actually carry. */
     fraisOptions: SelectOption[];
     statuts: string[];
+    [key: string]: unknown;
+}
+
+// --- Calcul « Paiement prof » ----------------------------------------------
+
+/** Une ligne du calcul : ce qu'UN étudiant rapporte à l'enseignant. */
+export interface PaiementProfLigne {
+    studentId: number;
+    nom: string;
+    joursRetenus: number;
+    joursAbsents: number;
+    /** Retard / Justifié — écartés du calcul, ni pour ni contre. */
+    joursIgnores: number;
+    /** Bucket 1..4 → jours retenus. */
+    joursParSemaine: Record<number, number>;
+    /**
+     * Bucket 1..4 → montant calculé. `null` = semaine JAMAIS ENSEIGNÉE
+     * (aucun jour de cours) : ni gagnée, ni perdue — à ne pas peindre
+     * comme une semaine ratée.
+     */
+    montantsParSemaine: Record<number, number | null>;
+    montantAuto: number;
+    montantAjuste: number | null;
+    montantEffectif: number;
+    qualifie: boolean;
+}
+
+export interface PaiementProfCalcul {
+    lignes: PaiementProfLigne[];
+    total: number;
+    montantParEtudiant: number;
+    /** Part d'UNE semaine qualifiée (montant ÷ semaines réellement enseignées). */
+    montantSemaine: number;
+    seuil: number;
+    nombreJoursDeCours: number;
+    semainesQualifiees: number;
+    etudiantsRemunerateurs: number;
+    /** Semaine ISO (« GGGG-WW ») → bucket 1..4. */
+    decoupageSemaines: Record<string, number>;
+    /** Les seuls buckets ayant reçu des cours — les autres n'existent pas. */
+    bucketsOccupes: number[];
+    group: {
+        id: number;
+        nom: string;
+        niveau: string;
+        enseignantNom: string | null;
+        montantParEtudiantDefaut: number | null;
+        tauxHoraireDefaut: number | null;
+    };
+    periode: { debut: string; fin: string };
+    datesDeCours: string[];
+    /** student_id → { 'YYYY-MM-DD': statut } — la grille d'appel brute. */
+    grille: Record<number, Record<string, string>>;
+    heuresEffectuees: number;
+    totalHoraire: number | null;
+    nombreSeances: number;
+}
+
+export interface PaiementProfFilters {
+    groupFilter: string;
+    dateDebut: string;
+    dateFin: string;
+    montantParEtudiant: string;
+    seuil: string;
+}
+
+export interface PaiementProfPageProps {
+    /** `null` tant qu'un groupe et une période n'ont pas été choisis. */
+    calcul: PaiementProfCalcul | null;
+    filters: PaiementProfFilters;
+    groupOptions: SelectOption[];
+    seuilParDefaut: number;
+    pourcentageHebdo: number;
+    paiementProfTypeId: number | null;
+    canCreateDepense: boolean;
     [key: string]: unknown;
 }
 

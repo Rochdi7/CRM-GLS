@@ -15,9 +15,11 @@ namespace App\Domain\Payroll\DTOs;
 final readonly class LignePaiementProf
 {
     /**
-     * @param  array<int, int>    $joursParSemaine    bucket 1..4 => jours retenus
-     * @param  array<int, float>  $montantsParSemaine bucket 1..4 => montant calculé
-     * @param  float|null         $montantAjuste      ajustement manuel, s'il y en a un
+     * @param  array<int, int>         $joursParSemaine    bucket 1..4 => jours retenus
+     * @param  array<int, float|null>  $montantsParSemaine bucket 1..4 => montant calculé,
+     *                                                     NULL si la semaine n'a reçu aucun
+     *                                                     jour de cours (ni gagnée, ni perdue)
+     * @param  float|null              $montantAjuste      ajustement manuel, s'il y en a un
      */
     public function __construct(
         public int $studentId,

@@ -102,6 +102,40 @@ final class DecoupageSemaines
     }
 
     /**
+     * Buckets ayant REÇU au moins un jour de cours.
+     *
+     * ⚠ Divergence ASSUMÉE d'avec le portail GLS (21/09/2026) — c'est un
+     * correctif, pas un oubli de portage.
+     *
+     * Une semaine écourtée par un férié fusionne avec la précédente (voir
+     * `construire()`). Mais la fusion laisse alors MOINS de 4 buckets
+     * occupés : sur un mois à 1 jour férié + 3 semaines pleines, les jours
+     * tiennent dans 3 buckets et le 4e reste VIDE. Le portail comptait
+     * quand même ce bucket vide comme une semaine non qualifiée, si bien
+     * qu'un étudiant présent à TOUS les cours du mois ne rapportait que
+     * 375 DH sur 500 — l'enseignant perdait un quart de sa paie à cause
+     * d'un férié dont il n'est pas responsable, et rien à l'écran ne
+     * l'expliquait.
+     *
+     * Un bucket sans aucun jour de cours ne correspond à AUCUNE semaine
+     * enseignée : il ne peut donc ni être gagné, ni être perdu. Seuls les
+     * buckets réellement occupés entrent dans le calcul, et la part de
+     * chacun est le montant par étudiant divisé par LEUR nombre — de sorte
+     * qu'un étudiant présent partout vaut toujours exactement le montant
+     * par étudiant, férié ou non.
+     *
+     * @param  array<string, int>  $map  semaine ISO => bucket
+     * @return list<int>
+     */
+    public static function bucketsOccupes(array $map): array
+    {
+        $occupes = array_values(array_unique(array_values($map)));
+        sort($occupes);
+
+        return $occupes;
+    }
+
+    /**
      * Compte, par bucket, les jours retenus d'un étudiant — chaque semaine ISO
      * plafonnée à 5 jours.
      *
