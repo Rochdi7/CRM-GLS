@@ -346,7 +346,7 @@ function MatrixBody({ matrix, loading }: { matrix: GroupPaymentMatrix | null; lo
                             <th className="h6 border-top-0" style={CELL_STYLE}>
                                 N°
                             </th>
-                            <th className="h6 border-top-0" style={CELL_STYLE}>
+                            <th className="h6 border-top-0" style={{ ...CELL_STYLE, textAlign: 'left' }}>
                                 Étudiant
                             </th>
                             {matrix.columns.map((column) => (
@@ -375,16 +375,29 @@ function MatrixBody({ matrix, loading }: { matrix: GroupPaymentMatrix | null; lo
                                         {row.numero}
                                     </td>
                                     <td
-                                        style={{ ...CELL_STYLE, background: rowFill }}
+                                        style={{ ...CELL_STYLE, background: rowFill, textAlign: 'left' }}
                                         {...bind(rowTip(row))}
                                     >
-                                        {row.studentShowUrl ? (
-                                            <a href={row.studentShowUrl} className="text-reset">
-                                                {row.student ?? '—'}
-                                            </a>
-                                        ) : (
-                                            (row.student ?? '—')
-                                        )}
+                                        {/* Photo à GAUCHE du nom — la même source
+                                            que la fiche de présence
+                                            (Student::avatarUrl()), qui retombe sur
+                                            l'avatar par défaut quand aucune photo
+                                            n'a été téléversée : la colonne ne
+                                            présente donc jamais de trou. */}
+                                        <span className="d-inline-flex align-items-center gap-2">
+                                            <img
+                                                src={row.photoUrl ?? '/assets/images/avatar/defaultman.webp'}
+                                                alt=""
+                                                className="avatar avatar-sm rounded-circle flex-shrink-0"
+                                            />
+                                            {row.studentShowUrl ? (
+                                                <a href={row.studentShowUrl} className="text-reset">
+                                                    {row.student ?? '—'}
+                                                </a>
+                                            ) : (
+                                                (row.student ?? '—')
+                                            )}
+                                        </span>
                                     </td>
                                     {matrix.columns.map((column) => {
                                         const cell = row.cells[column.key];

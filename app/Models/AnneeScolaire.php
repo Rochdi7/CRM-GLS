@@ -80,6 +80,18 @@ class AnneeScolaire extends Model
     }
 
     /**
+     * Lecture NON destructive — la validation doit pouvoir consulter les
+     * glissements déjà décidés (pour savoir si un intervalle sera couvert)
+     * sans les consommer : seule l'écriture les prend.
+     *
+     * @return array<int, array{annee: self, colonne: string, valeur: \Illuminate\Support\Carbon}>
+     */
+    public static function glissementsEnAttente(): array
+    {
+        return self::$glissements;
+    }
+
+    /**
      * @return array<int, array{annee: self, colonne: string, valeur: \Illuminate\Support\Carbon}>
      */
     public static function prendreGlissements(): array

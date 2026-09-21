@@ -255,6 +255,15 @@ final class DepenseController extends Controller
                     ];
                 })()
                 : null,
+            // La fenêtre d'année est-elle levée ? Les champs date sont
+            // renvoyés VIDES après un effacement explicite ('-' n'est pas une
+            // date affichable), si bien que « Réinitialiser les filtres » se
+            // croyait sans effet alors que la liste était encore élargie
+            // au-delà de l'année active — l'utilisateur ne pouvait plus
+            // revenir à la vue par défaut. Servi HORS de `filters` : ce n'est
+            // pas un filtre réinitialisable, mais l'état que le serveur seul
+            // connaît (§5 : un read-model ne redérive jamais une règle).
+            'dateFilterEngaged' => $dateFilterEngaged,
             'filters' => [
                 'search' => $search,
                 'typeFilter' => $typeFilter,

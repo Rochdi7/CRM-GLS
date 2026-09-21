@@ -96,6 +96,110 @@ trait CouvertureAnneesRules
         }
 
         $this->refuserTrou($validator, $autres, $debut, $fin);
+        $this->refuserAbandonSansVoisine($validator, $autres, $annee, $debut, $fin);
+    }
+
+    /**
+     * ⚠ Le trou SANS VOISINE. `refuserTrou` ne boucle que sur les autres
+     * années : rétrécir la SEULE année existante (ou la dernière de la
+     * série, vers l'extérieur) n'a donc aucune voisine à examiner, et
+     * passait sans contrôle — l'argent des jours abandonnés tombait hors de
+     * TOUTE fenêtre, exactement le défaut que la règle existe pour empêcher.
+     * Rien ne peut glisser ici : il n'y a pas d'année à étendre, donc le
+     * refus reste la seule réponse honnête.
+     *
+     * On ne regarde que les jours que cette année COUVRAIT et ne couvre
+     * plus : élargir n'abandonne rien, et les jours jamais couverts sont
+     * l'affaire de `refuserTrou`.
+     *
+     * @param  \Illuminate\Support\Collection<int, AnneeScolaire>  $autres
+     */
+    private function refuserAbandonSansVoisine(Validator $validator, $autres, ?AnneeScolaire $annee, Carbon $debut, Carbon $fin): void
+    {
+        if ($annee === null || $validator->errors()->hasAny(['date_debut', 'date_fin'])) {
+            return;
+        }
+
+        $ancienDebut = $annee->date_debut->startOfDay();
+        $ancienFin = $annee->date_fin->startOfDay();
+
+        // Les deux bouts éventuellement abandonnés par le rétrécissement.
+        $abandons = array_filter([
+            $ancienDebut < $debut ? [$ancienDebut, $debut->copy()->subDay()] : null,
+            $ancienFin > $fin ? [$fin->copy()->addDay(), $ancienFin] : null,
+        ]);
+
+        foreach ($abandons as [$aDebut, $aFin]) {
+            // Un bout qu'une autre année couvre déjà (ou couvrira par un
+            // glissement déjà décidé) n'est pas abandonné.
+            if ($this->estCouvert($autres, $aDebut, $aFin)) {
+                continue;
+            }
+
+            $orphelines = $this->lignesOrphelines($aDebut, $aFin);
+
+            if ($orphelines === []) {
+                continue;
+            }
+
+            $validator->errors()->add('date_fin', __(
+                'This leaves :from to :to covered by no academic year, and :details would become invisible on every screen. Create the next academic year first, or keep these dates inside this one.',
+                [
+                    'from' => $aDebut->format('d/m/Y'),
+                    'to' => $aFin->format('d/m/Y'),
+                    'details' => implode(', ', $orphelines),
+                ],
+            ));
+
+            // La requête est refusée : aucun glissement ne doit survivre
+            // pour être rejoué par une écriture ultérieure.
+            AnneeScolaire::prendreGlissements();
+
+            return;
+        }
+    }
+
+    /**
+     * L'intervalle est-il ENTIÈREMENT couvert par les autres années, une
+     * fois les glissements en attente pris en compte ? On teste jour par
+     * jour : les fenêtres sont des intervalles de dates, pas des ensembles
+     * ordonnés qu'on pourrait fusionner sans les trier d'abord.
+     *
+     * @param  \Illuminate\Support\Collection<int, AnneeScolaire>  $autres
+     */
+    private function estCouvert($autres, Carbon $debut, Carbon $fin): bool
+    {
+        $glissements = AnneeScolaire::glissementsEnAttente();
+
+        $fenetres = $autres->map(function (AnneeScolaire $a) use ($glissements): array {
+            $d = $a->date_debut->copy()->startOfDay();
+            $f = $a->date_fin->copy()->startOfDay();
+
+            foreach ($glissements as $g) {
+                if ($g['annee']->getKey() === $a->getKey()) {
+                    $g['colonne'] === 'date_debut' ? $d = $g['valeur']->copy() : $f = $g['valeur']->copy();
+                }
+            }
+
+            return [$d, $f];
+        })->all();
+
+        for ($jour = $debut->copy(); $jour <= $fin; $jour->addDay()) {
+            $couvert = false;
+
+            foreach ($fenetres as [$d, $f]) {
+                if ($jour >= $d && $jour <= $f) {
+                    $couvert = true;
+                    break;
+                }
+            }
+
+            if (! $couvert) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

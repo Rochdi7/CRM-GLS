@@ -147,6 +147,60 @@ final class DepensesTabSwitchDateWindowTest extends TestCase
         );
     }
 
+    /**
+     * Après un effacement explicite, les DEUX champs date reviennent vides
+     * (« - » n'est pas une date affichable) alors que la fenêtre d'année
+     * reste levée. Sans un drapeau porté par le serveur, « Réinitialiser les
+     * filtres » se désactiverait et l'utilisateur resterait bloqué sur une
+     * liste élargie, sans moyen de revenir à la vue par défaut.
+     */
+    public function test_the_page_reports_whether_the_year_window_is_lifted(): void
+    {
+        [$user] = $this->prepare();
+
+        $props = fn (array $q) => $this->actingAs($user)
+            ->get(route('backoffice.depenses.index', $q))
+            ->assertOk()
+            ->viewData('page')['props'];
+
+        $this->assertFalse($props([])['dateFilterEngaged']);
+        $this->assertTrue($props(['dateFrom' => '-', 'dateTo' => '-'])['dateFilterEngaged']);
+        $this->assertTrue($props(['dateFrom' => '2026-01-01'])['dateFilterEngaged']);
+
+        // Le marqueur ne remonte JAMAIS dans les champs : ils doivent rester
+        // vides, sinon l'input date afficherait « - ».
+        $cleared = $props(['dateFrom' => '-', 'dateTo' => '-']);
+        $this->assertSame('', $cleared['filters']['dateFrom']);
+        $this->assertSame('', $cleared['filters']['dateTo']);
+    }
+
+    /**
+     * Un effacement de date SURVIT aux rechargements suivants. Le serveur
+     * renvoie les champs vides, donc si la page ne reportait pas le marqueur,
+     * une recherche (ou tout autre filtre) renverrait '' et réarmerait la
+     * fenêtre d'année : des lignes disparaîtraient en touchant un filtre sans
+     * rapport (§5). C'est ce que reload() reporte via `dateFilterEngaged`.
+     */
+    public function test_a_later_unrelated_filter_keeps_the_window_lifted(): void
+    {
+        [$user, $courante, $ancienne] = $this->prepare();
+
+        // Ce que reload() envoie pour une recherche APRÈS un effacement de
+        // date : le marqueur est reporté, la recherche s'y ajoute.
+        $refs = $this->references($user, [
+            'dateFrom' => '-', 'dateTo' => '-', 'search' => 'Ligne',
+        ]);
+
+        $this->assertContains(
+            $ancienne->reference,
+            $refs,
+            'Chercher après avoir effacé les dates a réarmé la fenêtre '
+            .'d\'année : modifier un filtre sans rapport ne doit jamais '
+            .'RÉDUIRE le jeu de lignes (§5).',
+        );
+        $this->assertContains($courante->reference, $refs);
+    }
+
     public function test_an_explicit_date_still_filters(): void
     {
         [$user, $courante, $ancienne] = $this->prepare();

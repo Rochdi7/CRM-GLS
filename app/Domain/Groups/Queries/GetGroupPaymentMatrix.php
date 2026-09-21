@@ -70,7 +70,9 @@ final class GetGroupPaymentMatrix
         $columnKeys = array_column($columns, 'key');
 
         $inscriptions = Inscription::query()
-            ->with('student')
+            // `student.media` : l'avatar est lu par ligne, donc la collection
+            // média se charge EN LOT (§17 « jamais une requête par ligne »).
+            ->with('student.media')
             ->where('group_id', $group->id)
             ->get();
 
@@ -223,6 +225,11 @@ final class GetGroupPaymentMatrix
                     'key' => (string) $inscription->id,
                     'numero' => '',
                     'student' => $inscription->student?->nomComplet(),
+                    // Photo de l'étudiant, ou l'avatar par défaut selon le sexe
+                    // (Student::avatarUrl() — la MÊME source que la fiche de
+                    // présence et la fiche étudiant : jamais une cellule vide
+                    // quand la photo manque).
+                    'photoUrl' => $inscription->student?->avatarUrl(),
                     'studentShowUrl' => $inscription->student
                         ? route('backoffice.students.show', $inscription->student)
                         : null,

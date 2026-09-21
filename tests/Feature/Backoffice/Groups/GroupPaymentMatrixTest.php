@@ -530,8 +530,9 @@ quitté pour moi 9",
         $queries = count(\DB::getQueryLog());
         \DB::disableQueryLog();
 
-        // group->frais + inscriptions + students + fee lines (one withSum
-        // pass) — a constant, whatever the 18 fee lines above become.
-        $this->assertLessThanOrEqual(6, $queries, 'The payment matrix must not scale its query count with the row count.');
+        // group->frais + inscriptions + students + leurs médias (l'avatar de
+        // la colonne Étudiant, chargé EN LOT) + fee lines (one withSum pass)
+        // — a constant, whatever the 18 fee lines above become.
+        $this->assertLessThanOrEqual(7, $queries, 'The payment matrix must not scale its query count with the row count.');
     }
 }
