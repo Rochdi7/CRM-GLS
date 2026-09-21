@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
-import TableToolbar from '@/Components/Tables/TableToolbar';
+import Modal from '@/Components/Modals/Modal';
 import DateField from '@/Components/Forms/DateField';
 import SelectField from '@/Components/Forms/SelectField';
 import FormField from '@/Components/Forms/FormField';
@@ -44,6 +44,38 @@ export default function PaiementProfIndex({
     // l'illusion d'une paie enregistrée alors qu'aucune dépense n'existe.
     const [ajustements, setAjustements] = useState<Record<number, string>>({});
 
+    // Saisie du modal — état LOCAL tant que « Calculer » n'a pas été cliqué.
+    // Le calcul ne part qu'au clic : on COMPOSE une paie, on ne parcourt pas
+    // une liste, donc rien ne doit se recharger pendant qu'on remplit.
+    const [showModal, setShowModal] = useState(false);
+    const [saisie, setSaisie] = useState(filters);
+
+    function majSaisie(champs: Partial<typeof filters>) {
+        setSaisie((precedent) => ({ ...precedent, ...champs }));
+    }
+
+    function ouvrirModal() {
+        // Repartir de ce qui est à l'écran : « Changer la période » doit
+        // rouvrir le modal pré-rempli, pas vide.
+        setSaisie(filters);
+        setShowModal(true);
+    }
+
+    // Le taux du groupe CHOISI DANS LE MODAL — pas celui du calcul affiché,
+    // qui peut porter sur un autre groupe tant qu'on n'a pas validé.
+    const tauxDuGroupe = useMemo(() => {
+        if (saisie.groupFilter === '' || calcul === null) {
+            return null;
+        }
+
+        return Number(saisie.groupFilter) === calcul.group.id
+            ? calcul.group.montantParEtudiantDefaut
+            : null;
+    }, [saisie.groupFilter, calcul]);
+
+    const formulaireComplet =
+        saisie.groupFilter !== '' && saisie.dateDebut !== '' && saisie.dateFin !== '';
+
     function reload(nextFilters: Partial<typeof filters>) {
         router.get('/backoffice/paiement-prof', { ...filters, ...nextFilters }, {
             preserveState: true,
@@ -52,7 +84,22 @@ export default function PaiementProfIndex({
         });
     }
 
-    const { active: resetActive, reset: onReset } = useFilterReset(filters, reload);
+    function lancerCalcul() {
+        if (!formulaireComplet) {
+            return;
+        }
+
+        setShowModal(false);
+        // Remplacement COMPLET des filtres (pas un merge) : un champ vidé dans
+        // le modal doit être vidé dans l'URL, sinon l'ancienne valeur survit.
+        router.get('/backoffice/paiement-prof', { ...saisie }, {
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+        });
+    }
+
+    const { reset: onReset } = useFilterReset(filters, reload);
 
     // Total effectif = le calcul serveur, corrigé des ajustements saisis ici.
     // Le serveur reste l'autorité sur chaque ligne ; l'écran n'applique que
@@ -127,67 +174,155 @@ export default function PaiementProfIndex({
                 .pp-ajust { width: 92px; text-align: right; }
             `}</style>
 
-            <TableToolbar onReset={onReset} resetActive={resetActive}>
+            {/* Barre d'action — le calcul se LANCE depuis un modal (« Nouveau
+                calcul ») plutôt que depuis une barre de filtres : on ne
+                parcourt pas une liste, on COMPOSE une paie. Tant que rien
+                n'a été demandé, il n'y a aucun filtre à réinitialiser. */}
+            <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <div>
+                    {calcul !== null && (
+                        <span className="text-muted">
+                            {calcul.group.nom}
+                            {' · '}
+                            {new Date(calcul.periode.debut).toLocaleDateString('fr-FR')}
+                            {' → '}
+                            {new Date(calcul.periode.fin).toLocaleDateString('fr-FR')}
+                        </span>
+                    )}
+                </div>
+                <div className="d-flex gap-2">
+                    {calcul !== null && (
+                        <button type="button" className="btn btn-outline-secondary" onClick={onReset}>
+                            <i className="ti ti-filter-off me-1" />
+                            {t('Clear')}
+                        </button>
+                    )}
+                    <button type="button" className="btn btn-primary" onClick={ouvrirModal}>
+                        <i className="ti ti-calculator me-1" />
+                        {calcul === null ? t('New calculation') : t('Change the period')}
+                    </button>
+                </div>
+            </div>
+
+            {/* ── Modal de saisie ──────────────────────────────────── */}
+            <Modal
+                show={showModal}
+                title={t('New teacher payment calculation')}
+                onClose={() => setShowModal(false)}
+                size="lg"
+                footer={
+                    <>
+                        <button
+                            type="button"
+                            className="btn btn-light"
+                            onClick={() => setShowModal(false)}
+                        >
+                            {t('Cancel')}
+                        </button>
+                        <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={!formulaireComplet}
+                            onClick={lancerCalcul}
+                        >
+                            <i className="ti ti-calculator me-1" />
+                            {t('Calculate')}
+                        </button>
+                    </>
+                }
+            >
+                <p className="text-muted mb-3">
+                    {t(
+                        'The payment is computed from the roll-call already recorded for that group — nothing is imported.',
+                    )}
+                </p>
+
                 <SelectField
                     id="pp-group"
                     label={t('Group')}
-                    value={filters.groupFilter}
+                    required
+                    value={saisie.groupFilter}
                     options={groupOptions}
-                    placeholder={t('All groups')}
-                    onChange={(event) => reload({ groupFilter: event.target.value })}
+                    placeholder={t('Select a group')}
+                    onChange={(event) => majSaisie({ groupFilter: event.target.value })}
                 />
-                <DateField
-                    id="pp-date-debut"
-                    label={t('Start date')}
-                    value={filters.dateDebut}
-                    onChange={(event) => reload({ dateDebut: event.target.value })}
-                />
-                <DateField
-                    id="pp-date-fin"
-                    label={t('End date')}
-                    value={filters.dateFin}
-                    onChange={(event) => reload({ dateFin: event.target.value })}
-                />
-                <FormField
-                    id="pp-montant"
-                    label={t('Amount per student')}
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    defaultValue={filters.montantParEtudiant}
-                    placeholder={calcul?.group.montantParEtudiantDefaut?.toFixed(2) ?? '0.00'}
-                    // Commit sur blur : un rechargement par frappe relancerait
-                    // le calcul à chaque chiffre tapé.
-                    onBlur={(event) => {
-                        if (event.target.value !== filters.montantParEtudiant) {
-                            reload({ montantParEtudiant: event.target.value });
-                        }
-                    }}
-                />
-                <FormField
-                    id="pp-seuil"
-                    label={t('Days required per week')}
-                    type="number"
-                    min="1"
-                    max="5"
-                    defaultValue={filters.seuil}
-                    placeholder={String(seuilParDefaut)}
-                    onBlur={(event) => {
-                        if (event.target.value !== filters.seuil) {
-                            reload({ seuil: event.target.value });
-                        }
-                    }}
-                />
-            </TableToolbar>
+
+                <div className="row">
+                    <div className="col-md-6">
+                        <DateField
+                            id="pp-date-debut"
+                            label={t('Start date')}
+                            required
+                            value={saisie.dateDebut}
+                            onChange={(event) => majSaisie({ dateDebut: event.target.value })}
+                        />
+                    </div>
+                    <div className="col-md-6">
+                        <DateField
+                            id="pp-date-fin"
+                            label={t('End date')}
+                            required
+                            value={saisie.dateFin}
+                            onChange={(event) => majSaisie({ dateFin: event.target.value })}
+                        />
+                    </div>
+                </div>
+
+                <div className="row">
+                    <div className="col-md-6">
+                        <FormField
+                            id="pp-montant"
+                            label={t('Amount per student')}
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={saisie.montantParEtudiant}
+                            // Vide = on prend le taux du groupe ; le placeholder
+                            // le NOMME pour que le champ vide ne se lise pas
+                            // comme « zéro dirham ».
+                            placeholder={tauxDuGroupe !== null ? tauxDuGroupe.toFixed(2) : '0.00'}
+                            onChange={(event) => majSaisie({ montantParEtudiant: event.target.value })}
+                        />
+                        <div className="form-text mt-n2 mb-3">
+                            {tauxDuGroupe !== null
+                                ? t('Leave empty to use the group rate (:rate MAD).').replace(
+                                      ':rate',
+                                      tauxDuGroupe.toFixed(2),
+                                  )
+                                : t('This group has no rate set — enter one here.')}
+                        </div>
+                    </div>
+                    <div className="col-md-6">
+                        <FormField
+                            id="pp-seuil"
+                            label={t('Days required per week')}
+                            type="number"
+                            min="1"
+                            max="5"
+                            value={saisie.seuil}
+                            placeholder={String(seuilParDefaut)}
+                            onChange={(event) => majSaisie({ seuil: event.target.value })}
+                        />
+                        <div className="form-text mt-n2 mb-3">
+                            {t('A week counts when the student attended at least this many days.')}
+                        </div>
+                    </div>
+                </div>
+            </Modal>
 
             {calcul === null ? (
                 <Card>
                     <EmptyState
-                        title={t('Choose a group and a period')}
+                        title={t('No calculation yet')}
                         message={t(
                             'The payment is computed from the roll-call already recorded for that group — nothing is imported.',
                         )}
-                    />
+                    >
+                        <button type="button" className="btn btn-primary" onClick={ouvrirModal}>
+                            <i className="ti ti-calculator me-1" />
+                            {t('New calculation')}
+                        </button>
+                    </EmptyState>
                 </Card>
             ) : calcul.lignes.length === 0 ? (
                 <Card>

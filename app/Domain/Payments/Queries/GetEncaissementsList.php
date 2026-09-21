@@ -452,6 +452,26 @@ final class GetEncaissementsList
                     && $e->cheque_id === null
                     && (float) ($e->remboursements_total ?? 0) <= 0.0
                     && (float) ($e->applications_sum_montant ?? 0) <= 0.0,
+                // Ce que la suppression devra DÉFAIRE, porté à l'écran plutôt
+                // que découvert après un clic sur « Oui, supprimer ». Même
+                // principe que `transferableAutreEtudiant` : la règle reste
+                // celle de `SupprimerEncaissement`, le read-model ne fait que
+                // la montrer. Une avance dont l'argent est appliqué n'est
+                // supprimable qu'en détachant d'abord ses applications — le
+                // modal le dit et demande confirmation.
+                // `applications_sum_montant` est déjà chargé (withSum plus
+                // haut) : aucune requête par ligne (§17).
+                'applicationsTotal' => number_format((float) ($e->applications_sum_montant ?? 0), 2, '.', ''),
+                'deleteDetacheApplications' => $e->inscription_fee_id === null
+                    && (float) ($e->applications_sum_montant ?? 0) > 0.0,
+                // Les deux refus que RIEN ne défait : leur contrepartie est
+                // hors de cette table (lifecycle du chèque, argent réellement
+                // sorti de la caisse). Le bouton reste donc inerte.
+                'deleteBlocker' => match (true) {
+                    (float) ($e->remboursements_total ?? 0) > 0.0 => __('A refunded payment cannot be deleted.'),
+                    $e->cheque_id !== null => __('A payment linked to a tracked cheque cannot be deleted.'),
+                    default => null,
+                },
                 'studentEmail' => $e->student?->email,
                 'showUrl' => route('backoffice.encaissements.show', $e),
                 'recuUrl' => route('backoffice.encaissements.recu', $e),

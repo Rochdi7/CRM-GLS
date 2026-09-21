@@ -209,6 +209,11 @@ Route::prefix('backoffice')
                 ->middleware('permission:students.create')->name('students.store');
             Route::put('students/{student}', [StudentController::class, 'update'])
                 ->middleware('permission:students.update')->name('students.update');
+            // ⚠ DOIT précéder students/{student} (voir le commentaire de
+            // « students/fusion » plus haut) — sinon le joker capture le
+            // segment et renvoie un 404 de binding.
+            Route::get('students/{student}/delete-blockers', [StudentController::class, 'deleteBlockers'])
+                ->middleware('permission:students.delete')->name('students.delete-blockers');
             Route::delete('students/{student}', [StudentController::class, 'destroy'])
                 ->middleware('permission:students.delete')->name('students.destroy');
             Route::get('students/{student}', [StudentController::class, 'show'])

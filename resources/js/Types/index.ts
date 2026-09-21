@@ -1873,6 +1873,24 @@ export interface EncaissementRow {
      * vit dans GardePresencesInscription et l'action refuse à nouveau.
      */
     transferableAutreEtudiant?: boolean;
+    /**
+     * Montant de cette avance déjà posé sur des frais par des lignes
+     * d'application — ce que la suppression devra détacher.
+     */
+    applicationsTotal?: MoneyDisplay;
+    /**
+     * Vrai quand supprimer cette avance suppose de DÉTACHER d'abord ses
+     * applications (leurs frais redeviennent dus). Le modal l'annonce et
+     * demande une confirmation explicite, qui part en
+     * `detacher_applications`. La règle vit dans SupprimerEncaissement.
+     */
+    deleteDetacheApplications?: boolean;
+    /**
+     * Motif d'un refus de suppression que RIEN ne défait (chèque suivi,
+     * paiement remboursé) — leur contrepartie est hors de cette table.
+     * Non nul ⇒ le bouton de confirmation reste inerte.
+     */
+    deleteBlocker?: string | null;
     studentEmail: string | null;
     showUrl: string;
     /** Printable receipt page — append ?format=a6|a5|a5x2. */

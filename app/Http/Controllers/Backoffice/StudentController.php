@@ -12,6 +12,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Students\StoreStudentRequest;
 use App\Http\Requests\Backoffice\Students\UpdateStudentRequest;
 use App\Models\Etablissement;
+use App\Models\Role;
 use App\Models\Student;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
@@ -150,24 +151,140 @@ final class StudentController extends Controller
             ->with('success', __('Student updated.'));
     }
 
-    public function destroy(Student $student): RedirectResponse
+    /**
+     * ⚠ Une fiche qui porte de l'ARGENT ou un DOSSIER ne se supprime jamais
+     * — super-admin compris. Seules les lignes d'APPEL orphelines cèdent.
+     *
+     * Le cas réel (21/09/2026) : une fiche créée par erreur au guichet,
+     * appelée deux jours dans un groupe où elle n'a jamais été inscrite,
+     * puis abandonnée. Elle n'a ni inscription, ni paiement, ni chèque —
+     * seulement deux « Absent » qui ne décrivent personne. La garde la
+     * bloquait au même titre qu'un dossier vivant, si bien que la seule
+     * issue était la console.
+     *
+     * Un super-admin peut donc FORCER, et le forçage retire les présences
+     * dans la même transaction. Trois bornes qui ne bougent pas :
+     *   1. les quatre autres verrous (inscriptions, encaissements,
+     *      remboursements, chèques) restent ABSOLUS — le forçage ne les
+     *      regarde même pas, il ne sait qu'effacer des appels ;
+     *   2. l'écran NOMME ce qui va être détruit (date, statut, groupe)
+     *      avant de demander confirmation : une suppression en aveugle
+     *      n'est pas une décision ;
+     *   3. les lignes retirées sont journalisées AVANT de disparaître —
+     *      c'est la seule trace qui restera de ce qu'on a effacé.
+     */
+    public function destroy(Request $request, Student $student): RedirectResponse
     {
         $this->authorize('delete', $student);
 
         $student->loadCount(['inscriptions', 'encaissements', 'remboursements']);
 
-        if ($student->inscriptions_count || $student->encaissements_count || $student->remboursements_count
-            || DB::table('cheques')->where('student_id', $student->id)->exists()
-            || DB::table('presences')->where('student_id', $student->id)->exists()) {
+        $chequesCount = DB::table('cheques')->where('student_id', $student->id)->count();
+
+        // Ces quatre-là ne cèdent JAMAIS : de l'argent et un dossier ne se
+        // suppriment pas, ils se corrigent par écriture compensatoire (§11).
+        if ($student->inscriptions_count || $student->encaissements_count
+            || $student->remboursements_count || $chequesCount) {
             throw ValidationException::withMessages([
                 'delete' => __('This student has activity history and cannot be deleted.'),
             ]);
+        }
+
+        $presences = $this->presencesOrphelines($student);
+
+        if ($presences->isNotEmpty()) {
+            // Seul un super-admin force, et seulement s'il l'a demandé
+            // explicitement après avoir vu la liste.
+            if (! $request->user()?->can('delete', $student) || ! $request->boolean('force')
+                || ! $request->user()->hasRole(Role::SUPER_ADMIN)) {
+                throw ValidationException::withMessages([
+                    'delete' => __('This student has activity history and cannot be deleted.'),
+                ]);
+            }
+
+            activity('student')
+                ->performedOn($student)
+                ->event('presences_orphelines_supprimees')
+                ->withProperties([
+                    'student_id' => $student->id,
+                    'reference' => $student->reference,
+                    'nom_complet' => $student->nomComplet(),
+                    'presences' => $presences->all(),
+                ])
+                ->log(sprintf(
+                    '%d ligne(s) de présence orpheline(s) supprimée(s) avec la fiche %s %s (aucune inscription dans ces groupes)',
+                    $presences->count(),
+                    $student->reference,
+                    $student->nomComplet(),
+                ));
+
+            DB::table('presences')->where('student_id', $student->id)->delete();
         }
 
         $student->delete();
 
         return redirect()->route('backoffice.students.index')
             ->with('success', __('Student deleted.'));
+    }
+
+    /**
+     * Les lignes d'appel de cette fiche, avec de quoi les RECONNAÎTRE à
+     * l'écran : une date et un statut nus ne disent pas à l'utilisateur ce
+     * qu'il s'apprête à effacer, le groupe si.
+     *
+     * Appelé par `destroy()` (qui les supprime) ET par `deleteBlockers()`
+     * (qui les montre) — une seule définition, sinon le modal finirait par
+     * annoncer autre chose que ce que le serveur retire.
+     *
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function presencesOrphelines(Student $student)
+    {
+        return DB::table('presences as p')
+            ->join('seances as se', 'se.id', '=', 'p.seance_id')
+            ->leftJoin('groups as g', 'g.id', '=', 'se.group_id')
+            ->where('p.student_id', $student->id)
+            ->orderBy('se.date_seance')
+            ->get(['p.id', 'se.date_seance', 'p.statut', 'se.group_id', 'g.nom as groupe'])
+            ->map(fn ($r) => [
+                'id' => (int) $r->id,
+                'date' => (string) $r->date_seance,
+                'statut' => (string) $r->statut,
+                'groupe' => $r->groupe ?? ('#'.$r->group_id),
+            ]);
+    }
+
+    /**
+     * Ce qui empêche la suppression, pour que le modal le DISE au lieu de
+     * répéter « historique d'activité » — un message qui ne nomme rien
+     * laisse l'utilisateur sans la moindre idée de quoi faire ensuite.
+     *
+     * Lecture seule : la décision reste à `destroy()`, qui revérifie tout
+     * (les ids arrivent du navigateur, §16).
+     */
+    public function deleteBlockers(Request $request, Student $student): \Illuminate\Http\JsonResponse
+    {
+        $this->authorize('delete', $student);
+
+        $student->loadCount(['inscriptions', 'encaissements', 'remboursements']);
+
+        $presences = $this->presencesOrphelines($student);
+
+        return response()->json([
+            'inscriptions' => $student->inscriptions_count,
+            'encaissements' => $student->encaissements_count,
+            'remboursements' => $student->remboursements_count,
+            'cheques' => DB::table('cheques')->where('student_id', $student->id)->count(),
+            'presences' => $presences->all(),
+            // Le forçage n'efface QUE des présences : dès qu'un autre
+            // verrou est levé, il n'y a rien à proposer.
+            'forcable' => $presences->isNotEmpty()
+                && ! $student->inscriptions_count
+                && ! $student->encaissements_count
+                && ! $student->remboursements_count
+                && DB::table('cheques')->where('student_id', $student->id)->doesntExist()
+                && (bool) $request->user()?->hasRole(Role::SUPER_ADMIN),
+        ]);
     }
 
     /**

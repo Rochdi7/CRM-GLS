@@ -1347,6 +1347,23 @@ the database layer. Non-negotiable invariants already enforced in code:
     journal's header totals + `solde` (they reconcile with the till's
     running balance, which spans years — only the journal ROWS follow the
     year window), and the TARGET group of « Changement de groupe » (below).
+  - **⚠ Le graphique « Résumé des frais annuels » classe par MOIS, jamais par
+    année d'inscription** (21/09/2026, `Reports\Actions\GetAnnualFraisSummary`).
+    L'année active ne fournit que la FENÊTRE (`date_debut` → `date_fin`) ;
+    aucune série n'est en plus filtrée sur `inscriptions.annee_scolaire_id`.
+    Croiser les deux — « inscription de cette année » ET « daté dans cette
+    année » — écarte toute ligne qui ne satisfait qu'une moitié, et cette ligne
+    n'apparaît alors sur le graphique d'AUCUNE année : un groupe 2025/2026
+    encore en cours en septembre 2026 facture des frais échus le 09/2026, que
+    2025/2026 refusait sur la date et 2026/2027 sur l'année (signalé avec un
+    septembre 2026 à 3 100 DH de chiffre d'affaire). Même trou côté
+    « Encaissements » : un paiement anticipé sur l'inscription de l'année
+    SUIVANTE. Les années ne se chevauchent pas (règle de couverture
+    ci-dessus), donc une date tombe dans une seule fenêtre et rien n'est
+    compté deux fois. Ne pas « rétablir » le filtre d'année ici : c'est une
+    exception assumée à la règle des listes, de la même famille que les
+    cartes « ce mois-ci ». Test :
+    `FinancialInvariantsAuditTest::test_the_annual_chart_files_a_row_by_its_month_whatever_annee_its_inscription_carries`.
   - **⚠ « Changement de groupe » may cross an ANNÉE — never a CENTRE**
     (02/09/2026). It is the only write allowed past the année half of the
     guard: a student whose course is interrupted mid-year is moved into

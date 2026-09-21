@@ -1092,6 +1092,7 @@
     "This fee already exists on the registration as a hidden line — restore it instead of adding it again.": "Ce frais existe déjà sur l'inscription en ligne masquée — restaurez-le au lieu de l'ajouter à nouveau.",
     "This advance was funded by a rejected cheque and cannot be applied.": "Cette avance a été financée par un chèque rejeté et ne peut pas être appliquée.",
     "A payment linked to a tracked cheque cannot be deleted.": "Un paiement lié à un chèque suivi ne peut pas être supprimé.",
+    "An allocation of this advance points at a fee whose registration is missing. Fix that row before deleting.": "Une affectation de cette avance pointe un frais dont l'inscription est introuvable. Corrigez cette ligne avant de supprimer.",
     "Assigned to registration :reference": "Attribué à l'inscription :reference",
     "Assignment period updated.": "Période d'affectation mise à jour.",
     "At least one payment line is required.": "Au moins une ligne de paiement est requise.",
@@ -1419,5 +1420,14 @@
     "No completed session over this period": "Aucune séance effectuée sur cette période",
     "Only sessions marked « Effectuée » are paid: a planned or cancelled session taught nothing.": "Seules les séances « Effectuée » sont payées : une séance prévue ou annulée n’a rien enseigné.",
     "Only :count weeks were actually taught over this period — the remaining slots are neither earned nor lost.": "Seules :count semaines ont réellement été enseignées sur cette période — les créneaux restants ne sont ni gagnés, ni perdus.",
-    "No rate set for this group — fill « Amount per student » above, or set it on the group.": "Aucun taux défini pour ce groupe — renseignez « Montant par étudiant » ci-dessus, ou fixez-le sur le groupe."
+    "No rate set for this group — fill « Amount per student » above, or set it on the group.": "Aucun taux défini pour ce groupe — renseignez « Montant par étudiant » ci-dessus, ou fixez-le sur le groupe.",
+    "New calculation": "Nouveau calcul",
+    "New teacher payment calculation": "Nouveau calcul de paiement prof",
+    "Change the period": "Changer la période",
+    "No calculation yet": "Aucun calcul pour le moment",
+    "Select a group": "Sélectionnez un groupe",
+    "Calculate": "Calculer",
+    "Leave empty to use the group rate (:rate MAD).": "Laisser vide pour utiliser le taux du groupe (:rate MAD).",
+    "This group has no rate set — enter one here.": "Ce groupe n’a pas de taux défini — saisissez-le ici.",
+    "A week counts when the student attended at least this many days.": "Une semaine compte dès que l’étudiant a suivi au moins ce nombre de jours."
 }

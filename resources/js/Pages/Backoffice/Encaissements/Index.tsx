@@ -164,6 +164,11 @@ function emptyAvanceForm(): AvanceFormState {
 export default function EncaissementsIndex({ encaissements, montantTotal, caisses, students, groups, frais, methodes, banques, defaultCaisseId, filters, can }: EncaissementsPageProps) {
     const isLoading = useInertiaLoading();
     const [deleteTarget, setDeleteTarget] = useState<EncaissementRow | null>(null);
+    // Outrepassement explicite du seul refus de suppression qui puisse être
+    // défait proprement (une avance dont l'argent est appliqué). Remis à
+    // false à chaque ouverture du modal : une confirmation ne se garde pas
+    // d'une ligne à l'autre.
+    const [detacherApplications, setDetacherApplications] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [deleteError, setDeleteError] = useState<string | undefined>(undefined);
     const [showModal, setShowModal] = useState(false);
@@ -474,13 +479,33 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
             return;
         }
 
+        // Garde d'INTERFACE seulement : le serveur refuse à nouveau dans les
+        // deux cas (SupprimerEncaissement::guard). Elle évite un aller-retour
+        // dont la réponse serait le texte déjà affiché au-dessus du bouton.
+        if (deleteTarget.deleteBlocker) {
+            setDeleteError(deleteTarget.deleteBlocker);
+
+            return;
+        }
+
+        if (deleteTarget.deleteDetacheApplications && !detacherApplications) {
+            setDeleteError('Cochez la confirmation pour détacher les affectations de cette avance.');
+
+            return;
+        }
+
         setDeleting(true);
         setDeleteError(undefined);
 
         router.delete(`/backoffice/encaissements/${deleteTarget.id}`, {
             preserveScroll: true,
+            // L'outrepassement n'est envoyé que depuis une ligne qui le
+            // DEMANDE et après la case cochée : jamais par défaut, jamais
+            // sur une ligne sans application.
+            data: detacherApplications ? { detacher_applications: true } : undefined,
             onSuccess: () => {
                 setDeleteTarget(null);
+                setDetacherApplications(false);
                 setDeleting(false);
             },
             onError: (errors: Record<string, string>) => {
@@ -1530,6 +1555,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                             danger
                                                             onClick={() => {
                                                                 setDeleteError(undefined);
+                                                                setDetacherApplications(false);
                                                                 setDeleteTarget(row);
                                                             }}
                                                         >
@@ -2450,16 +2476,51 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                 ))}
             </datalist>
 
+            {/* Le modal DIT ce que la suppression va défaire avant de
+                l'envoyer. Trois cas, décidés au serveur (`deleteBlocker`,
+                `deleteDetacheApplications`) et jamais redérivés ici :
+                – un refus ferme (chèque suivi, paiement remboursé) : le
+                  bouton reste inerte, la raison est affichée ;
+                – une avance appliquée : supprimable, mais seulement en
+                  détachant ses applications — case à cocher explicite ;
+                – le cas ordinaire : le message d'origine, inchangé. */}
             <ConfirmDialog
                 show={deleteTarget !== null}
                 title="Supprimer cet encaissement ?"
                 recordLabel={deleteTarget?.reference ?? ''}
-                message="Cette action est définitive. Le solde de la caisse sera diminué du montant de ce paiement et le statut du frais recalculé."
+                message={
+                    deleteTarget?.deleteBlocker
+                        ? deleteTarget.deleteBlocker
+                        : deleteTarget?.deleteDetacheApplications
+                          ? `Cette avance a été appliquée à des frais pour ${deleteTarget.applicationsTotal ?? '0.00'} MAD. La supprimer suppose de détacher d'abord ces affectations : les frais concernés redeviendront dus.`
+                          : 'Cette action est définitive. Le solde de la caisse sera diminué du montant de ce paiement et le statut du frais recalculé.'
+                }
                 error={deleteError}
                 processing={deleting}
+                confirmLabel={detacherApplications ? 'Détacher et supprimer' : undefined}
                 onConfirm={confirmDeleteEncaissement}
                 onCancel={() => setDeleteTarget(null)}
-            />
+            >
+                {deleteTarget?.deleteDetacheApplications && !deleteTarget.deleteBlocker && (
+                    <div className="alert alert-warning mb-0">
+                        <div className="form-check mb-0">
+                            <input
+                                className="form-check-input"
+                                type="checkbox"
+                                id="detacher-applications"
+                                checked={detacherApplications}
+                                disabled={deleting}
+                                onChange={(e) => setDetacherApplications(e.target.checked)}
+                            />
+                            <label className="form-check-label" htmlFor="detacher-applications">
+                                Je confirme le détachement des affectations de cette avance. Le
+                                solde de la caisse sera diminué une seule fois, du montant de
+                                l'avance.
+                            </label>
+                        </div>
+                    </div>
+                )}
+            </ConfirmDialog>
         </BackofficeLayout>
     );
 }
