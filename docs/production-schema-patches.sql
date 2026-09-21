@@ -368,24 +368,3 @@ END $$;
 
 CREATE INDEX IF NOT EXISTS depenses_centre_date_idx ON depenses (etablissement_id, date_depense);
 -- ---------------------------------------------------------------------------
-
--- ---------------------------------------------------------------------------
--- 21/09/2026 — groups.montant_par_etudiant_prof / groups.taux_horaire_prof
---
--- Taux de rémunération de l'enseignant POUR CE GROUPE, alimentant le calcul
--- « Paiement prof » (Domain\Payroll). Le taux appartient au GROUPE et non à
--- l'employé : un même enseignant est payé différemment selon le groupe qu'il
--- anime, et un taux porté par `employees` réécrirait le passé de tous ses
--- groupes d'un coup.
---
--- ⚠ Ces colonnes ne sont QU'UN DÉFAUT de formulaire. Le montant réellement
--- payé est FIGÉ sur la dépense (`depenses.montant`) au moment du paiement et
--- n'est jamais relu depuis le groupe, donc corriger un taux ne réécrit aucun
--- paiement déjà enregistré (§11 : append-only).
---
--- Nullables, AUCUN backfill : un groupe sans taux saisi laisse simplement le
--- champ du formulaire vide. Aucun montant, aucun `caisses.solde`, aucune
--- écriture de journal n'est touché.
-ALTER TABLE groups ADD COLUMN IF NOT EXISTS montant_par_etudiant_prof numeric(10,2) NULL;
-ALTER TABLE groups ADD COLUMN IF NOT EXISTS taux_horaire_prof numeric(10,2) NULL;
--- ---------------------------------------------------------------------------
