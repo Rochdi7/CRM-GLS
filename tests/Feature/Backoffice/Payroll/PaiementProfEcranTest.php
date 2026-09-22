@@ -6,8 +6,10 @@ namespace Tests\Feature\Backoffice\Payroll;
 
 use App\Models\AnneeScolaire;
 use App\Models\Depense;
+use App\Models\Employee;
 use App\Models\Etablissement;
 use App\Models\Group;
+use App\Models\GroupEnseignant;
 use App\Models\Presence;
 use App\Models\Seance;
 use App\Models\Student;
@@ -19,11 +21,12 @@ use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
 /**
- * Écran « Calcul paiement prof » — il LIT les appels et propose un montant.
+ * Écran « Calcul paiement prof » — il LIT les appels et propose un montant
+ * pour UN enseignant, selon le mode configuré sur SA fiche.
  *
  * Ce que ces tests protègent avant tout : l'écran n'écrit RIEN. Un calcul de
  * paie qui créerait une dépense au passage contournerait tous les invariants
- * monétaires (§11) — validation, garde de solde, `CaisseLedger`, journal.
+ * monétaires (§11).
  */
 final class PaiementProfEcranTest extends TestCase
 {
@@ -35,6 +38,8 @@ final class PaiementProfEcranTest extends TestCase
 
     private Group $group;
 
+    private Employee $prof;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -45,11 +50,28 @@ final class PaiementProfEcranTest extends TestCase
             'par_defaut' => true, 'inscription_ouverte' => true,
         ]);
         $this->centre = Etablissement::factory()->create();
+
+        // Enseignant en mode GLS à 500 DH / étudiant.
+        $this->prof = Employee::factory()->create([
+            'categorie' => Employee::CATEGORIE_ENSEIGNANT,
+            'etablissement_id' => $this->centre->id,
+            'mode_paiement_prof' => Employee::MODE_PAIEMENT_GLS,
+            'montant_par_etudiant_prof' => 500,
+        ]);
+
+        // Groupe démarré le 1er : ses mois coïncident avec le mois civil.
         $this->group = Group::factory()->create([
             'statut' => Group::STATUT_EN_FORMATION,
             'etablissement_id' => $this->centre->id,
             'annee_scolaire_id' => $this->annee->id,
-            'montant_par_etudiant_prof' => 500,
+            'enseignant_id' => $this->prof->id,
+            'date_debut_formation' => '2025-09-01',
+        ]);
+        GroupEnseignant::create([
+            'group_id' => $this->group->id,
+            'enseignant_id' => $this->prof->id,
+            'date_debut' => '2025-09-01',
+            'statut' => 'Actif',
         ]);
     }
 
@@ -64,25 +86,21 @@ final class PaiementProfEcranTest extends TestCase
         return $user->fresh();
     }
 
-    /** Une séance EFFECTUÉE avec l'appel de chaque étudiant. */
-    private function seance(string $date, array $appels): Seance
+    private function seance(string $date, array $appels, ?int $enseignantId = null): Seance
     {
         $seance = Seance::create([
             'group_id' => $this->group->id,
             'date_seance' => $date,
             'heure_debut' => '18:00',
             'heure_fin' => '20:00',
+            'enseignant_id' => $enseignantId ?? $this->prof->id,
             'etablissement_id' => $this->centre->id,
             'annee_scolaire_id' => $this->annee->id,
             'statut' => Seance::STATUT_EFFECTUEE,
         ]);
 
         foreach ($appels as $studentId => $statut) {
-            Presence::create([
-                'seance_id' => $seance->id,
-                'student_id' => $studentId,
-                'statut' => $statut,
-            ]);
+            Presence::create(['seance_id' => $seance->id, 'student_id' => $studentId, 'statut' => $statut]);
         }
 
         return $seance;
@@ -90,23 +108,28 @@ final class PaiementProfEcranTest extends TestCase
 
     private function student(string $prenom): Student
     {
-        return Student::factory()->create([
-            'etablissement_id' => $this->centre->id,
-            'prenom' => $prenom,
-        ]);
+        return Student::factory()->create(['etablissement_id' => $this->centre->id, 'prenom' => $prenom]);
     }
 
-    /** Quatre semaines pleines (lundi→vendredi), tout le monde présent. */
+    /** 20 séances en septembre, tout le monde présent. */
     private function moisPlein(Student $student): void
     {
         foreach (['2025-09-01', '2025-09-08', '2025-09-15', '2025-09-22'] as $lundi) {
             for ($i = 0; $i < 5; $i++) {
-                $this->seance(
-                    date('Y-m-d', strtotime($lundi.' +'.$i.' day')),
-                    [$student->id => Presence::STATUT_PRESENT],
-                );
+                $this->seance(date('Y-m-d', strtotime($lundi.' +'.$i.' day')), [$student->id => Presence::STATUT_PRESENT]);
             }
         }
+    }
+
+    private function calculer(array $extra = []): \Illuminate\Testing\TestResponse
+    {
+        return $this->actingAs($this->user('prof-payments.calculate'))
+            ->get('/backoffice/paiement-prof?'.http_build_query([
+                'groupFilter' => $this->group->id,
+                'enseignantFilter' => $this->prof->id,
+                'mois' => '2025-09',
+                ...$extra,
+            ]));
     }
 
     /*
@@ -118,135 +141,202 @@ final class PaiementProfEcranTest extends TestCase
     #[Test]
     public function it_refuses_a_user_without_the_permission(): void
     {
-        $this->actingAs($this->user('expenses.view'))
-            ->get('/backoffice/paiement-prof')
-            ->assertForbidden();
+        $this->actingAs($this->user('expenses.view'))->get('/backoffice/paiement-prof')->assertForbidden();
     }
 
     #[Test]
-    public function it_opens_for_a_user_holding_the_permission(): void
+    public function it_opens_empty_for_a_user_holding_the_permission(): void
     {
         $this->actingAs($this->user('prof-payments.calculate'))
             ->get('/backoffice/paiement-prof')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Backoffice/PaiementProf/Index')
-                // Sans groupe ni période, rien n'est calculé : l'écran
-                // n'invente pas une période par défaut.
                 ->where('calcul', null));
     }
 
     /*
     |--------------------------------------------------------------------
-    | Le calcul
+    | Le calcul, mode GLS
     |--------------------------------------------------------------------
     */
 
     #[Test]
-    public function it_computes_the_payment_from_the_recorded_roll_call(): void
+    public function it_computes_from_the_teachers_own_rate_and_the_recorded_roll_call(): void
     {
-        $student = $this->student('Amine');
-        $this->moisPlein($student);
+        $this->moisPlein($this->student('Amine'));
 
-        $this->actingAs($this->user('prof-payments.calculate'))
-            ->get('/backoffice/paiement-prof?'.http_build_query([
-                'groupFilter' => $this->group->id,
-                'dateDebut' => '2025-09-01',
-                'dateFin' => '2025-09-26',
-            ]))
+        $this->calculer()
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                // Présent partout ⇒ l'étudiant vaut exactement le montant.
+                ->where('calcul.enseignant.mode', Employee::MODE_PAIEMENT_GLS)
+                ->where('calcul.enseignant.taux', fn ($v) => (float) $v === 500.0)
+                // Présent partout ⇒ vaut exactement le taux.
                 ->where('calcul.total', fn ($v) => (float) $v === 500.0)
-                ->where('calcul.etudiantsRemunerateurs', 1)
+                ->where('calcul.nombreSeances', 20)
                 ->has('calcul.lignes', 1));
     }
 
     #[Test]
-    public function only_completed_sessions_are_paid(): void
+    public function the_month_window_follows_the_groups_start_day(): void
     {
+        // Groupe démarré le 07/09 : « septembre » = 07/09 → 06/10.
+        $this->group->update(['date_debut_formation' => '2025-09-07']);
+
+        $this->calculer()
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('calcul.periode.debut', '2025-09-07')
+                ->where('calcul.periode.fin', '2025-10-06')
+                ->where('calcul.periode.ancreSurLeGroupe', true));
+    }
+
+    #[Test]
+    public function only_this_teachers_sessions_are_counted(): void
+    {
+        // Un remplaçant a donné 5 des 20 séances : elles ne sont pas à
+        // notre prof, et ne diluent pas sa paie.
+        $remplacant = Employee::factory()->create([
+            'categorie' => Employee::CATEGORIE_ENSEIGNANT,
+            'etablissement_id' => $this->centre->id,
+        ]);
         $student = $this->student('Sara');
 
-        // Une séance PRÉVUE et une ANNULÉE n'ont rien enseigné.
-        foreach (['2025-09-01' => Seance::STATUT_PREVUE, '2025-09-02' => Seance::STATUT_ANNULEE] as $date => $statut) {
-            $seance = Seance::create([
+        foreach (['2025-09-01', '2025-09-08', '2025-09-15'] as $lundi) {
+            for ($i = 0; $i < 5; $i++) {
+                $this->seance(date('Y-m-d', strtotime($lundi.' +'.$i.' day')), [$student->id => Presence::STATUT_PRESENT]);
+            }
+        }
+        for ($i = 0; $i < 5; $i++) {
+            $this->seance(date('Y-m-d', strtotime('2025-09-22 +'.$i.' day')), [$student->id => Presence::STATUT_PRESENT], $remplacant->id);
+        }
+
+        $this->calculer()
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('calcul.nombreSeances', 15)
+                // 15 présences sur 15 séances DU PROF ⇒ le taux entier.
+                ->where('calcul.total', fn ($v) => (float) $v === 500.0));
+    }
+
+    #[Test]
+    public function sessions_without_a_teacher_pay_nobody_and_are_flagged(): void
+    {
+        $student = $this->student('Youssef');
+        $this->moisPlein($student);
+        // Trois séances orphelines de plus, DANS la fenêtre de septembre
+        // (26, 29, 30 — pas le 1er octobre, qui appartient au mois suivant).
+        foreach (['2025-09-26', '2025-09-29', '2025-09-30'] as $date) {
+            Seance::create([
                 'group_id' => $this->group->id,
                 'date_seance' => $date,
+                'enseignant_id' => null,
                 'etablissement_id' => $this->centre->id,
                 'annee_scolaire_id' => $this->annee->id,
-                'statut' => $statut,
-            ]);
-            Presence::create([
-                'seance_id' => $seance->id,
-                'student_id' => $student->id,
-                'statut' => Presence::STATUT_PRESENT,
+                'statut' => Seance::STATUT_EFFECTUEE,
             ]);
         }
 
-        $this->actingAs($this->user('prof-payments.calculate'))
-            ->get('/backoffice/paiement-prof?'.http_build_query([
-                'groupFilter' => $this->group->id,
-                'dateDebut' => '2025-09-01',
-                'dateFin' => '2025-09-26',
-            ]))
+        $this->calculer()
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->where('calcul.nombreSeances', 0)
+                ->where('calcul.seancesSansEnseignant', 3)
+                // Elles n'entrent pas dans le diviseur du prof.
+                ->where('calcul.nombreSeances', 20));
+    }
+
+    /*
+    |--------------------------------------------------------------------
+    | Modes horaire et win-win
+    |--------------------------------------------------------------------
+    */
+
+    #[Test]
+    public function the_hourly_mode_multiplies_the_teachers_rate_by_the_entered_hours(): void
+    {
+        $this->prof->update([
+            'mode_paiement_prof' => Employee::MODE_PAIEMENT_HORAIRE,
+            'taux_horaire_prof' => 80,
+            'montant_par_etudiant_prof' => null,
+        ]);
+        $this->moisPlein($this->student('Nadia'));
+
+        $this->calculer(['heures' => '12.5'])
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('calcul.enseignant.mode', Employee::MODE_PAIEMENT_HORAIRE)
+                ->where('calcul.heuresSaisies', fn ($v) => (float) $v === 12.5)
+                ->where('calcul.total', fn ($v) => (float) $v === 1000.0)
+                // Pas de lignes par étudiant en mode horaire.
+                ->has('calcul.lignes', 0));
+    }
+
+    #[Test]
+    public function the_win_win_mode_reads_the_amount_of_the_requested_month(): void
+    {
+        $this->prof->update(['mode_paiement_prof' => Employee::MODE_PAIEMENT_WIN_WIN, 'montant_par_etudiant_prof' => null]);
+        $this->prof->tauxMensuels()->create(['mois' => '2025-09-01', 'montant_par_etudiant' => 400]);
+        $this->prof->tauxMensuels()->create(['mois' => '2025-10-01', 'montant_par_etudiant' => 450]);
+        $this->moisPlein($this->student('Karim'));
+
+        $this->calculer()
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('calcul.enseignant.mode', Employee::MODE_PAIEMENT_WIN_WIN)
+                // Septembre = 400, pas 450 ni le taux GLS.
+                ->where('calcul.enseignant.taux', fn ($v) => (float) $v === 400.0)
+                ->where('calcul.total', fn ($v) => (float) $v === 400.0));
+    }
+
+    #[Test]
+    public function the_win_win_mode_refuses_a_month_that_was_never_entered(): void
+    {
+        $this->prof->update(['mode_paiement_prof' => Employee::MODE_PAIEMENT_WIN_WIN, 'montant_par_etudiant_prof' => null]);
+        $this->prof->tauxMensuels()->create(['mois' => '2025-10-01', 'montant_par_etudiant' => 450]);
+        $this->moisPlein($this->student('Lina'));
+
+        // Septembre n'est pas saisi : on ne prend PAS octobre à la place.
+        $this->calculer()
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('calcul.enseignant.taux', fn ($v) => (float) $v === 0.0)
+                ->where('calcul.enseignant.probleme', fn ($v) => is_string($v) && $v !== '')
                 ->where('calcul.total', fn ($v) => (float) $v === 0.0));
     }
 
     #[Test]
-    public function retard_and_justifie_neither_earn_nor_cost(): void
+    public function a_teacher_without_a_pay_mode_is_refused_with_a_named_problem(): void
     {
-        // Règle propre au CRM (21/09/2026) : seul « Présent » rémunère ;
-        // « Retard » et « Justifié » sont ÉCARTÉS du calcul. Une semaine de
-        // 3 Présent + 2 Retard qualifie donc comme 3 Présent seuls.
-        $student = $this->student('Youssef');
+        $this->prof->update(['mode_paiement_prof' => null, 'montant_par_etudiant_prof' => null]);
+        $this->moisPlein($this->student('Omar'));
 
-        foreach (['2025-09-01', '2025-09-08', '2025-09-15', '2025-09-22'] as $lundi) {
-            foreach ([0, 1, 2] as $i) {
-                $this->seance(
-                    date('Y-m-d', strtotime($lundi.' +'.$i.' day')),
-                    [$student->id => Presence::STATUT_PRESENT],
-                );
-            }
-            foreach ([3, 4] as $i) {
-                $this->seance(
-                    date('Y-m-d', strtotime($lundi.' +'.$i.' day')),
-                    [$student->id => $i === 3 ? Presence::STATUT_RETARD : Presence::STATUT_JUSTIFIE],
-                );
-            }
-        }
-
-        $this->actingAs($this->user('prof-payments.calculate'))
-            ->get('/backoffice/paiement-prof?'.http_build_query([
-                'groupFilter' => $this->group->id,
-                'dateDebut' => '2025-09-01',
-                'dateFin' => '2025-09-26',
-            ]))
+        $this->calculer()
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                // 3 « Présent » par semaine = le seuil : les 4 semaines
-                // qualifient malgré les Retard/Justifié.
-                ->where('calcul.total', fn ($v) => (float) $v === 500.0)
-                ->where('calcul.lignes.0.joursIgnores', 8));
+                ->where('calcul.enseignant.probleme', fn ($v) => is_string($v) && str_contains($v, 'Paiement prof'))
+                ->where('calcul.total', fn ($v) => (float) $v === 0.0));
     }
 
+    /*
+    |--------------------------------------------------------------------
+    | L'endpoint d'options du modal
+    |--------------------------------------------------------------------
+    */
+
     #[Test]
-    public function the_amount_per_student_can_be_overridden_on_the_screen(): void
+    public function the_group_options_endpoint_lists_teachers_months_and_orphan_sessions(): void
     {
-        $student = $this->student('Nadia');
-        $this->moisPlein($student);
+        $this->group->update(['date_debut_formation' => '2025-09-07']);
+        $this->moisPlein($this->student('Yasmine'));
 
         $this->actingAs($this->user('prof-payments.calculate'))
-            ->get('/backoffice/paiement-prof?'.http_build_query([
-                'groupFilter' => $this->group->id,
-                'dateDebut' => '2025-09-01',
-                'dateFin' => '2025-09-26',
-                'montantParEtudiant' => '800',
-            ]))
+            ->getJson("/backoffice/paiement-prof/groupes/{$this->group->id}/options?mois=2025-09")
             ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page->where('calcul.total', fn ($v) => (float) $v === 800.0));
+            ->assertJsonPath('fenetre.debut', '2025-09-07')
+            ->assertJsonPath('fenetre.fin', '2025-10-06')
+            ->assertJsonPath('enseignantParDefaut', $this->prof->id)
+            ->assertJsonPath('enseignants.0.mode', Employee::MODE_PAIEMENT_GLS)
+            ->assertJsonPath('seancesSansEnseignant', 0);
     }
 
     /*
@@ -258,30 +348,20 @@ final class PaiementProfEcranTest extends TestCase
     #[Test]
     public function computing_a_payment_never_creates_an_expense(): void
     {
-        // ⚠ L'invariant central : un calcul n'est pas un paiement. La dépense
-        // reste une soumission relue par l'opérateur, qui passe par
-        // EnregistrerDepense avec toutes ses gardes (§11).
-        $student = $this->student('Karim');
-        $this->moisPlein($student);
+        $this->moisPlein($this->student('Karim'));
 
-        $this->actingAs($this->user('prof-payments.calculate'))
-            ->get('/backoffice/paiement-prof?'.http_build_query([
-                'groupFilter' => $this->group->id,
-                'dateDebut' => '2025-09-01',
-                'dateFin' => '2025-09-26',
-            ]))
-            ->assertOk();
+        $this->calculer()->assertOk();
 
         $this->assertSame(0, Depense::count());
     }
 
     #[Test]
-    public function the_screen_is_read_only_and_exposes_no_write_route(): void
+    public function the_screen_exposes_no_write_route(): void
     {
-        $user = $this->user('prof-payments.calculate', 'expenses.create');
+        $this->actingAs($this->user('prof-payments.calculate', 'expenses.create'))
+            ->post('/backoffice/paiement-prof')
+            ->assertStatus(405);
 
-        // Aucune route d'écriture : l'écran est un GET, et rien d'autre.
-        $this->actingAs($user)->post('/backoffice/paiement-prof')->assertStatus(405);
         $this->assertSame(0, Depense::count());
     }
 
@@ -301,16 +381,13 @@ final class PaiementProfEcranTest extends TestCase
             'annee_scolaire_id' => $this->annee->id,
         ]);
 
-        $user = $this->user('prof-payments.calculate');
-        // Contexte actif = le centre du groupe de ce test.
-        $this->actingAs($user)->withSession(['context.etablissement_id' => $this->centre->id])
+        $this->actingAs($this->user('prof-payments.calculate'))
+            ->withSession(['context.etablissement_id' => $this->centre->id])
             ->get('/backoffice/paiement-prof?'.http_build_query([
                 'groupFilter' => $autreGroupe->id,
-                'dateDebut' => '2025-09-01',
-                'dateFin' => '2025-09-26',
+                'enseignantFilter' => $this->prof->id,
+                'mois' => '2025-09',
             ]))
-            // Un id venu de la query string est revérifié côté serveur : il
-            // ne doit jamais ouvrir un groupe hors du contexte actif.
             ->assertSessionHasErrors('groupFilter');
     }
 }

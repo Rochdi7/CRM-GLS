@@ -44,7 +44,7 @@ final class GetEmployeesList
         $employees = Employee::query()
             // `media` eager-loaded for the avatar column, `user` for the
             // "Voir le compte" action (avoids N+1 on both).
-            ->with(['etablissement', 'etablissements', 'media', 'user'])
+            ->with(['etablissement', 'etablissements', 'media', 'user', 'tauxMensuels'])
             // Center scoping matches on ANY assigned center (pivot), not just
             // the primary column — an employee working in Marrakech + Rabat
             // is visible to admins of BOTH centers.
@@ -112,6 +112,15 @@ final class GetEmployeesList
             'dateNaissance' => $employee->date_naissance?->toDateString(),
             'dateEmbauche' => $employee->date_embauche?->toDateString(),
             'salaire' => $employee->salaire !== null ? (string) $employee->salaire : null,
+            // Onglet « Paiement prof » (22/09/2026) — chargé en lot via
+            // with('tauxMensuels'), jamais une requête par ligne.
+            'modePaiementProf' => $employee->mode_paiement_prof,
+            'tauxHoraireProf' => $employee->taux_horaire_prof !== null ? (string) $employee->taux_horaire_prof : null,
+            'montantParEtudiantProf' => $employee->montant_par_etudiant_prof !== null ? (string) $employee->montant_par_etudiant_prof : null,
+            'tauxMensuels' => $employee->tauxMensuels->map(fn ($t) => [
+                'mois' => $t->mois->format('Y-m'),
+                'montant_par_etudiant' => (string) $t->montant_par_etudiant,
+            ])->values()->all(),
             'etablissementId' => $employee->etablissement_id,
             'etablissement' => $employee->etablissement?->nom_centre,
             'etablissementIds' => $employee->etablissements->pluck('id')->all(),

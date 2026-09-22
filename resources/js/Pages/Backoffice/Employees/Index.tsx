@@ -23,7 +23,9 @@ import SexeIcon from '@/Components/Details/SexeIcon';
 import { splitPhone } from '@/Data/countries';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { useFilterReset } from '@/Hooks/useFilterReset';
-import type { EmployeeRow, EmployeesPageProps, SelectOption } from '@/Types';
+import { t } from '@/Lib/i18n';
+import PaiementProfTab from '@/Components/Employees/PaiementProfTab';
+import type { EmployeeRow, EmployeesPageProps, SelectOption, TauxMensuelRow } from '@/Types';
 
 interface EmployeeFormState {
     nom: string;
@@ -51,6 +53,11 @@ interface EmployeeFormState {
      */
     etablissement_principal_id: string;
     username: string;
+    /** Onglet « Paiement prof » — vide pour un non-enseignant. */
+    mode_paiement_prof: '' | 'horaire' | 'gls' | 'win_win';
+    taux_horaire_prof: string;
+    montant_par_etudiant_prof: string;
+    taux_mensuels: TauxMensuelRow[];
 }
 
 function emptyForm(defaultCountry: string, contextCenterId: number | null): EmployeeFormState {
@@ -73,6 +80,10 @@ function emptyForm(defaultCountry: string, contextCenterId: number | null): Empl
         etablissement_ids: contextCenterId ? [contextCenterId] : [],
         etablissement_principal_id: contextCenterId ? String(contextCenterId) : '',
         username: '',
+        mode_paiement_prof: '',
+        taux_horaire_prof: '',
+        montant_par_etudiant_prof: '',
+        taux_mensuels: [],
     };
 }
 
@@ -102,6 +113,9 @@ export default function EmployeesIndex({
     const isLoading = useInertiaLoading();
 
     const [showModal, setShowModal] = useState(false);
+    // Onglet ouvert dans le modal — « Fiche » ou « Paiement prof ». Repart
+    // toujours sur la fiche à l'ouverture.
+    const [modalTab, setModalTab] = useState<'fiche' | 'paiement'>('fiche');
     const [editingEmployee, setEditingEmployee] = useState<EmployeeRow | null>(null);
     const [existingPhotoUrl, setExistingPhotoUrl] = useState<string | null>(null);
     const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -117,6 +131,8 @@ export default function EmployeesIndex({
     const [regenerating, setRegenerating] = useState(false);
 
     const form = useForm<EmployeeFormState>(emptyForm(defaultCountry, contextCenterId));
+    // L onglet « Paiement prof » ne vaut que pour un enseignant.
+    const estEnseignant = form.data.categorie === 'Enseignant';
 
     // Surface the one-time credentials exactly once, driven off the shared
     // flash prop (not a sentinel form-state id like the Livewire original's
@@ -156,6 +172,7 @@ export default function EmployeesIndex({
     const filterReset = useFilterReset(filters, reload, { perPage: filters.perPage });
 
     function openCreate() {
+        setModalTab('fiche');
         setEditingEmployee(null);
         setCredentials(null);
         setExistingPhotoUrl(null);
@@ -167,6 +184,7 @@ export default function EmployeesIndex({
     }
 
     function openEdit(employee: EmployeeRow) {
+        setModalTab('fiche');
         setEditingEmployee(employee);
         setCredentials(null);
         setExistingPhotoUrl(employee.photoUrl);
@@ -198,6 +216,10 @@ export default function EmployeesIndex({
             etablissement_principal_id: employee.etablissementId
                 ? String(employee.etablissementId)
                 : '',
+            mode_paiement_prof: employee.modePaiementProf ?? '',
+            taux_horaire_prof: employee.tauxHoraireProf ?? '',
+            montant_par_etudiant_prof: employee.montantParEtudiantProf ?? '',
+            taux_mensuels: employee.tauxMensuels ?? [],
         });
         setShowModal(true);
     }
@@ -519,7 +541,42 @@ export default function EmployeesIndex({
                     </div>
                 ) : (
                     <form onSubmit={submit}>
+                        {/* L'onglet « Paiement prof » n'a de sens que pour un
+                            ENSEIGNANT : il n'apparaît que pour cette catégorie,
+                            et se referme si on change de catégorie. */}
+                        {estEnseignant && (
+                            <ul className="nav nav-tabs p-0 border-bottom rounded-0 mb-4" role="tablist">
+                                <li className="nav-item" role="presentation">
+                                    <button
+                                        type="button"
+                                        className={`nav-link d-inline-flex align-items-center${modalTab === 'fiche' ? ' active' : ''}`}
+                                        onClick={() => setModalTab('fiche')}
+                                        role="tab"
+                                        aria-selected={modalTab === 'fiche'}
+                                    >
+                                        <i className="ti ti-user me-1" />
+                                        {t('Record')}
+                                    </button>
+                                </li>
+                                <li className="nav-item" role="presentation">
+                                    <button
+                                        type="button"
+                                        className={`nav-link d-inline-flex align-items-center${modalTab === 'paiement' ? ' active' : ''}`}
+                                        onClick={() => setModalTab('paiement')}
+                                        role="tab"
+                                        aria-selected={modalTab === 'paiement'}
+                                    >
+                                        <i className="ti ti-cash me-1" />
+                                        {t('Teacher payment')}
+                                        {form.data.mode_paiement_prof === '' && (
+                                            <span className="badge badge-soft-warning ms-2">{t('to set')}</span>
+                                        )}
+                                    </button>
+                                </li>
+                            </ul>
+                        )}
 
+                        <div className={estEnseignant && modalTab === 'paiement' ? 'd-none' : ''}>
                         <div className="d-flex align-items-center mb-4">
                             <span className="avatar avatar-xl rounded-circle bg-light me-3 overflow-hidden d-inline-flex align-items-center justify-content-center">
                                 {photoPreview ? (
@@ -810,6 +867,23 @@ export default function EmployeesIndex({
                                 <i className="ti ti-info-circle me-1" />
                                 Un compte de connexion sera créé automatiquement pour cet employé.
                             </p>
+                        )}
+                        </div>
+
+                        {estEnseignant && (
+                            <div className={modalTab === 'paiement' ? '' : 'd-none'}>
+                                <PaiementProfTab
+                                    mode={form.data.mode_paiement_prof}
+                                    tauxHoraire={form.data.taux_horaire_prof}
+                                    montantParEtudiant={form.data.montant_par_etudiant_prof}
+                                    tauxMensuels={form.data.taux_mensuels}
+                                    errors={form.errors as Record<string, string | undefined>}
+                                    onModeChange={(mode) => form.setData('mode_paiement_prof', mode)}
+                                    onTauxHoraireChange={(value) => form.setData('taux_horaire_prof', value)}
+                                    onMontantChange={(value) => form.setData('montant_par_etudiant_prof', value)}
+                                    onTauxMensuelsChange={(rows) => form.setData('taux_mensuels', rows)}
+                                />
+                            </div>
                         )}
 
                         <div className="d-flex justify-content-end gap-2 mt-4">

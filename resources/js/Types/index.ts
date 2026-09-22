@@ -1112,6 +1112,12 @@ export interface SyncUserAuthorizationForm {
 // --- Phase 7: Employees (Inertia/React list + modal CRUD) -------------------
 
 /** One row of the Employees list — mirrors GetEmployeesList's ->through() mapping exactly. */
+/** Une ligne du tableau win-win : « YYYY-MM » → montant par étudiant. */
+export interface TauxMensuelRow {
+    mois: string;
+    montant_par_etudiant: string;
+}
+
 export interface EmployeeRow {
     id: number;
     reference: string;
@@ -1129,6 +1135,12 @@ export interface EmployeeRow {
     dateNaissance: string | null;
     dateEmbauche: string | null;
     salaire: MoneyDisplay | null;
+    /** Onglet « Paiement prof » — enseignants seulement (22/09/2026). */
+    modePaiementProf: 'horaire' | 'gls' | 'win_win' | null;
+    tauxHoraireProf: MoneyDisplay | null;
+    montantParEtudiantProf: MoneyDisplay | null;
+    /** Montants win-win, un par mois (« YYYY-MM »). */
+    tauxMensuels: TauxMensuelRow[];
     /** Primary center — where the employee is based and its Caisse lives.
      *  Chosen explicitly on the form (« Centre principal »); defaults to the
      *  first assigned center. Always one of `etablissementIds`. */
@@ -2404,70 +2416,92 @@ export interface EcheancesEnMassePageProps {
 export interface PaiementProfLigne {
     studentId: number;
     nom: string;
+    /** Présences — la SEULE donnée qui paie. */
     joursRetenus: number;
     joursAbsents: number;
-    /** Retard / Justifié — écartés du calcul, ni pour ni contre. */
+    /** « Retard » / « Justifié » hérités de l'ancien import — ne rapportent rien. */
     joursIgnores: number;
-    /** Bucket 1..4 → jours retenus. */
-    joursParSemaine: Record<number, number>;
-    /**
-     * Bucket 1..4 → montant calculé. `null` = semaine JAMAIS ENSEIGNÉE
-     * (aucun jour de cours) : ni gagnée, ni perdue — à ne pas peindre
-     * comme une semaine ratée.
-     */
-    montantsParSemaine: Record<number, number | null>;
     montantAuto: number;
     montantAjuste: number | null;
     montantEffectif: number;
-    qualifie: boolean;
 }
 
 export interface PaiementProfCalcul {
     lignes: PaiementProfLigne[];
     total: number;
     montantParEtudiant: number;
-    /** Part d'UNE semaine qualifiée (montant ÷ semaines réellement enseignées). */
-    montantSemaine: number;
-    seuil: number;
+    /** taux ÷ séances rémunérées — ce que vaut UNE présence. */
+    montantParSeance: number;
+    /** Séances réellement effectuées sur la période. */
+    nombreSeances: number;
+    /** Diviseur retenu : le réel, plafonné à 22. */
+    seancesRemunerees: number;
     nombreJoursDeCours: number;
-    semainesQualifiees: number;
     etudiantsRemunerateurs: number;
-    /** Semaine ISO (« GGGG-WW ») → bucket 1..4. */
-    decoupageSemaines: Record<string, number>;
-    /** Les seuls buckets ayant reçu des cours — les autres n'existent pas. */
-    bucketsOccupes: number[];
-    group: {
+    group: { id: number; nom: string; niveau: string };
+    /** L'enseignant payé, avec SON mode et SON taux — et le problème nommé s'il en manque un. */
+    enseignant: {
         id: number;
         nom: string;
-        niveau: string;
-        enseignantNom: string | null;
-        montantParEtudiantDefaut: number | null;
-        tauxHoraireDefaut: number | null;
+        mode: PaiementProfMode | '';
+        taux: number;
+        probleme: string | null;
     };
-    periode: { debut: string; fin: string };
+    /** « YYYY-MM » demandé. */
+    mois: string;
+    periode: { debut: string; fin: string; libelle: string; ancreSurLeGroupe: boolean };
+    /** Séances EFFECTUÉES du mois sans enseignant_id — à corriger, elles ne paient personne. */
+    seancesSansEnseignant: number;
     datesDeCours: string[];
     /** student_id → { 'YYYY-MM-DD': statut } — la grille d'appel brute. */
     grille: Record<number, Record<string, string>>;
+    /** Heures dérivées des séances effectuées (aide à la saisie, mode horaire). */
     heuresEffectuees: number;
+    /** Heures RETENUES (saisies, sinon effectuées) — mode horaire seulement. */
+    heuresSaisies: number | null;
     totalHoraire: number | null;
-    nombreSeances: number;
+}
+
+export type PaiementProfMode = 'horaire' | 'gls' | 'win_win';
+
+/** Un enseignant proposé dans le modal, avec ce que le calcul saura de lui. */
+export interface PaiementProfEnseignantOption {
+    value: number;
+    label: string;
+    /** Séances qu'il a réellement données sur le mois choisi. */
+    seancesCeMois: number;
+    mode: PaiementProfMode | '';
+    taux: number;
+    probleme: string | null;
+}
+
+/** Réponse de `paiement-prof/groupes/{group}/options`. */
+export interface PaiementProfGroupOptions {
+    moisOptions: { value: string; label: string }[];
+    mois: string;
+    fenetre: { debut: string; fin: string; libelle: string; ancreSurLeGroupe: boolean };
+    enseignants: PaiementProfEnseignantOption[];
+    enseignantParDefaut: number | null;
+    seancesSansEnseignant: number;
 }
 
 export interface PaiementProfFilters {
     groupFilter: string;
-    dateDebut: string;
-    dateFin: string;
-    montantParEtudiant: string;
-    seuil: string;
+    enseignantFilter: string;
+    /** « YYYY-MM ». */
+    mois: string;
+    /** Heures saisies — mode horaire seulement. */
+    heures: string;
 }
 
 export interface PaiementProfPageProps {
-    /** `null` tant qu'un groupe et une période n'ont pas été choisis. */
+    /** `null` tant qu'un groupe, un enseignant et un mois n'ont pas été choisis. */
     calcul: PaiementProfCalcul | null;
     filters: PaiementProfFilters;
     groupOptions: SelectOption[];
-    seuilParDefaut: number;
-    pourcentageHebdo: number;
+    /** Plafond metier : un mois compte 22 seances au maximum. */
+    seancesMaxParMois: number;
+    modes: PaiementProfMode[];
     paiementProfTypeId: number | null;
     canCreateDepense: boolean;
     [key: string]: unknown;

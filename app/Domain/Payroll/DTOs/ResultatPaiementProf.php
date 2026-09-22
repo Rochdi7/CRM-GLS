@@ -8,6 +8,9 @@ namespace App\Domain\Payroll\DTOs;
  * Résultat complet d'un calcul « Paiement prof » : le total, et TOUT ce qui
  * permet de le refaire à la main.
  *
+ *     montant par séance = taux ÷ séances rémunérées (plafond 22)
+ *     montant étudiant   = montant par séance × ses présences
+ *
  * ⚠ Ce total n'est pas un paiement. Rien n'est écrit, aucune caisse n'est
  * touchée : c'est une proposition de montant que l'utilisateur relit avant
  * d'enregistrer la dépense par le chemin ordinaire (§11).
@@ -16,20 +19,17 @@ final readonly class ResultatPaiementProf
 {
     /**
      * @param  list<LignePaiementProf>  $lignes
-     * @param  array<string, int>       $decoupageSemaines  semaine ISO => bucket 1..4
-     * @param  list<int>                $bucketsOccupes     semaines ayant reçu des cours
+     * @param  int  $nombreSeances      séances réellement effectuées
+     * @param  int  $seancesRemunerees  diviseur retenu (le réel, plafonné à 22)
      */
     public function __construct(
         public array $lignes,
         public float $total,
         public float $montantParEtudiant,
-        public float $montantSemaine,
-        public int $seuil,
-        public int $nombreJoursDeCours,
-        public int $semainesQualifiees,
+        public float $montantParSeance,
+        public int $nombreSeances,
+        public int $seancesRemunerees,
         public int $etudiantsRemunerateurs,
-        public array $decoupageSemaines,
-        public array $bucketsOccupes = [],
     ) {}
 
     /** @return array<string, mixed> */
@@ -39,13 +39,10 @@ final readonly class ResultatPaiementProf
             'lignes' => array_map(static fn (LignePaiementProf $l): array => $l->toArray(), $this->lignes),
             'total' => $this->total,
             'montantParEtudiant' => $this->montantParEtudiant,
-            'montantSemaine' => $this->montantSemaine,
-            'seuil' => $this->seuil,
-            'nombreJoursDeCours' => $this->nombreJoursDeCours,
-            'semainesQualifiees' => $this->semainesQualifiees,
+            'montantParSeance' => $this->montantParSeance,
+            'nombreSeances' => $this->nombreSeances,
+            'seancesRemunerees' => $this->seancesRemunerees,
             'etudiantsRemunerateurs' => $this->etudiantsRemunerateurs,
-            'decoupageSemaines' => $this->decoupageSemaines,
-            'bucketsOccupes' => $this->bucketsOccupes,
         ];
     }
 }

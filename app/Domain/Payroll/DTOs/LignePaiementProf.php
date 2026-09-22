@@ -15,11 +15,9 @@ namespace App\Domain\Payroll\DTOs;
 final readonly class LignePaiementProf
 {
     /**
-     * @param  array<int, int>         $joursParSemaine    bucket 1..4 => jours retenus
-     * @param  array<int, float|null>  $montantsParSemaine bucket 1..4 => montant calculé,
-     *                                                     NULL si la semaine n'a reçu aucun
-     *                                                     jour de cours (ni gagnée, ni perdue)
-     * @param  float|null              $montantAjuste      ajustement manuel, s'il y en a un
+     * @param  int         $joursRetenus  présences — la SEULE donnée qui paie
+     * @param  int         $joursIgnores  « Retard » / « Justifié » hérités, ne rapportent rien
+     * @param  float|null  $montantAjuste ajustement manuel, s'il y en a un
      */
     public function __construct(
         public int $studentId,
@@ -27,12 +25,9 @@ final readonly class LignePaiementProf
         public int $joursRetenus,
         public int $joursAbsents,
         public int $joursIgnores,
-        public array $joursParSemaine,
-        public array $montantsParSemaine,
         public float $montantAuto,
         public ?float $montantAjuste,
         public float $montantEffectif,
-        public bool $qualifie,
     ) {}
 
     /** @return array<string, mixed> */
@@ -44,12 +39,9 @@ final readonly class LignePaiementProf
             'joursRetenus' => $this->joursRetenus,
             'joursAbsents' => $this->joursAbsents,
             'joursIgnores' => $this->joursIgnores,
-            'joursParSemaine' => $this->joursParSemaine,
-            'montantsParSemaine' => $this->montantsParSemaine,
             'montantAuto' => $this->montantAuto,
             'montantAjuste' => $this->montantAjuste,
             'montantEffectif' => $this->montantEffectif,
-            'qualifie' => $this->qualifie,
         ];
     }
 }

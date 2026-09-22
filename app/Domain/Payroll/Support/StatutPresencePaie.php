@@ -9,19 +9,22 @@ use App\Models\Presence;
 /**
  * Comment un statut d'appel est lu PAR LA PAIE.
  *
- * ⚠ Le CRM enregistre QUATRE statuts (Présent / Absent / Retard / Justifié)
- * là où le portail GLS n'en connaissait que deux. La règle de paie, décidée
- * le 21/09/2026, est volontairement BINAIRE et ne retient que « Présent » :
+ * ⚠ Règle arrêtée le 22/09/2026 : **seul « Présent » rémunère**. Tout le
+ * reste — « Absent », et les rares « Retard » / « Justifié » — ne rapporte
+ * rien.
  *
- *   - « Présent »  → compte comme jour retenu ;
- *   - « Absent »   → compte comme jour NON retenu ;
- *   - « Retard » et « Justifié » → IGNORÉS, ni pour ni contre.
+ * C'est volontairement BINAIRE. La saisie d'appel n'offre d'ailleurs que
+ * deux boutons (Présent / Absent, voir `Seances/Show.tsx`) : « Retard » et
+ * « Justifié » restent des valeurs valides en base uniquement pour les
+ * quelques lignes héritées de l'ancien import (14 « Retard » au 22/09/2026,
+ * aucun « Justifié ») — personne ne peut plus en créer. Elles sont donc
+ * lues comme des absences plutôt que de recevoir un traitement à part que
+ * plus aucun écran n'alimente.
  *
- * « Ignoré » ne veut PAS dire « absent ». La ligne est retirée du calcul
- * comme si l'étudiant n'avait pas été appelé ce jour-là : elle ne compte pas
- * vers le seuil hebdomadaire, mais ne compte pas non plus CONTRE lui. Une
- * semaine de 3 « Présent » + 2 « Retard » qualifie donc exactement comme une
- * semaine de 3 « Présent » seuls.
+ * ⚠ Ne JAMAIS supprimer les constantes `STATUT_RETARD` / `STATUT_JUSTIFIE`
+ * du modèle : des lignes réelles les portent, et `Presence::STATUTS` sert à
+ * la validation. « Retirer du système » veut dire « ne plus en produire et
+ * ne plus les compter », pas « effacer l'historique ».
  *
  * C'est la SEULE définition de cette lecture : le calculateur et le
  * read-model qui peint la grille la partagent, sinon l'écran colorierait des
@@ -37,24 +40,15 @@ final class StatutPresencePaie
     }
 
     /**
-     * Le statut est-il écarté du calcul (ni pour, ni contre) ?
+     * Statut hérité que plus aucune saisie ne produit.
      *
-     * Une ligne ignorée n'entre pas non plus dans le dénominateur : le jour
-     * se lit comme un jour sans appel pour CET étudiant.
+     * Conservé pour que la GRILLE puisse le peindre distinctement (il n'est
+     * pas une absence saisie comme telle), mais il ne rapporte rien : côté
+     * argent, `estRetenu()` est la seule question posée.
      */
-    public static function estIgnore(?string $statut): bool
+    public static function estHerite(?string $statut): bool
     {
         return $statut === Presence::STATUT_RETARD
             || $statut === Presence::STATUT_JUSTIFIE;
-    }
-
-    /**
-     * Statuts effectivement pris en compte par une requête de paie.
-     *
-     * @return list<string>
-     */
-    public static function statutsComptes(): array
-    {
-        return [Presence::STATUT_PRESENT, Presence::STATUT_ABSENT];
     }
 }

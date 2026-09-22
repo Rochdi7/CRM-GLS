@@ -4,40 +4,33 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
-use App\Domain\Payroll\Actions\CalculerPaiementProfHebdomadaire;
+use App\Domain\Payroll\Actions\CalculerPaiementProfParSeance;
 use App\Domain\Payroll\Queries\GetPaiementProfCalcul;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Controllers\Controller;
+use App\Models\Employee;
 use App\Models\Group;
 use App\Models\TypeDepense;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 /**
  * « Calcul paiement prof » — dérive, depuis les appels DÉJÀ SAISIS, le
- * montant dû à un enseignant pour un groupe sur une période.
- *
- * Portage de la logique du portail GLS (`ProfPaymentCalculationService`),
- * avec UNE différence de fond : le portail lisait un instantané importé
- * (Excel / API) et devait donc le stocker dans des tables d'import. Ici la
- * donnée nous appartient (`presences` → `seances`), donc **aucune table
- * d'import n'existe** : l'écran calcule à la lecture, à partir de la source
- * de vérité. Recalculer après un appel corrigé donne aussitôt le bon montant,
- * sans ré-importer quoi que ce soit.
+ * montant dû à UN enseignant pour UN groupe sur UN mois de groupe, selon le
+ * mode de paie configuré sur sa fiche (onglet « Paiement prof »).
  *
  * ⚠ **Cet écran n'écrit RIEN et ne touche AUCUNE caisse.** Il propose un
- * montant. Le paiement reste une dépense « Paiement prof » ordinaire,
- * enregistrée par l'utilisateur depuis le modal habituel — avec tous les
- * invariants monétaires que cela emporte (validation, garde de solde,
- * `CaisseLedger`, journal, §11). Le passage de l'un à l'autre se fait par la
- * query string (`prefill_*`), exactement comme le lien « rembourser » d'un
- * chèque rejeté : rien n'est créé automatiquement, l'opérateur relit et
- * soumet.
+ * montant ; le paiement reste une dépense « Paiement prof » ordinaire,
+ * enregistrée depuis le modal habituel (`prefill_*`), avec tous ses
+ * invariants (§11). Un calcul n'est pas un paiement.
  *
- * Volontairement absent de la barre latérale, comme « Échéances en masse » :
- * c'est un outil, pas une rubrique — ce qui ne change rien à sa protection,
- * décidée par la permission côté serveur (§5, `prof-payments.calculate`).
+ * `groupOptions()` est un endpoint JSON appelé par le modal dès qu'un groupe
+ * est choisi : il rend les mois, les enseignants (avec leur mode et un
+ * éventuel problème de configuration NOMMÉ) et les séances sans prof à
+ * corriger — de sorte que le modal ne propose jamais un calcul que le
+ * serveur refuserait ensuite.
  */
 final class PaiementProfController extends Controller
 {
@@ -50,34 +43,34 @@ final class PaiementProfController extends Controller
         abort_unless($user->can('prof-payments.calculate'), 403);
 
         $groupFilter = (string) $request->string('groupFilter');
-        $dateDebut = (string) $request->string('dateDebut');
-        $dateFin = (string) $request->string('dateFin');
-        $montantFilter = (string) $request->string('montantParEtudiant');
-        $seuilFilter = (string) $request->string('seuil');
+        $enseignantFilter = (string) $request->string('enseignantFilter');
+        $mois = (string) $request->string('mois');
+        $heuresFilter = (string) $request->string('heures');
 
-        $groupId = $groupFilter !== '' ? (int) $groupFilter : null;
-
-        $calcul = null;
         $group = null;
+        $enseignant = null;
+        $calcul = null;
 
-        if ($groupId !== null) {
-            $group = Group::query()->with('enseignant')->find($groupId);
+        if ($groupFilter !== '') {
+            $group = Group::query()->with('enseignant')->find((int) $groupFilter);
 
             if ($group !== null) {
-                // Portée revérifiée ici et pas seulement dans le read-model :
-                // l'id vient de la query string, donc du navigateur (§11 —
-                // une garde de lecture se rejoue là où l'id entre).
+                // L'id vient de la query string, donc du navigateur : la
+                // portée se rejoue là où il entre (§11).
                 $this->assertGroupInContext($request, $group, 'groupFilter');
             }
         }
 
-        if ($group !== null && $dateDebut !== '' && $dateFin !== '') {
+        if ($group !== null && $enseignantFilter !== '') {
+            $enseignant = Employee::query()->find((int) $enseignantFilter);
+        }
+
+        if ($group !== null && $enseignant !== null && $mois !== '') {
             $calcul = $query(
                 group: $group,
-                dateDebut: $dateDebut,
-                dateFin: $dateFin,
-                montantParEtudiant: $montantFilter !== '' ? (float) $montantFilter : null,
-                seuil: $seuilFilter !== '' ? (int) $seuilFilter : null,
+                enseignant: $enseignant,
+                mois: $mois,
+                heures: $heuresFilter !== '' ? (float) $heuresFilter : null,
             );
         }
 
@@ -85,26 +78,32 @@ final class PaiementProfController extends Controller
             'calcul' => $calcul,
             'filters' => [
                 'groupFilter' => $groupFilter,
-                'dateDebut' => $dateDebut,
-                'dateFin' => $dateFin,
-                'montantParEtudiant' => $montantFilter,
-                'seuil' => $seuilFilter,
+                'enseignantFilter' => $enseignantFilter,
+                'mois' => $mois,
+                'heures' => $heuresFilter,
             ],
-            // Servi en CLOSURE : la liste des groupes n'a pas à être
-            // recalculée par un rechargement partiel qui ne demande que le
-            // calcul (§17 perf).
             'groupOptions' => fn (): array => $query->groupOptions($user),
-            'seuilParDefaut' => CalculerPaiementProfHebdomadaire::SEUIL_PAR_DEFAUT,
-            'pourcentageHebdo' => CalculerPaiementProfHebdomadaire::POURCENTAGE_HEBDO_PAR_DEFAUT,
-            // Permet au bouton « Enregistrer la dépense » de pré-remplir le
-            // bon type sans que la page ait à le deviner.
+            'seancesMaxParMois' => CalculerPaiementProfParSeance::SEANCES_MAX_PAR_MOIS,
+            'modes' => Employee::MODES_PAIEMENT_PROF,
             'paiementProfTypeId' => fn (): ?int => TypeDepense::query()
                 ->where('nom', TypeDepense::SYSTEM_PAIEMENT_PROF)
                 ->value('id'),
-            // Le calcul propose un montant ; encore faut-il avoir le droit
-            // d'enregistrer la dépense qui en découle. Confort d'interface
-            // seulement — le vrai contrôle est dans DepenseController (§5).
             'canCreateDepense' => $user->can('expenses.create'),
         ]);
+    }
+
+    /**
+     * Options dépendant du groupe choisi — mois, enseignants, séances sans
+     * prof. Appelé par le modal en JSON.
+     */
+    public function groupOptions(Request $request, Group $group, GetPaiementProfCalcul $query): JsonResponse
+    {
+        abort_unless($request->user()->can('prof-payments.calculate'), 403);
+
+        $this->assertGroupInContext($request, $group, 'group');
+
+        $mois = (string) $request->string('mois');
+
+        return response()->json($query->optionsPourGroupe($group, $mois !== '' ? $mois : null));
     }
 }

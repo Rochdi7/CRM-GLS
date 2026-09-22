@@ -13,6 +13,7 @@ use App\Models\Cheque;
 use App\Models\Creneau;
 use App\Models\Depense;
 use App\Models\Employee;
+use App\Models\EnseignantTauxMensuel;
 use App\Models\Encaissement;
 use App\Models\Etablissement;
 use App\Models\Frais;
@@ -117,6 +118,7 @@ final class AuditLogRegistry
 
             // ── RH & accès ─────────────────────────────────────────────
             Employee::class => ['employee', 'Employé'],
+            EnseignantTauxMensuel::class => ['enseignant_taux_mensuel', 'Taux mensuel enseignant (win-win)'],
             User::class => ['user', 'Utilisateur'],
             Role::class => ['role', 'Rôle'],
 

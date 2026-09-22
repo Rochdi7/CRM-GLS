@@ -125,6 +125,34 @@ class Employee extends Model implements HasMedia
         self::STATUT_INACTIF,
     ];
 
+    /*
+    |----------------------------------------------------------------------
+    | Paiement prof — configuration de PAIE d un enseignant (22/09/2026)
+    |----------------------------------------------------------------------
+    | Portée par l EMPLOYÉ (onglet « Paiement prof » de sa fiche), jamais par
+    | le groupe : c est le prof que l on paie, et son mode le suit d un groupe
+    | à l autre.
+    */
+
+    /** taux horaire × heures enseignées (saisies au calcul). */
+    public const MODE_PAIEMENT_HORAIRE = 'horaire';
+
+    /** montant par étudiant ÷ séances du mois × présences. */
+    public const MODE_PAIEMENT_GLS = 'gls';
+
+    /**
+     * Même formule que GLS, mais le montant par étudiant change CHAQUE
+     * MOIS (400, 420, 450… jusqu à 600), saisi mois par mois dans
+     * `enseignant_taux_mensuels`.
+     */
+    public const MODE_PAIEMENT_WIN_WIN = 'win_win';
+
+    public const MODES_PAIEMENT_PROF = [
+        self::MODE_PAIEMENT_HORAIRE,
+        self::MODE_PAIEMENT_GLS,
+        self::MODE_PAIEMENT_WIN_WIN,
+    ];
+
     public const SEXES = ['Homme', 'Femme'];
 
     protected $fillable = [
@@ -132,6 +160,7 @@ class Employee extends Model implements HasMedia
         'telephone', 'whatsapp', 'email', 'adresse', 'note',
         'date_naissance', 'date_embauche', 'salaire',
         'etablissement_id', 'user_id',
+        'mode_paiement_prof', 'taux_horaire_prof', 'montant_par_etudiant_prof',
     ];
 
     /**
@@ -156,6 +185,8 @@ class Employee extends Model implements HasMedia
             'date_naissance' => 'date',
             'date_embauche' => 'date',
             'salaire' => 'decimal:2',
+            'taux_horaire_prof' => 'decimal:2',
+            'montant_par_etudiant_prof' => 'decimal:2',
         ];
     }
 
@@ -267,6 +298,20 @@ class Employee extends Model implements HasMedia
     public function groupes(): HasMany
     {
         return $this->hasMany(Group::class, 'enseignant_id');
+    }
+
+    /**
+     * Montants « win-win » saisis mois par mois (mode
+     * MODE_PAIEMENT_WIN_WIN). Une ligne par mois civil, `mois` = le 1er.
+     */
+    public function tauxMensuels(): HasMany
+    {
+        return $this->hasMany(EnseignantTauxMensuel::class)->orderBy('mois');
+    }
+
+    public function estEnseignant(): bool
+    {
+        return $this->categorie === self::CATEGORIE_ENSEIGNANT;
     }
 
     /**

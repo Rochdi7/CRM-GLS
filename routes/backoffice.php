@@ -574,6 +574,12 @@ Route::prefix('backoffice')
             // et le controleur la reverifie (§5).
             Route::get('paiement-prof', [PaiementProfController::class, 'index'])
                 ->middleware('permission:prof-payments.calculate')->name('paiement-prof.index');
+            // Options dependant du groupe choisi (mois, enseignants, seances
+            // sans prof) — JSON pour le modal. Meme permission, meme garde de
+            // contexte : le modal ne doit jamais proposer un calcul que le
+            // serveur refuserait ensuite.
+            Route::get('paiement-prof/groupes/{group}/options', [PaiementProfController::class, 'groupOptions'])
+                ->middleware('permission:prof-payments.calculate')->name('paiement-prof.group-options');
 
             // Reconciliation des paiements importes — l'interface de
             // `paiements:reconcilier` (docs/legacy-import-cli.md) : compare
