@@ -1112,6 +1112,12 @@ export interface SyncUserAuthorizationForm {
 // --- Phase 7: Employees (Inertia/React list + modal CRUD) -------------------
 
 /** One row of the Employees list — mirrors GetEmployeesList's ->through() mapping exactly. */
+/** Une ligne du tableau win-win : « YYYY-MM » → montant par étudiant. */
+export interface TauxMensuelRow {
+    mois: string;
+    montant_par_etudiant: string;
+}
+
 export interface EmployeeRow {
     id: number;
     reference: string;
@@ -1129,6 +1135,12 @@ export interface EmployeeRow {
     dateNaissance: string | null;
     dateEmbauche: string | null;
     salaire: MoneyDisplay | null;
+    /** Onglet « Paiement prof » — enseignants seulement (22/09/2026). */
+    modePaiementProf: 'horaire' | 'gls' | 'win_win' | null;
+    tauxHoraireProf: MoneyDisplay | null;
+    montantParEtudiantProf: MoneyDisplay | null;
+    /** Montants win-win, un par mois (« YYYY-MM »). */
+    tauxMensuels: TauxMensuelRow[];
     /** Primary center — where the employee is based and its Caisse lives.
      *  Chosen explicitly on the form (« Centre principal »); defaults to the
      *  first assigned center. Always one of `etablissementIds`. */
@@ -1335,6 +1347,8 @@ export interface GroupPaymentRow {
     numero: string;
     student: string | null;
     studentShowUrl: string | null;
+    /** Photo de l'étudiant, ou l'avatar par défaut (Student::avatarUrl()). */
+    photoUrl: string | null;
     reference: string;
     /** Active | Changement | Annulée — drives the row colour. */
     statut: string;
@@ -1871,6 +1885,24 @@ export interface EncaissementRow {
      * vit dans GardePresencesInscription et l'action refuse à nouveau.
      */
     transferableAutreEtudiant?: boolean;
+    /**
+     * Montant de cette avance déjà posé sur des frais par des lignes
+     * d'application — ce que la suppression devra détacher.
+     */
+    applicationsTotal?: MoneyDisplay;
+    /**
+     * Vrai quand supprimer cette avance suppose de DÉTACHER d'abord ses
+     * applications (leurs frais redeviennent dus). Le modal l'annonce et
+     * demande une confirmation explicite, qui part en
+     * `detacher_applications`. La règle vit dans SupprimerEncaissement.
+     */
+    deleteDetacheApplications?: boolean;
+    /**
+     * Motif d'un refus de suppression que RIEN ne défait (chèque suivi,
+     * paiement remboursé) — leur contrepartie est hors de cette table.
+     * Non nul ⇒ le bouton de confirmation reste inerte.
+     */
+    deleteBlocker?: string | null;
     studentEmail: string | null;
     showUrl: string;
     /** Printable receipt page — append ?format=a6|a5|a5x2. */
@@ -2289,6 +2321,13 @@ export interface DepensesPageProps {
     canAudit: boolean;
     depenseStatuts: string[];
     filters: DepensesFilters;
+    /**
+     * La fenêtre de l'année active est-elle LEVÉE ? Décidé au serveur, jamais
+     * redérivé des champs date : après un effacement explicite ceux-ci
+     * reviennent vides alors que la liste reste élargie, et sans ce drapeau
+     * « Réinitialiser les filtres » se désactiverait à tort.
+     */
+    dateFilterEngaged: boolean;
     [key: string]: unknown;
 }
 
@@ -2368,6 +2407,111 @@ export interface EcheancesEnMassePageProps {
     /** Only the fees the chosen group's inscriptions actually carry. */
     fraisOptions: SelectOption[];
     statuts: string[];
+    [key: string]: unknown;
+}
+
+// --- Calcul « Paiement prof » ----------------------------------------------
+
+/** Une ligne du calcul : ce qu'UN étudiant rapporte à l'enseignant. */
+export interface PaiementProfLigne {
+    studentId: number;
+    nom: string;
+    /** Présences — la SEULE donnée qui paie. */
+    joursRetenus: number;
+    joursAbsents: number;
+    /** « Retard » / « Justifié » hérités de l'ancien import — ne rapportent rien. */
+    joursIgnores: number;
+    montantAuto: number;
+    montantAjuste: number | null;
+    montantEffectif: number;
+}
+
+export interface PaiementProfCalcul {
+    lignes: PaiementProfLigne[];
+    total: number;
+    montantParEtudiant: number;
+    /** taux ÷ séances rémunérées — ce que vaut UNE présence. */
+    montantParSeance: number;
+    /** Séances réellement effectuées sur la période. */
+    nombreSeances: number;
+    /** Diviseur retenu : le réel, plafonné à 22. */
+    seancesRemunerees: number;
+    nombreJoursDeCours: number;
+    etudiantsRemunerateurs: number;
+    group: { id: number; nom: string; niveau: string };
+    /** L'enseignant payé, avec SON mode et SON taux — et le problème nommé s'il en manque un. */
+    enseignant: {
+        id: number;
+        nom: string;
+        mode: PaiementProfMode | '';
+        taux: number;
+        probleme: string | null;
+    };
+    /** « YYYY-MM » demandé. */
+    mois: string;
+    periode: { debut: string; fin: string; libelle: string; ancreSurLeGroupe: boolean };
+    /** Séances EFFECTUÉES du mois sans enseignant_id — à corriger, elles ne paient personne. */
+    seancesSansEnseignant: number;
+    datesDeCours: string[];
+    /** student_id → { 'YYYY-MM-DD': statut } — la grille d'appel brute. */
+    grille: Record<number, Record<string, string>>;
+    /** Heures dérivées des séances effectuées (aide à la saisie, mode horaire). */
+    heuresEffectuees: number;
+    /** Heures RETENUES (saisies, sinon effectuées) — mode horaire seulement. */
+    heuresSaisies: number | null;
+    totalHoraire: number | null;
+}
+
+export type PaiementProfMode = 'horaire' | 'gls' | 'win_win';
+
+/** Un enseignant proposé dans le modal, avec ce que le calcul saura de lui. */
+export interface PaiementProfEnseignantOption {
+    value: number;
+    label: string;
+    /** Séances qu'il a réellement données sur le mois choisi. */
+    seancesCeMois: number;
+    mode: PaiementProfMode | '';
+    taux: number;
+    probleme: string | null;
+}
+
+/** Réponse de `paiement-prof/groupes/{group}/options`. */
+export interface PaiementProfGroupOptions {
+    moisOptions: { value: string; label: string }[];
+    mois: string;
+    fenetre: { debut: string; fin: string; libelle: string; ancreSurLeGroupe: boolean };
+    enseignants: PaiementProfEnseignantOption[];
+    enseignantParDefaut: number | null;
+    /** Durée habituelle d une séance du mois (2.5 = 2h30), déduite des horaires réels. */
+    dureeHabituelle: number | null;
+    seancesSansEnseignant: number;
+}
+
+export interface PaiementProfFilters {
+    groupFilter: string;
+    enseignantFilter: string;
+    /** « YYYY-MM ». */
+    mois: string;
+    /** Heures saisies — mode horaire seulement. */
+    heures: string;
+    /**
+     * Durée d'UNE séance (« 2h30 ») — aide de saisie qui alimente `heures`.
+     * Purement locale : jamais envoyée au serveur, qui ne connaît que le
+     * total d'heures.
+     */
+    dureeSeance: string;
+}
+
+export interface PaiementProfPageProps {
+    /** `null` tant qu'un groupe, un enseignant et un mois n'ont pas été choisis. */
+    calcul: PaiementProfCalcul | null;
+    filters: PaiementProfFilters;
+    groupOptions: SelectOption[];
+    /** Plafond metier : un mois compte 22 seances au maximum. */
+    seancesMaxParMois: number;
+    modes: PaiementProfMode[];
+    paiementProfTypeId: number | null;
+    canCreateDepense: boolean;
     [key: string]: unknown;
 }
 
@@ -2513,6 +2657,8 @@ export interface RapportFilters {
     methodeFilter: string;
     caisseFilter: string;
     typeFilter: string;
+    typeDepenseFilter: string;
+    statutDepenseFilter: string;
     dateFrom: string;
     dateTo: string;
 }
@@ -2525,7 +2671,9 @@ export type RapportFiltreKey =
     | 'inscriptionFilter'
     | 'methodeFilter'
     | 'caisseFilter'
-    | 'typeFilter';
+    | 'typeFilter'
+    | 'typeDepenseFilter'
+    | 'statutDepenseFilter';
 
 export interface RapportsPageProps {
     onglets: RapportOnglet[];
@@ -2542,12 +2690,21 @@ export interface RapportsPageProps {
     methodeOptions: SelectOption[];
     caisseOptions: SelectOption[];
     typeOptions: SelectOption[];
+    /** Le catalogue ACTIF des types de dépense (« Paiement prof » compris). */
+    typeDepenseOptions: SelectOption[];
+    /** Les quatre statuts de Depense::STATUTS, servis par le serveur. */
+    statutDepenseOptions: SelectOption[];
     /** Nombre de lignes que le document contiendra avec les filtres courants. */
     nombreLignes: number;
     /**
-     * Le total encaissé, calculé PAR LE SERVEUR sur tout l'ensemble filtré —
-     * jamais additionné côté client. Chaîne vide pour un rapport sans colonne
+     * Le total, calculé PAR LE SERVEUR sur tout l'ensemble filtré — jamais
+     * additionné côté client. Chaîne vide pour un rapport sans colonne
      * monétaire : la page n'affiche alors rien, plutôt que « 0,00 DH ».
+     *
+     * ⚠ Ce qu'il TOTALISE dépend du rapport, et le libellé affiché le dit :
+     * « Total encaissé » pour le relevé des encaissements, « Total approuvé »
+     * pour la liste des dépenses — où il ne compte QUE les lignes approuvées,
+     * donc moins que la somme des montants listés.
      */
     montantTotal: string;
     [key: string]: unknown;
@@ -2589,6 +2746,12 @@ export interface DatabaseColumn {
     primary: boolean;
     input: DatabaseColumnInput;
     references: { table: string; column: string } | null;
+    /**
+     * The closed set of values this column accepts, read from the model
+     * constant that defines it (`Depense::STATUTS`…), or null when the
+     * column is free text.
+     */
+    values: string[] | null;
 }
 
 export interface DatabaseRow {
@@ -2616,5 +2779,11 @@ export interface DatabaseTablePageProps {
     rows: PaginatedData<DatabaseRow>;
     /** Names behind the foreign-key ids on this page: `{column: {id: name}}`. The id stays the stored value. */
     foreignLabels: Record<string, Record<string, string>>;
+    /**
+     * Choosable rows behind each foreign-key column, so the edit modal offers
+     * a name instead of an id typed from memory. A column absent here (its
+     * referenced table is too large or unreadable) keeps the plain id box.
+     */
+    foreignOptions: Record<string, { options: SelectOption[]; truncated: boolean }>;
     filters: DatabaseTableFilters;
 }

@@ -25,6 +25,21 @@ import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { useFilterReset } from '@/Hooks/useFilterReset';
 import type { SelectOption, StudentRow, StudentsPageProps } from '@/Types';
 
+/**
+ * Ce qui empêche la suppression, servi par
+ * `students.delete-blockers`. `forcable` vient du SERVEUR : la page ne
+ * redérive jamais « peut-on forcer ? », sinon elle finirait par offrir un
+ * bouton que `destroy()` refuse (CLAUDE.md §5).
+ */
+interface DeleteBlockers {
+    inscriptions: number;
+    encaissements: number;
+    remboursements: number;
+    cheques: number;
+    presences: Array<{ id: number; date: string; statut: string; groupe: string }>;
+    forcable: boolean;
+}
+
 interface StudentFormState {
     nom: string;
     prenom: string;
@@ -107,6 +122,7 @@ export default function StudentsIndex({
     const [deleteTarget, setDeleteTarget] = useState<StudentRow | null>(null);
     const [deleteError, setDeleteError] = useState<string | undefined>(undefined);
     const [deleteProcessing, setDeleteProcessing] = useState(false);
+    const [deleteBlockers, setDeleteBlockers] = useState<DeleteBlockers | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const form = useForm<StudentFormState>(emptyForm(defaultCountry, contextCenterId));
@@ -256,19 +272,33 @@ export default function StudentsIndex({
     function confirmDelete(student: StudentRow) {
         setDeleteTarget(student);
         setDeleteError(undefined);
+        setDeleteBlockers(null);
+
+        // Ce qui bloque, AVANT d'échouer : le modal doit pouvoir nommer les
+        // lignes d'appel au lieu de renvoyer « historique d'activité ».
+        // Lecture seule — la décision reste au serveur dans destroy().
+        fetch(`/backoffice/students/${student.id}/delete-blockers`, {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+        })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data: DeleteBlockers | null) => setDeleteBlockers(data))
+            .catch(() => setDeleteBlockers(null));
     }
 
-    function handleDelete() {
+    function handleDelete(force = false) {
         if (!deleteTarget) {
             return;
         }
 
         setDeleteProcessing(true);
         router.delete(`/backoffice/students/${deleteTarget.id}`, {
+            data: force ? { force: true } : {},
             preserveScroll: true,
             onSuccess: () => {
                 setDeleteTarget(null);
                 setDeleteError(undefined);
+                setDeleteBlockers(null);
             },
             onError: (errors) => {
                 setDeleteError(errors.delete ?? 'Suppression impossible.');
@@ -842,12 +872,48 @@ export default function StudentsIndex({
                 message="Voulez-vous vraiment supprimer cet étudiant ?"
                 error={deleteError}
                 processing={deleteProcessing}
-                onConfirm={handleDelete}
+                confirmLabel={deleteBlockers?.forcable ? 'Oui, supprimer la fiche et ces présences' : undefined}
+                onConfirm={() => handleDelete(deleteBlockers?.forcable === true)}
                 onCancel={() => {
                     setDeleteTarget(null);
                     setDeleteError(undefined);
+                    setDeleteBlockers(null);
                 }}
-            />
+            >
+                {deleteBlockers?.forcable && (
+                    /*
+                     * ⚠ L'alerte NOMME ce qui va être détruit. Une
+                     * suppression en aveugle n'est pas une décision : sans
+                     * la date, le statut et le groupe, l'utilisateur ne peut
+                     * pas juger si ces appels sont des scories ou la trace
+                     * d'un vrai passage en classe.
+                     */
+                    <div className="alert alert-warning mb-0" role="alert">
+                        <div className="d-flex align-items-start">
+                            <i className="ti ti-alert-triangle me-2 mt-1 fs-18" aria-hidden="true" />
+                            <div>
+                                <p className="fw-semibold mb-1">
+                                    Cette fiche porte {deleteBlockers.presences.length} ligne
+                                    {deleteBlockers.presences.length > 1 ? 's' : ''} de présence, qui ser
+                                    {deleteBlockers.presences.length > 1 ? 'ont' : 'a'} également supprimée
+                                    {deleteBlockers.presences.length > 1 ? 's' : ''}.
+                                </p>
+                                <p className="mb-2 fs-13">
+                                    Aucune inscription, aucun paiement : ces appels ne rattachent la fiche à
+                                    rien. Cette suppression est définitive et sera journalisée.
+                                </p>
+                                <ul className="mb-0 ps-3 fs-13">
+                                    {deleteBlockers.presences.map((p) => (
+                                        <li key={p.id}>
+                                            {p.date} — {p.statut} — {p.groupe}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </ConfirmDialog>
         </BackofficeLayout>
     );
 }

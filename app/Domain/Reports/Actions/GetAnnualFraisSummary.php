@@ -18,8 +18,9 @@ use Illuminate\Support\Facades\DB;
  * chart used to be a fixed calendar-year view with its own selector, which
  * split every school year across two calendar years and piled the imported
  * fees into one spike), 5 series (docs clarified 2026-08-14):
- *  - chiffreAffaire: sum of InscriptionFee.montant whose date_echeance falls
- *    in that month (what was billed/due that month);
+ *  - chiffreAffaire: the fees whose date_echeance falls in that month — the
+ *    full InscriptionFee.montant on an « Active » inscription, but ONLY WHAT
+ *    WAS PAID on a closed one (see « Un dossier clos ne doit rien » below);
  *  - collecte: Encaissement.montant received against those SAME fees
  *    (payments settling a fee due in that month, regardless of when paid);
  *  - resteAPayer: chiffreAffaire − collecte for that month;
@@ -32,6 +33,20 @@ use Illuminate\Support\Facades\DB;
  * Center-scoped via CurrentContext (same active-center rule as
  * GetDashboardStats). When no année scolaire is selected (fresh session with
  * no default year), the current calendar year is the fallback window.
+ *
+ * ⚠ THE MONTH ALONE DECIDES WHICH POINT A ROW LANDS ON (21/09/2026). The
+ * active année only supplies the WINDOW (its date_debut → date_fin); no
+ * series is additionally filtered on `inscriptions.annee_scolaire_id`.
+ * Crossing the two — « inscription of this année » AND « dated inside this
+ * année » — drops every row that satisfies one half only, and such a row is
+ * then shown by NO année's chart: a 2025/2026 group still running in
+ * September 2026 bills fees due 09/2026, which the 2025/2026 chart refused on
+ * the date and the 2026/2027 chart refused on the année — reported with
+ * September 2026 reading 3 100 DH of chiffre d'affaire. Encaissements had the
+ * same hole (an early payment on NEXT year's inscription, dated this year).
+ * Années never overlap (CouvertureAnneesRules,
+ * CLAUDE.md §11), so a date falls in exactly one window and nothing is counted
+ * twice. Same rule as the dashboard's « ce mois-ci » cards.
  *
  * Performance (24/08/2026): every series is ONE PostgreSQL GROUP BY month
  * aggregate — 4 queries total, whatever the data volume. The previous
@@ -66,22 +81,33 @@ final class GetAnnualFraisSummary
     public function __invoke(): array
     {
         $centreId = $this->context->etablissementId();
-        $anneeId = $this->context->anneeScolaireId();
         [$start, $end] = $this->window();
         $range = [$start->toDateString(), $end->toDateString()];
 
-        // Chiffre d'affaire — fees of the ACTIVE ANNÉE's inscriptions
-        // (annee_scolaire_id chain, CLAUDE.md §11 context scoping — the date
-        // window alone let another année's fees leak in whenever their due
-        // dates fell inside this année's months, e.g. 2025/2026 monthly fees
-        // due Sep–Dec 2026 showing under 2026/2027), grouped by due month.
+        // Chiffre d'affaire — every fee DUE in the month, whatever année its
+        // inscription is filed under (see the class docblock: a fee of a
+        // 2025/2026 group due in 09/2026 IS September 2026's billing).
+        //
+        // ⚠ A fee of a CLOSED dossier counts only for what was PAID on it;
+        // only an « Active » inscription carries a receivable (class
+        // docblock, « Un dossier clos ne doit rien »). One aggregate per fee
+        // joined in — never a per-row montantPaye() (perf note below).
+        $paye = DB::table('encaissements')
+            ->whereNotNull('inscription_fee_id')
+            ->groupBy('inscription_fee_id')
+            ->selectRaw('inscription_fee_id, SUM(montant) AS total');
+
         $chiffreAffaire = $this->byMonth(
             DB::table('inscription_fees')
-                ->whereNull('masque_le')
-                ->whereNotNull('date_echeance')
-                ->whereBetween('date_echeance', $range)
-                ->tap(fn (Builder $q) => $this->scopeFeesToContext($q, 'inscription_fees', $centreId, $anneeId)),
-            'date_echeance',
+                ->join('inscriptions', 'inscriptions.id', '=', 'inscription_fees.inscription_id')
+                ->leftJoinSub($paye, 'paye', 'paye.inscription_fee_id', '=', 'inscription_fees.id')
+                ->whereNull('inscription_fees.masque_le')
+                ->whereNotNull('inscription_fees.date_echeance')
+                ->whereBetween('inscription_fees.date_echeance', $range)
+                ->tap(fn (Builder $q) => $this->scopeFeesToContext($q, 'inscription_fees', $centreId)),
+            'inscription_fees.date_echeance',
+            'CASE WHEN inscriptions.statut = ? THEN inscription_fees.montant ELSE COALESCE(paye.total, 0) END',
+            [Inscription::STATUT_ACTIVE],
         );
 
         // Collecté — payments settling those SAME fees, grouped by the FEE's
@@ -93,7 +119,7 @@ final class GetAnnualFraisSummary
                 ->whereNull('inscription_fees.masque_le')
                 ->whereNotNull('inscription_fees.date_echeance')
                 ->whereBetween('inscription_fees.date_echeance', $range)
-                ->tap(fn (Builder $q) => $this->scopeFeesToContext($q, 'inscription_fees', $centreId, $anneeId)),
+                ->tap(fn (Builder $q) => $this->scopeFeesToContext($q, 'inscription_fees', $centreId)),
             'inscription_fees.date_echeance',
             'encaissements.montant',
         );
@@ -123,9 +149,9 @@ final class GetAnnualFraisSummary
         // operator to the centre their till lives in, not the centre the
         // money was collected for — the chart and the card disagreed for
         // the same month (audit 24/08/2026).
-        // Année scoping (§11): fee-linked payments belong to their fee's
-        // inscription année; avances (no fee) are matched by their payment
-        // date falling in the window — same split as the Encaissements list.
+        // No année filter: money received in a month is that month's money,
+        // whichever année's fee it settles (an early payment on next year's
+        // inscription was received THIS month) — see the class docblock.
         $encaissements = $this->byMonth(
             DB::table('encaissements')
                 ->whereBetween('date_paiement', $range)
@@ -141,16 +167,7 @@ final class GetAnnualFraisSummary
                 ->when($centreId, fn (Builder $q) => $q->whereIn(
                     'student_id',
                     DB::table('students')->select('id')->where('etablissement_id', $centreId),
-                ))
-                ->when($anneeId, fn (Builder $q) => $q->where(fn (Builder $w) => $w
-                    ->whereNull('encaissements.inscription_fee_id')
-                    ->orWhereExists(function (Builder $sub) use ($anneeId): void {
-                        $sub->selectRaw('1')
-                            ->from('inscription_fees')
-                            ->join('inscriptions', 'inscriptions.id', '=', 'inscription_fees.inscription_id')
-                            ->whereColumn('inscription_fees.id', 'encaissements.inscription_fee_id')
-                            ->where('inscriptions.annee_scolaire_id', $anneeId);
-                    }))),
+                )),
             'date_paiement',
         );
 
@@ -213,12 +230,16 @@ final class GetAnnualFraisSummary
      * SUM($amountColumn) grouped by the calendar month of $dateColumn, keyed
      * 'YYYY-MM' (months without rows are simply absent).
      *
+     * $amountColumn may be a SQL expression; its `?` placeholders are filled
+     * from $bindings.
+     *
+     * @param  list<mixed>  $bindings
      * @return array<string, float>
      */
-    private function byMonth(Builder $query, string $dateColumn, string $amountColumn = 'montant'): array
+    private function byMonth(Builder $query, string $dateColumn, string $amountColumn = 'montant', array $bindings = []): array
     {
         $rows = $query
-            ->selectRaw("to_char({$dateColumn}, 'YYYY-MM') AS mois, COALESCE(SUM({$amountColumn}), 0) AS total")
+            ->selectRaw("to_char({$dateColumn}, 'YYYY-MM') AS mois, COALESCE(SUM({$amountColumn}), 0) AS total", $bindings)
             ->groupByRaw("to_char({$dateColumn}, 'YYYY-MM')")
             ->get();
 
@@ -232,10 +253,9 @@ final class GetAnnualFraisSummary
     }
 
     /**
-     * Fees belong to the active context through their inscription: the active
-     * centre (NULL-centre inscriptions are global — same rule as before) AND
-     * the active année scolaire (hard filter — an inscription always carries
-     * its année).
+     * Fees belong to the active context through their inscription's CENTRE
+     * (NULL-centre inscriptions are global). Deliberately NOT through its
+     * année: the due month decides the point (class docblock).
      *
      * Cancelled inscriptions are excluded from the billed series entirely
      * (31/08/2026, aligned on the reference WimSchool calculation
@@ -247,18 +267,45 @@ final class GetAnnualFraisSummary
      * are completed formations whose revenue is real. The « Encaissements »
      * series is untouched — money received is money received, whatever became
      * of the inscription.
+     *
+     * ⚠ Narrowing this to `= Active` was proposed and REJECTED (21/09/2026),
+     * measured on production over 2026/2027: « Changement » carries 10 146 300
+     * DH of fees of which 3 883 250 DH are ALREADY COLLECTED — nearly twice
+     * what « Active » has collected (2 051 990 DH). Collecté filters on the
+     * same fees, so Active-only would erase that money from BOTH series while
+     * it sits in the caisse and on every finance screen: the chart would
+     * announce a smaller year than the till actually received. Two screens of
+     * the same money that contradict each other (§11). A group change closes
+     * the old enrollment and carries its paid fees over — the student studied
+     * and paid, the revenue is earned.
+     *
+     * ⚠ UN DOSSIER CLOS NE DOIT RIEN (21/09/2026). What WAS wrong with
+     * « Changement » / « Expirée » / « Archivée » is the UNPAID half: the
+     * legacy import gave every closed dossier its full monthly schedule, so
+     * the billed series was a FLAT line (Salé 572 000 DH every month from
+     * January to August, Rabat 823 000 DH) under a « Reste à payer » of
+     * ~2 M DH a month that nobody owes — the student left the group, those
+     * months were never due. The reference WimSchool chart shows the opposite
+     * for the same data: a past month reads Collecté ≈ Chiffre d'affaire
+     * (06/2026: 146 100 / 145 800, reste 300). So a closed dossier's fee
+     * counts for what was PAID on it, and only an « Active » inscription
+     * carries a receivable — the same rule as « Gestion des recouvrements »
+     * (GetRetardsList), which already refuses to chase a closed dossier. No
+     * collected dirham leaves either series (the reason Active-only was
+     * rejected); only the uncollectible receivable does. The WimSchool server
+     * formula is not in its JS bundle — this rule is inferred from its curve
+     * and from our own recouvrement rule, not copied from its SQL.
      */
-    private function scopeFeesToContext(Builder $query, string $feesTable, ?int $centreId, ?int $anneeId): Builder
+    private function scopeFeesToContext(Builder $query, string $feesTable, ?int $centreId): Builder
     {
-        return $query->whereExists(function (Builder $sub) use ($feesTable, $centreId, $anneeId): void {
+        return $query->whereExists(function (Builder $sub) use ($feesTable, $centreId): void {
             $sub->selectRaw('1')
                 ->from('inscriptions')
                 ->whereColumn('inscriptions.id', "{$feesTable}.inscription_id")
                 ->where('inscriptions.statut', '!=', Inscription::STATUT_ANNULEE)
                 ->when($centreId, fn (Builder $q) => $q->where(fn (Builder $w) => $w
                     ->whereNull('inscriptions.etablissement_id')
-                    ->orWhere('inscriptions.etablissement_id', $centreId)))
-                ->when($anneeId, fn (Builder $q) => $q->where('inscriptions.annee_scolaire_id', $anneeId));
+                    ->orWhere('inscriptions.etablissement_id', $centreId)));
         });
     }
 }

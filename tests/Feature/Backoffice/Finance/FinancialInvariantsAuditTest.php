@@ -433,6 +433,65 @@ final class FinancialInvariantsAuditTest extends TestCase
         $this->assertSame('400.00', $summary['encaissements'][0]);
     }
 
+    public function test_the_annual_chart_bills_a_closed_dossier_only_for_what_was_paid(): void
+    {
+        // Un dossier clos ne doit rien : the unpaid half of a « Changement »
+        // fee is not chiffre d'affaire (it made the billed series a flat
+        // line under millions of « reste à payer » nobody owes) — but the
+        // 400 DH actually collected stay in BOTH series.
+        $user = $this->userWith(['payments.view', 'payments.create']);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
+        $this->actingAs($user);
+        app(CurrentContext::class)->setEtablissement($this->centre->id);
+        $this->payLine($user, $student, $inscription, $fee, '400', Encaissement::METHODE_ESPECES);
+
+        $inscription->update(['statut' => Inscription::STATUT_CHANGEMENT]);
+
+        $summary = app(GetAnnualFraisSummary::class)();
+        $this->assertSame('400.00', $summary['chiffreAffaire'][1]);
+        $this->assertSame('400.00', $summary['collecte'][1]);
+        $this->assertSame('0.00', $summary['resteAPayer'][1]);
+        $this->assertSame('400.00', $summary['encaissements'][0]);
+    }
+
+    public function test_the_annual_chart_files_a_row_by_its_month_whatever_annee_its_inscription_carries(): void
+    {
+        // A 2025/2026 group still running in September 2026 bills a fee due
+        // 10/09/2026. Crossing « inscription of this année » with « dated in
+        // this année » showed that fee on NO chart: 2025/2026 refused the
+        // date, 2026/2027 refused the année. The month alone decides.
+        $next = AnneeScolaire::create([
+            'nom' => '2026/2027', 'date_debut' => '2026-09-01', 'date_fin' => '2027-08-31',
+            'par_defaut' => false, 'inscription_ouverte' => true,
+        ]);
+        $user = $this->userWith(['payments.view', 'payments.create']);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
+        $fee->update(['date_echeance' => '2026-09-10']);
+        $this->actingAs($user);
+        $context = app(CurrentContext::class);
+        $context->setEtablissement($this->centre->id);
+        // Paid 20/09/2025 — money received in 2025/2026, on a fee due in 2026/2027.
+        $this->payLine($user, $student, $inscription, $fee, '400', Encaissement::METHODE_ESPECES);
+
+        // 2026/2027: the fee is September 2026's billing (index 0) although
+        // its inscription is filed under 2025/2026; the money is not this
+        // year's — it was received the year before.
+        $context->setAnneeScolaire($next->id);
+        $summary = app(GetAnnualFraisSummary::class)();
+        $this->assertSame('1000.00', $summary['chiffreAffaire'][0]);
+        $this->assertSame('400.00', $summary['collecte'][0]);
+        $this->assertSame('600.00', $summary['resteAPayer'][0]);
+        $this->assertSame(0.0, array_sum(array_map('floatval', $summary['encaissements'])));
+
+        // 2025/2026: the mirror image — the fee is billed nowhere in this
+        // window (never counted twice), the payment lands on September 2025.
+        $context->setAnneeScolaire($this->annee->id);
+        $summary = app(GetAnnualFraisSummary::class)();
+        $this->assertSame(0.0, array_sum(array_map('floatval', $summary['chiffreAffaire'])));
+        $this->assertSame(0.0, array_sum(array_map('floatval', $summary['collecte'])));
+        $this->assertSame('400.00', $summary['encaissements'][0]);
+    }
+
     // ── Ledger invariant: solde = Σ credits − Σ debits, entries chain ───
 
     public function test_every_balance_equals_the_sum_of_its_journaled_movements(): void

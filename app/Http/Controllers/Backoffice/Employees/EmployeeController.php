@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice\Employees;
 
 use App\Domain\Employees\Queries\GetEmployeesList;
+use App\Domain\Payroll\Actions\SynchroniserTauxMensuels;
 use App\Domain\Settings\Queries\GetAccessibleCenterOptions;
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Http\Controllers\Controller;
@@ -123,6 +124,11 @@ final class EmployeeController extends Controller
 
             $employee->syncEtablissements($centerIds, $primaryId);
             $this->storePhoto($employee, $request);
+            app(SynchroniserTauxMensuels::class)->handle(
+                $employee,
+                $data['mode_paiement_prof'] ?? null,
+                $data['taux_mensuels'] ?? null,
+            );
 
             return $employee;
         });
@@ -151,6 +157,11 @@ final class EmployeeController extends Controller
                 $this->resolvePrimaryCenterId($data, $centerIds),
             );
             $this->storePhoto($employee, $request);
+            app(SynchroniserTauxMensuels::class)->handle(
+                $employee,
+                $data['mode_paiement_prof'] ?? null,
+                $data['taux_mensuels'] ?? null,
+            );
 
             // The login's e-mail follows the staff record (they were two
             // independent columns — audit CRUD-F17). Kept only when the
@@ -273,6 +284,17 @@ final class EmployeeController extends Controller
             'date_naissance' => $data['date_naissance'] ?? null,
             'date_embauche' => $data['date_embauche'] ?? null,
             'salaire' => $data['salaire'] ?? null,
+            // Onglet « Paiement prof » (22/09/2026). Seul le taux du MODE
+            // choisi est conservé : garder un taux horaire sous un mode GLS
+            // laisserait un chiffre dormant que le prochain changement de
+            // mode ressusciterait sans que personne ne l'ait relu.
+            'mode_paiement_prof' => $data['mode_paiement_prof'] ?? null,
+            'taux_horaire_prof' => ($data['mode_paiement_prof'] ?? null) === Employee::MODE_PAIEMENT_HORAIRE
+                ? ($data['taux_horaire_prof'] ?? null)
+                : null,
+            'montant_par_etudiant_prof' => ($data['mode_paiement_prof'] ?? null) === Employee::MODE_PAIEMENT_GLS
+                ? ($data['montant_par_etudiant_prof'] ?? null)
+                : null,
         ];
     }
 

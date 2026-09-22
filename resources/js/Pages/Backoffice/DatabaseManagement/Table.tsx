@@ -106,8 +106,25 @@ function placeholderFor(column: DatabaseColumn): string {
  * uses. The id stays the value that is stored and submitted — showing only
  * the name would hide which row is referenced, and a later rename would
  * silently change what the screen claims (CLAUDE.md §11).
+ *
+ * In the modal a foreign key is therefore CHOSEN from a searchable dropdown
+ * of the referenced table's rows, never typed: the maintainer knows « GLS
+ * Rabat », not « 3 ». The option carries BOTH (« GLS Rabat · #3 ») and the
+ * submitted value stays the id. A referenced table larger than
+ * `DatabaseBrowser::FOREIGN_OPTIONS_CAP`, or one the application role
+ * cannot read, serves no options and the field falls back to the id box —
+ * a dropdown that silently omits most rows would be worse than none.
+ *
+ * A column with a CLOSED value set (`statut`, `methode`, `categorie`,
+ * `niveau`…) is a dropdown for the same reason: those values are spelled
+ * exactly or not at all (« Payé partiellement », « Fin de formation »), and
+ * a typo here writes straight to the table. The set comes from the model
+ * constant that defines the column (`DatabaseBrowser::VALUE_SETS`, keyed by
+ * table AND column — `statut` means a different thing on each table). In
+ * both cases a stored value the list does not contain is kept as an option,
+ * so the modal never blanks a value it simply does not recognise.
  */
-export default function DatabaseTable({ table, columns, rows, foreignLabels, filters }: DatabaseTablePageProps) {
+export default function DatabaseTable({ table, columns, rows, foreignLabels, foreignOptions, filters }: DatabaseTablePageProps) {
     const loading = useInertiaLoading();
     const baseUrl = `/backoffice/database-management/${encodeURIComponent(table.name)}`;
     const canEdit = !table.readOnly && table.primaryKey.length > 0;
@@ -244,9 +261,43 @@ export default function DatabaseTable({ table, columns, rows, foreignLabels, fil
         // next reload, rather than guessing at a name we have not resolved.
         const referenced = column.references ? labelFor(foreignLabels, column.name, value) : null;
 
+        // A foreign key is CHOSEN, never typed: the maintainer knows the
+        // centre's name, not its id. The options come from the server
+        // (`foreignOptions`), labelled by the same resolver that names the
+        // ids in the grid; a referenced table too large to list leaves the
+        // column absent here and the field stays the raw id box.
+        const fkOptions = column.references ? foreignOptions[column.name]?.options : undefined;
+
+        // A column whose values are a closed set (`statut`, `methode`,
+        // `categorie`…) is picked, not spelled: « Payé partiellement » and
+        // « Fin de formation » are easy to mistype and a typo here writes
+        // straight to the table. The set comes from the model constant that
+        // defines it, keyed by table AND column server-side.
+        const valueOptions: SelectOption[] | undefined = column.values?.map((v) => ({ value: v, label: v }));
+
+        const choices = fkOptions ?? valueOptions;
+
         let control;
 
-        if (column.input === 'boolean') {
+        if (choices && !locked) {
+            // A stored value absent from the list (a row deleted since, or a
+            // legacy value the model no longer lists) is added back as an
+            // option, so opening the modal never silently blanks it.
+            const options: SelectOption[] =
+                value !== '' && !choices.some((o) => o.value === value)
+                    ? [...choices, { value, label: fkOptions ? `${referenced ?? t('Unknown row')} · #${value}` : value }]
+                    : choices;
+
+            control = (
+                <SelectField
+                    id={id}
+                    options={options}
+                    placeholder={column.nullable ? t('None') : t('Select…')}
+                    value={value}
+                    onChange={(e) => setValue(column.name, e.target.value)}
+                />
+            );
+        } else if (column.input === 'boolean') {
             control = (
                 <SelectField
                     id={id}

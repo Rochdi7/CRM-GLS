@@ -155,6 +155,81 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame(500.0, (float) $caisse->fresh()->solde);
     }
 
+    /**
+     * L'outrepassement super-admin du SEUL refus qui puisse être défait
+     * proprement : les applications sont détachées de leurs frais dans la
+     * même transaction, puis l'avance est supprimée. La caisse n'est débitée
+     * QU'UNE fois — par l'avance, la seule des deux lignes qui l'avait
+     * créditée — et le frais libéré redevient dû.
+     */
+    public function test_destroy_with_the_override_detaches_the_applications_first(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.delete');
+        $agent = $user->employee;
+        [$student, , $fee] = $this->enrolledStudentWithFee(1000);
+        $caisse = Caisse::factory()->create(['etablissement_id' => $this->centre->id, 'solde' => 500]);
+        $avance = Encaissement::create([
+            'reference' => 'ENC-AV-CASCADE', 'agent_id' => $agent->id, 'student_id' => $student->id, 'inscription_fee_id' => null,
+            'caisse_id' => $caisse->id, 'montant' => 300, 'methode' => Encaissement::METHODE_ESPECES,
+            'date_paiement' => '2025-09-20',
+        ]);
+        $apply = Encaissement::create([
+            'reference' => 'ENC-AV-CASCADE-APP', 'agent_id' => $agent->id, 'student_id' => $student->id, 'inscription_fee_id' => $fee->id,
+            'caisse_id' => $caisse->id, 'montant' => 300, 'methode' => Encaissement::METHODE_ESPECES,
+            'date_paiement' => '2025-09-21', 'applied_from_encaissement_id' => $avance->id,
+        ]);
+        $fee->update(['statut' => InscriptionFee::STATUT_PAYE_PARTIELLEMENT]);
+
+        $this->actingAs($user)
+            ->delete(route('backoffice.encaissements.destroy', $avance), ['detacher_applications' => true])
+            ->assertRedirect(route('backoffice.encaissements.index'));
+
+        $this->assertDatabaseMissing('encaissements', ['id' => $avance->id]);
+        // L'application est DÉTACHÉE de son frais, jamais supprimée : les
+        // enregistrements monétaires restent append-only (§11).
+        $this->assertDatabaseHas('encaissements', ['id' => $apply->id, 'inscription_fee_id' => null]);
+        // Un seul débit, celui de l'avance : une application n'a jamais
+        // crédité la caisse, elle ne doit donc rien lui reprendre.
+        $this->assertSame(200.0, (float) $caisse->fresh()->solde);
+        // Le frais libéré redevient dû.
+        $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $fee->fresh()->statut);
+    }
+
+    /**
+     * L'outrepassement ne franchit QUE ce refus-là. Un paiement remboursé a
+     * fait sortir de l'argent pour de bon : le défaire ici serait une
+     * décision monétaire que personne n'a demandée.
+     */
+    public function test_the_override_does_not_bypass_the_refunded_payment_refusal(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.delete', 'refunds.create');
+        $agent = $user->employee;
+        [$student, , $fee] = $this->enrolledStudentWithFee(1000);
+        $caisse = Caisse::factory()->create(['etablissement_id' => $this->centre->id, 'solde' => 500]);
+        $encaissement = Encaissement::create([
+            'reference' => 'ENC-REFUNDED', 'agent_id' => $agent->id, 'student_id' => $student->id, 'inscription_fee_id' => $fee->id,
+            'caisse_id' => $caisse->id, 'montant' => 200, 'methode' => Encaissement::METHODE_ESPECES,
+            'date_paiement' => '2025-09-20',
+        ]);
+        Remboursement::create([
+            'reference' => 'RMB-OVERRIDE',
+            'beneficiaire_id' => $student->id,
+            'encaissement_id' => $encaissement->id,
+            'caisse_id' => $caisse->id,
+            'agent_id' => $agent->id,
+            'montant' => 50,
+            'date_remboursement' => '2025-09-22',
+            'motif' => 'Test',
+        ]);
+
+        $this->actingAs($user)
+            ->delete(route('backoffice.encaissements.destroy', $encaissement), ['detacher_applications' => true])
+            ->assertSessionHasErrors('encaissement');
+
+        $this->assertDatabaseHas('encaissements', ['id' => $encaissement->id]);
+        $this->assertSame(500.0, (float) $caisse->fresh()->solde);
+    }
+
     public function test_destroy_of_an_apply_row_leaves_the_till_balance_untouched(): void
     {
         $user = $this->userWith('payments.view', 'payments.delete');

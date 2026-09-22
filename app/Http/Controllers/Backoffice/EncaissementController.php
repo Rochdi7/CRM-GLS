@@ -998,7 +998,15 @@ final class EncaissementController extends Controller
      * The one destroy path on a money record (CLAUDE.md §11). Reachable only
      * with `payments.delete` — a permission no role preset carries, granted by
      * a super-admin. SupprimerEncaissement reverses caisses.solde in the same
-     * transaction and refuses entangled rows (applied avances, tracked chèques).
+     * transaction and refuses entangled rows (tracked chèques, refunded rows).
+     *
+     * `detacher_applications` est l'OUTREPASSEMENT assumé du seul de ces
+     * refus qui puisse être défait proprement : les applications d'une avance
+     * sont détachées de leurs frais (qui redeviennent dus) dans la même
+     * transaction, au lieu de laisser des lignes orphelines pointer une
+     * ligne supprimée. L'écran AVERTIT de ce que ça défait avant de
+     * l'envoyer ; il ne peut pas être coché par accident depuis une ligne
+     * qui n'a aucune application.
      */
     public function destroy(Request $request, Encaissement $encaissement, SupprimerEncaissement $action): RedirectResponse
     {
@@ -1008,7 +1016,7 @@ final class EncaissementController extends Controller
         $this->authorize('delete', $encaissement);
         $this->assertContextAnneeOuverte('id');
 
-        $action->handle($encaissement);
+        $action->handle($encaissement, $request->boolean('detacher_applications'));
 
         return $this->backToListPreservingFilters($request, 'backoffice.encaissements.index')
             ->with('success', __('Payment deleted.'));

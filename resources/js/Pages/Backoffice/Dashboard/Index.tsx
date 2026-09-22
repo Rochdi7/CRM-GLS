@@ -164,11 +164,15 @@ export default function DashboardIndex({ stats, annualFrais, annualFraisPeriode,
                 </div>
             </div>
 
-            <div className="row">
-                <div className="col-md-12">
-                    <AnnualFraisChart data={annualFrais} periode={annualFraisPeriode} />
+            {/* Masqué temporairement (22/09/2026) : chiffres du « Résumé des frais annuels »
+                en cours de vérification. Décommenter pour le réafficher. */}
+            {false && (
+                <div className="row">
+                    <div className="col-md-12">
+                        <AnnualFraisChart data={annualFrais} periode={annualFraisPeriode} />
+                    </div>
                 </div>
-            </div>
+            )}
         </BackofficeLayout>
     );
 }

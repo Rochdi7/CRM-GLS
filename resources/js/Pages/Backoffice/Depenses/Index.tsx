@@ -182,6 +182,7 @@ export default function DepensesIndex({
     montantEnAttente,
     enAttenteCount,
     filters,
+    dateFilterEngaged,
 }: DepensesPageProps) {
     const isLoading = useInertiaLoading();
     // The Types de dépenses tab links to its own page — UI-gate it like the
@@ -204,6 +205,11 @@ export default function DepensesIndex({
     const [tab, setTab] = useState<Tab>(initialTab);
 
     const [showDepenseModal, setShowDepenseModal] = useState(false);
+    /**
+     * Lien de retour vers « Calcul paiement prof » quand le modal a été
+     * ouvert depuis cet écran — `null` pour une saisie ordinaire.
+     */
+    const [retourCalcul, setRetourCalcul] = useState<string | null>(null);
     // Which of the TWO expense modals is open: the ordinary « Ajouter une
     // dépense » one, or the « Paiement prof » one (type locked, Groupe
     // required, payment period instead of a supplier invoice reference).
@@ -253,7 +259,19 @@ export default function DepensesIndex({
     const remboursementForm = useForm<RemboursementFormState>(emptyRemboursementForm());
 
     function reload(nextFilters: Partial<typeof filters>) {
-        router.get('/backoffice/depenses', { ...filters, ...nextFilters, page: undefined, pageProf: undefined, pageValidation: undefined, tab }, {
+        const next = { ...filters, ...nextFilters };
+
+        // ⚠ Un effacement de date doit SURVIVRE aux rechargements suivants.
+        // Le serveur renvoie les champs vides (« - » n'est pas une date
+        // affichable), donc sans ce report une recherche ou un changement de
+        // type renverrait '' et RÉARMERAIT la fenêtre d'année : des lignes
+        // disparaîtraient en modifiant un filtre sans rapport (§5). Le
+        // drapeau vient du serveur, seul à connaître l'état réel.
+        const carried = dateFilterEngaged && next.dateFrom === '' && next.dateTo === ''
+            ? { ...next, dateFrom: '-', dateTo: '-' }
+            : next;
+
+        router.get('/backoffice/depenses', { ...carried, page: undefined, pageProf: undefined, pageValidation: undefined, tab }, {
             preserveState: true,
             preserveScroll: true,
             replace: true,
@@ -277,7 +295,16 @@ export default function DepensesIndex({
         reload({ [edge]: value === '' ? '-' : value });
     }
 
-    const filterReset = useFilterReset(filters, reload, { perPage: filters.perPage });
+    const baseFilterReset = useFilterReset(filters, reload, { perPage: filters.perPage });
+    // Effacer une date laisse les DEUX champs vides tout en gardant la
+    // fenêtre d'année levée côté serveur ('-' dans l'URL) : le bouton se
+    // croirait alors sans effet et l'utilisateur resterait bloqué sur une
+    // liste élargie. Le drapeau vient du serveur (`dateFilterEngaged`), qui
+    // seul sait si la fenêtre est armée ; le reset renvoie '' et la réarme.
+    const filterReset = {
+        reset: baseFilterReset.reset,
+        active: baseFilterReset.active || dateFilterEngaged,
+    };
 
     // --- Approval flow (Paramètres → Système « Validation des dépenses ») ---
     // A pending dépense has debited NOTHING: approving is what moves the
@@ -382,6 +409,7 @@ export default function DepensesIndex({
     function openCreateDepense() {
         setEditingDepense(null);
         setProfMode(false);
+        setRetourCalcul(null);
         depenseForm.clearErrors();
         depenseForm.setData(emptyDepenseForm());
         setShowDepenseModal(true);
@@ -395,6 +423,7 @@ export default function DepensesIndex({
     function openCreatePaiementProf() {
         setEditingDepense(null);
         setProfMode(true);
+        setRetourCalcul(null);
         // Une saisie neuve repart de l'année active : la case est un geste
         // explicite, jamais un état qui traîne d'un paiement précédent.
         setGroupesAnneesPrecedentes(false);
@@ -438,6 +467,7 @@ export default function DepensesIndex({
     function closeDepenseModal() {
         setShowDepenseModal(false);
         setEditingDepense(null);
+        setRetourCalcul(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
     }
 
@@ -500,6 +530,54 @@ export default function DepensesIndex({
         : remboursementCaisses.length === 1
             ? remboursementCaisses[0].id
             : '';
+
+    /**
+     * Ouverture pré-remplie depuis « Calcul paiement prof »
+     * (/backoffice/paiement-prof) — même canal que le lien « rembourser »
+     * d'un chèque rejeté ci-dessous : la query string est le SEUL lien entre
+     * les deux écrans.
+     *
+     * ⚠ Rien n'est créé automatiquement. L'écran de calcul ne fait que
+     * PROPOSER un montant ; la dépense reste une soumission relue et validée
+     * par l'opérateur, qui passe par `EnregistrerDepense` avec tous ses
+     * invariants monétaires (§11). Le montant, le groupe et la période sont
+     * revérifiés côté serveur par PaiementProfRules — un `prefill_*` forgé
+     * n'ouvre donc aucune porte que le formulaire n'ouvrirait pas.
+     */
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+
+        if (params.get('prefill_paiement_prof') === null || !canViewDepenses) {
+            return;
+        }
+
+        const typeId = params.get('prefill_type_depense_id');
+        const groupId = params.get('prefill_group_id');
+        // Chemin de RETOUR vers le calcul qui a produit ce montant. Relatif
+        // et re-préfixé ici : une URL absolue venue de la query string serait
+        // une redirection ouverte (on ne renvoie jamais vers un hôte fourni
+        // par le client, §5).
+        const retour = params.get('prefill_retour');
+        setRetourCalcul(
+            retour !== null && retour.startsWith('?') ? `/backoffice/paiement-prof${retour}` : null,
+        );
+
+        setTab('paiements-prof');
+        setProfMode(true);
+        setGroupesAnneesPrecedentes(false);
+        depenseForm.clearErrors();
+        depenseForm.setData({
+            ...emptyDepenseForm(),
+            type_depense_id: typeId !== null ? Number(typeId) : (paiementProfTypeId ?? ''),
+            group_id: groupId !== null ? Number(groupId) : '',
+            montant: params.get('prefill_montant') ?? '',
+            periode_debut: params.get('prefill_periode_debut') ?? '',
+            periode_fin: params.get('prefill_periode_fin') ?? '',
+            description: params.get('prefill_description') ?? '',
+        });
+        setShowDepenseModal(true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     function openCreateRemboursement() {
         setEditingRemboursement(null);
@@ -1427,6 +1505,26 @@ export default function DepensesIndex({
                     {editingDepense && (
                         <div className="alert alert-warning">
                             Le montant et la caisse ne peuvent pas être modifiés après création.
+                        </div>
+                    )}
+                    {/* Ouvert depuis « Calcul paiement prof » : le montant
+                        vient d'un calcul, pas d'une saisie. On dit d'où il
+                        sort et on garde le chemin du RETOUR — signer une paie
+                        sans pouvoir relire le détail qui la justifie est
+                        exactement ce qu'il faut éviter. */}
+                    {retourCalcul !== null && (
+                        <div className="alert alert-info d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <span>
+                                <i className="ti ti-calculator me-1" />
+                                {t('Amount computed from the roll-call.')}
+                            </span>
+                            <a
+                                href={retourCalcul}
+                                className="btn btn-sm btn-outline-primary d-inline-flex align-items-center"
+                            >
+                                <i className="ti ti-eye me-1" />
+                                {t('Review the calculation')}
+                            </a>
                         </div>
                     )}
                     {!editingDepense && soldeActuel !== null && (

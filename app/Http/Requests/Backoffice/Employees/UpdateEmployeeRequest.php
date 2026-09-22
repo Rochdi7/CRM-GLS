@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Backoffice\Employees;
 
+use App\Http\Requests\Backoffice\Employees\Concerns\PaiementProfEnseignantRules;
 use App\Models\Employee;
 use App\Models\Role;
 use App\Support\Phone\Countries;
@@ -17,6 +18,8 @@ use Illuminate\Validation\Rule;
  */
 final class UpdateEmployeeRequest extends FormRequest
 {
+    use PaiementProfEnseignantRules;
+
     public function authorize(): bool
     {
         return true;
@@ -28,6 +31,7 @@ final class UpdateEmployeeRequest extends FormRequest
     public function rules(): array
     {
         return [
+            ...$this->paiementProfRules(),
             'nom' => ['required', 'string', 'max:100'],
             'prenom' => ['required', 'string', 'max:100'],
             'sexe' => ['required', Rule::in(Employee::SEXES)],
@@ -88,6 +92,7 @@ final class UpdateEmployeeRequest extends FormRequest
     public function messages(): array
     {
         return [
+            ...$this->paiementProfMessages(),
             'etablissement_ids.required' => __('Select at least one center.'),
             'etablissement_ids.min' => __('Select at least one center.'),
         ];

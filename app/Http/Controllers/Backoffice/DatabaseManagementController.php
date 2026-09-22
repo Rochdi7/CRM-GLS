@@ -88,6 +88,16 @@ final class DatabaseManagementController extends Controller
                 // Names behind the foreign-key ids on THIS page — the id
                 // stays the value, the name is shown beside it.
                 'foreignLabels' => $this->browser->foreignKeyLabels($table, $rows->items()),
+                // Choosable rows behind each FK column, so the modal offers
+                // a NAME instead of an id to type from memory. A referenced
+                // table too large to list simply yields nothing and the
+                // field stays the raw id box.
+                //
+                // Served as a CLOSURE (§17): it costs one count + one list
+                // per referenced table (32 queries on `encaissements`), and
+                // a search / sort / pagination reload does not need it —
+                // the catalogue cannot change under those.
+                'foreignOptions' => fn (): array => $this->browser->foreignOptions($table),
                 'filters' => $filters,
             ];
         } catch (QueryException $e) {

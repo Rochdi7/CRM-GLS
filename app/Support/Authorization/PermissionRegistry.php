@@ -312,6 +312,18 @@ final class PermissionRegistry
                 'expenses.cancel' => 'Annuler une dépense approuvée (super-admin)',
                 'expenses.approve' => 'Approuver ou refuser une dépense',
             ],
+            // Calcul « Paiement prof » (21/09/2026) — dérive, depuis les
+            // appels déjà saisis, le montant dû à un enseignant sur une
+            // période. C'est une LECTURE : rien n'est écrit, aucune caisse
+            // n'est touchée, aucun montant n'est figé. Le paiement lui-même
+            // reste une dépense ordinaire et garde `expenses.create`.
+            //
+            // Droit distinct de `expenses.*` à dessein : calculer une paie
+            // n'est pas dépenser. Le donner à quelqu'un ne lui permet pas
+            // d'enregistrer la dépense qui en découle, et inversement.
+            'Paiement prof' => [
+                'prof-payments.calculate' => 'Calculer le paiement d’un enseignant',
+            ],
             'Remboursements' => [
                 'refunds.view' => 'Consulter les remboursements',
                 'refunds.create' => 'Enregistrer un remboursement',
@@ -851,6 +863,12 @@ final class PermissionRegistry
             // only, so a manager sees only their affected centres. Creating
             // or editing an account stays super-admin-only.
             'cash-accounts.view',
+            // Calculer la paie d'un enseignant (21/09/2026). C'est la
+            // direction qui arrête ce qu'un professeur a gagné, pas le
+            // front-office — même classe que les autres arbitrages de cette
+            // liste. Le droit ne fait que CALCULER : enregistrer la dépense
+            // qui en découle reste `expenses.create`.
+            'prof-payments.calculate',
         ];
 
         // Read-only across every finance screen — the accounting/oversight
