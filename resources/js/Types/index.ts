@@ -2657,6 +2657,8 @@ export interface RapportFilters {
     methodeFilter: string;
     caisseFilter: string;
     typeFilter: string;
+    typeDepenseFilter: string;
+    statutDepenseFilter: string;
     dateFrom: string;
     dateTo: string;
 }
@@ -2669,7 +2671,9 @@ export type RapportFiltreKey =
     | 'inscriptionFilter'
     | 'methodeFilter'
     | 'caisseFilter'
-    | 'typeFilter';
+    | 'typeFilter'
+    | 'typeDepenseFilter'
+    | 'statutDepenseFilter';
 
 export interface RapportsPageProps {
     onglets: RapportOnglet[];
@@ -2686,12 +2690,21 @@ export interface RapportsPageProps {
     methodeOptions: SelectOption[];
     caisseOptions: SelectOption[];
     typeOptions: SelectOption[];
+    /** Le catalogue ACTIF des types de dépense (« Paiement prof » compris). */
+    typeDepenseOptions: SelectOption[];
+    /** Les quatre statuts de Depense::STATUTS, servis par le serveur. */
+    statutDepenseOptions: SelectOption[];
     /** Nombre de lignes que le document contiendra avec les filtres courants. */
     nombreLignes: number;
     /**
-     * Le total encaissé, calculé PAR LE SERVEUR sur tout l'ensemble filtré —
-     * jamais additionné côté client. Chaîne vide pour un rapport sans colonne
+     * Le total, calculé PAR LE SERVEUR sur tout l'ensemble filtré — jamais
+     * additionné côté client. Chaîne vide pour un rapport sans colonne
      * monétaire : la page n'affiche alors rien, plutôt que « 0,00 DH ».
+     *
+     * ⚠ Ce qu'il TOTALISE dépend du rapport, et le libellé affiché le dit :
+     * « Total encaissé » pour le relevé des encaissements, « Total approuvé »
+     * pour la liste des dépenses — où il ne compte QUE les lignes approuvées,
+     * donc moins que la somme des montants listés.
      */
     montantTotal: string;
     [key: string]: unknown;

@@ -6,16 +6,19 @@ namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Reports\Exports\ExporterRapportExcel;
 use App\Domain\Reports\Exports\RapportPdfRenderer;
+use App\Domain\Reports\Queries\GetDepensesReport;
 use App\Domain\Reports\Queries\GetEncaissementsReport;
 use App\Domain\Reports\Queries\GetInscriptionsReport;
 use App\Domain\Reports\Queries\GetStudentsReport;
 use App\Domain\Reports\Support\RapportCatalogue;
 use App\Http\Controllers\Controller;
 use App\Models\Caisse;
+use App\Models\Depense;
 use App\Models\Encaissement;
 use App\Models\Group;
 use App\Models\Inscription;
 use App\Models\Student;
+use App\Models\TypeDepense;
 use App\Services\Context\CurrentContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -79,6 +82,7 @@ final class RapportController extends Controller
         GetInscriptionsReport $getInscriptionsReport,
         GetStudentsReport $getStudentsReport,
         GetEncaissementsReport $getEncaissementsReport,
+        GetDepensesReport $getDepensesReport,
     ): Response|RedirectResponse {
         abort_unless($request->user()->can('reports.view'), 403);
 
@@ -124,6 +128,13 @@ final class RapportController extends Controller
                 $filters['caisseFilter'],
                 $filters['typeFilter'],
             ),
+            GetDepensesReport::KEY => $getDepensesReport->count(
+                $request->user(),
+                $filters['dateFrom'],
+                $filters['dateTo'],
+                $filters['typeDepenseFilter'],
+                $filters['statutDepenseFilter'],
+            ),
         };
 
         return Inertia::render('Backoffice/Rapports/Index', [
@@ -158,21 +169,44 @@ final class RapportController extends Controller
             // filtre n'a pas à relire le catalogue des caisses.
             'caisseOptions' => fn () => $getEncaissementsReport->caisseOptions($request->user()),
             'typeOptions' => self::TYPES_ENCAISSEMENT_LABELS,
+            // Closure : un rechargement partiel déclenché par un changement de
+            // filtre n'a pas à relire le catalogue des types de dépense.
+            'typeDepenseOptions' => fn () => $getDepensesReport->typeOptions(),
+            // Les quatre statuts du MODÈLE, dans leur ordre de déclaration :
+            // Depense::STATUTS est la seule autorité sur ce qu'un statut de
+            // dépense peut valoir, jamais une liste recopiée ici.
+            'statutDepenseOptions' => array_map(
+                static fn (string $s): array => ['value' => $s, 'label' => $s],
+                Depense::STATUTS,
+            ),
             'nombreLignes' => $lignes,
             // Le total n'est calculé QUE pour le rapport qui l'imprime : les
             // deux autres n'ont pas de colonne monétaire, et une chaîne vide
             // dit à la page de ne rien afficher plutôt que « 0,00 DH », qu'on
             // lirait comme « rien encaissé ».
-            'montantTotal' => $filters['rapport'] === GetEncaissementsReport::KEY
-                ? $getEncaissementsReport->total(
+            'montantTotal' => match ($filters['rapport']) {
+                GetEncaissementsReport::KEY => $getEncaissementsReport->total(
                     $request->user(),
                     $filters['dateFrom'],
                     $filters['dateTo'],
                     $filters['methodeFilter'],
                     $filters['caisseFilter'],
                     $filters['typeFilter'],
-                )
-                : '',
+                ),
+                // ⚠ Ce total ne compte QUE les dépenses approuvées — l'argent
+                // réellement sorti des caisses. Il est donc volontairement
+                // INFÉRIEUR à la somme des montants listés, dont certains
+                // attendent encore une décision (§11 : « argent sorti » a UNE
+                // seule définition, statut = Approuvée).
+                GetDepensesReport::KEY => $getDepensesReport->total(
+                    $request->user(),
+                    $filters['dateFrom'],
+                    $filters['dateTo'],
+                    $filters['typeDepenseFilter'],
+                    $filters['statutDepenseFilter'],
+                ),
+                default => '',
+            },
         ]);
     }
 
@@ -182,6 +216,7 @@ final class RapportController extends Controller
         GetInscriptionsReport $getInscriptionsReport,
         GetStudentsReport $getStudentsReport,
         GetEncaissementsReport $getEncaissementsReport,
+        GetDepensesReport $getDepensesReport,
         RapportPdfRenderer $renderer,
         CurrentContext $context,
     ): \Symfony\Component\HttpFoundation\Response {
@@ -189,7 +224,7 @@ final class RapportController extends Controller
 
         $filters = $this->filters($request);
         $cle = $filters['rapport'];
-        $lignes = $this->lignes($request, $getInscriptionsReport, $getStudentsReport, $getEncaissementsReport, $filters);
+        $lignes = $this->lignes($request, $getInscriptionsReport, $getStudentsReport, $getEncaissementsReport, $getDepensesReport, $filters);
 
         $pdf = $renderer->render(
             RapportCatalogue::vuePdf($cle),
@@ -206,7 +241,7 @@ final class RapportController extends Controller
                 $this->filtresAppliques($filters),
                 // Le « Total encaissé » du relevé — calculé en SQL sur tout
                 // l'ensemble filtré, jamais réadditionné par le gabarit.
-                $this->supplementsPdf($request, $getEncaissementsReport, $filters),
+                $this->supplementsPdf($request, $getEncaissementsReport, $getDepensesReport, $filters),
             ),
         );
 
@@ -226,6 +261,7 @@ final class RapportController extends Controller
         GetInscriptionsReport $getInscriptionsReport,
         GetStudentsReport $getStudentsReport,
         GetEncaissementsReport $getEncaissementsReport,
+        GetDepensesReport $getDepensesReport,
         ExporterRapportExcel $exporter,
         CurrentContext $context,
     ): StreamedResponse {
@@ -233,7 +269,7 @@ final class RapportController extends Controller
 
         $filters = $this->filters($request);
         $cle = $filters['rapport'];
-        $lignes = $this->lignes($request, $getInscriptionsReport, $getStudentsReport, $getEncaissementsReport, $filters);
+        $lignes = $this->lignes($request, $getInscriptionsReport, $getStudentsReport, $getEncaissementsReport, $getDepensesReport, $filters);
 
         // Les mêmes lignes de contexte que le PDF, dans le même ordre, et
         // construites depuis le MÊME dictionnaire : le classeur ne peut pas
@@ -256,6 +292,20 @@ final class RapportController extends Controller
                 $filters['methodeFilter'],
                 $filters['caisseFilter'],
                 $filters['typeFilter'],
+            );
+        }
+
+        // Le total APPROUVÉ, et il se NOMME ainsi : il ne compte pas les
+        // lignes En attente / Refusée / Annulée que le classeur liste par
+        // ailleurs, donc l'appeler « Total » tout court laisserait croire que
+        // la colonne Montant s'y additionne.
+        if ($cle === GetDepensesReport::KEY) {
+            $sousTitres[] = 'Total approuvé : '.$getDepensesReport->total(
+                $request->user(),
+                $filters['dateFrom'],
+                $filters['dateTo'],
+                $filters['typeDepenseFilter'],
+                $filters['statutDepenseFilter'],
             );
         }
 
@@ -282,6 +332,7 @@ final class RapportController extends Controller
         GetInscriptionsReport $getInscriptionsReport,
         GetStudentsReport $getStudentsReport,
         GetEncaissementsReport $getEncaissementsReport,
+        GetDepensesReport $getDepensesReport,
         array $filters,
     ): Collection {
         return match ($filters['rapport']) {
@@ -307,6 +358,13 @@ final class RapportController extends Controller
                 $filters['caisseFilter'],
                 $filters['typeFilter'],
             ),
+            GetDepensesReport::KEY => $getDepensesReport(
+                $request->user(),
+                $filters['dateFrom'],
+                $filters['dateTo'],
+                $filters['typeDepenseFilter'],
+                $filters['statutDepenseFilter'],
+            ),
         };
     }
 
@@ -324,22 +382,38 @@ final class RapportController extends Controller
     private function supplementsPdf(
         Request $request,
         GetEncaissementsReport $getEncaissementsReport,
+        GetDepensesReport $getDepensesReport,
         array $filters,
     ): array {
-        if ($filters['rapport'] !== GetEncaissementsReport::KEY) {
-            return [];
+        if ($filters['rapport'] === GetEncaissementsReport::KEY) {
+            return [
+                'totalMontant' => $getEncaissementsReport->total(
+                    $request->user(),
+                    $filters['dateFrom'],
+                    $filters['dateTo'],
+                    $filters['methodeFilter'],
+                    $filters['caisseFilter'],
+                    $filters['typeFilter'],
+                ),
+            ];
         }
 
-        return [
-            'totalMontant' => $getEncaissementsReport->total(
-                $request->user(),
-                $filters['dateFrom'],
-                $filters['dateTo'],
-                $filters['methodeFilter'],
-                $filters['caisseFilter'],
-                $filters['typeFilter'],
-            ),
-        ];
+        // Le pied du document — « Total approuvé » : la MÊME valeur que le
+        // compteur de l'écran et que l'en-tête du classeur, calculée par la
+        // même requête Domain.
+        if ($filters['rapport'] === GetDepensesReport::KEY) {
+            return [
+                'totalMontant' => $getDepensesReport->total(
+                    $request->user(),
+                    $filters['dateFrom'],
+                    $filters['dateTo'],
+                    $filters['typeDepenseFilter'],
+                    $filters['statutDepenseFilter'],
+                ),
+            ];
+        }
+
+        return [];
     }
 
     /**
@@ -391,6 +465,15 @@ final class RapportController extends Controller
             $libelles['Type'] = $this->typeEncaissementLabel($filters['typeFilter']);
         }
 
+        if (in_array('typeDepenseFilter', $visibles, true)
+            && ($typeDepense = $this->typeDepenseLabel($filters['typeDepenseFilter'])) !== null) {
+            $libelles['Type'] = $typeDepense;
+        }
+
+        if (in_array('statutDepenseFilter', $visibles, true) && $filters['statutDepenseFilter'] !== '') {
+            $libelles['Statut'] = $filters['statutDepenseFilter'];
+        }
+
         return $libelles;
     }
 
@@ -407,6 +490,21 @@ final class RapportController extends Controller
         }
 
         return $type;
+    }
+
+    /**
+     * Le NOM du type de dépense filtré, pour le rappeler en tête du document.
+     * Lu sans scoping supplémentaire, comme groupLabel() : la requête du
+     * rapport a déjà borné les lignes, donc un type hors portée ne sort aucune
+     * ligne et l'en-tête ne nommerait qu'un document vide.
+     */
+    private function typeDepenseLabel(string $typeFilter): ?string
+    {
+        if ($typeFilter === '') {
+            return null;
+        }
+
+        return TypeDepense::query()->whereKey((int) $typeFilter)->value('nom');
     }
 
     /**
@@ -465,6 +563,7 @@ final class RapportController extends Controller
         $inscriptionFilter = (string) $request->string('inscriptionFilter');
         $methodeFilter = (string) $request->string('methodeFilter');
         $typeFilter = (string) $request->string('typeFilter');
+        $statutDepenseFilter = (string) $request->string('statutDepenseFilter');
 
         return [
             'rapport' => in_array($rapport, RapportCatalogue::clesImplementees(), true)
@@ -479,6 +578,12 @@ final class RapportController extends Controller
             'methodeFilter' => in_array($methodeFilter, Encaissement::METHODES, true) ? $methodeFilter : '',
             'caisseFilter' => (string) $request->string('caisseFilter'),
             'typeFilter' => in_array($typeFilter, GetEncaissementsReport::TYPES, true) ? $typeFilter : '',
+            'typeDepenseFilter' => (string) $request->string('typeDepenseFilter'),
+            // Validé contre la constante du modèle : un statut forgé retombe
+            // sur « aucun filtre » plutôt que d'atteindre la requête SQL.
+            'statutDepenseFilter' => in_array($statutDepenseFilter, Depense::STATUTS, true)
+                ? $statutDepenseFilter
+                : '',
             'dateFrom' => self::filterValue($request->string('dateFrom')),
             'dateTo' => self::filterValue($request->string('dateTo')),
         ];

@@ -59,6 +59,8 @@ export default function RapportsIndex({
     methodeOptions,
     caisseOptions,
     typeOptions,
+    typeDepenseOptions,
+    statutDepenseOptions,
     nombreLignes,
     montantTotal,
 }: RapportsPageProps) {
@@ -138,6 +140,16 @@ export default function RapportsIndex({
             placeholder: t('All types'),
             options: typeOptions,
         },
+        typeDepenseFilter: {
+            label: t('Type'),
+            placeholder: t('Choose a type'),
+            options: typeDepenseOptions,
+        },
+        statutDepenseFilter: {
+            label: t('Status'),
+            placeholder: t('All statuses'),
+            options: statutDepenseOptions,
+        },
     };
 
     /**
@@ -151,6 +163,7 @@ export default function RapportsIndex({
             return {
                 vide: t('No student matches these filters.'),
                 unite: nombreLignes === 1 ? t('student') : t('students'),
+                total: t('Total collected'),
             };
         }
 
@@ -158,12 +171,27 @@ export default function RapportsIndex({
             return {
                 vide: t('No payment matches these filters.'),
                 unite: nombreLignes === 1 ? t('payment') : t('payments'),
+                total: t('Total collected'),
+            };
+        }
+
+        if (filters.rapport === 'liste-depenses') {
+            return {
+                vide: t('No expense matches these filters.'),
+                unite: nombreLignes === 1 ? t('expense') : t('expenses'),
+                // ⚠ « Total approuvé », jamais « Total » tout court : le
+                // serveur ne compte que les dépenses approuvées, alors que la
+                // liste imprime aussi les lignes En attente / Refusée /
+                // Annulée. Un libellé générique laisserait croire que la
+                // colonne Montant du document s'y additionne.
+                total: t('Approved total'),
             };
         }
 
         return {
             vide: t('No registration matches these filters.'),
             unite: nombreLignes === 1 ? t('registration') : t('registrations'),
+            total: t('Total collected'),
         };
     })();
 
@@ -251,6 +279,8 @@ export default function RapportsIndex({
                                         methodeFilter: '',
                                         caisseFilter: '',
                                         typeFilter: '',
+                                        typeDepenseFilter: '',
+                                        statutDepenseFilter: '',
                                     })
                                 }
                             >
@@ -368,7 +398,7 @@ export default function RapportsIndex({
                             Vide pour un rapport sans colonne monétaire. */}
                         {montantTotal !== '' && nombreLignes > 0 && (
                             <span className="ms-2 fw-semibold text-dark">
-                                — {t('Total collected')} : {montantTotal}
+                                — {messages.total} : {montantTotal}
                             </span>
                         )}
                     </p>

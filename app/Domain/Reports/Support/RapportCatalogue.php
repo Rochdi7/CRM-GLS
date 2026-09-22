@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Reports\Support;
 
+use App\Domain\Reports\Queries\GetDepensesReport;
 use App\Domain\Reports\Queries\GetEncaissementsReport;
 use App\Domain\Reports\Queries\GetInscriptionsReport;
 use App\Domain\Reports\Queries\GetStudentsReport;
@@ -61,7 +62,16 @@ final class RapportCatalogue
                 ],
             ],
             ['key' => 'caisse', 'label' => 'Caisse', 'rapports' => []],
-            ['key' => 'depenses', 'label' => 'Dépenses', 'rapports' => []],
+            [
+                'key' => 'depenses',
+                'label' => 'Dépenses',
+                'rapports' => [
+                    [
+                        'value' => GetDepensesReport::KEY,
+                        'label' => 'Liste des dépenses',
+                    ],
+                ],
+            ],
             ['key' => 'vie-scolaire', 'label' => 'Vie scolaire', 'rapports' => []],
             ['key' => 'employes', 'label' => 'Employés', 'rapports' => []],
         ];
@@ -70,7 +80,12 @@ final class RapportCatalogue
     /** Les clés de rapport réellement servies — ce que le contrôleur accepte. */
     public static function clesImplementees(): array
     {
-        return [GetInscriptionsReport::KEY, GetStudentsReport::KEY, GetEncaissementsReport::KEY];
+        return [
+            GetInscriptionsReport::KEY,
+            GetStudentsReport::KEY,
+            GetEncaissementsReport::KEY,
+            GetDepensesReport::KEY,
+        ];
     }
 
     /**
@@ -90,6 +105,7 @@ final class RapportCatalogue
             GetInscriptionsReport::KEY => ['groupFilter', 'statutFilter'],
             GetStudentsReport::KEY => ['sexeFilter', 'inscriptionFilter'],
             GetEncaissementsReport::KEY => ['methodeFilter', 'caisseFilter', 'typeFilter'],
+            GetDepensesReport::KEY => ['typeDepenseFilter', 'statutDepenseFilter'],
             default => [],
         };
     }
@@ -101,6 +117,7 @@ final class RapportCatalogue
             GetInscriptionsReport::KEY => "Liste d'inscriptions",
             GetStudentsReport::KEY => 'Liste des étudiants',
             GetEncaissementsReport::KEY => 'Relevé des Encaissements',
+            GetDepensesReport::KEY => 'Liste des Dépenses',
             default => 'Rapport',
         };
     }
@@ -112,6 +129,7 @@ final class RapportCatalogue
             GetInscriptionsReport::KEY => 'backoffice.rapports.inscriptions-pdf',
             GetStudentsReport::KEY => 'backoffice.rapports.etudiants-pdf',
             GetEncaissementsReport::KEY => 'backoffice.rapports.encaissements-pdf',
+            GetDepensesReport::KEY => 'backoffice.rapports.depenses-pdf',
             default => throw new \InvalidArgumentException("Rapport inconnu : {$cle}"),
         };
     }
@@ -165,6 +183,24 @@ final class RapportCatalogue
                 ['key' => 'date', 'label' => 'Date', 'width' => 12.0],
                 ['key' => 'operateur', 'label' => 'Opérateur', 'width' => 20.0],
             ],
+            // ⚠ « Statut » est une colonne du document, pas un détail
+            // d'écran : c'est elle qui dit si l'argent est SORTI de la caisse
+            // (« Approuvée ») ou non (« En attente » / « Refusée » /
+            // « Annulée »). Sans elle, les quatre se liraient pareil dans le
+            // classeur et le total du document paraîtrait faux.
+            GetDepensesReport::KEY => [
+                ['key' => 'numero', 'label' => "N° d'ordre", 'width' => 9.0],
+                ['key' => 'reference', 'label' => 'Réf', 'width' => 14.0],
+                ['key' => 'type', 'label' => 'Type', 'width' => 22.0],
+                ['key' => 'description', 'label' => 'Description', 'width' => 30.0],
+                ['key' => 'montant', 'label' => 'Montant', 'width' => 14.0],
+                ['key' => 'methode', 'label' => 'Méthode', 'width' => 12.0],
+                ['key' => 'statut', 'label' => 'Statut', 'width' => 13.0],
+                ['key' => 'caisse', 'label' => 'Caisse', 'width' => 20.0],
+                ['key' => 'groupe', 'label' => 'Groupe', 'width' => 20.0],
+                ['key' => 'date', 'label' => 'Date', 'width' => 12.0],
+                ['key' => 'operateur', 'label' => 'Opérateur', 'width' => 20.0],
+            ],
             default => throw new \InvalidArgumentException("Rapport inconnu : {$cle}"),
         };
     }
@@ -180,6 +216,7 @@ final class RapportCatalogue
             GetInscriptionsReport::KEY => 'liste-inscriptions',
             GetStudentsReport::KEY => 'liste-etudiants',
             GetEncaissementsReport::KEY => 'releve-encaissements',
+            GetDepensesReport::KEY => 'liste-depenses',
             default => 'rapport',
         };
 
