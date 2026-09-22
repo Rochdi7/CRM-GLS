@@ -2482,6 +2482,8 @@ export interface PaiementProfGroupOptions {
     fenetre: { debut: string; fin: string; libelle: string; ancreSurLeGroupe: boolean };
     enseignants: PaiementProfEnseignantOption[];
     enseignantParDefaut: number | null;
+    /** Durée habituelle d une séance du mois (2.5 = 2h30), déduite des horaires réels. */
+    dureeHabituelle: number | null;
     seancesSansEnseignant: number;
 }
 
@@ -2492,6 +2494,12 @@ export interface PaiementProfFilters {
     mois: string;
     /** Heures saisies — mode horaire seulement. */
     heures: string;
+    /**
+     * Durée d'UNE séance (« 2h30 ») — aide de saisie qui alimente `heures`.
+     * Purement locale : jamais envoyée au serveur, qui ne connaît que le
+     * total d'heures.
+     */
+    dureeSeance: string;
 }
 
 export interface PaiementProfPageProps {

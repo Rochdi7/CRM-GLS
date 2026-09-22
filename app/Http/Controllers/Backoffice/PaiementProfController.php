@@ -81,6 +81,10 @@ final class PaiementProfController extends Controller
                 'enseignantFilter' => $enseignantFilter,
                 'mois' => $mois,
                 'heures' => $heuresFilter,
+                // Aide de saisie côté écran uniquement (durée d'une séance,
+                // « 2h30 ») : le serveur ne s'en sert pas, mais la page
+                // initialise son état depuis `filters`.
+                'dureeSeance' => '',
             ],
             'groupOptions' => fn (): array => $query->groupOptions($user),
             'seancesMaxParMois' => CalculerPaiementProfParSeance::SEANCES_MAX_PAR_MOIS,

@@ -8,6 +8,7 @@ import SelectField from '@/Components/Forms/SelectField';
 import FormField from '@/Components/Forms/FormField';
 import { useFilterReset } from '@/Hooks/useFilterReset';
 import { t } from '@/Lib/i18n';
+import { formatDuree, parseDuree } from '@/Lib/duree';
 import type { PaiementProfGroupOptions, PaiementProfPageProps, SelectOption } from '@/Types';
 
 /**
@@ -41,6 +42,12 @@ export default function PaiementProfIndex({
     const [showModal, setShowModal] = useState(false);
     const [saisie, setSaisie] = useState(filters);
 
+    // Le total d'heures a-t-il été saisi À LA MAIN ? Tant que non, il suit
+    // la multiplication (durée × séances). Dès que l'opérateur le corrige,
+    // l'automatisme se tait : se battre contre une valeur qui se réécrit
+    // toute seule est le pire comportement possible sur un montant de paie.
+    const [heuresManuelles, setHeuresManuelles] = useState(false);
+
     // Ce que le serveur sait du groupe choisi — chargé à la sélection.
     const [options, setOptions] = useState<PaiementProfGroupOptions | null>(null);
     const [chargement, setChargement] = useState(false);
@@ -51,6 +58,9 @@ export default function PaiementProfIndex({
 
     function ouvrirModal() {
         setSaisie(filters);
+        // Un nouveau calcul repart en mode AUTOMATIQUE : le drapeau ne doit
+        // pas survivre au modal précédent.
+        setHeuresManuelles(false);
         setShowModal(true);
     }
 
@@ -82,6 +92,16 @@ export default function PaiementProfIndex({
                     ...precedent,
                     // Le mois par défaut du serveur si l'écran n'en avait pas.
                     mois: precedent.mois !== '' ? precedent.mois : data.mois,
+                    // Durée habituelle d'une séance du groupe, déduite des
+                    // horaires réels : le champ arrive PRÉ-REMPLI et le total
+                    // se calcule tout seul. L'opérateur n'a rien à saisir dans
+                    // le cas courant, et garde la main dans les autres.
+                    dureeSeance:
+                        precedent.dureeSeance !== ''
+                            ? precedent.dureeSeance
+                            : data.dureeHabituelle !== null
+                              ? formatDuree(data.dureeHabituelle)
+                              : '',
                     // Le prof pré-sélectionné : celui qui a le plus enseigné ce
                     // mois-ci — seulement si l'écran n'en avait pas déjà un.
                     enseignantFilter:
@@ -125,6 +145,25 @@ export default function PaiementProfIndex({
 
     const moisOptions: SelectOption[] = (options?.moisOptions ?? []).map((m) => ({ value: m.value, label: m.label }));
 
+    /** Séances du mois pour l'enseignant choisi — le multiplicateur. */
+    const seancesDuMois = enseignantChoisi?.seancesCeMois ?? 0;
+
+    const dureeParSeance = useMemo(() => parseDuree(saisie.dureeSeance), [saisie.dureeSeance]);
+
+    const totalHeuresCalcule = useMemo(
+        () => (dureeParSeance !== null ? Math.round(dureeParSeance * seancesDuMois * 100) / 100 : 0),
+        [dureeParSeance, seancesDuMois],
+    );
+
+    useEffect(() => {
+        if (heuresManuelles || dureeParSeance === null || seancesDuMois === 0) {
+            return;
+        }
+
+        const valeur = totalHeuresCalcule.toFixed(2);
+        setSaisie((precedent) => (precedent.heures === valeur ? precedent : { ...precedent, heures: valeur }));
+    }, [heuresManuelles, dureeParSeance, seancesDuMois, totalHeuresCalcule]);
+
     const formulaireComplet =
         saisie.groupFilter !== '' &&
         saisie.enseignantFilter !== '' &&
@@ -148,7 +187,10 @@ export default function PaiementProfIndex({
 
         setShowModal(false);
         setAjustements({});
-        router.get('/backoffice/paiement-prof', { ...saisie }, {
+        // `dureeSeance` est une aide de saisie : le serveur ne connaît que le
+        // total d'heures, l'envoyer polluerait l'URL sans rien décider.
+        const { dureeSeance: _, ...payload } = saisie;
+        router.get('/backoffice/paiement-prof', { ...payload }, {
             preserveState: true,
             preserveScroll: true,
             replace: true,
@@ -238,6 +280,16 @@ export default function PaiementProfIndex({
             return;
         }
 
+        // De quoi ROUVRIR ce calcul à l'identique depuis le modal de dépense :
+        // relu avant de signer, le détail doit rester à un clic. Query string
+        // seule (jamais une URL absolue) — c'est le modal qui la re-préfixe.
+        const retour = new URLSearchParams({
+            groupFilter: String(calcul.group.id),
+            enseignantFilter: String(calcul.enseignant.id),
+            mois: calcul.mois,
+            ...(calcul.heuresSaisies !== null ? { heures: String(calcul.heuresSaisies) } : {}),
+        });
+
         const params = new URLSearchParams({
             prefill_paiement_prof: '1',
             prefill_group_id: String(calcul.group.id),
@@ -245,6 +297,7 @@ export default function PaiementProfIndex({
             prefill_periode_debut: calcul.periode.debut,
             prefill_periode_fin: calcul.periode.fin,
             prefill_description: `${t('Teacher payment')} — ${calcul.enseignant.nom} — ${calcul.group.nom} — ${calcul.periode.libelle}`,
+            prefill_retour: `?${retour.toString()}`,
             ...(paiementProfTypeId !== null ? { prefill_type_depense_id: String(paiementProfTypeId) } : {}),
         });
 
@@ -356,7 +409,7 @@ export default function PaiementProfIndex({
                     onChange={(event) =>
                         // Changer de groupe remet prof et mois à zéro : ils
                         // n'ont de sens que pour LE groupe choisi.
-                        majSaisie({ groupFilter: event.target.value, enseignantFilter: '', mois: '', heures: '' })
+                        majSaisie({ groupFilter: event.target.value, enseignantFilter: '', mois: '', heures: '', dureeSeance: '' })
                     }
                 />
 
@@ -399,7 +452,7 @@ export default function PaiementProfIndex({
                                             options={enseignantOptions}
                                             placeholder={t('Select a teacher')}
                                             onChange={(event) =>
-                                                majSaisie({ enseignantFilter: event.target.value, heures: '' })
+                                                majSaisie({ enseignantFilter: event.target.value, heures: '', dureeSeance: '' })
                                             }
                                         />
                                     </div>
@@ -461,18 +514,80 @@ export default function PaiementProfIndex({
                                 )}
 
                                 {/* Mode horaire : le seul cas où l'opérateur
-                                    saisit quelque chose de plus. */}
+                                    saisit quelque chose de plus.
+
+                                    La durée PAR SÉANCE est multipliée par le
+                                    nombre de séances du mois : additionner 22
+                                    séances à la main est une source d'erreur
+                                    inutile. Le total reste modifiable — un mois
+                                    avec une séance écourtée ne rentre pas dans
+                                    la multiplication. */}
                                 {enseignantChoisi?.mode === 'horaire' && enseignantChoisi.probleme === null && (
-                                    <FormField
-                                        id="pp-heures"
-                                        label={t('Total hours taught in this group this month')}
-                                        type="number"
-                                        step="0.25"
-                                        min="0"
-                                        required
-                                        value={saisie.heures}
-                                        onChange={(event) => majSaisie({ heures: event.target.value })}
-                                    />
+                                    <div className="row">
+                                        <div className="col-md-6">
+                                            <FormField
+                                                id="pp-duree-seance"
+                                                label={t('Duration per session')}
+                                                type="text"
+                                                inputMode="decimal"
+                                                placeholder="2h30"
+                                                value={saisie.dureeSeance}
+                                                onChange={(event) => majSaisie({ dureeSeance: event.target.value })}
+                                            />
+                                            <div className="form-text mt-n2 mb-3">
+                                                {dureeParSeance !== null ? (
+                                                    <span className="text-success">
+                                                        {formatDuree(dureeParSeance)} × {seancesDuMois}{' '}
+                                                        {t('sessions')} = <strong>{formatDuree(totalHeuresCalcule)}</strong>
+                                                    </span>
+                                                ) : saisie.dureeSeance !== '' ? (
+                                                    <span className="text-danger">
+                                                        {t('Unreadable duration — use 2h30, 2:30 or 2.30.')}
+                                                    </span>
+                                                ) : (
+                                                    t('e.g. 2h30 — multiplied by the month’s sessions.')
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="col-md-6">
+                                            <FormField
+                                                id="pp-heures"
+                                                label={t('Total hours taught in this group this month')}
+                                                type="number"
+                                                step="0.25"
+                                                min="0"
+                                                required
+                                                value={saisie.heures}
+                                                onChange={(event) => {
+                                                    // Saisie manuelle : elle PRIME sur la
+                                                    // multiplication, qui cesse alors de
+                                                    // réécrire le champ.
+                                                    setHeuresManuelles(true);
+                                                    majSaisie({ heures: event.target.value });
+                                                }}
+                                            />
+                                            <div className="form-text mt-n2 mb-3 d-flex justify-content-between gap-2">
+                                                <span>
+                                                    {saisie.heures !== '' && Number(saisie.heures) > 0
+                                                        ? formatDuree(Number(saisie.heures))
+                                                        : t('Editable — overrides the calculation.')}
+                                                </span>
+                                                {heuresManuelles && dureeParSeance !== null && (
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-link btn-sm p-0 fs-12 text-decoration-none"
+                                                        onClick={() => {
+                                                            setHeuresManuelles(false);
+                                                            majSaisie({ heures: totalHeuresCalcule.toFixed(2) });
+                                                        }}
+                                                    >
+                                                        <i className="ti ti-arrow-back-up me-1" />
+                                                        {t('Recalculate')}
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
                                 )}
                             </>
                         )}

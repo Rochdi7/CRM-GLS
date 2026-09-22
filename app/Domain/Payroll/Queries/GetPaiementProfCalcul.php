@@ -100,6 +100,14 @@ final class GetPaiementProfCalcul
 
         $principal = $parProf->sortDesc()->keys()->first();
 
+        // Durée HABITUELLE d'une séance du groupe, déduite des horaires
+        // réellement enregistrés (la plus fréquente). Sert à pré-remplir le
+        // champ « Durée par séance » du mode horaire : le cas courant — des
+        // séances toutes de même longueur — ne demande alors aucune saisie.
+        // Reste modifiable : un mois avec une séance écourtée ne rentre pas
+        // dans une multiplication.
+        $dureeHabituelle = $this->dureeHabituelle($group, $fenetre);
+
         return [
             'moisOptions' => $moisOptions,
             'mois' => $mois,
@@ -122,6 +130,7 @@ final class GetPaiementProfCalcul
                 ];
             })->values()->all(),
             'enseignantParDefaut' => $principal !== null ? (int) $principal : ($group->enseignant_id ?? null),
+            'dureeHabituelle' => $dureeHabituelle,
             'seancesSansEnseignant' => $sansEnseignant,
         ];
     }
@@ -262,6 +271,38 @@ final class GetPaiementProfCalcul
             'heuresSaisies' => null,
             'totalHoraire' => null,
         ];
+    }
+
+    /**
+     * Durée en heures de la séance la PLUS FRÉQUENTE du mois (2.5 pour
+     * 2 h 30). `null` quand aucune séance n'a d'horaire exploitable — mieux
+     * vaut un champ vide qu'une durée inventée sur un calcul de paie.
+     */
+    private function dureeHabituelle(Group $group, MoisDeGroupe $fenetre): ?float
+    {
+        $horaire = DB::table('seances')
+            ->where('group_id', $group->id)
+            ->where('statut', Seance::STATUT_EFFECTUEE)
+            ->whereBetween('date_seance', [$fenetre->debut->toDateString(), $fenetre->fin->toDateString()])
+            ->whereNotNull('heure_debut')
+            ->whereNotNull('heure_fin')
+            ->select('heure_debut', 'heure_fin', DB::raw('count(*) as n'))
+            ->groupBy('heure_debut', 'heure_fin')
+            ->orderByDesc('n')
+            ->first();
+
+        if ($horaire === null) {
+            return null;
+        }
+
+        $debut = Carbon::parse($horaire->heure_debut);
+        $fin = Carbon::parse($horaire->heure_fin);
+
+        if ($fin->lessThanOrEqualTo($debut)) {
+            return null;
+        }
+
+        return round($debut->diffInMinutes($fin) / 60, 2);
     }
 
     private function totalHeures(iterable $seances): float

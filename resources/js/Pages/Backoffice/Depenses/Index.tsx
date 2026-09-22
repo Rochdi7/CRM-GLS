@@ -205,6 +205,11 @@ export default function DepensesIndex({
     const [tab, setTab] = useState<Tab>(initialTab);
 
     const [showDepenseModal, setShowDepenseModal] = useState(false);
+    /**
+     * Lien de retour vers « Calcul paiement prof » quand le modal a été
+     * ouvert depuis cet écran — `null` pour une saisie ordinaire.
+     */
+    const [retourCalcul, setRetourCalcul] = useState<string | null>(null);
     // Which of the TWO expense modals is open: the ordinary « Ajouter une
     // dépense » one, or the « Paiement prof » one (type locked, Groupe
     // required, payment period instead of a supplier invoice reference).
@@ -404,6 +409,7 @@ export default function DepensesIndex({
     function openCreateDepense() {
         setEditingDepense(null);
         setProfMode(false);
+        setRetourCalcul(null);
         depenseForm.clearErrors();
         depenseForm.setData(emptyDepenseForm());
         setShowDepenseModal(true);
@@ -417,6 +423,7 @@ export default function DepensesIndex({
     function openCreatePaiementProf() {
         setEditingDepense(null);
         setProfMode(true);
+        setRetourCalcul(null);
         // Une saisie neuve repart de l'année active : la case est un geste
         // explicite, jamais un état qui traîne d'un paiement précédent.
         setGroupesAnneesPrecedentes(false);
@@ -460,6 +467,7 @@ export default function DepensesIndex({
     function closeDepenseModal() {
         setShowDepenseModal(false);
         setEditingDepense(null);
+        setRetourCalcul(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
     }
 
@@ -545,6 +553,14 @@ export default function DepensesIndex({
 
         const typeId = params.get('prefill_type_depense_id');
         const groupId = params.get('prefill_group_id');
+        // Chemin de RETOUR vers le calcul qui a produit ce montant. Relatif
+        // et re-préfixé ici : une URL absolue venue de la query string serait
+        // une redirection ouverte (on ne renvoie jamais vers un hôte fourni
+        // par le client, §5).
+        const retour = params.get('prefill_retour');
+        setRetourCalcul(
+            retour !== null && retour.startsWith('?') ? `/backoffice/paiement-prof${retour}` : null,
+        );
 
         setTab('paiements-prof');
         setProfMode(true);
@@ -1489,6 +1505,26 @@ export default function DepensesIndex({
                     {editingDepense && (
                         <div className="alert alert-warning">
                             Le montant et la caisse ne peuvent pas être modifiés après création.
+                        </div>
+                    )}
+                    {/* Ouvert depuis « Calcul paiement prof » : le montant
+                        vient d'un calcul, pas d'une saisie. On dit d'où il
+                        sort et on garde le chemin du RETOUR — signer une paie
+                        sans pouvoir relire le détail qui la justifie est
+                        exactement ce qu'il faut éviter. */}
+                    {retourCalcul !== null && (
+                        <div className="alert alert-info d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <span>
+                                <i className="ti ti-calculator me-1" />
+                                {t('Amount computed from the roll-call.')}
+                            </span>
+                            <a
+                                href={retourCalcul}
+                                className="btn btn-sm btn-outline-primary d-inline-flex align-items-center"
+                            >
+                                <i className="ti ti-eye me-1" />
+                                {t('Review the calculation')}
+                            </a>
                         </div>
                     )}
                     {!editingDepense && soldeActuel !== null && (

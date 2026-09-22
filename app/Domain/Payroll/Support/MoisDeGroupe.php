@@ -6,6 +6,7 @@ namespace App\Domain\Payroll\Support;
 
 use App\Models\Group;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Les « mois » d'un groupe ne sont PAS les mois civils : ils commencent le
@@ -70,18 +71,44 @@ final class MoisDeGroupe
     }
 
     /**
-     * Mois proposables pour ce groupe : du démarrage jusqu'au mois courant
-     * (ou à la fin de formation si elle est passée).
+     * Mois proposables pour ce groupe.
+     *
+     * ⚠ Les bornes sont celles des SÉANCES RÉELLES, élargies par les dates de
+     * formation — jamais l'inverse. Un groupe dont `date_debut_formation` a
+     * été saisie APRÈS ses premières séances (cas courant sur les données
+     * importées) verrait sinon ces mois disparaître du menu : l'opérateur ne
+     * pourrait pas payer un mois qui a pourtant été enseigné, sans rien à
+     * l'écran pour l'expliquer.
+     *
+     * Symétriquement, une `date_fin_formation` dans le futur ne doit pas
+     * ouvrir des mois qui n'ont pas encore eu lieu : le dernier mois
+     * proposable ne dépasse jamais le mois courant.
      *
      * @return list<array{value: string, label: string}>
      */
     public static function options(Group $group): array
     {
-        $premier = ($group->date_debut_formation ?? Carbon::now())->copy()->startOfMonth();
-        $dernier = min(
-            Carbon::now()->startOfMonth(),
-            ($group->date_fin_formation ?? Carbon::now())->copy()->startOfMonth(),
-        );
+        $bornes = DB::table('seances')
+            ->where('group_id', $group->id)
+            ->selectRaw('min(date_seance) as premiere, max(date_seance) as derniere')
+            ->first();
+
+        $premiereSeance = $bornes?->premiere !== null ? Carbon::parse($bornes->premiere) : null;
+        $derniereSeance = $bornes?->derniere !== null ? Carbon::parse($bornes->derniere) : null;
+
+        // Le plus ANCIEN entre le début déclaré et la première séance.
+        $premier = self::plusAncien($group->date_debut_formation, $premiereSeance)
+            ?->copy()->startOfMonth() ?? Carbon::now()->startOfMonth();
+
+        // Le plus RÉCENT entre la fin déclarée et la dernière séance, borné
+        // au mois courant.
+        $dernier = self::plusRecent($group->date_fin_formation, $derniereSeance)
+            ?->copy()->startOfMonth() ?? Carbon::now()->startOfMonth();
+
+        $moisCourant = Carbon::now()->startOfMonth();
+        if ($dernier->greaterThan($moisCourant)) {
+            $dernier = $moisCourant;
+        }
 
         // Un groupe démarré dans le futur : son premier mois est proposable
         // quand même (rien à calculer, mais l'écran le dit).
@@ -95,6 +122,24 @@ final class MoisDeGroupe
         }
 
         return $options;
+    }
+
+    private static function plusAncien(?Carbon $a, ?Carbon $b): ?Carbon
+    {
+        if ($a === null || $b === null) {
+            return $a ?? $b;
+        }
+
+        return $a->lessThan($b) ? $a : $b;
+    }
+
+    private static function plusRecent(?Carbon $a, ?Carbon $b): ?Carbon
+    {
+        if ($a === null || $b === null) {
+            return $a ?? $b;
+        }
+
+        return $a->greaterThan($b) ? $a : $b;
     }
 
     private static function libelle(Carbon $mois): string

@@ -1486,5 +1486,12 @@
     "Only sessions marked « Effectuée » and assigned to this teacher are paid.": "Seules les séances « Effectuée » et affectées à cet enseignant sont payées.",
     "Hours retained": "Heures retenues",
     "Hourly rate": "Taux horaire",
-    ":count completed sessions over :libelle (:debut → :fin).": ":count séances effectuées sur :libelle (:debut → :fin)."
+    ":count completed sessions over :libelle (:debut → :fin).": ":count séances effectuées sur :libelle (:debut → :fin).",
+    "Duration per session": "Durée par séance",
+    "Unreadable duration — use 2h30, 2:30 or 2.30.": "Durée illisible — utilisez 2h30, 2:30 ou 2.30.",
+    "e.g. 2h30 — multiplied by the month’s sessions.": "ex. 2h30 — multiplié par les séances du mois.",
+    "Editable — overrides the calculation.": "Modifiable — remplace le calcul.",
+    "Recalculate": "Recalculer",
+    "Amount computed from the roll-call.": "Montant calculé depuis les appels.",
+    "Review the calculation": "Revoir le calcul"
 }
