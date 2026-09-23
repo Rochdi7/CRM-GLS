@@ -22,8 +22,9 @@ interface BarDetail {
 const DUREES: { value: NouvellesInscriptionsDuree; label: string }[] = [
     { value: 'jour', label: 'Today' },
     { value: '7j', label: '7 days' },
-    { value: '30j', label: '30 days' },
-    { value: '12s', label: '12 weeks' },
+    { value: '1m', label: '1 month' },
+    { value: '3m', label: '3 months' },
+    { value: '6m', label: '6 months' },
     { value: '12m', label: '12 months' },
     { value: 'annee', label: 'Academic year' },
 ];

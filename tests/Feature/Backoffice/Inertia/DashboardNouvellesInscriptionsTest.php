@@ -108,7 +108,7 @@ final class DashboardNouvellesInscriptionsTest extends TestCase
                 ->where('nouvellesInscriptions.counts.5', 1)); // 02/2026: C only, A's successor excluded
     }
 
-    public function test_durations_bucket_by_day_and_week(): void
+    public function test_durations_bucket_by_day_and_month(): void
     {
         $s = Student::factory()->create(['etablissement_id' => $this->centre->id]);
         $this->inscription($s, '2026-03-14');
@@ -121,11 +121,36 @@ final class DashboardNouvellesInscriptionsTest extends TestCase
                 ->where('nouvellesInscriptions.counts.5', 1)
                 ->where('nouvellesInscriptions.total', 1));
 
+        // « 1 mois » = 16/02 → 15/03, one bar per day; the 14/03 row sits on the day before last.
+        $this->actingAs($this->superAdmin())
+            ->get(route('backoffice.dashboard', ['inscDuree' => '1m']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('nouvellesInscriptions.counts', 28)
+                ->where('nouvellesInscriptions.labels.0', '16/02')
+                ->where('nouvellesInscriptions.labels.26', '14/03')
+                ->where('nouvellesInscriptions.counts.26', 1)
+                ->where('nouvellesInscriptions.total', 1));
+
+        // « 3 mois » / « 6 mois » bucket by MONTH — never by week (23/09/2026).
+        $this->actingAs($this->superAdmin())
+            ->get(route('backoffice.dashboard', ['inscDuree' => '3m']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('nouvellesInscriptions.counts', 3)
+                ->where('nouvellesInscriptions.labels.0', '01/2026')
+                ->where('nouvellesInscriptions.labels.2', '03/2026')
+                ->where('nouvellesInscriptions.counts.2', 1));
+
+        $this->actingAs($this->superAdmin())
+            ->get(route('backoffice.dashboard', ['inscDuree' => '6m']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('nouvellesInscriptions.counts', 6)
+                ->where('nouvellesInscriptions.labels.0', '10/2025')
+                ->where('nouvellesInscriptions.counts.5', 1));
+
+        // The week bucket is gone: the old « 12 semaines » key falls back to today.
         $this->actingAs($this->superAdmin())
             ->get(route('backoffice.dashboard', ['inscDuree' => '12s']))
-            ->assertInertia(fn (Assert $page) => $page
-                ->has('nouvellesInscriptions.counts', 12)
-                ->where('nouvellesInscriptions.counts.11', 1));
+            ->assertInertia(fn (Assert $page) => $page->where('nouvellesInscriptions.duree', 'jour'));
 
         // Unknown duration falls back to today.
         $this->actingAs($this->superAdmin())

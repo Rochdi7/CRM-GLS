@@ -17,9 +17,12 @@ use Illuminate\Support\Facades\DB;
  *  - `jour`  — today only (default), one bar per HOUR of the day. `date_inscription`
  *              carries no time, so the hour is read from `created_at` (when
  *              the row was keyed); the day itself is still `date_inscription`;
- *  - `7j`    — last 7 days, one bar per day;
- *  - `30j`   — last 30 days, one bar per day;
- *  - `12s`   — last 12 weeks, one bar per ISO week (Monday start);
+ *  - `7j`    — last 7 days, one bar per day (the ONLY day-count window —
+ *              « 30 jours » and « 12 semaines » were replaced by month windows
+ *              on 23/09/2026: the school plans by month, never by week);
+ *  - `1m`    — the last month (today minus one month → today), one bar per day;
+ *  - `3m`    — last 3 months, one bar per month;
+ *  - `6m`    — last 6 months, one bar per month;
  *  - `12m`   — last 12 months, one bar per month;
  *  - `annee` — the active année scolaire window (top-bar switcher), one bar
  *              per month.
@@ -51,7 +54,7 @@ use Illuminate\Support\Facades\DB;
  */
 final class GetNouvellesInscriptionsChart
 {
-    public const DUREES = ['jour', '7j', '30j', '12s', '12m', 'annee'];
+    public const DUREES = ['jour', '7j', '1m', '3m', '6m', '12m', 'annee'];
 
     public const DUREE_DEFAUT = 'jour';
 
@@ -94,27 +97,15 @@ final class GetNouvellesInscriptionsChart
             ];
         }
 
-        $cursor = match ($unit) {
-            'day' => $start->copy(),
-            'week' => $start->copy()->startOfWeek(Carbon::MONDAY),
-            default => $start->copy()->startOfMonth(),
-        };
+        $cursor = $unit === 'day' ? $start->copy() : $start->copy()->startOfMonth();
 
         while ($cursor->lessThanOrEqualTo($end)) {
             $key = $unit === 'month' ? $cursor->format('Y-m') : $cursor->format('Y-m-d');
-            $labels[] = match ($unit) {
-                'day' => $cursor->format('d/m'),
-                'week' => $cursor->format('d/m'),
-                default => $cursor->format('m/Y'),
-            };
+            $labels[] = $unit === 'day' ? $cursor->format('d/m') : $cursor->format('m/Y');
             $keys[] = $key;
             $counts[] = (int) ($rows[$key] ?? 0);
 
-            match ($unit) {
-                'day' => $cursor->addDay(),
-                'week' => $cursor->addWeek(),
-                default => $cursor->addMonth(),
-            };
+            $unit === 'day' ? $cursor->addDay() : $cursor->addMonth();
         }
 
         return [
@@ -146,7 +137,7 @@ final class GetNouvellesInscriptionsChart
 
         $pattern = match ($unit) {
             'hour' => '/^([01]\d|2[0-3])$/',
-            'day', 'week' => '/^\d{4}-\d{2}-\d{2}$/',
+            'day' => '/^\d{4}-\d{2}-\d{2}$/',
             default => '/^\d{4}-\d{2}$/',
         };
         if (preg_match($pattern, $key) !== 1) {
@@ -221,19 +212,18 @@ final class GetNouvellesInscriptionsChart
                 ->whereRaw("(a.attribute_changes->'old'->>'date_inscription')::date < i.date_inscription"));
     }
 
-    /** @param 'hour'|'day'|'week'|'month' $unit */
+    /** @param 'hour'|'day'|'month' $unit */
     private static function bucketSql(string $unit): string
     {
         return match ($unit) {
             'hour' => "to_char(i.created_at, 'HH24')",
             'day' => "to_char(i.date_inscription, 'YYYY-MM-DD')",
-            'week' => "to_char(date_trunc('week', i.date_inscription), 'YYYY-MM-DD')",
             default => "to_char(i.date_inscription, 'YYYY-MM')",
         };
     }
 
     /**
-     * @return array{0: Carbon, 1: Carbon, 2: 'hour'|'day'|'week'|'month'}
+     * @return array{0: Carbon, 1: Carbon, 2: 'hour'|'day'|'month'}
      */
     private function window(string $duree): array
     {
@@ -242,8 +232,9 @@ final class GetNouvellesInscriptionsChart
         return match ($duree) {
             'jour' => [$today, $today->copy(), 'hour'],
             '7j' => [$today->copy()->subDays(6), $today, 'day'],
-            '30j' => [$today->copy()->subDays(29), $today, 'day'],
-            '12s' => [$today->copy()->startOfWeek(Carbon::MONDAY)->subWeeks(11), $today, 'week'],
+            '1m' => [$today->copy()->subMonthNoOverflow()->addDay(), $today, 'day'],
+            '3m' => [$today->copy()->startOfMonth()->subMonths(2), $today, 'month'],
+            '6m' => [$today->copy()->startOfMonth()->subMonths(5), $today, 'month'],
             '12m' => [$today->copy()->startOfMonth()->subMonths(11), $today, 'month'],
             default => $this->anneeWindow(),
         };

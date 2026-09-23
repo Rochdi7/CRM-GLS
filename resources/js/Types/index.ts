@@ -221,7 +221,7 @@ export interface EspaceEnseignantData {
     cumul: { approuve: number; enAttente: number; nombre: number };
 }
 
-export type NouvellesInscriptionsDuree = 'jour' | '7j' | '30j' | '12s' | '12m' | 'annee';
+export type NouvellesInscriptionsDuree = 'jour' | '7j' | '1m' | '3m' | '6m' | '12m' | 'annee';
 
 /** GetNouvellesInscriptionsChart — new registrations only (group changes excluded). */
 export interface NouvellesInscriptionsChartData {
