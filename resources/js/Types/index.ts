@@ -99,6 +99,8 @@ export interface NavItem {
     matchPaths: string[];
     /** True once this item has a real Inertia page; false renders a plain anchor to the legacy Blade/Livewire route. */
     inertia?: boolean;
+    /** Entrée « Bientôt disponible » : dessinée sans lien, jamais navigable. */
+    comingSoon?: boolean;
 }
 
 export interface NavGroup {

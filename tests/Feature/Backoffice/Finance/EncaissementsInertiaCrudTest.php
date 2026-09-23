@@ -1390,6 +1390,42 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame('BMCE', $encaissement->banque);
         $this->assertSame('2025-10-01', $encaissement->date_echeance_cheque->toDateString());
         $this->assertSame(0.0, $cheque->fresh()->montantRestant());
+        // « À déposer » + reste 0,00 DH ⇒ « Encaissé » (StatutChequeSolde).
+        $this->assertSame(\App\Models\Cheque::STATUT_ENCAISSE, $cheque->fresh()->statut);
+    }
+
+    public function test_a_partially_used_or_guarantee_cheque_keeps_its_status(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'cheques.view', 'cheques.create');
+        $this->actingAs($user);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
+
+        $partiel = \App\Models\Cheque::create([
+            'reference' => 'CHQ-PART', 'source' => \App\Models\Cheque::SOURCE_ETUDIANT, 'student_id' => $student->id,
+            'numero_cheque' => 'CHQ-PART-1', 'montant' => 500, 'date_reception' => '2025-09-01',
+            'type' => \App\Models\Cheque::TYPE_A_DEPOSER, 'statut' => \App\Models\Cheque::STATUT_DEPOSE,
+            'etablissement_id' => $this->centre->id, 'agent_id' => $user->employee->id,
+        ]);
+        $garantie = \App\Models\Cheque::create([
+            'reference' => 'CHQ-GAR', 'source' => \App\Models\Cheque::SOURCE_ETUDIANT, 'student_id' => $student->id,
+            'numero_cheque' => 'CHQ-GAR-1', 'montant' => 300, 'date_reception' => '2025-09-01',
+            'type' => \App\Models\Cheque::TYPE_GARANTIE, 'statut' => \App\Models\Cheque::STATUT_EN_POSSESSION,
+            'etablissement_id' => $this->centre->id, 'agent_id' => $user->employee->id,
+        ]);
+
+        $this->post(route('backoffice.encaissements.store'), [
+            'student_id' => $student->id,
+            'inscription_id' => $inscription->id,
+            'date_paiement' => '2025-09-20',
+            'payment_lines' => [
+                ['fee_id' => $fee->id, 'montant' => '200', 'methode' => 'Chèque', 'date_paiement' => '2025-09-20', 'cheque_id' => $partiel->id],
+                ['fee_id' => $fee->id, 'montant' => '300', 'methode' => 'Chèque', 'date_paiement' => '2025-09-20', 'cheque_id' => $garantie->id],
+            ],
+        ])->assertSessionDoesntHaveErrors();
+
+        $this->assertSame(\App\Models\Cheque::STATUT_DEPOSE, $partiel->fresh()->statut);
+        $this->assertSame(0.0, $garantie->fresh()->montantRestant());
+        $this->assertSame(\App\Models\Cheque::STATUT_EN_POSSESSION, $garantie->fresh()->statut);
     }
 
     public function test_paying_with_a_tracked_cheque_cannot_exceed_its_remaining_balance(): void

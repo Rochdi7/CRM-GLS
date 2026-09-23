@@ -216,6 +216,63 @@ final class ChequesInertiaCrudTest extends TestCase
         ])->assertSessionHasErrors('statut');
     }
 
+    /** « Encaissé » peut être automatique (reste 0) : un rejet bancaire ultérieur reste saisissable. */
+    public function test_an_encaisse_cheque_can_still_be_marked_rejete(): void
+    {
+        $this->actingAs($this->userWith('cheques.view', 'cheques.update', 'cheques.deposit'));
+        $cheque = $this->makeCheque(Cheque::STATUT_ENCAISSE);
+
+        $this->patch(route('backoffice.cheques.update-statut', $cheque), [
+            'statut' => Cheque::STATUT_REJETE,
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame(Cheque::STATUT_REJETE, $cheque->fresh()->statut);
+    }
+
+    public function test_lowering_the_amount_to_what_was_used_marks_the_cheque_encaisse(): void
+    {
+        $this->actingAs($this->userWith('cheques.view', 'cheques.update', 'cheques.deposit'));
+        $cheque = $this->makeCheque(Cheque::STATUT_DEPOSE);
+        $this->useCheque($cheque, 700);
+
+        $this->put(route('backoffice.cheques.update', $cheque), [
+            'source' => Cheque::SOURCE_ETUDIANT, 'student_id' => $cheque->student_id,
+            'numero_cheque' => $cheque->numero_cheque, 'montant' => '700',
+            'date_reception' => '2026-08-01', 'type' => Cheque::TYPE_A_DEPOSER,
+        ])->assertSessionHasNoErrors();
+
+        $this->assertSame(Cheque::STATUT_ENCAISSE, $cheque->fresh()->statut);
+    }
+
+    public function test_catch_up_command_marks_fully_used_cheques_and_never_a_rejected_one(): void
+    {
+        $plein = $this->makeCheque(Cheque::STATUT_DEPOSE);
+        $this->useCheque($plein, 1000);
+        $partiel = $this->makeCheque(Cheque::STATUT_DEPOSE);
+        $this->useCheque($partiel, 400);
+        $rejete = $this->makeCheque(Cheque::STATUT_REJETE);
+        $this->useCheque($rejete, 1000);
+
+        $this->artisan('cheques:marquer-encaisses')->assertSuccessful();
+        $this->assertSame(Cheque::STATUT_DEPOSE, $plein->fresh()->statut, 'dry-run writes nothing');
+
+        $this->artisan('cheques:marquer-encaisses', ['--apply' => true])->assertSuccessful();
+
+        $this->assertSame(Cheque::STATUT_ENCAISSE, $plein->fresh()->statut);
+        $this->assertSame(Cheque::STATUT_DEPOSE, $partiel->fresh()->statut);
+        $this->assertSame(Cheque::STATUT_REJETE, $rejete->fresh()->statut);
+    }
+
+    private function useCheque(Cheque $cheque, float $montant): void
+    {
+        $agent = Employee::first() ?? Employee::factory()->create(['etablissement_id' => $this->centre->id]);
+        $cheque->encaissements()->create([
+            'reference' => 'ENC-'.fake()->unique()->numerify('####'), 'student_id' => $cheque->student_id,
+            'caisse_id' => \App\Models\Caisse::factory()->create(['etablissement_id' => $this->centre->id])->id,
+            'agent_id' => $agent->id, 'montant' => $montant, 'methode' => 'Chèque', 'date_paiement' => '2026-08-05',
+        ]);
+    }
+
     // --- retour (returned to owner) tracking -------------------------------
 
     public function test_a_rejete_cheque_can_be_marked_as_returned(): void

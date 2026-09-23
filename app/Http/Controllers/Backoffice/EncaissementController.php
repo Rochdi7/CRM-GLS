@@ -17,6 +17,7 @@ use App\Domain\Payments\Support\RecuWhatsAppLink;
 use App\Domain\Payments\Actions\SupprimerEncaissement;
 use App\Domain\Payments\Actions\TransfererFraisVersAutreEtudiant;
 use App\Domain\Payments\Support\CibleTransfertFrais;
+use App\Domain\Payments\Support\StatutChequeSolde;
 use App\Domain\Payments\Queries\GetEncaissementDetails;
 use App\Domain\Payments\Queries\GetEncaissementsList;
 use App\Domain\Payments\Queries\GetInscriptionPayments;
@@ -492,6 +493,12 @@ final class EncaissementController extends Controller
                     'date_echeance_cheque' => $cheque?->date_echeance?->toDateString(),
                     'note' => $data['note'] ?? null,
                 ], $agent);
+            }
+
+            // Un chèque « À déposer » dont ce paiement épuise le reste passe
+            // « Encaissé » (StatutChequeSolde) — même transaction, même verrou.
+            foreach ($cheques as $cheque) {
+                StatutChequeSolde::synchroniser($cheque);
             }
         });
 

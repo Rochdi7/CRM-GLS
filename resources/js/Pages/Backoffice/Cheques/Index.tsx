@@ -606,6 +606,16 @@ export default function ChequesIndex({
                                                     </RowActionItem>
                                                 </>
                                             )}
+                                            {/* « Encaissé » peut être posé automatiquement (reste 0,00 DH)
+                                                avant la réponse de la banque : un rejet reste saisissable. */}
+                                            {canDeposit && cheque.statut === 'Encaissé' && (
+                                                <>
+                                                    {canUpdate && <RowActionDivider />}
+                                                    <RowActionItem icon="ti-x" danger onClick={() => confirmStatut(cheque, 'Rejeté')}>
+                                                        Marquer rejeté
+                                                    </RowActionItem>
+                                                </>
+                                            )}
                                             {canDeposit && cheque.statut === 'Rejeté' && (
                                                 <>
                                                     {canUpdate && <RowActionDivider />}

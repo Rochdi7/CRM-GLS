@@ -1,6 +1,7 @@
 import { backofficeNavigation } from '@/Config/backofficeNavigation';
 import NavLink from '@/Components/Navigation/NavLink';
 import { isPathActive, useCurrentPath } from '@/Hooks/useActivePath';
+import { t } from '@/Lib/i18n';
 
 interface SidebarProps {
     permissions: string[];
@@ -65,10 +66,21 @@ export default function Sidebar({ permissions, isSuperAdmin, mobileOpen, onNavig
                                                 key={item.href}
                                                 className={isPathActive(currentPath, item.matchPaths) ? 'active' : ''}
                                             >
-                                                <NavLink href={item.href} inertia={item.inertia} onClick={onNavigate}>
-                                                    <i className={item.icon} />
-                                                    <span>{item.label}</span>
-                                                </NavLink>
+                                                {item.comingSoon ? (
+                                                    // Pas de href : rien à suivre, ni clic ni clavier.
+                                                    <a aria-disabled="true" className="opacity-75" style={{ cursor: 'not-allowed' }}>
+                                                        <i className={item.icon} />
+                                                        <span>{item.label}</span>
+                                                        <span className="badge badge-soft-warning ms-auto fs-10">
+                                                            {t('Coming soon')}
+                                                        </span>
+                                                    </a>
+                                                ) : (
+                                                    <NavLink href={item.href} inertia={item.inertia} onClick={onNavigate}>
+                                                        <i className={item.icon} />
+                                                        <span>{item.label}</span>
+                                                    </NavLink>
+                                                )}
                                             </li>
                                         ))}
                                     </ul>

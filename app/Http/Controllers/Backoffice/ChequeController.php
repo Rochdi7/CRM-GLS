@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Payments\Actions\RestituerChequeGarantie;
+use App\Domain\Payments\Support\StatutChequeSolde;
 use App\Domain\Payments\Queries\GetChequesList;
 use App\Domain\Payments\Queries\GetEncaissementsList;
 use App\Domain\Settings\Queries\GetBanquesList;
@@ -213,6 +214,7 @@ final class ChequeController extends Controller
         }
 
         DB::transaction(function () use ($cheque, $payload): void {
+            $cheque = Cheque::query()->whereKey($cheque->id)->lockForUpdate()->firstOrFail();
             $cheque->update($payload);
 
             foreach ($cheque->encaissements()->lockForUpdate()->get() as $encaissement) {
@@ -220,6 +222,10 @@ final class ChequeController extends Controller
                 $encaissement->banque = $cheque->banque;
                 $encaissement->save();
             }
+
+            // Ramener le montant au déjà-utilisé, ou repasser le type en
+            // « À déposer », peut épuiser le reste : même règle qu'au paiement.
+            StatutChequeSolde::synchroniser($cheque);
         });
 
         return $this->backToListPreservingFilters($request, 'backoffice.cheques.index')
@@ -252,6 +258,10 @@ final class ChequeController extends Controller
         $allowed = match ($cheque->statut) {
             Cheque::STATUT_EN_POSSESSION => [Cheque::STATUT_DEPOSE],
             Cheque::STATUT_DEPOSE => [Cheque::STATUT_ENCAISSE, Cheque::STATUT_REJETE],
+            // « Encaissé » peut être posé AUTOMATIQUEMENT dès que le reste du
+            // chèque tombe à 0 (StatutChequeSolde), avant que la banque ait
+            // répondu : un rejet ultérieur (signature…) doit rester saisissable.
+            Cheque::STATUT_ENCAISSE => [Cheque::STATUT_REJETE],
             default => [],
         };
 
