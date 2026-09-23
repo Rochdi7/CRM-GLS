@@ -3832,3 +3832,41 @@ html[data-theme='dark'] .table tbody tr.gls-day-separator > td {
 .retard-paiement-badge:focus::before {
     display: block;
 }
+
+/*
+ * Sidebar « Bientôt disponible » entry (Sidebar.tsx, NavItem.comingSoon).
+ * No href and no pointer events: the theme's hover recolour never fires and
+ * nothing can be clicked. The badge has its own class because the theme styles
+ * EVERY span inside a sidebar link (14px, label colour, 10px margin), which
+ * made a Bootstrap .badge there oversized and cut off.
+ */
+.sidebar .sidebar-menu > ul > li ul li a.nav-coming-soon {
+    pointer-events: none;
+    cursor: default;
+    opacity: 0.6;
+}
+
+.sidebar .sidebar-menu > ul > li ul li a.nav-coming-soon span.nav-soon-badge {
+    margin-left: auto;
+    margin-right: 0;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    border-radius: 20px;
+    color: #b76e00;
+    background: #fff4de;
+    flex-shrink: 0;
+}
+
+[dir='rtl'] .sidebar .sidebar-menu > ul > li ul li a.nav-coming-soon span.nav-soon-badge {
+    margin-left: 0;
+    margin-right: auto;
+}
+
+html[data-theme='dark'] .sidebar .sidebar-menu > ul > li ul li a.nav-coming-soon span.nav-soon-badge {
+    color: #ffc46b;
+    background: rgba(255, 171, 0, 0.16);
+}

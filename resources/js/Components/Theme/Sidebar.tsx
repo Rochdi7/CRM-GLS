@@ -68,12 +68,10 @@ export default function Sidebar({ permissions, isSuperAdmin, mobileOpen, onNavig
                                             >
                                                 {item.comingSoon ? (
                                                     // Pas de href : rien à suivre, ni clic ni clavier.
-                                                    <a aria-disabled="true" className="opacity-75" style={{ cursor: 'not-allowed' }}>
+                                                    <a aria-disabled="true" className="nav-coming-soon" title={t('Coming soon')}>
                                                         <i className={item.icon} />
                                                         <span>{item.label}</span>
-                                                        <span className="badge badge-soft-warning ms-auto fs-10">
-                                                            {t('Coming soon')}
-                                                        </span>
+                                                        <span className="nav-soon-badge">{t('Soon')}</span>
                                                     </a>
                                                 ) : (
                                                     <NavLink href={item.href} inertia={item.inertia} onClick={onNavigate}>
