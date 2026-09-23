@@ -175,7 +175,7 @@ export interface DashboardPageProps {
     [key: string]: unknown;
 }
 
-export type NouvellesInscriptionsDuree = '7j' | '30j' | '12s' | '12m' | 'annee';
+export type NouvellesInscriptionsDuree = 'jour' | '7j' | '30j' | '12s' | '12m' | 'annee';
 
 /** GetNouvellesInscriptionsChart — new registrations only (group changes excluded). */
 export interface NouvellesInscriptionsChartData {

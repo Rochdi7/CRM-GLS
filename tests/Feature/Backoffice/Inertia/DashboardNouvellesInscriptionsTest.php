@@ -128,6 +128,23 @@ final class DashboardNouvellesInscriptionsTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->where('nouvellesInscriptions.duree', 'annee'));
     }
 
+    public function test_today_buckets_by_the_hour_the_row_was_keyed(): void
+    {
+        $s = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $this->inscription($s, '2026-03-15'); // created_at = now() = 10:00
+        $this->inscription(Student::factory()->create(['etablissement_id' => $this->centre->id]), '2026-03-14');
+
+        $this->actingAs($this->superAdmin())
+            ->get(route('backoffice.dashboard', ['inscDuree' => 'jour']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('nouvellesInscriptions.duree', 'jour')
+                ->has('nouvellesInscriptions.counts', 24)
+                ->where('nouvellesInscriptions.labels.10', '10h')
+                ->where('nouvellesInscriptions.counts.10', 1)
+                ->where('nouvellesInscriptions.total', 1)
+                ->where('nouvellesInscriptions.periode', '15/03/2026'));
+    }
+
     public function test_non_super_admin_never_receives_the_chart(): void
     {
         $user = User::factory()->create();

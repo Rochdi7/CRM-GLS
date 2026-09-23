@@ -15,6 +15,9 @@ use Illuminate\Support\Facades\DB;
  * `dashboard.inscriptions-chart`) — how many NEW registrations were taken,
  * bucketed over a chosen DURATION:
  *
+ *  - `jour`  — today only, one bar per HOUR of the day. `date_inscription`
+ *              carries no time, so the hour is read from `created_at` (when
+ *              the row was keyed); the day itself is still `date_inscription`;
  *  - `7j`    — last 7 days, one bar per day;
  *  - `30j`   — last 30 days, one bar per day;
  *  - `12s`   — last 12 weeks, one bar per ISO week (Monday start);
@@ -51,7 +54,7 @@ use Illuminate\Support\Facades\DB;
  */
 final class GetNouvellesInscriptionsChart
 {
-    public const DUREES = ['7j', '30j', '12s', '12m', 'annee'];
+    public const DUREES = ['jour', '7j', '30j', '12s', '12m', 'annee'];
 
     public const DUREE_DEFAUT = 'annee';
 
@@ -73,6 +76,7 @@ final class GetNouvellesInscriptionsChart
         $centreId = $this->context->etablissementId();
 
         $bucketSql = match ($unit) {
+            'hour' => "to_char(i.created_at, 'HH24')",
             'day' => "to_char(i.date_inscription, 'YYYY-MM-DD')",
             'week' => "to_char(date_trunc('week', i.date_inscription), 'YYYY-MM-DD')",
             default => "to_char(i.date_inscription, 'YYYY-MM')",
@@ -88,6 +92,21 @@ final class GetNouvellesInscriptionsChart
 
         $labels = [];
         $counts = [];
+        if ($unit === 'hour') {
+            for ($h = 0; $h < 24; $h++) {
+                $labels[] = sprintf('%02dh', $h);
+                $counts[] = (int) ($rows[sprintf('%02d', $h)] ?? 0);
+            }
+
+            return [
+                'duree' => $duree,
+                'labels' => $labels,
+                'counts' => $counts,
+                'total' => array_sum($counts),
+                'periode' => $start->format('d/m/Y'),
+            ];
+        }
+
         $cursor = match ($unit) {
             'day' => $start->copy(),
             'week' => $start->copy()->startOfWeek(Carbon::MONDAY),
@@ -120,13 +139,14 @@ final class GetNouvellesInscriptionsChart
     }
 
     /**
-     * @return array{0: Carbon, 1: Carbon, 2: 'day'|'week'|'month'}
+     * @return array{0: Carbon, 1: Carbon, 2: 'hour'|'day'|'week'|'month'}
      */
     private function window(string $duree): array
     {
         $today = now()->startOfDay();
 
         return match ($duree) {
+            'jour' => [$today, $today->copy(), 'hour'],
             '7j' => [$today->copy()->subDays(6), $today, 'day'],
             '30j' => [$today->copy()->subDays(29), $today, 'day'],
             '12s' => [$today->copy()->startOfWeek(Carbon::MONDAY)->subWeeks(11), $today, 'week'],

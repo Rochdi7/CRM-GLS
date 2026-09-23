@@ -9,6 +9,7 @@ interface NouvellesInscriptionsChartProps {
 }
 
 const DUREES: { value: NouvellesInscriptionsDuree; label: string }[] = [
+    { value: 'jour', label: 'Today' },
     { value: '7j', label: '7 days' },
     { value: '30j', label: '30 days' },
     { value: '12s', label: '12 weeks' },
@@ -22,18 +23,21 @@ const HEIGHT = 280;
 const HEIGHT_MOBILE = 220;
 const PAD_LEFT = 44;
 const PAD_RIGHT = 12;
-const PAD_TOP = 16;
+const PAD_TOP = 24;
 const PAD_BOTTOM = 32;
 
+/**
+ * Axis top rounded UP to a multiple of 4 whole registrations, so the four
+ * gridline steps are integers (a top of 10 drew « 2.5 » rounded to « 3 »).
+ */
 function niceMax(max: number): number {
     if (max <= 4) {
         return 4;
     }
-    const magnitude = 10 ** Math.floor(Math.log10(max));
-    const normalized = max / magnitude;
-    const step = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 4 ? 4 : normalized <= 8 ? 8 : 10;
+    const magnitude = 10 ** Math.floor(Math.log10(max / 4));
+    const step = Math.ceil(max / 4 / magnitude) * magnitude;
 
-    return step * magnitude;
+    return step * 4;
 }
 
 /**
@@ -81,9 +85,7 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
             <div className="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div>
                     <h4 className="card-title mb-1">{t('New registrations')}</h4>
-                    <p className="text-muted mb-0">
-                        {t('Group changes and modifications excluded')} · {data.periode}
-                    </p>
+                    <p className="text-muted mb-0">{data.periode}</p>
                 </div>
                 <div className="d-flex align-items-center flex-wrap gap-2">
                     <span className="badge badge-soft-primary fs-13">
@@ -141,6 +143,25 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                                     fill={BAR_COLOR}
                                     opacity={hoverIndex === null || hoverIndex === i ? 1 : 0.45}
                                 />
+                            );
+                        })}
+
+                        {/* The count per bar (per day / week / month), written above it —
+                            skipped when bars are too narrow for the digits. */}
+                        {slot >= 18 && data.counts.map((v, i) => {
+                            if (v === 0) return null;
+                            return (
+                                <text
+                                    key={`val-${i}`}
+                                    x={xCenter(i)}
+                                    y={yFor(v) - 6}
+                                    textAnchor="middle"
+                                    fontSize={12}
+                                    fontWeight={600}
+                                    fill="var(--gls-chart-muted)"
+                                >
+                                    {v.toLocaleString('fr-FR')}
+                                </text>
                             );
                         })}
 
