@@ -15,6 +15,7 @@ use App\Http\Controllers\Backoffice\ChequeController;
 use App\Http\Controllers\Backoffice\ContextController;
 use App\Http\Controllers\Backoffice\CreneauController;
 use App\Http\Controllers\Backoffice\DashboardController;
+use App\Http\Controllers\Backoffice\DashboardNouvellesInscriptionsController;
 use App\Http\Controllers\Backoffice\DatabaseManagementController;
 use App\Http\Controllers\Backoffice\DepenseController;
 use App\Http\Controllers\Backoffice\Employees\EmployeeController;
@@ -105,6 +106,8 @@ Route::prefix('backoffice')
         // Authenticated area
         Route::middleware('auth')->group(function (): void {
             Route::get('/dashboard', DashboardController::class)->name('dashboard');
+            Route::get('/dashboard/nouvelles-inscriptions', DashboardNouvellesInscriptionsController::class)
+                ->name('dashboard.nouvelles-inscriptions');
             Route::post('/logout', LogoutController::class)->name('logout');
 
             // Top-bar academic-year/center switcher (Inertia/React Header;

@@ -227,9 +227,26 @@ export type NouvellesInscriptionsDuree = 'jour' | '7j' | '30j' | '12s' | '12m' |
 export interface NouvellesInscriptionsChartData {
     duree: NouvellesInscriptionsDuree;
     labels: string[];
+    /** Server bucket key per bar — sent back to list that bar's students. */
+    keys: string[];
     counts: number[];
     total: number;
     periode: string;
+}
+
+/** One student behind a clicked bar (GetNouvellesInscriptionsChart::students). */
+export interface NouvelleInscriptionStudent {
+    inscriptionId: number;
+    studentId: number;
+    reference: string;
+    nom: string;
+    prenom: string;
+    telephone: string | null;
+    groupe: string | null;
+    centre: string | null;
+    statut: string;
+    dateInscription: string;
+    heure: string;
 }
 
 /** One entry of Laravel's paginator ->links() array (as serialized by Inertia). */

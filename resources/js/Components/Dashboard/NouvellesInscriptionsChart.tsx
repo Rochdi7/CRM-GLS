@@ -1,11 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
-import type { NouvellesInscriptionsChartData, NouvellesInscriptionsDuree } from '@/Types';
+import type { NouvelleInscriptionStudent, NouvellesInscriptionsChartData, NouvellesInscriptionsDuree } from '@/Types';
 import { t } from '@/Lib/i18n';
+import { statutVariant } from '@/Lib/inscriptionStatut';
+import Modal from '@/Components/Modals/Modal';
 
 interface NouvellesInscriptionsChartProps {
     data: NouvellesInscriptionsChartData;
     onDureeChange: (duree: NouvellesInscriptionsDuree) => void;
     loading?: boolean;
+}
+
+interface BarDetail {
+    label: string;
+    loading: boolean;
+    error: boolean;
+    students: NouvelleInscriptionStudent[];
+    canViewStudents: boolean;
 }
 
 const DUREES: { value: NouvellesInscriptionsDuree; label: string }[] = [
@@ -52,6 +62,30 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
     const [WIDTH, setWidth] = useState(FALLBACK_WIDTH);
+    const [detail, setDetail] = useState<BarDetail | null>(null);
+    // Ignores a late answer for a bar the user has already moved away from.
+    const requestId = useRef(0);
+
+    async function openBar(i: number) {
+        if (loading || !data.counts[i]) return;
+
+        const id = ++requestId.current;
+        setDetail({ label: data.labels[i], loading: true, error: false, students: [], canViewStudents: false });
+
+        try {
+            const params = new URLSearchParams({ duree: data.duree, key: data.keys[i] });
+            const response = await fetch(`/backoffice/dashboard/nouvelles-inscriptions?${params.toString()}`, {
+                headers: { Accept: 'application/json' },
+            });
+            if (!response.ok) throw new Error(String(response.status));
+            const json = (await response.json()) as { students: NouvelleInscriptionStudent[]; canViewStudents: boolean };
+            if (id !== requestId.current) return;
+            setDetail({ label: data.labels[i], loading: false, error: false, students: json.students, canViewStudents: json.canViewStudents });
+        } catch {
+            if (id !== requestId.current) return;
+            setDetail((current) => (current ? { ...current, loading: false, error: true } : current));
+        }
+    }
 
     useEffect(() => {
         const el = containerRef.current;
@@ -173,7 +207,9 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                                 width={slot}
                                 height={plotHeight}
                                 fill="transparent"
+                                style={{ cursor: data.counts[i] > 0 ? 'pointer' : 'default' }}
                                 onMouseEnter={() => setHoverIndex(i)}
+                                onClick={() => openBar(i)}
                             />
                         ))}
 
@@ -209,10 +245,78 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                                 <span className="gls-frais-tooltip-label">{t('New registrations')}:</span>
                                 <span className="gls-frais-tooltip-value">{data.counts[hoverIndex].toLocaleString('fr-FR')}</span>
                             </div>
+                            {data.counts[hoverIndex] > 0 && (
+                                <div className="gls-frais-tooltip-row fs-12 opacity-75">{t('Click to see the students')}</div>
+                            )}
                         </div>
                     )}
                 </div>
             </div>
+
+            <Modal
+                show={detail !== null}
+                title={`${t('New registrations')} — ${detail?.label ?? ''}`}
+                onClose={() => {
+                    requestId.current++;
+                    setDetail(null);
+                }}
+                size="xl"
+            >
+                {detail?.loading && (
+                    <div className="text-center py-4">
+                        <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
+                        {t('Loading…')}
+                    </div>
+                )}
+                {detail?.error && <div className="alert alert-danger mb-0">{t('Unable to load the students.')}</div>}
+                {detail && !detail.loading && !detail.error && (
+                    detail.students.length === 0 ? (
+                        <p className="text-muted mb-0">{t('No student record found')}</p>
+                    ) : (
+                        <div className="table-responsive">
+                            <table className="table table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>{t('Reference')}</th>
+                                        <th>{t('Student')}</th>
+                                        <th>{t('Phone')}</th>
+                                        <th>{t('Group')}</th>
+                                        <th>{t('Centre')}</th>
+                                        <th>{t('Registration date')}</th>
+                                        <th>{t('Status')}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {detail.students.map((s, idx) => (
+                                        <tr key={s.inscriptionId}>
+                                            <td>{idx + 1}</td>
+                                            <td className="text-normal-case">{s.reference}</td>
+                                            <td>
+                                                {detail.canViewStudents ? (
+                                                    <a href={`/backoffice/students/${s.studentId}`}>{s.nom} {s.prenom}</a>
+                                                ) : (
+                                                    <>{s.nom} {s.prenom}</>
+                                                )}
+                                            </td>
+                                            <td>{s.telephone ?? '—'}</td>
+                                            <td>{s.groupe ?? '—'}</td>
+                                            <td>{s.centre ?? '—'}</td>
+                                            <td>
+                                                {s.dateInscription}
+                                                {data.duree === 'jour' && s.heure && <span className="text-muted"> {s.heure}</span>}
+                                            </td>
+                                            <td>
+                                                <span className={`badge badge-soft-${statutVariant(s.statut)}`}>{s.statut}</span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )
+                )}
+            </Modal>
         </div>
     );
 }

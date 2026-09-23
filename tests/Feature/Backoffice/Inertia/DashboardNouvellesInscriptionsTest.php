@@ -6,9 +6,13 @@ namespace Tests\Feature\Backoffice\Inertia;
 
 use App\Domain\Registrations\Actions\ChangerGroupeInscription;
 use App\Models\AnneeScolaire;
+use App\Models\Caisse;
+use App\Models\Employee;
+use App\Models\Encaissement;
 use App\Models\Etablissement;
 use App\Models\Group;
 use App\Models\Inscription;
+use App\Models\InscriptionFee;
 use App\Models\Role;
 use App\Models\Student;
 use App\Models\User;
@@ -192,5 +196,121 @@ final class DashboardNouvellesInscriptionsTest extends TestCase
             ->get(route('backoffice.dashboard'))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->where('nouvellesInscriptions.duree', 'jour'));
+    }
+
+    public function test_clicking_a_bar_lists_exactly_the_students_it_counts(): void
+    {
+        $nouveau = Student::factory()->create(['etablissement_id' => $this->centre->id, 'nom' => 'Alaoui', 'prenom' => 'Sara']);
+        $this->inscription($nouveau, '2026-03-12');
+        // Same day, but an existing student's second dossier — not counted, not listed.
+        $ancien = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $this->inscription($ancien, '2025-10-05');
+        $this->inscription($ancien, '2026-03-12');
+        // Another day of the same window.
+        $this->inscription(Student::factory()->create(['etablissement_id' => $this->centre->id]), '2026-03-13');
+
+        $this->actingAs($this->superAdmin())
+            ->getJson(route('backoffice.dashboard.nouvelles-inscriptions', ['duree' => '7j', 'key' => '2026-03-12']))
+            ->assertOk()
+            ->assertJsonCount(1, 'students')
+            ->assertJsonPath('students.0.studentId', $nouveau->id)
+            ->assertJsonPath('students.0.nom', 'Alaoui')
+            ->assertJsonPath('students.0.dateInscription', '12/03/2026')
+            ->assertJsonPath('canViewStudents', true);
+    }
+
+    public function test_today_bar_lists_by_the_hour_and_rejects_foreign_keys(): void
+    {
+        $s = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $this->inscription($s, '2026-03-15'); // keyed at 10:00
+
+        $user = $this->superAdmin();
+        $this->actingAs($user)
+            ->getJson(route('backoffice.dashboard.nouvelles-inscriptions', ['duree' => 'jour', 'key' => '10']))
+            ->assertJsonCount(1, 'students')
+            ->assertJsonPath('students.0.heure', '10:00');
+
+        foreach ([['jour', '11'], ['jour', "10' OR 1=1"], ['nope', '10'], ['7j', '2026-03']] as [$duree, $key]) {
+            $this->actingAs($user)
+                ->getJson(route('backoffice.dashboard.nouvelles-inscriptions', ['duree' => $duree, 'key' => $key]))
+                ->assertOk()
+                ->assertJsonCount(0, 'students');
+        }
+    }
+
+    public function test_a_user_without_students_view_gets_names_but_no_link(): void
+    {
+        $this->inscription(Student::factory()->create(['etablissement_id' => $this->centre->id]), '2026-03-15');
+
+        $this->actingAs(User::factory()->create())
+            ->getJson(route('backoffice.dashboard.nouvelles-inscriptions', ['duree' => 'jour', 'key' => '10']))
+            ->assertOk()
+            ->assertJsonPath('canViewStudents', false);
+    }
+
+    public function test_a_student_who_paid_before_the_dossier_is_not_new(): void
+    {
+        // Salé, 23/09/2026 : the imported dossier was deleted the day a new one
+        // was keyed, and the 07/08 payment moved onto the new one. Nothing in
+        // `inscriptions` says she is a returning student — her money does.
+        $hiba = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $nouveau = $this->inscription($hiba, '2026-03-15');
+        $fee = InscriptionFee::create([
+            'inscription_id' => $nouveau->id, 'nom' => 'Frais de Mars',
+            'montant_initial' => 300, 'montant' => 300, 'date_echeance' => '2026-03-15',
+        ]);
+        $agent = Employee::factory()->create(['etablissement_id' => $this->centre->id]);
+        Encaissement::create([
+            'reference' => 'ENC-HIBA', 'agent_id' => $agent->id,
+            'student_id' => $hiba->id, 'inscription_fee_id' => $fee->id,
+            'caisse_id' => Caisse::factory()->create(['etablissement_id' => $this->centre->id])->id,
+            'montant' => 300, 'methode' => Encaissement::METHODE_ESPECES, 'date_paiement' => '2026-02-07',
+        ]);
+        // A genuinely new student who paid ON enrolment day still counts.
+        $neuf = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $insNeuf = $this->inscription($neuf, '2026-03-15');
+        $feeNeuf = InscriptionFee::create([
+            'inscription_id' => $insNeuf->id, 'nom' => 'Frais de Mars',
+            'montant_initial' => 300, 'montant' => 300, 'date_echeance' => '2026-03-15',
+        ]);
+        Encaissement::create([
+            'reference' => 'ENC-NEUF', 'agent_id' => $agent->id,
+            'student_id' => $neuf->id, 'inscription_fee_id' => $feeNeuf->id,
+            'caisse_id' => Caisse::factory()->create(['etablissement_id' => $this->centre->id])->id,
+            'montant' => 300, 'methode' => Encaissement::METHODE_ESPECES, 'date_paiement' => '2026-03-15',
+        ]);
+
+        $this->actingAs($this->superAdmin())
+            ->get(route('backoffice.dashboard', ['inscDuree' => 'jour']))
+            ->assertInertia(fn (Assert $page) => $page->where('nouvellesInscriptions.total', 1));
+
+        $this->actingAs($this->superAdmin())
+            ->getJson(route('backoffice.dashboard.nouvelles-inscriptions', ['duree' => 'jour', 'key' => '10']))
+            ->assertJsonCount(1, 'students')
+            ->assertJsonPath('students.0.studentId', $neuf->id);
+    }
+
+    public function test_a_student_whose_earlier_dossier_was_deleted_is_not_new(): void
+    {
+        $ancien = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $vieux = $this->inscription($ancien, '2025-10-05');
+        $vieux->delete(); // journaled as `deleted` — the journal is append-only
+        $this->inscription($ancien, '2026-03-15');
+
+        // A dossier keyed by mistake and re-keyed the SAME day is still new.
+        $neuf = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $this->inscription($neuf, '2026-03-15')->delete();
+        $this->inscription($neuf, '2026-03-15');
+
+        $this->assertDatabaseHas('activity_log', ['log_name' => 'inscription', 'event' => 'deleted', 'subject_id' => $vieux->id]);
+
+        $this->actingAs($this->superAdmin())
+            ->get(route('backoffice.dashboard', ['inscDuree' => 'jour']))
+            ->assertInertia(fn (Assert $page) => $page->where('nouvellesInscriptions.total', 1));
+
+        $this->actingAs($this->superAdmin())
+            ->getJson(route('backoffice.dashboard.nouvelles-inscriptions', ['duree' => 'jour', 'key' => '10']))
+            ->assertJsonCount(1, 'students')
+            ->assertJsonPath('students.0.studentId', $neuf->id);
     }
 }
