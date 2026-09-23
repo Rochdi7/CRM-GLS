@@ -41,6 +41,7 @@ final class PermissionRegistry
         return [
             'Tableau de bord' => [
                 'dashboard.view' => 'Consulter le tableau de bord',
+                'dashboard.inscriptions-chart' => 'Voir le graphique des nouvelles inscriptions (super-admin)',
             ],
             'Centres' => [
                 'centers.view' => 'Consulter les centres',
@@ -571,6 +572,9 @@ final class PermissionRegistry
         ));
 
         return array_values(array_unique(array_merge($deletes, [
+            // Graphique « Nouvelles inscriptions » du tableau de bord —
+            // chiffre de pilotage réservé au super-admin (23/09/2026).
+            'dashboard.inscriptions-chart',
             'system-settings.view', 'system-settings.update',
             'banks.view', 'banks.create', 'banks.update',
             'cancellation-reasons.view', 'cancellation-reasons.create', 'cancellation-reasons.update',

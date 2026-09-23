@@ -328,10 +328,12 @@ export default function PaiementProfIndex({
                 .pp-present .pp-pastille { background: #E7F7EF; color: #0F7A43; }
                 .pp-absent  .pp-pastille { background: #FDECEE; color: #C32232; }
                 .pp-ignore  .pp-pastille { background: #EEF0F3; color: #6C757D; }
-                .pp-vide { color: var(--bs-secondary-color); opacity: .3; }
-                .pp-wstart { border-left: 2px solid #C9D2E0 !important; }
+                /* Opacity on the dot only: on the <td> it also faded the
+                   week divider (border-left), which then alternated bold/pale. */
+                .pp-vide .pp-point { color: var(--bs-secondary-color); opacity: .3; }
+                .pp-wstart { border-left: 2px solid #E23744 !important; }
                 .pp-sem { min-width: 92px; text-align: center; padding: 6px 8px !important; }
-                .pp-sem-first { border-left: 2px solid #C9D2E0 !important; }
+                .pp-sem-first { border-left: 2px solid #E23744 !important; }
                 .pp-total { position: sticky; right: 0; z-index: 4; min-width: 130px; text-align: right;
                             font-weight: 600; background: var(--bs-body-bg);
                             box-shadow: -4px 0 6px -4px rgba(0,0,0,.2); }
@@ -648,10 +650,30 @@ export default function PaiementProfIndex({
                         </div>
                     )}
 
+                    {calcul.seancesHoraireInvalide.length > 0 && (
+                        <div className="alert alert-warning d-flex align-items-center gap-2">
+                            <i className="ti ti-clock-exclamation" />
+                            <span>
+                                {t(
+                                    ':count session(s) have an unusable schedule (missing or reversed) and count as 0 h: :dates',
+                                    {
+                                        count: String(calcul.seancesHoraireInvalide.length),
+                                        dates: calcul.seancesHoraireInvalide
+                                            .map((d) => new Date(d + 'T00:00:00').toLocaleDateString('fr-FR'))
+                                            .join(', '),
+                                    },
+                                )}{' '}
+                                <a href={`/backoffice/groups/${calcul.group.id}`} className="fw-semibold">
+                                    {t('Fix them on the group’s sessions')} →
+                                </a>
+                            </span>
+                        </div>
+                    )}
+
                     {/* ── Récapitulatif ─────────────────────────────── */}
                     <div className="row g-3 mb-3">
-                        <div className="col-6 col-md">
-                            <Card>
+                        <div className="col-6 col-md d-flex">
+                            <Card className="w-100 h-100">
                                 <div className="text-muted fs-12 text-uppercase mb-1">{t('Total payment')}</div>
                                 <div className="fs-24 fw-bold text-success">{totalAffiche.toFixed(2)} MAD</div>
                                 {nombreAjustements > 0 && (
@@ -665,8 +687,8 @@ export default function PaiementProfIndex({
                                 )}
                             </Card>
                         </div>
-                        <div className="col-6 col-md">
-                            <Card>
+                        <div className="col-6 col-md d-flex">
+                            <Card className="w-100 h-100">
                                 <div className="text-muted fs-12 text-uppercase mb-1">{t('Sessions')}</div>
                                 <div className="fs-24 fw-bold">{calcul.nombreSeances}</div>
                                 <small className="text-muted">
@@ -676,14 +698,14 @@ export default function PaiementProfIndex({
                         </div>
                         {estHoraire ? (
                             <>
-                                <div className="col-6 col-md">
-                                    <Card>
+                                <div className="col-6 col-md d-flex">
+                                    <Card className="w-100 h-100">
                                         <div className="text-muted fs-12 text-uppercase mb-1">{t('Hours retained')}</div>
                                         <div className="fs-24 fw-bold">{(calcul.heuresSaisies ?? 0).toFixed(2)} h</div>
                                     </Card>
                                 </div>
-                                <div className="col-6 col-md">
-                                    <Card>
+                                <div className="col-6 col-md d-flex">
+                                    <Card className="w-100 h-100">
                                         <div className="text-muted fs-12 text-uppercase mb-1">{t('Hourly rate')}</div>
                                         <div className="fs-24 fw-bold">
                                             {calcul.enseignant.taux.toFixed(2)} <small className="fs-14">MAD</small>
@@ -693,25 +715,16 @@ export default function PaiementProfIndex({
                             </>
                         ) : (
                             <>
-                                <div className="col-6 col-md">
-                                    <Card>
+                                <div className="col-6 col-md d-flex">
+                                    <Card className="w-100 h-100">
                                         <div className="text-muted fs-12 text-uppercase mb-1">{t('Paying students')}</div>
                                         <div className="fs-24 fw-bold">
                                             {calcul.etudiantsRemunerateurs} / {calcul.lignes.length}
                                         </div>
                                     </Card>
                                 </div>
-                                <div className="col-6 col-md">
-                                    <Card>
-                                        <div className="text-muted fs-12 text-uppercase mb-1">{t('Per session')}</div>
-                                        <div className="fs-24 fw-bold">{calcul.montantParSeance.toFixed(2)} MAD</div>
-                                        <small className="text-muted">
-                                            {calcul.montantParEtudiant.toFixed(2)} ÷ {calcul.seancesRemunerees}
-                                        </small>
-                                    </Card>
-                                </div>
-                                <div className="col-6 col-md">
-                                    <Card>
+                                <div className="col-6 col-md d-flex">
+                                    <Card className="w-100 h-100">
                                         <div className="text-muted fs-12 text-uppercase mb-1">{t('Rate per student')}</div>
                                         <div className="fs-24 fw-bold">
                                             {calcul.montantParEtudiant.toFixed(2)} <small className="fs-14">MAD</small>
@@ -830,8 +843,7 @@ export default function PaiementProfIndex({
                                         {/* Montant CALCULÉ (présences × part de séance),
                                             puis la correction manuelle à côté : on voit
                                             d'où l'on part avant de déroger. */}
-                                        <th className="pp-sem pp-sem-first">{t('Computed')}</th>
-                                        <th className="pp-sem">{t('Adjustment')}</th>
+                                        <th className="pp-sem pp-sem-first">{t('Adjustment')}</th>
                                         <th className="pp-total">{t('Total')}</th>
                                     </tr>
                                 </thead>
@@ -886,7 +898,7 @@ export default function PaiementProfIndex({
                                                             {statut !== undefined ? (
                                                                 <span className="pp-pastille">{cellule.texte}</span>
                                                             ) : (
-                                                                cellule.texte
+                                                                <span className="pp-point">{cellule.texte}</span>
                                                             )}
                                                         </td>
                                                     );
@@ -896,21 +908,6 @@ export default function PaiementProfIndex({
                                                     « 18 × 22.73 » rend le chiffre
                                                     vérifiable sans quitter la ligne. */}
                                                 <td className="pp-sem pp-sem-first">
-                                                    <div
-                                                        className={
-                                                            ligne.montantAuto > 0 ? 'fw-semibold' : 'text-muted'
-                                                        }
-                                                    >
-                                                        {ligne.montantAuto.toFixed(2)}
-                                                    </div>
-                                                    {calcul.montantParSeance > 0 && (
-                                                        <div className="fs-12 text-muted">
-                                                            {ligne.joursRetenus} × {calcul.montantParSeance.toFixed(2)}
-                                                        </div>
-                                                    )}
-                                                </td>
-
-                                                <td className="pp-sem">
                                                     <input
                                                         type="number"
                                                         className={`form-control form-control-sm pp-ajust${
@@ -975,36 +972,10 @@ export default function PaiementProfIndex({
                                             <td key={date} className={`pp-jour${classeSemaine(date)}`} />
                                         ))}
                                         <td className="pp-sem pp-sem-first" />
-                                        <td className="pp-sem" />
                                         <td className="pp-total">{totalAffiche.toFixed(2)} MAD</td>
                                     </tr>
                                 </tfoot>
                             </table>
-                        </div>
-
-                        {/* Légende — la grille ne se lit pas sans elle : « R »
-                            et « J » sont NEUTRES parce qu'ils sont écartés du
-                            calcul, ce qu'aucune couleur ne peut dire seule. */}
-                        <div className="d-flex flex-wrap align-items-center gap-4 px-3 pt-3 pp-legende text-muted">
-                            <span className="pp-present d-inline-flex align-items-center gap-1">
-                                <span className="pp-pastille">P</span>
-                                <span className="text-muted">{t('Present — counts')}</span>
-                            </span>
-                            <span className="pp-absent d-inline-flex align-items-center gap-1">
-                                <span className="pp-pastille">A</span>
-                                <span className="text-muted">{t('Absent')}</span>
-                            </span>
-                            <span className="pp-ignore d-inline-flex align-items-center gap-1">
-                                <span className="pp-pastille">R</span>
-                                <span className="text-muted">{t('Legacy status — earns nothing')}</span>
-                            </span>
-                            <span className="d-inline-flex align-items-center gap-1">
-                                <span
-                                    className="d-inline-block"
-                                    style={{ width: 2, height: 14, background: '#C9D2E0' }}
-                                />
-                                {t('Start of a pay week')}
-                            </span>
                         </div>
                     </Card>
                     </>

@@ -170,7 +170,20 @@ export interface DashboardPageProps {
     /** The année scolaire the chart window covers (top-bar switcher), e.g. "2025/2026". */
     annualFraisPeriode: string;
     seancesCalendar: SeancesCalendarData;
+    /** « Nouvelles inscriptions » bar chart — NULL unless super-admin. */
+    nouvellesInscriptions: NouvellesInscriptionsChartData | null;
     [key: string]: unknown;
+}
+
+export type NouvellesInscriptionsDuree = '7j' | '30j' | '12s' | '12m' | 'annee';
+
+/** GetNouvellesInscriptionsChart — new registrations only (group changes excluded). */
+export interface NouvellesInscriptionsChartData {
+    duree: NouvellesInscriptionsDuree;
+    labels: string[];
+    counts: number[];
+    total: number;
+    periode: string;
 }
 
 /** One entry of Laravel's paginator ->links() array (as serialized by Inertia). */
@@ -2457,6 +2470,8 @@ export interface PaiementProfCalcul {
     grille: Record<number, Record<string, string>>;
     /** Heures dérivées des séances effectuées (aide à la saisie, mode horaire). */
     heuresEffectuees: number;
+    /** Dates des séances dont l'horaire est inexploitable (manquant ou inversé) — comptées 0 h. */
+    seancesHoraireInvalide: string[];
     /** Heures RETENUES (saisies, sinon effectuées) — mode horaire seulement. */
     heuresSaisies: number | null;
     totalHoraire: number | null;

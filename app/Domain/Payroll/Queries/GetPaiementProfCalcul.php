@@ -188,6 +188,13 @@ final class GetPaiementProfCalcul
             ],
             'seancesSansEnseignant' => $sansEnseignant,
             'heuresEffectuees' => $this->totalHeures($seances),
+            // Séances dont l'horaire est inexploitable (manquant, ou fin <=
+            // début — une saisie inversée, « 12:30 → 10:00 »). Elles comptent
+            // 0 h dans le total : les PASSER SOUS SILENCE ferait manquer des
+            // heures à la paie sans que rien ne l'explique (§11 « signaler
+            // plutôt que masquer »). L'écran les nomme, l'opérateur corrige
+            // la séance.
+            'seancesHoraireInvalide' => $this->seancesHoraireInvalide($seances),
         ];
 
         // Configuration incomplète : on rend l'en-tête (l'écran a besoin du
@@ -303,6 +310,31 @@ final class GetPaiementProfCalcul
         }
 
         return round($debut->diffInMinutes($fin) / 60, 2);
+    }
+
+    /**
+     * Dates des séances dont la durée ne peut pas être calculée.
+     *
+     * @param  iterable<int, Seance>  $seances
+     * @return array<int, string>
+     */
+    private function seancesHoraireInvalide(iterable $seances): array
+    {
+        $dates = [];
+
+        foreach ($seances as $seance) {
+            if ($seance->heure_debut === null || $seance->heure_fin === null) {
+                $dates[] = $seance->date_seance->toDateString();
+
+                continue;
+            }
+
+            if (Carbon::parse($seance->heure_fin)->lessThanOrEqualTo(Carbon::parse($seance->heure_debut))) {
+                $dates[] = $seance->date_seance->toDateString();
+            }
+        }
+
+        return $dates;
     }
 
     private function totalHeures(iterable $seances): float

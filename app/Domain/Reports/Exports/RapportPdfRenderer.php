@@ -123,14 +123,33 @@ final class RapportPdfRenderer
      */
     private function entetePage(?Etablissement $centre): string
     {
-        $nom = htmlspecialchars(mb_strtoupper($centre?->nom_centre ?? 'GLS'), ENT_QUOTES);
-        $adresse = $centre?->adresse ? htmlspecialchars($centre->adresse, ENT_QUOTES).'<br>' : '';
-        $tel = $centre?->telephone ? 'Tél. '.htmlspecialchars($centre->telephone, ENT_QUOTES) : '';
-
         $logoPath = public_path('assets/images/logo/gls-noir.png');
         $logo = is_file($logoPath)
             ? '<img src="'.$logoPath.'" style="height:34pt;">'
             : '';
+
+        // ⚠ « Tous les centres » : le document n'a PAS d'identité de centre à
+        // imprimer. L'ancien repli écrivait le mot « GLS » en gras suivi d'un
+        // <br> et de deux chaînes vides (pas d'adresse, pas de téléphone) —
+        // une bande presque nue, dont la moitié gauche se lisait comme un
+        // gabarit resté à remplir (signalé le 23/09/2026 sur le relevé des
+        // inscriptions). Le logo EST l'identité de la marque : quand aucun
+        // centre ne parle, c'est lui qui porte l'en-tête, seul et à gauche, au
+        // lieu d'un texte de remplacement. Rien n'est « perdu » : il n'y avait
+        // aucune information à afficher, seulement un mot qui en tenait lieu.
+        if ($centre === null) {
+            return <<<HTML
+                <table style="width:100%;border-collapse:collapse;font-size:8.5pt;">
+                    <tr>
+                        <td style="border:none;padding:0;vertical-align:top;">{$logo}</td>
+                    </tr>
+                </table>
+                HTML;
+        }
+
+        $nom = htmlspecialchars(mb_strtoupper((string) $centre->nom_centre), ENT_QUOTES);
+        $adresse = $centre->adresse ? htmlspecialchars($centre->adresse, ENT_QUOTES).'<br>' : '';
+        $tel = $centre->telephone ? 'Tél. '.htmlspecialchars($centre->telephone, ENT_QUOTES) : '';
 
         return <<<HTML
             <table style="width:100%;border-collapse:collapse;font-size:8.5pt;">

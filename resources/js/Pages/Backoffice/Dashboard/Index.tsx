@@ -2,11 +2,12 @@ import { Link, router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import AnnualFraisChart from '@/Components/Dashboard/AnnualFraisChart';
+import NouvellesInscriptionsChart from '@/Components/Dashboard/NouvellesInscriptionsChart';
 import SeancesAgenda from '@/Components/Dashboard/SeancesAgenda';
 import SeancesCalendar, { isoDate } from '@/Components/Dashboard/SeancesCalendar';
 import StatsGrid from '@/Components/Dashboard/StatsGrid';
 import { t } from '@/Lib/i18n';
-import type { DashboardPageProps, SharedProps } from '@/Types';
+import type { DashboardPageProps, NouvellesInscriptionsDuree, SharedProps } from '@/Types';
 
 interface QuickAction {
     label: string;
@@ -45,10 +46,11 @@ const QUICK_ACTIONS: QuickAction[] = [
  * fees chart (GetAnnualFraisSummary). Everything follows the top-bar
  * année/centre switcher server-side; nothing here re-filters client-side.
  */
-export default function DashboardIndex({ stats, annualFrais, annualFraisPeriode, seancesCalendar }: DashboardPageProps) {
+export default function DashboardIndex({ stats, annualFrais, annualFraisPeriode, seancesCalendar, nouvellesInscriptions }: DashboardPageProps) {
     // auth.user is a shared prop (HandleInertiaRequests) — no page prop needed.
     const { auth } = usePage<SharedProps>().props;
     const [selectedDay, setSelectedDay] = useState<string>(() => isoDate(new Date()));
+    const [inscLoading, setInscLoading] = useState(false);
 
     const canAny = (permissions: string[]) =>
         auth.isSuperAdmin || permissions.some((p) => auth.permissions.includes(p));
@@ -72,6 +74,21 @@ export default function DashboardIndex({ stats, annualFrais, annualFraisPeriode,
         );
         // Keep the agenda on a day of the month now displayed.
         setSelectedDay((current) => (current.startsWith(month) ? current : `${month}-01`));
+    }
+
+    function changeInscriptionsDuree(duree: NouvellesInscriptionsDuree) {
+        // Partial reload — only the chart is recomputed server-side. The
+        // current calMonth rides along so the calendar keeps its month.
+        const params = new URLSearchParams(window.location.search);
+        params.set('inscDuree', duree);
+        router.get('/backoffice/dashboard', Object.fromEntries(params), {
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+            only: ['nouvellesInscriptions'],
+            onStart: () => setInscLoading(true),
+            onFinish: () => setInscLoading(false),
+        });
     }
 
     return (
@@ -163,6 +180,19 @@ export default function DashboardIndex({ stats, annualFrais, annualFraisPeriode,
                     <SeancesAgenda data={seancesCalendar} selectedDay={selectedDay} />
                 </div>
             </div>
+
+            {/* Super-admin only — the prop is NULL for every other user (server-side gate). */}
+            {nouvellesInscriptions && (
+                <div className="row">
+                    <div className="col-md-12">
+                        <NouvellesInscriptionsChart
+                            data={nouvellesInscriptions}
+                            onDureeChange={changeInscriptionsDuree}
+                            loading={inscLoading}
+                        />
+                    </div>
+                </div>
+            )}
 
             {/* Masqué temporairement (22/09/2026) : chiffres du « Résumé des frais annuels »
                 en cours de vérification. Décommenter pour le réafficher. */}
