@@ -844,11 +844,29 @@ html[data-theme='dark'] .gls-ctx-btn-centre[aria-expanded='true'] {
     --gls-chart-grid: #e9edf4;
     --gls-chart-muted: #6a7287;
     --gls-chart-surface: #fff;
+    /* « Nouvelles inscriptions » bars — PreSkool hues in fixed order (primary,
+     * pink, success, purple, orange, teal, danger). Validated with the dataviz
+     * palette script for light mode; the dark steps below are re-stepped for
+     * the dark surface, not a flip. */
+    --gls-bar-1: #3d5ee1;
+    --gls-bar-2: #e83e8c;
+    --gls-bar-3: #1abe17;
+    --gls-bar-4: #4a00e5;
+    --gls-bar-5: #fd7e14;
+    --gls-bar-6: #02a8b5;
+    --gls-bar-7: #e82646;
 }
 html[data-theme='dark'] .gls-frais-chart {
     --gls-chart-grid: #2c2c3a;
     --gls-chart-muted: #9ca1af;
     --gls-chart-surface: #1b1632;
+    --gls-bar-1: #5474f5;
+    --gls-bar-2: #db4f93;
+    --gls-bar-3: #2ab127;
+    --gls-bar-4: #8558f5;
+    --gls-bar-5: #dd7422;
+    --gls-bar-6: #1ca8b4;
+    --gls-bar-7: #e1475f;
 }
 .gls-frais-tooltip {
     position: absolute;
@@ -1212,6 +1230,8 @@ html[data-theme='dark'] .gls-seancecal-day.is-today {
 .table tbody td select,
 .table tbody td textarea,
 .table tbody td .dropdown-menu,
+.table tbody td.text-normal-case,
+.table tbody td.text-normal-case *,
 .table tbody td .text-normal-case,
 .table tbody td .text-normal-case * {
     text-transform: none;

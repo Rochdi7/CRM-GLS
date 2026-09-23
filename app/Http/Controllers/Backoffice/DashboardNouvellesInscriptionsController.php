@@ -13,18 +13,21 @@ use Illuminate\Http\Request;
  * « Nouvelles inscriptions » — the students behind one clicked bar. Same
  * audience as the chart itself (every signed-in user) and the same scope:
  * the active centre from CurrentContext, which only offers centres the user
- * already reaches. `canViewStudents` only decides whether the modal draws a
- * link to the student page — that page keeps its own permission + policy.
+ * already reaches. Paginated (`page`, 25 rows) — the modal pages through the
+ * same query. `canViewStudents` only decides whether the modal draws a link
+ * to the student page — that page keeps its own permission + policy.
  */
 final class DashboardNouvellesInscriptionsController extends Controller
 {
     public function __invoke(Request $request, GetNouvellesInscriptionsChart $chart): JsonResponse
     {
-        return response()->json([
-            'students' => $chart->students(
-                (string) $request->string('duree'),
-                (string) $request->string('key'),
-            ),
+        $page = $chart->students(
+            (string) $request->string('duree'),
+            (string) $request->string('key'),
+            max(1, $request->integer('page', 1)),
+        );
+
+        return response()->json($page + [
             'canViewStudents' => (bool) $request->user()?->can('students.view'),
         ]);
     }

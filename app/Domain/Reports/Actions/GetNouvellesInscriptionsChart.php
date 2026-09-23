@@ -118,19 +118,27 @@ final class GetNouvellesInscriptionsChart
         ];
     }
 
+    /** Rows per page of the per-bar student list — a month of Marrakech is 100+ rows. */
+    public const STUDENTS_PER_PAGE = 25;
+
     /**
-     * The students behind ONE bar (click on the chart). Same base query and
-     * the same bucket expression as the count, so the list can never hold a
-     * row the bar does not count — or miss one it does. An unknown duration
-     * or a key that is not a bucket of the window returns an empty list
-     * instead of widening to something the chart never showed.
+     * The students behind ONE bar (click on the chart), PAGINATED server-side
+     * (23/09/2026 — « Année scolaire » on a big centre listed 113 rows in one
+     * modal). Same base query and the same bucket expression as the count, so
+     * the list can never hold a row the bar does not count — or miss one it
+     * does. An unknown duration or a key that is not a bucket of the window
+     * returns an empty page instead of widening to something the chart never
+     * showed; a page past the end returns empty rows with the real total.
      *
-     * @return list<array{inscriptionId: int, studentId: int, reference: string, nom: string, prenom: string, telephone: ?string, groupe: ?string, centre: ?string, statut: string, dateInscription: string, heure: string}>
+     * @return array{students: list<array{inscriptionId: int, studentId: int, reference: string, nom: string, prenom: string, telephone: ?string, groupe: ?string, centre: ?string, statut: string, dateInscription: string, heure: string}>, total: int, page: int, lastPage: int, perPage: int}
      */
-    public function students(string $duree, string $key): array
+    public function students(string $duree, string $key, int $page = 1): array
     {
+        $page = max(1, $page);
+        $empty = ['students' => [], 'total' => 0, 'page' => $page, 'lastPage' => 1, 'perPage' => self::STUDENTS_PER_PAGE];
+
         if (! in_array($duree, self::DUREES, true)) {
-            return [];
+            return $empty;
         }
 
         [$start, $end, $unit] = $this->window($duree);
@@ -141,17 +149,23 @@ final class GetNouvellesInscriptionsChart
             default => '/^\d{4}-\d{2}$/',
         };
         if (preg_match($pattern, $key) !== 1) {
-            return [];
+            return $empty;
         }
 
-        return $this->nouvellesInscriptions($start, $end)
-            ->whereRaw(self::bucketSql($unit).' = ?', [$key])
+        $bar = $this->nouvellesInscriptions($start, $end)
+            ->whereRaw(self::bucketSql($unit).' = ?', [$key]);
+
+        $total = (clone $bar)->count();
+        $lastPage = max(1, (int) ceil($total / self::STUDENTS_PER_PAGE));
+
+        $students = $bar
             ->join('students as s', 's.id', '=', 'i.student_id')
             ->leftJoin('groups as g', 'g.id', '=', 'i.group_id')
             ->leftJoin('etablissements as e', 'e.id', '=', 'i.etablissement_id')
             ->orderBy('i.date_inscription')
             ->orderBy('i.created_at')
             ->orderBy('i.id')
+            ->forPage($page, self::STUDENTS_PER_PAGE)
             ->get([
                 'i.id', 'i.student_id', 'i.statut', 'i.date_inscription', 'i.created_at',
                 's.reference', 's.nom', 's.prenom', 's.telephone',
@@ -171,6 +185,8 @@ final class GetNouvellesInscriptionsChart
                 'heure' => $r->created_at !== null ? Carbon::parse($r->created_at)->format('H:i') : '',
             ])
             ->all();
+
+        return ['students' => $students, 'total' => $total, 'page' => $page, 'lastPage' => $lastPage, 'perPage' => self::STUDENTS_PER_PAGE];
     }
 
     /**

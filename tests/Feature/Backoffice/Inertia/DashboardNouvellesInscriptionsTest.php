@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Backoffice\Inertia;
 
 use App\Domain\Registrations\Actions\ChangerGroupeInscription;
+use App\Domain\Reports\Actions\GetNouvellesInscriptionsChart;
 use App\Models\AnneeScolaire;
 use App\Models\Caisse;
 use App\Models\Employee;
@@ -241,7 +242,51 @@ final class DashboardNouvellesInscriptionsTest extends TestCase
             ->assertJsonPath('students.0.studentId', $nouveau->id)
             ->assertJsonPath('students.0.nom', 'Alaoui')
             ->assertJsonPath('students.0.dateInscription', '12/03/2026')
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('page', 1)
+            ->assertJsonPath('lastPage', 1)
             ->assertJsonPath('canViewStudents', true);
+    }
+
+    public function test_a_bar_with_many_students_is_paginated_server_side(): void
+    {
+        $perPage = GetNouvellesInscriptionsChart::STUDENTS_PER_PAGE;
+        for ($n = 0; $n < $perPage + 3; $n++) {
+            $this->inscription(Student::factory()->create(['etablissement_id' => $this->centre->id]), '2026-03-12');
+        }
+
+        $user = $this->superAdmin();
+        $params = ['duree' => '7j', 'key' => '2026-03-12'];
+
+        $this->actingAs($user)
+            ->getJson(route('backoffice.dashboard.nouvelles-inscriptions', $params))
+            ->assertOk()
+            ->assertJsonCount($perPage, 'students')
+            ->assertJsonPath('total', $perPage + 3)
+            ->assertJsonPath('page', 1)
+            ->assertJsonPath('lastPage', 2)
+            ->assertJsonPath('perPage', $perPage);
+
+        $this->actingAs($user)
+            ->getJson(route('backoffice.dashboard.nouvelles-inscriptions', $params + ['page' => 2]))
+            ->assertOk()
+            ->assertJsonCount(3, 'students')
+            ->assertJsonPath('page', 2)
+            ->assertJsonPath('total', $perPage + 3);
+
+        // Past the end: empty rows, but the real total — never a widened list.
+        $this->actingAs($user)
+            ->getJson(route('backoffice.dashboard.nouvelles-inscriptions', $params + ['page' => 9]))
+            ->assertOk()
+            ->assertJsonCount(0, 'students')
+            ->assertJsonPath('total', $perPage + 3);
+
+        // A bogus page falls back to the first one.
+        $this->actingAs($user)
+            ->getJson(route('backoffice.dashboard.nouvelles-inscriptions', $params + ['page' => 0]))
+            ->assertOk()
+            ->assertJsonPath('page', 1)
+            ->assertJsonCount($perPage, 'students');
     }
 
     public function test_today_bar_lists_by_the_hour_and_rejects_foreign_keys(): void

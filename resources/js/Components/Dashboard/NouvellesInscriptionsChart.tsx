@@ -3,6 +3,7 @@ import type { NouvelleInscriptionStudent, NouvellesInscriptionsChartData, Nouvel
 import { t } from '@/Lib/i18n';
 import { statutVariant } from '@/Lib/inscriptionStatut';
 import Modal from '@/Components/Modals/Modal';
+import { PagerFooter } from '@/Components/Tables/Pagination';
 
 interface NouvellesInscriptionsChartProps {
     data: NouvellesInscriptionsChartData;
@@ -11,12 +12,28 @@ interface NouvellesInscriptionsChartProps {
 }
 
 interface BarDetail {
+    /** Index of the clicked bar — kept so a page change re-queries the SAME bucket. */
+    bar: number;
     label: string;
     loading: boolean;
     /** HTTP status (or 0 for a network failure) — shown so a 404 (stale route cache) reads differently from a 500. */
     error: number | null;
     students: NouvelleInscriptionStudent[];
     canViewStudents: boolean;
+    /** Server-side pagination of the bar's list (25 rows a page). */
+    page: number;
+    lastPage: number;
+    total: number;
+    perPage: number;
+}
+
+interface BarPageResponse {
+    students: NouvelleInscriptionStudent[];
+    canViewStudents: boolean;
+    total: number;
+    page: number;
+    lastPage: number;
+    perPage: number;
 }
 
 const DUREES: { value: NouvellesInscriptionsDuree; label: string }[] = [
@@ -29,7 +46,16 @@ const DUREES: { value: NouvellesInscriptionsDuree; label: string }[] = [
     { value: 'annee', label: 'Academic year' },
 ];
 
-const BAR_COLOR = '#3D5EE1';
+/**
+ * One PreSkool hue per bar, assigned in FIXED order and repeated — the bars
+ * are a single series, so the colour carries no meaning beyond telling the
+ * bucket apart at a glance (asked 23/09/2026). The actual values are CSS
+ * tokens on `.gls-frais-chart` (app.css) so dark mode gets its own steps:
+ * both palettes were run through the dataviz validator (adjacent-pair CVD
+ * separation and contrast against each surface).
+ */
+const BAR_COLOR_COUNT = 7;
+const barColor = (i: number): string => `var(--gls-bar-${(i % BAR_COLOR_COUNT) + 1})`;
 const FALLBACK_WIDTH = 1000;
 const HEIGHT = 280;
 const HEIGHT_MOBILE = 220;
@@ -68,27 +94,53 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
     // Ignores a late answer for a bar the user has already moved away from.
     const requestId = useRef(0);
 
-    async function openBar(i: number) {
-        if (loading || !data.counts[i]) return;
-
+    async function loadBar(i: number, page: number) {
         const id = ++requestId.current;
-        setDetail({ label: data.labels[i], loading: true, error: null, students: [], canViewStudents: false });
+        setDetail((current) => ({
+            bar: i,
+            label: data.labels[i],
+            loading: true,
+            error: null,
+            // Keep the rows on screen while the next page loads (no flash to empty).
+            students: current?.bar === i ? current.students : [],
+            canViewStudents: current?.canViewStudents ?? false,
+            page,
+            lastPage: current?.bar === i ? current.lastPage : 1,
+            total: current?.bar === i ? current.total : 0,
+            perPage: current?.perPage ?? 25,
+        }));
 
         let status = 0;
         try {
-            const params = new URLSearchParams({ duree: data.duree, key: data.keys[i] });
+            const params = new URLSearchParams({ duree: data.duree, key: data.keys[i], page: String(page) });
             const response = await fetch(`/backoffice/dashboard/nouvelles-inscriptions?${params.toString()}`, {
                 headers: { Accept: 'application/json' },
             });
             status = response.status;
             if (!response.ok) throw new Error(String(response.status));
-            const json = (await response.json()) as { students: NouvelleInscriptionStudent[]; canViewStudents: boolean };
+            const json = (await response.json()) as BarPageResponse;
             if (id !== requestId.current) return;
-            setDetail({ label: data.labels[i], loading: false, error: null, students: json.students, canViewStudents: json.canViewStudents });
+            setDetail({
+                bar: i,
+                label: data.labels[i],
+                loading: false,
+                error: null,
+                students: json.students,
+                canViewStudents: json.canViewStudents,
+                page: json.page,
+                lastPage: json.lastPage,
+                total: json.total,
+                perPage: json.perPage,
+            });
         } catch {
             if (id !== requestId.current) return;
             setDetail((current) => (current ? { ...current, loading: false, error: status } : current));
         }
+    }
+
+    function openBar(i: number) {
+        if (loading || !data.counts[i]) return;
+        void loadBar(i, 1);
     }
 
     useEffect(() => {
@@ -178,7 +230,7 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                                     width={barWidth}
                                     height={Math.max(0, PAD_TOP + plotHeight - y)}
                                     rx={Math.min(4, barWidth / 4)}
-                                    fill={BAR_COLOR}
+                                    fill={barColor(i)}
                                     opacity={hoverIndex === null || hoverIndex === i ? 1 : 0.45}
                                 />
                             );
@@ -245,7 +297,7 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                         >
                             <div className="gls-frais-tooltip-header">{data.labels[hoverIndex]}</div>
                             <div className="gls-frais-tooltip-row">
-                                <span className="gls-frais-tooltip-dot" style={{ backgroundColor: BAR_COLOR }} />
+                                <span className="gls-frais-tooltip-dot" style={{ backgroundColor: barColor(hoverIndex) }} />
                                 <span className="gls-frais-tooltip-label">{t('New registrations')}:</span>
                                 <span className="gls-frais-tooltip-value">{data.counts[hoverIndex].toLocaleString('fr-FR')}</span>
                             </div>
@@ -266,7 +318,7 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                 }}
                 size="xl"
             >
-                {detail?.loading && (
+                {detail?.loading && detail.students.length === 0 && (
                     <div className="text-center py-4">
                         <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />
                         {t('Loading…')}
@@ -277,11 +329,11 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                         {t('Unable to load the students.')} {detail.error > 0 ? `(HTTP ${detail.error})` : `(${t('network error')})`}
                     </div>
                 )}
-                {detail && !detail.loading && detail.error === null && (
+                {detail && detail.error === null && (!detail.loading || detail.students.length > 0) && (
                     detail.students.length === 0 ? (
                         <p className="text-muted mb-0">{t('No student record found')}</p>
                     ) : (
-                        <div className="table-responsive">
+                        <div className="table-responsive" style={{ opacity: detail.loading ? 0.5 : 1 }}>
                             <table className="table table-sm mb-0">
                                 <thead>
                                     <tr>
@@ -298,7 +350,7 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                                 <tbody>
                                     {detail.students.map((s, idx) => (
                                         <tr key={s.inscriptionId}>
-                                            <td>{idx + 1}</td>
+                                            <td>{(detail.page - 1) * detail.perPage + idx + 1}</td>
                                             <td className="text-normal-case">{s.reference}</td>
                                             <td>
                                                 {detail.canViewStudents ? (
@@ -308,7 +360,8 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                                                 )}
                                             </td>
                                             <td>{s.telephone ?? '—'}</td>
-                                            <td>{s.groupe ?? '—'}</td>
+                                            {/* A group name is a code (« 2610-1900-A1-1-Yassine ») — keep it as typed. */}
+                                            <td className="text-normal-case">{s.groupe ?? '—'}</td>
                                             <td>{s.centre ?? '—'}</td>
                                             <td>
                                                 {s.dateInscription}
@@ -321,6 +374,12 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                                     ))}
                                 </tbody>
                             </table>
+                            <PagerFooter
+                                current={detail.page}
+                                last={detail.lastPage}
+                                total={detail.total}
+                                onPage={(page) => void loadBar(detail.bar, page)}
+                            />
                         </div>
                     )
                 )}

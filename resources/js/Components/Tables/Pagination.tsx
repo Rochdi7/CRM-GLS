@@ -107,8 +107,6 @@ function urlForPage(paginator: PaginatedData<unknown>, page: number): string | n
  * filters already in the URL are preserved and the page never fully reloads.
  */
 export default function Pagination<T>({ paginator, preserveScroll = true, only }: PaginationProps<T>) {
-    const isPhone = useMediaQuery('(max-width: 575.98px)');
-
     function visit(page: number) {
         const url = urlForPage(paginator, page);
         if (!url || page < 1 || page > paginator.last_page || page === paginator.current_page) {
@@ -128,8 +126,35 @@ export default function Pagination<T>({ paginator, preserveScroll = true, only }
     }
 
     const { current_page: current, last_page: last, total } = paginator;
+
+    return <PagerFooter current={current} last={last} total={total} onPage={visit} />;
+}
+
+interface PagerFooterProps {
+    current: number;
+    last: number;
+    total: number;
+    onPage: (page: number) => void;
+}
+
+/**
+ * The pager's presentational half — the same Bootstrap `.pagination` markup
+ * and « N total » footer, but with a plain `onPage` callback so a list that
+ * is NOT an Inertia page (the « Nouvelles inscriptions » modal fetches JSON)
+ * paginates with the same look instead of a second pager. `Pagination` above
+ * is the Inertia-router wrapper every list page keeps using.
+ */
+export function PagerFooter({ current, last, total, onPage }: PagerFooterProps) {
+    const isPhone = useMediaQuery('(max-width: 575.98px)');
     const singlePage = last <= 1;
     const pages = pageWindow(current, last, isPhone ? 1 : 2);
+
+    function visit(page: number) {
+        if (page < 1 || page > last || page === current) {
+            return;
+        }
+        onPage(page);
+    }
 
     const summary = `${formatTotal(total)} ${t('total')}`;
 
