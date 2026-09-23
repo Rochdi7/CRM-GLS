@@ -139,7 +139,18 @@ final class DiagnostiquerDeplacementPaiement
                 'etudiantId' => $ins->student_id,
                 'groupe' => $ins->group?->nom,
                 'presences' => $this->compterPresences($ins),
-                'frais' => $ins->fees->map(fn (InscriptionFee $f): array => $this->frais($f))->values()->all(),
+                // Ce qui peut encore RECEVOIR l'argent d'abord (reste dû),
+                // puis les lignes soldées, puis les masquées — l'opérateur
+                // cherche une cible, pas un relevé ; l'échéance départage.
+                'frais' => $ins->fees
+                    ->map(fn (InscriptionFee $f): array => $this->frais($f))
+                    ->sortBy(fn (array $f, int $i): int => (match (true) {
+                        $f['masque'] => 2,
+                        (float) $f['reste'] > 0 => 0,
+                        default => 1,
+                    }) * 1000 + $i)
+                    ->values()
+                    ->all(),
             ],
             'presences' => $presences,
             // La purge ne sait effacer QUE des « Absent » — même règle que

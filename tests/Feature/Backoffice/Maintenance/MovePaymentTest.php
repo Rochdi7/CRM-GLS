@@ -163,7 +163,14 @@ final class MovePaymentTest extends TestCase
         }
     }
 
-    /** @return array{montant: string, date: string, agent: int, caisse: int, methode: string, solde: string} */
+    /**
+     * Tout ce qu'un déplacement ne doit JAMAIS toucher : la ligne (montant,
+     * date, agent, caisse, méthode), le solde de la caisse ET son journal —
+     * un mouvement de caisse passe par CaisseLedger (`solde_movement`), et
+     * ce geste n'en écrit aucun.
+     *
+     * @return array{montant: string, date: string, agent: int, caisse: int, methode: string, solde: string, mouvements: int}
+     */
     private function invariants(Encaissement $enc): array
     {
         $enc->refresh();
@@ -175,6 +182,8 @@ final class MovePaymentTest extends TestCase
             'caisse' => $enc->caisse_id,
             'methode' => $enc->methode,
             'solde' => (string) Caisse::query()->whereKey($this->caisse->id)->value('solde'),
+            'mouvements' => \Illuminate\Support\Facades\DB::table('activity_log')
+                ->where('log_name', 'caisse')->where('event', 'solde_movement')->count(),
         ];
     }
 
@@ -408,6 +417,31 @@ final class MovePaymentTest extends TestCase
                 ->where('diagnostic.purgeable', true)
                 ->where('diagnostic.fraisDetecte.id', $fraisCible['Frais de Septembre']->id)
                 ->where('diagnostic.blocages', []));
+    }
+
+    /** Les frais de la cible : à payer d'abord, puis soldés, puis masqués — l'opérateur cherche une cible. */
+    public function test_le_diagnostic_classe_les_frais_cible_a_payer_puis_payes_puis_masques(): void
+    {
+        $fantome = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $reel = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        [, $fraisSource] = $this->inscription($fantome, ['Frais de Septembre' => 1300], 'INS-SRC');
+        [, $fraisCible] = $this->inscription($reel, [
+            'Frais de Janvier' => 1300,   // masqué
+            'Frais de Septembre' => 1300, // payé
+            "Frais d'Octobre" => 1300,    // à payer
+        ], 'INS-CIB');
+        $fraisCible['Frais de Janvier']->update(['masque_le' => now()]);
+        $this->paiement($reel, $fraisCible['Frais de Septembre'], 1300, 'ENC-MV-9A');
+        $this->paiement($fantome, $fraisSource['Frais de Septembre'], 1300, 'ENC-MV-9B');
+
+        $this->actingAs($this->mainteneur())
+            ->get(self::URL.'?encaissement=ENC-MV-9B&inscription=INS-CIB')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('diagnostic.cible.frais.0.nom', "Frais d'Octobre")
+                ->where('diagnostic.cible.frais.1.nom', 'Frais de Septembre')
+                ->where('diagnostic.cible.frais.2.nom', 'Frais de Janvier')
+                ->where('diagnostic.cible.frais.2.masque', true));
     }
 
     public function test_le_diagnostic_dit_quand_une_reference_est_introuvable(): void
