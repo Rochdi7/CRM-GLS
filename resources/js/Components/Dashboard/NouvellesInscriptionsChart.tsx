@@ -13,7 +13,8 @@ interface NouvellesInscriptionsChartProps {
 interface BarDetail {
     label: string;
     loading: boolean;
-    error: boolean;
+    /** HTTP status (or 0 for a network failure) — shown so a 404 (stale route cache) reads differently from a 500. */
+    error: number | null;
     students: NouvelleInscriptionStudent[];
     canViewStudents: boolean;
 }
@@ -70,20 +71,22 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
         if (loading || !data.counts[i]) return;
 
         const id = ++requestId.current;
-        setDetail({ label: data.labels[i], loading: true, error: false, students: [], canViewStudents: false });
+        setDetail({ label: data.labels[i], loading: true, error: null, students: [], canViewStudents: false });
 
+        let status = 0;
         try {
             const params = new URLSearchParams({ duree: data.duree, key: data.keys[i] });
             const response = await fetch(`/backoffice/dashboard/nouvelles-inscriptions?${params.toString()}`, {
                 headers: { Accept: 'application/json' },
             });
+            status = response.status;
             if (!response.ok) throw new Error(String(response.status));
             const json = (await response.json()) as { students: NouvelleInscriptionStudent[]; canViewStudents: boolean };
             if (id !== requestId.current) return;
-            setDetail({ label: data.labels[i], loading: false, error: false, students: json.students, canViewStudents: json.canViewStudents });
+            setDetail({ label: data.labels[i], loading: false, error: null, students: json.students, canViewStudents: json.canViewStudents });
         } catch {
             if (id !== requestId.current) return;
-            setDetail((current) => (current ? { ...current, loading: false, error: true } : current));
+            setDetail((current) => (current ? { ...current, loading: false, error: status } : current));
         }
     }
 
@@ -268,8 +271,12 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                         {t('Loading…')}
                     </div>
                 )}
-                {detail?.error && <div className="alert alert-danger mb-0">{t('Unable to load the students.')}</div>}
-                {detail && !detail.loading && !detail.error && (
+                {detail?.error !== null && detail?.error !== undefined && (
+                    <div className="alert alert-danger mb-0">
+                        {t('Unable to load the students.')} {detail.error > 0 ? `(HTTP ${detail.error})` : `(${t('network error')})`}
+                    </div>
+                )}
+                {detail && !detail.loading && detail.error === null && (
                     detail.students.length === 0 ? (
                         <p className="text-muted mb-0">{t('No student record found')}</p>
                     ) : (
