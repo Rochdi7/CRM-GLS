@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Domain\Attendance\Actions\GenererSeancesDepuisCreneau;
 use App\Domain\Attendance\Queries\GetCreneauFormOptions;
 use App\Domain\Attendance\Queries\GetCreneauxGrille;
@@ -32,7 +33,7 @@ use Inertia\Response;
  */
 final class CreneauController extends Controller
 {
-    use AssertsContextScope;
+    use AssertsContextScope, RedirectsPreservingFilters;
 
     public function index(
         Request $request,
@@ -114,16 +115,16 @@ final class CreneauController extends Controller
         // over (or its start date missing), no séance can be dated, so say so
         // instead of reporting a silent success.
         if ($sansDateDebut) {
-            return redirect()->route('backoffice.emploi-du-temps.index')
+            return $this->backToListPreservingFilters($request, 'backoffice.emploi-du-temps.index')
                 ->with('warning', __("Schedule slot created, but no session will be generated: the group has no start of training date. Set the group's start date to generate sessions."));
         }
 
         if ($bloque) {
-            return redirect()->route('backoffice.emploi-du-temps.index')
+            return $this->backToListPreservingFilters($request, 'backoffice.emploi-du-temps.index')
                 ->with('warning', __("Schedule slot created, but no session was generated: the group's end of training date has passed. Extend the group's end date to generate sessions."));
         }
 
-        return redirect()->route('backoffice.emploi-du-temps.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.emploi-du-temps.index')
             ->with('success', __('Schedule slot created.'));
     }
 
@@ -155,16 +156,16 @@ final class CreneauController extends Controller
         $generer->resynchroniser($creneau);
 
         if ($generer->bloqueParDateDebutManquante) {
-            return redirect()->route('backoffice.emploi-du-temps.index')
+            return $this->backToListPreservingFilters($request, 'backoffice.emploi-du-temps.index')
                 ->with('warning', __("Schedule slot updated, but no session will be generated: the group has no start of training date. Set the group's start date to generate sessions."));
         }
 
         if ($generer->bloqueParFinFormation) {
-            return redirect()->route('backoffice.emploi-du-temps.index')
+            return $this->backToListPreservingFilters($request, 'backoffice.emploi-du-temps.index')
                 ->with('warning', __("Schedule slot updated, but no session was generated: the group's end of training date has passed. Extend the group's end date to generate sessions."));
         }
 
-        return redirect()->route('backoffice.emploi-du-temps.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.emploi-du-temps.index')
             ->with('success', __('Schedule slot updated.'));
     }
 
@@ -231,7 +232,7 @@ final class CreneauController extends Controller
         $generer->supprimerFuturs($creneau);
         $creneau->delete();
 
-        return redirect()->route('backoffice.emploi-du-temps.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.emploi-du-temps.index')
             ->with('success', __('Schedule slot deleted.'));
     }
 }

@@ -293,6 +293,9 @@ export default function PaiementProfIndex({
         const params = new URLSearchParams({
             prefill_paiement_prof: '1',
             prefill_group_id: String(calcul.group.id),
+            // L'enseignant PAYÉ, tel que le calcul l'a désigné — figé sur la
+            // dépense, jamais redéduit du groupe (23/09/2026).
+            prefill_enseignant_id: String(calcul.enseignant.id),
             prefill_montant: totalAffiche.toFixed(2),
             prefill_periode_debut: calcul.periode.debut,
             prefill_periode_fin: calcul.periode.fin,

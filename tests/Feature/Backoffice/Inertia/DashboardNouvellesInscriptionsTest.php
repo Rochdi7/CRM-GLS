@@ -20,7 +20,7 @@ use Tests\TestCase;
 
 /**
  * « Nouvelles inscriptions » dashboard bar chart (GetNouvellesInscriptionsChart):
- * super-admin only, bucketed by duration, and a group change is NEVER a new
+ * every signed-in user (no permission), bucketed by duration (today first), and a group change is NEVER a new
  * registration — neither the app-linked successor (inscriptions_historique)
  * nor the legacy one (Changement row whose date_fin meets the successor).
  */
@@ -122,10 +122,10 @@ final class DashboardNouvellesInscriptionsTest extends TestCase
                 ->has('nouvellesInscriptions.counts', 12)
                 ->where('nouvellesInscriptions.counts.11', 1));
 
-        // Unknown duration falls back to the année.
+        // Unknown duration falls back to today.
         $this->actingAs($this->superAdmin())
             ->get(route('backoffice.dashboard', ['inscDuree' => 'nope']))
-            ->assertInertia(fn (Assert $page) => $page->where('nouvellesInscriptions.duree', 'annee'));
+            ->assertInertia(fn (Assert $page) => $page->where('nouvellesInscriptions.duree', 'jour'));
     }
 
     public function test_today_buckets_by_the_hour_the_row_was_keyed(): void
@@ -145,14 +145,24 @@ final class DashboardNouvellesInscriptionsTest extends TestCase
                 ->where('nouvellesInscriptions.periode', '15/03/2026'));
     }
 
-    public function test_non_super_admin_never_receives_the_chart(): void
+    public function test_every_role_receives_the_chart(): void
     {
-        $user = User::factory()->create();
-        $user->givePermissionTo('dashboard.view');
+        foreach (Role::query()->pluck('name') as $name) {
+            $user = User::factory()->create();
+            $user->assignRole($name);
 
-        $this->actingAs($user)
+            $this->actingAs($user)
+                ->get(route('backoffice.dashboard'))
+                ->assertOk()
+                ->assertInertia(fn (Assert $page) => $page->where('nouvellesInscriptions.duree', 'jour'));
+        }
+    }
+
+    public function test_a_user_with_no_role_or_permission_still_receives_the_chart(): void
+    {
+        $this->actingAs(User::factory()->create())
             ->get(route('backoffice.dashboard'))
             ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page->where('nouvellesInscriptions', null));
+            ->assertInertia(fn (Assert $page) => $page->where('nouvellesInscriptions.duree', 'jour'));
     }
 }

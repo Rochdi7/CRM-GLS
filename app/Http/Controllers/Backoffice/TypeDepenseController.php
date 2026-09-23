@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Domain\Expenses\Queries\GetTypesDepensesList;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\TypesDepenses\StoreTypeDepenseRequest;
@@ -32,6 +33,8 @@ use Inertia\Response;
  */
 final class TypeDepenseController extends Controller
 {
+    use RedirectsPreservingFilters;
+
     public function __construct()
     {
         $this->authorizeResource(TypeDepense::class, 'types_depense');
@@ -61,7 +64,7 @@ final class TypeDepenseController extends Controller
             'is_system' => false,
         ]);
 
-        return redirect()->route('backoffice.types-depenses.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.types-depenses.index')
             ->with('success', __('Type de dépense créé.'));
     }
 
@@ -75,11 +78,11 @@ final class TypeDepenseController extends Controller
 
         $types_depense->update($request->validated());
 
-        return redirect()->route('backoffice.types-depenses.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.types-depenses.index')
             ->with('success', __('Type de dépense mis à jour.'));
     }
 
-    public function destroy(TypeDepense $types_depense): RedirectResponse
+    public function destroy(Request $request, TypeDepense $types_depense): RedirectResponse
     {
         abort_if($types_depense->is_system, 403, __('Les types système ne sont pas supprimables.'));
         $this->authorize('delete', $types_depense);
@@ -92,7 +95,7 @@ final class TypeDepenseController extends Controller
 
         $types_depense->delete();
 
-        return redirect()->route('backoffice.types-depenses.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.types-depenses.index')
             ->with('success', __('Type de dépense supprimé.'));
     }
 }

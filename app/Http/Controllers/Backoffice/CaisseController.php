@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Domain\Finance\Queries\GetCaisseDetails;
 use App\Domain\Finance\Queries\GetCaisseGlobale;
 use App\Domain\Finance\Queries\GetCaisseJournal;
@@ -44,6 +45,8 @@ use Inertia\Response;
  */
 final class CaisseController extends Controller
 {
+    use RedirectsPreservingFilters;
+
     public function index(
         Request $request,
         GetCaisseJournal $getCaisseJournal,
@@ -251,7 +254,7 @@ final class CaisseController extends Controller
             'statut' => Caisse::STATUT_ACTIVE,
         ]);
 
-        return redirect()->route('backoffice.caisses.index', ['tab' => 'comptes'])
+        return $this->backToListPreservingFilters($request, 'backoffice.caisses.index', ['tab' => 'comptes'])
             ->with('success', __('Cash account created.'));
     }
 
@@ -304,7 +307,7 @@ final class CaisseController extends Controller
             'etablissement_id' => $newCentre,
         ]);
 
-        return redirect()->route('backoffice.caisses.index', ['tab' => 'comptes'])
+        return $this->backToListPreservingFilters($request, 'backoffice.caisses.index', ['tab' => 'comptes'])
             ->with('success', __('Cash account updated.'));
     }
 
@@ -360,7 +363,7 @@ final class CaisseController extends Controller
 
         $caisse->delete();
 
-        return redirect()->route('backoffice.caisses.index', ['tab' => 'comptes'])
+        return $this->backToListPreservingFilters($request, 'backoffice.caisses.index', ['tab' => 'comptes'])
             ->with('success', __('Cash account deleted.'));
     }
 

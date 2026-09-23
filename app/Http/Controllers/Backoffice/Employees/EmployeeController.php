@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice\Employees;
 
+use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Domain\Employees\Queries\GetEmployeesList;
 use App\Domain\Payroll\Actions\SynchroniserTauxMensuels;
 use App\Domain\Settings\Queries\GetAccessibleCenterOptions;
@@ -41,6 +42,8 @@ use Inertia\Response;
  */
 final class EmployeeController extends Controller
 {
+    use RedirectsPreservingFilters;
+
     public function index(
         Request $request,
         GetEmployeesList $getEmployeesList,
@@ -133,7 +136,7 @@ final class EmployeeController extends Controller
             return $employee;
         });
 
-        return redirect()->route('backoffice.employees.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.employees.index')
             ->with('success', __('Employee created. Its login credentials have been generated.'))
             ->with('new_employee_username', session('new_employee_username'))
             ->with('new_employee_password', session('new_employee_password'));
@@ -171,7 +174,7 @@ final class EmployeeController extends Controller
             }
         });
 
-        $redirect = redirect()->route('backoffice.employees.index')
+        $redirect = $this->backToListPreservingFilters($request, 'backoffice.employees.index')
             ->with('success', __('Employee updated.'));
 
         // A profile edit NEVER moves a caisse (production-safety rule,
@@ -194,7 +197,7 @@ final class EmployeeController extends Controller
         return $redirect;
     }
 
-    public function destroy(Employee $employee): RedirectResponse
+    public function destroy(Request $request, Employee $employee): RedirectResponse
     {
         $this->authorize('delete', $employee);
 
@@ -221,7 +224,7 @@ final class EmployeeController extends Controller
             $employee->delete();
         });
 
-        return redirect()->route('backoffice.employees.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.employees.index')
             ->with('success', __('Employee deleted.'));
     }
 

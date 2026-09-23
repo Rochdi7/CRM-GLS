@@ -41,7 +41,12 @@ final class PermissionRegistry
         return [
             'Tableau de bord' => [
                 'dashboard.view' => 'Consulter le tableau de bord',
-                'dashboard.inscriptions-chart' => 'Voir le graphique des nouvelles inscriptions (super-admin)',
+                // Espace enseignant (23/09/2026) : ses groupes, ses séances
+                // du mois et l'historique de SES paiements. Le prof lit
+                // uniquement ce qui lui appartient — l'identité vient de
+                // `$user->employee`, jamais d'un id du client. C'est sa seule
+                // fenêtre sur l'argent : `teacher` n'a aucun `expenses.*`.
+                'dashboard.espace-enseignant' => 'Voir son espace enseignant (groupes, séances, paiements)',
             ],
             'Centres' => [
                 'centers.view' => 'Consulter les centres',
@@ -572,9 +577,6 @@ final class PermissionRegistry
         ));
 
         return array_values(array_unique(array_merge($deletes, [
-            // Graphique « Nouvelles inscriptions » du tableau de bord —
-            // chiffre de pilotage réservé au super-admin (23/09/2026).
-            'dashboard.inscriptions-chart',
             'system-settings.view', 'system-settings.update',
             'banks.view', 'banks.create', 'banks.update',
             'cancellation-reasons.view', 'cancellation-reasons.create', 'cancellation-reasons.update',
@@ -1063,6 +1065,7 @@ final class PermissionRegistry
             // Academic scope only — no financial data.
             'teacher' => [
                 'dashboard.view',
+                'dashboard.espace-enseignant',
                 'rooms.view', 'rooms.create', 'rooms.update',
                 'groups.view',
                 'groups.change-teacher',

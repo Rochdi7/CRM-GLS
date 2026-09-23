@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Domain\Groups\Actions\ChangerEnseignantGroupe;
 use App\Domain\Groups\Actions\CloturerInscriptionsGroupe;
 use App\Domain\Groups\Actions\ReaffecterGroupeVersAnnee;
@@ -52,7 +53,7 @@ use Inertia\Response;
  */
 final class GroupController extends Controller
 {
-    use AssertsContextScope;
+    use AssertsContextScope, RedirectsPreservingFilters;
 
     public function index(
         Request $request,
@@ -214,7 +215,7 @@ final class GroupController extends Controller
             );
         });
 
-        return redirect()->route('backoffice.groups.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.groups.index')
             ->with('success', __('Group created.'));
     }
 
@@ -306,7 +307,7 @@ final class GroupController extends Controller
             $datesResynchronisees = app(SynchroniserDatesInscriptions::class)->handle($group->refresh());
         });
 
-        $redirect = redirect()->route('backoffice.groups.index')
+        $redirect = $this->backToListPreservingFilters($request, 'backoffice.groups.index')
             ->with('success', __('Group updated.'));
 
         // Réécrire les dates de plusieurs dizaines d'inscriptions ne doit
@@ -639,7 +640,7 @@ final class GroupController extends Controller
         $employee = $request->user()?->employee;
         $resultat = $this->cloturer($group, fn () => $group->annuler($employee));
 
-        return redirect()->route('backoffice.groups.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.groups.index')
             ->with('success', $this->messageCloture(__('Group cancelled.'), $resultat));
     }
 
@@ -660,7 +661,7 @@ final class GroupController extends Controller
 
         $group->reactiver();
 
-        return redirect()->route('backoffice.groups.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.groups.index')
             ->with('success', __('Group reactivated.'));
     }
 
@@ -680,7 +681,7 @@ final class GroupController extends Controller
 
         $group->activer();
 
-        return redirect()->route('backoffice.groups.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.groups.index')
             ->with('success', __('Group started.'));
     }
 
@@ -700,7 +701,7 @@ final class GroupController extends Controller
 
         $group->retournerEnInscription();
 
-        return redirect()->route('backoffice.groups.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.groups.index')
             ->with('success', __('Group returned to En inscription.'));
     }
 
@@ -948,6 +949,6 @@ final class GroupController extends Controller
                 'count' => (string) $resultat['inscriptions'],
             ]);
 
-        return redirect()->route('backoffice.groups.index')->with('success', $message);
+        return $this->backToListPreservingFilters($request, 'backoffice.groups.index')->with('success', $message);
     }
 }

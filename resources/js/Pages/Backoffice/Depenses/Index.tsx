@@ -28,6 +28,8 @@ type Tab = 'depenses' | 'paiements-prof' | 'remboursements' | 'validation';
 interface DepenseFormState {
     type_depense_id: number | '';
     group_id: number | '';
+    /** L'enseignant PAYÉ — pré-rempli par le calcul, sinon déduit du groupe côté serveur. */
+    enseignant_id: number | '';
     montant: string;
     methode_paiement: string;
     date_depense: string;
@@ -108,6 +110,7 @@ function emptyDepenseForm(): DepenseFormState {
     return {
         type_depense_id: '',
         group_id: '',
+        enseignant_id: '',
         montant: '',
         methode_paiement: '',
         date_depense: new Date().toISOString().slice(0, 10),
@@ -483,10 +486,12 @@ export default function DepensesIndex({
      * ordinary dépense or a supplier invoice ref for a paiement prof.
      */
     function depensePayload(data: DepenseFormState): Record<string, unknown> {
-        const { group_id, periode_debut, periode_fin, reference_facture, ...rest } = data;
+        const { group_id, enseignant_id, periode_debut, periode_fin, reference_facture, ...rest } = data;
 
+        // `enseignant_id` est PROHIBÉ sur une dépense ordinaire (PaiementProfRules) :
+        // il ne part qu'en mode prof, et seulement s'il est renseigné.
         return profMode
-            ? { ...rest, group_id, periode_debut, periode_fin }
+            ? { ...rest, group_id, periode_debut, periode_fin, ...(enseignant_id !== '' ? { enseignant_id } : {}) }
             : { ...rest, reference_facture };
     }
 
@@ -570,6 +575,11 @@ export default function DepensesIndex({
             ...emptyDepenseForm(),
             type_depense_id: typeId !== null ? Number(typeId) : (paiementProfTypeId ?? ''),
             group_id: groupId !== null ? Number(groupId) : '',
+            enseignant_id: (() => {
+                const id = params.get('prefill_enseignant_id');
+
+                return id !== null && id !== '' ? Number(id) : '';
+            })(),
             montant: params.get('prefill_montant') ?? '',
             periode_debut: params.get('prefill_periode_debut') ?? '',
             periode_fin: params.get('prefill_periode_fin') ?? '',

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Domain\Attendance\Actions\EnregistrerPresences;
 use App\Domain\Attendance\Exports\ExporterMatriceAbsences;
 use App\Domain\Attendance\Queries\GetAbsencesParGroupe;
@@ -37,7 +38,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 final class SeanceController extends Controller
 {
-    use AssertsContextScope;
+    use AssertsContextScope, RedirectsPreservingFilters;
 
     public function index(
         Request $request,
@@ -382,7 +383,7 @@ final class SeanceController extends Controller
             'created_by' => $request->user()?->employee?->id,
         ]);
 
-        return redirect()->route('backoffice.seances.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.seances.index')
             ->with('success', __('Session created.'));
     }
 
@@ -435,7 +436,7 @@ final class SeanceController extends Controller
 
         $seance->delete();
 
-        return redirect()->route('backoffice.seances.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.seances.index')
             ->with('success', __('Session deleted.'));
     }
 

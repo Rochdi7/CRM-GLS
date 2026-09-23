@@ -19,6 +19,7 @@ use App\Models\Student;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -162,7 +163,7 @@ final class ChequeController extends Controller
             'agent_id' => $agent->id,
         ]);
 
-        return redirect()->route('backoffice.cheques.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.cheques.index')
             ->with('success', __('Cheque recorded.'));
     }
 
@@ -190,23 +191,38 @@ final class ChequeController extends Controller
             $this->assertStudentInContext($request, Student::findOrFail((int) $payload['student_id']));
         }
 
-        // Once the cheque has funded payments its identity is frozen: those
-        // Encaissement rows (student_id, numero_cheque, banque) were copied
-        // from it, and re-owning it would offer its remaining balance to a
-        // different student while the first one's payments still point at it.
+        // Once the cheque has funded payments its OWNER is frozen: re-owning
+        // it would offer its remaining balance to a different student while
+        // the first one's payments still point at it.
+        //
+        // Its number and bank are NOT frozen (23/09/2026): a chèque rejected
+        // for a bad signature comes back as a replacement chèque for the
+        // same money, and the front office corrects the number/bank on the
+        // same row. That is a label, not money — no montant, caisse or statut
+        // moves — but the funded Encaissement rows carry a COPY of both
+        // columns, so they follow in the same transaction (one save() per
+        // row so Auditable journals each change).
         if ($utilise > 0) {
-            foreach (['source', 'student_id', 'proprietaire_nom', 'numero_cheque', 'banque'] as $frozen) {
+            foreach (['source', 'student_id', 'proprietaire_nom'] as $frozen) {
                 if (array_key_exists($frozen, $payload) && (string) $payload[$frozen] !== (string) $cheque->{$frozen}) {
                     throw ValidationException::withMessages([
-                        $frozen => __('This cheque has already been used to pay: its owner and identity can no longer change.'),
+                        $frozen => __('This cheque has already been used to pay: its owner can no longer change.'),
                     ]);
                 }
             }
         }
 
-        $cheque->update($payload);
+        DB::transaction(function () use ($cheque, $payload): void {
+            $cheque->update($payload);
 
-        return redirect()->route('backoffice.cheques.index')
+            foreach ($cheque->encaissements()->lockForUpdate()->get() as $encaissement) {
+                $encaissement->numero_cheque = $cheque->numero_cheque;
+                $encaissement->banque = $cheque->banque;
+                $encaissement->save();
+            }
+        });
+
+        return $this->backToListPreservingFilters($request, 'backoffice.cheques.index')
             ->with('success', __('Cheque updated.'));
     }
 
@@ -270,7 +286,7 @@ final class ChequeController extends Controller
             ])
             ->log("Chèque {$cheque->reference} : {$ancien} → {$statut}");
 
-        return redirect()->route('backoffice.cheques.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.cheques.index')
             ->with('success', __('Cheque status updated.'));
     }
 
@@ -319,7 +335,7 @@ final class ChequeController extends Controller
             'retourne_par_id' => $agent->id,
         ]);
 
-        return redirect()->route('backoffice.cheques.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.cheques.index')
             ->with('success', __('Cheque marked as returned to its owner.'));
     }
 

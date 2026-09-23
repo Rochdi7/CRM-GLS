@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Domain\Registrations\Actions\AnnulerInscription;
 use App\Domain\Registrations\Actions\AssignerLivresInscription;
 use App\Domain\Registrations\Actions\BasculerVisibiliteFraisInscription;
@@ -61,7 +62,7 @@ use Inertia\Response;
  */
 final class InscriptionController extends Controller
 {
-    use AssertsContextScope;
+    use AssertsContextScope, RedirectsPreservingFilters;
 
     public function index(
         Request $request,
@@ -329,7 +330,7 @@ final class InscriptionController extends Controller
 
         $action->handle($inscription, $lines);
 
-        return redirect()->route('backoffice.inscriptions.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.inscriptions.index')
             ->with('success', __('Registration fees updated.'));
     }
 
@@ -619,7 +620,7 @@ final class InscriptionController extends Controller
         // `pull()`-style single render (HandleInertiaRequests), exactly like
         // newEmployeeCredentials: the prompt is a one-time notice, not a
         // state that should reappear on the next search/pagination reload.
-        return redirect()->route('backoffice.inscriptions.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.inscriptions.index')
             ->with('success', __('Registration created.'))
             ->with('nouvelleInscription', $created === null ? null : [
                 'id' => $created->id,
@@ -682,7 +683,7 @@ final class InscriptionController extends Controller
             array_map('intval', $data['transfer_fee_ids'] ?? []),
         );
 
-        return redirect()->route('backoffice.inscriptions.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.inscriptions.index')
             ->with('success', __('Registration moved to the new group.'));
     }
 
@@ -709,7 +710,7 @@ final class InscriptionController extends Controller
 
         $action->handle($inscription, $newGroup);
 
-        return redirect()->route('backoffice.inscriptions.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.inscriptions.index')
             ->with('success', __('Registration group updated.'));
     }
 
@@ -753,7 +754,7 @@ final class InscriptionController extends Controller
             'note' => $data['note'] ?? null,
         ]);
 
-        return redirect()->route('backoffice.inscriptions.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.inscriptions.index')
             ->with('success', __('Registration updated.'));
     }
 
@@ -807,7 +808,7 @@ final class InscriptionController extends Controller
 
             $inscription->update(['statut' => Inscription::STATUT_CHANGEMENT]);
 
-            return redirect()->route('backoffice.inscriptions.index')
+            return $this->backToListPreservingFilters($request, 'backoffice.inscriptions.index')
                 ->with('success', __('Registration status updated.'));
         }
 
@@ -848,7 +849,7 @@ final class InscriptionController extends Controller
             'motif_annulation' => null,
         ]);
 
-        return redirect()->route('backoffice.inscriptions.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.inscriptions.index')
             ->with('success', __('Registration status updated.'));
     }
 
@@ -877,7 +878,7 @@ final class InscriptionController extends Controller
             $data['note'] ?? null,
         );
 
-        return redirect()->route('backoffice.inscriptions.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.inscriptions.index')
             ->with('success', __('Registration cancelled.'));
     }
 
@@ -935,7 +936,7 @@ final class InscriptionController extends Controller
             ]);
         }
 
-        return redirect()->route('backoffice.inscriptions.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.inscriptions.index')
             ->with('success', __('Registration deleted.'));
     }
 }

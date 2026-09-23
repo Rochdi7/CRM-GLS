@@ -61,6 +61,18 @@ trait PaiementProfRules
             'periode_fin' => $isProf
                 ? ['required', 'date', 'after_or_equal:periode_debut']
                 : ['prohibited'],
+            // L'enseignant PAYÉ (23/09/2026). Facultatif : le calcul le
+            // pré-remplit, une saisie à la main peut l'omettre — le serveur
+            // retombe alors sur le prof actuel du groupe (EnregistrerDepense).
+            // Doit être un ENSEIGNANT : payer un « Paiement prof » à une
+            // comptable est une erreur de saisie, pas un cas à accepter.
+            'enseignant_id' => $isProf
+                ? [
+                    'nullable', 'integer',
+                    \Illuminate\Validation\Rule::exists('employees', 'id')
+                        ->where('categorie', \App\Models\Employee::CATEGORIE_ENSEIGNANT),
+                ]
+                : ['prohibited'],
             // Supplier invoice reference — dépenses only.
             'reference_facture' => $isProf
                 ? ['prohibited']

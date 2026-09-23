@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Domain\Settings\Queries\GetAccessibleCenterOptions;
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Domain\Students\Queries\GetStudentDetails;
@@ -32,6 +33,8 @@ use Inertia\Response;
  */
 final class StudentController extends Controller
 {
+    use RedirectsPreservingFilters;
+
     public function index(
         Request $request,
         GetStudentsList $getStudentsList,
@@ -132,7 +135,7 @@ final class StudentController extends Controller
 
         $this->storePhoto($student, $request);
 
-        return redirect()->route('backoffice.students.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.students.index')
             ->with('success', __('Student created.'));
     }
 
@@ -147,7 +150,7 @@ final class StudentController extends Controller
         $student->update($payload);
         $this->storePhoto($student, $request);
 
-        return redirect()->route('backoffice.students.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.students.index')
             ->with('success', __('Student updated.'));
     }
 
@@ -223,7 +226,7 @@ final class StudentController extends Controller
 
         $student->delete();
 
-        return redirect()->route('backoffice.students.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.students.index')
             ->with('success', __('Student deleted.'));
     }
 

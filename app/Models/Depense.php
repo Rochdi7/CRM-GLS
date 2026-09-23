@@ -55,7 +55,7 @@ class Depense extends Model implements HasMedia
     public const MARQUEUR_ANNULE = '[ANNULÉE]';
 
     protected $fillable = [
-        'reference', 'type_depense_id', 'caisse_id', 'etablissement_id', 'group_id', 'montant',
+        'reference', 'type_depense_id', 'caisse_id', 'etablissement_id', 'group_id', 'enseignant_id', 'montant',
         'methode_paiement', 'date_depense', 'periode_debut', 'periode_fin',
         'reference_facture',
         'description', 'mots_cles', 'note', 'agent_id',
@@ -180,6 +180,17 @@ class Depense extends Model implements HasMedia
     public function agent(): BelongsTo
     {
         return $this->belongsTo(Employee::class, 'agent_id');
+    }
+
+    /**
+     * L'enseignant PAYÉ par un « Paiement prof » (23/09/2026) — à ne pas
+     * confondre avec `agent()`, la caissière qui a saisi la ligne. NULL sur
+     * une dépense ordinaire, et sur les paiements antérieurs à la colonne
+     * (lus alors avec un repli sur le prof actuel du groupe, signalé).
+     */
+    public function enseignant(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'enseignant_id');
     }
 
     /** The super-admin who approved or refused this expense. */

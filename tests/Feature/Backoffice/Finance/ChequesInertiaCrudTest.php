@@ -298,6 +298,63 @@ final class ChequesInertiaCrudTest extends TestCase
         $this->assertSame('1000.00', (string) $cheque->fresh()->montant);
     }
 
+    /**
+     * A chèque rejected for a bad signature comes back as a replacement for
+     * the same money: its number/bank are corrected on the same row, even
+     * once it funded payments — and those payments follow, no money moves.
+     */
+    public function test_number_and_bank_of_a_used_cheque_can_be_corrected_and_its_payments_follow(): void
+    {
+        $this->actingAs($this->userWith('cheques.view', 'cheques.update', 'cheques.deposit'));
+        $cheque = $this->makeCheque(Cheque::STATUT_REJETE);
+        $cheque->update(['banque' => 'BMCI']);
+        $caisse = \App\Models\Caisse::factory()->create(['etablissement_id' => $this->centre->id, 'solde' => 700]);
+        $encaissement = $cheque->encaissements()->create([
+            'reference' => 'ENC-USED', 'student_id' => $cheque->student_id, 'caisse_id' => $caisse->id,
+            'agent_id' => Employee::first()->id, 'montant' => 700, 'methode' => 'Chèque', 'date_paiement' => '2026-08-05',
+            'numero_cheque' => $cheque->numero_cheque, 'banque' => 'BMCI',
+        ]);
+
+        $this->put(route('backoffice.cheques.update', $cheque), [
+            'source' => Cheque::SOURCE_ETUDIANT, 'student_id' => $cheque->student_id,
+            'numero_cheque' => '6998747', 'banque' => 'CIH', 'montant' => '1000',
+            'date_reception' => '2026-08-01', 'type' => Cheque::TYPE_A_DEPOSER,
+        ])->assertSessionHasNoErrors();
+
+        $cheque->refresh();
+        $this->assertSame('6998747', $cheque->numero_cheque);
+        $this->assertSame('CIH', $cheque->banque);
+        $this->assertSame(Cheque::STATUT_REJETE, $cheque->statut);
+        $this->assertSame('1000.00', (string) $cheque->montant);
+
+        $encaissement->refresh();
+        $this->assertSame('6998747', $encaissement->numero_cheque);
+        $this->assertSame('CIH', $encaissement->banque);
+        $this->assertSame('700.00', (string) $encaissement->montant);
+        $this->assertSame($caisse->id, $encaissement->caisse_id);
+        $this->assertSame('700.00', (string) $caisse->fresh()->solde);
+    }
+
+    public function test_owner_of_a_used_cheque_still_cannot_change(): void
+    {
+        $this->actingAs($this->userWith('cheques.view', 'cheques.update', 'cheques.deposit'));
+        $cheque = $this->makeCheque();
+        $cheque->encaissements()->create([
+            'reference' => 'ENC-USED', 'student_id' => $cheque->student_id,
+            'caisse_id' => \App\Models\Caisse::factory()->create(['etablissement_id' => $this->centre->id])->id,
+            'agent_id' => Employee::first()->id, 'montant' => 700, 'methode' => 'Chèque', 'date_paiement' => '2026-08-05',
+        ]);
+        $other = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+
+        $this->put(route('backoffice.cheques.update', $cheque), [
+            'source' => Cheque::SOURCE_ETUDIANT, 'student_id' => $other->id,
+            'numero_cheque' => $cheque->numero_cheque, 'montant' => '1000',
+            'date_reception' => '2026-08-01', 'type' => Cheque::TYPE_A_DEPOSER,
+        ])->assertSessionHasErrors('student_id');
+
+        $this->assertNotSame($other->id, $cheque->fresh()->student_id);
+    }
+
     // --- student cheques lookup -------------------------------------------
 
     public function test_student_cheques_lookup_only_returns_cheques_with_remaining_value(): void

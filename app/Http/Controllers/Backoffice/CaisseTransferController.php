@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Domain\Finance\Actions\DemanderTransfertCaisse;
 use App\Domain\Finance\Actions\ValiderTransfertCaisse;
 use App\Domain\Finance\Support\CaisseResolver;
@@ -42,7 +43,7 @@ use Inertia\Response;
  */
 final class CaisseTransferController extends Controller
 {
-    use AssertsContextScope;
+    use AssertsContextScope, RedirectsPreservingFilters;
 
     public function store(StoreCaisseTransferRequest $request, DemanderTransfertCaisse $action): RedirectResponse
     {
@@ -78,7 +79,7 @@ final class CaisseTransferController extends Controller
 
         $action->handle([...$data, 'caisse_source_id' => $source->id], $requester);
 
-        return redirect()->route('backoffice.caisses.index', ['tab' => 'transferts'])
+        return $this->backToListPreservingFilters($request, 'backoffice.caisses.index', ['tab' => 'transferts'])
             ->with('success', __('Transfer requested — awaiting validation.'));
     }
 
@@ -171,7 +172,7 @@ final class CaisseTransferController extends Controller
             ]);
         });
 
-        return redirect()->route('backoffice.caisses.index', ['tab' => 'transferts'])
+        return $this->backToListPreservingFilters($request, 'backoffice.caisses.index', ['tab' => 'transferts'])
             ->with('success', __('Transfer updated.'));
     }
 
@@ -198,7 +199,7 @@ final class CaisseTransferController extends Controller
             throw ValidationException::withMessages(['validate' => $message]);
         }
 
-        return redirect()->route('backoffice.caisses.index', ['tab' => 'transferts'])
+        return $this->backToListPreservingFilters($request, 'backoffice.caisses.index', ['tab' => 'transferts'])
             ->with('success', __('Transfer validated — balances have been updated.'));
     }
 }

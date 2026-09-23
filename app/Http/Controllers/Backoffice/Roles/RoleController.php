@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice\Roles;
 
+use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Domain\Settings\Queries\GetRolesList;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Roles\StoreRoleRequest;
@@ -36,6 +37,8 @@ use Spatie\Permission\PermissionRegistrar;
  */
 final class RoleController extends Controller
 {
+    use RedirectsPreservingFilters;
+
     public function index(Request $request, GetRolesList $getRolesList): Response
     {
         $this->authorize('roles.view');
@@ -89,7 +92,7 @@ final class RoleController extends Controller
             ->withProperties(['role' => $role->name, 'permissions' => $permissions])
             ->log('role created');
 
-        return redirect()->route('backoffice.roles.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.roles.index')
             ->with('success', __('Role created.'));
     }
 
@@ -144,7 +147,7 @@ final class RoleController extends Controller
             ->withProperties(['role' => $role->name, 'permissions' => $permissions])
             ->log('role updated');
 
-        return redirect()->route('backoffice.roles.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.roles.index')
             ->with('success', __('Role updated.'));
     }
 
@@ -181,7 +184,7 @@ final class RoleController extends Controller
             ->withProperties(['role' => $roleName])
             ->log('role deleted');
 
-        return redirect()->route('backoffice.roles.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.roles.index')
             ->with('success', __('Role deleted.'));
     }
 }

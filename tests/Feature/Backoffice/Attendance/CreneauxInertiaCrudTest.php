@@ -383,6 +383,36 @@ final class CreneauxInertiaCrudTest extends TestCase
         $this->assertSame(2, Seance::where('creneau_id', $creneau->id)->count());
     }
 
+    public function test_editing_a_creneau_returns_to_the_grid_with_its_filters(): void
+    {
+        $this->actingAs($this->userWith('attendance.view', 'attendance.create', 'attendance.update', 'attendance.delete'));
+
+        $jour = Carbon::today()->isoWeekday();
+        $this->post(route('backoffice.creneaux.store'), [
+            'group_id' => $this->group->id,
+            'jours_semaine' => [$jour],
+            'heure_debut' => '10:00',
+            'heure_fin' => '12:00',
+        ]);
+        $creneau = Creneau::firstOrFail();
+
+        $filtered = route('backoffice.emploi-du-temps.index', [
+            'groupFilter' => (string) $this->group->id,
+            'jourFilter' => (string) $jour,
+        ]);
+
+        $this->from($filtered)->put(route('backoffice.creneaux.update', $creneau), [
+            'jour_semaine' => $jour,
+            'heure_debut' => '14:00',
+            'heure_fin' => '16:00',
+        ])->assertRedirect($filtered);
+
+        // A write made from ANOTHER page never carries that page's query over.
+        $this->from(route('backoffice.seances.index', ['groupFilter' => '999']))
+            ->delete(route('backoffice.creneaux.destroy', $creneau))
+            ->assertRedirect(route('backoffice.emploi-du-temps.index'));
+    }
+
     public function test_deleting_a_creneau_removes_only_its_future_prevue_seances(): void
     {
         $this->actingAs($this->userWith('attendance.view', 'attendance.create', 'attendance.delete'));

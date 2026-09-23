@@ -6,6 +6,7 @@ import NouvellesInscriptionsChart from '@/Components/Dashboard/NouvellesInscript
 import SeancesAgenda from '@/Components/Dashboard/SeancesAgenda';
 import SeancesCalendar, { isoDate } from '@/Components/Dashboard/SeancesCalendar';
 import StatsGrid from '@/Components/Dashboard/StatsGrid';
+import EspaceEnseignant from '@/Components/Dashboard/EspaceEnseignant';
 import { t } from '@/Lib/i18n';
 import type { DashboardPageProps, NouvellesInscriptionsDuree, SharedProps } from '@/Types';
 
@@ -46,11 +47,26 @@ const QUICK_ACTIONS: QuickAction[] = [
  * fees chart (GetAnnualFraisSummary). Everything follows the top-bar
  * année/centre switcher server-side; nothing here re-filters client-side.
  */
-export default function DashboardIndex({ stats, annualFrais, annualFraisPeriode, seancesCalendar, nouvellesInscriptions }: DashboardPageProps) {
+export default function DashboardIndex({ stats, annualFrais, annualFraisPeriode, seancesCalendar, nouvellesInscriptions, espaceEnseignant }: DashboardPageProps) {
     // auth.user is a shared prop (HandleInertiaRequests) — no page prop needed.
     const { auth } = usePage<SharedProps>().props;
     const [selectedDay, setSelectedDay] = useState<string>(() => isoDate(new Date()));
     const [inscLoading, setInscLoading] = useState(false);
+    const [espaceLoading, setEspaceLoading] = useState(false);
+
+    function changeEspaceMois(mois: string) {
+        // Rechargement partiel : seul l'espace enseignant est recalculé.
+        const params = new URLSearchParams(window.location.search);
+        params.set('espaceMois', mois);
+        router.get('/backoffice/dashboard', Object.fromEntries(params), {
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+            only: ['espaceEnseignant'],
+            onStart: () => setEspaceLoading(true),
+            onFinish: () => setEspaceLoading(false),
+        });
+    }
 
     const canAny = (permissions: string[]) =>
         auth.isSuperAdmin || permissions.some((p) => auth.permissions.includes(p));
@@ -165,6 +181,12 @@ export default function DashboardIndex({ stats, annualFrais, annualFraisPeriode,
                 </div>
             </div>
 
+            {/* Espace enseignant — NULL pour tout compte qui n'est pas un prof
+                (gate serveur : permission + fiche employé Enseignant). */}
+            {espaceEnseignant && (
+                <EspaceEnseignant data={espaceEnseignant} onMoisChange={changeEspaceMois} loading={espaceLoading} />
+            )}
+
             <StatsGrid stats={stats} />
 
             <div className="row">
@@ -181,7 +203,7 @@ export default function DashboardIndex({ stats, annualFrais, annualFraisPeriode,
                 </div>
             </div>
 
-            {/* Super-admin only — the prop is NULL for every other user (server-side gate). */}
+            {/* Every signed-in user — no permission gate (23/09/2026). */}
             {nouvellesInscriptions && (
                 <div className="row">
                     <div className="col-md-12">

@@ -39,7 +39,7 @@ trait RedirectsPreservingFilters
         string $routeName,
         array $extra = [],
     ): RedirectResponse {
-        $filters = $this->refererQueryOf($request);
+        $filters = $this->refererQueryOf($request, route($routeName, [], false));
 
         if ($filters === null) {
             return redirect()->route($routeName, $extra);
@@ -55,11 +55,13 @@ trait RedirectsPreservingFilters
 
     /**
      * The referer's query parameters, or null when it is absent, unparsable
-     * or points outside this application.
+     * or points outside this application — or at ANOTHER page than the list
+     * being returned to (e.g. a write made from a detail page): that page's
+     * query keys are not this list's filters.
      *
      * @return array<string, mixed>|null
      */
-    private function refererQueryOf(Request $request): ?array
+    private function refererQueryOf(Request $request, string $listPath): ?array
     {
         $referer = $request->headers->get('referer');
 
@@ -76,6 +78,10 @@ trait RedirectsPreservingFilters
         $host = $parts['host'] ?? null;
 
         if ($host !== null && $host !== $request->getHost()) {
+            return null;
+        }
+
+        if (rtrim($parts['path'] ?? '/', '/') !== rtrim($listPath, '/')) {
             return null;
         }
 

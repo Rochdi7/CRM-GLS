@@ -400,3 +400,31 @@ CREATE INDEX IF NOT EXISTS depenses_centre_date_idx ON depenses (etablissement_i
 ALTER TABLE groups ADD COLUMN IF NOT EXISTS montant_par_etudiant_prof numeric(10,2) NULL;
 ALTER TABLE groups ADD COLUMN IF NOT EXISTS taux_horaire_prof numeric(10,2) NULL;
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 23/09/2026 — depenses.enseignant_id : QUEL enseignant un « Paiement prof »
+-- a payé.
+--
+-- ⚠ RIEN À FAIRE À LA MAIN : cette colonne arrive par la migration additive
+-- `2026_09_23_100000_add_enseignant_id_to_depenses_table.php`, jouée par le
+-- `php artisan migrate --force` du déploiement habituel. Le SQL ci-dessous
+-- n'est conservé que pour mémoire, et reste sans danger (idempotent).
+--
+-- Jusqu'ici la ligne ne portait que group_id (le groupe) et agent_id (la
+-- caissière). Le prof payé se DÉDUISAIT du groupe — faux dès qu'un groupe
+-- change d'enseignant ou qu'un remplaçant est payé.
+--
+-- Nullable, AUCUN backfill (§11 : on ne fige pas une supposition dans un
+-- enregistrement monétaire). Les lignes antérieures sont lues avec un repli
+-- sur le prof ACTUEL du groupe, signalé à l'écran (« via le groupe »).
+ALTER TABLE depenses ADD COLUMN IF NOT EXISTS enseignant_id bigint NULL;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'depenses_enseignant_id_foreign') THEN
+    ALTER TABLE depenses ADD CONSTRAINT depenses_enseignant_id_foreign
+      FOREIGN KEY (enseignant_id) REFERENCES employees (id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS depenses_enseignant_date_idx ON depenses (enseignant_id, date_depense);
+-- ---------------------------------------------------------------------------

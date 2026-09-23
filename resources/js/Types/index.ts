@@ -170,9 +170,53 @@ export interface DashboardPageProps {
     /** The année scolaire the chart window covers (top-bar switcher), e.g. "2025/2026". */
     annualFraisPeriode: string;
     seancesCalendar: SeancesCalendarData;
-    /** « Nouvelles inscriptions » bar chart — NULL unless super-admin. */
+    /** « Nouvelles inscriptions » bar chart — every signed-in user. */
     nouvellesInscriptions: NouvellesInscriptionsChartData | null;
+    /** Espace enseignant — NULL sauf pour un prof connecté (gate serveur). */
+    espaceEnseignant: EspaceEnseignantData | null;
     [key: string]: unknown;
+}
+
+// --- Espace enseignant ------------------------------------------------------
+
+export interface EspaceEnseignantGroupe {
+    id: number;
+    nom: string;
+    niveau: string;
+    statut: string;
+    /** Est-il ENCORE le prof du groupe ? */
+    actif: boolean;
+    seancesCeMois: number;
+    appels: number;
+    presents: number;
+    /** % de présents sur ses séances du mois — null sans appel. */
+    tauxPresence: number | null;
+}
+
+export interface EspaceEnseignantPaiement {
+    id: number;
+    reference: string;
+    date: string | null;
+    periodeDebut: string | null;
+    periodeFin: string | null;
+    groupNom: string | null;
+    montant: number;
+    /** Approuvée / En attente / Refusée / Annulée — jamais masqué. */
+    statut: string;
+    description: string | null;
+    /** Ligne antérieure à `depenses.enseignant_id` : rattachée par le groupe, pas certifiée. */
+    enseignantDeduit: boolean;
+}
+
+export interface EspaceEnseignantData {
+    enseignant: { id: number; nom: string; mode: string | null };
+    /** « YYYY-MM » du bloc groupes/séances. */
+    mois: string;
+    moisLibelle: string;
+    groupes: EspaceEnseignantGroupe[];
+    paiements: EspaceEnseignantPaiement[];
+    /** Année active : « Approuvée » seulement dans `approuve`, le reste à part. */
+    cumul: { approuve: number; enAttente: number; nombre: number };
 }
 
 export type NouvellesInscriptionsDuree = 'jour' | '7j' | '30j' | '12s' | '12m' | 'annee';

@@ -11,11 +11,11 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * « Nouvelles inscriptions » dashboard bar chart (super-admin only,
- * `dashboard.inscriptions-chart`) — how many NEW registrations were taken,
+ * « Nouvelles inscriptions » dashboard bar chart (every signed-in user,
+ * no permission) — how many NEW registrations were taken,
  * bucketed over a chosen DURATION:
  *
- *  - `jour`  — today only, one bar per HOUR of the day. `date_inscription`
+ *  - `jour`  — today only (default), one bar per HOUR of the day. `date_inscription`
  *              carries no time, so the hour is read from `created_at` (when
  *              the row was keyed); the day itself is still `date_inscription`;
  *  - `7j`    — last 7 days, one bar per day;
@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\DB;
  *  - `12s`   — last 12 weeks, one bar per ISO week (Monday start);
  *  - `12m`   — last 12 months, one bar per month;
  *  - `annee` — the active année scolaire window (top-bar switcher), one bar
- *              per month (default).
+ *              per month.
  *
  * The date is `date_inscription` — the day the student signed up. Like the
  * « Résumé des frais annuels » chart, the année only supplies the WINDOW:
@@ -56,7 +56,7 @@ final class GetNouvellesInscriptionsChart
 {
     public const DUREES = ['jour', '7j', '30j', '12s', '12m', 'annee'];
 
-    public const DUREE_DEFAUT = 'annee';
+    public const DUREE_DEFAUT = 'jour';
 
     /** Gap tolerated between a legacy `Changement` row's date_fin and its successor's date_inscription. */
     public const LEGACY_TOLERANCE_DAYS = 31;

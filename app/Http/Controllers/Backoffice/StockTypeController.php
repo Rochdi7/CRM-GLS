@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\StockTypes\StoreStockTypeRequest;
 use App\Http\Requests\Backoffice\StockTypes\UpdateStockTypeRequest;
 use App\Models\StockType;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 
 /**
  * Types de stock CRUD — replaces StockArticle's old hardcoded CATEGORIES
@@ -20,6 +22,8 @@ use Illuminate\Http\RedirectResponse;
  */
 final class StockTypeController extends Controller
 {
+    use RedirectsPreservingFilters;
+
     public function __construct()
     {
         $this->authorizeResource(StockType::class, 'stock_type', ['except' => ['index']]);
@@ -33,7 +37,7 @@ final class StockTypeController extends Controller
             'is_system' => false,
         ]);
 
-        return redirect()->route('backoffice.stock.index', ['tab' => 'types'])
+        return $this->backToListPreservingFilters($request, 'backoffice.stock.index', ['tab' => 'types'])
             ->with('success', __('Type de stock créé.'));
     }
 
@@ -46,11 +50,11 @@ final class StockTypeController extends Controller
 
         $stock_type->update($request->validated());
 
-        return redirect()->route('backoffice.stock.index', ['tab' => 'types'])
+        return $this->backToListPreservingFilters($request, 'backoffice.stock.index', ['tab' => 'types'])
             ->with('success', __('Type de stock mis à jour.'));
     }
 
-    public function destroy(StockType $stock_type): RedirectResponse
+    public function destroy(Request $request, StockType $stock_type): RedirectResponse
     {
         abort_if($stock_type->is_system, 403, __('Les types système ne sont pas supprimables.'));
         $this->authorize('delete', $stock_type);
@@ -63,7 +67,7 @@ final class StockTypeController extends Controller
 
         $stock_type->delete();
 
-        return redirect()->route('backoffice.stock.index', ['tab' => 'types'])
+        return $this->backToListPreservingFilters($request, 'backoffice.stock.index', ['tab' => 'types'])
             ->with('success', __('Type de stock supprimé.'));
     }
 }

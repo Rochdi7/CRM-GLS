@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Domain\Stock\Actions\EnregistrerMouvementStock;
 use App\Domain\Stock\Queries\GetStockArticlesList;
@@ -34,7 +35,7 @@ use Inertia\Response;
  */
 final class StockController extends Controller
 {
-    use AssertsContextScope;
+    use AssertsContextScope, RedirectsPreservingFilters;
 
     public function index(
         Request $request,
@@ -150,7 +151,7 @@ final class StockController extends Controller
             'note' => $data['note'] ?? null,
         ]);
 
-        return redirect()->route('backoffice.stock.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.stock.index')
             ->with('success', __('Stock item created.'));
     }
 
@@ -236,7 +237,7 @@ final class StockController extends Controller
 
         $article->delete();
 
-        return redirect()->route('backoffice.stock.index')
+        return $this->backToListPreservingFilters($request, 'backoffice.stock.index')
             ->with('success', __('Stock item deleted.'));
     }
 

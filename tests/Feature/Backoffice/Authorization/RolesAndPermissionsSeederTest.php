@@ -98,6 +98,8 @@ final class RolesAndPermissionsSeederTest extends TestCase
                 // contexte actif, reverifiee ligne par ligne a l'ecriture
                 // (ModifierEcheancesFraisEnMasse).
                 'fee-due-dates.bulk-update',
+                // Espace enseignant du tableau de bord (23/09/2026).
+                'dashboard.espace-enseignant',
             ],
             $teacher->permissions()->pluck('name')->all(),
         );

@@ -69,6 +69,15 @@ final class EnregistrerDepense
                 : null;
             $etablissementId ??= $this->context->etablissementId() ?? $agent->etablissement_id;
 
+            // L'enseignant PAYÉ (23/09/2026) : celui que le calcul a désigné,
+            // sinon le prof ACTUEL du groupe pour une saisie à la main. Figé
+            // À LA CRÉATION — un changement de prof ultérieur sur le groupe
+            // ne doit jamais réattribuer un paiement déjà versé.
+            $enseignantId = $data['enseignant_id'] ?? null;
+            if ($enseignantId === null && ($data['group_id'] ?? null) !== null) {
+                $enseignantId = Group::query()->whereKey($data['group_id'])->value('enseignant_id');
+            }
+
             if (! $requiresApproval) {
                 // Checked BEFORE the row exists: a refused expense must leave
                 // no trace at all (no DEP- reference burnt, no Approuvée row
@@ -87,6 +96,7 @@ final class EnregistrerDepense
             $depense = Depense::create([
                 ...$data,
                 'etablissement_id' => $etablissementId,
+                'enseignant_id' => $enseignantId,
                 'reference' => ReferenceGenerator::make('DEP', 'depenses'),
                 'agent_id' => $agent->id,
                 'statut' => $requiresApproval
