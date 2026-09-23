@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Domain\Reports\Actions;
 
-use App\Models\Inscription;
 use App\Services\Context\CurrentContext;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
@@ -12,8 +11,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * « Nouvelles inscriptions » dashboard bar chart (every signed-in user,
- * no permission) — how many NEW registrations were taken,
- * bucketed over a chosen DURATION:
+ * no permission) — how many NEW STUDENTS registered, bucketed over a chosen
+ * DURATION:
  *
  *  - `jour`  — today only (default), one bar per HOUR of the day. `date_inscription`
  *              carries no time, so the hour is read from `created_at` (when
@@ -25,41 +24,25 @@ use Illuminate\Support\Facades\DB;
  *  - `annee` — the active année scolaire window (top-bar switcher), one bar
  *              per month.
  *
- * The date is `date_inscription` — the day the student signed up. Like the
- * « Résumé des frais annuels » chart, the année only supplies the WINDOW:
- * an inscription is not additionally filtered on `annee_scolaire_id`, the
- * date alone decides its bar (années never overlap, CLAUDE.md §11).
+ * ⚠ ONLY NEW STUDENTS (23/09/2026). The date is `inscriptions.date_inscription`,
+ * but a dossier is counted only when it is the student's FIRST one — no other
+ * inscription of the same student is older (earlier date, or same date and
+ * lower id). A group change, a manual re-enrolment in another group, a legacy
+ * successor: each is a later dossier of a student who already exists, so none
+ * of them can reach this chart. The previous version tried to recognise group
+ * changes after the fact, and every manual re-enrolment slipped through.
+ * « Modification du groupe » rewrites group_id IN PLACE and creates no row.
+ * Every statut is kept — a registration later cancelled was still taken.
  *
- * ⚠ ONLY NEW inscriptions. Two things create an inscription row that is NOT
- * a new registration, and both are excluded:
- *
- *  1. « Changement de groupe » (ChangerGroupeInscription) closes the old row
- *     as `Changement` and creates a SUCCESSOR row for the same student. The
- *     app links the pair in `inscriptions_historique.new_inscription_id`.
- *  2. The legacy import brought the old CRM's group changes WITHOUT that
- *     link: the predecessor is a `Changement` row and the successor an
- *     ordinary row of the same student and centre whose `date_inscription`
- *     sits on (measured locally: 803 of 804 exact matches) or next to the
- *     predecessor's `date_fin`. A row is therefore a legacy successor when
- *     the same student + centre has an EARLIER `Changement` inscription whose
- *     `date_fin` is within LEGACY_TOLERANCE_DAYS of this `date_inscription`.
- *
- * « Modification du groupe » (ModifierGroupeInscription) rewrites group_id IN
- * PLACE and creates no row, so it can never be counted. Every statut is kept
- * — an inscription later cancelled was still a new registration the day it
- * was taken.
- *
- * Centre-scoped via CurrentContext (NULL on « Tous les centres »). One
- * GROUP BY query whatever the volume.
+ * Like « Résumé des frais annuels », the année only supplies the WINDOW.
+ * Centre-scoped on the dossier's centre via CurrentContext (NULL on « Tous
+ * les centres »). One GROUP BY query whatever the volume.
  */
 final class GetNouvellesInscriptionsChart
 {
     public const DUREES = ['jour', '7j', '30j', '12s', '12m', 'annee'];
 
     public const DUREE_DEFAUT = 'jour';
-
-    /** Gap tolerated between a legacy `Changement` row's date_fin and its successor's date_inscription. */
-    public const LEGACY_TOLERANCE_DAYS = 31;
 
     public function __construct(private readonly CurrentContext $context) {}
 
@@ -85,7 +68,15 @@ final class GetNouvellesInscriptionsChart
         $rows = DB::table('inscriptions as i')
             ->whereBetween('i.date_inscription', [$start->toDateString(), $end->toDateString()])
             ->when($centreId, fn (Builder $q) => $q->where('i.etablissement_id', $centreId))
-            ->tap(fn (Builder $q) => $this->excludeSuccessors($q))
+            // The student's FIRST dossier only (class docblock).
+            ->whereNotExists(fn (Builder $sub) => $sub->selectRaw('1')
+                ->from('inscriptions as p')
+                ->whereColumn('p.student_id', 'i.student_id')
+                ->where(fn (Builder $w) => $w
+                    ->whereColumn('p.date_inscription', '<', 'i.date_inscription')
+                    ->orWhere(fn (Builder $t) => $t
+                        ->whereColumn('p.date_inscription', 'i.date_inscription')
+                        ->whereColumn('p.id', '<', 'i.id'))))
             ->selectRaw("{$bucketSql} AS bucket, COUNT(*) AS total")
             ->groupByRaw($bucketSql)
             ->pluck('total', 'bucket');
@@ -165,23 +156,5 @@ final class GetNouvellesInscriptionsChart
         }
 
         return [now()->startOfYear(), now()->endOfYear()->startOfDay(), 'month'];
-    }
-
-    /** The two « this row is a group change, not a registration » rules (class docblock). */
-    private function excludeSuccessors(Builder $query): void
-    {
-        $query
-            ->whereNotExists(fn (Builder $sub) => $sub->selectRaw('1')
-                ->from('inscriptions_historique as h')
-                ->whereColumn('h.new_inscription_id', 'i.id'))
-            ->whereNotExists(fn (Builder $sub) => $sub->selectRaw('1')
-                ->from('inscriptions as p')
-                ->whereColumn('p.student_id', 'i.student_id')
-                ->whereColumn('p.id', '<>', 'i.id')
-                ->where('p.statut', Inscription::STATUT_CHANGEMENT)
-                ->whereRaw('(p.etablissement_id IS NOT DISTINCT FROM i.etablissement_id)')
-                ->whereColumn('p.date_inscription', '<', 'i.date_inscription')
-                ->whereNotNull('p.date_fin')
-                ->whereRaw('abs(i.date_inscription - p.date_fin) <= ?', [self::LEGACY_TOLERANCE_DAYS]));
     }
 }

@@ -194,7 +194,9 @@ final class ChangerGroupeInscription
             'etablissement_id' => $newGroup->etablissement_id,
             'annee_scolaire_id' => $newGroup->annee_scolaire_id ?? app(CurrentContext::class)->anneeScolaireId(),
             'statut' => Inscription::STATUT_ACTIVE,
-            'date_inscription' => now()->toDateString(),
+            // A group change is not a new registration: the student signed up
+            // on the ORIGINAL dossier's day, never on the day of the move.
+            'date_inscription' => $old->date_inscription?->toDateString() ?? now()->toDateString(),
             'date_debut' => $dateDebut,
             'date_fin' => $newGroup->date_fin_formation?->toDateString(),
             'montant_total' => $lines->sum('montant') ?: null,

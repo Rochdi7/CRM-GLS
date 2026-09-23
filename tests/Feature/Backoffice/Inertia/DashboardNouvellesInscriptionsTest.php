@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Backoffice\Inertia;
 
+use App\Domain\Registrations\Actions\ChangerGroupeInscription;
 use App\Models\AnneeScolaire;
 use App\Models\Etablissement;
 use App\Models\Group;
@@ -20,9 +21,9 @@ use Tests\TestCase;
 
 /**
  * « Nouvelles inscriptions » dashboard bar chart (GetNouvellesInscriptionsChart):
- * every signed-in user (no permission), bucketed by duration (today first), and a group change is NEVER a new
- * registration — neither the app-linked successor (inscriptions_historique)
- * nor the legacy one (Changement row whose date_fin meets the successor).
+ * every signed-in user (no permission), bucketed by duration (today first).
+ * Only a student's FIRST dossier counts: a group change, a re-enrolment or a
+ * legacy successor is a later dossier, so none of them is a new registration.
  */
 final class DashboardNouvellesInscriptionsTest extends TestCase
 {
@@ -143,6 +144,33 @@ final class DashboardNouvellesInscriptionsTest extends TestCase
                 ->where('nouvellesInscriptions.counts.10', 1)
                 ->where('nouvellesInscriptions.total', 1)
                 ->where('nouvellesInscriptions.periode', '15/03/2026'));
+    }
+
+    public function test_a_re_enrolment_of_an_existing_student_is_not_a_new_registration(): void
+    {
+        $ancien = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $this->inscription($ancien, '2025-10-05', Inscription::STATUT_ANNULEE);
+        // Re-enrolled by hand today, no historique link, no Changement row.
+        $this->inscription($ancien, '2026-03-15');
+
+        $this->actingAs($this->superAdmin())
+            ->get(route('backoffice.dashboard', ['inscDuree' => 'jour']))
+            ->assertInertia(fn (Assert $page) => $page->where('nouvellesInscriptions.total', 0));
+    }
+
+    public function test_a_group_change_keeps_the_original_registration_date(): void
+    {
+        $s = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $old = $this->inscription($s, '2025-10-05');
+        $newGroup = Group::factory()->create(['etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->group->annee_scolaire_id]);
+
+        $new = app(ChangerGroupeInscription::class)->handle($old, $newGroup, '2026-03-14', '2026-03-15', null, null, null);
+
+        $this->assertSame('2025-10-05', $new->date_inscription->toDateString());
+
+        $this->actingAs($this->superAdmin())
+            ->get(route('backoffice.dashboard', ['inscDuree' => 'jour']))
+            ->assertInertia(fn (Assert $page) => $page->where('nouvellesInscriptions.total', 0));
     }
 
     public function test_every_role_receives_the_chart(): void
