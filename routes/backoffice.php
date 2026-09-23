@@ -35,6 +35,7 @@ use App\Http\Controllers\Backoffice\Import\StudentImportController;
 use App\Http\Controllers\Backoffice\InscriptionController;
 use App\Http\Controllers\Backoffice\LegacyReconciliationController;
 use App\Http\Controllers\Backoffice\MotifAnnulationController;
+use App\Http\Controllers\Backoffice\MovePaymentController;
 use App\Http\Controllers\Backoffice\PaiementProfController;
 use App\Http\Controllers\Backoffice\PermissionController;
 use App\Http\Controllers\Backoffice\ProfileController;
@@ -629,6 +630,23 @@ Route::prefix('backoffice')
                     Route::put('{table}/rows', [DatabaseManagementController::class, 'update'])->name('rows.update');
                     Route::delete('{table}/rows', [DatabaseManagementController::class, 'destroy'])->name('rows.destroy');
                     Route::post('{table}/truncate', [DatabaseManagementController::class, 'truncate'])->name('truncate');
+                });
+
+            // « Deplacer un paiement » (21-23/09/2026) — l'ecran de ce qui se
+            // faisait en PuTTY : un paiement encaisse au nom du MAUVAIS
+            // etudiant est reaffecte au frais de la bonne personne, en
+            // effacant les appels fantomes du dossier source ou en posant une
+            // AVANCE sur le frais d'un tiers. Meme identite de maintenance
+            // que « Gestion de la base de donnees » (ability
+            // `payments.move-any`, MAINTAINER_ONLY_ABILITIES, au-dessus du
+            // bypass super-admin) ; hors de la barre laterale, et ce n'est
+            // pas ce qui le protege. Aucun argent ne bouge : montant, date,
+            // agent, caisse et solde restent tels quels.
+            Route::prefix('move-payment')->name('move-payment.')
+                ->middleware('can:'.MovePaymentController::ABILITY)
+                ->group(function (): void {
+                    Route::get('/', [MovePaymentController::class, 'index'])->name('index');
+                    Route::post('/', [MovePaymentController::class, 'store'])->name('store');
                 });
 
             // Gestion des recouvrements — read-only overdue-fees report

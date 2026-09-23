@@ -98,6 +98,11 @@ class AppServiceProvider extends ServiceProvider
         // Gestion de la base de données (/backoffice/database-management) :
         // écrit directement dans les tables, hors de tout invariant.
         'database.manage',
+        // Déplacement d'un paiement vers un autre étudiant
+        // (/backoffice/move-payment) : lève la garde « zéro présence » en
+        // effaçant des appels fantômes, et affecte une AVANCE au frais d'un
+        // tiers — deux gestes qu'aucune action d'exploitation n'autorise.
+        'payments.move-any',
     ];
 
     /**

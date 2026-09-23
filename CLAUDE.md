@@ -1773,6 +1773,34 @@ keeps the primary column stable when an edit merely adds a center. Enforcing
   autre schéma revient sous son nom nu et 500 à la lecture. Tests :
   `tests/Feature/Backoffice/Access/DatabaseManagementAccessTest.php`,
   `tests/Feature/Backoffice/Maintenance/DatabaseManagementTest.php`.
+- **⚠ « Déplacer un paiement » est réservé au SEUL compte de maintenance**
+  (21–23/09/2026, `/backoffice/move-payment`, `MovePaymentController`,
+  ability `payments.move-any` dans `MAINTAINER_ONLY_ABILITIES` — le CEO
+  reçoit 403). L'écran de ce qui s'est fait trois fois en PuTTY en une
+  semaine : un dossier saisi sur le MAUVAIS nom au guichet (FELLAHI pour
+  ROCHD, MALAK pour AYA AGDALI, RHAZALI pour ABIH), l'enseignant appelle le
+  nom fantôme « Absent » à chaque séance, et l'argent de la vraie personne
+  reste au nom de quelqu'un qui n'est jamais venu. Deux gestes qu'aucun
+  écran d'exploitation n'autorise et qui ne doivent PAS s'y ajouter :
+  (1) `Registrations\Actions\PurgerPresencesFantomes` efface les appels du
+  dossier source pour que `TransfererFraisVersAutreEtudiant` passe sa garde
+  « zéro présence » — la garde ne s'assouplit pas, on retire les lignes qui
+  ne décrivent personne ; elle n'efface QUE des « Absent », et UNE ligne
+  Présent/Retard/Justifié refuse le lot ENTIER (la personne EST venue : ce
+  n'est pas un fantôme, et un dossier amputé serait pire qu'un refus) ;
+  (2) `Payments\Actions\AffecterAvanceVersAutreEtudiant` pose une AVANCE
+  sur le frais DÉSIGNÉ d'un autre étudiant, mêmes gardes qu'`AppliquerAvance`
+  moins « même étudiant » (`AppliquerAvance` exige le même étudiant, le
+  transfert de frais refuse une avance — ni l'un ni l'autre ne s'assouplit
+  « pour faire pareil »). `DeplacerPaiementMaintenance` enchaîne le tout
+  dans UNE transaction, et refuse un frais cible fourni pour une ligne à
+  frais (il serait ignoré en silence) ; `Queries\DiagnostiquerDeplacementPaiement`
+  montre AVANT d'écrire ce qui ne bougera pas (montant, date, agent,
+  caisse), les appels, le frais détecté (même `CibleTransfertFrais::resoudre()`
+  que l'action) et chaque refus — recopiés des actions, jamais redéfinis.
+  Motif obligatoire, journal sur chaque ligne effacée ET sur le geste. Hors
+  du menu, et ce n'est pas ce qui le protège. Tests :
+  `tests/Feature/Backoffice/Maintenance/MovePaymentTest.php`.
 - **⚠ Only super-admin deletes.** `PermissionRegistry::superAdminOnly()`
   lists what no role preset may hold, and `matrix()` FILTERS every preset
   through it — so writing a `*.delete` into a preset has no effect, and a

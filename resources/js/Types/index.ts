@@ -2865,3 +2865,72 @@ export interface DatabaseTablePageProps {
     foreignOptions: Record<string, { options: SelectOption[]; truncated: boolean }>;
     filters: DatabaseTableFilters;
 }
+
+// ── « Déplacer un paiement » (maintenance, /backoffice/move-payment) ──────
+
+export interface MovePaymentFee {
+    id: number;
+    nom: string;
+    montant: string;
+    paye: string;
+    reste: string;
+    statut: string;
+    masque: boolean;
+}
+
+export interface MovePaymentDiagnosticError {
+    erreur: string;
+}
+
+/**
+ * Le diagnostic servi par Domain\Payments\Queries\DiagnostiquerDeplacementPaiement.
+ * Chaque refus listé ici est recopié de l'action qui le porte — la page
+ * n'en redérive aucun (CLAUDE.md §5).
+ */
+export interface MovePaymentDiagnosticOk {
+    erreur: null;
+    /** `frais` : ligne rattachée à un frais (cible détectée par le nom) ; `avance` : le frais cible est désigné. */
+    mode: 'frais' | 'avance';
+    source: {
+        id: number;
+        reference: string;
+        montant: string;
+        methode: string;
+        date: string | null;
+        agent: string | null;
+        caisse: string | null;
+        centreId: number | null;
+        etudiant: string | null;
+        etudiantId: number;
+        frais: string | null;
+        inscription: string | null;
+        inscriptionStatut: string | null;
+        groupe: string | null;
+    };
+    cible: {
+        id: number;
+        reference: string;
+        statut: string;
+        centreId: number;
+        etudiant: string | null;
+        etudiantId: number;
+        groupe: string | null;
+        presences: number;
+        frais: MovePaymentFee[];
+    };
+    /** Appels du dossier SOURCE (étudiant × séances de son groupe) — ce que la garde compte. */
+    presences: Array<{ id: number; date: string; statut: string }>;
+    purgeable: boolean;
+    purgeRefus: string | null;
+    fraisDetecte: MovePaymentFee | null;
+    fraisDetecteRefus: string | null;
+    /** Refus que rien ne lèvera (chèque, remboursement, autre centre, même étudiant…). */
+    blocages: string[];
+}
+
+export type MovePaymentDiagnostic = MovePaymentDiagnosticError | MovePaymentDiagnosticOk;
+
+export interface MovePaymentPageProps {
+    filters: { encaissement: string; inscription: string };
+    diagnostic: MovePaymentDiagnostic | null;
+}
