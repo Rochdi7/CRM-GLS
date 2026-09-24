@@ -2312,6 +2312,8 @@ export interface EncaissementFormOption {
      * client — that overstates a partly-applied avance.
      */
     montantRemboursable: MoneyDisplay;
+    /** Non-null = listed but NOT selectable (payment sits on a hidden fee) — the server's reason. */
+    bloqueRaison: string | null;
 }
 
 export interface DepensesPageProps {

@@ -68,7 +68,7 @@ final class GetGroupFeeDueDates
             // Paid total in the SAME query — the per-row montantPaye() fires
             // one SUM per line, which is exactly the N+1 §17 forbids in a
             // read-model (a group can hold forty students).
-            ->withSum('encaissements', 'montant')
+            ->avecPayeNet()
             ->whereNull('masque_le')
             ->where('frais_id', $fraisId)
             ->whereHas('inscription', function (Builder $q) use ($user, $groupId, $statutFilter): void {
@@ -81,7 +81,7 @@ final class GetGroupFeeDueDates
             ->get()
             ->map(function (InscriptionFee $fee): array {
                 $student = $fee->inscription?->student;
-                $paye = (float) ($fee->encaissements_sum_montant ?? 0);
+                $paye = $fee->payeNet();
 
                 return [
                     'feeId' => $fee->id,

@@ -50,7 +50,7 @@ final class RetardPaiementEtudiant
         $fees = InscriptionFee::query()
             ->select('inscription_fees.*')
             ->addSelect('inscriptions.student_id as retard_student_id')
-            ->withSum('encaissements', 'montant')
+            ->avecPayeNet()
             ->join('inscriptions', 'inscriptions.id', '=', 'inscription_fees.inscription_id')
             ->whereIn('inscriptions.student_id', $studentIds)
             ->where('inscriptions.statut', \App\Models\Inscription::STATUT_ACTIVE)
@@ -64,7 +64,7 @@ final class RetardPaiementEtudiant
         $moisCourant = now()->format('Y-m');
 
         foreach ($fees as $fee) {
-            $paye = (float) ($fee->encaissements_sum_montant ?? 0);
+            $paye = $fee->payeNet();
             $reste = round(max(0, (float) $fee->montant - $paye), 2);
 
             if ($reste <= 0) {

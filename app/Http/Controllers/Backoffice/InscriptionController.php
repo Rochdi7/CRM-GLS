@@ -163,7 +163,7 @@ final class InscriptionController extends Controller
             // which must re-read a freshly locked row. restoreFee() below
             // keeps it too: that path maps ONE row, not a collection.
             'fees' => $inscription->fees()->whereNull('masque_le')
-                ->withSum('encaissements as paye_sum', 'montant')->get()
+                ->avecPayeNet()->get()
                 // Teaching-calendar order (janvier → décembre), with the
                 // one-off charges (inscription, examen) first — the fee lines
                 // are created in whatever order the group assigned them, which
@@ -186,7 +186,7 @@ final class InscriptionController extends Controller
                 'statut' => $fee->statut,
                 // Informational only (never submitted back) — drives the
                 // "Reste à payer" column in the edit table.
-                'paye' => number_format((float) ($fee->paye_sum ?? 0), 2, '.', ''),
+                'paye' => number_format($fee->payeNet(), 2, '.', ''),
                 // Le prix ENREGISTRÉ : la table s'en sert pour savoir si
                 // la ligne est soldée (reste déjà à 0) et, dans ce cas,
                 // désactiver la remise — même critère que l'action.

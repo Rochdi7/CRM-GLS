@@ -229,10 +229,10 @@ final class PlacerAvancesLibres extends Command
 
         return InscriptionFee::query()
             ->whereIn('inscription_id', Inscription::where('group_id', $groupId)->where('student_id', $studentId)->pluck('id'))
-            ->withSum('encaissements', 'montant')
+            ->avecPayeNet()
             ->get()
             ->filter(fn (InscriptionFee $f): bool => $this->cleFrais($f->nom) === $k)
-            ->sum(fn (InscriptionFee $f): float => (float) ($f->encaissements_sum_montant ?? 0));
+            ->sum(fn (InscriptionFee $f): float => $f->payeNet());
     }
 
     private function chargerMatrices(string $dossier, int $centre): void

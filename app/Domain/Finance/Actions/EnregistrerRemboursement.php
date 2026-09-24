@@ -8,6 +8,7 @@ use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Models\Caisse;
 use App\Models\Employee;
 use App\Models\Encaissement;
+use App\Models\InscriptionFee;
 use App\Models\Remboursement;
 use App\Models\Student;
 use App\Domain\Finance\Support\CaisseLedger;
@@ -61,6 +62,27 @@ final class EnregistrerRemboursement
                 if ($encaissement->student_id !== (int) $data['beneficiaire_id']) {
                     throw ValidationException::withMessages([
                         'encaissement_id' => __('This payment does not belong to the selected student.'),
+                    ]);
+                }
+
+                // ⚠ Jamais un remboursement sur un frais MASQUÉ (24/09/2026).
+                // Un frais masqué n'est plus dû et ne devrait porter aucun
+                // argent (le masquage libère le payé en avance) : un paiement
+                // encore posé dessus est une anomalie, et le rembourser
+                // ferait sortir de la caisse de l'argent qu'aucun écran ne
+                // montre (ENC-26191, 1 200 DH, remboursé par RMB-003 sur un
+                // frais masqué — invisible dans Encaissements, présent dans
+                // le relevé). On restaure le frais, ou on libère d'abord
+                // l'argent en avance ; l'avance, elle, se rembourse.
+                $fee = $encaissement->inscription_fee_id !== null
+                    ? InscriptionFee::query()->whereKey($encaissement->inscription_fee_id)->first()
+                    : null;
+
+                if ($fee !== null && $fee->estMasque()) {
+                    throw ValidationException::withMessages([
+                        'encaissement_id' => __('This payment sits on a hidden fee (« :frais »): restore the fee, or release its money as an advance first, before refunding it.', [
+                            'frais' => $fee->nom,
+                        ]),
                     ]);
                 }
 
@@ -165,6 +187,12 @@ final class EnregistrerRemboursement
                     'etablissement_id' => $etablissementId,
                 ],
             );
+
+            // Payé = encaissé − remboursé (InscriptionFee::montantPaye) : le
+            // frais du paiement remboursé n'est plus soldé, son statut stocké
+            // doit le dire — sinon il reste « Payé » alors que l'argent est
+            // reparti (RMB-003 / ENC-26191, 24/09/2026).
+            $remboursement->encaissement?->fee?->rafraichirStatut();
 
             return $remboursement;
         });

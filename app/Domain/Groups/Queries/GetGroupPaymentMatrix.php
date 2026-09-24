@@ -79,7 +79,7 @@ final class GetGroupPaymentMatrix
         $feesByInscription = InscriptionFee::query()
             ->whereIn('inscription_id', $inscriptions->pluck('id'))
             ->whereNull('masque_le')
-            ->withSum('encaissements', 'montant')
+            ->avecPayeNet()
             ->get()
             ->groupBy('inscription_id');
 
@@ -182,7 +182,7 @@ final class GetGroupPaymentMatrix
 
                 foreach ($fees as $fee) {
                     $du = (float) $fee->montant;
-                    $paye = (float) ($fee->encaissements_sum_montant ?? 0);
+                    $paye = $fee->payeNet();
 
                     $total += $paye;
                     $reste += max(0.0, $du - $paye);

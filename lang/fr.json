@@ -1566,5 +1566,6 @@
     "Remaining due too small": "Reste dû insuffisant",
     "Explain why this money changes hands — kept in the audit journal.": "Expliquez pourquoi cet argent change de nom — conservé au journal d'audit.",
     "Move the payment": "Déplacer le paiement",
-    "Moving…": "Déplacement…"
+    "Moving…": "Déplacement…",
+    "This payment sits on a hidden fee (« :frais »): restore the fee, or release its money as an advance first, before refunding it.": "Ce paiement est posé sur un frais masqué (« :frais ») : restaurez le frais, ou libérez d’abord son argent en avance, avant de le rembourser."
 }

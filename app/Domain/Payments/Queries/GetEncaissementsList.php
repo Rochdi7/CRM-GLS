@@ -288,7 +288,7 @@ final class GetEncaissementsList
             ->with(['student', 'fee.inscription', 'caisse', 'agent', 'cheque:id,statut'])
             // Per-fee paid total, computed by the DB (no N+1): feeds the
             // edit modal's read-only "Reste à payer" figure.
-            ->with(['fee' => fn ($q) => $q->withSum('encaissements', 'montant')])
+            ->with(['fee' => fn ($q) => $q->avecPayeNet()])
             // One correlated SUM, never a per-row accessor: feeds "Montant
             // utilisé / restant" on the Avances tab and the « Avance » cell of
             // the Encaissements tab (an avance there shows what is applied).
@@ -365,7 +365,7 @@ final class GetEncaissementsList
             // till (CaisseResolver::forRemboursement).
             $chequeRejete = ($chequesOrigine[$e->id] ?? $e->cheque)?->statut === Cheque::STATUT_REJETE;
             $feeTotal = $e->fee !== null ? (float) $e->fee->montant : null;
-            $feePaye = $e->fee !== null ? (float) ($e->fee->encaissements_sum_montant ?? 0) : null;
+            $feePaye = $e->fee !== null ? $e->fee->payeNet() : null;
 
             return [
                 'id' => $e->id,

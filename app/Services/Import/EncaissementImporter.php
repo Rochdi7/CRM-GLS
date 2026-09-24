@@ -1176,7 +1176,7 @@ final class EncaissementImporter implements Importer
 
         $fees = InscriptionFee::query()
             ->whereIn('id', $ids)
-            ->withSum('encaissements', 'montant')
+            ->avecPayeNet()
             ->get()
             ->keyBy('id');
 
@@ -1188,7 +1188,7 @@ final class EncaissementImporter implements Importer
             }
 
             $du = (float) $fee->montant;
-            $paye = (float) ($fee->encaissements_sum_montant ?? 0);
+            $paye = $fee->payeNet();
 
             // A fee priced 0.00 (the legacy inscriptions export carries no
             // amounts) has no known due — it is back-filled from the money

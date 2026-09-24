@@ -1094,6 +1094,27 @@ the database layer. Non-negotiable invariants already enforced in code:
   `::test_an_advance_can_be_applied_to_a_closed_registration`,
   `::test_an_advance_is_still_refused_on_a_hidden_fee_of_a_closed_registration`,
   `::test_an_advance_is_still_refused_on_another_students_closed_registration`.
+- **⚠ PAYÉ = ENCAISSÉ − REMBOURSÉ** (24/09/2026). Le payé d'un frais est
+  `Σ encaissements du frais − Σ remboursements NON annulés de ces
+  encaissements`, et UNE définition le porte : `InscriptionFee::montantPaye()`
+  (actions, ligne verrouillée) et, pour les listes, `->avecPayeNet()` +
+  `$fee->payeNet()` (deux `withSum` en lot, jamais une requête par ligne,
+  §17). ENC-26191 (1 200 DH) remboursé en entier par RMB-003 laissait le
+  frais de Septembre « Payé » sur la fiche, la matrice, le recouvrement et la
+  liste — aucune lecture ne soustrayait un remboursement, et un remboursement
+  ne touchait jamais le frais. Désormais `EnregistrerRemboursement` et
+  `AnnulerRemboursement` appellent `InscriptionFee::rafraichirStatut()` dans
+  leur transaction : rembourser rend le frais dû, annuler le remboursement le
+  resolde. Un remboursement annulé se reconnaît au marqueur `[ANNULÉ]` de sa
+  note (`Remboursement::estAnnule()` / `scopeNonAnnules()`). **Ne jamais
+  réécrire `withSum('encaissements', 'montant')` sur une requête de frais** —
+  c'est le chiffre brut, faux dès qu'un paiement a été rendu. Les séries
+  d'argent REÇU (relevé des encaissements, graphique annuel « Encaissements »)
+  restent brutes : l'argent est bien entré, le remboursement est une sortie à
+  part. Rattrapage des statuts écrits avant :
+  `php artisan frais:recalculer-statuts-rembourses` (simulation par défaut,
+  `--apply`). Tests :
+  `tests/Feature/Backoffice/Finance/FraisPayeNetDesRemboursementsTest.php`.
 - **⚠ Retirer un frais DÉJÀ PAYÉ libère toujours son argent en avance.**
   Trois chemins retirent un frais d'une inscription et ils doivent se
   comporter à l'identique, sinon celui que l'utilisateur emprunte change ce

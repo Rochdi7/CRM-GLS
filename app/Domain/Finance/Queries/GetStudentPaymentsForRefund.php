@@ -92,6 +92,13 @@ final class GetStudentPaymentsForRefund
                     'isAvance' => $e->isAvance(),
                     'dejaRembourse' => number_format($dejaRembourse, 2, '.', ''),
                     'montantRemboursable' => number_format(round(max(0.0, $remboursable), 2), 2, '.', ''),
+                    // Listé mais NON sélectionnable : même refus
+                    // qu'EnregistrerRemboursement (frais masqué), porté à
+                    // l'écran plutôt que redécouvert au submit — et jamais
+                    // retiré de la liste, sinon l'argent semble absent.
+                    'bloqueRaison' => $e->fee !== null && $e->fee->estMasque()
+                        ? __('This payment sits on a hidden fee (« :frais »): restore the fee, or release its money as an advance first, before refunding it.', ['frais' => $e->fee->nom])
+                        : null,
                 ];
             })
             // Nothing left to give back = nothing to offer. A fully applied

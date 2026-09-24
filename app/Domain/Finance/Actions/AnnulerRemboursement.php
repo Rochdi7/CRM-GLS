@@ -82,6 +82,10 @@ final class AnnulerRemboursement
                 'note' => $note === '' ? $suffixe : $note."\n".$suffixe,
             ]);
 
+            // L'argent est revenu : le frais du paiement est de nouveau réglé
+            // (le marqueur ci-dessus sort ce remboursement du payé net).
+            $verrouille->encaissement?->fee?->rafraichirStatut();
+
             return $verrouille;
         });
     }

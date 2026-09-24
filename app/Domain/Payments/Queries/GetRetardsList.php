@@ -79,7 +79,7 @@ final class GetRetardsList
             // Paid total per fee computed by the DB in the same query — the
             // per-row montantPaye() this replaced fired one SUM per overdue
             // fee (hundreds of queries on a real centre).
-            ->withSum('encaissements', 'montant')
+            ->avecPayeNet()
             ->whereNull('masque_le')
             ->whereNotNull('date_echeance')
             ->where('date_echeance', '<', $today)
@@ -100,7 +100,7 @@ final class GetRetardsList
             ->orderBy('date_echeance')
             ->get()
             ->map(function (InscriptionFee $fee): ?array {
-                $paye = (float) ($fee->encaissements_sum_montant ?? 0);
+                $paye = $fee->payeNet();
                 $reste = round(max(0, (float) $fee->montant - $paye), 2);
 
                 if ($reste <= 0) {
@@ -164,7 +164,7 @@ final class GetRetardsList
         $today = now()->toDateString();
 
         $rows = InscriptionFee::query()
-            ->withSum('encaissements', 'montant')
+            ->avecPayeNet()
             ->whereNull('masque_le')
             ->whereNotNull('date_echeance')
             ->where('date_echeance', '<', $today)
@@ -187,7 +187,7 @@ final class GetRetardsList
         $counts = array_fill_keys(self::BUCKETS, 0);
 
         foreach ($rows as $fee) {
-            $paye = (float) ($fee->encaissements_sum_montant ?? 0);
+            $paye = $fee->payeNet();
             $reste = round(max(0, (float) $fee->montant - $paye), 2);
 
             if ($reste <= 0) {

@@ -674,6 +674,12 @@ export default function DepensesIndex({
     }
 
     function selectPaymentToRefund(payment: EncaissementFormOption) {
+        // Frais masqué : le serveur refuserait — la ligne reste listée, grisée,
+        // avec la raison, mais ne se sélectionne pas.
+        if (payment.bloqueRaison) {
+            return;
+        }
+
         // montantRemboursable comes from the server: an avance is capped at
         // what is still unallocated, a fee payment at what it brought in
         // less prior refunds. Subtracting dejaRembourse from montant here
@@ -1891,14 +1897,22 @@ export default function DepensesIndex({
                                         {studentPayments.map((payment) => (
                                             <tr
                                                 key={payment.id}
-                                                className={remboursementForm.data.encaissement_id === payment.id ? 'table-primary' : undefined}
-                                                style={{ cursor: 'pointer' }}
+                                                className={
+                                                    payment.bloqueRaison
+                                                        ? 'text-muted'
+                                                        : remboursementForm.data.encaissement_id === payment.id
+                                                          ? 'table-primary'
+                                                          : undefined
+                                                }
+                                                style={{ cursor: payment.bloqueRaison ? 'not-allowed' : 'pointer' }}
+                                                title={payment.bloqueRaison ?? undefined}
                                                 onClick={() => selectPaymentToRefund(payment)}
                                             >
                                                 <td>
                                                     <input
                                                         type="radio"
                                                         className="form-check-input"
+                                                        disabled={payment.bloqueRaison !== null}
                                                         checked={remboursementForm.data.encaissement_id === payment.id}
                                                         onChange={() => selectPaymentToRefund(payment)}
                                                     />
@@ -1911,6 +1925,12 @@ export default function DepensesIndex({
                                                         <span className="badge bg-info-transparent">Avance</span>
                                                     ) : (
                                                         (payment.feeNom ?? '—')
+                                                    )}
+                                                    {payment.bloqueRaison && (
+                                                        <div className="fs-12 text-danger text-normal-case">
+                                                            <i className="ti ti-lock me-1" aria-hidden="true" />
+                                                            Frais masqué — non remboursable
+                                                        </div>
                                                     )}
                                                 </td>
                                                 <td>{payment.methode}</td>

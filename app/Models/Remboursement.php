@@ -51,6 +51,20 @@ class Remboursement extends Model
         return str_contains((string) $remboursement->note, self::MARQUEUR_ANNULE);
     }
 
+    /**
+     * La même règle qu'`estAnnule()`, en SQL : un remboursement annulé ne
+     * représente plus aucune sortie d'argent. Colonne qualifiée, parce que
+     * ce scope sert aussi à travers `InscriptionFee::remboursements()`
+     * (hasManyThrough, où `note` existe des deux côtés de la jointure).
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<self>  $query
+     */
+    public function scopeNonAnnules($query): void
+    {
+        $query->where(fn ($q) => $q->whereNull('remboursements.note')
+            ->orWhere('remboursements.note', 'not like', '%'.self::MARQUEUR_ANNULE.'%'));
+    }
+
     public function beneficiaire(): BelongsTo
     {
         return $this->belongsTo(Student::class, 'beneficiaire_id');
