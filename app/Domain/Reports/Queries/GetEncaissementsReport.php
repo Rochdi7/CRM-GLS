@@ -64,6 +64,23 @@ final class GetEncaissementsReport
     /** @var list<string> */
     public const TYPES = [self::TYPE_REGLEMENT, self::TYPE_AVANCE];
 
+    /**
+     * ⚠ Le relevé imprime l'argent GARDÉ, pas l'argent passé en caisse
+     * (24/09/2026). Somme des remboursements NON annulés d'un paiement —
+     * même règle que Remboursement::estAnnule() / scopeNonAnnules(), en
+     * sous-requête corrélée (une seule requête pour tout le document, §17).
+     * ENC-26191 (1 200 DH, remboursé par RMB-003) figurait encore au relevé
+     * et à son total, alors que l'argent était reparti.
+     */
+    private const SQL_REMBOURSE = '(select coalesce(sum(r.montant), 0) from remboursements r
+        where r.encaissement_id = encaissements.id
+        and (r.note is null or r.note not like ?))';
+
+    private static function motifAnnule(): string
+    {
+        return '%'.\App\Models\Remboursement::MARQUEUR_ANNULE.'%';
+    }
+
     public function __construct(
         private readonly CenterAccessService $centerAccess,
         private readonly CurrentContext $context,
@@ -97,13 +114,19 @@ final class GetEncaissementsReport
             ])
             ->orderBy('date_paiement')
             ->orderBy('reference')
-            ->get([
-                'id', 'reference', 'student_id', 'inscription_fee_id',
+            ->select([
+                'encaissements.id', 'reference', 'student_id', 'inscription_fee_id',
                 'montant', 'methode', 'date_paiement', 'agent_id',
-            ]);
+            ])
+            ->selectRaw(self::SQL_REMBOURSE.' as rembourse_net', [self::motifAnnule()])
+            ->get();
 
         return $rows->values()->map(function (Encaissement $e, int $index): array {
             $estAvance = $e->inscription_fee_id === null;
+            // Ce que l'école a GARDÉ de ce paiement : encaissé − remboursé
+            // (voir SQL_REMBOURSE). Une ligne remboursée en entier n'arrive
+            // jamais ici (baseQuery l'écarte).
+            $net = round((float) $e->montant - (float) ($e->rembourse_net ?? 0), 2);
 
             return [
                 // Le N° est le rang DANS LE DOCUMENT (1..n), pas un id —
@@ -116,10 +139,10 @@ final class GetEncaissementsReport
                 'type' => $estAvance ? 'Avance' : 'Règlement',
                 // Formaté ici, une seule fois, pour que le PDF et le classeur
                 // impriment le même montant (le gabarit ne recalcule rien).
-                'montant' => number_format((float) $e->montant, 2, ',', ' ').' DH',
+                'montant' => number_format($net, 2, ',', ' ').' DH',
                 // Le montant NUMÉRIQUE, pour le total du document : le
                 // gabarit ne ré-analyse jamais la chaîne formatée ci-dessus.
-                'montantBrut' => (float) $e->montant,
+                'montantBrut' => $net,
                 'methode' => (string) $e->methode,
                 // Une avance n'est sur aucun frais : la colonne le dit au lieu
                 // de laisser un blanc qu'on lirait comme une donnée manquante.
@@ -165,7 +188,8 @@ final class GetEncaissementsReport
         string $typeFilter = '',
     ): string {
         $montant = (float) $this->baseQuery($user, $dateFrom, $dateTo, $methodeFilter, $caisseFilter, $typeFilter)
-            ->sum('encaissements.montant');
+            ->selectRaw('coalesce(sum(encaissements.montant - '.self::SQL_REMBOURSE.'), 0) as total_net', [self::motifAnnule()])
+            ->value('total_net');
 
         return number_format($montant, 2, ',', ' ').' DH';
     }
@@ -210,6 +234,10 @@ final class GetEncaissementsReport
             // sur un frais, la caisse n'a pas bougé pour elles. Sans ce
             // filtre, le total du relevé dépasse l'argent réellement encaissé.
             ->whereNull('applied_from_encaissement_id')
+            // ⚠ Un paiement REMBOURSÉ EN ENTIER n'est plus de l'argent
+            // encaissé : l'école l'a rendu (ENC-26191, RMB-003). Il sort du
+            // relevé ; un remboursement partiel reste, pour son NET.
+            ->whereRaw('encaissements.montant > '.self::SQL_REMBOURSE, [self::motifAnnule()])
             // Le centre d'un paiement est celui de son ÉTUDIANT, jamais celui
             // de la caisse — même règle que GetEncaissementsList.
             ->whereHas('student', fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))

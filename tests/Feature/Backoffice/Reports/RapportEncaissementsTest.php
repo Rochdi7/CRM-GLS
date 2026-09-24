@@ -291,6 +291,63 @@ final class RapportEncaissementsTest extends TestCase
         $this->assertSame('1 500,00 DH', $this->montantTotal());
     }
 
+    private function rembourser(Encaissement $e, float $montant, ?string $note = null): void
+    {
+        \App\Models\Remboursement::create([
+            'reference' => 'RMB-R'.(++self::$refSeq),
+            'beneficiaire_id' => $e->student_id,
+            'encaissement_id' => $e->id,
+            'caisse_id' => $this->caisse->id,
+            'montant' => $montant,
+            'date_remboursement' => '2025-10-05',
+            'agent_id' => $this->agent->id,
+            'note' => $note,
+        ]);
+    }
+
+    /**
+     * ⚠ Le relevé imprime l'argent GARDÉ (24/09/2026) : ENC-26191, remboursé
+     * en entier par RMB-003, figurait encore au document et à son total.
+     */
+    public function test_a_fully_refunded_payment_leaves_the_document_and_its_total(): void
+    {
+        $loubna = $this->student('Loubna');
+        $rembourse = $this->reglement($loubna, $this->fee($this->inscription($loubna), 1200.00, 'Frais de Septembre'), 1200.00);
+        $this->rembourser($rembourse, 1200.00);
+
+        $salma = $this->student('Salma');
+        $this->reglement($salma, $this->fee($this->inscription($salma), 300.00), 300.00);
+
+        $refs = array_column($this->lignes(), 'reference');
+        $this->assertNotContains($rembourse->reference, $refs);
+        $this->assertCount(1, $refs);
+        $this->assertSame('300,00 DH', $this->montantTotal());
+    }
+
+    public function test_a_partially_refunded_payment_prints_its_net_amount(): void
+    {
+        $loubna = $this->student('Loubna');
+        $e = $this->reglement($loubna, $this->fee($this->inscription($loubna), 1200.00), 1200.00);
+        $this->rembourser($e, 500.00);
+
+        $ligne = collect($this->lignes())->firstWhere('reference', $e->reference);
+        $this->assertSame('700,00 DH', $ligne['montant']);
+        $this->assertSame('700,00 DH', $this->montantTotal());
+    }
+
+    /** Un remboursement ANNULÉ a recrédité la caisse : le paiement revient entier. */
+    public function test_a_cancelled_refund_does_not_reduce_the_document(): void
+    {
+        $loubna = $this->student('Loubna');
+        $e = $this->reglement($loubna, $this->fee($this->inscription($loubna), 1200.00), 1200.00);
+        $this->rembourser($e, 1200.00, \App\Models\Remboursement::MARQUEUR_ANNULE.' le 06/10/2025');
+
+        $ligne = collect($this->lignes())->firstWhere('reference', $e->reference);
+        $this->assertNotNull($ligne);
+        $this->assertSame('1 200,00 DH', $ligne['montant']);
+        $this->assertSame('1 200,00 DH', $this->montantTotal());
+    }
+
     // ─────────────────────────── Filtres ───────────────────────────
 
     /** Le filtre « Type » sort exactement les lignes que le document marque ainsi. */

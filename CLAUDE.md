@@ -1108,10 +1108,14 @@ the database layer. Non-negotiable invariants already enforced in code:
   resolde. Un remboursement annulé se reconnaît au marqueur `[ANNULÉ]` de sa
   note (`Remboursement::estAnnule()` / `scopeNonAnnules()`). **Ne jamais
   réécrire `withSum('encaissements', 'montant')` sur une requête de frais** —
-  c'est le chiffre brut, faux dès qu'un paiement a été rendu. Les séries
-  d'argent REÇU (relevé des encaissements, graphique annuel « Encaissements »)
-  restent brutes : l'argent est bien entré, le remboursement est une sortie à
-  part. Rattrapage des statuts écrits avant :
+  c'est le chiffre brut, faux dès qu'un paiement a été rendu. Le **relevé
+  des encaissements** imprime lui aussi le NET (`GetEncaissementsReport::
+  SQL_REMBOURSE`, sous-requête corrélée) : un paiement remboursé en entier
+  sort du document et de son total, un remboursement partiel laisse la ligne
+  pour ce que l'école a GARDÉ, un remboursement annulé ne retire rien — sans
+  cela le PDF signé annonçait 178 940 DH quand la liste en montrait 177 740.
+  Seul le graphique annuel « Encaissements » reste brut (argent passé en
+  caisse ce mois-là). Rattrapage des statuts écrits avant :
   `php artisan frais:recalculer-statuts-rembourses` (simulation par défaut,
   `--apply`). Tests :
   `tests/Feature/Backoffice/Finance/FraisPayeNetDesRemboursementsTest.php`.
