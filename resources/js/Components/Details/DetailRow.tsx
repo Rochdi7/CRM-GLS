@@ -12,7 +12,7 @@ export default function DetailRow({ label, value, borderTop = false }: DetailRow
     return (
         <div className={`d-flex justify-content-between mb-2${borderTop ? ' border-top pt-2' : ''}`}>
             <span className="text-muted">{label}</span>
-            <span className="fw-medium text-end ms-2 text-truncate">{value ?? '—'}</span>
+            <span className="fw-medium text-end ms-2 text-truncate">{value ?? '-'}</span>
         </div>
     );
 }

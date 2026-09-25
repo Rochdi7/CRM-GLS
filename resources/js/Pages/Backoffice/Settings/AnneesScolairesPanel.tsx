@@ -154,7 +154,7 @@ export default function AnneesScolairesPanel({ anneesScolaires, permissions }: A
                                     Par défaut
                                 </span>
                             ) : (
-                                <span className="text-muted">—</span>
+                                <span className="text-muted">-</span>
                             )}
                         </td>
                         <td>
@@ -267,7 +267,7 @@ export default function AnneesScolairesPanel({ anneesScolaires, permissions }: A
                         <div className="col-12">
                             <CheckboxField
                                 id="a-cloturee"
-                                label="Année clôturée — bloquer toute saisie"
+                                label="Année clôturée - bloquer toute saisie"
                                 checked={form.data.cloturee}
                                 onChange={(event) => form.setData('cloturee', event.target.checked)}
                             />

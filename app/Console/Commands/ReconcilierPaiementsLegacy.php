@@ -116,7 +116,7 @@ final class ReconcilierPaiementsLegacy extends Command
             $fichier = $this->fichierPaiements($dossier, $sousDossier);
 
             if ($fichier === null) {
-                $this->warn(sprintf('  %s : aucun fichier de paiements — ignoré.', $centre->nom_centre));
+                $this->warn(sprintf('  %s : aucun fichier de paiements - ignoré.', $centre->nom_centre));
 
                 continue;
             }
@@ -138,7 +138,7 @@ final class ReconcilierPaiementsLegacy extends Command
         }
 
         $this->info(sprintf(
-            '%s%d écart(s) — %d corrigé(s) pour %s MAD.',
+            '%s%d écart(s) - %d corrigé(s) pour %s MAD.',
             $apply ? '' : '[SIMULATION] ',
             $this->ecarts,
             $this->corriges,
@@ -168,7 +168,7 @@ final class ReconcilierPaiementsLegacy extends Command
         $filtreEtudiant = $this->resolveEtudiant($centre);
 
         if (trim((string) $this->option('etudiant')) !== '' && $filtreEtudiant === null) {
-            $this->warn('  Étudiant introuvable dans ce centre — ignoré.');
+            $this->warn('  Étudiant introuvable dans ce centre - ignoré.');
 
             return;
         }
@@ -192,7 +192,7 @@ final class ReconcilierPaiementsLegacy extends Command
                 if ($filtreEtudiant === null || $this->ligneConcerne($ligne, $filtreEtudiant)) {
                     $this->ecarts++;
                     $this->ligneEcart($ref, $ligne['montant'], $ligne['date'], 'ABSENT DE LA BASE', 'n/a');
-                    $this->bloques[] = sprintf('%s : jamais importé — relancer import:centre, puis cette commande.', $ref);
+                    $this->bloques[] = sprintf('%s : jamais importé - relancer import:centre, puis cette commande.', $ref);
                 }
 
                 continue;
@@ -259,7 +259,7 @@ final class ReconcilierPaiementsLegacy extends Command
         $frais = $this->catalogue[LegacyLabels::cle($fraisNom)] ?? null;
 
         if ($frais === null) {
-            $this->bloques[] = sprintf('%s : « %s » absent du catalogue — laissé tel quel.', $paiement->legacy_ref, $fraisNom);
+            $this->bloques[] = sprintf('%s : « %s » absent du catalogue - laissé tel quel.', $paiement->legacy_ref, $fraisNom);
 
             return;
         }
@@ -356,7 +356,7 @@ final class ReconcilierPaiementsLegacy extends Command
     {
         if ($inscription->anneeScolaire?->estCloturee()) {
             return sprintf(
-                'année %s CLÔTURÉE — rouvrir dans Paramètres → Années scolaires, relancer, puis reclôturer.',
+                'année %s CLÔTURÉE - rouvrir dans Paramètres → Années scolaires, relancer, puis reclôturer.',
                 $inscription->anneeScolaire->nom
             );
         }
@@ -478,7 +478,7 @@ final class ReconcilierPaiementsLegacy extends Command
         }
 
         if ($cibles === []) {
-            $this->error('Aucun centre trouvé — vérifier --dossier et --centre.');
+            $this->error('Aucun centre trouvé - vérifier --dossier et --centre.');
         }
 
         return $cibles;

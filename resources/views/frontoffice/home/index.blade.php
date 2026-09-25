@@ -6,7 +6,7 @@
             <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-2 mb-3" data-reveal="zoom">GLS SPRACHENZENTRUM BACKOFFICE</span>
             <h1 class="display-5 fw-bold mb-3" data-reveal data-reveal-delay="150">{{ __('Welcome to GLS') }}</h1>
             <p class="lead text-muted mx-auto mb-4" style="max-width: 40rem;" data-reveal data-reveal-delay="300">
-                {{ __('Language courses, student portal and school services — all in one place.') }}
+                {{ __('Language courses, student portal and school services - all in one place.') }}
             </p>
             <div class="d-flex justify-content-center gap-2" data-reveal data-reveal-delay="450">
                 {{-- Placeholder actions; real destinations come with the auth phase --}}

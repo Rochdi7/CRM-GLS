@@ -34,12 +34,12 @@ export default function ImportScopeFields({
                 <span className="text-muted">Import dans :</span>
                 <span className="badge bg-primary-transparent text-primary fs-13">
                     <i className="ti ti-calendar me-1" />
-                    {context?.currentAcademicYear?.name ?? '—'}
+                    {context?.currentAcademicYear?.name ?? '-'}
                 </span>
                 {centerLocked && (
                     <span className="badge bg-primary-transparent text-primary fs-13">
                         <i className="ti ti-building me-1" />
-                        {context?.currentCenter?.name ?? '—'}
+                        {context?.currentCenter?.name ?? '-'}
                     </span>
                 )}
                 <small className="text-muted w-100">

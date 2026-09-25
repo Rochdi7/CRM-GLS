@@ -78,7 +78,7 @@ final class SupprimerCreneauxDoubles extends Command
 
                 $lignes[] = [
                     $group?->id,
-                    $group?->nom ?? '—',
+                    $group?->nom ?? '-',
                     $copie->id,
                     Creneau::JOURS[(int) $copie->jour_semaine] ?? $copie->jour_semaine,
                     substr((string) $copie->heure_debut, 0, 5),
@@ -115,7 +115,7 @@ final class SupprimerCreneauxDoubles extends Command
         }
 
         if ($lignes === []) {
-            $this->info('Aucun créneau en double — tous les emplois du temps sont sains.');
+            $this->info('Aucun créneau en double - tous les emplois du temps sont sains.');
 
             return self::SUCCESS;
         }
@@ -135,7 +135,7 @@ final class SupprimerCreneauxDoubles extends Command
         ));
 
         if (! $apply) {
-            $this->warn('Simulation — relancez avec --apply pour écrire.');
+            $this->warn('Simulation - relancez avec --apply pour écrire.');
         }
 
         return self::SUCCESS;

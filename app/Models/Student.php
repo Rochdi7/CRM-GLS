@@ -80,12 +80,32 @@ class Student extends Model implements HasMedia
     /** Parent/guardian relation ("Categorie") — fixed list, enforce in validation. */
     public const PARENT_RELATIONS = ['Le père', 'La mère', 'Le parrain'];
 
+    /**
+     * Statut de la FICHE dans son centre (25/09/2026). Une fiche appartient
+     * à un centre ; un transfert vers un autre centre la laisse ici, passée
+     * « Transféré » (présences et historique conservés), et en crée une
+     * COPIE Active dans le centre d'arrivée — voir StudentTransfer et
+     * Domain\Students\Actions\ValiderTransfertEtudiant. Plain VARCHAR
+     * validé ici, jamais une table de référence (gls-crm-schema.md).
+     */
+    public const STATUT_ACTIF = 'Actif';
+
+    public const STATUT_TRANSFERE = 'Transféré';
+
+    public const STATUTS = [self::STATUT_ACTIF, self::STATUT_TRANSFERE];
+
     protected $fillable = [
         'reference', 'legacy_ref', 'legacy_source', 'nom', 'prenom', 'sexe', 'date_naissance', 'cin',
         'telephone', 'whatsapp', 'email', 'adresse', 'niveau',
         'domaine', 'examen_type',
-        'etablissement_id', 'parent_nom', 'parent_relation', 'parent_sexe',
+        'etablissement_id', 'statut', 'transfere_vers_student_id', 'transfere_depuis_student_id',
+        'parent_nom', 'parent_relation', 'parent_sexe',
         'parent_cin', 'parent_telephone', 'parent_whatsapp', 'note',
+    ];
+
+    /** Mirror of the column default (§11) so the journal never records « avant : vide ». */
+    protected $attributes = [
+        'statut' => self::STATUT_ACTIF,
     ];
 
     protected function casts(): array
@@ -146,6 +166,32 @@ class Student extends Model implements HasMedia
     public function remboursements(): HasMany
     {
         return $this->hasMany(Remboursement::class, 'beneficiaire_id');
+    }
+
+    /** La copie de cette fiche dans le centre d'arrivée (fiche « Transféré »). */
+    public function transfereVers(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'transfere_vers_student_id');
+    }
+
+    /** La fiche d'origine dont cette fiche est la copie (centre de départ). */
+    public function transfereDepuis(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'transfere_depuis_student_id');
+    }
+
+    public function transferts(): HasMany
+    {
+        return $this->hasMany(StudentTransfer::class);
+    }
+
+    /**
+     * Une fiche « Transféré » est close dans son centre : plus de dossier,
+     * plus d'argent — tout se passe désormais sur la copie (`transfereVers`).
+     */
+    public function estTransfere(): bool
+    {
+        return $this->statut === self::STATUT_TRANSFERE;
     }
 
     public function nomComplet(): string

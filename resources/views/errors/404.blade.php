@@ -9,7 +9,7 @@
 @endsection
 
 @section('reassurance')
-    {{ __("The application is working normally — only this address is invalid.") }}
+    {{ __("The application is working normally - only this address is invalid.") }}
 @endsection
 
 @section('actions')

@@ -1,9 +1,9 @@
 {{--
-    500 — the page users mistook for "the server is down" (31/08/2026).
+    500 - the page users mistook for "the server is down" (31/08/2026).
 
     The wording therefore states three things in order: this ONE action failed,
     the rest of the CRM is still running, and nothing was half-saved (every
-    money/state write is wrapped in a transaction, CLAUDE.md §11 — so a 500
+    money/state write is wrapped in a transaction, CLAUDE.md §11 - so a 500
     always rolls back rather than leaving a partial record). The support
     reference is the Laravel exception id already written to the log, which
     turns "ça marche pas" into a line the maintainer can grep for.
@@ -19,7 +19,7 @@
 @endsection
 
 @section('reassurance')
-    {{ __("The application is still running — only this action failed. You can go back and continue working.") }}
+    {{ __("The application is still running - only this action failed. You can go back and continue working.") }}
 @endsection
 
 @section('actions')

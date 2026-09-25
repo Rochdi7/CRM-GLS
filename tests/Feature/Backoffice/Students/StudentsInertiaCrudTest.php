@@ -127,6 +127,35 @@ final class StudentsInertiaCrudTest extends TestCase
         $this->assertSame('A1.1', $student->niveau);
     }
 
+    /**
+     * Signalé le 24/09/2026 : « WhatsApp repasse à vide après saisie ».
+     * Aller-retour complet création → modification d'un autre champ (le
+     * modal renvoie le numéro NATIONAL, re-préfixé au serveur) : le numéro
+     * ne doit jamais disparaître.
+     */
+    public function test_the_whatsapp_number_survives_create_and_a_later_edit(): void
+    {
+        $this->actingAs($this->userWith('students.view', 'students.create', 'students.update'));
+
+        $this->post(route('backoffice.students.store'), [
+            'nom' => 'Wahbi', 'prenom' => 'Nora', 'phone_pays' => 'MA',
+            'telephone' => '604622157', 'whatsapp' => '662000000',
+        ])->assertSessionDoesntHaveErrors();
+
+        $student = Student::where('nom', 'Wahbi')->firstOrFail();
+        $this->assertSame('+212662000000', $student->whatsapp);
+
+        $this->put(route('backoffice.students.update', $student), [
+            'nom' => 'Wahbi', 'prenom' => 'Nora', 'phone_pays' => 'MA', 'niveau' => 'A1.1',
+            'telephone' => '604622157', 'whatsapp' => '662000000',
+        ])->assertSessionDoesntHaveErrors();
+
+        $this->assertSame('+212662000000', $student->fresh()->whatsapp);
+
+        $this->get(route('backoffice.students.index'))
+            ->assertInertia(fn ($page) => $page->where('students.data.0.whatsapp', '+212662000000'));
+    }
+
     public function test_parent_details_are_saved_with_the_student(): void
     {
         $this->actingAs($this->userWith('students.view', 'students.create'));

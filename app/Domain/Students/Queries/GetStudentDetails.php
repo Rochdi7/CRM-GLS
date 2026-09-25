@@ -6,8 +6,10 @@ namespace App\Domain\Students\Queries;
 
 use App\Models\Encaissement;
 use App\Models\Inscription;
+use App\Models\Presence;
 use App\Models\Student;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Extracted from resources/views/backoffice/students/show.blade.php +
@@ -30,6 +32,7 @@ final class GetStudentDetails
         Inscription::STATUT_ACTIVE,
         Inscription::STATUT_ANNULEE,
         Inscription::STATUT_CHANGEMENT,
+        Inscription::STATUT_TRANSFEREE,
     ];
 
     /**
@@ -39,6 +42,8 @@ final class GetStudentDetails
     {
         $student->loadMissing([
             'etablissement',
+            'transfereVers.etablissement',
+            'transfereDepuis.etablissement',
             'inscriptions.group',
             'inscriptions.fees',
             'inscriptions.anneeScolaire',
@@ -72,6 +77,25 @@ final class GetStudentDetails
             'email' => $student->email,
             'adresse' => $student->adresse,
             'centre' => $student->etablissement?->nom_centre,
+            // Transfert entre centres (25/09/2026) : chaque fiche renvoie vers
+            // l'autre — l'original garde présences et historique, la copie
+            // porte le dossier vivant et l'argent.
+            'statut' => $student->statut,
+            'transfereVers' => $student->transfereVers === null ? null : [
+                'id' => $student->transfereVers->id,
+                'reference' => $student->transfereVers->reference,
+                'centre' => $student->transfereVers->etablissement?->nom_centre,
+            ],
+            'transfereDepuis' => $student->transfereDepuis === null ? null : [
+                'id' => $student->transfereDepuis->id,
+                'reference' => $student->transfereDepuis->reference,
+                'centre' => $student->transfereDepuis->etablissement?->nom_centre,
+            ],
+            // L'historique des centres précédents, AFFICHÉ sur la fiche
+            // d'arrivée (25/09/2026) : le centre qui reçoit l'étudiant ne
+            // peut en général pas ouvrir la fiche d'origine (autre centre),
+            // et c'est là que vivent ses présences et ses anciens dossiers.
+            'historiqueTransfert' => $this->historiqueTransfert($student),
             'photoUrl' => $student->avatarUrl(),
             'parent' => ($student->parent_nom || $student->parent_telephone || $student->parent_relation || $student->parent_cin)
                 ? [
@@ -94,6 +118,77 @@ final class GetStudentDetails
                 'caisse' => $encaissement->caisse?->nom,
             ])->values()->all(),
         ];
+    }
+
+    /**
+     * Les fiches d'ORIGINE de cet étudiant, de la plus récente à la plus
+     * ancienne (un étudiant transféré deux fois garde ses deux centres).
+     * Lecture seule : rien n'est copié ni déplacé, les présences restent
+     * rattachées à la fiche d'origine (ValiderTransfertEtudiant) — on les
+     * LIT ici. Une requête par fiche pour les dossiers et une pour les
+     * appels, jamais une par ligne.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function historiqueTransfert(Student $student): array
+    {
+        $historique = [];
+        $vus = [$student->id => true];
+        $origine = $student->transfereDepuis;
+
+        while ($origine !== null && ! isset($vus[$origine->id])) {
+            $vus[$origine->id] = true;
+
+            $inscriptions = Inscription::query()
+                ->with(['group:id,nom', 'anneeScolaire:id,nom'])
+                ->where('student_id', $origine->id)
+                ->orderByDesc('date_inscription')
+                ->get()
+                ->map(fn (Inscription $i): array => [
+                    'reference' => $i->reference,
+                    'groupe' => $i->group?->nom,
+                    'anneeScolaire' => $i->anneeScolaire?->nom,
+                    'dateDebut' => $i->date_debut?->format('d/m/Y') ?? $i->date_inscription?->format('d/m/Y'),
+                    'dateFin' => $i->date_fin?->format('d/m/Y'),
+                    'statut' => $i->statut,
+                ])
+                ->all();
+
+            $presences = DB::table('presences as p')
+                ->join('seances as se', 'se.id', '=', 'p.seance_id')
+                ->leftJoin('groups as g', 'g.id', '=', 'se.group_id')
+                ->where('p.student_id', $origine->id)
+                ->orderByDesc('se.date_seance')
+                ->orderByDesc('se.heure_debut')
+                ->get(['p.id', 'p.statut', 'p.note', 'se.date_seance', 'se.heure_debut', 'g.nom as groupe']);
+
+            $compteurs = [];
+            foreach (Presence::STATUTS as $statut) {
+                $compteurs[$statut] = $presences->where('statut', $statut)->count();
+            }
+
+            $historique[] = [
+                'id' => $origine->id,
+                'reference' => $origine->reference,
+                'centre' => $origine->etablissement?->nom_centre,
+                'inscriptions' => $inscriptions,
+                'presencesTotal' => $presences->count(),
+                'compteurs' => $compteurs,
+                'presences' => $presences->map(fn ($r): array => [
+                    'id' => (int) $r->id,
+                    'date' => \Illuminate\Support\Carbon::parse($r->date_seance)->format('d/m/Y'),
+                    'heure' => $r->heure_debut !== null ? substr((string) $r->heure_debut, 0, 5) : null,
+                    'groupe' => $r->groupe,
+                    'statut' => (string) $r->statut,
+                    'note' => $r->note,
+                ])->all(),
+            ];
+
+            $origine->loadMissing('transfereDepuis.etablissement');
+            $origine = $origine->transfereDepuis;
+        }
+
+        return $historique;
     }
 
     /**

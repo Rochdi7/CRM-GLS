@@ -53,7 +53,7 @@ export default function CaisseTransferShow({ transfer }: CaisseTransferShowProps
                         <DetailRow label="Validé par" value={transfer.validatedBy ?? 'Pas encore validé'} />
                         <div className="d-flex justify-content-between">
                             <span className="text-muted">Note</span>
-                            <span className="fw-medium text-end">{transfer.note ?? '—'}</span>
+                            <span className="fw-medium text-end">{transfer.note ?? '-'}</span>
                         </div>
                     </Card>
                 </div>
@@ -62,7 +62,7 @@ export default function CaisseTransferShow({ transfer }: CaisseTransferShowProps
                     <Card title="Instantanés des soldes">
                         {transfer.isPending && (
                             <div className="alert alert-warning" role="alert">
-                                Les soldes n'ont pas encore bougé — ce transfert est en attente de validation par un
+                                Les soldes n'ont pas encore bougé - ce transfert est en attente de validation par un
                                 autre employé.
                             </div>
                         )}
@@ -78,28 +78,28 @@ export default function CaisseTransferShow({ transfer }: CaisseTransferShowProps
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td className="fw-medium">{transfer.caisseSource ?? '—'}</td>
+                                        <td className="fw-medium">{transfer.caisseSource ?? '-'}</td>
                                         <td className="text-end">
                                             {transfer.soldeSourceAvant === null
-                                                ? '—'
+                                                ? '-'
                                                 : `${Number(transfer.soldeSourceAvant).toFixed(2)} DH`}
                                         </td>
                                         <td className="text-end">
                                             {transfer.soldeSourceApres === null
-                                                ? '—'
+                                                ? '-'
                                                 : `${Number(transfer.soldeSourceApres).toFixed(2)} DH`}
                                         </td>
                                     </tr>
                                     <tr>
-                                        <td className="fw-medium">{transfer.caisseDestination ?? '—'}</td>
+                                        <td className="fw-medium">{transfer.caisseDestination ?? '-'}</td>
                                         <td className="text-end">
                                             {transfer.soldeDestAvant === null
-                                                ? '—'
+                                                ? '-'
                                                 : `${Number(transfer.soldeDestAvant).toFixed(2)} DH`}
                                         </td>
                                         <td className="text-end">
                                             {transfer.soldeDestApres === null
-                                                ? '—'
+                                                ? '-'
                                                 : `${Number(transfer.soldeDestApres).toFixed(2)} DH`}
                                         </td>
                                     </tr>

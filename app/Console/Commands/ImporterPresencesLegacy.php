@@ -81,7 +81,7 @@ final class ImporterPresencesLegacy extends Command
         $admin = Employee::query()->orderBy('id')->first();
 
         if ($admin === null) {
-            $this->error('Aucun employé en base — lancer les seeders avant un import.');
+            $this->error('Aucun employé en base - lancer les seeders avant un import.');
 
             return self::FAILURE;
         }
@@ -104,7 +104,7 @@ final class ImporterPresencesLegacy extends Command
         }
 
         if ($this->option('dry-run')) {
-            $this->info('[DRY-RUN] Analyse seule — rien ne sera écrit en base.');
+            $this->info('[DRY-RUN] Analyse seule - rien ne sera écrit en base.');
         }
 
         $echecs = 0;
@@ -230,7 +230,7 @@ final class ImporterPresencesLegacy extends Command
 
         if ($ambigus !== []) {
             $this->warn(sprintf(
-                '  %d groupe(s) ambigu(s) — plusieurs groupes du même nom (lignes en conflit) : %s',
+                '  %d groupe(s) ambigu(s) - plusieurs groupes du même nom (lignes en conflit) : %s',
                 count($ambigus),
                 implode(', ', array_map(fn (string $l): string => '« '.$l.' »', $ambigus))
             ));
@@ -262,7 +262,7 @@ final class ImporterPresencesLegacy extends Command
         try {
             $batch = $importer->analyze($this->upload($path), $context, $admin);
         } catch (\Throwable $e) {
-            $this->error(sprintf('  %-42s ÉCHEC — %s', $libelle, $e->getMessage()));
+            $this->error(sprintf('  %-42s ÉCHEC - %s', $libelle, $e->getMessage()));
 
             return false;
         }
@@ -324,7 +324,7 @@ final class ImporterPresencesLegacy extends Command
             }
         }
 
-        return sprintf('%d lignes — %s', $batch->total_rows, $parts === [] ? 'rien' : implode(', ', $parts));
+        return sprintf('%d lignes - %s', $batch->total_rows, $parts === [] ? 'rien' : implode(', ', $parts));
     }
 
     private function upload(string $path): UploadedFile

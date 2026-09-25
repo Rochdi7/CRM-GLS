@@ -78,7 +78,7 @@ function seanceTitle(seance: MatriceSeance): string {
               ? `${formatDate(seance.date)} à ${seance.heureDebut}`
               : formatDate(seance.date);
 
-    return seance.saisie ? quand : `${quand} — absence non saisie`;
+    return seance.saisie ? quand : `${quand} - absence non saisie`;
 }
 
 /**
@@ -193,7 +193,11 @@ export default function AbsenceParGroupe({
                                 options={groupOptions}
                                 placeholder="Choisir un groupe"
                                 value={filters.groupFilter}
-                                onChange={(event) => reload({ groupFilter: event.target.value })}
+                                // Dates RETIRÉES (pas vidées) : le serveur pose alors la
+                                // fenêtre par défaut, 22 dernières séances → aujourd'hui.
+                                onChange={(event) =>
+                                    reload({ groupFilter: event.target.value, dateFrom: undefined, dateTo: undefined })
+                                }
                             />
                         </div>
                         <div style={{ width: 190 }}>
@@ -331,10 +335,10 @@ export default function AbsenceParGroupe({
                                                             !seance.saisie
                                                                 ? seanceTitle(seance)
                                                                 : cell
-                                                                  ? `${formatDate(seance.date)} — ${cell.statut}${
+                                                                  ? `${formatDate(seance.date)} - ${cell.statut}${
                                                                         cell.note ? ` (${cell.note})` : ''
                                                                     }`
-                                                                  : `${formatDate(seance.date)} — non pointé`
+                                                                  : `${formatDate(seance.date)} - non pointé`
                                                         }
                                                     >
                                                         {seance.saisie ? (cell?.lettre ?? '') : ''}

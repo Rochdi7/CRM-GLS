@@ -115,7 +115,7 @@ final class DemanderTransfertCaisse
             if ((float) $data['montant'] > $disponible) {
                 $message = $centreActif !== null
                     ? __(
-                        'This center only holds :solde MAD in this till — the rest belongs to other centers.',
+                        'This center only holds :solde MAD in this till - the rest belongs to other centers.',
                         ['solde' => number_format(max(0.0, $disponible), 2, ',', ' ')],
                     )
                     : __(

@@ -212,7 +212,7 @@ final class GetRemboursementsList
                 // the caisse's own nom is already the employee name for a
                 // « Caissière » till, but an « Externe » safe is not.
                 'nom' => $c->responsable !== null && $c->responsable->nomComplet() !== $c->nom
-                    ? "{$c->nom} — {$c->responsable->nomComplet()}"
+                    ? "{$c->nom} - {$c->responsable->nomComplet()}"
                     : $c->nom,
                 'solde' => number_format((float) $c->solde, 2, '.', ''),
             ]);

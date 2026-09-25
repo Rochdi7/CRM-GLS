@@ -147,7 +147,7 @@ final class CompleterDatesInscriptions extends Command
 
         $this->line('');
         $this->info(sprintf(
-            '%s%d fichier(s), %d ligne(s) lue(s) — %d inscription(s) modifiée(s), %d inchangée(s), %d réf(s) absente(s) de la base, %d ligne(s) sans date dans le fichier.',
+            '%s%d fichier(s), %d ligne(s) lue(s) - %d inscription(s) modifiée(s), %d inchangée(s), %d réf(s) absente(s) de la base, %d ligne(s) sans date dans le fichier.',
             $this->option('dry-run') ? '[DRY-RUN] ' : '',
             $totaux['fichiers'],
             $totaux['lignes'],
@@ -322,7 +322,7 @@ final class CompleterDatesInscriptions extends Command
                 $etablissement = $this->trouverEtablissement($nom);
 
                 if ($etablissement === null) {
-                    $this->warn(sprintf('Centre « %s » introuvable en base — ignoré.', $nom));
+                    $this->warn(sprintf('Centre « %s » introuvable en base - ignoré.', $nom));
 
                     continue;
                 }

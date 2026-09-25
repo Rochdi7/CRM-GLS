@@ -73,6 +73,13 @@ class InscriptionFee extends Model
 
     public const MASQUE_ORIGINE_MANUEL = 'manuel';
 
+    /**
+     * Masquée par le transfert de l'étudiant vers un autre centre
+     * (ValiderTransfertEtudiant) : la créance impayée n'est plus due ici,
+     * le dossier étant clos « Transférée ».
+     */
+    public const MASQUE_ORIGINE_TRANSFERT = 'transfert';
+
     public function estMasque(): bool
     {
         return $this->masque_le !== null;

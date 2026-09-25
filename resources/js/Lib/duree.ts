@@ -69,7 +69,7 @@ export function parseDuree(saisie: string): number | null {
 /** « 2.5 » → « 2h30 » — pour confirmer à l'écran ce qui a été compris. */
 export function formatDuree(heures: number): string {
     if (!Number.isFinite(heures) || heures < 0) {
-        return '—';
+        return '-';
     }
 
     const total = Math.round(heures * 60);

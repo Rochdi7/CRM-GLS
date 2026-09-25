@@ -31,6 +31,16 @@ class Inscription extends Model
 
     public const STATUT_ARCHIVEE = 'Archivée';
 
+    /**
+     * Dossier clos par un transfert de l'étudiant vers un AUTRE centre
+     * (25/09/2026, ValiderTransfertEtudiant) : ses frais payés et leur
+     * argent sont partis sur le nouveau dossier du centre d'arrivée, ses
+     * frais impayés sont masqués. Écrit par le code seulement — jamais
+     * sélectionnable à la main — et clos comme « Changement » pour tout
+     * ce qui lit un statut (recouvrement, encaissement, tableau de bord).
+     */
+    public const STATUT_TRANSFEREE = 'Transférée';
+
     /** The only statuses selectable in the UI. */
     public const STATUTS = [
         self::STATUT_ACTIVE,

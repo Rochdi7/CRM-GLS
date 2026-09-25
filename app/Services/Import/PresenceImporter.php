@@ -224,7 +224,7 @@ final class PresenceImporter implements Importer
                             'errors' => [[
                                 'field' => 'statut',
                                 'code' => 'already_imported',
-                                'message' => 'Présence déjà enregistrée pour cet élève sur cette séance — ligne ignorée.',
+                                'message' => 'Présence déjà enregistrée pour cet élève sur cette séance - ligne ignorée.',
                             ]],
                         ]);
 
@@ -338,13 +338,13 @@ final class PresenceImporter implements Importer
     {
         if (($resolution['student_id'] ?? $data['student_id'] ?? null) === null) {
             throw new \RuntimeException(
-                "Élève introuvable dans ce centre — vérifier l'orthographe ou importer d'abord les étudiants."
+                "Élève introuvable dans ce centre - vérifier l'orthographe ou importer d'abord les étudiants."
             );
         }
 
         if (($resolution['group_id'] ?? $data['group_id'] ?? null) === null) {
             throw new \RuntimeException(
-                "Groupe non associé — revenir à l'écran d'association des groupes."
+                "Groupe non associé - revenir à l'écran d'association des groupes."
             );
         }
 
@@ -511,7 +511,7 @@ final class PresenceImporter implements Importer
                 'code' => 'duplicate_in_file',
                 'message' => sprintf(
                     'Doublon dans le fichier : %sapparaît déjà sur la séance du %s à la même heure.',
-                    $eleve !== '' ? $eleve.' — ' : '',
+                    $eleve !== '' ? $eleve.' - ' : '',
                     $dateSeance
                 ),
             ];

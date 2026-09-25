@@ -1,5 +1,5 @@
 {{--
-    Reçu de paiement imprimable — page Blade autonome (pas Inertia) ouverte
+    Reçu de paiement imprimable - page Blade autonome (pas Inertia) ouverte
     dans un nouvel onglet, reproduisant le reçu wimschool historique
     (en-tête texte FR/AR, ligne ICE, bande « Reçu N° », valeurs centrées en
     gras, mention « Copie du reçu » sur le second exemplaire).
@@ -9,7 +9,7 @@
       a5x2 → deux exemplaires (original + copie) sur UNE demi-feuille A4,
              c.-à-d. une A5 paysage coupée en deux à l'horizontale
     Libellés bilingues FR/AR fixes (document officiel, indépendant de la
-    locale UI) — rendu navigateur pour préserver la ligature arabe.
+    locale UI) - rendu navigateur pour préserver la ligature arabe.
 --}}
 @php
     // a5x2 = deux reçus sur une demi-feuille A4 (A5 paysage) : chaque
@@ -271,7 +271,7 @@
                     </div>
                 </div>
 
-                <div class="ice-line">ICE : {{ $centre?->ice ?? '—' }}</div>
+                <div class="ice-line">ICE : {{ $centre?->ice ?? '-' }}</div>
 
                 <div class="recu-num">
                     <span class="lbl-fr">Reçu N° :</span>
@@ -282,22 +282,22 @@
                 <div class="rows">
                     <div class="row-line">
                         <span class="fr">Année scolaire</span>
-                        <span class="val">{{ $anneeScolaire ?? '—' }}</span>
+                        <span class="val">{{ $anneeScolaire ?? '-' }}</span>
                         <span class="ar">السنة الدراسية</span>
                     </div>
                     <div class="row-line">
                         <span class="fr">Prénom et nom</span>
-                        <span class="val">{{ $encaissement->student?->nomComplet() ?? '—' }}</span>
+                        <span class="val">{{ $encaissement->student?->nomComplet() ?? '-' }}</span>
                         <span class="ar">اسم و نسب التلميذ(ة)</span>
                     </div>
                     <div class="row-line">
                         <span class="fr">Matricule</span>
-                        <span class="val">{{ $encaissement->student?->reference ?? '—' }}</span>
+                        <span class="val">{{ $encaissement->student?->reference ?? '-' }}</span>
                         <span class="ar">رقــم التسجيل</span>
                     </div>
                     <div class="row-line">
                         <span class="fr">Groupe</span>
-                        <span class="val">{{ $niveau ?? '—' }}</span>
+                        <span class="val">{{ $niveau ?? '-' }}</span>
                         <span class="ar">المجموعة</span>
                     </div>
                     <div class="row-line spaced">
@@ -317,7 +317,7 @@
                     </div>
                     <div class="row-line">
                         <span class="fr">Date de paiement</span>
-                        <span class="val">{{ $encaissement->date_paiement?->format('d/m/Y') ?? '—' }}</span>
+                        <span class="val">{{ $encaissement->date_paiement?->format('d/m/Y') ?? '-' }}</span>
                         <span class="ar">تاريخ الأداء</span>
                     </div>
                 </div>

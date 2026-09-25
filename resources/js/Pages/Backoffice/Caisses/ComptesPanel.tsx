@@ -219,7 +219,7 @@ export default function ComptesPanel({
                                 <td className="text-end text-success fw-medium">{Number(row.encaissements).toFixed(2)} DH</td>
                                 <td className="text-end text-danger fw-medium">{Number(row.depenses).toFixed(2)} DH</td>
                                 <td className="text-end fw-medium">{Number(row.solde).toFixed(2)} DH</td>
-                                <td>{row.dateAjout ?? '—'}</td>
+                                <td>{row.dateAjout ?? '-'}</td>
                                 <td>
                                     {/* A centre's method account is provisioned,
                                         not managed: open only. Only an Externe
@@ -302,8 +302,8 @@ export default function ComptesPanel({
             <ConfirmDialog
                 show={deleteTarget !== null}
                 title="Supprimer le compte de caisse"
-                message="Un compte ne peut être supprimé que s'il est encore vide — sinon désactivez-le."
-                recordLabel={deleteTarget ? `${deleteTarget.nom} — ${deleteTarget.type}` : ''}
+                message="Un compte ne peut être supprimé que s'il est encore vide - sinon désactivez-le."
+                recordLabel={deleteTarget ? `${deleteTarget.nom} - ${deleteTarget.type}` : ''}
                 error={deleteError}
                 processing={deleting}
                 onConfirm={confirmDelete}

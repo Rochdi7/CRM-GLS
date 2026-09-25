@@ -1,23 +1,23 @@
 {{--
-    « Liste des étudiants » — gabarit PDF (mPDF), servi par RapportPdfRenderer.
+    « Liste des étudiants » - gabarit PDF (mPDF), servi par RapportPdfRenderer.
 
     Copie conforme d'inscriptions-pdf.blade.php : mêmes styles, même titre
     encadré, même rappel des filtres, mêmes contraintes. Les deux documents
-    doivent se lire pareil — un rapport GLS a une seule mise en page.
+    doivent se lire pareil - un rapport GLS a une seule mise en page.
 
     ⚠ Rendu en TROIS sections ($section = debut | lignes | fin), et non d'une
     seule pièce : mPDF analyse le HTML avec PCRE et refuse au-delà de
     `pcre.backtrack_limit` (« The HTML code size is larger than… »), ce qui fait
     échouer net un rapport d'année pleine. Le renderer écrit donc l'ouverture,
     puis les lignes par tranches, puis la fermeture. Le tableau reste ouvert
-    entre les appels — d'où les balises volontairement non refermées à la fin de
+    entre les appels - d'où les balises volontairement non refermées à la fin de
     « debut ».
 
     ⚠ L'identité du centre (nom, adresse, téléphone, logo) et le pied
     (signature, cachet, pagination) ne sont PAS dans ce fichier : ce sont
     RapportPdfRenderer::entetePage() / ::pied(), posés par
     SetHTMLHeader()/SetHTMLFooter() pour être répétés sur CHAQUE page. Écrits
-    ici, ils ne s'imprimeraient qu'en page 1 — une page détachée du lot ne dirait
+    ici, ils ne s'imprimeraient qu'en page 1 - une page détachée du lot ne dirait
     plus de quel centre elle vient.
 
     Construit en tableaux pour la grille, jamais en flexbox : mPDF ne supporte
@@ -119,7 +119,7 @@
                          d'une ligne à l'autre en lisant la dernière colonne.
                          Alternée sur le N° de la ligne et NON sur $loop : les
                          lignes arrivent par tranches (LIGNES_PAR_TRANCHE), et
-                         $loop repartirait de zéro à chaque tranche — deux
+                         $loop repartirait de zéro à chaque tranche - deux
                          lignes de même teinte se seraient touchées à la
                          jointure. --}}
                     <tr @if ((int) $ligne['numero'] % 2 === 0) style="background:#f4f4f4;" @endif>
@@ -128,7 +128,7 @@
                         {{-- Les noms sortent en CAPITALES comme à l'écran
                              (app.css uppercase les cellules de tableau) : le
                              document doit se lire comme la page. La donnée
-                             stockée garde sa casse — CLAUDE.md §5. --}}
+                             stockée garde sa casse - CLAUDE.md §5. --}}
                         <td class="txt">{{ mb_strtoupper($ligne['etudiant']) }}</td>
                         <td>{{ $ligne['sexe'] }}</td>
                         <td>{{ $ligne['dateNaissance'] }}</td>

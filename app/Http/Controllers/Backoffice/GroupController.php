@@ -16,6 +16,7 @@ use App\Domain\Groups\Queries\GetGroupFormOptions;
 use App\Domain\Groups\Queries\GetGroupPaymentMatrix;
 use App\Domain\Groups\Queries\GetGroupsList;
 use App\Domain\Groups\Queries\GetGroupStudentsBySegment;
+use App\Domain\Groups\Support\PorteeEnseignant;
 use App\Domain\Settings\Support\FraisEcheanceResolver;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
@@ -62,6 +63,7 @@ final class GroupController extends Controller
     ): Response {
         $this->authorize('viewAny', Group::class);
 
+        $restreint = PorteeEnseignant::estRestreint($request->user());
         $search = (string) $request->string('search');
         $statutFilter = (string) $request->string('statutFilter', Group::STATUT_EN_FORMATION);
         $enseignantFilter = (string) $request->string('enseignantFilter');
@@ -76,6 +78,19 @@ final class GroupController extends Controller
 
         if (! in_array($sort, GetGroupsList::SORTS, true)) {
             $sort = GetGroupsList::DEFAULT_SORT;
+        }
+
+        // Portée enseignant : sa propre vue en cartes (consultation seule),
+        // jamais la table d'administration avec ses modals de création.
+        if ($restreint) {
+            return Inertia::render('Backoffice/Groups/MesGroupes', [
+                'groups' => $getGroupsList($request->user(), $search, $statutFilter, $perPage, '', '', '', $sort),
+                'statutCounts' => $getGroupsList->statutCounts($request->user()),
+                'filters' => [
+                    'search' => $search,
+                    'statutFilter' => $statutFilter,
+                ],
+            ]);
         }
 
         return Inertia::render('Backoffice/Groups/Index', [
@@ -95,8 +110,10 @@ final class GroupController extends Controller
             'perPageOptions' => GetGroupsList::PER_PAGE_OPTIONS,
             'niveaux' => Group::NIVEAUX,
             'statuts' => Group::STATUTS,
-            'enseignants' => $getGroupFormOptions->enseignants(),
-            'fraisCatalog' => $getGroupFormOptions->fraisCatalog(),
+            // Portée enseignant : un prof ne filtre pas par collègue et ne
+            // voit pas le catalogue des frais (montants).
+            'enseignants' => $restreint ? [] : $getGroupFormOptions->enseignants(),
+            'fraisCatalog' => $restreint ? [] : $getGroupFormOptions->fraisCatalog(),
             // Confort d'UI seulement (CLAUDE.md §5) : dessine « Modifier » sur
             // un groupe clos de l'onglet Historique. La vraie garde est
             // GroupPolicy@updateClosed, revérifiée dans update().
@@ -113,10 +130,18 @@ final class GroupController extends Controller
     ): Response {
         $this->authorize('view', $group);
 
+        $details = $getGroupDetails($group, $request->user());
+        $restreint = PorteeEnseignant::estRestreint($request->user());
+
+        if ($restreint) {
+            // Portée enseignant : aucun montant sur la fiche d'un groupe.
+            $details['fees'] = [];
+        }
+
         return Inertia::render('Backoffice/Groups/Show', [
-            'group' => $getGroupDetails($group, $request->user()),
+            'group' => $details,
             // Options for the "Changer d'enseignant" modal.
-            'enseignants' => $getGroupFormOptions->enseignants(),
+            'enseignants' => $restreint ? [] : $getGroupFormOptions->enseignants(),
         ]);
     }
 
@@ -497,7 +522,7 @@ final class GroupController extends Controller
         // Rouvrir d'abord, déplacer ensuite — deux actes explicites.
         if ($group->statut === Group::STATUT_FIN_FORMATION) {
             throw ValidationException::withMessages([
-                'statut' => __('This group is "Fin de formation" — that status is final and cannot be changed.'),
+                'statut' => __('This group is "Fin de formation" - that status is final and cannot be changed.'),
             ]);
         }
 

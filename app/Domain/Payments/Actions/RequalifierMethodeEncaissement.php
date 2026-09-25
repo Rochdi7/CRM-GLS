@@ -153,13 +153,13 @@ final class RequalifierMethodeEncaissement
             // aucun argent à déplacer — et sa méthode n'est qu'un écho de
             // celle de l'avance parente.
             throw ValidationException::withMessages([
-                'methode' => __('The method of an advance allocation cannot be changed — change it on the advance itself.'),
+                'methode' => __('The method of an advance allocation cannot be changed - change it on the advance itself.'),
             ]);
         }
 
         if ($encaissement->cheque_id !== null) {
             throw ValidationException::withMessages([
-                'methode' => __('A payment linked to a tracked cheque keeps its method — the Cheques module owns that lifecycle.'),
+                'methode' => __('A payment linked to a tracked cheque keeps its method - the Cheques module owns that lifecycle.'),
             ]);
         }
 

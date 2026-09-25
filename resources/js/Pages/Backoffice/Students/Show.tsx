@@ -3,10 +3,21 @@ import Card from '@/Components/Shared/Card';
 import DetailRow from '@/Components/Details/DetailRow';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import RelatedRecordsTable from '@/Components/Details/RelatedRecordsTable';
+import { statutVariant } from '@/Lib/inscriptionStatut';
 import type { StudentDetails } from '@/Types';
 
 interface StudentShowProps {
     student: StudentDetails;
+}
+
+/** Couleur d'une ligne d'appel — mêmes teintes que la fiche de présence. */
+function presenceVariant(statut: string): 'success' | 'danger' | 'warning' | 'info' | 'secondary' {
+    if (statut === 'Présent') return 'success';
+    if (statut === 'Absent') return 'danger';
+    if (statut === 'Retard') return 'warning';
+    if (statut === 'Justifié') return 'info';
+
+    return 'secondary';
 }
 
 function SexeLabel({ sexe }: { sexe: string | null }) {
@@ -24,7 +35,7 @@ function SexeLabel({ sexe }: { sexe: string | null }) {
             </span>
         );
     }
-    return <>—</>;
+    return <>-</>;
 }
 
 /**
@@ -43,6 +54,46 @@ export default function StudentShow({ student }: StudentShowProps) {
                 { label: student.nomComplet },
             ]}
         >
+            {student.statut === 'Transféré' && (
+                <div className="alert alert-warning d-flex align-items-start" role="alert">
+                    <i className="ti ti-arrows-exchange me-2 mt-1 fs-18" aria-hidden="true" />
+                    <div>
+                        <p className="fw-semibold mb-1">Étudiant transféré vers un autre centre</p>
+                        <p className="mb-0 fs-13">
+                            Cette fiche est close ici : elle garde ses présences et son historique, mais son dossier
+                            vivant et ses paiements sont sur sa nouvelle fiche
+                            {student.transfereVers && (
+                                <>
+                                    {' '}
+                                    à {student.transfereVers.centre ?? '-'} :{' '}
+                                    <a href={`/backoffice/students/${student.transfereVers.id}`}>
+                                        <code>{student.transfereVers.reference}</code>
+                                    </a>
+                                </>
+                            )}
+                            .
+                        </p>
+                    </div>
+                </div>
+            )}
+            {student.transfereDepuis && (
+                <div className="alert alert-info d-flex align-items-start" role="alert">
+                    <i className="ti ti-arrows-exchange me-2 mt-1 fs-18" aria-hidden="true" />
+                    <div>
+                        <p className="fw-semibold mb-1">Fiche issue d'un transfert</p>
+                        <p className="mb-0 fs-13">
+                            Ses anciens dossiers et son historique de présences à{' '}
+                            {student.transfereDepuis.centre ?? '-'} sont repris plus bas, section « Historique ». Fiche
+                            d'origine :{' '}
+                            <a href={`/backoffice/students/${student.transfereDepuis.id}`}>
+                                <code>{student.transfereDepuis.reference}</code>
+                            </a>
+                            .
+                        </p>
+                    </div>
+                </div>
+            )}
+
             <div className="row">
                 <div className="col-xl-4">
                     <Card>
@@ -123,7 +174,7 @@ export default function StudentShow({ student }: StudentShowProps) {
                     {student.inscriptionsParAnnee.map((groupe) => (
                         <Card
                             key={groupe.annee ?? 'sans-annee'}
-                            title={`Inscriptions — ${groupe.annee ?? 'Sans année scolaire'}`}
+                            title={`Inscriptions - ${groupe.annee ?? 'Sans année scolaire'}`}
                             tools={<span className="badge badge-soft-secondary">{groupe.inscriptions.length}</span>}
                         >
                             <RelatedRecordsTable
@@ -145,9 +196,9 @@ export default function StudentShow({ student }: StudentShowProps) {
                                         <td>
                                             <code>{insc.reference}</code>
                                         </td>
-                                        <td>{insc.groupe ?? '—'}</td>
-                                        <td>{insc.date ?? '—'}</td>
-                                        <td>{insc.total ? `${Number(insc.total).toFixed(2)} MAD` : '—'}</td>
+                                        <td>{insc.groupe ?? '-'}</td>
+                                        <td>{insc.date ?? '-'}</td>
+                                        <td>{insc.total ? `${Number(insc.total).toFixed(2)} MAD` : '-'}</td>
                                         <td>
                                             <StatusBadge label={insc.statut} />
                                         </td>
@@ -157,10 +208,100 @@ export default function StudentShow({ student }: StudentShowProps) {
                         </Card>
                     ))}
 
+                    {student.historiqueTransfert.map((h) => (
+                        <Card
+                            key={h.id}
+                            title={`Historique - ${h.centre ?? 'centre précédent'}`}
+                            tools={
+                                <span className="badge badge-soft-secondary">
+                                    <i className="ti ti-arrows-exchange me-1" />
+                                    Fiche d'origine <code className="ms-1">{h.reference}</code>
+                                </span>
+                            }
+                        >
+                            <p className="text-muted fs-13 mb-3">
+                                Données conservées dans le centre de départ au moment du transfert : dossiers et
+                                appels de présence. Consultation seule.
+                            </p>
+
+                            <div className="d-flex flex-wrap gap-2 mb-3">
+                                <span className="badge badge-soft-dark fs-13">{h.presencesTotal} appel(s)</span>
+                                {Object.entries(h.compteurs).map(([statut, n]) => (
+                                    <span key={statut} className={`badge badge-soft-${presenceVariant(statut)} fs-13`}>
+                                        {statut} : {n}
+                                    </span>
+                                ))}
+                            </div>
+
+                            <h6 className="mb-2">Dossiers</h6>
+                            <RelatedRecordsTable
+                                isEmpty={h.inscriptions.length === 0}
+                                emptyTitle="Aucun dossier dans ce centre"
+                                emptyIcon="ti ti-clipboard-list"
+                                head={
+                                    <tr>
+                                        <th>Référence</th>
+                                        <th>Groupe</th>
+                                        <th>Année</th>
+                                        <th>Période</th>
+                                        <th>Statut</th>
+                                    </tr>
+                                }
+                            >
+                                {h.inscriptions.map((insc) => (
+                                    <tr key={insc.reference}>
+                                        <td>
+                                            <code>{insc.reference}</code>
+                                        </td>
+                                        <td>{insc.groupe ?? '-'}</td>
+                                        <td>{insc.anneeScolaire ?? '-'}</td>
+                                        <td>
+                                            {insc.dateDebut ?? '-'}
+                                            {insc.dateFin ? ` → ${insc.dateFin}` : ''}
+                                        </td>
+                                        <td>
+                                            <StatusBadge label={insc.statut} variant={statutVariant(insc.statut)} />
+                                        </td>
+                                    </tr>
+                                ))}
+                            </RelatedRecordsTable>
+
+                            <h6 className="mt-4 mb-2">Présences et absences</h6>
+                            <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+                                <RelatedRecordsTable
+                                    isEmpty={h.presences.length === 0}
+                                    emptyTitle="Aucun appel enregistré dans ce centre"
+                                    emptyIcon="ti ti-calendar-check"
+                                    head={
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Heure</th>
+                                            <th>Groupe</th>
+                                            <th>Statut</th>
+                                            <th>Note</th>
+                                        </tr>
+                                    }
+                                >
+                                    {h.presences.map((p) => (
+                                        <tr key={p.id}>
+                                            <td>{p.date}</td>
+                                            <td>{p.heure ?? '-'}</td>
+                                            <td>{p.groupe ?? '-'}</td>
+                                            <td>
+                                                <StatusBadge label={p.statut} variant={presenceVariant(p.statut)} dot />
+                                            </td>
+                                            <td className="text-normal-case">{p.note ?? '-'}</td>
+                                        </tr>
+                                    ))}
+                                </RelatedRecordsTable>
+                            </div>
+                        </Card>
+                    ))}
+
                     <Card
                         title={
                             student.paiementsScope
-                                ? `Paiements — inscription ${student.paiementsScope.toLowerCase()}`
+                                ? `Paiements - inscription ${student.paiementsScope.toLowerCase()}`
                                 : 'Paiements'
                         }
                         tools={
@@ -190,8 +331,8 @@ export default function StudentShow({ student }: StudentShowProps) {
                                     </td>
                                     <td className="fw-medium">{Number(payment.montant).toFixed(2)} MAD</td>
                                     <td>{payment.methode}</td>
-                                    <td>{payment.date ?? '—'}</td>
-                                    <td>{payment.caisse ?? '—'}</td>
+                                    <td>{payment.date ?? '-'}</td>
+                                    <td>{payment.caisse ?? '-'}</td>
                                 </tr>
                             ))}
                         </RelatedRecordsTable>

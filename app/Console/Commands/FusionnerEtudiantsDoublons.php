@@ -78,9 +78,9 @@ final class FusionnerEtudiantsDoublons extends Command
         foreach ($paires as [$garde, $doublons]) {
             $this->line('');
             $this->info(sprintf(
-                '%s %s — garder #%d (%s), fusionner %s',
-                $garde->prenom, $garde->nom, $garde->id, $garde->legacy_ref ?? '—',
-                $doublons->map(fn (Student $s): string => '#'.$s->id.' ('.($s->legacy_ref ?? '—').')')->implode(', ')
+                '%s %s - garder #%d (%s), fusionner %s',
+                $garde->prenom, $garde->nom, $garde->id, $garde->legacy_ref ?? '-',
+                $doublons->map(fn (Student $s): string => '#'.$s->id.' ('.($s->legacy_ref ?? '-').')')->implode(', ')
             ));
 
             foreach ($doublons as $doublon) {
@@ -164,7 +164,7 @@ final class FusionnerEtudiantsDoublons extends Command
         }
 
         if ($fiches->pluck('etablissement_id')->unique()->count() > 1) {
-            $this->error('Les fiches ne sont pas dans le même centre — fusion refusée.');
+            $this->error('Les fiches ne sont pas dans le même centre - fusion refusée.');
 
             return [];
         }

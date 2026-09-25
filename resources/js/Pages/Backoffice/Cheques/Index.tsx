@@ -69,7 +69,7 @@ function rejectedChequeNote(cheque: ChequeRow): string {
     parts.push(`montant du chèque : ${cheque.montant} DH`);
     parts.push(`réf. chèque : ${cheque.reference}`);
 
-    return `${parts.join(' — ')}.`;
+    return `${parts.join(' - ')}.`;
 }
 
 /**
@@ -152,7 +152,7 @@ export default function ChequesIndex({
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.nom }));
     const parentOptions: SelectOption[] = parents.map((p) => ({
         value: p.parentNom,
-        label: `${p.parentNom}${p.parentRelation ? ` (${p.parentRelation})` : ''} — ${p.studentNom}`,
+        label: `${p.parentNom}${p.parentRelation ? ` (${p.parentRelation})` : ''} - ${p.studentNom}`,
     }));
 
     function reload(nextFilters: Partial<typeof filters>) {
@@ -498,7 +498,7 @@ export default function ChequesIndex({
                     Montant total : {Number(montantTotal).toFixed(2)} MAD
                     {filters.statutFilter !== 'Restitué' && (
                         <span className="text-muted fw-normal fs-13 ms-2 text-normal-case">
-                            (chèques en main — hors restitués)
+                            (chèques en main - hors restitués)
                         </span>
                     )}
                 </p>
@@ -529,7 +529,7 @@ export default function ChequesIndex({
                                     <td>
                                         <code>{cheque.numeroCheque}</code>
                                     </td>
-                                    <td className="fw-medium">{cheque.proprietaire ?? '—'}</td>
+                                    <td className="fw-medium">{cheque.proprietaire ?? '-'}</td>
                                     <td>
                                         {cheque.telephone ? (
                                             <a href={`tel:${cheque.telephone}`} className="d-inline-flex align-items-center">
@@ -537,14 +537,14 @@ export default function ChequesIndex({
                                                 {cheque.telephone}
                                             </a>
                                         ) : (
-                                            '—'
+                                            '-'
                                         )}
                                     </td>
                                     <td>{Number(cheque.montant).toFixed(2)} DH</td>
                                     <td className="fw-medium">{Number(cheque.reste).toFixed(2)} DH</td>
-                                    <td>{cheque.banque ?? '—'}</td>
+                                    <td>{cheque.banque ?? '-'}</td>
                                     <td>{typeLabel(cheque.type)}</td>
-                                    <td>{cheque.dateEcheance ?? '—'}</td>
+                                    <td>{cheque.dateEcheance ?? '-'}</td>
                                     <td>
                                         <div className="d-flex align-items-center gap-2">
                                             {/* ⚠ `statutAffiche`, pas `statut` : un chèque de
@@ -824,8 +824,8 @@ export default function ChequesIndex({
                 title="Restituer le chèque de garantie"
                 recordLabel={
                     garantieTarget
-                        ? `${garantieTarget.numeroCheque} — ${Number(garantieTarget.montant).toFixed(2)} MAD`
-                          + (garantieTarget.proprietaire ? ` — ${garantieTarget.proprietaire}` : '')
+                        ? `${garantieTarget.numeroCheque} - ${Number(garantieTarget.montant).toFixed(2)} MAD`
+                          + (garantieTarget.proprietaire ? ` - ${garantieTarget.proprietaire}` : '')
                         : ''
                 }
                 message={
@@ -874,7 +874,7 @@ export default function ChequesIndex({
             >
                 {rejectedCheque && rejectedCheque.encaissements.length === 0 && (
                     <p className="mb-0">
-                        Ce chèque n'est lié à aucun encaissement — aucun remboursement n'est nécessaire.
+                        Ce chèque n'est lié à aucun encaissement - aucun remboursement n'est nécessaire.
                     </p>
                 )}
                 {rejectedCheque && rejectedCheque.encaissements.length === 1 && (
@@ -888,7 +888,7 @@ export default function ChequesIndex({
                 {rejectedCheque && rejectedCheque.encaissements.length > 1 && (
                     <p className="mb-0">
                         Ce chèque a été utilisé pour payer {rejectedCheque.encaissements.length} encaissements
-                        différents. Un remboursement est essentiel pour chacun — enregistrez-les un par un depuis
+                        différents. Un remboursement est essentiel pour chacun - enregistrez-les un par un depuis
                         l'onglet Remboursements.
                     </p>
                 )}
@@ -913,19 +913,19 @@ export default function ChequesIndex({
                         <div>
                             <div className="text-muted small mb-1">Chèque</div>
                             <div className="fw-medium">
-                                <code>{detailsCheque.numeroCheque}</code> — {detailsCheque.proprietaire ?? '—'}
+                                <code>{detailsCheque.numeroCheque}</code> - {detailsCheque.proprietaire ?? '-'}
                             </div>
                         </div>
                         <div>
                             <div className="text-muted small mb-1">Reçu par</div>
-                            <div className="fw-medium">{detailsCheque.agentNom ?? '—'}</div>
+                            <div className="fw-medium">{detailsCheque.agentNom ?? '-'}</div>
                         </div>
                         <div>
                             <div className="text-muted small mb-1">Restitué au propriétaire</div>
                             {detailsCheque.retourneLe ? (
                                 <div className="fw-medium">
                                     <i className="ti ti-circle-check text-success me-1" />
-                                    Par {detailsCheque.retourneParNom ?? '—'} le {detailsCheque.retourneLe}
+                                    Par {detailsCheque.retourneParNom ?? '-'} le {detailsCheque.retourneLe}
                                 </div>
                             ) : (
                                 <div className="text-muted">

@@ -55,7 +55,7 @@ final class ModifierGroupeInscription
 
         if ($inscription->group?->statut !== Group::STATUT_EN_INSCRIPTION) {
             throw ValidationException::withMessages([
-                'new_group_id' => __('The current group has already started — use "Changement de groupe" instead.'),
+                'new_group_id' => __('The current group has already started - use "Changement de groupe" instead.'),
             ]);
         }
 

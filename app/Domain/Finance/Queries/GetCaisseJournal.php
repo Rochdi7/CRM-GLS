@@ -555,7 +555,7 @@ final class GetCaisseJournal
                     ->map(fn ($t) => [
                         'type' => self::TYPE_TRANSFERT,
                         'reference' => $t->reference,
-                        'libelle' => ($t->caisseSource?->nom ?? '—').' → '.($t->caisseDestination?->nom ?? '—'),
+                        'libelle' => ($t->caisseSource?->nom ?? '-').' → '.($t->caisseDestination?->nom ?? '-'),
                         'tiers' => $t->statut,
                         'montant' => (float) $t->montant,
                         'sens' => in_array($t->caisse_source_id, $ids, true) ? -1 : 1,

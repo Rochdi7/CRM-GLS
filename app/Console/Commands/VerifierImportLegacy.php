@@ -142,9 +142,9 @@ final class VerifierImportLegacy extends Command
         $this->line(sprintf(
             '  %-11s %-14s %7d %14s %7d %14s %8s',
             mb_substr(str_replace('GLS ', '', $centre), 0, 11), $fichier, $lignes,
-            $montant === null ? '—' : number_format($montant, 0, '.', ' '),
+            $montant === null ? '-' : number_format($montant, 0, '.', ' '),
             $base,
-            $montantBase === null ? '—' : number_format($montantBase, 0, '.', ' '),
+            $montantBase === null ? '-' : number_format($montantBase, 0, '.', ' '),
             $manque === 0 ? 'ok' : (string) $manque
         ));
     }

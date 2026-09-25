@@ -466,7 +466,7 @@ final class GetActivityLogList
             return match (true) {
                 $student === null => $reference,
                 $reference === null => $student,
-                default => $reference.' — '.$student,
+                default => $reference.' - '.$student,
             };
         }
 
@@ -476,7 +476,7 @@ final class GetActivityLogList
             if (is_string($value) && $value !== '') {
                 $student = $this->recordedStudentName($a);
 
-                return $student === null ? $value : $value.' — '.$student;
+                return $student === null ? $value : $value.' - '.$student;
             }
         }
 

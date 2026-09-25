@@ -34,7 +34,7 @@ const SELECTABLE_STATUSES = ['NOUVEAU', 'CONFLIT'];
  */
 function seanceBadge(row: ImportRow) {
     if (!SELECTABLE_STATUSES.includes(row.status)) {
-        return <span className="text-muted">—</span>;
+        return <span className="text-muted">-</span>;
     }
 
     return row.resolution?.existing_seance_id ? (
@@ -129,14 +129,14 @@ export default function PresenceImportPreview({
 
     return (
         <BackofficeLayout
-            title="Aperçu de l'import — Présences & séances"
+            title="Aperçu de l'import - Présences & séances"
             breadcrumbs={[
                 { label: 'Tableau de bord', href: '/backoffice/dashboard' },
                 { label: 'Import de données', href: '/backoffice/import' },
                 { label: 'Aperçu' },
             ]}
         >
-            <Card title={`${batch.original_filename} — ${batch.etablissement?.nom_centre ?? ''} / ${batch.annee_scolaire?.nom ?? ''}`}>
+            <Card title={`${batch.original_filename} - ${batch.etablissement?.nom_centre ?? ''} / ${batch.annee_scolaire?.nom ?? ''}`}>
                 <div className="d-flex gap-2 mb-3 flex-wrap">
                     <button
                         type="button"
@@ -198,11 +198,11 @@ export default function PresenceImportPreview({
                             <td>{row.source_row_number}</td>
                             <td>{String(row.raw.eleve ?? '')}</td>
                             <td>{String(row.raw.groupe ?? '')}</td>
-                            <td>{String(row.raw.date_seance ?? '—')}</td>
-                            <td>{String(row.raw.horaire ?? '—')}</td>
+                            <td>{String(row.raw.date_seance ?? '-')}</td>
+                            <td>{String(row.raw.horaire ?? '-')}</td>
                             <td>{seanceBadge(row)}</td>
-                            <td>{String(row.raw.statut ?? '—')}</td>
-                            <td>{String(row.raw.enseignant ?? '—')}</td>
+                            <td>{String(row.raw.statut ?? '-')}</td>
+                            <td>{String(row.raw.enseignant ?? '-')}</td>
                             <td>
                                 <ImportRowStatusBadge status={row.status} />
                             </td>
@@ -238,7 +238,7 @@ export default function PresenceImportPreview({
                         {conflictRowIds.length > 0 && (
                             <>
                                 {' '}
-                                — {conflictRowIds.length - includedConflicts.size} conflit(s) exclu(s), à résoudre avant insertion
+                                - {conflictRowIds.length - includedConflicts.size} conflit(s) exclu(s), à résoudre avant insertion
                             </>
                         )}
                     </span>

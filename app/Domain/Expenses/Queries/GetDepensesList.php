@@ -144,6 +144,7 @@ final class GetDepensesList
             ->with([
                 'typeDepense', 'agent', 'approvedBy',
                 'caisse.etablissement', 'group.etablissement', 'etablissement',
+                'enseignant',
             ])
             ->withCount('media')
             ->latest()
@@ -174,6 +175,9 @@ final class GetDepensesList
             'etablissement' => self::centreNom($d),
             'groupId' => $d->group_id,
             'groupNom' => $d->group?->nom,
+            // « Paiement prof » only — the teacher PAID, frozen on the row
+            // at creation (`depenses.enseignant_id`), never re-derived.
+            'enseignant' => $d->enseignant?->nomComplet(),
             'montant' => number_format((float) $d->montant, 2, '.', ''),
             'methodePaiement' => $d->methode_paiement,
             'dateDepense' => $d->date_depense?->toDateString(),
@@ -288,7 +292,7 @@ final class GetDepensesList
             ->map(fn (Group $g): array => [
                 'id' => $g->id,
                 'nom' => $g->anneeScolaire !== null
-                    ? $g->nom.' — '.$g->anneeScolaire->nom
+                    ? $g->nom.' - '.$g->anneeScolaire->nom
                     : $g->nom,
             ]);
     }

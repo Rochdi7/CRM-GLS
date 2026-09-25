@@ -236,7 +236,7 @@ final class TransfererFraisVersAutreEtudiant
                     'etablissement_id' => $inscriptionSource->etablissement_id,
                 ])
                 ->log(sprintf(
-                    'Frais transféré : encaissement %s (%s MAD) déplacé de %s (%s) vers %s (%s) — motif : %s',
+                    'Frais transféré : encaissement %s (%s MAD) déplacé de %s (%s) vers %s (%s) - motif : %s',
                     $row->reference,
                     number_format((float) $row->montant, 2, '.', ' '),
                     $inscriptionSource->student?->nomComplet() ?? '?',

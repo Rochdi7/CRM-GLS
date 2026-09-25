@@ -134,8 +134,8 @@ export default function GlobalePanel({ data, filters, onFilter, onReset, resetAc
                                 <td>
                                     <a href={row.showUrl}>{row.nom}</a>
                                 </td>
-                                {!centerLocked && <td>{row.centre ?? '—'}</td>}
-                                <td>{row.responsable ?? '—'}</td>
+                                {!centerLocked && <td>{row.centre ?? '-'}</td>}
+                                <td>{row.responsable ?? '-'}</td>
                                 <td className="text-end fw-medium">{Number(row.solde).toFixed(2)} DH</td>
                             </tr>
                         ))}

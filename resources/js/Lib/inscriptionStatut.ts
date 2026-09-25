@@ -1,6 +1,6 @@
 /**
  * Inscription statut → Bootstrap colour variant (Inscription::STATUTS:
- * Active / Annulée / Changement / Expirée / Archivée).
+ * Active / Annulée / Changement / Transférée / Expirée / Archivée).
  *
  * ⚠ THE SINGLE DEFINITION — shared by the Inscriptions list badges and the
  * « Appliquer l'avance » dropdown (17/09/2026). A second copy would let one
@@ -8,12 +8,15 @@
  * colour is precisely what tells the cashier which dossier they are about to
  * put money on.
  */
-export type StatutVariant = 'success' | 'danger' | 'warning' | 'secondary';
+export type StatutVariant = 'success' | 'danger' | 'warning' | 'secondary' | 'info';
 
 export function statutVariant(statut: string): StatutVariant {
     if (statut === 'Active') return 'success';
     if (statut === 'Annulée') return 'danger';
     if (statut === 'Changement') return 'warning';
+    // Dossier clos par un transfert de l'étudiant vers un autre centre
+    // (Inscription::STATUT_TRANSFEREE, 25/09/2026).
+    if (statut === 'Transférée') return 'info';
 
     return 'secondary';
 }

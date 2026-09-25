@@ -121,7 +121,7 @@ final class AbsenceParGroupeTest extends TestCase
         Presence::create(['seance_id' => $s1->id, 'student_id' => $bob->id, 'statut' => Presence::STATUT_RETARD]);
 
         $this->actingAs($this->userWith('attendance.view'))
-            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $this->group->id]))
+            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $this->group->id, 'dateFrom' => '', 'dateTo' => '']))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Backoffice/Seances/AbsenceParGroupe')
@@ -165,7 +165,7 @@ final class AbsenceParGroupeTest extends TestCase
         Presence::create(['seance_id' => $pointee->id, 'student_id' => $alice->id, 'statut' => Presence::STATUT_PRESENT]);
 
         $this->actingAs($this->userWith('attendance.view'))
-            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $this->group->id]))
+            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $this->group->id, 'dateFrom' => '', 'dateTo' => '']))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->count('matrice.seances', 2)
@@ -192,7 +192,7 @@ final class AbsenceParGroupeTest extends TestCase
         $this->makeSeance('2026-03-02');
 
         $this->actingAs($this->userWith('attendance.view'))
-            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $this->group->id]))
+            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $this->group->id, 'dateFrom' => '', 'dateTo' => '']))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->count('matrice.students', 4)
@@ -235,6 +235,8 @@ final class AbsenceParGroupeTest extends TestCase
             ->get(route('backoffice.seances.absence-par-groupe', [
                 'groupFilter' => $this->group->id,
                 'statutFilter' => Seance::STATUT_ANNULEE,
+                'dateFrom' => '',
+                'dateTo' => '',
             ]))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
@@ -257,7 +259,7 @@ final class AbsenceParGroupeTest extends TestCase
         $this->makeSeance('2026-03-02');
 
         $this->actingAs($this->userWith('attendance.view'))
-            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $this->group->id]))
+            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $this->group->id, 'dateFrom' => '', 'dateTo' => '']))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->count('matrice.students', 2)
@@ -289,7 +291,7 @@ final class AbsenceParGroupeTest extends TestCase
         // Active context is the default year (2025/2026) — the other year's
         // séances must not leak into the matrix.
         $this->actingAs($this->userWith('attendance.view'))
-            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $groupAutre->id]))
+            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $groupAutre->id, 'dateFrom' => '', 'dateTo' => '']))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page->count('matrice.seances', 0));
     }
@@ -349,7 +351,7 @@ final class AbsenceParGroupeTest extends TestCase
         ]);
 
         $this->actingAs($this->userWith('attendance.view'))
-            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $this->group->id]))
+            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $this->group->id, 'dateFrom' => '', 'dateTo' => '']))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->count('matrice.seances', 1)
@@ -379,5 +381,58 @@ final class AbsenceParGroupeTest extends TestCase
         $this->actingAs($this->userWith('attendance.view'))
             ->get(route('backoffice.seances.absence-par-groupe.export'))
             ->assertSessionHasErrors('groupFilter');
+    }
+
+    /**
+     * Fenêtre par défaut (24/09/2026) : un groupe choisi SANS clé de date
+     * s'ouvre sur les 22 dernières séances → aujourd'hui, pas sur l'année
+     * entière (189 colonnes illisibles). Une annulée ne compte pas, une séance
+     * future non plus.
+     */
+    public function test_choosing_a_group_opens_on_the_last_22_seances_up_to_today(): void
+    {
+        for ($i = 0; $i < 30; $i++) {
+            $this->makeSeance(now()->subDays($i)->toDateString());
+        }
+        $this->makeSeance(now()->subDays(3)->toDateString(), Seance::STATUT_ANNULEE);
+        $this->makeSeance(now()->addDays(2)->toDateString(), Seance::STATUT_PREVUE);
+
+        $this->actingAs($this->userWith('attendance.view'))
+            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $this->group->id]))
+            ->assertRedirect(route('backoffice.seances.absence-par-groupe', [
+                'groupFilter' => $this->group->id,
+                'dateFrom' => now()->subDays(21)->toDateString(),
+                'dateTo' => now()->toDateString(),
+                'statutFilter' => '',
+            ]));
+    }
+
+    public function test_a_group_with_fewer_seances_opens_on_all_of_them(): void
+    {
+        $this->makeSeance(now()->subDays(10)->toDateString());
+        $this->makeSeance(now()->subDays(2)->toDateString());
+
+        $this->actingAs($this->userWith('attendance.view'))
+            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $this->group->id]))
+            ->assertRedirect(route('backoffice.seances.absence-par-groupe', [
+                'groupFilter' => $this->group->id,
+                'dateFrom' => now()->subDays(10)->toDateString(),
+                'dateTo' => now()->toDateString(),
+                'statutFilter' => '',
+            ]));
+    }
+
+    public function test_dates_the_user_cleared_stay_cleared(): void
+    {
+        // Clés présentes mais vides = effacées par l'utilisateur : aucune
+        // fenêtre réinjectée, la matrice couvre toute l'année.
+        for ($i = 0; $i < 30; $i++) {
+            $this->makeSeance(now()->subDays($i)->toDateString());
+        }
+
+        $this->actingAs($this->userWith('attendance.view'))
+            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $this->group->id, 'dateFrom' => '', 'dateTo' => '']))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('matrice.seances', 30));
     }
 }

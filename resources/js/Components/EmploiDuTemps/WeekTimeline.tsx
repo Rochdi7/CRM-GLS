@@ -42,8 +42,8 @@ function todayJour(): number {
 
 function closTitle(row: CreneauRow): string {
     return row.motifCloture === 'termine'
-        ? `Fin de formation${row.dateFin ? ` le ${row.dateFin}` : ''} — ce créneau ne génère plus de séance, c'est normal.`
-        : `Enseignant remplacé${row.dateFin ? ` le ${row.dateFin}` : ''} — l'emploi du temps du prof sortant a été séparé pour la paie. Le nouvel enseignant a ses propres créneaux.`;
+        ? `Fin de formation${row.dateFin ? ` le ${row.dateFin}` : ''} - ce créneau ne génère plus de séance, c'est normal.`
+        : `Enseignant remplacé${row.dateFin ? ` le ${row.dateFin}` : ''} - l'emploi du temps du prof sortant a été séparé pour la paie. Le nouvel enseignant a ses propres créneaux.`;
 }
 
 /**
@@ -412,7 +412,7 @@ export default function WeekTimeline({ creneaux, jours, jourFilter, canUpdate, c
                                         key={`${stack.start}-${stack.end}`}
                                         className="gls-tl-stack"
                                         style={{ ...box, minHeight: height }}
-                                        aria-label={`${timeLabel} — ${t(':count groups at the same time', { count: String(stack.rows.length) })}`}
+                                        aria-label={`${timeLabel} - ${t(':count groups at the same time', { count: String(stack.rows.length) })}`}
                                     >
                                         <header className="gls-tl-stack-head">
                                             <span className="gls-tl-stack-time">

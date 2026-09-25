@@ -167,8 +167,13 @@ export interface AnnualFraisSummary {
 }
 
 export interface DashboardPageProps {
+    /**
+     * Portée enseignant (PorteeEnseignant) — the server serves header labels
+     * only in `stats`, and no charts: the page draws the teacher's own space.
+     */
+    porteeEnseignant: boolean;
     stats: DashboardStats;
-    annualFrais: AnnualFraisSummary;
+    annualFrais: AnnualFraisSummary | null;
     /** The année scolaire the chart window covers (top-bar switcher), e.g. "2025/2026". */
     annualFraisPeriode: string;
     seancesCalendar: SeancesCalendarData;
@@ -340,6 +345,11 @@ export interface StudentDetails {
     email: string | null;
     adresse: string | null;
     centre: string | null;
+    statut: string;
+    transfereVers: StudentTransferLink | null;
+    transfereDepuis: StudentTransferLink | null;
+    /** Fiches d'origine (centres précédents), la plus récente d'abord — lecture seule. */
+    historiqueTransfert: StudentHistoriqueCentre[];
     photoUrl: string | null;
     parent: {
         relation: string | null;
@@ -1288,6 +1298,37 @@ export interface StudentRow {
     note: string | null;
     photoUrl: string | null;
     photoThumbUrl: string | null;
+    /** Statut de la fiche dans son centre : 'Actif' | 'Transféré' (Student::STATUTS). */
+    statut: string;
+    /** Fiche « Transféré » : la copie Active dans le centre d'arrivée. */
+    transfereVers: StudentTransferLink | null;
+    /** Copie créée par un transfert : la fiche d'origine (présences, historique). */
+    transfereDepuis: StudentTransferLink | null;
+}
+
+/** Historique d'un centre précédent, affiché sur la fiche d'arrivée (GetStudentDetails::historiqueTransfert). */
+export interface StudentHistoriqueCentre {
+    id: number;
+    reference: string;
+    centre: string | null;
+    inscriptions: Array<{
+        reference: string;
+        groupe: string | null;
+        anneeScolaire: string | null;
+        dateDebut: string | null;
+        dateFin: string | null;
+        statut: string;
+    }>;
+    presencesTotal: number;
+    compteurs: Record<string, number>;
+    presences: Array<{ id: number; date: string; heure: string | null; groupe: string | null; statut: string; note: string | null }>;
+}
+
+/** L'autre fiche d'un transfert entre centres (25/09/2026). */
+export interface StudentTransferLink {
+    id: number;
+    reference: string;
+    centre: string | null;
 }
 
 export interface StudentsFilters {
@@ -1320,7 +1361,59 @@ export interface StudentsPageProps {
     etablissements: Array<{ id: number; nom_centre: string }>;
     centerLocked: boolean;
     contextCenterId: number | null;
+    /** Cibles d'un transfert d'étudiant — tout le réseau (closure, chargée avec la page). */
+    transferCentres: Array<{ id: number; nomCentre: string }>;
+    /** UI only (§5). `view` = may open the student's detail page ; `transfer` = may request a centre transfer. */
+    permissions: CrudPermissions & { view: boolean; transfer: boolean };
     [key: string]: unknown;
+}
+
+// --- Transferts d'étudiants entre centres (25/09/2026) --------------------
+
+/** One row of the student-transfers list — mirrors GetStudentTransfersList's ->through() mapping. */
+export interface StudentTransferRow {
+    id: number;
+    reference: string;
+    statut: string;
+    student: { id: number; reference: string | null; nomComplet: string };
+    nouveauStudent: { id: number; reference: string } | null;
+    nouvelleInscription: { id: number; reference: string } | null;
+    centreSource: string | null;
+    centreCible: string | null;
+    groupeCible: { id: number; nom: string; niveau: string | null } | null;
+    motif: string;
+    motifDecision: string | null;
+    montantTransfere: string | null;
+    demandePar: string | null;
+    demandeLe: string | null;
+    decidePar: string | null;
+    decideLe: string | null;
+    canDecide: boolean;
+    canCancel: boolean;
+}
+
+export interface StudentTransfersFilters {
+    search: string;
+    statutFilter: string;
+    perPage: number;
+}
+
+export interface StudentTransfersPageProps {
+    transfers: PaginatedData<StudentTransferRow>;
+    filters: StudentTransfersFilters;
+    perPageOptions: number[];
+    statuts: string[];
+    permissions: { validate: boolean };
+    [key: string]: unknown;
+}
+
+/** Un groupe ouvert du centre cible, servi par student-transfers.groupes-cibles. */
+export interface GroupeCibleTransfert {
+    id: number;
+    nom: string;
+    niveau: string | null;
+    statut: string;
+    annee: string | null;
 }
 
 // --- Phase 8: Groups (Inertia/React list + modal CRUD with fee lines) ------
@@ -1346,10 +1439,21 @@ export interface GroupDeletionImpact {
     seances: number;
 }
 
+/** One open créneau of a group, as the teacher's card view lists it. */
+export interface GroupCreneauResume {
+    jour: string;
+    heureDebut: string;
+    heureFin: string;
+    salle: string | null;
+}
+
 export interface GroupRow {
     id: number;
     nom: string;
     niveau: string;
+    /** Portée enseignant only (PorteeEnseignant) — null/[] for everyone else. */
+    salle?: string | null;
+    emploiDuTemps?: GroupCreneauResume[];
     enseignant: string | null;
     enseignantId: number | null;
     dateDebutFormation: string | null;
@@ -1492,6 +1596,47 @@ export interface GroupFormOption {
 export interface GroupFraisCatalogOption extends GroupFormOption {
     montantDefaut: string;
     moisEcheance: number | null;
+}
+
+/** « Mes séances » — the teacher's card view of SeanceController@index. */
+export interface MesSeancesPageProps {
+    seances: PaginatedData<SeanceRow>;
+    filters: { search: string; groupFilter: string; statutFilter: string; enseignantFilter: string; dateFrom: string; dateTo: string };
+    groupOptions: SelectOption[];
+    statuts: string[];
+    today: string;
+    [key: string]: unknown;
+}
+
+/** A student row as a teacher receives it (reduced — GetStudentsList, portée enseignant). */
+export interface MonEtudiantRow {
+    id: number;
+    reference: string;
+    nomComplet: string;
+    prenom: string;
+    sexe: string | null;
+    age: number | null;
+    niveau: string | null;
+    telephone: string | null;
+    whatsapp: string | null;
+    photoThumbUrl: string | null;
+    groupes: Array<{ id: number; nom: string | null; niveau: string | null }>;
+}
+
+/** « Mes étudiants » — the teacher's card view of StudentController@index. */
+export interface MesEtudiantsPageProps {
+    students: PaginatedData<MonEtudiantRow>;
+    filters: { search: string; groupeFilter: string };
+    groupOptions: SelectOption[];
+    [key: string]: unknown;
+}
+
+/** « Mes groupes » — the teacher's read-only card view of GroupController@index. */
+export interface MesGroupesPageProps {
+    groups: PaginatedData<GroupRow>;
+    statutCounts: Record<string, number>;
+    filters: { search: string; statutFilter: string };
+    [key: string]: unknown;
 }
 
 export interface GroupsPageProps {
@@ -2221,6 +2366,8 @@ export interface DepenseRow {
     etablissement: string | null;
     groupId: number | null;
     groupNom: string | null;
+    /** « Paiement prof » only — the teacher paid, frozen on the row. */
+    enseignant: string | null;
     montant: MoneyDisplay;
     methodePaiement: string | null;
     dateDepense: string | null;
@@ -2592,6 +2739,11 @@ export interface PaiementProfPageProps {
     modes: PaiementProfMode[];
     paiementProfTypeId: number | null;
     canCreateDepense: boolean;
+    /**
+     * Les « Paiement prof » déjà enregistrés (GetDepensesList, portée
+     * paiement-prof) — `null` sans `expenses.view`.
+     */
+    paiementsProf: { data: PaginatedData<DepenseRow>; montantTotal: MoneyDisplay } | null;
     [key: string]: unknown;
 }
 

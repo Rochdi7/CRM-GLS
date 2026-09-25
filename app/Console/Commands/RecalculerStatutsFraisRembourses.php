@@ -54,7 +54,7 @@ final class RecalculerStatutsFraisRembourses extends Command
             }
 
             $this->line(sprintf(
-                '  fee #%d  %s — %s (%s) : %s → %s  (dû %s, payé net %s)',
+                '  fee #%d  %s - %s (%s) : %s → %s  (dû %s, payé net %s)',
                 $fee->id,
                 $fee->inscription?->reference ?? '?',
                 $fee->nom,

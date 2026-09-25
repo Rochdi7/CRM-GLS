@@ -6,6 +6,8 @@ namespace App\Domain\Groups\Queries;
 
 use App\Domain\Attendance\Support\DetecteurCreneauxDoubles;
 use App\Domain\Attendance\Support\DiagnostiquerEmploiDuTemps;
+use App\Domain\Groups\Support\PorteeEnseignant;
+use App\Models\Creneau;
 use App\Models\Frais;
 use App\Models\Group;
 use App\Models\Inscription;
@@ -66,8 +68,18 @@ final class GetGroupsList
             $sort = self::DEFAULT_SORT;
         }
 
+        // Portée enseignant : aucun montant ne quitte le serveur (les lignes
+        // de frais du modal d'édition portent les montants du groupe), et la
+        // vue en cartes affiche l'emploi du temps OUVERT de chaque groupe —
+        // chargé en lot, jamais une requête par carte (§ perf).
+        $sansFinance = PorteeEnseignant::estRestreint($user);
+
         $groups = Group::query()
             ->with(['enseignant', 'frais'])
+            ->when($sansFinance, fn ($q) => $q->with([
+                'salle:id,nom',
+                'creneaux' => fn ($c) => $c->whereNull('date_fin')->with('salle:id,nom')->orderBy('jour_semaine')->orderBy('heure_debut'),
+            ]))
             ->withCount([
                 'inscriptions',
                 'inscriptions as inscriptions_actives_count' => fn ($q) => $q->where('statut', Inscription::STATUT_ACTIVE),
@@ -84,6 +96,7 @@ final class GetGroupsList
             ])
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
+            ->tap(fn ($q) => PorteeEnseignant::scopeGroupes($q, $user))
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
             // The "Historique" tab groups both terminal statuses together
             // (Fin de formation + Annulée) — its tab key stays the single
@@ -142,7 +155,7 @@ final class GetGroupsList
             // Keyed by frais_id so the edit modal can prefill the fee-lines
             // table without a second request — same data Group::with('frais')
             // already gives the Livewire component's edit().
-            'fraisLignes' => $group->frais->mapWithKeys(fn ($fee): array => [
+            'fraisLignes' => $sansFinance ? [] : $group->frais->mapWithKeys(fn ($fee): array => [
                 $fee->id => [
                     'montant' => (string) $fee->pivot->montant,
                     'dateEcheance' => $fee->pivot->date_echeance ?: '',
@@ -155,7 +168,16 @@ final class GetGroupsList
             // masqués »). Derived, not stored: a fee is "removed" for this
             // group precisely when the active catalog offers it and
             // group_frais has no row for it.
-            'fraisRetires' => $catalogueActif
+            'salle' => $sansFinance ? $group->salle?->nom : null,
+            'emploiDuTemps' => $sansFinance
+                ? $group->creneaux->map(fn (Creneau $creneau): array => [
+                    'jour' => Creneau::JOURS[$creneau->jour_semaine] ?? '—',
+                    'heureDebut' => substr((string) $creneau->heure_debut, 0, 5),
+                    'heureFin' => substr((string) $creneau->heure_fin, 0, 5),
+                    'salle' => $creneau->salle?->nom,
+                ])->values()->all()
+                : [],
+            'fraisRetires' => $sansFinance ? [] : $catalogueActif
                 ->whereNotIn('id', $group->frais->pluck('id'))
                 ->map(fn (Frais $frais): array => ['id' => $frais->id, 'nom' => $frais->nom])
                 ->values()
@@ -178,6 +200,7 @@ final class GetGroupsList
         $perStatut = Group::query()
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
+            ->tap(fn ($q) => PorteeEnseignant::scopeGroupes($q, $user))
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
             ->selectRaw('statut, COUNT(*) as total')
             ->groupBy('statut')

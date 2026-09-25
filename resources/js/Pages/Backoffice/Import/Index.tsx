@@ -64,7 +64,7 @@ export default function ImportIndex({ recentBatches, centerLocked }: ImportIndex
                     <Card title="Étudiants + Inscriptions (recommandé)">
                         <p className="text-muted">
                             Les deux fichiers en une seule opération : les étudiants sont importés d&apos;abord, puis
-                            les inscriptions sont résolues contre eux — plus de conflits « étudiant introuvable »
+                            les inscriptions sont résolues contre eux - plus de conflits « étudiant introuvable »
                             entre deux imports séparés. Avec filtre par statut (Active / Annulée / Changement) pour
                             répartir l&apos;historique et les données courantes entre les années.
                         </p>
@@ -107,8 +107,8 @@ export default function ImportIndex({ recentBatches, centerLocked }: ImportIndex
                         <tr key={batch.id}>
                             <td>{MODULE_LABELS[batch.module]}</td>
                             <td>{batch.original_filename}</td>
-                            {!centerLocked && <td>{batch.etablissement?.nom_centre ?? '—'}</td>}
-                            <td>{batch.annee_scolaire?.nom ?? '—'}</td>
+                            {!centerLocked && <td>{batch.etablissement?.nom_centre ?? '-'}</td>}
+                            <td>{batch.annee_scolaire?.nom ?? '-'}</td>
                             <td>{statusLabel(batch.status)}</td>
                             <td>{batch.inserted_rows}</td>
                             <td>{batch.error_rows}</td>

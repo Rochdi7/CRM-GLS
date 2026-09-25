@@ -114,7 +114,11 @@ final class CenterAccessTest extends TestCase
     {
         $teacher = $this->userInCenterA('teacher');
 
-        $group = Group::factory()->create(['etablissement_id' => $this->centerA->id]);
+        // Portee enseignant (24/09/2026) : il voit SON groupe.
+        $group = Group::factory()->create([
+            'etablissement_id' => $this->centerA->id,
+            'enseignant_id' => $teacher->employee->id,
+        ]);
         $caisse = Caisse::factory()->create(['etablissement_id' => $this->centerA->id]);
 
         $this->assertTrue($teacher->can('view', $group));

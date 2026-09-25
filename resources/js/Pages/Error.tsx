@@ -43,7 +43,7 @@ function copyFor(status: number): Copy {
                 title: t('Page not found'),
                 heading: t('This page does not exist'),
                 message: t('The address is incorrect, or the record you are looking for has been moved or deleted.'),
-                reassurance: t('The application is working normally — only this address is invalid.'),
+                reassurance: t('The application is working normally - only this address is invalid.'),
                 icon: 'ti-file-off',
                 tone: 'info',
             };
@@ -70,7 +70,7 @@ function copyFor(status: number): Copy {
                 title: t('Action failed'),
                 heading: t('This action could not be completed'),
                 message: t('An unexpected error interrupted this operation. Nothing was saved: the action was cancelled in full.'),
-                reassurance: t('The application is still running — only this action failed. You can go back and continue working.'),
+                reassurance: t('The application is still running - only this action failed. You can go back and continue working.'),
                 icon: 'ti-alert-triangle',
                 tone: 'danger',
             };

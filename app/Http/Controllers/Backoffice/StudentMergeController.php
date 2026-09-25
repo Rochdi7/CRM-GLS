@@ -111,7 +111,7 @@ final class StudentMergeController extends Controller
         return redirect()
             ->route('backoffice.students.merge.index', ['etudiant_id' => $encaissement->student_id])
             ->with('success', $cible === null
-                ? __('Payment detached — it is an advance again.')
+                ? __('Payment detached - it is an advance again.')
                 : __('Payment moved.'));
     }
 }

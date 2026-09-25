@@ -112,14 +112,14 @@ export default function StudentImportPreview({
 
     return (
         <BackofficeLayout
-            title="Aperçu de l'import — Étudiants"
+            title="Aperçu de l'import - Étudiants"
             breadcrumbs={[
                 { label: 'Tableau de bord', href: '/backoffice/dashboard' },
                 { label: 'Import de données', href: '/backoffice/import' },
                 { label: 'Aperçu' },
             ]}
         >
-            <Card title={`${batch.original_filename} — ${batch.etablissement?.nom_centre ?? ''} / ${batch.annee_scolaire?.nom ?? ''}`}>
+            <Card title={`${batch.original_filename} - ${batch.etablissement?.nom_centre ?? ''} / ${batch.annee_scolaire?.nom ?? ''}`}>
                 <div className="d-flex gap-2 mb-3 flex-wrap">
                     <button
                         type="button"
@@ -181,9 +181,9 @@ export default function StudentImportPreview({
                             <td>{String(row.raw.legacy_ref ?? '')}</td>
                             <td>{String(row.raw.prenom ?? '')}</td>
                             <td>{String(row.raw.nom ?? '')}</td>
-                            <td>{String(row.raw.telephone ?? '—')}</td>
-                            <td>{String(row.raw.sexe ?? '—')}</td>
-                            <td>{String(row.raw.date_naissance ?? '—')}</td>
+                            <td>{String(row.raw.telephone ?? '-')}</td>
+                            <td>{String(row.raw.sexe ?? '-')}</td>
+                            <td>{String(row.raw.date_naissance ?? '-')}</td>
                             <td>
                                 <ImportRowStatusBadge status={row.status} />
                             </td>
@@ -219,7 +219,7 @@ export default function StudentImportPreview({
                         {conflictRowIds.length > 0 && (
                             <>
                                 {' '}
-                                — {conflictRowIds.length - includedConflicts.size} conflit(s) exclu(s), à résoudre avant insertion
+                                - {conflictRowIds.length - includedConflicts.size} conflit(s) exclu(s), à résoudre avant insertion
                             </>
                         )}
                     </span>

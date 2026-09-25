@@ -8,6 +8,7 @@ use App\Models\Employee;
 use App\Models\Group;
 use App\Models\Seance;
 use App\Models\User;
+use App\Domain\Groups\Support\PorteeEnseignant;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
 
@@ -30,6 +31,7 @@ final class GetSeanceFormOptions
         return Group::query()
             ->whereIn('statut', [Group::STATUT_EN_INSCRIPTION, Group::STATUT_EN_FORMATION])
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+            ->tap(fn ($q) => PorteeEnseignant::scopeGroupes($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
             ->orderBy('nom')
@@ -64,6 +66,7 @@ final class GetSeanceFormOptions
     {
         return Group::query()
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+            ->tap(fn ($q) => PorteeEnseignant::scopeGroupes($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
             ->orderBy('nom')
@@ -71,7 +74,7 @@ final class GetSeanceFormOptions
             ->map(fn (Group $group): array => [
                 'value' => $group->id,
                 'label' => in_array($group->statut, Group::STATUTS_HISTORIQUE, true)
-                    ? "{$group->nom} ({$group->niveau}) — {$group->statut}"
+                    ? "{$group->nom} ({$group->niveau}) - {$group->statut}"
                     : "{$group->nom} ({$group->niveau})",
             ])
             ->all();
@@ -104,6 +107,8 @@ final class GetSeanceFormOptions
             ->where('categorie', Employee::CATEGORIE_ENSEIGNANT)
             ->where('statut', Employee::STATUT_ACTIF)
             ->tap(fn ($q) => $this->scopeEnseignantsToCenters($q, $user))
+            // Portée enseignant : il ne filtre que sur lui-même.
+            ->when(PorteeEnseignant::enseignantId($user), fn ($q, $id) => $q->whereKey($id))
             ->orderBy('nom')
             ->get(['id', 'nom', 'prenom', 'etablissement_id'])
             ->map(fn (Employee $employee): array => [
@@ -154,6 +159,7 @@ final class GetSeanceFormOptions
             ->with(['group:id,nom,niveau', 'enseignant:id,nom,prenom'])
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
+            ->tap(fn ($q) => PorteeEnseignant::scopeSeances($q, $user))
             ->whereDate('date_seance', $date)
             ->when($enseignantId, fn ($q, $id) => $q->where('enseignant_id', $id))
             ->orderBy('heure_debut')

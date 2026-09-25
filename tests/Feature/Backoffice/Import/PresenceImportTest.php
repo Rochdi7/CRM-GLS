@@ -91,7 +91,7 @@ final class PresenceImportTest extends TestCase
             $this->assertLessThan(
                 500,
                 ++$guard,
-                'commit() stopped making progress — remaining never reached 0.'
+                'commit() stopped making progress - remaining never reached 0.'
             );
         } while ($remaining > 0);
 

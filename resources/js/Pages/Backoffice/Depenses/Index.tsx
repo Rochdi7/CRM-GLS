@@ -71,7 +71,7 @@ function OperationDateCell({ createdAt, updatedAt, wasEdited }: {
     wasEdited?: boolean;
 }) {
     if (!createdAt) {
-        return <>—</>;
+        return <>-</>;
     }
 
     return (
@@ -92,7 +92,7 @@ function DetailLine({ label, value }: { label: string; value?: string | null }) 
     return (
         <div>
             <span className="text-muted d-block fs-13">{label}</span>
-            <span className="fw-medium text-normal-case">{value || '—'}</span>
+            <span className="fw-medium text-normal-case">{value || '-'}</span>
         </div>
     );
 }
@@ -899,9 +899,9 @@ export default function DepensesIndex({
                                         <td>
                                             <code>{row.reference}</code>
                                         </td>
-                                        <td>{row.typeDepense ?? '—'}</td>
-                                        <td>{row.caisse ?? '—'}</td>
-                                        {!centerLocked && <td>{row.etablissement ?? '—'}</td>}
+                                        <td>{row.typeDepense ?? '-'}</td>
+                                        <td>{row.caisse ?? '-'}</td>
+                                        {!centerLocked && <td>{row.etablissement ?? '-'}</td>}
                                         <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} MAD</td>
                                         {approvalEnabled && (
                                             <td>
@@ -918,7 +918,7 @@ export default function DepensesIndex({
                                                 )}
                                             </td>
                                         )}
-                                        <td>{row.dateDepense ?? '—'}</td>
+                                        <td>{row.dateDepense ?? '-'}</td>
                                         {canAudit && (
                                             <td className="text-normal-case">
                                                 <OperationDateCell
@@ -935,7 +935,7 @@ export default function DepensesIndex({
                                                     {row.receiptsCount}
                                                 </span>
                                             ) : (
-                                                '—'
+                                                '-'
                                             )}
                                         </td>
                                         <td>
@@ -1055,9 +1055,9 @@ export default function DepensesIndex({
                                         <td>
                                             <code>{row.reference}</code>
                                         </td>
-                                        <td>{row.groupNom ?? '—'}</td>
-                                        <td>{row.caisse ?? '—'}</td>
-                                        {!centerLocked && <td>{row.etablissement ?? '—'}</td>}
+                                        <td>{row.groupNom ?? '-'}</td>
+                                        <td>{row.caisse ?? '-'}</td>
+                                        {!centerLocked && <td>{row.etablissement ?? '-'}</td>}
                                         <td className={`text-end fw-medium${row.isAnnulee ? ' text-muted text-decoration-line-through' : ''}`}>
                                             {Number(row.montant).toFixed(2)} MAD
                                         </td>
@@ -1076,11 +1076,11 @@ export default function DepensesIndex({
                                                 )}
                                             </td>
                                         )}
-                                        <td>{row.dateDepense ?? '—'}</td>
+                                        <td>{row.dateDepense ?? '-'}</td>
                                         <td>
                                             {row.periodeDebut && row.periodeFin
                                                 ? `${row.periodeDebut} → ${row.periodeFin}`
-                                                : '—'}
+                                                : '-'}
                                         </td>
                                         {canAudit && (
                                             <td className="text-normal-case">
@@ -1098,7 +1098,7 @@ export default function DepensesIndex({
                                                     {row.receiptsCount}
                                                 </span>
                                             ) : (
-                                                '—'
+                                                '-'
                                             )}
                                         </td>
                                         <td>
@@ -1205,8 +1205,8 @@ export default function DepensesIndex({
                                         <td>
                                             <code>{row.reference}</code>
                                         </td>
-                                        <td>{row.beneficiaire ?? '—'}</td>
-                                        <td>{row.caisse ?? '—'}</td>
+                                        <td>{row.beneficiaire ?? '-'}</td>
+                                        <td>{row.caisse ?? '-'}</td>
                                         <td className="text-end">
                                             {row.annule ? (
                                                 <>
@@ -1221,7 +1221,7 @@ export default function DepensesIndex({
                                                 </span>
                                             )}
                                         </td>
-                                        <td>{row.dateRemboursement ?? '—'}</td>
+                                        <td>{row.dateRemboursement ?? '-'}</td>
                                         <td>
                                             <RowActions>
                                                 <RowActionItem icon="ti-edit" onClick={() => openEditRemboursement(row)}>
@@ -1349,8 +1349,8 @@ export default function DepensesIndex({
                                         <td>
                                             <code>{row.reference}</code>
                                         </td>
-                                        <td>{row.typeDepense ?? '—'}</td>
-                                        {!centerLocked && <td>{row.etablissement ?? '—'}</td>}
+                                        <td>{row.typeDepense ?? '-'}</td>
+                                        {!centerLocked && <td>{row.etablissement ?? '-'}</td>}
                                         <td>
                                             <StatusBadge
                                                 label={row.statut}
@@ -1361,7 +1361,7 @@ export default function DepensesIndex({
                                                 <div className="text-muted fs-12 text-normal-case">{row.motifRefus}</div>
                                             )}
                                         </td>
-                                        <td>{row.dateDepense ?? '—'}</td>
+                                        <td>{row.dateDepense ?? '-'}</td>
                                         <td className="text-normal-case">
                                             <OperationDateCell
                                                 createdAt={row.createdAt}
@@ -1370,15 +1370,15 @@ export default function DepensesIndex({
                                             />
                                         </td>
                                         <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} MAD</td>
-                                        <td>{row.groupNom ?? '—'}</td>
+                                        <td>{row.groupNom ?? '-'}</td>
                                         <td className="text-normal-case">
                                             {row.motsCles
                                                 ? row.motsCles.split(',').map((mot) => mot.trim()).filter(Boolean).map((mot) => (
                                                     <span key={mot} className="badge bg-secondary me-1">{mot}</span>
                                                 ))
-                                                : '—'}
+                                                : '-'}
                                         </td>
-                                        <td>{row.agent ?? '—'}</td>
+                                        <td>{row.agent ?? '-'}</td>
                                         <td className="text-end">
                                             <RowActions>
                                                 <RowActionItem icon="ti-eye" onClick={() => setDetailsRow(row)}>
@@ -1493,7 +1493,7 @@ export default function DepensesIndex({
                                 ? detailsRow.motsCles.split(',').map((mot) => mot.trim()).filter(Boolean).map((mot) => (
                                     <span key={mot} className="badge bg-secondary me-1 text-normal-case">{mot}</span>
                                 ))
-                                : <span className="fw-medium">—</span>}
+                                : <span className="fw-medium">-</span>}
                         </div>
                     </div>
                 )}
@@ -1758,7 +1758,7 @@ export default function DepensesIndex({
                             className={`form-control${depenseForm.errors['justificatifs.0'] ? ' is-invalid' : ''}`}
                             onChange={handleFilesChange}
                         />
-                        <div className="form-text">Formats acceptés : {justificatifMimes.join(', ')} — max {Math.round(justificatifMaxKb / 1024)} Mo</div>
+                        <div className="form-text">Formats acceptés : {justificatifMimes.join(', ')} - max {Math.round(justificatifMaxKb / 1024)} Mo</div>
                     </div>
                 </form>
             </Modal>
@@ -1831,7 +1831,7 @@ export default function DepensesIndex({
                     {editingRemboursement ? (
                         <div className="d-flex justify-content-between mb-3">
                             <span className="text-muted">Caisse débitée</span>
-                            <span className="fw-medium">{editingRemboursement.caisse ?? '—'}</span>
+                            <span className="fw-medium">{editingRemboursement.caisse ?? '-'}</span>
                         </div>
                     ) : canChooseRemboursementCaisse ? (
                         <div className="row">
@@ -1862,7 +1862,7 @@ export default function DepensesIndex({
                             <span className="fw-semibold">
                                 {remboursementCaisseParDefaut !== null
                                     ? `${remboursementCaisseParDefaut.nom} (${Number(remboursementCaisseParDefaut.solde).toFixed(2)} MAD)`
-                                    : '—'}
+                                    : '-'}
                             </span>
                         </div>
                     )}
@@ -1924,17 +1924,17 @@ export default function DepensesIndex({
                                                     {payment.isAvance ? (
                                                         <span className="badge bg-info-transparent">Avance</span>
                                                     ) : (
-                                                        (payment.feeNom ?? '—')
+                                                        (payment.feeNom ?? '-')
                                                     )}
                                                     {payment.bloqueRaison && (
                                                         <div className="fs-12 text-danger text-normal-case">
                                                             <i className="ti ti-lock me-1" aria-hidden="true" />
-                                                            Frais masqué — non remboursable
+                                                            Frais masqué - non remboursable
                                                         </div>
                                                     )}
                                                 </td>
                                                 <td>{payment.methode}</td>
-                                                <td>{payment.date ?? '—'}</td>
+                                                <td>{payment.date ?? '-'}</td>
                                                 <td className="text-end">{Number(payment.montant).toFixed(2)} MAD</td>
                                                 <td className="text-end fw-medium">
                                                     {Number(payment.montantRemboursable).toFixed(2)} MAD

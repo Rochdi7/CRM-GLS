@@ -48,7 +48,7 @@ final class RecalculerSoldesCaisses extends Command
 {
     protected $signature = 'caisse:recalculer-soldes
         {--apply : Execute (default is a dry-run that changes nothing)}
-        {--ambiguous= : caisse|student — how to resolve rows whose student centre differs from the till centre}';
+        {--ambiguous= : caisse|student - how to resolve rows whose student centre differs from the till centre}';
 
     protected $description = 'Re-home historical TPE/Chèque/Virement rows from cash tills into the centres\' method accounts (dry-run by default)';
 
@@ -77,14 +77,14 @@ final class RecalculerSoldesCaisses extends Command
         $this->renderPlan($plan);
 
         if ($plan['unresolvable'] !== []) {
-            $this->error(sprintf('%d row(s) have no resolvable centre — nothing applied. Fix the data first.', count($plan['unresolvable'])));
+            $this->error(sprintf('%d row(s) have no resolvable centre - nothing applied. Fix the data first.', count($plan['unresolvable'])));
 
             return self::FAILURE;
         }
 
         if ($plan['ambiguous'] !== [] && $ambiguousRule === null) {
             $this->error(sprintf(
-                '%d ambiguous row(s) (student centre ≠ till centre) — nothing applied. Re-run with --ambiguous=caisse or --ambiguous=student.',
+                '%d ambiguous row(s) (student centre ≠ till centre) - nothing applied. Re-run with --ambiguous=caisse or --ambiguous=student.',
                 count($plan['ambiguous']),
             ));
 
@@ -196,8 +196,8 @@ final class RecalculerSoldesCaisses extends Command
         }
 
         if ($move['moveMoney']) {
-            $this->ledger->debit($from->id, $move['montant'], self::MOTIF." — {$move['reference']}", $model, $extra);
-            $this->ledger->credit($target->id, $move['montant'], self::MOTIF." — {$move['reference']}", $model, $extra);
+            $this->ledger->debit($from->id, $move['montant'], self::MOTIF." - {$move['reference']}", $model, $extra);
+            $this->ledger->credit($target->id, $move['montant'], self::MOTIF." - {$move['reference']}", $model, $extra);
         }
 
         $model->update(['caisse_id' => $target->id]);
@@ -256,7 +256,7 @@ final class RecalculerSoldesCaisses extends Command
             ['Compte', 'Type', 'Centre', 'Solde'],
             Caisse::query()->with('etablissement')->orderBy('etablissement_id')->orderBy('type')->orderBy('nom')->get()
                 ->filter(fn (Caisse $c) => (float) $c->solde !== 0.0 || $c->isCompteMethode())
-                ->map(fn (Caisse $c) => [$c->nom, $c->type, $c->etablissement?->nom_centre ?? '—', number_format((float) $c->solde, 2, '.', '')])
+                ->map(fn (Caisse $c) => [$c->nom, $c->type, $c->etablissement?->nom_centre ?? '-', number_format((float) $c->solde, 2, '.', '')])
                 ->values()
                 ->all(),
         );
@@ -265,7 +265,7 @@ final class RecalculerSoldesCaisses extends Command
     private function centreName(?int $id): string
     {
         if ($id === null) {
-            return '—';
+            return '-';
         }
 
         return (string) (DB::table('etablissements')->where('id', $id)->value('nom_centre') ?? "#{$id}");

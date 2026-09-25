@@ -143,7 +143,7 @@ final class HiddenAccountPageSweepTest extends TestCase
         $this->assertSame(
             [],
             $leaks,
-            "These screens name a hidden account — route the query through HiddenAccount (CLAUDE.md §11):\n"
+            "These screens name a hidden account - route the query through HiddenAccount (CLAUDE.md §11):\n"
                 .implode("\n", $leaks),
         );
     }
@@ -172,7 +172,7 @@ final class HiddenAccountPageSweepTest extends TestCase
 
         $this->assertTrue(
             $found,
-            'The sweep found nobody at all — it would pass even if the maintainer leaked.',
+            'The sweep found nobody at all - it would pass even if the maintainer leaked.',
         );
         $this->assertNotNull($visible->id);
     }

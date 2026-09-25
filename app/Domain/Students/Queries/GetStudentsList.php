@@ -7,6 +7,7 @@ namespace App\Domain\Students\Queries;
 use App\Models\Inscription;
 use App\Models\Student;
 use App\Models\User;
+use App\Domain\Groups\Support\PorteeEnseignant;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -43,15 +44,32 @@ final class GetStudentsList
         string $prenomFilter = '',
         string $telephoneFilter = '',
         string $inscriptionFilter = '',
+        string $groupeFilter = '',
     ): LengthAwarePaginator {
         if (! in_array($perPage, self::PER_PAGE_OPTIONS, true)) {
             $perPage = self::DEFAULT_PER_PAGE;
         }
 
+        // Portée enseignant : la vue « Mes étudiants » affiche les groupes du
+        // prof où l'étudiant est inscrit (chargés en lot, jamais par carte).
+        $enseignantId = PorteeEnseignant::enseignantId($user);
+
         $students = Student::query()
             // `media` eager-loaded for the avatar column (avoids N+1).
-            ->with(['etablissement', 'media'])
+            ->with(['etablissement', 'media', 'transfereVers:id,reference,etablissement_id', 'transfereVers.etablissement:id,nom_centre', 'transfereDepuis:id,reference,etablissement_id', 'transfereDepuis.etablissement:id,nom_centre'])
+            ->when($enseignantId !== null, fn ($q) => $q->with(['inscriptions' => fn ($i) => $i
+                ->where('statut', Inscription::STATUT_ACTIVE)
+                ->whereIn('group_id', PorteeEnseignant::groupeIds((int) $enseignantId))
+                ->with('group:id,nom,niveau')]))
+            // Filtre « Groupe » de la vue enseignant — borné à SES groupes par
+            // PorteeEnseignant::scopeStudents ci-dessous.
+            ->when($groupeFilter !== '', fn ($q) => $q->whereHas('inscriptions', fn ($i) => $i
+                ->where('statut', Inscription::STATUT_ACTIVE)
+                ->where('group_id', (int) $groupeFilter)))
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+            // Portée enseignant : un prof ne liste que les étudiants inscrits
+            // (Active) dans SES groupes.
+            ->tap(fn ($q) => PorteeEnseignant::scopeStudents($q, $user))
             // Narrow to the center selected in the top-bar switcher.
             ->tap(function ($q): void {
                 if (! $this->context->isAllCenters()) {
@@ -102,6 +120,28 @@ final class GetStudentsList
             ->paginate($perPage)
             ->withQueryString();
 
+        // Portée enseignant : le strict nécessaire pour la classe — ni CIN, ni
+        // adresse, ni données du parent ne quittent le serveur.
+        if ($enseignantId !== null) {
+            return $students->through(fn (Student $student): array => [
+                'id' => $student->id,
+                'reference' => $student->reference,
+                'nomComplet' => $student->nomComplet(),
+                'prenom' => $student->prenom,
+                'sexe' => $student->sexe,
+                'age' => $student->age(),
+                'niveau' => $student->niveau,
+                'telephone' => $student->telephone,
+                'whatsapp' => $student->whatsapp,
+                'photoThumbUrl' => $student->getFirstMediaUrl('photo', 'thumb') ?: $student->avatarUrl(),
+                'groupes' => $student->inscriptions
+                    ->map(fn (Inscription $i): array => ['id' => $i->group_id, 'nom' => $i->group?->nom, 'niveau' => $i->group?->niveau])
+                    ->unique('id')
+                    ->values()
+                    ->all(),
+            ]);
+        }
+
         $students->through(fn (Student $student): array => [
             'id' => $student->id,
             'reference' => $student->reference,
@@ -122,6 +162,20 @@ final class GetStudentsList
             'examenType' => $student->examen_type,
             'etablissementId' => $student->etablissement_id,
             'etablissement' => $student->etablissement?->nom_centre,
+            // Transfert entre centres (25/09/2026) : une fiche « Transféré »
+            // reste listée dans son centre, badgée, et renvoie vers sa copie ;
+            // la copie renvoie vers l'original (présences, historique).
+            'statut' => $student->statut,
+            'transfereVers' => $student->transfereVers === null ? null : [
+                'id' => $student->transfereVers->id,
+                'reference' => $student->transfereVers->reference,
+                'centre' => $student->transfereVers->etablissement?->nom_centre,
+            ],
+            'transfereDepuis' => $student->transfereDepuis === null ? null : [
+                'id' => $student->transfereDepuis->id,
+                'reference' => $student->transfereDepuis->reference,
+                'centre' => $student->transfereDepuis->etablissement?->nom_centre,
+            ],
             'parentNom' => $student->parent_nom,
             'parentRelation' => $student->parent_relation,
             'parentSexe' => $student->parent_sexe,

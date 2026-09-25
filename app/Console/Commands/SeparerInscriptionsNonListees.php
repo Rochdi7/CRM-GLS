@@ -76,7 +76,7 @@ final class SeparerInscriptionsNonListees extends Command
                 ?? $groupes->first(fn (Group $g): bool => $this->cle($g->nom) === $this->cle($nom));
 
             if ($groupe === null) {
-                $this->warn(sprintf('  ?? %s : groupe introuvable — ignoré', $nom));
+                $this->warn(sprintf('  ?? %s : groupe introuvable - ignoré', $nom));
 
                 continue;
             }

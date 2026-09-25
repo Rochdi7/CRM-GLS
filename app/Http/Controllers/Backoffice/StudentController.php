@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice;
 
 use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
+use App\Domain\Attendance\Queries\GetSeanceFormOptions;
+use App\Domain\Groups\Support\PorteeEnseignant;
 use App\Domain\Settings\Queries\GetAccessibleCenterOptions;
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Domain\Students\Queries\GetStudentDetails;
@@ -39,6 +41,7 @@ final class StudentController extends Controller
         Request $request,
         GetStudentsList $getStudentsList,
         GetAccessibleCenterOptions $accessibleCenters,
+        GetSeanceFormOptions $seanceOptions,
     ): Response {
         $this->authorize('viewAny', Student::class);
 
@@ -55,6 +58,21 @@ final class StudentController extends Controller
         $telephoneFilter = (string) $request->string('telephoneFilter');
         $inscriptionFilter = (string) $request->string('inscriptionFilter');
         $perPage = (int) $request->integer('perPage', GetStudentsList::DEFAULT_PER_PAGE);
+
+        // Portée enseignant : sa propre vue en cartes (consultation seule) —
+        // les étudiants de SES groupes, filtrables par groupe.
+        if (PorteeEnseignant::estRestreint($request->user())) {
+            $groupeFilter = (string) $request->string('groupeFilter');
+
+            return Inertia::render('Backoffice/Students/MesEtudiants', [
+                'students' => $getStudentsList(
+                    $request->user(), $search, '', '', '', '', 25,
+                    '', '', '', '', '', $groupeFilter,
+                ),
+                'filters' => ['search' => $search, 'groupeFilter' => $groupeFilter],
+                'groupOptions' => $seanceOptions->allGroups($request->user()),
+            ]);
+        }
 
         return Inertia::render('Backoffice/Students/Index', [
             'students' => $getStudentsList(
@@ -108,6 +126,26 @@ final class StudentController extends Controller
                 ->get(['id', 'nom_centre']),
             'centerLocked' => ! $context->isAllCenters(),
             'contextCenterId' => $context->etablissementId(),
+            // Cibles possibles d'un transfert d'étudiant (25/09/2026) : TOUT
+            // le réseau, volontairement hors de la portée « Centres affectés »
+            // — le guichet de Rabat envoie vers Casablanca qu'il n'ouvre pas.
+            // Servi en closure : seul le modal de transfert en a besoin.
+            'transferCentres' => fn () => Etablissement::query()
+                ->orderBy('nom_centre')
+                ->get(['id', 'nom_centre'])
+                ->map(fn (Etablissement $e): array => ['id' => $e->id, 'nomCentre' => $e->nom_centre])
+                ->all(),
+            // Confort d'UI seulement (§5) : la page dessinait Ajouter /
+            // Modifier / Supprimer pour tout le monde, le serveur ne refusant
+            // qu'à la soumission. `view` = la fiche détaillée (paiements) —
+            // un enseignant (portée `groups.view-own`) ne l'ouvre pas.
+            'permissions' => [
+                'create' => $request->user()->can('students.create'),
+                'update' => $request->user()->can('students.update'),
+                'delete' => $request->user()->can('students.delete'),
+                'view' => $request->user()->can('students.view'),
+                'transfer' => $request->user()->can('student-transfers.create'),
+            ],
         ]);
     }
 

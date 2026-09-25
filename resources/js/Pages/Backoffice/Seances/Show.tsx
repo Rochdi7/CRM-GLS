@@ -449,15 +449,15 @@ export default function SeanceShow({
                                     <Link href={row.showUrl}>{row.dateSeance}</Link>
                                 </td>
                                 <td>
-                                    {row.heureDebut ? `${row.heureDebut}${row.heureFin ? ` – ${row.heureFin}` : ''}` : '—'}
+                                    {row.heureDebut ? `${row.heureDebut}${row.heureFin ? ` – ${row.heureFin}` : ''}` : '-'}
                                 </td>
                                 <td>
-                                    {row.groupNom ?? '—'}
+                                    {row.groupNom ?? '-'}
                                     {row.groupNiveau && (
                                         <span className="badge badge-soft-secondary ms-2">{row.groupNiveau}</span>
                                     )}
                                 </td>
-                                <td>{row.enseignant ?? '—'}</td>
+                                <td>{row.enseignant ?? '-'}</td>
                                 <td>
                                     {row.presencesCount > 0 ? (
                                         <>
@@ -570,7 +570,7 @@ export default function SeanceShow({
                     {!saving && saveError && (
                         <span className="text-danger d-flex align-items-center">
                             <i className="ti ti-alert-circle me-2" aria-hidden="true" />
-                            Échec de l'enregistrement — réessayez
+                            Échec de l'enregistrement - réessayez
                         </span>
                     )}
                 </div>
@@ -673,7 +673,7 @@ export default function SeanceShow({
                                                                 student.retardPaiement.moisCourant
                                                                     ? 'échéance'
                                                                     : 'échéance la plus ancienne'
-                                                            } : ${student.retardPaiement.dateEcheance} — ${
+                                                            } : ${student.retardPaiement.dateEcheance} - ${
                                                                 student.retardPaiement.montant
                                                             } MAD dus)`}
                                                         >
@@ -689,7 +689,7 @@ export default function SeanceShow({
                                                             className="form-check-input"
                                                             type="checkbox"
                                                             role="switch"
-                                                            aria-label={`${statut} — ${student.prenom} ${student.nom}`}
+                                                            aria-label={`${statut} - ${student.prenom} ${student.nom}`}
                                                             checked={line?.statut === statut}
                                                             disabled={!canMark}
                                                             onChange={(event) =>

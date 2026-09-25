@@ -1,5 +1,5 @@
 {{--
-    Reçu GROUPÉ — variante PDF (mPDF) de recu-groupe.blade.php, servie par le
+    Reçu GROUPÉ - variante PDF (mPDF) de recu-groupe.blade.php, servie par le
     lien WhatsApp d'un envoi groupé (Frontoffice\RecuGroupeController) et par
     l'email groupé. Même règle que le couple recu / recu-pdf : la version
     navigateur reste l'imprimable du guichet, celle-ci est construite en
@@ -20,7 +20,7 @@
         ->unique()
         ->implode(' / ');
     $dates = $encaissements->map(fn ($e) => $e->date_paiement?->format('d/m/Y'))->filter()->unique();
-    $dateAffichee = $dates->count() === 1 ? $dates->first() : $dates->first().' — '.$dates->last();
+    $dateAffichee = $dates->count() === 1 ? $dates->first() : $dates->first().' - '.$dates->last();
     $logoPath = public_path('assets/images/logo/gls-noir.png');
 @endphp
 <!DOCTYPE html>
@@ -135,7 +135,7 @@
         </tr>
     </table>
 
-    <div class="ice-line">ICE : {{ $centre?->ice ?? '—' }}</div>
+    <div class="ice-line">ICE : {{ $centre?->ice ?? '-' }}</div>
 
     <table class="recu-num-table">
         <tr>
@@ -148,22 +148,22 @@
     <table class="row-table">
         <tr>
             <td class="row-fr">Année scolaire</td>
-            <td class="row-val">{{ $anneeScolaire ?? '—' }}</td>
+            <td class="row-val">{{ $anneeScolaire ?? '-' }}</td>
             <td class="row-ar">السنة الدراسية</td>
         </tr>
         <tr>
             <td class="row-fr">Prénom et nom</td>
-            <td class="row-val">{{ $student?->nomComplet() ?? '—' }}</td>
+            <td class="row-val">{{ $student?->nomComplet() ?? '-' }}</td>
             <td class="row-ar">اسم و نسب التلميذ(ة)</td>
         </tr>
         <tr>
             <td class="row-fr">Matricule</td>
-            <td class="row-val">{{ $student?->reference ?? '—' }}</td>
+            <td class="row-val">{{ $student?->reference ?? '-' }}</td>
             <td class="row-ar">رقــم التسجيل</td>
         </tr>
         <tr>
             <td class="row-fr">Groupe</td>
-            <td class="row-val">{{ $niveau ?? '—' }}</td>
+            <td class="row-val">{{ $niveau ?? '-' }}</td>
             <td class="row-ar">المجموعة</td>
         </tr>
     </table>
@@ -189,7 +189,7 @@
                     <td>{{ $e->libelleFrais() }}</td>
                     <td class="num">{{ $fmt($e->montant) }}</td>
                     <td class="num">{{ $fmt($reste) }}</td>
-                    <td class="num">{{ $e->date_paiement?->format('d/m/Y') ?? '—' }}</td>
+                    <td class="num">{{ $e->date_paiement?->format('d/m/Y') ?? '-' }}</td>
                 </tr>
             @endforeach
         </tbody>
@@ -211,7 +211,7 @@
         </tr>
         <tr>
             <td class="row-fr">Date de paiement</td>
-            <td class="row-val">{{ $dateAffichee ?: '—' }}</td>
+            <td class="row-val">{{ $dateAffichee ?: '-' }}</td>
             <td class="row-ar">تاريخ الأداء</td>
         </tr>
     </table>

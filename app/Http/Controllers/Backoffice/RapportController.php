@@ -608,6 +608,6 @@ final class RapportController extends Controller
     {
         return $date !== '' && ($parsed = \DateTimeImmutable::createFromFormat('Y-m-d', $date)) !== false
             ? $parsed->format('d/m/Y')
-            : '—';
+            : '-';
     }
 }

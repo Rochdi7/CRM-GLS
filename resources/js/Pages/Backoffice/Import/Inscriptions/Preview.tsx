@@ -112,14 +112,14 @@ export default function InscriptionImportPreview({
 
     return (
         <BackofficeLayout
-            title="Aperçu de l'import — Inscriptions"
+            title="Aperçu de l'import - Inscriptions"
             breadcrumbs={[
                 { label: 'Tableau de bord', href: '/backoffice/dashboard' },
                 { label: 'Import de données', href: '/backoffice/import' },
                 { label: 'Aperçu' },
             ]}
         >
-            <Card title={`${batch.original_filename} — ${batch.etablissement?.nom_centre ?? ''} / ${batch.annee_scolaire?.nom ?? ''}`}>
+            <Card title={`${batch.original_filename} - ${batch.etablissement?.nom_centre ?? ''} / ${batch.annee_scolaire?.nom ?? ''}`}>
                 <div className="d-flex gap-2 mb-3 flex-wrap">
                     <button
                         type="button"
@@ -181,7 +181,7 @@ export default function InscriptionImportPreview({
                             <td>{String(row.raw.etudiant ?? '')}</td>
                             <td>{String(row.raw.groupe ?? '')}</td>
                             <td>{String(row.raw.statut ?? '')}</td>
-                            <td>{String(row.raw.date_inscription ?? '—')}</td>
+                            <td>{String(row.raw.date_inscription ?? '-')}</td>
                             <td>
                                 <ImportRowStatusBadge status={row.status} />
                             </td>
@@ -217,7 +217,7 @@ export default function InscriptionImportPreview({
                         {conflictRowIds.length > 0 && (
                             <>
                                 {' '}
-                                — {conflictRowIds.length - includedConflicts.size} conflit(s) exclu(s), à résoudre avant insertion
+                                - {conflictRowIds.length - includedConflicts.size} conflit(s) exclu(s), à résoudre avant insertion
                             </>
                         )}
                     </span>

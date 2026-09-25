@@ -309,6 +309,11 @@ export default function GroupsIndex({
     // `groups.delete` est dans superAdminOnly() : aucun rôle ne le porte,
     // donc en pratique seul un super-admin voit l'entrée de menu.
     const canDeleteGroups = auth.isSuperAdmin || auth.permissions.includes('groups.delete');
+    // Same UI-only gates for create / edit / status changes: an enseignant
+    // (portée `groups.view-own`) consults his groups and changes nothing.
+    const canCreateGroups = auth.isSuperAdmin || auth.permissions.includes('groups.create');
+    const canUpdateGroups = auth.isSuperAdmin || auth.permissions.includes('groups.update');
+    const canArchiveGroups = auth.isSuperAdmin || auth.permissions.includes('groups.archive');
     const [showModal, setShowModal] = useState(false);
     const [editingGroup, setEditingGroup] = useState<GroupRow | null>(null);
     const [studentsModal, setStudentsModal] = useState<{ group: GroupRow; segment: StatsSegment } | null>(null);
@@ -436,7 +441,7 @@ export default function GroupsIndex({
 
     // Raccourci « Actions rapides » du tableau de bord : ?nouveau=1 ouvre
     // directement ce formulaire (confort d'interface seulement, §5).
-    useAutoOpenCreate(openCreate);
+    useAutoOpenCreate(openCreate, canCreateGroups);
 
     function openEdit(group: GroupRow) {
         setEditingGroup(group);
@@ -800,10 +805,12 @@ export default function GroupsIndex({
             title="Groupes"
             breadcrumbs={[{ label: 'Tableau de bord', href: '/backoffice/dashboard' }, { label: 'Groupes' }]}
             actions={
-                <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                    <i className="ti ti-square-rounded-plus me-2" />
-                    Ajouter un groupe
-                </button>
+                canCreateGroups ? (
+                    <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
+                        <i className="ti ti-square-rounded-plus me-2" />
+                        Ajouter un groupe
+                    </button>
+                ) : undefined
             }
         >
             {emploiDuTempsArrete && (
@@ -941,7 +948,7 @@ export default function GroupsIndex({
                                     <td>
                                         <span className="badge badge-soft-info">{group.niveau}</span>
                                     </td>
-                                    <td>{group.enseignant ?? '—'}</td>
+                                    <td>{group.enseignant ?? '-'}</td>
                                     <td>
                                         <button
                                             type="button"
@@ -1001,7 +1008,7 @@ export default function GroupsIndex({
                                     </td>
                                     <td className="text-end">
                                         <RowActions view={group.showUrl}>
-                                            {(!GROUP_STATUTS_CLOS.includes(group.statut) || canEditClosedGroups) && (
+                                            {canUpdateGroups && (!GROUP_STATUTS_CLOS.includes(group.statut) || canEditClosedGroups) && (
                                                 <RowActionItem icon="ti-edit" onClick={() => openEdit(group)}>
                                                     Modifier
                                                 </RowActionItem>
@@ -1011,7 +1018,7 @@ export default function GroupsIndex({
                                                     Détails paiement
                                                 </RowActionItem>
                                             )}
-                                            {group.statut === 'En formation' && (
+                                            {canArchiveGroups && group.statut === 'En formation' && (
                                                 <>
                                                     <RowActionDivider />
                                                     <RowActionItem icon="ti-x" danger onClick={() => confirmAnnuler(group)}>
@@ -1036,7 +1043,7 @@ export default function GroupsIndex({
                                                     </RowActionItem>
                                                 </>
                                             )}
-                                            {group.statut === 'En inscription' && (
+                                            {canArchiveGroups && group.statut === 'En inscription' && (
                                                 <>
                                                     <RowActionDivider />
                                                     <RowActionItem icon="ti-circle-check" onClick={() => confirmActiver(group)}>
@@ -1180,7 +1187,7 @@ export default function GroupsIndex({
                     <div className="border-top pt-3">
                         <h6 className="mb-1">Frais du groupe</h6>
                         <p className="text-muted fs-13 mb-3">
-                            Les montants et les échéances sont pré-remplis depuis le catalogue des frais — modifiez-les si ce
+                            Les montants et les échéances sont pré-remplis depuis le catalogue des frais - modifiez-les si ce
                             groupe diffère du standard. Tous les frais sont reportés sur l'inscription lorsqu'un étudiant est
                             assigné à ce groupe.
                         </p>
@@ -1236,7 +1243,7 @@ export default function GroupsIndex({
                                                         <SelectField
                                                             id={`grp-fee-c-${fee.value}`}
                                                             options={niveauOptions}
-                                                            placeholder="—"
+                                                            placeholder="-"
                                                             value={ligne.classification}
                                                             onChange={(event) => setLigne(fee.value as number, 'classification', event.target.value)}
                                                             error={classificationError}
@@ -1315,7 +1322,7 @@ export default function GroupsIndex({
                                     <p className="text-muted fs-13 mb-2">
                                         Ces frais ne sont plus facturés par ce groupe et sont masqués sur ses inscriptions. Les
                                         montants déjà encaissés sur eux sont revenus en avance et peuvent être ré-appliqués à un
-                                        autre frais. Restaurer un frais le réaffiche sur toutes les inscriptions du groupe — sans
+                                        autre frais. Restaurer un frais le réaffiche sur toutes les inscriptions du groupe - sans
                                         ré-appliquer les avances, ce qui reste une décision explicite.
                                     </p>
                                 )}
@@ -1377,7 +1384,7 @@ export default function GroupsIndex({
                                         </td>
                                         <td>{student.prenom}</td>
                                         <td>{student.nom}</td>
-                                        <td>{student.cin ?? '—'}</td>
+                                        <td>{student.cin ?? '-'}</td>
                                         <td>
                                             {student.telephone ? (
                                                 <a href={`tel:${student.telephone}`} className="d-inline-flex align-items-center">
@@ -1385,12 +1392,12 @@ export default function GroupsIndex({
                                                     {student.telephone}
                                                 </a>
                                             ) : (
-                                                '—'
+                                                '-'
                                             )}
                                         </td>
-                                        <td>{student.dateNaissance ?? '—'}</td>
-                                        <td>{student.niveauScolaire ?? '—'}</td>
-                                        <td>{student.dateInscription ?? '—'}</td>
+                                        <td>{student.dateNaissance ?? '-'}</td>
+                                        <td>{student.niveauScolaire ?? '-'}</td>
+                                        <td>{student.dateInscription ?? '-'}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -1401,7 +1408,7 @@ export default function GroupsIndex({
 
             <Modal
                 show={paymentsGroup !== null}
-                title={`Statistique de groupe — ${paymentsGroup?.nom ?? ''}`}
+                title={`Statistique de groupe - ${paymentsGroup?.nom ?? ''}`}
                 onClose={closePaymentsModal}
                 // A centred dialog, not modal-fullscreen: pinning the modal
                 // edge-to-edge only removes the framing. `wide` keeps the
@@ -1510,7 +1517,7 @@ export default function GroupsIndex({
                         {deleteImpact.encaissements > 0 && (
                             <div className="alert alert-danger fs-13" role="alert">
                                 <i className="ti ti-lock me-1" />
-                                Ce groupe a reçu <strong>{deleteImpact.encaissements}</strong> paiement(s) —{' '}
+                                Ce groupe a reçu <strong>{deleteImpact.encaissements}</strong> paiement(s) -{' '}
                                 <strong>
                                     {deleteImpact.montantEncaisse.toLocaleString('fr-MA', {
                                         minimumFractionDigits: 2,

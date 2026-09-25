@@ -80,7 +80,7 @@ final class CaisseTransferController extends Controller
         $action->handle([...$data, 'caisse_source_id' => $source->id], $requester);
 
         return $this->backToListPreservingFilters($request, 'backoffice.caisses.index', ['tab' => 'transferts'])
-            ->with('success', __('Transfer requested — awaiting validation.'));
+            ->with('success', __('Transfer requested - awaiting validation.'));
     }
 
     public function show(CaisseTransfer $caisse_transfer, GetCaisseTransferDetails $getCaisseTransferDetails): Response
@@ -140,7 +140,7 @@ final class CaisseTransferController extends Controller
                     ]);
                 }
 
-                $data['note'] = trim(implode(' — ', array_filter([
+                $data['note'] = trim(implode(' - ', array_filter([
                     $caisse_transfer->note,
                     __('Cancelled by :who: :motif', [
                         'who' => $request->user()->name,
@@ -200,6 +200,6 @@ final class CaisseTransferController extends Controller
         }
 
         return $this->backToListPreservingFilters($request, 'backoffice.caisses.index', ['tab' => 'transferts'])
-            ->with('success', __('Transfer validated — balances have been updated.'));
+            ->with('success', __('Transfer validated - balances have been updated.'));
     }
 }

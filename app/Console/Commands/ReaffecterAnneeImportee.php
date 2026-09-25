@@ -71,7 +71,7 @@ final class ReaffecterAnneeImportee extends Command
             $centre->nom_centre,
             $de->nom,
             $vers->nom,
-            $this->option('dry-run') ? '  (simulation — rien ne sera modifié)' : '',
+            $this->option('dry-run') ? '  (simulation - rien ne sera modifié)' : '',
         ));
 
         foreach ($scopes as $label => $query) {
@@ -83,7 +83,7 @@ final class ReaffecterAnneeImportee extends Command
         }
 
         if (! $this->confirm('Confirmer la réaffectation ?')) {
-            $this->warn('Abandonné — rien n\'a été modifié.');
+            $this->warn('Abandonné - rien n\'a été modifié.');
 
             return self::FAILURE;
         }
@@ -130,7 +130,7 @@ final class ReaffecterAnneeImportee extends Command
 
         $this->error($matches->isEmpty()
             ? "Aucun centre ne correspond à « {$input} »."
-            : "Plusieurs centres correspondent à « {$input} » : ".$matches->pluck('nom_centre')->implode(', ').' — précisez.');
+            : "Plusieurs centres correspondent à « {$input} » : ".$matches->pluck('nom_centre')->implode(', ').' - précisez.');
 
         return null;
     }

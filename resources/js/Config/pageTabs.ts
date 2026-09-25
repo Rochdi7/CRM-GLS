@@ -33,6 +33,14 @@ export const STUDENTS_TABS: PageTabDef[] = [
         exact: true,
     },
     {
+        // Transferts d'étudiants entre centres (25/09/2026) : la liste des
+        // demandes, à côté des fiches — c'est depuis une fiche qu'on demande.
+        label: t('Student transfers'),
+        href: '/backoffice/student-transfers',
+        icon: 'ti ti-arrows-exchange',
+        permissions: ['student-transfers.view'],
+    },
+    {
         label: t('Merge records'),
         href: '/backoffice/students/fusion',
         icon: 'ti ti-arrow-merge',

@@ -115,14 +115,14 @@ export default function EncaissementImportPreview({
 
     return (
         <BackofficeLayout
-            title="Aperçu de l'import — Encaissements"
+            title="Aperçu de l'import - Encaissements"
             breadcrumbs={[
                 { label: 'Tableau de bord', href: '/backoffice/dashboard' },
                 { label: 'Import de données', href: '/backoffice/import' },
                 { label: 'Aperçu' },
             ]}
         >
-            <Card title={`${batch.original_filename} — ${batch.etablissement?.nom_centre ?? ''} / ${batch.annee_scolaire?.nom ?? ''}`}>
+            <Card title={`${batch.original_filename} - ${batch.etablissement?.nom_centre ?? ''} / ${batch.annee_scolaire?.nom ?? ''}`}>
                 <div className="d-flex gap-2 mb-3 flex-wrap">
                     <button
                         type="button"
@@ -188,7 +188,7 @@ export default function EncaissementImportPreview({
                             <td>{row.source_row_number}</td>
                             <td>{String(row.raw.legacy_ref ?? '')}</td>
                             <td>{String(row.raw.payeur ?? '')}</td>
-                            <td>{String(row.raw.montant ?? '—')}</td>
+                            <td>{String(row.raw.montant ?? '-')}</td>
                             <td>{String(row.raw.methode_label ?? '')}</td>
                             <td>
                                 {row.raw.is_avance ? (
@@ -197,7 +197,7 @@ export default function EncaissementImportPreview({
                                     String(row.raw.frais_label ?? '')
                                 )}
                             </td>
-                            <td>{String(row.raw.date_paiement ?? '—')}</td>
+                            <td>{String(row.raw.date_paiement ?? '-')}</td>
                             <td>{String(row.raw.operateur ?? '')}</td>
                             <td>
                                 <ImportRowStatusBadge status={row.status} />
@@ -234,7 +234,7 @@ export default function EncaissementImportPreview({
                         {conflictRowIds.length > 0 && (
                             <>
                                 {' '}
-                                — {conflictRowIds.length - includedConflicts.size} conflit(s) exclu(s), à résoudre avant insertion
+                                - {conflictRowIds.length - includedConflicts.size} conflit(s) exclu(s), à résoudre avant insertion
                             </>
                         )}
                     </span>

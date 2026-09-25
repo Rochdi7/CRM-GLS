@@ -73,7 +73,7 @@ final class AnnulerDepenseDoublon extends Command
 
         // ── Idempotence ────────────────────────────────────────────────
         if ($doublon->isAnnulee() || AnnulerDepense::correctionExiste($doublon, $correction)) {
-            $this->warn("  {$reference} est déjà annulée ({$correction}) — aucune action.");
+            $this->warn("  {$reference} est déjà annulée ({$correction}) - aucune action.");
             $this->line('  Solde de la caisse : '.$this->money((float) $doublon->caisse?->solde).' DH');
 
             return self::SUCCESS;
@@ -90,24 +90,24 @@ final class AnnulerDepenseDoublon extends Command
             ['Toutes deux « Approuvée »', $doublon->isApprouvee() && $conservee->isApprouvee(),
                 "{$reference} : {$doublon->statut} · {$refConservee} : {$conservee->statut}"],
             ['Même caisse', $doublon->caisse_id !== null && $doublon->caisse_id === $conservee->caisse_id,
-                ($doublon->caisse?->nom ?? '—').' / '.($conservee->caisse?->nom ?? '—')],
+                ($doublon->caisse?->nom ?? '-').' / '.($conservee->caisse?->nom ?? '-')],
             ['Même montant', (string) $doublon->montant === (string) $conservee->montant,
                 $this->money((float) $doublon->montant).' / '.$this->money((float) $conservee->montant)],
             ['Même date de dépense', $doublon->date_depense?->toDateString() === $conservee->date_depense?->toDateString(),
-                ($doublon->date_depense?->format('d/m/Y') ?? '—').' / '.($conservee->date_depense?->format('d/m/Y') ?? '—')],
+                ($doublon->date_depense?->format('d/m/Y') ?? '-').' / '.($conservee->date_depense?->format('d/m/Y') ?? '-')],
             ['Même description', trim((string) $doublon->description) === trim((string) $conservee->description),
                 '« '.trim((string) $doublon->description).' » / « '.trim((string) $conservee->description).' »'],
             ['Saisies à moins de '.self::FENETRE_MINUTES.' min', $ecartMinutes !== null && $ecartMinutes <= self::FENETRE_MINUTES,
-                $ecartMinutes === null ? '—' : $ecartMinutes.' min'],
+                $ecartMinutes === null ? '-' : $ecartMinutes.' min'],
             ['Exactement UN débit journalisé pour '.$reference, $sorties === 1, $sorties.' débit(s)'],
             ['Aucune écriture compensatoire pour '.$reference, $entrees === 0, $entrees.' crédit(s)'],
         ];
 
         $this->line('');
         $this->line("  Dépense en trop : <info>{$reference}</info>  ·  conservée : <info>{$refConservee}</info>");
-        $this->line('  Caisse          : '.($doublon->caisse?->nom ?? '—').' ('.($doublon->caisse?->etablissement?->nom_centre ?? '—').')');
-        $this->line('  Saisie par      : '.($doublon->agent?->nomComplet() ?? '—').' le '.($doublon->created_at?->format('d/m/Y H:i') ?? '—'));
-        $this->line('  Approuvée par   : '.($doublon->approvedBy?->nomComplet() ?? '—').' le '.($doublon->approved_at?->format('d/m/Y H:i') ?? '—'));
+        $this->line('  Caisse          : '.($doublon->caisse?->nom ?? '-').' ('.($doublon->caisse?->etablissement?->nom_centre ?? '-').')');
+        $this->line('  Saisie par      : '.($doublon->agent?->nomComplet() ?? '-').' le '.($doublon->created_at?->format('d/m/Y H:i') ?? '-'));
+        $this->line('  Approuvée par   : '.($doublon->approvedBy?->nomComplet() ?? '-').' le '.($doublon->approved_at?->format('d/m/Y H:i') ?? '-'));
         $this->line('');
         $this->line('  Preuves du doublon :');
 
@@ -136,7 +136,7 @@ final class AnnulerDepenseDoublon extends Command
         $this->line('');
 
         if (! $apply) {
-            $this->warn('  SIMULATION — relancez avec --apply pour appliquer.');
+            $this->warn('  SIMULATION - relancez avec --apply pour appliquer.');
 
             return self::SUCCESS;
         }

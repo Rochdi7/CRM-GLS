@@ -67,7 +67,7 @@ final class RolesAndPermissionsSeeder extends Seeder
 
         if ($roles + $users > 0) {
             $this->command?->warn(sprintf(
-                'centers.access-all retiré de %d rôle(s) et %d utilisateur(s) — réservé aux super administrateurs.',
+                'centers.access-all retiré de %d rôle(s) et %d utilisateur(s) - réservé aux super administrateurs.',
                 $roles,
                 $users,
             ));

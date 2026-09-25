@@ -140,8 +140,8 @@ export default function SallesPanel({ salles, centerOptions, permissions, center
                 {salles.data.map((row) => (
                     <tr key={row.id}>
                         <td className="fw-medium">{row.nom}</td>
-                        {!centerLocked && <td>{row.centre ?? '—'}</td>}
-                        <td>{row.capacite ?? '—'}</td>
+                        {!centerLocked && <td>{row.centre ?? '-'}</td>}
+                        <td>{row.capacite ?? '-'}</td>
                         <td>
                             <span className={`badge badge-soft-${row.statut === 'Active' ? 'success' : 'secondary'}`}>
                                 {row.statut === 'Active' ? t('Active') : t('Inactive')}

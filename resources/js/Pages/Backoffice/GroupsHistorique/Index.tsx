@@ -57,17 +57,17 @@ export default function GroupsHistoriqueIndex({ historiques, centerLocked }: Gro
                             <td>
                                 <StatusBadge label={row.niveau} />
                             </td>
-                            <td>{row.enseignant ?? '—'}</td>
-                            {!centerLocked && <td>{row.centre ?? '—'}</td>}
-                            <td>{row.anneeScolaire ?? '—'}</td>
+                            <td>{row.enseignant ?? '-'}</td>
+                            {!centerLocked && <td>{row.centre ?? '-'}</td>}
+                            <td>{row.anneeScolaire ?? '-'}</td>
                             <td>
                                 <StatusBadge label={String(row.nombreEtudiants)} variant="secondary" />
                             </td>
                             <td>
-                                {row.dateDebutFormation ?? '—'} → {row.dateFinFormation ?? '—'}
+                                {row.dateDebutFormation ?? '-'} → {row.dateFinFormation ?? '-'}
                             </td>
-                            <td>{row.archivedAt ?? '—'}</td>
-                            <td>{row.archivedBy ?? '—'}</td>
+                            <td>{row.archivedAt ?? '-'}</td>
+                            <td>{row.archivedBy ?? '-'}</td>
                         </tr>
                     ))}
                 </RelatedRecordsTable>

@@ -101,7 +101,7 @@ final class ReattribuerAgentEncaissements extends Command
         // just moves the problem to another name.
         if (in_array($vers->categorie, Employee::CATEGORIES_NON_ENCAISSEUSES, true)) {
             $this->error(sprintf(
-                '%s %s est « %s » — un poste qui n\'encaisse pas. Choisir un autre destinataire.',
+                '%s %s est « %s » - un poste qui n\'encaisse pas. Choisir un autre destinataire.',
                 $vers->prenom, $vers->nom, $vers->categorie
             ));
 
@@ -172,7 +172,7 @@ final class ReattribuerAgentEncaissements extends Command
 
         if ($dry) {
             $this->line('');
-            $this->comment('  DRY-RUN — rien écrit. Relancer sans --dry-run pour appliquer.');
+            $this->comment('  DRY-RUN - rien écrit. Relancer sans --dry-run pour appliquer.');
 
             return self::SUCCESS;
         }
@@ -271,9 +271,9 @@ final class ReattribuerAgentEncaissements extends Command
         );
 
         $this->line('');
-        $this->info(sprintf("%d agent(s) — %s DH d'historique importé.", count($lignes), number_format($totalImporte, 2, '.', ' ')));
+        $this->info(sprintf("%d agent(s) - %s DH d'historique importé.", count($lignes), number_format($totalImporte, 2, '.', ' ')));
         $this->line('');
-        $this->comment("  (!) = poste qui n'encaisse pas — n'aurait jamais dû être proposé à l'import.");
+        $this->comment("  (!) = poste qui n'encaisse pas - n'aurait jamais dû être proposé à l'import.");
         $this->comment('  « saisies CRM » = paiements que cette personne a réellement enregistrés');
         $this->comment('  dans le CRM. Ces lignes-là ne sont JAMAIS réattribuées : agent_id y est');
         $this->comment("  une trace d'audit, pas un libellé (§11).");

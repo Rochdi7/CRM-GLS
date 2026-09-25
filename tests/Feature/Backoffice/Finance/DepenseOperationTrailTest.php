@@ -98,7 +98,7 @@ final class DepenseOperationTrailTest extends TestCase
             $this->assertNotContains(
                 'expenses.approve',
                 $permissions,
-                "Role [{$role}] must not preset [expenses.approve] — the audit trail is super-admin only.",
+                "Role [{$role}] must not preset [expenses.approve] - the audit trail is super-admin only.",
             );
         }
     }

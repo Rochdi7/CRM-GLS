@@ -163,7 +163,7 @@ export default function EtablissementsPanel({ etablissements, permissions }: Eta
                     <tr key={row.id}>
                         <td className="fw-medium">{row.nomCentre}</td>
                         <td>{row.ville}</td>
-                        <td>{row.telephone ?? '—'}</td>
+                        <td>{row.telephone ?? '-'}</td>
                         <td>
                             <span className="badge badge-soft-secondary">{row.sallesCount}</span>
                         </td>
@@ -171,7 +171,7 @@ export default function EtablissementsPanel({ etablissements, permissions }: Eta
                             {row.siegeSocial ? (
                                 <span className="badge badge-soft-success">Oui</span>
                             ) : (
-                                <span className="text-muted">—</span>
+                                <span className="text-muted">-</span>
                             )}
                         </td>
                         <td className="text-end">

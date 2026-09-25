@@ -75,7 +75,7 @@ final class AnnulerRemboursement
 
             $note = trim((string) $verrouille->note);
             $suffixe = Remboursement::MARQUEUR_ANNULE.' le '.now()->format('d/m/Y')
-                .' — caisse recréditée de '.number_format($montant, 2, ',', ' ').' DH.'
+                .' - caisse recréditée de '.number_format($montant, 2, ',', ' ').' DH.'
                 .($motif !== null && trim($motif) !== '' ? ' Motif : '.trim($motif) : '');
 
             $verrouille->update([

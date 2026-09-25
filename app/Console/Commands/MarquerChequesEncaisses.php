@@ -52,7 +52,7 @@ final class MarquerChequesEncaisses extends Command
             $candidats->map(fn (Cheque $c) => [
                 $c->reference,
                 $c->numero_cheque,
-                $c->etablissement?->nom_centre ?? '—',
+                $c->etablissement?->nom_centre ?? '-',
                 $c->statut,
                 number_format((float) $c->montant, 2, ',', ' '),
                 number_format((float) $c->encaissements_sum_montant, 2, ',', ' '),

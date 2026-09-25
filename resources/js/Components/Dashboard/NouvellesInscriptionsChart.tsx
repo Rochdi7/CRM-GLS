@@ -311,7 +311,7 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
 
             <Modal
                 show={detail !== null}
-                title={`${t('New registrations')} — ${detail?.label ?? ''}`}
+                title={`${t('New registrations')} - ${detail?.label ?? ''}`}
                 onClose={() => {
                     requestId.current++;
                     setDetail(null);
@@ -359,10 +359,10 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                                                     <>{s.nom} {s.prenom}</>
                                                 )}
                                             </td>
-                                            <td>{s.telephone ?? '—'}</td>
+                                            <td>{s.telephone ?? '-'}</td>
                                             {/* A group name is a code (« 2610-1900-A1-1-Yassine ») — keep it as typed. */}
-                                            <td className="text-normal-case">{s.groupe ?? '—'}</td>
-                                            <td>{s.centre ?? '—'}</td>
+                                            <td className="text-normal-case">{s.groupe ?? '-'}</td>
+                                            <td>{s.centre ?? '-'}</td>
                                             <td>
                                                 {s.dateInscription}
                                                 {data.duree === 'jour' && s.heure && <span className="text-muted"> {s.heure}</span>}

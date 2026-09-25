@@ -90,7 +90,7 @@ export default function PaiementProfTab({
                         id="emp-mode-paiement"
                         label={t('Pay mode')}
                         options={modeOptions}
-                        placeholder={t('— Not a paid teacher —')}
+                        placeholder={t('- Not a paid teacher -')}
                         value={mode}
                         onChange={(event) => onModeChange(event.target.value as ModePaiementProf)}
                         error={errors.mode_paiement_prof}

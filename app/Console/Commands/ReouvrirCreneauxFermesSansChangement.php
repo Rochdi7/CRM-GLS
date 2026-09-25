@@ -57,7 +57,7 @@ final class ReouvrirCreneauxFermesSansChangement extends Command
             ->get();
 
         if ($groupes->isEmpty()) {
-            $this->info('Aucun groupe concerné — tous les emplois du temps actifs sont ouverts.');
+            $this->info('Aucun groupe concerné - tous les emplois du temps actifs sont ouverts.');
 
             return self::SUCCESS;
         }
@@ -81,8 +81,8 @@ final class ReouvrirCreneauxFermesSansChangement extends Command
             $lignes[] = [
                 $group->id,
                 $group->nom,
-                $group->etablissement?->nom_centre ?? '—',
-                $group->anneeScolaire?->nom ?? '—',
+                $group->etablissement?->nom_centre ?? '-',
+                $group->anneeScolaire?->nom ?? '-',
                 $periodes->count(),
                 $creneaux . ' / ' . ($creneaux + $ouverts),
                 $vraiChangement ? 'IGNORÉ (changement réel)' : ($apply ? 'ROUVERT' : 'à rouvrir'),
@@ -121,7 +121,7 @@ final class ReouvrirCreneauxFermesSansChangement extends Command
         ));
 
         if (! $apply) {
-            $this->warn('Simulation — relancez avec --apply pour écrire.');
+            $this->warn('Simulation - relancez avec --apply pour écrire.');
         } else {
             $this->info('Lancez ensuite `php artisan seances:generate` pour produire les séances du jour.');
         }

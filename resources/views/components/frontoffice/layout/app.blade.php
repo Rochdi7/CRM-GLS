@@ -1,5 +1,5 @@
 {{--
-    Frontoffice main layout — public-facing area (students, parents, visitors).
+    Frontoffice main layout - public-facing area (students, parents, visitors).
 
     Deliberately independent from the Backoffice admin shell: it reuses only
     Bootstrap 5 + the icon font from the PreSkool asset set, plus its own
@@ -20,7 +20,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ $title ? $title.' — '.config('app.name') : config('app.name') }}</title>
+    <title>{{ $title ? $title.' - '.config('app.name') : config('app.name') }}</title>
 
     {{-- Favicon (GLS brand set) --}}
     <link rel="icon" type="image/png" sizes="96x96" href="{{ asset('assets/images/favicon/favicon-96x96.png') }}">

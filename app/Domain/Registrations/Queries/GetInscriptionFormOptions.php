@@ -30,6 +30,9 @@ final class GetInscriptionFormOptions
     public function students($user): Collection
     {
         return Student::query()
+            // Une fiche « Transféré » ne s'inscrit plus ici : son dossier
+            // vit sur la copie du centre d'arrivée (25/09/2026).
+            ->where('statut', '!=', Student::STATUT_TRANSFERE)
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(function ($q): void {
                 if (! $this->context->isAllCenters()) {
@@ -60,7 +63,7 @@ final class GetInscriptionFormOptions
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
             ->orderBy('nom')
             ->get()
-            ->map(fn (Group $g): array => ['id' => $g->id, 'label' => "{$g->nom} — {$g->niveau}", 'statut' => $g->statut]);
+            ->map(fn (Group $g): array => ['id' => $g->id, 'label' => "{$g->nom} - {$g->niveau}", 'statut' => $g->statut]);
     }
 
     /**
@@ -96,7 +99,7 @@ final class GetInscriptionFormOptions
             ->get()
             ->map(fn (Group $g): array => [
                 'id' => $g->id,
-                'label' => "{$g->nom} — {$g->niveau}",
+                'label' => "{$g->nom} - {$g->niveau}",
                 'statut' => $g->statut,
                 'anneeScolaireId' => $g->annee_scolaire_id,
                 'anneeLabel' => $g->anneeScolaire?->nom,

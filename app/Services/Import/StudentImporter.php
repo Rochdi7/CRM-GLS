@@ -129,7 +129,7 @@ final class StudentImporter implements Importer
                             'errors' => [[
                                 'field' => 'legacy_ref',
                                 'code' => 'already_imported',
-                                'message' => 'Étudiant déjà importé — ligne ignorée.',
+                                'message' => 'Étudiant déjà importé - ligne ignorée.',
                             ]],
                         ]);
 
@@ -238,13 +238,13 @@ final class StudentImporter implements Importer
             // same-name collision that silently dropped a real student.
             $reason = $legacyRef !== '' && $duplicate->legacy_ref === $legacyRef
                 ? sprintf(
-                    'Déjà importé : %s %s — la réf. %s existe déjà dans ce centre (import précédent).',
+                    'Déjà importé : %s %s - la réf. %s existe déjà dans ce centre (import précédent).',
                     $prenom,
                     $nom,
                     $legacyRef,
                 )
                 : sprintf(
-                    'Doublon : %s %s existe déjà dans ce centre (%s) — réf. %s.',
+                    'Doublon : %s %s existe déjà dans ce centre (%s) - réf. %s.',
                     $duplicate->prenom,
                     $duplicate->nom,
                     $dateNaissance !== null
@@ -286,7 +286,7 @@ final class StudentImporter implements Importer
                     'field' => 'legacy_ref',
                     'code' => 'duplicate_in_file',
                     'message' => sprintf(
-                        'Doublon dans le fichier : %s %s (réf. %s) est la même personne que la réf. %s (%s) — saisie deux fois dans l\'ancien CRM, une seule fiche est créée.',
+                        'Doublon dans le fichier : %s %s (réf. %s) est la même personne que la réf. %s (%s) - saisie deux fois dans l\'ancien CRM, une seule fiche est créée.',
                         $prenom,
                         $nom,
                         $legacyRef,

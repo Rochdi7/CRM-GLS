@@ -201,7 +201,7 @@ final class GlsStaffSeeder extends Seeder
         $centres = Etablissement::query()->pluck('id', 'nom_centre')->all();
 
         if ($centres === []) {
-            $this->command?->error('Aucun établissement en base — lancez ReferentialDataSeeder en premier.');
+            $this->command?->error('Aucun établissement en base - lancez ReferentialDataSeeder en premier.');
 
             return;
         }
@@ -215,7 +215,7 @@ final class GlsStaffSeeder extends Seeder
 
             foreach ($nomsCentres as $nomCentre) {
                 if (! isset($centres[$nomCentre])) {
-                    $this->command?->warn("Centre inconnu « {$nomCentre} » pour {$email} — ignoré.");
+                    $this->command?->warn("Centre inconnu « {$nomCentre} » pour {$email} - ignoré.");
 
                     continue;
                 }
@@ -224,7 +224,7 @@ final class GlsStaffSeeder extends Seeder
             }
 
             if ($ids === []) {
-                $this->command?->warn("Aucun centre valide pour {$email} — employé ignoré.");
+                $this->command?->warn("Aucun centre valide pour {$email} - employé ignoré.");
 
                 continue;
             }
@@ -406,7 +406,7 @@ final class GlsStaffSeeder extends Seeder
         }
 
         $this->command?->warn(
-            'Mots de passe à usage unique — affichés UNE SEULE FOIS, '
+            'Mots de passe à usage unique - affichés UNE SEULE FOIS, '
             .'changement obligatoire à la première connexion :'
         );
 

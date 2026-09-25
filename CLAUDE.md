@@ -1265,6 +1265,46 @@ the database layer. Non-negotiable invariants already enforced in code:
   groupes passe ses doublons pré-calculés (`doublonsParGroupe`, une requête
   pour toute la page) — jamais une requête par ligne (§ perf). Tests :
   `tests/Feature/Backoffice/Attendance/CreneauxDoublonsTest.php`.
+- **⚠ Un étudiant se TRANSFÈRE d'un centre à l'autre par DEMANDE, validée
+  par le super-admin** (25/09/2026, `student_transfers`,
+  `Domain\Students\Actions\{Demander,Valider,Refuser,Annuler}TransfertEtudiant`,
+  écran « Transferts d'étudiants » + action de ligne « Demander un transfert »
+  sur la page Étudiants). La demande (`student-transfers.view/create` dans
+  `defaultForEveryRole()` — TOUS les rôles, comme la remise de chèques) NOMME le centre cible, le **groupe d'affectation dans
+  ce centre (obligatoire)** et un motif ; rien ne bouge. La décision est
+  `student-transfers.validate`, dans `superAdminOnly()` : valider déplace du
+  chiffre d'affaires entre établissements. À la validation, dans UNE
+  transaction sous verrou : (1) la fiche est COPIÉE dans le centre cible
+  (nouvelle ETU-, `legacy_ref` NULL, photo/documents recopiés), la source
+  passe `Student::STATUT_TRANSFERE` et les deux se pointent
+  (`transfere_vers_student_id` / `transfere_depuis_student_id`) — la fiche
+  d'origine n'est JAMAIS déplacée ni supprimée, elle garde ses présences ;
+  (2) chaque inscription Active du centre source passe
+  `Inscription::STATUT_TRANSFEREE` ; ses lignes de frais qui ont reçu de
+  l'argent (net des remboursements) sont DÉPLACÉES telles quelles sur le
+  nouveau dossier — même mécanisme que « Changement de groupe », la ligne
+  bouge et ses encaissements la suivent — et ses lignes impayées sont
+  masquées (`MASQUE_ORIGINE_TRANSFERT`) ; (3) un nouveau dossier Actif est
+  ouvert pour la copie dans le groupe cible avec le catalogue du groupe MOINS
+  les frais déjà payés et déplacés ; (4) l'argent SUIT la personne : les
+  avances et les encaissements posés sur une ligne déplacée, plus les
+  chèques, passent sous le `student_id` de la copie. **AUCUN montant ne
+  bouge** : `montant`, `caisse_id`, `date_paiement`, `agent_id` et surtout
+  `encaissements.etablissement_id` (le stamp de ventilation) sont inchangés,
+  `caisses.solde` n'est ni lu ni écrit — le cash reste physiquement dans la
+  caisse du centre source, et la ventilation, le journal et le ledger
+  continuent de le dire ; ce qui change est à QUI l'argent est affecté, et
+  la liste des paiements le lit par le `student_id` (« le centre d'un
+  paiement est celui de l'ÉTUDIANT »). Rapatrier le cash reste un transfert
+  de caisse ordinaire. **Les présences ne sont NI déplacées NI copiées** :
+  elles appartiennent aux séances du groupe de départ, les recopier
+  doublerait ses statistiques d'absence ; la copie renvoie vers l'original.
+  Une fiche « Transféré » est CLOSE dans son centre :
+  `GardeEtudiantTransfere::assertNonTransfere()` refuse une nouvelle
+  inscription et une avance dessus (et une seconde demande), et le
+  dropdown d'inscription ne la liste plus. Une demande refusée ou annulée
+  reste lisible (jamais supprimée). Tests :
+  `tests/Feature/Backoffice/Students/TransfertEtudiantCentreTest.php`.
 - **Étudiants & Inscriptions CRUD** (same React modal pattern as Employees).
   Students: `backoffice.students.index` (`Backoffice\StudentController`) —
   modal with photo upload (media `photo` collection, `/media/<uuid8>/…`
@@ -1826,6 +1866,37 @@ keeps the primary column stable when an edit merely adds a center. Enforcing
   Motif obligatoire, journal sur chaque ligne effacée ET sur le geste. Hors
   du menu, et ce n'est pas ce qui le protège. Tests :
   `tests/Feature/Backoffice/Maintenance/MovePaymentTest.php`.
+- **⚠ Un enseignant ne voit que SES groupes** (24/09/2026,
+  `Domain\Groups\Support\PorteeEnseignant`, permission `groups.view-own`).
+  Le preset `teacher` = tableau de bord + espace enseignant +
+  `groups.view-own` + `attendance.view/mark` — rien d'autre : ni création
+  d'étudiant / d'inscription / de groupe / de créneau, ni salles, ni
+  changement d'enseignant, ni `defaultForEveryRole()`
+  (`PermissionRegistry::ROLES_SANS_BASE`). Restreint = tient
+  `groups.view-own` SANS `groups.view` — une question de permissions, jamais
+  de rôle, et un super-admin n'est jamais restreint. « Ses groupes » =
+  `groups.enseignant_id` OU un créneau OUVERT à son nom ; une séance est à
+  lui si elle est dans l'un de ses groupes OU s'il l'assure (remplacement) ;
+  ses étudiants = inscription Active dans l'un de ses groupes. UNE
+  définition, appliquée dans chaque read-model (groupes, étudiants, séances,
+  appel, absences par groupe, emploi du temps, options de filtres,
+  calendrier du tableau de bord) ET revérifiée par les policies (`couvre*`)
+  — un id forgé n'ouvre pas le groupe d'un collègue. Aucun montant ne lui est
+  servi (lignes de frais des groupes, catalogue, compteurs et graphiques du
+  tableau de bord : `porteeEnseignant`), et la fiche étudiant (paiements)
+  reste `students.view`. Exception assumée : le badge « retard de paiement »
+  de la fiche d'appel reste affiché, c'est pour lui qu'il existe. Son écran
+  Groupes est une VUE À PART (`Pages/Backoffice/Groups/MesGroupes.tsx`,
+  rendue par `GroupController@index` quand l'utilisateur est restreint) :
+  cartes en consultation seule avec l'emploi du temps ouvert de chaque
+  groupe, l'œil ouvre la liste des étudiants actifs dans un modal
+  (`groups.students-by-segment`) — jamais la table d'administration et ses
+  modals de création. Même principe pour `Seances/MesSeances.tsx` (cartes par
+  jour, seule action : faire / revoir l'appel ; aucun menu — annuler une séance
+  exige `attendance.update`, que le prof n'a pas, `SeancePolicy@cancel`) et
+  `Students/MesEtudiants.tsx` (cartes, filtre par SES groupes, ligne RÉDUITE
+  servie par `GetStudentsList` : ni CIN, ni adresse, ni parent). Tests :
+  `tests/Feature/Backoffice/Groups/PorteeEnseignantTest.php`.
 - **⚠ Only super-admin deletes.** `PermissionRegistry::superAdminOnly()`
   lists what no role preset may hold, and `matrix()` FILTERS every preset
   through it — so writing a `*.delete` into a preset has no effect, and a

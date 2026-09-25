@@ -95,7 +95,7 @@ final class AnnulationTransfertParMainteneurTest extends TestCase
         $this->actingAs($user)
             ->put(route('backoffice.caisse-transfers.update', $transfer), [
                 'statut' => CaisseTransfer::STATUT_ANNULE,
-                'motif_annulation' => 'Doublon — la caisse a déjà été vidée',
+                'motif_annulation' => 'Doublon - la caisse a déjà été vidée',
             ])
             ->assertSessionHasNoErrors();
 

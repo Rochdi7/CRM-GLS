@@ -44,7 +44,7 @@ final class GenererSeancesTestMarrakech extends Command
         {--presence=80 : Pourcentage de présents}
         {--apply : Écrire réellement (sinon dry-run)}';
 
-    protected $description = 'Complète les séances manquantes des groupes de Marrakech avec leurs appels — LOCAL uniquement';
+    protected $description = 'Complète les séances manquantes des groupes de Marrakech avec leurs appels - LOCAL uniquement';
 
     public function handle(): int
     {
@@ -59,7 +59,7 @@ final class GenererSeancesTestMarrakech extends Command
         $jusqua = Carbon::parse((string) ($this->option('jusqu-a') ?: now()->toDateString()))->startOfDay();
         $tauxPresence = max(0, min(100, (int) $this->option('presence')));
 
-        $this->info($apply ? 'MODE ÉCRITURE' : 'DRY-RUN — rien n’est écrit (ajoutez --apply)');
+        $this->info($apply ? 'MODE ÉCRITURE' : 'DRY-RUN - rien n’est écrit (ajoutez --apply)');
         $this->line(sprintf('Période : %s → %s · %d %% de présents',
             $depuis->format('d/m/Y'), $jusqua->format('d/m/Y'), $tauxPresence));
 
@@ -83,7 +83,7 @@ final class GenererSeancesTestMarrakech extends Command
                 $rythme = $this->rythmeDuGroupe($group);
 
                 if ($rythme === null) {
-                    $this->line(sprintf('  %-28s <fg=yellow>ignoré — aucune séance existante, rythme inconnu</>', $group->nom));
+                    $this->line(sprintf('  %-28s <fg=yellow>ignoré - aucune séance existante, rythme inconnu</>', $group->nom));
 
                     continue;
                 }
@@ -91,7 +91,7 @@ final class GenererSeancesTestMarrakech extends Command
                 $etudiants = $this->etudiantsDuGroupe($group);
 
                 if ($etudiants === []) {
-                    $this->line(sprintf('  %-28s <fg=yellow>ignoré — aucun étudiant rattaché</>', $group->nom));
+                    $this->line(sprintf('  %-28s <fg=yellow>ignoré - aucun étudiant rattaché</>', $group->nom));
 
                     continue;
                 }

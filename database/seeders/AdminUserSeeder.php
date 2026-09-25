@@ -71,7 +71,7 @@ final class AdminUserSeeder extends Seeder
         // its model constants everywhere else (CLAUDE.md §11).
         if (! in_array($categorie, Employee::CATEGORIES, true)) {
             $this->command?->warn(
-                "ADMIN_CATEGORIE « {$categorie} » is not a valid Employee catégorie — "
+                "ADMIN_CATEGORIE « {$categorie} » is not a valid Employee catégorie - "
                 .'falling back to '.Employee::CATEGORIE_DIRECTEUR.'.'
             );
 
@@ -85,7 +85,7 @@ final class AdminUserSeeder extends Seeder
         if ($password === null || $password === '') {
             if (! $isLocal) {
                 $this->command?->error(
-                    'ADMIN_PASSWORD is not set — refusing to seed an administrator '
+                    'ADMIN_PASSWORD is not set - refusing to seed an administrator '
                     .'with a default password outside local/testing.'
                 );
 
@@ -129,7 +129,7 @@ final class AdminUserSeeder extends Seeder
 
         if (! $creation) {
             $this->command?->info(
-                "Compte administrateur {$email} déjà présent — mot de passe conservé "
+                "Compte administrateur {$email} déjà présent - mot de passe conservé "
                 .'(le seeder ne réinitialise jamais un mot de passe existant).'
             );
         }

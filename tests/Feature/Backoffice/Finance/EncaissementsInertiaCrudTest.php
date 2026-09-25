@@ -1343,7 +1343,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
         foreach (['depenses', 'remboursements', 'caisse-transfers'] as $module) {
             $this->assertFalse(
                 \Illuminate\Support\Facades\Route::has("backoffice.{$module}.destroy"),
-                "backoffice.{$module}.destroy must not exist — money records are append-only.",
+                "backoffice.{$module}.destroy must not exist - money records are append-only.",
             );
         }
     }
@@ -1354,7 +1354,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
             $this->assertNotContains(
                 'payments.delete',
                 $permissions,
-                "Role {$role} must not carry payments.delete — a super-admin grants it by hand.",
+                "Role {$role} must not carry payments.delete - a super-admin grants it by hand.",
             );
         }
     }

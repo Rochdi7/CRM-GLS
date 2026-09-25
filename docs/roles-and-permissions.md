@@ -238,7 +238,10 @@ keep the roles from drifting apart:
   `matrix()`, jamais recopiée dans les treize listes : un rôle créé demain
   l'hérite d'office, alors qu'une liste écrite à la main l'oublierait (c'est
   exactement ce qui était arrivé à `reports.view`, absent de
-  `marketing-manager` et `teacher`). Elle contient aujourd'hui :
+  `marketing-manager` et `teacher`). ⚠ Exception : `teacher` en est EXCLU
+  depuis le 24/09/2026 (`ROLES_SANS_BASE`) — ce sont des gestes de
+  front-office, et un enseignant ne travaille que dans sa portée
+  (`groups.view-own`). Elle contient aujourd'hui :
 
   | permission | pourquoi elle est ouverte à tous |
   |---|---|
@@ -288,7 +291,7 @@ Super-admins see everything via `Gate::before` regardless.
 | `administrative-assistant` | `$operations` exactly — identical to `consultant` (asserted by a test). |
 | `administrative-manager` | `$operations` + employés (view+update), `users.view`, audit. |
 | `marketing-manager` | `$operations` **+ la gestion complète du stock** (articles, mouvements, catalogue des types) — le seul rôle qui la porte. Depuis le 03/09/2026 son périmètre de base est celui de l'assistante administrative : le stock est sa SEULE différence. Pas de `$managementEdits` — la finance reste en création seule. |
-| `teacher` | `dashboard.view`, `groups.view`, `students.view`, séances + appel. No finance. |
+| `teacher` | `dashboard.view`, `dashboard.espace-enseignant`, `groups.view-own`, `attendance.view`, `attendance.mark` — **portée enseignant** (24/09/2026) : SES groupes, leurs étudiants, leurs séances et leur emploi du temps seulement (`Domain\Groups\Support\PorteeEnseignant`) ; ne crée rien, ne voit aucun chiffre financier, et ne reçoit PAS `defaultForEveryRole()` (`PermissionRegistry::ROLES_SANS_BASE`). |
 
 Ce qu'**aucun** rôle ne porte (Gate::before uniquement) : n'importe quel
 `*.delete`, `employees.create`, `payments.update-date`, `expenses.approve`,

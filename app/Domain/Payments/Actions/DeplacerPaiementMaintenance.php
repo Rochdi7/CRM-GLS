@@ -88,7 +88,7 @@ final class DeplacerPaiementMaintenance
 
             if ($fraisCibleId !== null) {
                 throw ValidationException::withMessages([
-                    'inscription_fee_id' => __('For a payment attached to a fee, the target fee is detected by name — do not pick one.'),
+                    'inscription_fee_id' => __('For a payment attached to a fee, the target fee is detected by name - do not pick one.'),
                 ]);
             }
 

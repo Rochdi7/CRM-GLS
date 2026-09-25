@@ -8,6 +8,8 @@ use App\Models\Inscription;
 use App\Models\Presence;
 use App\Models\Seance;
 use App\Models\User;
+use App\Domain\Groups\Support\PorteeEnseignant;
+use App\Models\Group;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
 use Illuminate\Support\Collection;
@@ -64,7 +66,12 @@ final class GetAbsencesParGroupe
     {
         $groupId = (int) $filters['groupFilter'];
 
-        if ($groupId === 0) {
+        // Portée enseignant : le groupe demandé doit être l'un des siens —
+        // sinon la liste des étudiants d'un groupe voisin sortirait par son id.
+        $groupeHorsPortee = PorteeEnseignant::estRestreint($user)
+            && ! PorteeEnseignant::scopeGroupes(Group::query()->whereKey($groupId), $user)->exists();
+
+        if ($groupId === 0 || $groupeHorsPortee) {
             return ['seances' => [], 'students' => [], 'totals' => $this->emptyTotals()];
         }
 
@@ -122,6 +129,25 @@ final class GetAbsencesParGroupe
      * @param  array{dateFrom: string, dateTo: string, statutFilter: string}  $filters
      * @return Collection<int, Seance>
      */
+    /**
+     * Default window of the matrix (24/09/2026): the last N séances up to
+     * today — about one month of classes. A whole year (189 columns) is
+     * unreadable. Returns the date of the N-th most recent non-cancelled
+     * séance (or the oldest one when the group has fewer), same scoping as
+     * the matrix itself; null when there is none.
+     */
+    public const SEANCES_FENETRE_PAR_DEFAUT = 22;
+
+    public function debutFenetreParDefaut(User $user, int $groupId, int $nombre = self::SEANCES_FENETRE_PAR_DEFAUT): ?string
+    {
+        $dates = $this->seances($user, $groupId, ['dateFrom' => '', 'dateTo' => now()->toDateString(), 'statutFilter' => ''])
+            ->reject(fn (Seance $seance): bool => $seance->statut === Seance::STATUT_ANNULEE)
+            ->sortByDesc(fn (Seance $seance): string => $seance->date_seance->toDateString())
+            ->take($nombre);
+
+        return $dates->isEmpty() ? null : $dates->last()->date_seance->toDateString();
+    }
+
     private function seances(User $user, int $groupId, array $filters): Collection
     {
         return Seance::query()

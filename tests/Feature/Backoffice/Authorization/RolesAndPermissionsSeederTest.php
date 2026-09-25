@@ -73,33 +73,14 @@ final class RolesAndPermissionsSeederTest extends TestCase
         $teacher = Role::findByName('teacher');
         $this->assertEqualsCanonicalizing(
             [
-                'dashboard.view', 'groups.view', 'groups.change-teacher', 'students.view',
-                'registrations.view', 'registrations.delete',
-                'attendance.view', 'attendance.create', 'attendance.mark',
-                // Les salles sont ouvertes a TOUS les roles depuis le
-                // 31/08/2026 (Parametres > Salles), scopees aux centres
-                // affectes par Store/UpdateSalleRequest. `rooms.delete`
-                // reste super-admin.
-                'rooms.view', 'rooms.create', 'rooms.update',
-                // Gestion des rapports : base commune a TOUS les roles
-                // (PermissionRegistry::defaultForEveryRole()) — un rapport
-                // imprime une liste que son lecteur peut deja ouvrir.
-                'reports.view',
-                // Remise d'un cheque a la banque : meme base commune
-                // (07/09/2026, demande metier « tout le monde peut le
-                // faire »). Inoffensif ici : sans `cheques.view` un
-                // enseignant n'ouvre meme pas l'ecran des cheques — la
-                // permission decrit un geste, la VISIBILITE reste separee.
-                'cheques.deposit',
-                // Echeances en masse : meme base commune (07/09/2026).
-                // Recaler la date de rappel des frais d'un groupe entier ne
-                // deplace aucun argent — ni caisse, ni montant, ni statut —
-                // et la portee reste celle des centres affectes + du
-                // contexte actif, reverifiee ligne par ligne a l'ecriture
-                // (ModifierEcheancesFraisEnMasse).
-                'fee-due-dates.bulk-update',
-                // Espace enseignant du tableau de bord (23/09/2026).
-                'dashboard.espace-enseignant',
+                // Portee enseignant (24/09/2026, PorteeEnseignant) : SES
+                // groupes, leurs etudiants, seances et emploi du temps, et
+                // l'appel — rien d'autre. Ni salles, ni changement
+                // d'enseignant, ni creation de seance/creneau, ni la base
+                // commune defaultForEveryRole() (ROLES_SANS_BASE).
+                'dashboard.view', 'dashboard.espace-enseignant',
+                'groups.view-own',
+                'attendance.view', 'attendance.mark',
             ],
             $teacher->permissions()->pluck('name')->all(),
         );
@@ -427,8 +408,9 @@ final class RolesAndPermissionsSeederTest extends TestCase
         $user = User::factory()->create();
         $user->assignRole('teacher');
 
-        $this->assertTrue($user->can('groups.view'));
-        $this->assertTrue($user->can('students.view'));
+        $this->assertTrue($user->can('groups.view-own'));
+        $this->assertFalse($user->can('groups.view'));
+        $this->assertFalse($user->can('students.create'));
         $this->assertFalse($user->can('payments.view'));
         $this->assertFalse($user->can('roles.view'));
     }
@@ -473,6 +455,15 @@ final class RolesAndPermissionsSeederTest extends TestCase
                 continue; // Gate::before bypass — holds no explicit permission.
             }
 
+            // Portée enseignant (24/09/2026) : `teacher` ne fait que l'appel
+            // dans SES groupes — il ne reçoit ni la base commune ni les
+            // gestes de front-office (PermissionRegistry::ROLES_SANS_BASE).
+            if ($name === 'teacher') {
+                $this->assertFalse(Role::findByName($name)->hasPermissionTo('reports.view'));
+
+                continue;
+            }
+
             $this->assertTrue(
                 Role::findByName($name)->hasPermissionTo('reports.view'),
                 "Le rôle {$name} doit pouvoir consulter les rapports.",
@@ -492,11 +483,48 @@ final class RolesAndPermissionsSeederTest extends TestCase
      * rendrait le guichet capable de modifier un document monétaire, ce que
      * la refonte des rôles interdit explicitement (CLAUDE.md §16).
      */
+    /**
+     * Transfert d'étudiant entre centres (25/09/2026) : la DEMANDE est un
+     * geste de guichet ouvert à tous les rôles (defaultForEveryRole()), la
+     * DÉCISION reste super-admin (superAdminOnly()).
+     */
+    public function test_every_role_requests_a_student_transfer_but_only_a_super_admin_decides(): void
+    {
+        foreach (PermissionRegistry::roles() as $name => $label) {
+            if ($name === Role::SUPER_ADMIN) {
+                continue;
+            }
+
+            $role = Role::findByName($name);
+
+            if (in_array($name, PermissionRegistry::ROLES_SANS_BASE, true)) {
+                $this->assertFalse($role->hasPermissionTo('student-transfers.create'));
+
+                continue;
+            }
+
+            $this->assertTrue($role->hasPermissionTo('student-transfers.view'), $name);
+            $this->assertTrue($role->hasPermissionTo('student-transfers.create'), $name);
+            $this->assertFalse($role->hasPermissionTo('student-transfers.validate'), $name);
+        }
+
+        $this->assertContains('student-transfers.validate', PermissionRegistry::superAdminOnly());
+    }
+
     public function test_every_role_can_deposit_a_cheque_at_the_bank(): void
     {
         foreach (PermissionRegistry::roles() as $name => $label) {
             if ($name === Role::SUPER_ADMIN) {
                 continue; // Gate::before bypass — holds no explicit permission.
+            }
+
+            // Portée enseignant (24/09/2026) : `teacher` ne fait que l'appel
+            // dans SES groupes — il ne reçoit ni la base commune ni les
+            // gestes de front-office (PermissionRegistry::ROLES_SANS_BASE).
+            if ($name === 'teacher') {
+                $this->assertFalse(Role::findByName($name)->hasPermissionTo('cheques.deposit'));
+
+                continue;
             }
 
             $this->assertTrue(
@@ -545,6 +573,15 @@ final class RolesAndPermissionsSeederTest extends TestCase
                 continue; // Gate::before bypass — holds no explicit permission.
             }
 
+            // Portée enseignant (24/09/2026) : `teacher` ne fait que l'appel
+            // dans SES groupes — il ne reçoit ni la base commune ni les
+            // gestes de front-office (PermissionRegistry::ROLES_SANS_BASE).
+            if ($name === 'teacher') {
+                $this->assertFalse(Role::findByName($name)->hasPermissionTo('groups.change-teacher'));
+
+                continue;
+            }
+
             $this->assertTrue(
                 Role::findByName($name)->hasPermissionTo('groups.change-teacher'),
                 "Le rôle {$name} doit pouvoir changer l'enseignant d'un groupe.",
@@ -565,6 +602,15 @@ final class RolesAndPermissionsSeederTest extends TestCase
         foreach (PermissionRegistry::roles() as $name => $label) {
             if ($name === Role::SUPER_ADMIN) {
                 continue; // Gate::before bypass — holds no explicit permission.
+            }
+
+            // Portée enseignant (24/09/2026) : `teacher` ne fait que l'appel
+            // dans SES groupes — il ne reçoit ni la base commune ni les
+            // gestes de front-office (PermissionRegistry::ROLES_SANS_BASE).
+            if ($name === 'teacher') {
+                $this->assertFalse(Role::findByName($name)->hasPermissionTo('registrations.delete'));
+
+                continue;
             }
 
             $this->assertTrue(

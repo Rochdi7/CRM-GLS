@@ -45,7 +45,7 @@ final class MaintainerUserSeeder extends Seeder
             ?? Etablissement::query()->orderBy('id')->first();
 
         if ($centre === null) {
-            $this->command?->error('Aucun établissement en base — lancez ReferentialDataSeeder en premier.');
+            $this->command?->error('Aucun établissement en base - lancez ReferentialDataSeeder en premier.');
 
             return;
         }
@@ -129,7 +129,7 @@ final class MaintainerUserSeeder extends Seeder
                 [[HiddenAccount::EMAIL, $user->username, $motDePasse]],
             );
         } else {
-            $this->command?->info('Compte technique déjà présent — mot de passe inchangé.');
+            $this->command?->info('Compte technique déjà présent - mot de passe inchangé.');
         }
     }
 }

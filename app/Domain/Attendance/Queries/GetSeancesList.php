@@ -7,6 +7,7 @@ namespace App\Domain\Attendance\Queries;
 use App\Models\Presence;
 use App\Models\Seance;
 use App\Models\User;
+use App\Domain\Groups\Support\PorteeEnseignant;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -55,6 +56,7 @@ final class GetSeancesList
             ])
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
+            ->tap(fn ($q) => PorteeEnseignant::scopeSeances($q, $user))
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
             ->when($statutFilter !== '', fn ($q) => $q->where('statut', $statutFilter))
             ->when($groupFilter !== '', fn ($q) => $q->where('group_id', (int) $groupFilter))

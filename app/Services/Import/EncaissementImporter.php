@@ -254,7 +254,7 @@ final class EncaissementImporter implements Importer
                             'errors' => [[
                                 'field' => 'legacy_ref',
                                 'code' => 'already_imported',
-                                'message' => 'Encaissement déjà importé — ligne ignorée.',
+                                'message' => 'Encaissement déjà importé - ligne ignorée.',
                             ]],
                         ]);
 
@@ -466,7 +466,7 @@ final class EncaissementImporter implements Importer
             'date_reception' => $data['date_paiement'],
             'type' => Cheque::TYPE_A_DEPOSER,
             'statut' => Cheque::STATUT_ENCAISSE,
-            'note' => "Importé de l'ancien CRM — numéro de chèque absent de l'export.",
+            'note' => "Importé de l'ancien CRM - numéro de chèque absent de l'export.",
             'etablissement_id' => $batch->etablissement_id,
             'agent_id' => $agent->id,
         ]);
@@ -493,18 +493,18 @@ final class EncaissementImporter implements Importer
                 ?? ($feeId !== null ? InscriptionFee::find($feeId)?->nom : null);
 
             $note .= sprintf(
-                ' — frais "%s" rattaché à "%s" (libellé absent de cette inscription)',
+                ' - frais "%s" rattaché à "%s" (libellé absent de cette inscription)',
                 $loose['requested'],
                 $nom ?? '?'
             );
         }
 
         if ($data['is_avance'] ?? false) {
-            $note .= " — avance (aucun frais indiqué dans l'export)";
+            $note .= " - avance (aucun frais indiqué dans l'export)";
         }
 
         if (($data['methode'] ?? null) === Encaissement::METHODE_CHEQUE) {
-            $note .= " — chèque enregistré sans numéro (absent de l'export)";
+            $note .= " - chèque enregistré sans numéro (absent de l'export)";
         }
 
         return $note;
@@ -539,7 +539,7 @@ final class EncaissementImporter implements Importer
         // hunting through fee labels for a problem that isn't there.
         if (($resolution['student_id'] ?? null) === null) {
             throw new \RuntimeException(
-                "Étudiant introuvable dans ce centre — vérifier l'orthographe du payeur ou importer d'abord les étudiants."
+                "Étudiant introuvable dans ce centre - vérifier l'orthographe du payeur ou importer d'abord les étudiants."
             );
         }
 
@@ -548,7 +548,7 @@ final class EncaissementImporter implements Importer
         // correct shape for it, not a failure.
         if (! $isAvance && ($resolution['inscription_fee_id'] ?? null) === null) {
             throw new \RuntimeException(
-                "Cet étudiant n'a aucune inscription utilisable pour le centre/année de ce lot — importer d'abord les inscriptions, ou relancer l'analyse en acceptant les inscriptions annulées / changement."
+                "Cet étudiant n'a aucune inscription utilisable pour le centre/année de ce lot - importer d'abord les inscriptions, ou relancer l'analyse en acceptant les inscriptions annulées / changement."
             );
         }
 
@@ -562,7 +562,7 @@ final class EncaissementImporter implements Importer
 
         if ($missing !== []) {
             throw new \RuntimeException(sprintf(
-                'Ligne non résolue — %s à rapprocher avant insertion.',
+                'Ligne non résolue - %s à rapprocher avant insertion.',
                 implode(', ', $missing)
             ));
         }
@@ -1383,7 +1383,7 @@ final class EncaissementImporter implements Importer
         if ($inscriptions === []) {
             return ['inscription_fee_id' => null, 'candidates' => [], 'conflicts' => [
                 ['field' => 'inscription_fee_id', 'code' => 'no_inscription', 'message' => $this->includeInactiveInscriptions
-                    ? "Aucune inscription pour cet étudiant dans ce centre (ni active, ni annulée, ni changement) — importer d'abord les inscriptions."
+                    ? "Aucune inscription pour cet étudiant dans ce centre (ni active, ni annulée, ni changement) - importer d'abord les inscriptions."
                     : "Aucune inscription active pour cet étudiant dans ce centre. Si son inscription a été annulée ou changée, cochez « Accepter les inscriptions annulées / changement » avant d'analyser."],
             ]];
         }
@@ -1520,8 +1520,8 @@ final class EncaissementImporter implements Importer
                     'field' => 'legacy_ref',
                     'code' => 'already_in_database',
                     'message' => sprintf(
-                        "Déjà importé : %sla réf. %s existe déjà dans ce centre (import précédent) — le montant n'a pas été compté deux fois.",
-                        $payeur !== '' ? $payeur.' — ' : '',
+                        "Déjà importé : %sla réf. %s existe déjà dans ce centre (import précédent) - le montant n'a pas été compté deux fois.",
+                        $payeur !== '' ? $payeur.' - ' : '',
                         $legacyRef
                     ),
                 ];
@@ -1533,7 +1533,7 @@ final class EncaissementImporter implements Importer
                     'code' => 'duplicate_in_file',
                     'message' => sprintf(
                         'Doublon dans le fichier : %sla réf. %s apparaît sur une ligne précédente.',
-                        $payeur !== '' ? $payeur.' — ' : '',
+                        $payeur !== '' ? $payeur.' - ' : '',
                         $legacyRef
                     ),
                 ];
@@ -1567,7 +1567,7 @@ final class EncaissementImporter implements Importer
                 'field' => 'montant',
                 'code' => 'duplicate_in_file',
                 'message' => sprintf(
-                    'Doublon dans le fichier : %s— même frais, même montant (%s DH) et même date (%s) sur une ligne précédente.',
+                    'Doublon dans le fichier : %s- même frais, même montant (%s DH) et même date (%s) sur une ligne précédente.',
                     $payeur !== '' ? $payeur.' ' : 'même étudiant ',
                     $montant,
                     $datePaiement

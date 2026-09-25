@@ -161,13 +161,13 @@ final class CorrigerMontantEncaissement
             // elle n'a jamais crédité de caisse (AppliquerAvance), son
             // montant est borné par l'avance parente.
             throw ValidationException::withMessages([
-                'montant' => __('The amount of an advance allocation cannot be changed — correct it on the advance itself.'),
+                'montant' => __('The amount of an advance allocation cannot be changed - correct it on the advance itself.'),
             ]);
         }
 
         if ($encaissement->cheque_id !== null) {
             throw ValidationException::withMessages([
-                'montant' => __('A payment linked to a tracked cheque keeps its amount — the Cheques module owns that lifecycle.'),
+                'montant' => __('A payment linked to a tracked cheque keeps its amount - the Cheques module owns that lifecycle.'),
             ]);
         }
 

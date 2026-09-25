@@ -16,14 +16,14 @@ interface PresenceImportResultProps {
 export default function PresenceImportResult({ batch, failedRows, skippedRows, unresolvedRows }: PresenceImportResultProps) {
     return (
         <BackofficeLayout
-            title="Résultat de l'import — Présences & séances"
+            title="Résultat de l'import - Présences & séances"
             breadcrumbs={[
                 { label: 'Tableau de bord', href: '/backoffice/dashboard' },
                 { label: 'Import de données', href: '/backoffice/import' },
                 { label: 'Résultat' },
             ]}
         >
-            <Card title={`${batch.original_filename} — ${batch.etablissement?.nom_centre ?? ''} / ${batch.annee_scolaire?.nom ?? ''}`}>
+            <Card title={`${batch.original_filename} - ${batch.etablissement?.nom_centre ?? ''} / ${batch.annee_scolaire?.nom ?? ''}`}>
                 <div className="row mb-4">
                     <div className="col-md-3">
                         <div className="text-muted fs-13 mb-1">Lignes dans le fichier</div>
@@ -51,7 +51,7 @@ export default function PresenceImportResult({ batch, failedRows, skippedRows, u
 
                 <ImportRowReasonTable
                     title="Lignes ignorées"
-                    hint="Ces lignes n'ont volontairement pas été écrites — le plus souvent parce que l'appel était déjà enregistré pour cet élève sur cette séance, ou parce que la même ligne apparaît deux fois dans le fichier. Rien n'a été perdu."
+                    hint="Ces lignes n'ont volontairement pas été écrites - le plus souvent parce que l'appel était déjà enregistré pour cet élève sur cette séance, ou parce que la même ligne apparaît deux fois dans le fichier. Rien n'a été perdu."
                     rows={skippedRows}
                 />
 

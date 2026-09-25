@@ -122,6 +122,6 @@ final class CaisseProvisioner
 
     public function compteMethodeName(Etablissement $etablissement, string $methode): string
     {
-        return "{$methode} — {$etablissement->nom_centre}";
+        return "{$methode} - {$etablissement->nom_centre}";
     }
 }

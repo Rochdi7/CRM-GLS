@@ -37,7 +37,7 @@ final class PreparerTestPaiementProfMarrakech extends Command
 {
     protected $signature = 'paiement-prof:preparer-test-marrakech {--apply : Écrire réellement (sinon dry-run)}';
 
-    protected $description = 'Prépare Marrakech (affectations, dates, paie des profs) pour tester le calcul paiement prof — LOCAL uniquement';
+    protected $description = 'Prépare Marrakech (affectations, dates, paie des profs) pour tester le calcul paiement prof - LOCAL uniquement';
 
     /** Fragment de nom de groupe (insensible à la casse) → référence employé. */
     private const CORRESPONDANCES = [
@@ -69,7 +69,7 @@ final class PreparerTestPaiementProfMarrakech extends Command
         }
 
         $apply = (bool) $this->option('apply');
-        $this->info($apply ? 'MODE ÉCRITURE' : 'DRY-RUN — rien n\'est écrit (ajoutez --apply)');
+        $this->info($apply ? 'MODE ÉCRITURE' : 'DRY-RUN - rien n\'est écrit (ajoutez --apply)');
 
         $centre = DB::table('etablissements')->where('nom_centre', 'like', '%arrakech%')->first();
         if ($centre === null) {

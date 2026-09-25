@@ -93,7 +93,7 @@ final class ValiderTransfertCaisse
             if ((float) $source->solde < (float) $transfer->montant) {
                 throw ValidationException::withMessages([
                     'statut' => __(
-                        'The source till only holds :solde MAD — not enough for this :montant MAD transfer. It has moved since the request was filed; cancel it or file a new one for the available amount.',
+                        'The source till only holds :solde MAD - not enough for this :montant MAD transfer. It has moved since the request was filed; cancel it or file a new one for the available amount.',
                         [
                             'solde' => number_format((float) $source->solde, 2, ',', ' '),
                             'montant' => number_format((float) $transfer->montant, 2, ',', ' '),

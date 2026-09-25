@@ -1475,11 +1475,11 @@ export default function InscriptionsIndex({
                                     <td>
                                         <code>{inscription.reference}</code>
                                     </td>
-                                    <td className="fw-medium text-wrap-cell">{inscription.student ?? '—'}</td>
-                                    <td className="text-wrap-cell">{inscription.groupe ?? '—'}</td>
-                                    <td>{inscription.date ?? '—'}</td>
-                                    <td>{inscription.dateDebut ?? '—'}</td>
-                                    <td>{inscription.dateFin ?? '—'}</td>
+                                    <td className="fw-medium text-wrap-cell">{inscription.student ?? '-'}</td>
+                                    <td className="text-wrap-cell">{inscription.groupe ?? '-'}</td>
+                                    <td>{inscription.date ?? '-'}</td>
+                                    <td>{inscription.dateDebut ?? '-'}</td>
+                                    <td>{inscription.dateFin ?? '-'}</td>
                                     <td>
                                         <StatusBadge label={inscription.statut} variant={statutVariant(inscription.statut)} dot />
                                     </td>
@@ -1838,7 +1838,7 @@ export default function InscriptionsIndex({
                                         <FormField
                                             id="ins-group"
                                             label="Groupe"
-                                            value={editingInscription.groupe ?? '—'}
+                                            value={editingInscription.groupe ?? '-'}
                                             readOnly
                                             disabled
                                         />
@@ -1865,7 +1865,7 @@ export default function InscriptionsIndex({
                                     />
                                     <div className="form-text">
                                         {!editingInscription && form.data.group_id !== ''
-                                            ? 'Pré-remplie depuis le groupe — modifiable'
+                                            ? 'Pré-remplie depuis le groupe - modifiable'
                                             : 'Période de cette inscription'}
                                     </div>
                                 </div>
@@ -1879,7 +1879,7 @@ export default function InscriptionsIndex({
                                     />
                                     <div className="form-text">
                                         {!editingInscription && form.data.group_id !== ''
-                                            ? 'Pré-remplie depuis le groupe — modifiable'
+                                            ? 'Pré-remplie depuis le groupe - modifiable'
                                             : 'Période de cette inscription'}
                                     </div>
                                 </div>
@@ -2053,7 +2053,7 @@ export default function InscriptionsIndex({
                                     </div>
                                     {!canManageFees && (
                                         <p className="text-muted fs-13">
-                                            Lecture seule — vous n'avez pas la permission de modifier les frais.
+                                            Lecture seule - vous n'avez pas la permission de modifier les frais.
                                         </p>
                                     )}
                                     {canManageFees && !loadingEditingFees && (
@@ -2318,7 +2318,7 @@ export default function InscriptionsIndex({
                                                             <tr key={fee.id}>
                                                                 <td className="text-muted">{fee.nom}</td>
                                                                 <td className="text-end text-muted">{Number(fee.montant).toFixed(2)} DH</td>
-                                                                <td className="text-muted">{fee.dateEcheance || '—'}</td>
+                                                                <td className="text-muted">{fee.dateEcheance || '-'}</td>
                                                                 {canManageFees && (
                                                                     <td className="text-end" style={{ width: 120 }}>
                                                                         <button
@@ -2613,7 +2613,7 @@ export default function InscriptionsIndex({
                                                     return (
                                                         <tr key={line.id ?? index}>
                                                             <td className="text-wrap-cell">{line.nom}</td>
-                                                            <td>{line.dateEcheance ? formatFr(line.dateEcheance) : '—'}</td>
+                                                            <td>{line.dateEcheance ? formatFr(line.dateEcheance) : '-'}</td>
                                                             <td className="text-end">{fmtDh(final)} DH</td>
                                                             <td className="text-end">{fmtDh(linePaye)} DH</td>
                                                             <td className="text-end">
@@ -2708,7 +2708,7 @@ export default function InscriptionsIndex({
                             id="ins-paiement-student"
                             type="text"
                             className="form-control"
-                            value={paiementTarget?.student ?? '—'}
+                            value={paiementTarget?.student ?? '-'}
                             disabled
                         />
                     </div>
@@ -2788,7 +2788,7 @@ export default function InscriptionsIndex({
                                                     <Fragment key={line.feeId}>
                                                         <tr>
                                                             <td className="fw-medium text-wrap-cell">{line.nom}</td>
-                                                            <td>{line.dateEcheance ? formatFr(line.dateEcheance) : '—'}</td>
+                                                            <td>{line.dateEcheance ? formatFr(line.dateEcheance) : '-'}</td>
                                                             <td className="text-end">{Number(line.montantInitial).toFixed(2)} DH</td>
                                                             <td className="text-end">{Number(line.reste).toFixed(2)} DH</td>
                                                             <td>
@@ -2845,11 +2845,11 @@ export default function InscriptionsIndex({
                                                                         required
                                                                         options={paiementCheques.map((cheque) => ({
                                                                             value: cheque.id,
-                                                                            label: `${cheque.numeroCheque}${cheque.banque ? ` — ${cheque.banque}` : ''} (reste ${Number(cheque.reste).toFixed(2)} DH)`,
+                                                                            label: `${cheque.numeroCheque}${cheque.banque ? ` - ${cheque.banque}` : ''} (reste ${Number(cheque.reste).toFixed(2)} DH)`,
                                                                         }))}
                                                                         placeholder={
                                                                             paiementCheques.length === 0
-                                                                                ? "Aucun chèque enregistré pour cet étudiant — ajoutez-en un dans Chèques"
+                                                                                ? "Aucun chèque enregistré pour cet étudiant - ajoutez-en un dans Chèques"
                                                                                 : 'Choisir un chèque'
                                                                         }
                                                                         disabled={paiementCheques.length === 0}
@@ -3083,7 +3083,7 @@ export default function InscriptionsIndex({
                         <h6 className="mb-2">Groupe actuel</h6>
                         <div className="row mb-3">
                             <div className="col-md-6">
-                                <FormField id="cg-groupe-actuel" label="Groupe" value={changeGroupTarget.groupe ?? '—'} readOnly disabled />
+                                <FormField id="cg-groupe-actuel" label="Groupe" value={changeGroupTarget.groupe ?? '-'} readOnly disabled />
                             </div>
                             <div className="col-md-6">
                                 <FormField
@@ -3092,7 +3092,7 @@ export default function InscriptionsIndex({
                                     value={
                                         changeGroupTarget.montantTotal !== null
                                             ? `${Number(changeGroupTarget.montantTotal).toFixed(2)} MAD`
-                                            : '—'
+                                            : '-'
                                     }
                                     readOnly
                                     disabled
@@ -3205,7 +3205,7 @@ export default function InscriptionsIndex({
                                                             onChange={() => toggleTransferFee(fee.id as number)}
                                                         />
                                                         <label className="form-check-label" htmlFor={`cg-transfer-fee-${fee.id}`}>
-                                                            {fee.nom} — payé {parseFloat(fee.paye ?? '0').toFixed(2)} DH
+                                                            {fee.nom} - payé {parseFloat(fee.paye ?? '0').toFixed(2)} DH
                                                             {fee.statut !== 'Payé' && (
                                                                 <span className="badge badge-soft-warning ms-2">{fee.statut}</span>
                                                             )}
@@ -3267,7 +3267,7 @@ export default function InscriptionsIndex({
                                     && selectedChangeGroup.anneeScolaireId !== currentChangeGroupAnneeId && (
                                     <div className="alert alert-warning mt-2 mb-0 py-2 fs-13">
                                         La nouvelle inscription sera créée dans l'année scolaire
-                                        {' '}<strong>{selectedChangeGroup.anneeLabel ?? '—'}</strong>. Elle n'apparaîtra
+                                        {' '}<strong>{selectedChangeGroup.anneeLabel ?? '-'}</strong>. Elle n'apparaîtra
                                         dans la liste qu'après avoir basculé le sélecteur d'année en haut de page.
                                     </div>
                                 )}
@@ -3294,7 +3294,7 @@ export default function InscriptionsIndex({
                                 <FormField
                                     id="mg-groupe-actuel"
                                     label="Groupe actuel"
-                                    value={modifyGroupTarget.groupe ?? '—'}
+                                    value={modifyGroupTarget.groupe ?? '-'}
                                     readOnly
                                     disabled
                                 />

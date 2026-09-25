@@ -1,5 +1,5 @@
 {{--
-    419 — expired CSRF token, i.e. a page left open too long. Users read
+    419 - expired CSRF token, i.e. a page left open too long. Users read
     Laravel's default "Page Expired" as a crash; it is simply a re-login.
 --}}
 @extends('errors.layout')
@@ -13,7 +13,7 @@
 @endsection
 
 @section('reassurance')
-    {{ __("Sign in again and redo the action — this is normal after a long period of inactivity.") }}
+    {{ __("Sign in again and redo the action - this is normal after a long period of inactivity.") }}
 @endsection
 
 @section('actions')

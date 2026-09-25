@@ -1,7 +1,7 @@
 {{--
     Corps de l'email accompagnant le reçu de paiement en pièce jointe PDF
     (App\Domain\Payments\Mail\EncaissementRecuMail). Le reçu détaillé est
-    dans le PDF joint — ce corps reste un résumé court FR, mais mis en page
+    dans le PDF joint - ce corps reste un résumé court FR, mais mis en page
     en table HTML (compat. large des clients mail, incl. Outlook) plutôt
     qu'en texte brut, avec la couleur de marque du reçu imprimé (#1b5a90,
     voir recu.blade.php .toolbar button) et le logo GLS.
@@ -10,7 +10,7 @@
     référencé par une URL asset(). Une URL est chargée depuis les serveurs du
     client mail : Gmail ne peut pas atteindre un APP_URL local, les proxys
     d'images la bloquent, et beaucoup de clients n'affichent rien tant que le
-    destinataire n'a pas cliqué « afficher les images » — l'en-tête tombait
+    destinataire n'a pas cliqué « afficher les images » - l'en-tête tombait
     alors sur le rectangle d'image cassée. Embarqué, le logo voyage avec
     l'email et s'affiche partout, hors ligne compris.
 
@@ -73,7 +73,7 @@
                                 </tr>
                                 <tr>
                                     <td style="padding: 12px 16px; font-size: 13px; color: #6b7280; border-bottom: 1px solid #e5e7eb;">Date de paiement</td>
-                                    <td style="padding: 12px 16px; font-size: 13px; font-weight: 700; color: #111827; text-align: right; border-bottom: 1px solid #e5e7eb;">{{ $encaissement->date_paiement?->format('d/m/Y') ?? '—' }}</td>
+                                    <td style="padding: 12px 16px; font-size: 13px; font-weight: 700; color: #111827; text-align: right; border-bottom: 1px solid #e5e7eb;">{{ $encaissement->date_paiement?->format('d/m/Y') ?? '-' }}</td>
                                 </tr>
                                 <tr>
                                     <td style="padding: 14px 16px; font-size: 14px; color: #111827; font-weight: 700;">Montant réglé</td>

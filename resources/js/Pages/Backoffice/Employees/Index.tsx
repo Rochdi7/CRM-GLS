@@ -468,11 +468,11 @@ export default function EmployeesIndex({
                                                     ))}
                                                 </span>
                                             ) : (
-                                                (employee.etablissement ?? '—')
+                                                (employee.etablissement ?? '-')
                                             )}
                                         </td>
                                     )}
-                                    <td>{employee.telephone ?? '—'}</td>
+                                    <td>{employee.telephone ?? '-'}</td>
                                     <td>
                                         <StatusBadge
                                             label={employee.statut}
@@ -926,7 +926,7 @@ export default function EmployeesIndex({
                 </div>
                 <div className="alert alert-info d-flex justify-content-between align-items-center mb-3">
                     <span className="fw-medium">Nom d'utilisateur</span>
-                    <code className="fs-14">{accountTarget?.username ?? '—'}</code>
+                    <code className="fs-14">{accountTarget?.username ?? '-'}</code>
                 </div>
 
                 {regeneratedPasswordShown ? (
@@ -938,7 +938,7 @@ export default function EmployeesIndex({
                             <span className="badge badge-soft-warning">Unique</span>
                         </div>
                         <p className="text-muted fs-12 mt-2 mb-0">
-                            Communiquez-le maintenant — il ne sera plus jamais affiché. L'employé devra le changer à sa prochaine
+                            Communiquez-le maintenant - il ne sera plus jamais affiché. L'employé devra le changer à sa prochaine
                             connexion.
                         </p>
                     </>

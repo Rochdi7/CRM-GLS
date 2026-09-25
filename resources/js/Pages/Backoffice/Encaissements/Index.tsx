@@ -126,7 +126,7 @@ function inscriptionOption(inscription: StudentInscriptionOption, mode: 'paiemen
         ),
         disabled: !allowed,
         // Names the refusal instead of leaving a greyed row unexplained.
-        disabledReason: allowed ? undefined : t('Closed — not payable'),
+        disabledReason: allowed ? undefined : t('Closed - not payable'),
     };
 }
 
@@ -339,7 +339,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
     const bulkHint = selectedRows.length === 0
         ? 'Sélectionnez au moins un paiement.'
         : selectedInscriptionIds.length > 1
-            ? "Un reçu ne couvre qu'une seule inscription — décochez les paiements rattachés à une autre inscription."
+            ? "Un reçu ne couvre qu'une seule inscription - décochez les paiements rattachés à une autre inscription."
             : '';
 
     function toggleRowSelection(id: number) {
@@ -822,7 +822,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
             setTransferInscriptionOptions(
                 data.inscriptions.map((i) => ({
                     value: i.id,
-                    label: `${i.label} — reste dû ${Number(i.reste).toFixed(2)} MAD`,
+                    label: `${i.label} - reste dû ${Number(i.reste).toFixed(2)} MAD`,
                 })),
             );
         } finally {
@@ -1340,7 +1340,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                         <td>
                                             <code>{row.reference}</code>
                                         </td>
-                                        <td>{row.student ?? '—'}</td>
+                                        <td>{row.student ?? '-'}</td>
                                         {/* The fee this money was detached from (read from the audit
                                             journal server-side); a fresh avance never had one. */}
                                         <td>
@@ -1352,13 +1352,13 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                     )}
                                                 </>
                                             ) : (
-                                                <span className="text-muted">—</span>
+                                                <span className="text-muted">-</span>
                                             )}
                                         </td>
                                         <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} MAD</td>
-                                        <td>{row.caisse ?? '—'}</td>
-                                        <td>{row.agent ?? '—'}</td>
-                                        <td>{row.datePaiement ?? '—'}</td>
+                                        <td>{row.caisse ?? '-'}</td>
+                                        <td>{row.agent ?? '-'}</td>
+                                        <td>{row.datePaiement ?? '-'}</td>
                                         <td className="text-end">{Number(row.montantUtilise ?? 0).toFixed(2)} MAD</td>
                                         <td className="text-end fw-medium">
                                             {Number(row.montantRestant ?? row.montant).toFixed(2)} MAD
@@ -1436,12 +1436,12 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                         <td>
                                             <code>{row.reference}</code>
                                         </td>
-                                        <td>{row.student ?? '—'}</td>
+                                        <td>{row.student ?? '-'}</td>
                                         {filters.view === 'cheque' && (
                                             <>
-                                                <td>{row.numeroCheque ?? '—'}</td>
-                                                <td>{row.banque ?? '—'}</td>
-                                                <td>{row.dateEcheanceCheque ?? '—'}</td>
+                                                <td>{row.numeroCheque ?? '-'}</td>
+                                                <td>{row.banque ?? '-'}</td>
+                                                <td>{row.dateEcheanceCheque ?? '-'}</td>
                                             </>
                                         )}
                                         <td>
@@ -1461,7 +1461,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                                     ? row.fraisAppliques
                                                                           .map(
                                                                               (a) =>
-                                                                                  `${a.frais}${a.groupe ? ` (${a.groupe})` : ''} : ${Number(a.montant).toFixed(2)} MAD${a.date ? ` — ${a.date}` : ''}`,
+                                                                                  `${a.frais}${a.groupe ? ` (${a.groupe})` : ''} : ${Number(a.montant).toFixed(2)} MAD${a.date ? ` - ${a.date}` : ''}`,
                                                                           )
                                                                           .join('\n')
                                                                     : undefined
@@ -1484,10 +1484,10 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                     )}
                                                 </>
                                             ) : (
-                                                row.feeNom ?? '—'
+                                                row.feeNom ?? '-'
                                             )}
                                         </td>
-                                        <td>{row.caisse ?? '—'}</td>
+                                        <td>{row.caisse ?? '-'}</td>
                                         <td className="text-end fw-medium">
                                             {Number(row.montant).toFixed(2)} MAD
                                             {Number(row.montantRembourse) > 0 && (
@@ -1497,8 +1497,8 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                         <td>
                                             <span className="badge badge-soft-info">{row.methode}</span>
                                         </td>
-                                        <td>{row.datePaiement ?? '—'}</td>
-                                        <td>{row.agent ?? '—'}</td>
+                                        <td>{row.datePaiement ?? '-'}</td>
+                                        <td>{row.agent ?? '-'}</td>
                                         <td>
                                             <RowActions view={row.showUrl}>
                                                 <RowActionItem icon="ti-edit" onClick={() => openEdit(row)}>
@@ -1638,7 +1638,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                     {studentGaranties.map((g) => (
                                         <li key={g.id}>
                                             {g.numeroCheque}
-                                            {g.banque ? ` — ${g.banque}` : ''} — {Number(g.montant).toFixed(2)} DH
+                                            {g.banque ? ` - ${g.banque}` : ''} - {Number(g.montant).toFixed(2)} DH
                                         </li>
                                     ))}
                                 </ul>
@@ -1694,7 +1694,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                     <Fragment key={line.feeId}>
                                                         <tr>
                                                             <td className="fw-medium">{line.nom}</td>
-                                                            <td>{line.dateEcheance ?? '—'}</td>
+                                                            <td>{line.dateEcheance ?? '-'}</td>
                                                             <td className="text-end">{Number(line.montantInitial).toFixed(2)} DH</td>
                                                             <td className="text-end">{Number(line.reste).toFixed(2)} DH</td>
                                                             <td>
@@ -1747,11 +1747,11 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                                         required
                                                                         options={studentCheques.map((c) => ({
                                                                             value: c.id,
-                                                                            label: `${c.numeroCheque}${c.banque ? ` — ${c.banque}` : ''} (reste ${Number(c.reste).toFixed(2)} DH)`,
+                                                                            label: `${c.numeroCheque}${c.banque ? ` - ${c.banque}` : ''} (reste ${Number(c.reste).toFixed(2)} DH)`,
                                                                         }))}
                                                                         placeholder={
                                                                             studentCheques.length === 0
-                                                                                ? "Aucun chèque enregistré pour cet étudiant — ajoutez-en un dans Chèques"
+                                                                                ? "Aucun chèque enregistré pour cet étudiant - ajoutez-en un dans Chèques"
                                                                                 : 'Choisir un chèque'
                                                                         }
                                                                         disabled={studentCheques.length === 0}
@@ -1838,7 +1838,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                     id="e-edit-student"
                                     type="text"
                                     className="form-control"
-                                    value={[editingRow.studentRef, editingRow.student].filter(Boolean).join(' | ') || '—'}
+                                    value={[editingRow.studentRef, editingRow.student].filter(Boolean).join(' | ') || '-'}
                                     disabled
                                 />
                             </div>
@@ -1863,7 +1863,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                         id="e-edit-montant-total"
                                         type="text"
                                         className="form-control"
-                                        value={editingRow.feeMontantTotal !== null ? Number(editingRow.feeMontantTotal).toFixed(2) : '—'}
+                                        value={editingRow.feeMontantTotal !== null ? Number(editingRow.feeMontantTotal).toFixed(2) : '-'}
                                         disabled
                                     />
                                     <span className="input-group-text">DH</span>
@@ -1878,7 +1878,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                         id="e-edit-reste"
                                         type="text"
                                         className="form-control"
-                                        value={editingRow.feeReste !== null ? Number(editingRow.feeReste).toFixed(2) : '—'}
+                                        value={editingRow.feeReste !== null ? Number(editingRow.feeReste).toFixed(2) : '-'}
                                         disabled
                                     />
                                     <span className="input-group-text">DH</span>
@@ -1956,7 +1956,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                 {canEditMethode && editForm.data.methode !== editingRow.methode && (
                                     <p className="text-warning fs-12 mt-1 mb-0">
                                         <i className="ti ti-alert-triangle me-1" />
-                                        Le montant sera déplacé de « {editingRow.caisse ?? '—'} » vers la
+                                        Le montant sera déplacé de « {editingRow.caisse ?? '-'} » vers la
                                         caisse correspondant à « {editForm.data.methode} ».
                                     </p>
                                 )}
@@ -2183,7 +2183,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                             <code>{payment.reference}</code>
                                                         </td>
                                                         <td>
-                                                            {payment.feeNom ?? '—'}
+                                                            {payment.feeNom ?? '-'}
                                                             {payment.rembourse && (
                                                                 <span className="badge badge-soft-danger ms-2">Remboursé</span>
                                                             )}
@@ -2220,7 +2220,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                         <td>
                                                             <span className="badge badge-soft-info">{payment.methode}</span>
                                                         </td>
-                                                        <td>{payment.datePaiement ?? '—'}</td>
+                                                        <td>{payment.datePaiement ?? '-'}</td>
                                                     </tr>
                                                 );
                                             })}
@@ -2325,7 +2325,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                 frère reste ouvert — son frais redevient simplement dû. */}
             <Modal
                 show={transferTarget !== null}
-                title={transferTarget ? `Transférer le frais — ${transferTarget.reference}` : ''}
+                title={transferTarget ? `Transférer le frais - ${transferTarget.reference}` : ''}
                 onClose={closeTransfer}
                 processing={transferForm.processing}
                 size="lg"
@@ -2401,7 +2401,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                         refuse s'il n'y en a pas de disponible. */}
                                     <div className="form-text">
                                         Le paiement sera posé sur la ligne « {transferTarget.feeNom} » de cette
-                                        inscription — détectée automatiquement.
+                                        inscription - détectée automatiquement.
                                     </div>
                                 </div>
                             </div>
@@ -2452,7 +2452,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                     <p className="mb-0 fs-13">
                                         Un dossier dont le nom a déjà été appelé appartient définitivement à son
                                         étudiant : la place a été occupée, la prestation a commencé. Toutes les
-                                        lignes d'appel comptent — y compris « Absent » et « Justifié ».
+                                        lignes d'appel comptent - y compris « Absent » et « Justifié ».
                                     </p>
                                 </>
                             ) : (

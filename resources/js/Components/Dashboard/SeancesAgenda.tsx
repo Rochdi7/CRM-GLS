@@ -92,7 +92,7 @@ export default function SeancesAgenda({ data, selectedDay }: SeancesAgendaProps)
                                                     <small>{seance.heureFin ?? ''}</small>
                                                 </>
                                             ) : (
-                                                <strong>—</strong>
+                                                <strong>-</strong>
                                             )}
                                         </div>
                                         <div className="flex-fill overflow-hidden">

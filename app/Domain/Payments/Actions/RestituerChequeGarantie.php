@@ -83,7 +83,7 @@ final class RestituerChequeGarantie
 
             if ($verrouille->type !== Cheque::TYPE_GARANTIE) {
                 throw ValidationException::withMessages([
-                    'motif' => __('Only a guarantee cheque can be returned this way — a cheque to deposit follows the bank flow.'),
+                    'motif' => __('Only a guarantee cheque can be returned this way - a cheque to deposit follows the bank flow.'),
                 ]);
             }
 
@@ -114,7 +114,7 @@ final class RestituerChequeGarantie
 
             $note = trim((string) $verrouille->note);
             $suffixe = '[RESTITUÉ] le '.now()->format('d/m/Y')
-                .' — '.rtrim($motif, '.').'.';
+                .' - '.rtrim($motif, '.').'.';
 
             $verrouille->update([
                 'retourne_le' => now(),

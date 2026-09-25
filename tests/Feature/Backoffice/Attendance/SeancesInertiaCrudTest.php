@@ -258,7 +258,7 @@ final class SeancesInertiaCrudTest extends TestCase
         $this->seedMotifs();
         $seance = $this->makeSeance();
 
-        $this->actingAs($this->userWith('attendance.view', 'attendance.mark'))
+        $this->actingAs($this->userWith('attendance.view', 'attendance.mark', 'attendance.update'))
             ->post(route('backoffice.seances.annuler', $seance), ['motif' => 'Problème du temps'])
             ->assertRedirect();
 
@@ -272,7 +272,7 @@ final class SeancesInertiaCrudTest extends TestCase
         $this->seedMotifs();
         $seance = $this->makeSeance();
 
-        $this->actingAs($this->userWith('attendance.view', 'attendance.mark'))
+        $this->actingAs($this->userWith('attendance.view', 'attendance.mark', 'attendance.update'))
             ->post(route('backoffice.seances.annuler', $seance), ['motif' => ''])
             ->assertSessionHasErrors('motif');
 
@@ -284,7 +284,7 @@ final class SeancesInertiaCrudTest extends TestCase
         $this->seedMotifs();
         $seance = $this->makeSeance();
 
-        $this->actingAs($this->userWith('attendance.view', 'attendance.mark'))
+        $this->actingAs($this->userWith('attendance.view', 'attendance.mark', 'attendance.update'))
             ->post(route('backoffice.seances.annuler', $seance), ['motif' => 'Jour férié'])
             ->assertSessionHasErrors('motif');
 
@@ -297,7 +297,7 @@ final class SeancesInertiaCrudTest extends TestCase
         MotifAnnulation::create(['nom' => 'Ancienne raison', 'statut' => MotifAnnulation::STATUT_INACTIF]);
         $seance = $this->makeSeance();
 
-        $this->actingAs($this->userWith('attendance.view', 'attendance.mark'))
+        $this->actingAs($this->userWith('attendance.view', 'attendance.mark', 'attendance.update'))
             ->post(route('backoffice.seances.annuler', $seance), ['motif' => 'Ancienne raison'])
             ->assertSessionHasErrors('motif');
 
@@ -314,7 +314,7 @@ final class SeancesInertiaCrudTest extends TestCase
         $this->seedMotifs();
         $seance = $this->makeSeance();
 
-        $this->actingAs($this->userWith('attendance.view', 'attendance.mark'))
+        $this->actingAs($this->userWith('attendance.view', 'attendance.mark', 'attendance.update'))
             ->post(route('backoffice.seances.annuler', $seance), [
                 'motif' => MotifAnnulation::MOTIF_CHANGEMENT_GROUPE,
             ])

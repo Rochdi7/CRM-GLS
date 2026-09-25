@@ -23,7 +23,8 @@ import SexeIcon from '@/Components/Details/SexeIcon';
 import { splitPhone } from '@/Data/countries';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { useFilterReset } from '@/Hooks/useFilterReset';
-import type { SelectOption, StudentRow, StudentsPageProps } from '@/Types';
+import StatusBadge from '@/Components/Details/StatusBadge';
+import type { GroupeCibleTransfert, SelectOption, StudentRow, StudentsPageProps } from '@/Types';
 
 /**
  * Ce qui empêche la suppression, servi par
@@ -63,6 +64,19 @@ interface StudentFormState {
     parent_whatsapp: string;
     note: string;
     photo: File | null;
+}
+
+/**
+ * Demande de transfert vers un autre centre (25/09/2026). Le groupe
+ * d'affectation dans le centre cible est OBLIGATOIRE : sans lui l'étudiant
+ * arriverait sans dossier. Les groupes sont chargés à la volée pour le
+ * centre choisi (student-transfers.groupes-cibles).
+ */
+interface TransferFormState {
+    student_id: number | '';
+    etablissement_cible_id: number | '';
+    group_cible_id: number | '';
+    motif: string;
 }
 
 function emptyForm(defaultCountry: string, contextCenterId: number | null): StudentFormState {
@@ -112,8 +126,19 @@ export default function StudentsIndex({
     etablissements,
     centerLocked,
     contextCenterId,
+    transferCentres,
+    permissions,
 }: StudentsPageProps) {
     const isLoading = useInertiaLoading();
+    const [transferTarget, setTransferTarget] = useState<StudentRow | null>(null);
+    const [transferGroups, setTransferGroups] = useState<GroupeCibleTransfert[]>([]);
+    const [transferGroupsLoading, setTransferGroupsLoading] = useState(false);
+    const transferForm = useForm<TransferFormState>({
+        student_id: '',
+        etablissement_cible_id: '',
+        group_cible_id: '',
+        motif: '',
+    });
     const [showModal, setShowModal] = useState(false);
     const [editingStudent, setEditingStudent] = useState<StudentRow | null>(null);
     const [existingPhotoUrl, setExistingPhotoUrl] = useState<string | null>(null);
@@ -158,6 +183,57 @@ export default function StudentsIndex({
         reload({ ageSort: filters.ageSort === 'asc' ? 'desc' : 'asc' });
     }
 
+    function openTransfer(student: StudentRow) {
+        transferForm.clearErrors();
+        transferForm.setData({ student_id: student.id, etablissement_cible_id: '', group_cible_id: '', motif: '' });
+        setTransferGroups([]);
+        setTransferTarget(student);
+    }
+
+    function closeTransfer() {
+        setTransferTarget(null);
+        setTransferGroups([]);
+        transferForm.reset();
+        transferForm.clearErrors();
+    }
+
+    async function chooseTransferCentre(value: string) {
+        const centreId = value === '' ? '' : Number(value);
+        transferForm.setData((data) => ({ ...data, etablissement_cible_id: centreId, group_cible_id: '' }));
+        setTransferGroups([]);
+        if (centreId === '') {
+            return;
+        }
+        setTransferGroupsLoading(true);
+        try {
+            const response = await fetch(`/backoffice/student-transfers/groupes-cibles/${centreId}`, {
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            });
+            setTransferGroups(response.ok ? ((await response.json()) as GroupeCibleTransfert[]) : []);
+        } catch {
+            setTransferGroups([]);
+        } finally {
+            setTransferGroupsLoading(false);
+        }
+    }
+
+    function submitTransfer(event: FormEvent) {
+        event.preventDefault();
+        transferForm.post('/backoffice/student-transfers', {
+            preserveScroll: true,
+            onSuccess: () => closeTransfer(),
+        });
+    }
+
+    const transferCentreOptions: SelectOption[] = transferCentres
+        .filter((c) => c.id !== transferTarget?.etablissementId)
+        .map((c) => ({ value: c.id, label: c.nomCentre }));
+    const transferGroupOptions: SelectOption[] = transferGroups.map((g) => ({
+        value: g.id,
+        label: `${g.nom}${g.niveau ? ` - ${g.niveau}` : ''}${g.annee ? ` (${g.annee})` : ''}`,
+    }));
+
     function openCreate() {
         setEditingStudent(null);
         setExistingPhotoUrl(null);
@@ -171,7 +247,7 @@ export default function StudentsIndex({
 
     // Raccourci « Actions rapides » du tableau de bord : ?nouveau=1 ouvre
     // directement ce formulaire (confort d'interface seulement, §5).
-    useAutoOpenCreate(openCreate);
+    useAutoOpenCreate(openCreate, permissions.create);
 
     function openEdit(student: StudentRow) {
         setEditingStudent(student);
@@ -312,10 +388,12 @@ export default function StudentsIndex({
             title="Étudiants"
             breadcrumbs={[{ label: 'Tableau de bord', href: '/backoffice/dashboard' }, { label: 'Étudiants' }]}
             actions={
-                <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                    <i className="ti ti-square-rounded-plus me-2" />
-                    Ajouter un étudiant
-                </button>
+                permissions.create ? (
+                    <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
+                        <i className="ti ti-square-rounded-plus me-2" />
+                        Ajouter un étudiant
+                    </button>
+                ) : undefined
             }
         >
             <PageTabs tabs={STUDENTS_TABS} />
@@ -467,7 +545,10 @@ export default function StudentsIndex({
                                         <code>{student.reference}</code>
                                     </td>
                                     <td>
-                                        <a href={`/backoffice/students/${student.id}`} className="d-flex align-items-center text-dark">
+                                        <a
+                                            href={permissions.view ? `/backoffice/students/${student.id}` : undefined}
+                                            className="d-flex align-items-center text-dark"
+                                        >
                                             <span className="avatar avatar-sm rounded-circle bg-primary-transparent me-2 d-inline-flex align-items-center justify-content-center overflow-hidden">
                                                 {student.photoThumbUrl ? (
                                                     <img
@@ -483,6 +564,25 @@ export default function StudentsIndex({
                                             </span>
                                             <span className="fw-medium">{student.nomComplet}</span>
                                         </a>
+                                        {student.statut === 'Transféré' && (
+                                            <div className="mt-1">
+                                                <StatusBadge label="Transféré" variant="secondary" dot />
+                                                {student.transfereVers && (
+                                                    <a href={`/backoffice/students/${student.transfereVers.id}`} className="ms-1 fs-12">
+                                                        vers {student.transfereVers.centre ?? '-'}
+                                                    </a>
+                                                )}
+                                            </div>
+                                        )}
+                                        {student.transfereDepuis && (
+                                            <div className="mt-1 fs-12 text-muted">
+                                                <i className="ti ti-arrows-exchange me-1" />
+                                                Transféré depuis{' '}
+                                                <a href={`/backoffice/students/${student.transfereDepuis.id}`}>
+                                                    {student.transfereDepuis.centre ?? student.transfereDepuis.reference}
+                                                </a>
+                                            </div>
+                                        )}
                                     </td>
                                     <td>
                                         {student.niveau ? (
@@ -493,22 +593,33 @@ export default function StudentsIndex({
                                                 )}
                                             </>
                                         ) : (
-                                            '—'
+                                            '-'
                                         )}
                                     </td>
-                                    <td>{student.age ?? '—'}</td>
-                                    {!centerLocked && <td>{student.etablissement ?? '—'}</td>}
-                                    <td>{student.telephone ?? '—'}</td>
-                                    <td>{student.whatsapp ?? '—'}</td>
+                                    <td>{student.age ?? '-'}</td>
+                                    {!centerLocked && <td>{student.etablissement ?? '-'}</td>}
+                                    <td>{student.telephone ?? '-'}</td>
+                                    <td>{student.whatsapp ?? '-'}</td>
                                     <td className="text-end">
-                                        <RowActions>
-                                            <RowActionItem icon="ti-edit" onClick={() => openEdit(student)}>
-                                                Modifier
-                                            </RowActionItem>
-                                            <RowActionItem icon="ti-trash" danger onClick={() => confirmDelete(student)}>
-                                                Supprimer
-                                            </RowActionItem>
-                                        </RowActions>
+                                        {(permissions.update || permissions.delete || permissions.transfer) && (
+                                            <RowActions>
+                                                {permissions.update && (
+                                                    <RowActionItem icon="ti-edit" onClick={() => openEdit(student)}>
+                                                        Modifier
+                                                    </RowActionItem>
+                                                )}
+                                                {permissions.transfer && student.statut !== 'Transféré' && (
+                                                    <RowActionItem icon="ti-arrows-exchange" onClick={() => openTransfer(student)}>
+                                                        Demander un transfert
+                                                    </RowActionItem>
+                                                )}
+                                                {permissions.delete && (
+                                                    <RowActionItem icon="ti-trash" danger onClick={() => confirmDelete(student)}>
+                                                        Supprimer
+                                                    </RowActionItem>
+                                                )}
+                                            </RowActions>
+                                        )}
                                     </td>
                                 </tr>
                             ))}
@@ -865,6 +976,72 @@ export default function StudentsIndex({
                 </form>
             </Modal>
 
+            <Modal
+                show={transferTarget !== null}
+                title="Demander un transfert vers un autre centre"
+                onClose={closeTransfer}
+                processing={transferForm.processing}
+            >
+                <form onSubmit={submitTransfer}>
+                    <div className="alert alert-info fs-13" role="alert">
+                        <i className="ti ti-info-circle me-1" />
+                        La demande sera validée par un super-admin. À la validation, la fiche de{' '}
+                        <strong>{transferTarget?.nomComplet}</strong> est copiée dans le centre choisi et inscrite au
+                        groupe d'affectation ; tous ses paiements l'y suivent. Cette fiche passe « Transféré » et
+                        conserve ses présences.
+                    </div>
+                    {transferForm.errors.student_id && (
+                        <div className="alert alert-danger fs-13" role="alert">
+                            {transferForm.errors.student_id}
+                        </div>
+                    )}
+                    <SelectField
+                        id="tr-centre"
+                        label="Centre cible"
+                        options={transferCentreOptions}
+                        placeholder="Choisir un centre"
+                        value={transferForm.data.etablissement_cible_id}
+                        onChange={(event) => void chooseTransferCentre(event.target.value)}
+                        error={transferForm.errors.etablissement_cible_id}
+                        required
+                    />
+                    <SelectField
+                        id="tr-groupe"
+                        label="Groupe d'affectation dans le centre cible"
+                        options={transferGroupOptions}
+                        placeholder={
+                            transferForm.data.etablissement_cible_id === ''
+                                ? "Choisir d'abord un centre"
+                                : transferGroupsLoading
+                                  ? 'Chargement des groupes...'
+                                  : transferGroups.length === 0
+                                    ? 'Aucun groupe ouvert dans ce centre'
+                                    : 'Choisir un groupe'
+                        }
+                        value={transferForm.data.group_cible_id}
+                        onChange={(event) =>
+                            transferForm.setData('group_cible_id', event.target.value === '' ? '' : Number(event.target.value))
+                        }
+                        error={transferForm.errors.group_cible_id}
+                        disabled={transferForm.data.etablissement_cible_id === '' || transferGroupsLoading}
+                        required
+                    />
+                    <TextareaField
+                        id="tr-motif"
+                        label="Motif du transfert"
+                        rows={3}
+                        value={transferForm.data.motif}
+                        onChange={(event) => transferForm.setData('motif', event.target.value)}
+                        error={transferForm.errors.motif}
+                        maxLength={1000}
+                        required
+                    />
+                    <div className="d-flex justify-content-end gap-2 mt-4">
+                        <FormActions onCancel={closeTransfer} processing={transferForm.processing} submitLabel="Envoyer la demande" />
+                    </div>
+                </form>
+            </Modal>
+
             <ConfirmDialog
                 show={deleteTarget !== null}
                 title="Supprimer l'étudiant"
@@ -905,7 +1082,7 @@ export default function StudentsIndex({
                                 <ul className="mb-0 ps-3 fs-13">
                                     {deleteBlockers.presences.map((p) => (
                                         <li key={p.id}>
-                                            {p.date} — {p.statut} — {p.groupe}
+                                            {p.date} - {p.statut} - {p.groupe}
                                         </li>
                                     ))}
                                 </ul>
