@@ -28,7 +28,14 @@ export interface PageTabDef {
  * group related modules (Finance, Groupes/Historique) as tabs instead of
  * separate sidebar entries.
  */
-export default function PageTabs({ tabs }: { tabs: PageTabDef[] }) {
+export default function PageTabs({
+    tabs,
+    counts = {},
+}: {
+    tabs: PageTabDef[];
+    /** Server-computed badge per tab, keyed by tab href; 0/absent ⇒ no badge. */
+    counts?: Record<string, number>;
+}) {
     const { auth } = usePage<SharedProps>().props;
     const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
 
@@ -62,6 +69,9 @@ export default function PageTabs({ tabs }: { tabs: PageTabDef[] }) {
                         >
                             <i className={`${tab.icon} me-2`} aria-hidden="true" />
                             {tab.label}
+                            {(counts[tab.href] ?? 0) > 0 && (
+                                <span className="badge bg-warning ms-2">{counts[tab.href]}</span>
+                            )}
                         </Link>
                     </li>
                 );

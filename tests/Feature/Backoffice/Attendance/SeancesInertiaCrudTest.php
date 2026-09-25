@@ -359,9 +359,30 @@ final class SeancesInertiaCrudTest extends TestCase
         ];
 
         $this->put(route('backoffice.seances.presences.update', $seance), $payload(Presence::STATUT_ABSENT));
-        $this->put(route('backoffice.seances.presences.update', $seance), $payload(Presence::STATUT_RETARD));
+        $this->put(route('backoffice.seances.presences.update', $seance), $payload(Presence::STATUT_PRESENT));
 
         $this->assertSame(1, Presence::query()->count());
+        $this->assertSame(Presence::STATUT_PRESENT, Presence::firstOrFail()->statut);
+    }
+
+    public function test_the_roll_call_no_longer_accepts_retard(): void
+    {
+        $student = $this->enrollStudent();
+        $seance = $this->makeSeance();
+
+        $this->actingAs($this->userWith('attendance.view', 'attendance.mark'));
+
+        $this->put(route('backoffice.seances.presences.update', $seance), [
+            'presences' => [$student->id => ['statut' => Presence::STATUT_RETARD, 'note' => '']],
+        ]);
+
+        $this->assertSame(0, Presence::query()->count());
+
+        // A legacy « Retard » row coming back with the autosave is left as is.
+        Presence::create(['seance_id' => $seance->id, 'student_id' => $student->id, 'statut' => Presence::STATUT_RETARD]);
+        $this->put(route('backoffice.seances.presences.update', $seance), [
+            'presences' => [$student->id => ['statut' => Presence::STATUT_RETARD, 'note' => '']],
+        ])->assertSessionHasNoErrors();
         $this->assertSame(Presence::STATUT_RETARD, Presence::firstOrFail()->statut);
     }
 

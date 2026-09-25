@@ -5,9 +5,11 @@ import DetailRow from '@/Components/Details/DetailRow';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import RelatedRecordsTable from '@/Components/Details/RelatedRecordsTable';
 import LocalPagination from '@/Components/Tables/LocalPagination';
-import type { InscriptionDetails } from '@/Types';
+import AbsencesPanel from '@/Components/Attendance/AbsencesPanel';
+import type { AbsencesEtudiant, InscriptionDetails } from '@/Types';
 
 interface InscriptionShowProps {
+    absences: AbsencesEtudiant;
     inscription: InscriptionDetails;
 }
 
@@ -35,7 +37,8 @@ function feeStatusVariant(statut: string): 'success' | 'warning' | 'danger' {
  * totals (due/paid/remaining) are server-computed. Read-only, no edit
  * controls.
  */
-export default function InscriptionShow({ inscription }: InscriptionShowProps) {
+export default function InscriptionShow({ inscription, absences }: InscriptionShowProps) {
+    const [tab, setTab] = useState<'infos' | 'absences'>('infos');
     const reste = Number(inscription.reste);
     const [feesPage, setFeesPage] = useState(1);
 
@@ -56,6 +59,38 @@ export default function InscriptionShow({ inscription }: InscriptionShowProps) {
                 { label: inscription.reference },
             ]}
         >
+            <ul className="nav nav-tabs nav-tabs-solid nav-tabs-rounded-fill mb-3" role="tablist">
+                <li className="me-2 mb-2" role="presentation">
+                    <button
+                        type="button"
+                        className={`nav-link rounded${tab === 'infos' ? ' active' : ''}`}
+                        onClick={() => setTab('infos')}
+                    >
+                        <i className="ti ti-clipboard-list me-1" />
+                        Informations
+                    </button>
+                </li>
+                <li className="me-2 mb-2" role="presentation">
+                    <button
+                        type="button"
+                        className={`nav-link rounded${tab === 'absences' ? ' active' : ''}`}
+                        onClick={() => setTab('absences')}
+                    >
+                        <i className="ti ti-calendar-x me-1" />
+                        Absences ({absences.absences.length})
+                    </button>
+                </li>
+            </ul>
+
+            {tab === 'absences' && (
+                <AbsencesPanel
+                    data={absences}
+                    scope={`Absences de ${inscription.student ?? "l'étudiant"} dans le groupe ${inscription.groupe ?? '-'} (séances de ce dossier uniquement).`}
+                />
+            )}
+
+            {/* Tout le contenu « Informations » — plusieurs .row : un seul conteneur masqué. */}
+            <div hidden={tab !== 'infos'}>
             <div className="row">
                 <div className="col-12">
                     <Card title="Inscription">
@@ -215,6 +250,7 @@ export default function InscriptionShow({ inscription }: InscriptionShowProps) {
                         </RelatedRecordsTable>
                     </Card>
                 </div>
+            </div>
             </div>
         </BackofficeLayout>
     );

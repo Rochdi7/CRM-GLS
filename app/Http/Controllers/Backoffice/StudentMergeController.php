@@ -8,6 +8,7 @@ use App\Domain\Payments\Actions\DeplacerEncaissementVersFrais;
 use App\Domain\Payments\Queries\GetStudentPaymentPlacement;
 use App\Domain\Students\Actions\FusionnerEtudiants;
 use App\Domain\Students\Queries\GetFusionCandidates;
+use App\Domain\Students\Queries\GetStudentTransfersList;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Students\DeplacerEncaissementRequest;
 use App\Http\Requests\Backoffice\Students\FusionnerEtudiantsRequest;
@@ -47,7 +48,7 @@ use Inertia\Response;
  */
 final class StudentMergeController extends Controller
 {
-    public function index(Request $request, GetFusionCandidates $candidats, GetStudentPaymentPlacement $dossier): Response
+    public function index(Request $request, GetFusionCandidates $candidats, GetStudentPaymentPlacement $dossier, GetStudentTransfersList $transfers): Response
     {
         $this->authorize('merge', Student::class);
 
@@ -56,6 +57,7 @@ final class StudentMergeController extends Controller
 
         return Inertia::render('Backoffice/Students/Merge', [
             'filters' => ['search' => $search, 'etudiant_id' => $etudiantId],
+            'tabCounts' => fn () => $transfers->tabCounts($request->user()),
             'candidats' => $candidats($search),
             // Le dossier complet n'est chargé qu'une fois une fiche choisie —
             // closure, donc un rechargement partiel (only: ['candidats'])

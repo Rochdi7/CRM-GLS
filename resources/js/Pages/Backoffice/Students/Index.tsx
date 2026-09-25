@@ -128,6 +128,7 @@ export default function StudentsIndex({
     contextCenterId,
     transferCentres,
     permissions,
+    tabCounts,
 }: StudentsPageProps) {
     const isLoading = useInertiaLoading();
     const [transferTarget, setTransferTarget] = useState<StudentRow | null>(null);
@@ -396,7 +397,7 @@ export default function StudentsIndex({
                 ) : undefined
             }
         >
-            <PageTabs tabs={STUDENTS_TABS} />
+            <PageTabs tabs={STUDENTS_TABS} counts={tabCounts} />
 
             <Card title="Étudiants" bodyClassName="p-0 py-3">
                 {/* Per-column filter row (reference CRM's Étudiants filters,
@@ -985,10 +986,8 @@ export default function StudentsIndex({
                 <form onSubmit={submitTransfer}>
                     <div className="alert alert-info fs-13" role="alert">
                         <i className="ti ti-info-circle me-1" />
-                        La demande sera validée par un super-admin. À la validation, la fiche de{' '}
-                        <strong>{transferTarget?.nomComplet}</strong> est copiée dans le centre choisi et inscrite au
-                        groupe d'affectation ; tous ses paiements l'y suivent. Cette fiche passe « Transféré » et
-                        conserve ses présences.
+                        Validation par le backoffice. <strong>{transferTarget?.nomComplet}</strong> sera inscrit(e)
+                        dans le nouveau groupe avec ses paiements.
                     </div>
                     {transferForm.errors.student_id && (
                         <div className="alert alert-danger fs-13" role="alert">

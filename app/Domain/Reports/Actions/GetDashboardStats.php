@@ -38,6 +38,9 @@ final class GetDashboardStats
         // switcher says (same rule as GetStudentsList). Year-bearing figures
         // below (groups, inscriptions, money) still follow the switcher.
         $studentsQuery = Student::query()
+            // Une fiche « Transféré » est close ici : la personne est comptée
+            // par le centre d'arrivée, sur sa copie (25/09/2026).
+            ->where('statut', '!=', Student::STATUT_TRANSFERE)
             ->when($centreId, fn ($q) => $q->where('etablissement_id', $centreId));
 
         // Employees are staff — they exist regardless of academic year, so

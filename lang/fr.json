@@ -44,7 +44,7 @@
     "Click to see the students": "Cliquez pour voir les étudiants",
     "Student transfer refused.": "Demande de transfert refusée.",
     "Student transfer request cancelled.": "Demande de transfert annulée.",
-    "Student transfer requested - awaiting validation by a super-admin.": "Demande de transfert enregistrée - en attente de validation par un super-admin.",
+    "Student transfer requested - awaiting backoffice validation.": "Demande envoyée au backoffice.",
     "Student transfer validated: :nom is now enrolled at :centre (:reference).": "Transfert validé : :nom est désormais inscrit(e) à :centre (:reference).",
     "Student transfers": "Transferts d'étudiants",
     "The target center must be different from the student's current center.": "Le centre cible doit être différent du centre actuel de l'étudiant.",

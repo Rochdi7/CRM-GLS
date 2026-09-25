@@ -225,7 +225,7 @@ final class SeanceController extends Controller
             // modal, which may only schedule into a live group.
             'groupOptions' => $formOptions->allGroups($user),
             'statuts' => Seance::STATUTS,
-            'presenceStatuts' => Presence::STATUTS,
+            'presenceStatuts' => Presence::STATUTS_SAISISSABLES,
         ]);
     }
 
@@ -359,7 +359,7 @@ final class SeanceController extends Controller
         return Inertia::render('Backoffice/Seances/Show', [
             'seance' => $seance !== null ? $getSeanceDetails($seance) : null,
             'pageUrl' => $pageUrl,
-            'presenceStatuts' => Presence::STATUTS,
+            'presenceStatuts' => Presence::STATUTS_SAISISSABLES,
             'canMark' => $seance !== null && $user->can('mark', $seance),
             'canValidate' => $seance !== null && $user->can('validate', $seance),
             'canCancel' => $seance !== null && $user->can('cancel', $seance),

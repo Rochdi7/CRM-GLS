@@ -6,6 +6,7 @@ namespace App\Domain\Students\Queries;
 
 use App\Models\Encaissement;
 use App\Models\Inscription;
+use App\Models\Activity;
 use App\Models\Presence;
 use App\Models\Student;
 use Illuminate\Support\Collection;
@@ -96,6 +97,7 @@ final class GetStudentDetails
             // peut en général pas ouvrir la fiche d'origine (autre centre),
             // et c'est là que vivent ses présences et ses anciens dossiers.
             'historiqueTransfert' => $this->historiqueTransfert($student),
+            'paiementsTransferes' => $this->paiementsTransferes($student),
             'photoUrl' => $student->avatarUrl(),
             'parent' => ($student->parent_nom || $student->parent_telephone || $student->parent_relation || $student->parent_cin)
                 ? [
@@ -116,6 +118,58 @@ final class GetStudentDetails
                 'methode' => $encaissement->methode,
                 'date' => $encaissement->date_paiement?->format('d/m/Y'),
                 'caisse' => $encaissement->caisse?->nom,
+            ])->values()->all(),
+        ];
+    }
+
+    /**
+     * Sur une fiche « Transféré » : les paiements partis avec l'étudiant
+     * (25/09/2026). La fiche d'origine n'en porte plus aucun — l'argent suit
+     * la personne sur sa copie — et afficher « Aucun paiement · 0,00 MAD »
+     * se lisait comme de l'argent perdu. La liste vient de l'entrée de
+     * journal du transfert (`encaissements_deplaces`), append-only : c'est
+     * EXACTEMENT ce qui a été déplacé, jamais une re-dérivation. Lecture
+     * seule ; montant, date, méthode et caisse sont ceux du jour de
+     * l'encaissement. Le total exclut les lignes d'application d'avance,
+     * comme `montant_transfere` (sinon le même dirham compterait deux fois).
+     *
+     * @return array{vers: ?string, centre: ?string, total: string, lignes: list<array<string, mixed>>}|null
+     */
+    private function paiementsTransferes(Student $student): ?array
+    {
+        if (! $student->estTransfere()) {
+            return null;
+        }
+
+        $ids = Activity::query()
+            ->where('subject_type', Student::class)
+            ->where('subject_id', $student->id)
+            ->where('event', 'student_transferred')
+            ->get()
+            ->flatMap(fn (Activity $a): array => (array) ($a->properties['encaissements_deplaces'] ?? []))
+            ->map(fn ($id): int => (int) $id)
+            ->unique()
+            ->values();
+
+        $rows = Encaissement::query()
+            ->with('caisse:id,nom')
+            ->whereIn('id', $ids)
+            ->orderBy('date_paiement')
+            ->get();
+
+        return [
+            'vers' => $student->transfereVers?->reference,
+            'centre' => $student->transfereVers?->etablissement?->nom_centre,
+            'total' => number_format((float) $rows->whereNull('applied_from_encaissement_id')->sum('montant'), 2, '.', ''),
+            'lignes' => $rows->map(fn (Encaissement $e): array => [
+                'reference' => $e->reference,
+                'montant' => number_format((float) $e->montant, 2, '.', ''),
+                'methode' => $e->methode,
+                'date' => $e->date_paiement?->format('d/m/Y'),
+                'caisse' => $e->caisse?->nom,
+                'type' => $e->applied_from_encaissement_id !== null
+                    ? 'Application d\'avance'
+                    : ($e->inscription_fee_id === null ? 'Avance' : 'Paiement'),
             ])->values()->all(),
         ];
     }
@@ -162,10 +216,7 @@ final class GetStudentDetails
                 ->orderByDesc('se.heure_debut')
                 ->get(['p.id', 'p.statut', 'p.note', 'se.date_seance', 'se.heure_debut', 'g.nom as groupe']);
 
-            $compteurs = [];
-            foreach (Presence::STATUTS as $statut) {
-                $compteurs[$statut] = $presences->where('statut', $statut)->count();
-            }
+            $compteurs = Presence::compteurs($presences);
 
             $historique[] = [
                 'id' => $origine->id,

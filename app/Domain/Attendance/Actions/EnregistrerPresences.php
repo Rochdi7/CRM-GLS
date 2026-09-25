@@ -41,7 +41,10 @@ final class EnregistrerPresences
                     continue;
                 }
 
-                if (! in_array($ligne['statut'] ?? '', Presence::STATUTS, true)) {
+                // « Retard » est retiré (25/09/2026) : une ligne héritée qui
+                // revient telle quelle avec l'autosave est ignorée (la ligne
+                // en base reste intacte), jamais écrite à neuf.
+                if (! in_array($ligne['statut'] ?? '', Presence::STATUTS_SAISISSABLES, true)) {
                     continue;
                 }
 

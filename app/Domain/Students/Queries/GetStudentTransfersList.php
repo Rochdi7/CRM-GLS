@@ -8,6 +8,7 @@ use App\Models\StudentTransfer;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 /**
@@ -45,7 +46,7 @@ final class GetStudentTransfersList
         $employeeId = $user->employee?->id;
         $peutDecider = $user->can('student-transfers.validate');
 
-        $transfers = StudentTransfer::query()
+        $transfers = $this->scoped($user)
             ->with([
                 'student:id,reference,nom,prenom',
                 'nouveauStudent:id,reference,nom,prenom',
@@ -56,15 +57,6 @@ final class GetStudentTransfersList
                 'requestedBy:id,nom,prenom',
                 'decidedBy:id,name',
             ])
-            ->when(! $this->centerAccess->hasGlobalAccess($user), function ($q) use ($user): void {
-                $ids = $this->centerAccess->accessibleCenterIds($user);
-                $q->where(fn ($w) => $w
-                    ->whereIn('etablissement_source_id', $ids)
-                    ->orWhereIn('etablissement_cible_id', $ids));
-            })
-            ->when($this->context->etablissementId(), fn ($q, $centreId) => $q->where(fn ($w) => $w
-                ->where('etablissement_source_id', $centreId)
-                ->orWhere('etablissement_cible_id', $centreId)))
             ->when($statutFilter !== '', fn ($q) => $q->where('statut', $statutFilter))
             ->when($search !== '', fn ($q) => $q->where(fn ($w) => $w
                 ->where('reference', 'ilike', "%{$search}%")
@@ -115,5 +107,47 @@ final class GetStudentTransfersList
         ]);
 
         return $transfers;
+    }
+
+    /**
+     * Nombre de demandes « En attente » dans la MÊME portée que la liste —
+     * badge de l'onglet « Transferts d'étudiants ». Même périmètre, sinon le
+     * badge promet des lignes que le tableau ne montre pas.
+     */
+    public function enAttenteCount(User $user): int
+    {
+        return $this->scoped($user)
+            ->where('statut', StudentTransfer::STATUT_EN_ATTENTE)
+            ->count();
+    }
+
+    /**
+     * Badges de la barre d'onglets Étudiants, clés = href de l'onglet
+     * (Config/pageTabs.ts). Vide pour qui ne voit pas les transferts.
+     *
+     * @return array<string, int>
+     */
+    public function tabCounts(User $user): array
+    {
+        if (! $user->can('student-transfers.view')) {
+            return [];
+        }
+
+        return ['/backoffice/student-transfers' => $this->enAttenteCount($user)];
+    }
+
+    /** Portée centre (centres affectés + centre actif), partagée par la liste et le compteur. */
+    private function scoped(User $user): Builder
+    {
+        return StudentTransfer::query()
+            ->when(! $this->centerAccess->hasGlobalAccess($user), function ($q) use ($user): void {
+                $ids = $this->centerAccess->accessibleCenterIds($user);
+                $q->where(fn ($w) => $w
+                    ->whereIn('etablissement_source_id', $ids)
+                    ->orWhereIn('etablissement_cible_id', $ids));
+            })
+            ->when($this->context->etablissementId(), fn ($q, $centreId) => $q->where(fn ($w) => $w
+                ->where('etablissement_source_id', $centreId)
+                ->orWhere('etablissement_cible_id', $centreId)));
     }
 }
