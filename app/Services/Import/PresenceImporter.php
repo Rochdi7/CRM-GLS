@@ -57,8 +57,9 @@ final class PresenceImporter implements Importer
      * The two systems already agree on "Présent"/"Absent"; the entries below
      * only absorb spelling variants (missing accent, masculine/feminine) so
      * a perfectly valid line is never rejected as an unknown statut.
-     * "Retard"/"Justifié" exist in this app and are accepted in case a newer
-     * export carries them. Anything unrecognised is deliberately left
+     * "Justifié" exists in this app and is accepted in case a newer export
+     * carries it. "Retard" was removed from the system (25/09/2026): a late
+     * student DID attend, so it is imported as "Présent". Anything unrecognised is deliberately left
      * untouched for ImportValidator to reject loudly — including the literal
      * "-" the export writes when the roll call was never filled in.
      */
@@ -70,7 +71,8 @@ final class PresenceImporter implements Importer
         'Justifie' => Presence::STATUT_JUSTIFIE,
         'Justifiée' => Presence::STATUT_JUSTIFIE,
         'Justifiee' => Presence::STATUT_JUSTIFIE,
-        'En retard' => Presence::STATUT_RETARD,
+        'En retard' => Presence::STATUT_PRESENT,
+        'Retard' => Presence::STATUT_PRESENT,
     ];
 
     /**
@@ -352,7 +354,7 @@ final class PresenceImporter implements Importer
             throw new \RuntimeException('Date de séance illisible dans le fichier.');
         }
 
-        if (! in_array($data['statut'] ?? '', Presence::STATUTS, true)) {
+        if (! in_array($data['statut'] ?? '', Presence::STATUTS_SAISISSABLES, true)) {
             throw new \RuntimeException('Statut de présence absent ou non reconnu sur cette ligne.');
         }
     }

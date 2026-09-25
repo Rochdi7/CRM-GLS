@@ -77,7 +77,7 @@ const RETARD_SEUIL_JOURS = 5;
  * pickers on top (they re-query the séance list server-side and navigate
  * between séances), a "Suivi des présences" tab, the collapsible
  * "Formation" section and one roll-call line per student with mutually
- * exclusive Présent / Retard / Absent switches (header switches mark the
+ * exclusive Présent / Absent switches (header switches mark the
  * whole column). Every toggle auto-saves the roll call in one PUT
  * (EnregistrerPresences, single transaction) — no save button.
  */

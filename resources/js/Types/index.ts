@@ -350,6 +350,13 @@ export interface StudentDetails {
     transfereDepuis: StudentTransferLink | null;
     /** Fiches d'origine (centres précédents), la plus récente d'abord — lecture seule. */
     historiqueTransfert: StudentHistoriqueCentre[];
+    /** Fiche « Transféré » : les paiements partis avec l'étudiant (journal du transfert). */
+    paiementsTransferes: {
+        vers: string | null;
+        centre: string | null;
+        total: string;
+        lignes: Array<{ reference: string; montant: string; methode: string; date: string | null; caisse: string | null; type: string }>;
+    } | null;
     photoUrl: string | null;
     parent: {
         relation: string | null;
@@ -1306,6 +1313,22 @@ export interface StudentRow {
     transfereDepuis: StudentTransferLink | null;
 }
 
+/** Onglet « Absences » (fiche étudiant / fiche inscription) — GetAbsencesEtudiant. */
+export interface AbsencesEtudiant {
+    total: number;
+    compteurs: Record<string, number>;
+    absences: Array<{
+        id: number;
+        seanceId: number;
+        date: string;
+        heure: string | null;
+        groupe: string | null;
+        enseignant: string | null;
+        statut: string;
+        note: string | null;
+    }>;
+}
+
 /** Historique d'un centre précédent, affiché sur la fiche d'arrivée (GetStudentDetails::historiqueTransfert). */
 export interface StudentHistoriqueCentre {
     id: number;
@@ -1347,6 +1370,8 @@ export interface StudentsFilters {
 }
 
 export interface StudentsPageProps {
+    /** Badges de la barre d'onglets Étudiants (href ⇒ nombre en attente). */
+    tabCounts?: Record<string, number>;
     students: PaginatedData<StudentRow>;
     filters: StudentsFilters;
     perPageOptions: number[];
@@ -1399,6 +1424,7 @@ export interface StudentTransfersFilters {
 }
 
 export interface StudentTransfersPageProps {
+    tabCounts?: Record<string, number>;
     transfers: PaginatedData<StudentTransferRow>;
     filters: StudentTransfersFilters;
     perPageOptions: number[];

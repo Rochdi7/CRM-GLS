@@ -55,6 +55,7 @@ final class StudentTransferController extends Controller
             ],
             'perPageOptions' => GetStudentTransfersList::PER_PAGE_OPTIONS,
             'statuts' => StudentTransfer::STATUTS,
+            'tabCounts' => fn () => $getList->tabCounts($request->user()),
             'permissions' => [
                 'validate' => $request->user()->can('student-transfers.validate'),
             ],
@@ -103,7 +104,7 @@ final class StudentTransferController extends Controller
         );
 
         return $this->backToListPreservingFilters($request, 'backoffice.students.index')
-            ->with('success', __('Student transfer requested - awaiting validation by a super-admin.'));
+            ->with('success', __('Student transfer requested - awaiting backoffice validation.'));
     }
 
     public function validateAction(Request $request, StudentTransfer $student_transfer, ValiderTransfertEtudiant $action): RedirectResponse

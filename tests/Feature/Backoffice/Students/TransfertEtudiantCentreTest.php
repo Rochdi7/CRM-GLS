@@ -268,6 +268,12 @@ final class TransfertEtudiantCentreTest extends TestCase
         $avance = $this->paiement($student, null, 200, $caisse);
         $presence = $this->appeler($student, $this->groupeRabat, Presence::STATUT_ABSENT);
 
+        // Photo EN BASE de chaque paiement avant le transfert.
+        $avantTransfert = [
+            $paiement->id => Encaissement::query()->findOrFail($paiement->id)->getRawOriginal(),
+            $avance->id => Encaissement::query()->findOrFail($avance->id)->getRawOriginal(),
+        ];
+
         $this->demander($student)->assertSessionHasNoErrors();
         $transfert = StudentTransfer::query()->sole();
 
@@ -325,12 +331,18 @@ final class TransfertEtudiantCentreTest extends TestCase
         $this->assertSame('900.00', (string) $nouvelle->montant_total);
 
         // L'argent suit la personne : student_id réécrit, RIEN d'autre.
+        // ⚠ Date de paiement, agent, caisse, méthode, montant, centre et
+        // référence restent ceux du jour de l'encaissement — jamais la date
+        // du transfert ni le super-admin qui valide.
         foreach ([$paiement, $avance] as $row) {
+            $avant = $avantTransfert[$row->id];
             $row->refresh();
             $this->assertSame($copie->id, $row->student_id);
-            $this->assertSame($caisse->id, $row->caisse_id);
-            $this->assertSame($this->rabat->id, $row->etablissement_id);
+            foreach (['reference', 'montant', 'methode', 'date_paiement', 'agent_id', 'caisse_id', 'etablissement_id', 'inscription_fee_id', 'applied_from_encaissement_id', 'cheque_id'] as $col) {
+                $this->assertEquals($avant[$col], $row->getRawOriginal($col), "{$row->reference}.{$col} ne doit pas changer au transfert");
+            }
             $this->assertSame('2026-09-12', $row->date_paiement->toDateString());
+            $this->assertSame($this->guichet->id, $row->agent_id);
         }
         $this->assertSame('300.00', (string) $paiement->montant);
         $this->assertSame($feePaye->id, $paiement->inscription_fee_id);
@@ -348,6 +360,40 @@ final class TransfertEtudiantCentreTest extends TestCase
             'subject_type' => Student::class,
             'subject_id' => $source->id,
         ]);
+    }
+
+    /**
+     * La fiche d'origine n'a plus de paiement (l'argent a suivi la personne),
+     * mais elle DIT lesquels sont partis et vers quelle fiche — sinon
+     * « Aucun paiement · 0,00 MAD » se lit comme de l'argent perdu.
+     */
+    public function test_the_source_record_lists_the_payments_that_left_with_the_transfer(): void
+    {
+        $student = $this->etudiant();
+        $inscription = $this->inscription($student, $this->groupeRabat);
+        $fee = $this->fee($inscription, "Frais d'inscription", 300, InscriptionFee::STATUT_PAYE);
+        $caisse = Caisse::factory()->create(['etablissement_id' => $this->rabat->id]);
+        $paiement = $this->paiement($student, $fee, 300, $caisse);
+        $avance = $this->paiement($student, null, 150, $caisse);
+        $this->demander($student);
+        $admin = $this->superAdmin();
+        $this->actingAs($admin)->put(route('backoffice.student-transfers.validate', StudentTransfer::query()->sole()));
+
+        $copie = Student::query()->findOrFail($student->fresh()->transfere_vers_student_id);
+
+        $this->actingAs($admin)->get(route('backoffice.students.show', $student))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('student.paiements', 0)
+                ->where('student.paiementsTransferes.vers', $copie->reference)
+                ->where('student.paiementsTransferes.centre', 'GLS Casablanca')
+                ->where('student.paiementsTransferes.total', '450.00')
+                ->has('student.paiementsTransferes.lignes', 2)
+                ->where('student.paiementsTransferes.lignes.0.date', '12/09/2026'));
+
+        // La copie n'a pas ce bloc : ses paiements sont dans sa liste ordinaire.
+        $this->actingAs($admin)->get(route('backoffice.students.show', $copie))
+            ->assertInertia(fn ($page) => $page->where('student.paiementsTransferes', null));
     }
 
     public function test_validation_is_refused_twice_and_on_a_closed_target_group(): void
@@ -470,10 +516,73 @@ final class TransfertEtudiantCentreTest extends TestCase
                 ->where('student.historiqueTransfert.0.presences.0.groupe', 'Rabat A1')
                 ->where('student.historiqueTransfert.0.inscriptions.0.statut', Inscription::STATUT_TRANSFEREE));
 
+        // ⚠ L'onglet Absences de la copie ne compte QUE le nouveau centre :
+        // les appels de Rabat n'y entrent pas (ils sont dans l'Historique).
+        $this->appeler($copie, $this->groupeCasa, Presence::STATUT_ABSENT);
+        $this->actingAs($admin)->get(route('backoffice.students.show', $copie))
+            ->assertInertia(fn ($page) => $page
+                ->where('absences.total', 1)
+                ->has('absences.absences', 1)
+                ->where('absences.absences.0.groupe', 'Casa A1'));
+
+        // Et la fiche d'origine garde ses propres appels de Rabat, sans celui de Casablanca.
+        $this->actingAs($admin)->get(route('backoffice.students.show', $student))
+            ->assertInertia(fn ($page) => $page
+                ->where('absences.total', 2)
+                ->where('absences.absences.0.groupe', 'Rabat A1'));
+
         // La fiche d'origine, elle, n'a pas d'historique de transfert.
         $this->actingAs($admin)
             ->get(route('backoffice.students.show', $student))
             ->assertInertia(fn ($page) => $page->has('student.historiqueTransfert', 0));
+    }
+
+    /**
+     * Onglet « Absences » : la fiche étudiant liste TOUTES ses absences
+     * (Absent + Justifié), la fiche inscription seulement celles des
+     * séances du groupe de CE dossier. Un « Présent » ne figure jamais dans
+     * la liste, seulement dans les compteurs.
+     */
+    public function test_the_absences_tab_lists_this_students_absences_only(): void
+    {
+        $student = $this->etudiant();
+        $autreGroupe = Group::factory()->create(['etablissement_id' => $this->rabat->id, 'annee_scolaire_id' => $this->annee->id, 'nom' => 'Rabat B1']);
+        $insA = $this->inscription($student, $this->groupeRabat);
+        $insB = $this->inscription($student, $autreGroupe);
+
+        $this->appeler($student, $this->groupeRabat, Presence::STATUT_ABSENT);
+        $this->appeler($student, $this->groupeRabat, Presence::STATUT_PRESENT);
+        $this->appeler($student, $autreGroupe, Presence::STATUT_JUSTIFIE);
+
+        // Un AUTRE étudiant absent dans le même groupe ne doit pas apparaître.
+        $autre = Student::factory()->create(['etablissement_id' => $this->rabat->id]);
+        $this->appeler($autre, $this->groupeRabat, Presence::STATUT_ABSENT);
+
+        $admin = $this->superAdmin();
+
+        $this->actingAs($admin)->get(route('backoffice.students.show', $student))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('absences.total', 3)
+                ->has('absences.absences', 2)
+                ->where('absences.compteurs.Présent', 1)
+                ->where('absences.compteurs.Absent', 1)
+                ->where('absences.compteurs.Justifié', 1));
+
+        $this->actingAs($admin)->get(route('backoffice.inscriptions.show', $insA))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('absences.total', 2)
+                ->has('absences.absences', 1)
+                ->where('absences.absences.0.statut', Presence::STATUT_ABSENT)
+                ->where('absences.absences.0.groupe', 'Rabat A1'));
+
+        $this->actingAs($admin)->get(route('backoffice.inscriptions.show', $insB))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('absences.absences', 1)
+                ->where('absences.absences.0.statut', Presence::STATUT_JUSTIFIE)
+                ->where('absences.absences.0.groupe', 'Rabat B1'));
     }
 
     public function test_the_list_page_shows_the_request_to_the_source_centre(): void
@@ -490,5 +599,29 @@ final class TransfertEtudiantCentreTest extends TestCase
                 ->where('transfers.data.0.groupeCible.nom', 'Casa A1')
                 ->where('transfers.data.0.canCancel', true)
                 ->where('transfers.data.0.canDecide', false));
+    }
+
+    public function test_the_students_tab_bar_counts_pending_transfer_requests(): void
+    {
+        $this->actingAs($this->guichet->user)
+            ->get(route('backoffice.students.index'))
+            ->assertInertia(fn ($page) => $page->where('tabCounts', ['/backoffice/student-transfers' => 0]));
+
+        $this->demander($this->etudiant());
+
+        $this->actingAs($this->guichet->user)
+            ->get(route('backoffice.students.index'))
+            ->assertInertia(fn ($page) => $page->where('tabCounts', ['/backoffice/student-transfers' => 1]));
+
+        $this->actingAs($this->guichet->user)
+            ->get(route('backoffice.student-transfers.index'))
+            ->assertInertia(fn ($page) => $page->where('tabCounts', ['/backoffice/student-transfers' => 1]));
+
+        // Refusée ⇒ plus en attente ⇒ plus comptée.
+        StudentTransfer::query()->update(['statut' => StudentTransfer::STATUT_REFUSE]);
+
+        $this->actingAs($this->guichet->user)
+            ->get(route('backoffice.students.index'))
+            ->assertInertia(fn ($page) => $page->where('tabCounts', ['/backoffice/student-transfers' => 0]));
     }
 }

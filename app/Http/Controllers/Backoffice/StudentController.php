@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice;
 
 use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
+use App\Domain\Attendance\Queries\GetAbsencesEtudiant;
 use App\Domain\Attendance\Queries\GetSeanceFormOptions;
 use App\Domain\Groups\Support\PorteeEnseignant;
 use App\Domain\Settings\Queries\GetAccessibleCenterOptions;
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Domain\Students\Queries\GetStudentDetails;
+use App\Domain\Students\Queries\GetStudentTransfersList;
 use App\Domain\Students\Queries\GetStudentsList;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Students\StoreStudentRequest;
@@ -42,6 +44,7 @@ final class StudentController extends Controller
         GetStudentsList $getStudentsList,
         GetAccessibleCenterOptions $accessibleCenters,
         GetSeanceFormOptions $seanceOptions,
+        GetStudentTransfersList $transfers,
     ): Response {
         $this->authorize('viewAny', Student::class);
 
@@ -75,6 +78,7 @@ final class StudentController extends Controller
         }
 
         return Inertia::render('Backoffice/Students/Index', [
+            'tabCounts' => fn () => $transfers->tabCounts($request->user()),
             'students' => $getStudentsList(
                 $request->user(),
                 $search,
@@ -149,12 +153,14 @@ final class StudentController extends Controller
         ]);
     }
 
-    public function show(Student $student, GetStudentDetails $getStudentDetails): Response
+    public function show(Student $student, GetStudentDetails $getStudentDetails, GetAbsencesEtudiant $getAbsences): Response
     {
         $this->authorize('view', $student);
 
         return Inertia::render('Backoffice/Students/Show', [
             'student' => $getStudentDetails($student),
+            // Onglet « Absences » : les absences de CET étudiant seulement.
+            'absences' => $getAbsences->pourEtudiant($student),
         ]);
     }
 

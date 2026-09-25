@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice;
 
 use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
+use App\Domain\Attendance\Queries\GetAbsencesEtudiant;
 use App\Domain\Registrations\Actions\AnnulerInscription;
 use App\Domain\Registrations\Actions\AssignerLivresInscription;
 use App\Domain\Registrations\Actions\BasculerVisibiliteFraisInscription;
@@ -135,12 +136,14 @@ final class InscriptionController extends Controller
         ]);
     }
 
-    public function show(Inscription $inscription, GetInscriptionDetails $getInscriptionDetails): Response
+    public function show(Inscription $inscription, GetInscriptionDetails $getInscriptionDetails, GetAbsencesEtudiant $getAbsences): Response
     {
         $this->authorize('view', $inscription);
 
         return Inertia::render('Backoffice/Inscriptions/Show', [
             'inscription' => $getInscriptionDetails($inscription),
+            // Onglet « Absences » : celles de l'étudiant dans le groupe de CE dossier.
+            'absences' => $getAbsences->pourInscription($inscription),
         ]);
     }
 

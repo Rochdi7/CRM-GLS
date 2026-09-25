@@ -163,11 +163,11 @@ final class ImportValidator
             return $errors;
         }
 
-        if (! in_array($statut, Presence::STATUTS, true)) {
+        if (! in_array($statut, Presence::STATUTS_SAISISSABLES, true)) {
             $errors[] = $this->error('statut', 'invalid_enum', sprintf(
                 'Statut "%s" ne correspond à aucune valeur autorisée (%s).',
                 (string) $statut,
-                implode(', ', Presence::STATUTS)
+                implode(', ', Presence::STATUTS_SAISISSABLES)
             ));
         }
 

@@ -76,17 +76,10 @@ export const backofficeNavigation: NavGroup[] = [
                 // convention que « Déplacer des encaissements » et les
                 // Chèques. Le préfixe ci-dessous suffit à garder l'entrée
                 // Étudiants active pendant qu'on y est.
-                matchPaths: ['/backoffice/students'],
-                inertia: true,
-            },
-            {
-                // Demandes de transfert d'un étudiant vers un autre centre
-                // (25/09/2026) : le guichet demande, le super-admin décide.
-                label: t('Student transfers'),
-                href: '/backoffice/student-transfers',
-                icon: 'ti ti-arrows-exchange',
-                permissions: ['student-transfers.view'],
-                matchPaths: ['/backoffice/student-transfers'],
+                // « Transferts d'étudiants » n'a plus d'entrée propre non plus
+                // (25/09/2026) : c'est un onglet de la page Étudiants, avec
+                // son badge « en attente ». Il garde son `permission:`.
+                matchPaths: ['/backoffice/students', '/backoffice/student-transfers'],
                 inertia: true,
             },
             {

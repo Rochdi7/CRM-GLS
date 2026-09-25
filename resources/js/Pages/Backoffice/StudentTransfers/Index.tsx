@@ -35,7 +35,7 @@ function statutVariant(statut: string): 'success' | 'danger' | 'warning' | 'seco
  * est offert vient du serveur (`canDecide` / `canCancel`,
  * GetStudentTransfersList) — la page ne redérive aucune règle (§5).
  */
-export default function StudentTransfersIndex({ transfers, filters, perPageOptions, statuts, permissions }: StudentTransfersPageProps) {
+export default function StudentTransfersIndex({ transfers, filters, perPageOptions, statuts, permissions, tabCounts }: StudentTransfersPageProps) {
     const isLoading = useInertiaLoading();
     const [decision, setDecision] = useState<Decision | null>(null);
     const [motif, setMotif] = useState('');
@@ -124,7 +124,7 @@ export default function StudentTransfersIndex({ transfers, filters, perPageOptio
                 { label: "Transferts d'étudiants" },
             ]}
         >
-            <PageTabs tabs={STUDENTS_TABS} />
+            <PageTabs tabs={STUDENTS_TABS} counts={tabCounts} />
 
             <Card title="Demandes de transfert entre centres" bodyClassName="p-0 py-3">
                 <div className="px-3 pt-2">
@@ -170,8 +170,7 @@ export default function StudentTransfersIndex({ transfers, filters, perPageOptio
                 {!permissions.validate && (
                     <div className="alert alert-info mx-3 mb-3 fs-13" role="alert">
                         <i className="ti ti-info-circle me-1" />
-                        Une demande de transfert est validée ou refusée par un super-admin. Vous pouvez suivre ici
-                        l'état de vos demandes et retirer celles qui attendent encore.
+                        Suivez ici vos demandes. Le backoffice les valide ou les refuse.
                     </div>
                 )}
 

@@ -88,6 +88,7 @@ interface Props {
     filters: { search: string; etudiant_id: number | null };
     candidats: Candidat[];
     dossier: Dossier | null;
+    tabCounts?: Record<string, number>;
 }
 
 const URL = '/backoffice/students/fusion';
@@ -109,7 +110,7 @@ const statutBadge = (statut: string) => {
     }
 };
 
-export default function StudentMerge({ filters, candidats, dossier }: Props) {
+export default function StudentMerge({ filters, candidats, dossier, tabCounts }: Props) {
     const loading = useInertiaLoading();
     const [showMerge, setShowMerge] = useState(false);
     const [movePayment, setMovePayment] = useState<PaiementLigne | null>(null);
@@ -202,7 +203,7 @@ export default function StudentMerge({ filters, candidats, dossier }: Props) {
                 { label: t('Merge students & reassign payments') },
             ]}
         >
-            <PageTabs tabs={STUDENTS_TABS} />
+            <PageTabs tabs={STUDENTS_TABS} counts={tabCounts} />
 
             <div className="alert alert-warning d-flex align-items-start" role="alert">
                 <i className="ti ti-alert-triangle me-2 fs-18" aria-hidden="true" />
