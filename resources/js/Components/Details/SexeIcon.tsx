@@ -10,5 +10,5 @@ export default function SexeIcon({ sexe }: SexeIconProps) {
     if (sexe === 'Femme') {
         return <i className="ti ti-woman fs-16 text-pink" title="Femme" />;
     }
-    return <>—</>;
+    return <>-</>;
 }

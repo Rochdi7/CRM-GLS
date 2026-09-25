@@ -34,7 +34,7 @@ trait ResolvesImportScope
 
         if ($anneeScolaireId === null) {
             throw ValidationException::withMessages([
-                'annee_scolaire_id' => __('No academic year is available — create one in Settings first.'),
+                'annee_scolaire_id' => __('No academic year is available - create one in Settings first.'),
             ]);
         }
 

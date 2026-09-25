@@ -13,6 +13,7 @@ use App\Models\GroupEnseignant;
 use App\Models\Presence;
 use App\Models\Seance;
 use App\Models\Student;
+use App\Models\TypeDepense;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -153,6 +154,50 @@ final class PaiementProfEcranTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Backoffice/PaiementProf/Index')
                 ->where('calcul', null));
+    }
+
+    #[Test]
+    public function it_lists_the_teacher_payments_already_recorded(): void
+    {
+        // Signalé le 24/09/2026 : trois « Paiement prof » approuvés
+        // (27 773,80 MAD) et l'écran s'ouvrait sur « Aucun calcul ».
+        $type = TypeDepense::create([
+            'nom' => TypeDepense::SYSTEM_PAIEMENT_PROF, 'is_system' => true, 'statut' => TypeDepense::STATUT_ACTIF,
+        ]);
+        $agent = Employee::factory()->create(['etablissement_id' => $this->centre->id]);
+
+        Depense::query()->create([
+            'reference' => 'DEP-001',
+            'type_depense_id' => $type->id,
+            'caisse_id' => $agent->till()->first()->id,
+            'group_id' => $this->group->id,
+            'enseignant_id' => $this->prof->id,
+            'montant' => '9000.00',
+            'statut' => Depense::STATUT_APPROUVEE,
+            'date_depense' => '2025-09-30',
+            'periode_debut' => '2025-09-01',
+            'periode_fin' => '2025-09-30',
+            'description' => 'Paiement prof',
+            'agent_id' => $agent->id,
+        ]);
+
+        $this->actingAs($this->user('prof-payments.calculate', 'expenses.view'))
+            ->get('/backoffice/paiement-prof')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('calcul', null)
+                ->where('paiementsProf.montantTotal', '9000.00')
+                ->has('paiementsProf.data.data', 1)
+                ->where('paiementsProf.data.data.0.reference', 'DEP-001')
+                ->where('paiementsProf.data.data.0.enseignant', $this->prof->nomComplet()));
+    }
+
+    #[Test]
+    public function the_recorded_payments_need_the_expenses_view_permission(): void
+    {
+        $this->actingAs($this->user('prof-payments.calculate'))
+            ->get('/backoffice/paiement-prof')
+            ->assertInertia(fn (Assert $page) => $page->where('paiementsProf', null));
     }
 
     /*

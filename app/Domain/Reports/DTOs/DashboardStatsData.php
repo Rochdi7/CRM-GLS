@@ -35,6 +35,16 @@ final class DashboardStatsData
     ) {}
 
     /**
+     * Header labels only, every figure at zero — what a teacher-scoped user
+     * (PorteeEnseignant) receives: the centre-wide counts and the month's
+     * money never leave the server for him.
+     */
+    public static function enteteSeule(?string $anneeLabel, ?string $centreLabel): self
+    {
+        return new self(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0, $anneeLabel, $centreLabel);
+    }
+
+    /**
      * @return array{studentsTotal: int, studentsActifs: int, employeesTotal: int, employeesActive: int,
      *     enseignantsTotal: int, parentsTotal: int, groupsTotal: int, groupsEnFormation: int, groupsEnInscription: int,
      *     groupsTermines: int, groupsAnnules: int, inscriptionsTotal: int,

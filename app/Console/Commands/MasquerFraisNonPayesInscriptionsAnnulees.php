@@ -78,7 +78,7 @@ final class MasquerFraisNonPayesInscriptionsAnnulees extends Command
             $etudiant = trim(($inscription->student?->prenom ?? '').' '.($inscription->student?->nom ?? ''));
 
             $this->line(sprintf(
-                '  %s — %s : %d frais, %s DH',
+                '  %s - %s : %d frais, %s DH',
                 $inscription->reference,
                 $etudiant !== '' ? $etudiant : 'étudiant inconnu',
                 $lignes->count(),
@@ -88,7 +88,7 @@ final class MasquerFraisNonPayesInscriptionsAnnulees extends Command
             if ($this->option('details')) {
                 foreach ($lignes as $fee) {
                     $this->line(sprintf(
-                        '      · %s (%s) — %s DH',
+                        '      · %s (%s) - %s DH',
                         $fee->nom,
                         $fee->statut,
                         number_format((float) $fee->montant, 2, '.', ' '),

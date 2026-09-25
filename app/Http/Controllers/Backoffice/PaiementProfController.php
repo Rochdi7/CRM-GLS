@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Domain\Expenses\Queries\GetDepensesList;
 use App\Domain\Payroll\Actions\CalculerPaiementProfParSeance;
 use App\Domain\Payroll\Queries\GetPaiementProfCalcul;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
@@ -36,7 +37,7 @@ final class PaiementProfController extends Controller
 {
     use AssertsContextScope;
 
-    public function index(Request $request, GetPaiementProfCalcul $query): Response
+    public function index(Request $request, GetPaiementProfCalcul $query, GetDepensesList $depenses): Response
     {
         $user = $request->user();
 
@@ -93,6 +94,15 @@ final class PaiementProfController extends Controller
                 ->where('nom', TypeDepense::SYSTEM_PAIEMENT_PROF)
                 ->value('id'),
             'canCreateDepense' => $user->can('expenses.create'),
+            // Les paiements DÉJÀ enregistrés — sans cette liste l'écran
+            // s'ouvrait sur « Aucun calcul » alors que des « Paiement prof »
+            // existaient. Même read-model que l'onglet Paiements prof des
+            // Dépenses (portée centre/année, statuts, total Approuvée
+            // seulement) : jamais une seconde requête qui finirait par
+            // diverger. Ce sont des dépenses : `expenses.view` les ouvre.
+            'paiementsProf' => fn (): ?array => $user->can('expenses.view')
+                ? $depenses(user: $user, scope: GetDepensesList::SCOPE_PAIEMENT_PROF)
+                : null,
         ]);
     }
 

@@ -110,7 +110,7 @@ final class PurgerPresencesFantomes
                 'motif' => $motif,
             ])
             ->log(sprintf(
-                '%d appel(s) « Absent » fantôme(s) supprimé(s) sur %s (groupe #%d) — motif : %s',
+                '%d appel(s) « Absent » fantôme(s) supprimé(s) sur %s (groupe #%d) - motif : %s',
                 count($detail),
                 $inscription->reference,
                 $inscription->group_id,

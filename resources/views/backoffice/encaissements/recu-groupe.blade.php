@@ -1,5 +1,5 @@
 {{--
-    Reçu de paiement GROUPÉ — plusieurs encaissements de la MÊME inscription
+    Reçu de paiement GROUPÉ - plusieurs encaissements de la MÊME inscription
     réunis sur un seul document. Reprend à l'identique le modèle du reçu
     unitaire (`recu.blade.php`) : en-tête FR/AR du centre, ligne ICE, bande
     « Reçu N° », libellés bilingues, signature. Seul le bloc central change :
@@ -26,7 +26,7 @@
         ->unique()
         ->implode(' / ');
     $dates = $encaissements->map(fn ($e) => $e->date_paiement?->format('d/m/Y'))->filter()->unique();
-    $dateAffichee = $dates->count() === 1 ? $dates->first() : $dates->first().' — '.$dates->last();
+    $dateAffichee = $dates->count() === 1 ? $dates->first() : $dates->first().' - '.$dates->last();
 @endphp
 <!DOCTYPE html>
 <html lang="fr">
@@ -290,7 +290,7 @@
                     </div>
                 </div>
 
-                <div class="ice-line">ICE : {{ $centre?->ice ?? '—' }}</div>
+                <div class="ice-line">ICE : {{ $centre?->ice ?? '-' }}</div>
 
                 <div class="recu-num">
                     <span class="lbl-fr">Reçu N° :</span>
@@ -301,22 +301,22 @@
                 <div class="rows">
                     <div class="row-line">
                         <span class="fr">Année scolaire</span>
-                        <span class="val">{{ $anneeScolaire ?? '—' }}</span>
+                        <span class="val">{{ $anneeScolaire ?? '-' }}</span>
                         <span class="ar">السنة الدراسية</span>
                     </div>
                     <div class="row-line">
                         <span class="fr">Prénom et nom</span>
-                        <span class="val">{{ $student?->nomComplet() ?? '—' }}</span>
+                        <span class="val">{{ $student?->nomComplet() ?? '-' }}</span>
                         <span class="ar">اسم و نسب التلميذ(ة)</span>
                     </div>
                     <div class="row-line">
                         <span class="fr">Matricule</span>
-                        <span class="val">{{ $student?->reference ?? '—' }}</span>
+                        <span class="val">{{ $student?->reference ?? '-' }}</span>
                         <span class="ar">رقــم التسجيل</span>
                     </div>
                     <div class="row-line">
                         <span class="fr">Groupe</span>
-                        <span class="val">{{ $niveau ?? '—' }}</span>
+                        <span class="val">{{ $niveau ?? '-' }}</span>
                         <span class="ar">المجموعة</span>
                     </div>
                     <table class="frais-table">
@@ -340,7 +340,7 @@
                                     <td>{{ $e->libelleFrais() }}</td>
                                     <td class="num">{{ $fmt($e->montant) }}</td>
                                     <td class="num">{{ $fmt($reste) }}</td>
-                                    <td class="num">{{ $e->date_paiement?->format('d/m/Y') ?? '—' }}</td>
+                                    <td class="num">{{ $e->date_paiement?->format('d/m/Y') ?? '-' }}</td>
                                 </tr>
                             @endforeach
                         </tbody>
@@ -361,7 +361,7 @@
                     </div>
                     <div class="row-line">
                         <span class="fr">Date de paiement</span>
-                        <span class="val">{{ $dateAffichee ?: '—' }}</span>
+                        <span class="val">{{ $dateAffichee ?: '-' }}</span>
                         <span class="ar">تاريخ الأداء</span>
                     </div>
                 </div>

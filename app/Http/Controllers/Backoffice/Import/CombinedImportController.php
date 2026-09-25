@@ -179,7 +179,7 @@ final class CombinedImportController extends Controller
 
                 if (++$guard > 200) {
                     throw ValidationException::withMessages([
-                        $errorField => __('The import stopped making progress — check the batch in Recent imports.'),
+                        $errorField => __('The import stopped making progress - check the batch in Recent imports.'),
                     ]);
                 }
             } while ($result->remaining > 0);

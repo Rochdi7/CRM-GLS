@@ -29,7 +29,7 @@ function personLabel(row: ImportRow): string {
 
     const found = candidates.find((v) => typeof v === 'string' && v.trim() !== '');
 
-    return typeof found === 'string' ? found.trim() : '—';
+    return typeof found === 'string' ? found.trim() : '-';
 }
 
 /**
@@ -65,7 +65,7 @@ export default function ImportRowReasonTable({ title, hint, rows }: ImportRowRea
                 {rows.data.map((row) => (
                     <tr key={row.id}>
                         <td>{row.source_row_number}</td>
-                        <td>{String(row.raw.legacy_ref ?? '—')}</td>
+                        <td>{String(row.raw.legacy_ref ?? '-')}</td>
                         <td>{personLabel(row)}</td>
                         <td>
                             <ImportRowStatusBadge status={row.status} />

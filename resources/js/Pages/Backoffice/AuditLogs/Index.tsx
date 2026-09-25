@@ -265,7 +265,7 @@ function AuditRow({ row }: AuditRowProps) {
                 </Link>
             </td>
             <td className="text-nowrap">
-                <span className="fw-medium">{row.createdAt ?? '—'}</span>
+                <span className="fw-medium">{row.createdAt ?? '-'}</span>
                 {row.createdAtHuman && (
                     <span className="d-block fs-12 text-muted">{row.createdAtHuman}</span>
                 )}
@@ -284,7 +284,7 @@ function AuditRow({ row }: AuditRowProps) {
                         {row.money.isCredit ? '+' : '−'} {row.money.montant}
                     </span>
                 ) : (
-                    <span className="text-muted">—</span>
+                    <span className="text-muted">-</span>
                 )}
             </td>
             <td className="text-nowrap text-normal-case">
@@ -302,7 +302,7 @@ function AuditRow({ row }: AuditRowProps) {
                         )}
                     </>
                 ) : (
-                    <span className="text-muted">—</span>
+                    <span className="text-muted">-</span>
                 )}
             </td>
             <td>
@@ -312,10 +312,10 @@ function AuditRow({ row }: AuditRowProps) {
                         variant="secondary"
                     />
                 ) : (
-                    <span className="text-muted">—</span>
+                    <span className="text-muted">-</span>
                 )}
             </td>
-            <td className="text-nowrap text-normal-case">{row.ipAddress ?? '—'}</td>
+            <td className="text-nowrap text-normal-case">{row.ipAddress ?? '-'}</td>
         </tr>
     );
 }

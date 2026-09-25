@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domain\Reports\Actions;
 
+use App\Domain\Groups\Support\PorteeEnseignant;
 use App\Models\Seance;
+use App\Models\User;
 use App\Services\Context\CurrentContext;
 use Carbon\CarbonImmutable;
 
@@ -21,7 +23,7 @@ final class GetSeancesCalendar
      * @return array{month: string, days: array<string, list<array{id: int, groupNom: ?string,
      *     enseignant: ?string, statut: string, heureDebut: ?string, heureFin: ?string, showUrl: string}>>}
      */
-    public function __invoke(CurrentContext $context, string $month): array
+    public function __invoke(CurrentContext $context, string $month, ?User $user = null): array
     {
         $start = CarbonImmutable::createFromFormat('!Y-m', $month)->startOfMonth();
         $end = $start->endOfMonth();
@@ -35,6 +37,8 @@ final class GetSeancesCalendar
                 fn ($sub) => $sub->whereNull('etablissement_id')->orWhere('etablissement_id', $centreId),
             ))
             ->when($context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
+            // Portée enseignant : un prof ne voit que SES séances.
+            ->tap(fn ($q) => PorteeEnseignant::scopeSeances($q, $user))
             ->orderBy('date_seance')
             ->orderBy('heure_debut')
             ->orderBy('id')

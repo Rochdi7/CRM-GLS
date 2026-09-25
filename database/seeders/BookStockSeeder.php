@@ -49,7 +49,7 @@ final class BookStockSeeder extends Seeder
         $livreType = StockType::query()->where('nom', StockType::SYSTEM_LIVRE)->first();
 
         if ($livreType === null) {
-            $this->command?->warn('BookStockSeeder: StockType « Livre » missing — run StockTypeSeeder first.');
+            $this->command?->warn('BookStockSeeder: StockType « Livre » missing - run StockTypeSeeder first.');
 
             return;
         }

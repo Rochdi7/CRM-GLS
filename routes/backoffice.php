@@ -50,6 +50,7 @@ use App\Http\Controllers\Backoffice\StockController;
 use App\Http\Controllers\Backoffice\StockTypeController;
 use App\Http\Controllers\Backoffice\StudentController;
 use App\Http\Controllers\Backoffice\StudentMergeController;
+use App\Http\Controllers\Backoffice\StudentTransferController;
 use App\Http\Controllers\Backoffice\SystemSettingController;
 use App\Http\Controllers\Backoffice\TypeDepenseController;
 use App\Http\Controllers\Backoffice\Users\UserAuthorizationController;
@@ -208,7 +209,7 @@ Route::prefix('backoffice')
                 ->middleware('permission:payments.move-fee')->name('students.merge.move-payment');
 
             Route::get('students', [StudentController::class, 'index'])
-                ->middleware('permission:students.view')->name('students.index');
+                ->middleware('permission:students.view|groups.view-own')->name('students.index');
             Route::post('students', [StudentController::class, 'store'])
                 ->middleware('permission:students.create')->name('students.store');
             Route::put('students/{student}', [StudentController::class, 'update'])
@@ -223,6 +224,24 @@ Route::prefix('backoffice')
             Route::get('students/{student}', [StudentController::class, 'show'])
                 ->name('students.show');
 
+            // Transferts d'étudiants entre centres (25/09/2026) — flux en deux
+            // temps : le front office DEMANDE (centre cible + groupe
+            // d'affectation + motif, depuis la page Étudiants), le super-admin
+            // VALIDE ou REFUSE (student-transfers.validate, superAdminOnly()).
+            // Aucun destroy : une demande refusée ou annulée reste lisible.
+            Route::get('student-transfers', [StudentTransferController::class, 'index'])
+                ->middleware('permission:student-transfers.view')->name('student-transfers.index');
+            Route::get('student-transfers/groupes-cibles/{etablissement}', [StudentTransferController::class, 'groupesCibles'])
+                ->middleware('permission:student-transfers.create')->name('student-transfers.groupes-cibles');
+            Route::post('student-transfers', [StudentTransferController::class, 'store'])
+                ->middleware('permission:student-transfers.create')->name('student-transfers.store');
+            Route::put('student-transfers/{student_transfer}/validate', [StudentTransferController::class, 'validateAction'])
+                ->middleware('permission:student-transfers.validate')->name('student-transfers.validate');
+            Route::put('student-transfers/{student_transfer}/refuse', [StudentTransferController::class, 'refuse'])
+                ->middleware('permission:student-transfers.validate')->name('student-transfers.refuse');
+            Route::put('student-transfers/{student_transfer}/cancel', [StudentTransferController::class, 'cancel'])
+                ->middleware('permission:student-transfers.view')->name('student-transfers.cancel');
+
             // Academic — groups are never deleted by ordinary roles
             // (schema §6) ; groups.destroy est l'exception super-admin.
             // Groups — Inertia/React list + modal add/edit with per-group fee
@@ -232,7 +251,7 @@ Route::prefix('backoffice')
             // inventory.md). Never deletable; "Fin de formation" archives via
             // the detail page (Phase 5, unchanged).
             Route::get('groups', [GroupController::class, 'index'])
-                ->middleware('permission:groups.view')->name('groups.index');
+                ->middleware('permission:groups.view|groups.view-own')->name('groups.index');
             Route::post('groups', [GroupController::class, 'store'])
                 ->middleware('permission:groups.create')->name('groups.store');
             Route::put('groups/{group}', [GroupController::class, 'update'])

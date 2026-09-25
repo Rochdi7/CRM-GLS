@@ -82,7 +82,7 @@ final class SyncDefaultRoles extends Command
                 $role = Role::query()->where('name', $roleName)->where('guard_name', 'web')->first();
 
                 if ($role === null) {
-                    $this->error("Role [{$roleName}] missing — run db:seed --class=RolesAndPermissionsSeeder first.");
+                    $this->error("Role [{$roleName}] missing - run db:seed --class=RolesAndPermissionsSeeder first.");
 
                     return;
                 }
@@ -110,7 +110,7 @@ final class SyncDefaultRoles extends Command
         }
 
         if ($assigned === [] && $skipped === []) {
-            $this->info('Every employee login already has a role — nothing to do.');
+            $this->info('Every employee login already has a role - nothing to do.');
         }
 
         return self::SUCCESS;

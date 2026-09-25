@@ -1,10 +1,10 @@
 {{--
-    « Relevé des Encaissements » — gabarit PDF (mPDF), servi par
+    « Relevé des Encaissements » - gabarit PDF (mPDF), servi par
     RapportPdfRenderer.
 
     ⚠ Rendu en TROIS sections ($section = debut | lignes | fin), comme les
     autres rapports : mPDF analyse le HTML avec PCRE et refuse au-delà de
-    `pcre.backtrack_limit`. Le tableau reste donc OUVERT entre les appels —
+    `pcre.backtrack_limit`. Le tableau reste donc OUVERT entre les appels -
     d'où les balises volontairement non refermées à la fin de « debut ».
 
     ⚠ L'identité du centre et le pied (signature, cachet, pagination) ne sont
@@ -101,7 +101,7 @@
                 {{-- ⚠ La somme de ces largeurs DOIT faire exactement 100 %.
                      À 106 % (dix colonnes posées à vue), mPDF élargit le
                      tableau au-delà de la zone imprimable : le tableau déborde
-                     à droite et l'en-tête de page — donc le LOGO — se retrouve
+                     à droite et l'en-tête de page - donc le LOGO - se retrouve
                      rogné au bord de la feuille. Le rapport des inscriptions,
                      lui, totalise bien 100 % sur neuf colonnes. Recompter la
                      somme après tout ajout ou retrait de colonne. --}}
@@ -126,7 +126,7 @@
                 @foreach ($lignes as $ligne)
                     {{-- Une ligne sur deux légèrement teintée, alternée sur le
                          N° et NON sur $loop : les lignes arrivent par tranches
-                         et $loop repartirait de zéro à chaque tranche — deux
+                         et $loop repartirait de zéro à chaque tranche - deux
                          lignes de même teinte se toucheraient à la jointure. --}}
                     <tr @if ((int) $ligne['numero'] % 2 === 0) style="background:#f4f4f4;" @endif>
                         <td>{{ $ligne['numero'] }}</td>
@@ -134,7 +134,7 @@
                         {{-- Les noms sortent en CAPITALES comme à l'écran
                              (app.css uppercase les cellules de tableau) : le
                              document doit se lire comme la page. La donnée
-                             stockée garde sa casse — CLAUDE.md §5. --}}
+                             stockée garde sa casse - CLAUDE.md §5. --}}
                         <td class="txt">{{ mb_strtoupper($ligne['etudiant']) }}</td>
                         {{-- « Avance » / « Règlement » : jamais abrégé, c'est
                              la colonne qui dit si cet argent est déjà affecté
@@ -162,7 +162,7 @@
                  pied de tableau en tampon et rejoue l'en-tête de PAGE en le
                  posant, ce qui dessinait le LOGO DEUX FOIS au même endroit
                  (vérifié en comptant les opérateurs « Do » du flux : 2 avec
-                 <tfoot>, 1 sans — le rapport des inscriptions, qui n'a pas de
+                 <tfoot>, 1 sans - le rapport des inscriptions, qui n'a pas de
                  pied de tableau, n'en a jamais eu qu'un). Le total n'a pas
                  besoin d'être répété en bas de chaque page : c'est un total
                  de DOCUMENT, il se lit une fois, à la fin. --}}

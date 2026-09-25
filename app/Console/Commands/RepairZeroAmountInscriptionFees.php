@@ -54,7 +54,7 @@ final class RepairZeroAmountInscriptionFees extends Command
 
                 if ($group === null || $catalogFee === null || $montant === null) {
                     $skipped++;
-                    $this->warn("  skip fee #{$fee->id} ({$fee->nom}) — no matching group catalog fee found");
+                    $this->warn("  skip fee #{$fee->id} ({$fee->nom}) - no matching group catalog fee found");
 
                     continue;
                 }

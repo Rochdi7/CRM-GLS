@@ -212,7 +212,7 @@ final class PlacerAvancesLibres extends Command
                 continue;
             }
 
-            $this->warn(sprintf('  %d avance(s) laissée(s) — %s :', count($liste), $motif));
+            $this->warn(sprintf('  %d avance(s) laissée(s) - %s :', count($liste), $motif));
 
             foreach ($liste as $a) {
                 $this->line(sprintf('      %-10s %-26s %8s', $a->reference, mb_substr(trim($a->student->prenom.' '.$a->student->nom), 0, 26), number_format($a->montantRestant(), 2, '.', '')));

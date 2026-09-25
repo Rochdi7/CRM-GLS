@@ -141,7 +141,7 @@ final class MettreAJourGroupesDepuisExport extends Command
                 '  %-30s %s',
                 mb_substr($groupe->nom, 0, 30),
                 implode(', ', array_map(
-                    static fn (string $k, array $v): string => sprintf('%s: %s -> %s', $k, $v[0] ?: '—', $v[1] ?: '—'),
+                    static fn (string $k, array $v): string => sprintf('%s: %s -> %s', $k, $v[0] ?: '-', $v[1] ?: '-'),
                     array_keys($changements),
                     $changements
                 ))

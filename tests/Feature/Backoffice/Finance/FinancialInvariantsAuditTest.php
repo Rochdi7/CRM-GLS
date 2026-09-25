@@ -251,7 +251,7 @@ final class FinancialInvariantsAuditTest extends TestCase
                 && in_array(Encaissement::METHODE_TPE, $query->bindings, true)) {
                 $competitorId = -1; // re-entrancy guard: the insert below fires this listener too
                 $competitorId = DB::table('caisses')->insertGetId([
-                    'nom' => 'TPE — gagnant', 'type' => Encaissement::METHODE_TPE, 'etablissement_id' => $rabat->id,
+                    'nom' => 'TPE - gagnant', 'type' => Encaissement::METHODE_TPE, 'etablissement_id' => $rabat->id,
                     'solde' => 0, 'statut' => 'Active', 'created_at' => now(), 'updated_at' => now(),
                 ]);
             }

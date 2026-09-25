@@ -96,7 +96,7 @@ export default function StatCard({
     return (
         <div className="col-xxl-3 col-xl-4 col-sm-6 d-flex">
             {href ? (
-                <Link href={href} className={`${className} gls-stat-card-link`} aria-label={`${label} — ${t('Open the list')}`}>
+                <Link href={href} className={`${className} gls-stat-card-link`} aria-label={`${label} - ${t('Open the list')}`}>
                     {body}
                 </Link>
             ) : (

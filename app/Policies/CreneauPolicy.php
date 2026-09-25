@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Policies;
 
+use App\Domain\Groups\Support\PorteeEnseignant;
 use App\Models\Creneau;
+use App\Models\User;
 use App\Policies\Concerns\ResourcePolicy;
 use Illuminate\Database\Eloquent\Model;
 
@@ -17,6 +19,12 @@ use Illuminate\Database\Eloquent\Model;
 final class CreneauPolicy extends ResourcePolicy
 {
     protected string $module = 'attendance';
+
+    public function view(User $user, Model $model): bool
+    {
+        /** @var Creneau $model */
+        return parent::view($user, $model) && PorteeEnseignant::couvreCreneau($user, $model);
+    }
 
     protected function centerId(Model $model): ?int
     {

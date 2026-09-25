@@ -156,9 +156,9 @@ export default function UsersIndex({ users, filters, centerLocked }: UsersIndexP
                                 <tr key={user.id}>
                                     <td className="fw-medium">{user.name}</td>
                                     {/* Login identifiers stay verbatim — see the table-uppercase rule in app.css. */}
-                                    <td className="text-normal-case">{user.username ? `@${user.username}` : '—'}</td>
+                                    <td className="text-normal-case">{user.username ? `@${user.username}` : '-'}</td>
                                     <td className="text-normal-case">{user.email}</td>
-                                    {!centerLocked && <td>{user.employee?.etablissement ?? '—'}</td>}
+                                    {!centerLocked && <td>{user.employee?.etablissement ?? '-'}</td>}
                                     <td>
                                         {user.roles.length === 0 ? (
                                             <span className="text-muted">Aucun rôle</span>
@@ -282,7 +282,7 @@ export default function UsersIndex({ users, filters, centerLocked }: UsersIndexP
                                     <span className="badge badge-soft-warning">Unique</span>
                                 </div>
                                 <p className="text-muted fs-12 mt-2 mb-0">
-                                    Communiquez-le maintenant — il ne sera plus jamais affiché. L'utilisateur devra le changer à sa
+                                    Communiquez-le maintenant - il ne sera plus jamais affiché. L'utilisateur devra le changer à sa
                                     prochaine connexion.
                                 </p>
                             </>

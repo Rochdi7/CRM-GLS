@@ -45,7 +45,7 @@ export default function GuestLayout({ title, children }: GuestLayoutProps) {
 
                             <div className="p-4 text-center">
                                 <p className="mb-0">
-                                    {t('Copyright')} &copy; {new Date().getFullYear()} — GLS CRM
+                                    {t('Copyright')} &copy; {new Date().getFullYear()} - GLS CRM
                                 </p>
                             </div>
                         </div>

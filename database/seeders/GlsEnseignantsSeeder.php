@@ -170,7 +170,7 @@ final class GlsEnseignantsSeeder extends Seeder
         $centres = Etablissement::query()->pluck('id', 'nom_centre')->all();
 
         if ($centres === []) {
-            $this->command?->error('Aucun établissement en base — lancez ReferentialDataSeeder en premier.');
+            $this->command?->error('Aucun établissement en base - lancez ReferentialDataSeeder en premier.');
 
             return;
         }
@@ -184,7 +184,7 @@ final class GlsEnseignantsSeeder extends Seeder
 
             foreach ($nomsCentres as $nomCentre) {
                 if (! isset($centres[$nomCentre])) {
-                    $this->command?->warn("Centre inconnu « {$nomCentre} » pour {$prenom} {$nom} — ignoré.");
+                    $this->command?->warn("Centre inconnu « {$nomCentre} » pour {$prenom} {$nom} - ignoré.");
 
                     continue;
                 }
@@ -193,7 +193,7 @@ final class GlsEnseignantsSeeder extends Seeder
             }
 
             if ($ids === []) {
-                $this->command?->warn("Aucun centre valide pour {$prenom} {$nom} — enseignant ignoré.");
+                $this->command?->warn("Aucun centre valide pour {$prenom} {$nom} - enseignant ignoré.");
 
                 continue;
             }
@@ -242,7 +242,7 @@ final class GlsEnseignantsSeeder extends Seeder
         }
 
         $this->command?->info(sprintf(
-            '%d enseignant(s) créé(s), %d mis à jour — sans compte de connexion.',
+            '%d enseignant(s) créé(s), %d mis à jour - sans compte de connexion.',
             $crees,
             $majs,
         ));

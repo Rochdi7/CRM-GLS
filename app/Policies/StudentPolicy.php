@@ -4,12 +4,24 @@ declare(strict_types=1);
 
 namespace App\Policies;
 
+use App\Domain\Groups\Support\PorteeEnseignant;
 use App\Models\User;
 use App\Policies\Concerns\ResourcePolicy;
 
 final class StudentPolicy extends ResourcePolicy
 {
     protected string $module = 'students';
+
+    /**
+     * A teacher (`groups.view-own`) lists the students of HIS groups
+     * (GetStudentsList applies PorteeEnseignant). The student DETAIL page
+     * stays `students.view` only: it shows payments, and a teacher sees no
+     * money.
+     */
+    public function viewAny(User $user): bool
+    {
+        return $user->can('students.view') || $user->can(PorteeEnseignant::PERMISSION);
+    }
 
     /**
      * Fusion de deux fiches en double (super-admin — `students.merge` est

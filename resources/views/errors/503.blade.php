@@ -1,5 +1,5 @@
 {{--
-    503 — the ONE page that should say the application is unavailable, because
+    503 - the ONE page that should say the application is unavailable, because
     here it genuinely is (artisan down / maintenance during a deploy). Kept
     honest and distinct from 500 so the two are never confused again.
 --}}

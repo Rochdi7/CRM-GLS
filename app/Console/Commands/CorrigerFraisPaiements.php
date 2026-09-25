@@ -162,13 +162,13 @@ final class CorrigerFraisPaiements extends Command
 
         $this->line('');
         $this->info(sprintf(
-            '%s%d paiement(s) corrigé(s) pour %s MAD — %d ligne(s) démasquée(s), %d créée(s).',
+            '%s%d paiement(s) corrigé(s) pour %s MAD - %d ligne(s) démasquée(s), %d créée(s).',
             $dry ? '[DRY-RUN] ' : '',
             $corriges, number_format($montant, 2, '.', ''), $demasques, $crees
         ));
 
         foreach ($sansCatalogue as $l => $n) {
-            $this->warn(sprintf('  %d × « %s » : aucun frais du catalogue — laissé tel quel.', $n, $l));
+            $this->warn(sprintf('  %d × « %s » : aucun frais du catalogue - laissé tel quel.', $n, $l));
         }
 
         return self::SUCCESS;

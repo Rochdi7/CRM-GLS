@@ -45,11 +45,11 @@ export default function DepenseShow({ depense, canAudit }: DepenseShowProps) {
                 <div className="alert alert-secondary d-flex align-items-start mb-4">
                     <i className="ti ti-receipt-refund fs-20 me-3 mt-1" />
                     <div className="flex-fill">
-                        <h6 className="mb-2">Correction comptable — dépense annulée</h6>
+                        <h6 className="mb-2">Correction comptable - dépense annulée</h6>
                         <div className="row g-2">
                             <div className="col-md-3">
                                 <span className="text-muted d-block">Référence</span>
-                                <code>{depense.annulation?.correction ?? '—'}</code>
+                                <code>{depense.annulation?.correction ?? '-'}</code>
                             </div>
                             <div className="col-md-3">
                                 <span className="text-muted d-block">Caisse recréditée</span>
@@ -59,11 +59,11 @@ export default function DepenseShow({ depense, canAudit }: DepenseShowProps) {
                             </div>
                             <div className="col-md-3">
                                 <span className="text-muted d-block">Le</span>
-                                <span className="fw-medium">{depense.annulation?.date ?? '—'}</span>
+                                <span className="fw-medium">{depense.annulation?.date ?? '-'}</span>
                             </div>
                             <div className="col-md-3">
                                 <span className="text-muted d-block">Par</span>
-                                <span className="fw-medium">{depense.annulation?.par ?? '—'}</span>
+                                <span className="fw-medium">{depense.annulation?.par ?? '-'}</span>
                             </div>
                             {depense.annulation?.motif && (
                                 <div className="col-12">
@@ -127,7 +127,7 @@ export default function DepenseShow({ depense, canAudit }: DepenseShowProps) {
                     <Card title="Détails">
                         <div className="mb-3">
                             <span className="text-muted d-block mb-1">Description</span>
-                            <span className="fw-medium">{depense.description || '—'}</span>
+                            <span className="fw-medium">{depense.description || '-'}</span>
                         </div>
                         <div className="mb-3">
                             <span className="text-muted d-block mb-1">Mots-clés</span>
@@ -138,12 +138,12 @@ export default function DepenseShow({ depense, canAudit }: DepenseShowProps) {
                                     </span>
                                 ))
                             ) : (
-                                <span className="fw-medium">—</span>
+                                <span className="fw-medium">-</span>
                             )}
                         </div>
                         <div>
                             <span className="text-muted d-block mb-1">Note</span>
-                            <span className="fw-medium">{depense.note || '—'}</span>
+                            <span className="fw-medium">{depense.note || '-'}</span>
                         </div>
                     </Card>
 

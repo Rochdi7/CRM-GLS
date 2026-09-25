@@ -120,7 +120,7 @@ final class DiagnostiquerEmploiDuTemps
                         . "Tant qu'un nouvel emploi du temps n'a pas été saisi, aucune séance n'est "
                         . "générée automatiquement."
                     : "Tous ses créneaux ont été clôturés alors qu'aucun changement d'enseignant n'a "
-                        . "eu lieu — un défaut corrigé depuis. Tant que l'emploi du temps n'a pas été "
+                        . "eu lieu - un défaut corrigé depuis. Tant que l'emploi du temps n'a pas été "
                         . "rouvert, aucune séance n'est générée automatiquement.",
                 'action' => $plusieursPeriodes
                     ? "Supprimez les anciens créneaux et saisissez ceux de l'enseignant actuel."

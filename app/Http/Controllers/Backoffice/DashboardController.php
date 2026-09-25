@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Domain\Groups\Support\PorteeEnseignant;
 use App\Domain\Payroll\Queries\GetEspaceEnseignant;
+use App\Domain\Reports\DTOs\DashboardStatsData;
 use App\Domain\Reports\Actions\GetAnnualFraisSummary;
 use App\Domain\Reports\Actions\GetDashboardStats;
 use App\Domain\Reports\Actions\GetNouvellesInscriptionsChart;
@@ -56,12 +58,24 @@ final class DashboardController extends Controller
             && $user->can('dashboard.espace-enseignant');
         $espaceMois = (string) $request->string('espaceMois');
 
+        // Portée enseignant (24/09/2026) : le tableau de bord d'un prof est
+        // SON espace + le calendrier de SES séances. Les compteurs du centre,
+        // l'argent du mois et les graphiques ne sont pas calculés pour lui —
+        // la donnée ne quitte pas le serveur, ce n'est pas un masquage React.
+        $restreint = PorteeEnseignant::estRestreint($user);
+
         return Inertia::render('Backoffice/Dashboard/Index', [
-            'stats' => fn () => $getDashboardStats($context)->toArray(),
-            'annualFrais' => fn () => $getAnnualFraisSummary(),
-            'annualFraisPeriode' => fn () => $getAnnualFraisSummary->periodeLabel(),
-            'seancesCalendar' => fn () => $getSeancesCalendar($context, $calMonth),
-            'nouvellesInscriptions' => fn () => $getNouvellesInscriptions($duree),
+            'porteeEnseignant' => $restreint,
+            'stats' => fn () => $restreint
+                ? DashboardStatsData::enteteSeule(
+                    $context->anneeScolaire()?->nom,
+                    $context->isAllCenters() ? __('All centers') : $context->etablissement()?->nom_centre,
+                )->toArray()
+                : $getDashboardStats($context)->toArray(),
+            'annualFrais' => fn () => $restreint ? null : $getAnnualFraisSummary(),
+            'annualFraisPeriode' => fn () => $restreint ? '' : $getAnnualFraisSummary->periodeLabel(),
+            'seancesCalendar' => fn () => $getSeancesCalendar($context, $calMonth, $user),
+            'nouvellesInscriptions' => fn () => $restreint ? null : $getNouvellesInscriptions($duree),
             'espaceEnseignant' => fn () => $estEnseignant
                 ? $getEspaceEnseignant($employee, $espaceMois !== '' ? $espaceMois : null)
                 : null,

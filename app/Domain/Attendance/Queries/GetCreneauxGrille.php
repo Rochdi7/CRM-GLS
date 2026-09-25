@@ -6,6 +6,7 @@ namespace App\Domain\Attendance\Queries;
 
 use App\Models\Creneau;
 use App\Models\User;
+use App\Domain\Groups\Support\PorteeEnseignant;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
 use Illuminate\Support\Collection;
@@ -59,6 +60,7 @@ final class GetCreneauxGrille
                     $q->where('annee_scolaire_id', $this->context->anneeScolaireId());
                 }
             })
+            ->tap(fn ($q) => PorteeEnseignant::scopeCreneaux($q, $user))
             ->when($groupFilter !== '', fn ($q) => $q->where('group_id', (int) $groupFilter))
             ->when($enseignantFilter !== '', fn ($q) => $q->where('enseignant_id', (int) $enseignantFilter))
             ->when($salleFilter !== '', fn ($q) => $q->where('salle_id', (int) $salleFilter))
@@ -80,7 +82,7 @@ final class GetCreneauxGrille
             ->map(fn (Creneau $creneau): array => [
                 'id' => $creneau->id,
                 'groupId' => $creneau->group_id,
-                'groupNom' => $creneau->group?->nom ?? '—',
+                'groupNom' => $creneau->group?->nom ?? '-',
                 'groupNiveau' => $creneau->group?->niveau,
                 'jourSemaine' => $creneau->jour_semaine,
                 'heureDebut' => substr((string) $creneau->heure_debut, 0, 5),

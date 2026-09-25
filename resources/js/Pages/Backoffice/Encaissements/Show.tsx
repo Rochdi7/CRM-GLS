@@ -65,7 +65,7 @@ export default function EncaissementShow({ encaissement, canDetach = false }: En
                         <div className="d-flex justify-content-between align-items-center mb-4">
                             <div>
                                 <h4 className="mb-1">{Number(encaissement.montant).toFixed(2)} MAD</h4>
-                                <p className="text-muted mb-0">Reçu le {encaissement.date ?? '—'}</p>
+                                <p className="text-muted mb-0">Reçu le {encaissement.date ?? '-'}</p>
                             </div>
                             <span className="badge badge-soft-info">{encaissement.methode}</span>
                         </div>
@@ -83,7 +83,7 @@ export default function EncaissementShow({ encaissement, canDetach = false }: En
                                     {encaissement.student}
                                 </a>
                             ) : (
-                                <span className="fw-medium">—</span>
+                                <span className="fw-medium">-</span>
                             )}
                         </div>
                         <div className="d-flex justify-content-between mb-2">
@@ -93,7 +93,7 @@ export default function EncaissementShow({ encaissement, canDetach = false }: En
                                     {encaissement.inscriptionReference}
                                 </a>
                             ) : (
-                                <span className="fw-medium">—</span>
+                                <span className="fw-medium">-</span>
                             )}
                         </div>
                         <DetailRow label="Groupe" value={encaissement.groupe} />
@@ -140,16 +140,16 @@ export default function EncaissementShow({ encaissement, canDetach = false }: En
                                 <DetailRow label="Date de l'opération" value={encaissement.transfert.date} />
                                 <DetailRow
                                     label="De"
-                                    value={`${encaissement.transfert.ancienEtudiant ?? '—'} — ${encaissement.transfert.ancienneInscription ?? '—'}`}
+                                    value={`${encaissement.transfert.ancienEtudiant ?? '-'} - ${encaissement.transfert.ancienneInscription ?? '-'}`}
                                 />
                                 <DetailRow
                                     label="Vers"
-                                    value={`${encaissement.transfert.nouvelEtudiant ?? '—'} — ${encaissement.transfert.nouvelleInscription ?? '—'}`}
+                                    value={`${encaissement.transfert.nouvelEtudiant ?? '-'} - ${encaissement.transfert.nouvelleInscription ?? '-'}`}
                                 />
                                 <DetailRow label="Par" value={encaissement.transfert.par} />
                                 <div className="border-top pt-2 mt-2">
                                     <span className="text-muted d-block mb-1">Motif du transfert</span>
-                                    <p className="mb-0">{encaissement.transfert.motif ?? '—'}</p>
+                                    <p className="mb-0">{encaissement.transfert.motif ?? '-'}</p>
                                 </div>
                             </div>
                         )}
@@ -199,14 +199,14 @@ export default function EncaissementShow({ encaissement, canDetach = false }: En
                                         {encaissement.applications.map((application) => (
                                             <div key={application.reference} className="border-top pt-2 mb-2">
                                                 <div className="d-flex justify-content-between">
-                                                    <span className="fw-medium">{application.frais ?? '—'}</span>
+                                                    <span className="fw-medium">{application.frais ?? '-'}</span>
                                                     <span className="fw-semibold">
                                                         {Number(application.montant).toFixed(2)} MAD
                                                     </span>
                                                 </div>
                                                 <div className="d-flex justify-content-between align-items-center">
                                                     <div className="text-muted fs-12">
-                                                        {application.groupe && `${application.groupe} — `}
+                                                        {application.groupe && `${application.groupe} - `}
                                                         {application.date}
                                                         {' · '}
                                                         <a href={application.showUrl}>{application.reference}</a>
@@ -266,7 +266,7 @@ export default function EncaissementShow({ encaissement, canDetach = false }: En
                 recordLabel={
                     aDetacher === null
                         ? ''
-                        : `${aDetacher.frais ?? 'Frais'} — ${Number(aDetacher.montant).toFixed(2)} MAD`
+                        : `${aDetacher.frais ?? 'Frais'} - ${Number(aDetacher.montant).toFixed(2)} MAD`
                 }
                 message="Le frais redeviendra dû et le montant retournera en avance réapplicable. Aucun montant ne quitte la caisse et rien n'est supprimé."
                 icon="ti-unlink"

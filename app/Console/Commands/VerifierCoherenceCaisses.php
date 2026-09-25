@@ -90,7 +90,7 @@ final class VerifierCoherenceCaisses extends Command
     private function section(string $title, array $rows): int
     {
         $this->newLine();
-        $this->line("<options=bold>{$title}</> — ".count($rows));
+        $this->line("<options=bold>{$title}</> - ".count($rows));
 
         if ($rows !== []) {
             $this->table(array_keys($rows[0]), $rows);
@@ -122,9 +122,9 @@ final class VerifierCoherenceCaisses extends Command
                 'Référence' => $e->reference,
                 'Méthode' => $e->methode,
                 'Montant' => $this->money($e->montant),
-                'Caisse' => (string) ($e->caisse?->nom ?? '—'),
-                'Type caisse' => (string) ($e->caisse?->type ?? '—'),
-                'Centre étudiant' => (string) ($e->student?->etablissement?->nom_centre ?? '—'),
+                'Caisse' => (string) ($e->caisse?->nom ?? '-'),
+                'Type caisse' => (string) ($e->caisse?->type ?? '-'),
+                'Centre étudiant' => (string) ($e->student?->etablissement?->nom_centre ?? '-'),
                 'Ligne d\'application' => $e->applied_from_encaissement_id !== null ? 'oui' : '',
             ])
             ->all();
@@ -146,7 +146,7 @@ final class VerifierCoherenceCaisses extends Command
                     'Référence' => $d->reference,
                     'Montant' => $this->money($d->montant),
                     'Statut' => (string) $d->statut,
-                    'Caisse' => (string) ($d->caisse?->nom ?? '—'),
+                    'Caisse' => (string) ($d->caisse?->nom ?? '-'),
                     'Raison' => 'Une dépense se règle toujours depuis la caisse physique.',
                 ];
             });
@@ -175,8 +175,8 @@ final class VerifierCoherenceCaisses extends Command
                     'Table' => 'remboursements',
                     'Référence' => $r->reference,
                     'Montant' => $this->money($r->montant),
-                    'Statut' => '—',
-                    'Caisse' => (string) ($r->caisse?->nom ?? '—'),
+                    'Statut' => '-',
+                    'Caisse' => (string) ($r->caisse?->nom ?? '-'),
                     'Raison' => 'Un remboursement se règle depuis la caisse physique (sauf reprise d\'un chèque rejeté).',
                 ];
             });
@@ -210,7 +210,7 @@ final class VerifierCoherenceCaisses extends Command
             ->get()
             ->each(function (Caisse $c) use (&$rows): void {
                 $rows[] = [
-                    'Centre' => '—',
+                    'Centre' => '-',
                     'Type' => $c->type,
                     'Problème' => "compte #{$c->id} « {$c->nom} » : ".($c->etablissement_id === null ? 'sans centre' : 'avec un responsable'),
                 ];
@@ -237,7 +237,7 @@ final class VerifierCoherenceCaisses extends Command
                 'Caisses physiques' => (string) $e->tills_count,
                 'Problème' => (int) $e->tills_count === 0
                     ? 'aucune caisse (caisses:provision la créera)'
-                    : 'plusieurs caisses — à fusionner à la main',
+                    : 'plusieurs caisses - à fusionner à la main',
             ])
             ->all();
     }
@@ -256,8 +256,8 @@ final class VerifierCoherenceCaisses extends Command
             ->map(fn (CaisseTransfer $t): array => [
                 'Référence' => $t->reference,
                 'Montant' => $this->money($t->montant),
-                'Source' => (string) ($t->caisseSource?->nom ?? '—').' ('.($t->caisseSource?->type ?? '—').')',
-                'Destination' => (string) ($t->caisseDestination?->nom ?? '—').' ('.($t->caisseDestination?->type ?? '—').')',
+                'Source' => (string) ($t->caisseSource?->nom ?? '-').' ('.($t->caisseSource?->type ?? '-').')',
+                'Destination' => (string) ($t->caisseDestination?->nom ?? '-').' ('.($t->caisseDestination?->type ?? '-').')',
             ])
             ->all();
     }
@@ -273,7 +273,7 @@ final class VerifierCoherenceCaisses extends Command
             ->map(fn (Caisse $c): array => [
                 'Caisse' => $c->nom,
                 'Type' => $c->type,
-                'Centre' => (string) ($c->etablissement?->nom_centre ?? '—'),
+                'Centre' => (string) ($c->etablissement?->nom_centre ?? '-'),
                 'Solde' => $this->money($c->solde),
             ])
             ->all();

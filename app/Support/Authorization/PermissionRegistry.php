@@ -124,6 +124,20 @@ final class PermissionRegistry
                 // (FusionnerEtudiants).
                 'students.merge' => 'Fusionner deux fiches étudiant en double (super-admin)',
             ],
+            // Transfert d'un étudiant vers un AUTRE centre (25/09/2026) — flux
+            // en deux temps comme un transfert de caisse : le front office
+            // DEMANDE (centre cible + groupe d'affectation + motif), le
+            // super-admin DÉCIDE. La validation copie la fiche dans le centre
+            // d'arrivée, clôture « Transférée » les dossiers du centre de
+            // départ et emporte tout l'argent de l'étudiant sur son nouveau
+            // dossier (ValiderTransfertEtudiant) : c'est un déplacement de
+            // chiffre d'affaires entre établissements, donc `validate` est
+            // dans superAdminOnly() ci-dessous.
+            "Transferts d'étudiants" => [
+                'student-transfers.view' => "Consulter les demandes de transfert d'étudiants",
+                'student-transfers.create' => "Demander le transfert d'un étudiant vers un autre centre",
+                'student-transfers.validate' => "Valider ou refuser un transfert d'étudiant (super-admin)",
+            ],
             // Deliberately absent from every role preset in matrix() below
             // (superAdminOnly()) — a legacy import writes thousands of
             // students / inscriptions / encaissements in one pass.
@@ -141,6 +155,11 @@ final class PermissionRegistry
             ],
             'Groupes' => [
                 'groups.view' => 'Consulter les groupes et leur historique',
+                // Portée enseignant (24/09/2026, Domain\Groups\Support\PorteeEnseignant) :
+                // SES groupes seulement, leurs étudiants, leurs séances et leur
+                // emploi du temps — jamais le reste du centre ni un chiffre
+                // financier. Sans effet pour qui tient déjà `groups.view`.
+                'groups.view-own' => 'Consulter uniquement ses propres groupes, leurs étudiants, séances et emploi du temps',
                 'groups.create' => 'Créer un groupe',
                 'groups.update' => 'Modifier un groupe',
                 // Deliberately SEPARATE from groups.update: every role
@@ -642,6 +661,12 @@ final class PermissionRegistry
             // paire attribue les paiements de quelqu'un d'autre — et la
             // fiche vidée sort des recherches (05/09/2026).
             'students.merge',
+            // Valider le transfert d'un étudiant vers un autre centre déplace
+            // ses paiements — et donc du chiffre d'affaires — d'un
+            // établissement à l'autre (25/09/2026). Même classe que
+            // students.merge : la DEMANDE reste ouverte au front office, la
+            // DÉCISION est super-admin.
+            'student-transfers.validate',
             // « Centres affectés » is the ONE authority on which centers a
             // user reaches (employee_etablissement pivot, CLAUDE.md §16) —
             // no ROLE may widen it to the whole network. Someone who needs
@@ -659,6 +684,13 @@ final class PermissionRegistry
             'import.view', 'import.create',
         ])));
     }
+
+    /**
+     * Presets that do NOT receive defaultForEveryRole(): the baseline is a set
+     * of front-office gestures (reports, cheque deposit, bulk due dates) and a
+     * teacher works only inside PorteeEnseignant (24/09/2026).
+     */
+    public const ROLES_SANS_BASE = ['teacher'];
 
     /**
      * Default role → permission matrix (docs/roles-and-permissions.md).
@@ -694,7 +726,7 @@ final class PermissionRegistry
             }
 
             $presets[$role] = array_values(array_filter(
-                array_unique([...$permissions, ...$baseline]),
+                array_unique([...$permissions, ...(in_array($role, self::ROLES_SANS_BASE, true) ? [] : $baseline)]),
                 static fn (string $p): bool => ! isset($forbidden[$p]) && self::exists($p),
             ));
         }
@@ -749,6 +781,15 @@ final class PermissionRegistry
             // aucune caisse, aucun montant, aucun statut. C'est une date de
             // rappel, pas un mouvement d'argent.
             'fee-due-dates.bulk-update',
+            // Demander le transfert d'un étudiant vers un autre centre —
+            // demande métier du 25/09/2026 : TOUT le monde peut le faire
+            // depuis la page Étudiants (menu « ⋯ » → « Demander un
+            // transfert »). Conforme à la règle ci-dessus : la demande
+            // n'écrit qu'une ligne « En attente », ne touche ni dossier ni
+            // argent, et la DÉCISION reste super-admin
+            // (student-transfers.validate, superAdminOnly()).
+            'student-transfers.view',
+            'student-transfers.create',
         ];
     }
 
@@ -1062,16 +1103,19 @@ final class PermissionRegistry
                 'stock-types.create', 'stock-types.update',
             ],
 
-            // Academic scope only — no financial data.
+            // ⚠ Portée enseignant (24/09/2026, demande métier) : un prof ne
+            // voit que SES groupes, leurs étudiants, leurs séances et leur
+            // emploi du temps (`groups.view-own`, PorteeEnseignant), et ne fait
+            // qu'une chose : l'appel. Il ne crée ni étudiant, ni inscription,
+            // ni créneau, ni salle, ne change pas l'enseignant d'un groupe et
+            // ne voit aucun chiffre financier. Il ne reçoit PAS non plus
+            // defaultForEveryRole() (rapports, remise de chèques, échéances en
+            // masse : des gestes de front-office) — voir ROLES_SANS_BASE.
             'teacher' => [
                 'dashboard.view',
                 'dashboard.espace-enseignant',
-                'rooms.view', 'rooms.create', 'rooms.update',
-                'groups.view',
-                'groups.change-teacher',
-                'students.view',
-                'registrations.view', 'registrations.delete',
-                'attendance.view', 'attendance.create', 'attendance.mark',
+                'groups.view-own',
+                'attendance.view', 'attendance.mark',
             ],
         ];
     }

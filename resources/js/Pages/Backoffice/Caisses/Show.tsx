@@ -67,8 +67,8 @@ export default function CaisseShow({ caisse }: CaisseShowProps) {
                                         <code>{row.reference}</code>
                                     </td>
                                     <td>{row.label}</td>
-                                    <td>{row.centre ?? '—'}</td>
-                                    <td>{row.date ?? '—'}</td>
+                                    <td>{row.centre ?? '-'}</td>
+                                    <td>{row.date ?? '-'}</td>
                                     <td>
                                         <span className="badge badge-soft-info">{row.extra}</span>
                                     </td>
@@ -98,7 +98,7 @@ export default function CaisseShow({ caisse }: CaisseShowProps) {
                                         <code>{row.reference}</code>
                                     </td>
                                     <td>{row.label}</td>
-                                    <td>{row.date ?? '—'}</td>
+                                    <td>{row.date ?? '-'}</td>
                                     <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} DH</td>
                                 </tr>
                             ))}
@@ -125,7 +125,7 @@ export default function CaisseShow({ caisse }: CaisseShowProps) {
                                         <code>{row.reference}</code>
                                     </td>
                                     <td>{row.label}</td>
-                                    <td>{row.date ?? '—'}</td>
+                                    <td>{row.date ?? '-'}</td>
                                     <td className="text-end fw-medium">{Number(row.montant).toFixed(2)} DH</td>
                                 </tr>
                             ))}
@@ -171,7 +171,7 @@ export default function CaisseShow({ caisse }: CaisseShowProps) {
                                         {row.direction === 'out' ? 'Vers ' : 'De '}
                                         {row.label}
                                     </td>
-                                    <td>{row.date ?? '—'}</td>
+                                    <td>{row.date ?? '-'}</td>
                                     <td>
                                         <span className="badge badge-soft-info">{row.statut}</span>
                                     </td>

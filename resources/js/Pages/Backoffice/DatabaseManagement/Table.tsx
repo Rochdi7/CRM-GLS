@@ -411,7 +411,7 @@ export default function DatabaseTable({ table, columns, rows, foreignLabels, for
             )}
 
             <Card
-                title={`${table.name} — ${formatCount(table.total)} ${t('rows')}`}
+                title={`${table.name} - ${formatCount(table.total)} ${t('rows')}`}
                 bodyClassName="p-0 py-3"
                 tools={
                     <button
@@ -446,14 +446,14 @@ export default function DatabaseTable({ table, columns, rows, foreignLabels, for
                                             </td>
                                             <td className="text-normal-case">{c.type}</td>
                                             <td>{c.nullable ? t('Yes') : t('No')}</td>
-                                            <td className="text-normal-case text-muted">{c.default ?? '—'}</td>
+                                            <td className="text-normal-case text-muted">{c.default ?? '-'}</td>
                                             <td className="text-normal-case">
                                                 {c.references ? (
                                                     <Link href={`/backoffice/database-management/${encodeURIComponent(c.references.table)}`}>
                                                         {c.references.table}.{c.references.column}
                                                     </Link>
                                                 ) : (
-                                                    '—'
+                                                    '-'
                                                 )}
                                             </td>
                                         </tr>
@@ -585,7 +585,7 @@ export default function DatabaseTable({ table, columns, rows, foreignLabels, for
 
             <Modal
                 show={showModal}
-                title={editing ? `${t('Edit row')} — ${describeKey(editing.key)}` : `${t('Add a row')} — ${table.name}`}
+                title={editing ? `${t('Edit row')} - ${describeKey(editing.key)}` : `${t('Add a row')} - ${table.name}`}
                 onClose={closeModal}
                 processing={form.processing}
                 size="xl"

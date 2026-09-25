@@ -129,7 +129,7 @@ export default function AuditLogShow({ entry }: AuditLogShowPageProps) {
                     <dd className="col-sm-9">
                         {entry.subjectLabel ?? entry.logLabel}
                         {entry.subjectRef && (
-                            <span className="text-muted"> — {entry.subjectRef}</span>
+                            <span className="text-muted"> - {entry.subjectRef}</span>
                         )}
                     </dd>
 
@@ -140,14 +140,14 @@ export default function AuditLogShow({ entry }: AuditLogShowPageProps) {
 
                     <dt className="col-sm-3">{t('Date & time')}</dt>
                     <dd className="col-sm-9">
-                        {entry.createdAt ?? '—'}
+                        {entry.createdAt ?? '-'}
                         {entry.createdAtHuman && (
                             <span className="text-muted"> ({entry.createdAtHuman})</span>
                         )}
                     </dd>
 
                     <dt className="col-sm-3">{t('IP address')}</dt>
-                    <dd className="col-sm-9 text-normal-case">{entry.ipAddress ?? '—'}</dd>
+                    <dd className="col-sm-9 text-normal-case">{entry.ipAddress ?? '-'}</dd>
                 </dl>
             </Card>
 
@@ -158,7 +158,7 @@ export default function AuditLogShow({ entry }: AuditLogShowPageProps) {
                         <div className="col-md-3">
                             <div className="border rounded p-3 h-100">
                                 <div className="fs-12 text-muted">{t('Cash register')}</div>
-                                <div className="fw-medium fs-16">{entry.money.caisse ?? '—'}</div>
+                                <div className="fw-medium fs-16">{entry.money.caisse ?? '-'}</div>
                             </div>
                         </div>
                         <div className="col-md-3">
@@ -276,19 +276,19 @@ export default function AuditLogShow({ entry }: AuditLogShowPageProps) {
             <Card title={t('Origin')}>
                 <dl className="row mb-0">
                     <dt className="col-sm-3">{t('IP address')}</dt>
-                    <dd className="col-sm-9 text-normal-case">{entry.ipAddress ?? '—'}</dd>
+                    <dd className="col-sm-9 text-normal-case">{entry.ipAddress ?? '-'}</dd>
 
                     <dt className="col-sm-3">{t('Request')}</dt>
                     <dd className="col-sm-9 text-break text-normal-case">
                         {entry.method ? `${entry.method} ` : ''}
-                        {entry.url ?? '—'}
+                        {entry.url ?? '-'}
                     </dd>
 
                     <dt className="col-sm-3">{t('Route')}</dt>
-                    <dd className="col-sm-9 text-normal-case">{entry.routeName ?? '—'}</dd>
+                    <dd className="col-sm-9 text-normal-case">{entry.routeName ?? '-'}</dd>
 
                     <dt className="col-sm-3">{t('Browser')}</dt>
-                    <dd className="col-sm-9 text-break text-normal-case">{entry.userAgent ?? '—'}</dd>
+                    <dd className="col-sm-9 text-break text-normal-case">{entry.userAgent ?? '-'}</dd>
                 </dl>
             </Card>
         </BackofficeLayout>

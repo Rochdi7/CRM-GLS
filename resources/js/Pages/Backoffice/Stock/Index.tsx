@@ -466,8 +466,8 @@ export default function StockIndex({
                             <tr key={row.id}>
                                 <td className="text-muted">{row.reference}</td>
                                 <td className="fw-medium">{row.nom}</td>
-                                <td>{row.stockType ?? '—'}</td>
-                                {!centerLocked && <td>{row.etablissement ?? '—'}</td>}
+                                <td>{row.stockType ?? '-'}</td>
+                                {!centerLocked && <td>{row.etablissement ?? '-'}</td>}
                                 <td>
                                     <span className={`badge badge-soft-${row.enAlerte ? 'danger' : 'success'}`}>
                                         {row.quantite}
@@ -480,7 +480,7 @@ export default function StockIndex({
                                         />
                                     )}
                                 </td>
-                                <td>{row.seuilAlerte ?? '—'}</td>
+                                <td>{row.seuilAlerte ?? '-'}</td>
                                 <td>
                                     <StatusBadge
                                         label={row.statut}
@@ -602,8 +602,8 @@ export default function StockIndex({
                                 <td>
                                     {row.quantiteAvant} → {row.quantiteApres}
                                 </td>
-                                <td>{row.par ?? '—'}</td>
-                                <td className="text-muted">{row.note ?? '—'}</td>
+                                <td>{row.par ?? '-'}</td>
+                                <td className="text-muted">{row.note ?? '-'}</td>
                             </tr>
                         ))}
                     </RelatedRecordsTable>
@@ -860,7 +860,7 @@ export default function StockIndex({
                 show={deleteTarget !== null}
                 title="Supprimer cet article ?"
                 recordLabel={deleteTarget?.nom ?? ''}
-                message="Cette action est définitive. Un article avec des mouvements ne peut pas être supprimé — passez-le en Inactif."
+                message="Cette action est définitive. Un article avec des mouvements ne peut pas être supprimé - passez-le en Inactif."
                 error={deleteError}
                 processing={deleting}
                 onConfirm={confirmDelete}

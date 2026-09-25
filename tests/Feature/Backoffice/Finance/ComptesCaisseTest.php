@@ -196,7 +196,7 @@ final class ComptesCaisseTest extends TestCase
                 $this->assertNotContains(
                     $permission,
                     $permissions,
-                    "Role [{$role}] must not preset [{$permission}] — writing an account is super-admin only.",
+                    "Role [{$role}] must not preset [{$permission}] - writing an account is super-admin only.",
                 );
             }
         }

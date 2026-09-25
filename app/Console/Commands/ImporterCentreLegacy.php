@@ -94,7 +94,7 @@ final class ImporterCentreLegacy extends Command
         $admin = Employee::query()->orderBy('id')->first();
 
         if ($admin === null) {
-            $this->error('Aucun employé en base — lancer les seeders avant un import.');
+            $this->error('Aucun employé en base - lancer les seeders avant un import.');
 
             return self::FAILURE;
         }
@@ -229,7 +229,7 @@ final class ImporterCentreLegacy extends Command
         try {
             $batch = $importer->analyze($this->upload($path), $context, $admin);
         } catch (\Throwable $e) {
-            $this->error(sprintf('  %-42s ÉCHEC — %s', $libelle, $e->getMessage()));
+            $this->error(sprintf('  %-42s ÉCHEC - %s', $libelle, $e->getMessage()));
 
             return false;
         }
@@ -341,7 +341,7 @@ final class ImporterCentreLegacy extends Command
             }
         }
 
-        return sprintf('%d lignes — %s', $batch->total_rows, $parts === [] ? 'rien' : implode(', ', $parts));
+        return sprintf('%d lignes - %s', $batch->total_rows, $parts === [] ? 'rien' : implode(', ', $parts));
     }
 
     /**
@@ -549,7 +549,7 @@ final class ImporterCentreLegacy extends Command
 
         if ($till === null) {
             $this->error(sprintf(
-                '%s %s n\'a pas de caisse « Caissière » — la provisionner avant l\'import.',
+                '%s %s n\'a pas de caisse « Caissière » - la provisionner avant l\'import.',
                 $employee->prenom,
                 $employee->nom
             ));

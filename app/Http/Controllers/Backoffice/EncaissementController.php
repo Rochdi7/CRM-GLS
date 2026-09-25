@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Domain\Students\Support\GardeEtudiantTransfere;
 use App\Domain\Payments\Actions\AppliquerAvance;
 use App\Domain\Payments\Actions\ConvertirEncaissementsEnAvance;
 use App\Domain\Payments\Actions\DetacherEncaissementDuFrais;
@@ -274,7 +275,7 @@ final class EncaissementController extends Controller
         }
 
         throw ValidationException::withMessages([
-            $field => __('This registration is no longer active — record the money as an advance instead.'),
+            $field => __('This registration is no longer active - record the money as an advance instead.'),
         ]);
     }
 
@@ -529,7 +530,11 @@ final class EncaissementController extends Controller
         // receiving the credit must be within the cashier's centres —
         // otherwise a tampered student_id books an avance for another
         // centre's student (it would then show on THAT centre's pages).
-        $this->assertStudentInContext($request, Student::query()->findOrFail((int) $data['student_id']));
+        $student = Student::query()->findOrFail((int) $data['student_id']);
+        $this->assertStudentInContext($request, $student);
+        // Une avance sur une fiche « Transféré » séparerait l'argent de la
+        // personne, partie sur sa copie (GardeEtudiantTransfere).
+        GardeEtudiantTransfere::assertNonTransfere($student);
 
         // Same rule as store(): the method decides the account.
         $caisse = app(CaisseResolver::class)->resolveFor($agent, (string) $data['methode']);
@@ -721,7 +726,7 @@ final class EncaissementController extends Controller
 
                 return [
                     'id' => $i->id,
-                    'label' => $i->reference.' — '.($i->group?->nom ?? '—'),
+                    'label' => $i->reference.' - '.($i->group?->nom ?? '-'),
                     'reste' => number_format($resolution['reste'], 2, '.', ''),
                 ];
             })
@@ -998,7 +1003,7 @@ final class EncaissementController extends Controller
 
         $action->handle($encaissement);
 
-        return back()->with('success', __('Payment detached from its fee — the amount is available as an advance again.'));
+        return back()->with('success', __('Payment detached from its fee - the amount is available as an advance again.'));
     }
 
     /**

@@ -231,7 +231,7 @@ final class HiddenAccountTest extends TestCase
         $this->assertFalse(Employee::whereKey($dev->id)->exists());
         $this->assertTrue(
             Employee::withoutGlobalScope(HiddenAccountScope::class)->whereKey($dev->id)->exists(),
-            'The row itself is never deleted — only filtered from reads.',
+            'The row itself is never deleted - only filtered from reads.',
         );
     }
 
@@ -346,7 +346,7 @@ final class HiddenAccountTest extends TestCase
         $this->assertNotContains(
             $staffTill->id,
             $visible,
-            'It does not even see its OWN till in a list — hiding is display-wide.',
+            'It does not even see its OWN till in a list - hiding is display-wide.',
         );
 
         $options = app(\App\Domain\Payments\Queries\GetEncaissementsList::class)

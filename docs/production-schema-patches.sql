@@ -428,3 +428,35 @@ END $$;
 
 CREATE INDEX IF NOT EXISTS depenses_enseignant_date_idx ON depenses (enseignant_id, date_depense);
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 25/09/2026 — Transfert d'un étudiant entre centres : table
+-- `student_transfers` + trois colonnes sur `students` (statut,
+-- transfere_vers_student_id, transfere_depuis_student_id).
+--
+-- ⚠ RIEN À FAIRE À LA MAIN : les deux migrations additives
+-- `2026_09_25_100000_create_student_transfers_table.php` et
+-- `2026_09_25_100100_add_transfert_to_students_table.php` sont jouées par le
+-- `php artisan migrate --force` du déploiement habituel. Le SQL ci-dessous
+-- n'est conservé que pour mémoire (idempotent).
+--
+-- `students.statut` : « Actif » par défaut (toutes les fiches existantes le
+-- sont) ; « Transféré » = fiche close dans son centre, sa copie Active vit
+-- dans le centre d'arrivée. Aucune donnée existante n'est réécrite.
+ALTER TABLE students ADD COLUMN IF NOT EXISTS statut varchar(20) NOT NULL DEFAULT 'Actif';
+CREATE INDEX IF NOT EXISTS students_statut_idx ON students (statut);
+ALTER TABLE students ADD COLUMN IF NOT EXISTS transfere_vers_student_id bigint NULL;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS transfere_depuis_student_id bigint NULL;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'students_transfere_vers_student_id_foreign') THEN
+    ALTER TABLE students ADD CONSTRAINT students_transfere_vers_student_id_foreign
+      FOREIGN KEY (transfere_vers_student_id) REFERENCES students (id) ON DELETE SET NULL;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'students_transfere_depuis_student_id_foreign') THEN
+    ALTER TABLE students ADD CONSTRAINT students_transfere_depuis_student_id_foreign
+      FOREIGN KEY (transfere_depuis_student_id) REFERENCES students (id) ON DELETE SET NULL;
+  END IF;
+END $$;
+-- La table `student_transfers` elle-même : voir la migration create_* (aucun
+-- rattrapage nécessaire, c'est une table neuve).
+-- ---------------------------------------------------------------------------

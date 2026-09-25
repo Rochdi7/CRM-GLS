@@ -298,7 +298,7 @@ final class CaisseController extends Controller
         if ((int) $caisse->etablissement_id !== (int) $newCentre
             && $getComptesCaisse->hasMovements($caisse)) {
             throw ValidationException::withMessages([
-                'etablissement_id' => __('This cash account carries movements — its centre can no longer be changed.'),
+                'etablissement_id' => __('This cash account carries movements - its centre can no longer be changed.'),
             ]);
         }
 

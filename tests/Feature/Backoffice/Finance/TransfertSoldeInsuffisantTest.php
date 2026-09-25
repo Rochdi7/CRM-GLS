@@ -83,7 +83,7 @@ final class TransfertSoldeInsuffisantTest extends TestCase
 
         try {
             app(ValiderTransfertCaisse::class)->handle($transfer->fresh(), $rafik);
-            $this->fail('Validation should have been refused — the till no longer holds the money.');
+            $this->fail('Validation should have been refused - the till no longer holds the money.');
         } catch (ValidationException $e) {
             $this->assertStringContainsString('4 800,00', $e->getMessage());
         }

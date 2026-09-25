@@ -155,7 +155,7 @@ export default function InscriptionShow({ inscription }: InscriptionShowProps) {
                                     <td className={`fw-semibold ${reste > 0 ? 'text-danger' : 'text-success'}`}>
                                         {reste.toFixed(2)} MAD
                                     </td>
-                                    <td>{fee.dateEcheance ?? '—'}</td>
+                                    <td>{fee.dateEcheance ?? '-'}</td>
                                     <td>
                                         <span className={`badge badge-soft-${feeStatusVariant(fee.statut)}`}>
                                             {fee.statut}
@@ -199,10 +199,10 @@ export default function InscriptionShow({ inscription }: InscriptionShowProps) {
                                     <td>
                                         <code>{payment.reference}</code>
                                     </td>
-                                    <td>{payment.feeNom ?? '—'}</td>
+                                    <td>{payment.feeNom ?? '-'}</td>
                                     <td className="fw-medium">{Number(payment.montant).toFixed(2)} MAD</td>
                                     <td>{payment.methode}</td>
-                                    <td>{payment.datePaiement ?? '—'}</td>
+                                    <td>{payment.datePaiement ?? '-'}</td>
                                     <td>
                                         {payment.rembourse ? (
                                             <span className="badge badge-soft-warning">Remboursé</span>

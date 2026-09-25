@@ -213,7 +213,7 @@ final class ConvertirEncaissementsEnAvance
     {
         if ($encaissement->fee !== null && $encaissement->fee->estMasque()) {
             throw ValidationException::withMessages([
-                'montants.'.$encaissement->id => __('A payment attached to a hidden fee can only be converted in full — nothing can stay on a fee that is no longer due.'),
+                'montants.'.$encaissement->id => __('A payment attached to a hidden fee can only be converted in full - nothing can stay on a fee that is no longer due.'),
             ]);
         }
 

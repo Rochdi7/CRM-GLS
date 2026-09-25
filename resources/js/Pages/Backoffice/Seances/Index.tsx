@@ -41,7 +41,7 @@ interface SeancesIndexProps {
     statuts: string[];
     /** Active reasons from Paramètres → Raisons d'annulation ou archivage. */
     motifsAnnulation: string[];
-    permissions: { create: boolean; update: boolean; delete: boolean; mark: boolean };
+    permissions: { create: boolean; update: boolean; delete: boolean; mark: boolean; cancel: boolean };
 }
 
 const EMPTY_FORM: SeanceForm = {
@@ -365,15 +365,15 @@ export default function SeancesIndex({
                                 <Link href={row.showUrl}>{row.dateSeance}</Link>
                             </td>
                             <td>
-                                {row.heureDebut ? `${row.heureDebut}${row.heureFin ? ` – ${row.heureFin}` : ''}` : '—'}
+                                {row.heureDebut ? `${row.heureDebut}${row.heureFin ? ` – ${row.heureFin}` : ''}` : '-'}
                             </td>
                             <td>
-                                {row.groupNom ?? '—'}
+                                {row.groupNom ?? '-'}
                                 {row.groupNiveau && (
                                     <span className="badge badge-soft-secondary ms-2">{row.groupNiveau}</span>
                                 )}
                             </td>
-                            <td>{row.enseignant ?? '—'}</td>
+                            <td>{row.enseignant ?? '-'}</td>
                             <td>
                                 {row.presencesCount > 0 ? (
                                     <>
@@ -407,6 +407,9 @@ export default function SeancesIndex({
                                             Faire l'appel
                                         </Link>
                                     )}
+                                    {/* Portée enseignant : pas de menu — il fait l'appel (et valide
+                                        depuis la fiche), il n'annule, ne modifie ni ne supprime rien. */}
+                                    {(permissions.cancel || permissions.update || permissions.delete) && (
                                     <RowActions>
                                         {permissions.mark && row.statut !== 'Effectuée' && (
                                             <RowActionItem
@@ -416,7 +419,7 @@ export default function SeancesIndex({
                                                 Valider la séance
                                             </RowActionItem>
                                         )}
-                                        {permissions.mark && row.statut !== 'Annulée' && (
+                                        {permissions.cancel && row.statut !== 'Annulée' && (
                                             <RowActionItem icon="ti-x" danger onClick={() => openAnnulerModal(row)}>
                                                 Annuler la séance
                                             </RowActionItem>
@@ -439,6 +442,7 @@ export default function SeancesIndex({
                                             </RowActionItem>
                                         )}
                                     </RowActions>
+                                    )}
                                 </div>
                             </td>
                         </tr>
@@ -505,7 +509,7 @@ export default function SeancesIndex({
                                 id="seance-enseignant"
                                 label="Enseignant"
                                 options={enseignants}
-                                placeholder="—"
+                                placeholder="-"
                                 value={form.data.enseignant_id}
                                 onChange={(event) => form.setData('enseignant_id', event.target.value)}
                                 error={form.errors.enseignant_id}
@@ -542,7 +546,7 @@ export default function SeancesIndex({
             <ConfirmDialog
                 show={deleteTarget !== null}
                 title="Supprimer cette séance ?"
-                recordLabel={deleteTarget ? `${deleteTarget.groupNom ?? ''} — ${deleteTarget.dateSeance}` : ''}
+                recordLabel={deleteTarget ? `${deleteTarget.groupNom ?? ''} - ${deleteTarget.dateSeance}` : ''}
                 message="Cette action est définitive : la séance et son appel seront supprimés."
                 error={deleteError}
                 processing={deleting}
@@ -553,7 +557,7 @@ export default function SeancesIndex({
             <ConfirmDialog
                 show={validateTarget !== null}
                 title="Valider la séance"
-                recordLabel={validateTarget ? `${validateTarget.groupNom ?? ''} — ${validateTarget.dateSeance}` : ''}
+                recordLabel={validateTarget ? `${validateTarget.groupNom ?? ''} - ${validateTarget.dateSeance}` : ''}
                 message="Confirmer que cette séance a bien eu lieu (statut Effectuée) ?"
                 processing={validating}
                 icon="ti-circle-check"
@@ -572,7 +576,7 @@ export default function SeancesIndex({
             >
                 <form onSubmit={submitAnnuler}>
                     <p className="fw-medium">
-                        {annulerTarget ? `${annulerTarget.groupNom ?? ''} — ${annulerTarget.dateSeance}` : ''}
+                        {annulerTarget ? `${annulerTarget.groupNom ?? ''} - ${annulerTarget.dateSeance}` : ''}
                     </p>
                     <SelectField
                         id="seance-annuler-motif"

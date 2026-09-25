@@ -121,7 +121,7 @@ final class DashboardPerformanceTest extends TestCase
         }
         $withFifteen = $this->countDashboardQueries();
 
-        $this->assertSame($withThree, $withFifteen, "Dashboard queries grew from {$withThree} to {$withFifteen} — a per-row (N+1) pattern is back.");
+        $this->assertSame($withThree, $withFifteen, "Dashboard queries grew from {$withThree} to {$withFifteen} - a per-row (N+1) pattern is back.");
         $this->assertLessThan(30, $withFifteen);
     }
 

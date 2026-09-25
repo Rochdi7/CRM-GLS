@@ -302,15 +302,15 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                                 </div>
                                 <div className="col-md-3 mb-3">
                                     <p className="text-muted mb-1">Formation</p>
-                                    <p className="fw-medium mb-0">{group.niveau ?? '—'}</p>
+                                    <p className="fw-medium mb-0">{group.niveau ?? '-'}</p>
                                 </div>
                                 <div className="col-md-3 mb-3">
                                     <p className="text-muted mb-1">Date de début</p>
-                                    <p className="fw-medium mb-0">{group.dateDebutFormation ?? '—'}</p>
+                                    <p className="fw-medium mb-0">{group.dateDebutFormation ?? '-'}</p>
                                 </div>
                                 <div className="col-md-3 mb-3">
                                     <p className="text-muted mb-1">Date de fin</p>
-                                    <p className="fw-medium mb-0">{group.dateFinFormation ?? '—'}</p>
+                                    <p className="fw-medium mb-0">{group.dateFinFormation ?? '-'}</p>
                                 </div>
                                 <div className="col-md-3">
                                     <p className="text-muted mb-1">Statut</p>
@@ -371,7 +371,7 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                                             <span className="badge badge-soft-info ms-1">{fee.classification}</span>
                                         )}
                                     </td>
-                                    <td>{fee.dateEcheance ?? '—'}</td>
+                                    <td>{fee.dateEcheance ?? '-'}</td>
                                     <td>{Number(fee.montant).toFixed(2)} DH</td>
                                 </tr>
                             ))}
@@ -405,16 +405,16 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                                         {insc.studentShowUrl ? (
                                             <a href={insc.studentShowUrl}>{insc.student}</a>
                                         ) : (
-                                            (insc.student ?? '—')
+                                            (insc.student ?? '-')
                                         )}
                                     </td>
-                                    <td>{group.niveau ?? '—'}</td>
+                                    <td>{group.niveau ?? '-'}</td>
                                     <td>
                                         <StatusBadge label={insc.statut} />
                                     </td>
-                                    <td>{insc.date ?? '—'}</td>
-                                    <td>{insc.dateDebut ?? '—'}</td>
-                                    <td>{insc.dateFin ?? '—'}</td>
+                                    <td>{insc.date ?? '-'}</td>
+                                    <td>{insc.dateDebut ?? '-'}</td>
+                                    <td>{insc.dateFin ?? '-'}</td>
                                     <td className="text-end">
                                         {insc.studentShowUrl && (
                                             <a
@@ -435,7 +435,7 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                         <>
                             <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
                                 <p className="text-muted mb-0">
-                                    Historique des affectations — un seul enseignant est actif à la fois, les périodes
+                                    Historique des affectations - un seul enseignant est actif à la fois, les périodes
                                     précédentes sont conservées pour le suivi et la paie.
                                 </p>
                                 {group.canChangeEnseignant && (
@@ -467,10 +467,10 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                             >
                                 {group.enseignantsHistorique.map((row) => (
                                     <tr key={row.id}>
-                                        <td className="fw-medium">{row.enseignant ?? '—'}</td>
-                                        <td>{row.dateDebut ?? '—'}</td>
-                                        <td>{row.dateFin ?? '—'}</td>
-                                        <td>{row.motif ?? '—'}</td>
+                                        <td className="fw-medium">{row.enseignant ?? '-'}</td>
+                                        <td>{row.dateDebut ?? '-'}</td>
+                                        <td>{row.dateFin ?? '-'}</td>
+                                        <td>{row.motif ?? '-'}</td>
                                         <td>
                                             <StatusBadge
                                                 label={row.statut}
@@ -515,10 +515,10 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                         >
                             <tr>
                                 <td className="fw-medium">{group.nom}</td>
-                                <td>{group.niveau ?? '—'}</td>
-                                <td>{group.enseignant ?? '—'}</td>
-                                <td>{group.centre ?? '—'}</td>
-                                <td>{group.anneeScolaire ?? '—'}</td>
+                                <td>{group.niveau ?? '-'}</td>
+                                <td>{group.enseignant ?? '-'}</td>
+                                <td>{group.centre ?? '-'}</td>
+                                <td>{group.anneeScolaire ?? '-'}</td>
                                 <td>
                                     <span className="badge badge-soft-info d-inline-flex align-items-center gap-1">
                                         {group.etudiantsDistinctsCount}
@@ -567,8 +567,8 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
             >
                 <form onSubmit={submitMoveYear} onKeyDown={blockImplicitSubmit}>
                     <div className="alert alert-warning">
-                        Le groupe <strong>{group.nom}</strong> ({group.anneeScolaire ?? '—'}) sera déplacé avec{' '}
-                        <strong>toutes ses inscriptions, séances et paiements</strong> — rien n&apos;est copié ni
+                        Le groupe <strong>{group.nom}</strong> ({group.anneeScolaire ?? '-'}) sera déplacé avec{' '}
+                        <strong>toutes ses inscriptions, séances et paiements</strong> - rien n&apos;est copié ni
                         supprimé, les mêmes enregistrements changent d&apos;année (mêmes effectifs avant et après). Chaque
                         modification est tracée dans le journal d&apos;audit.
                     </div>
@@ -677,7 +677,7 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                         <i className="ti ti-info-circle fs-18 mt-1" aria-hidden="true" />
                         <span>
                             Correction des dates et du motif de la période de{' '}
-                            <strong>{affectationEnCours?.enseignant ?? '—'}</strong>. L'enseignant de cette période ne
+                            <strong>{affectationEnCours?.enseignant ?? '-'}</strong>. L'enseignant de cette période ne
                             change pas ici : pour le remplacer, utilisez « Changer d'enseignant ».
                         </span>
                     </div>
@@ -699,7 +699,7 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                                 // no end date to correct.
                                 <>
                                     <DateField id="grp-aff-fin" label="Date de fin" value="" disabled />
-                                    <p className="text-muted fs-12 mt-1 mb-0">Période en cours — sans date de fin.</p>
+                                    <p className="text-muted fs-12 mt-1 mb-0">Période en cours - sans date de fin.</p>
                                 </>
                             ) : (
                                 <DateField

@@ -342,6 +342,6 @@ final class DashboardInertiaTest extends TestCase
 
         // Generous ceiling — not a tight regression pin, just a guard against
         // an accidental N+1 (per-row) pattern creeping into the stats query.
-        $this->assertLessThan(30, $queryCount, "Dashboard executed {$queryCount} queries — check for N+1s.");
+        $this->assertLessThan(30, $queryCount, "Dashboard executed {$queryCount} queries - check for N+1s.");
     }
 }

@@ -107,7 +107,7 @@ final class ImputerCentreTransfert extends Command
 
         if ((float) $encaisse <= 0.0) {
             $this->error(sprintf(
-                '  %s n\'a jamais alimenté cette caisse — imputation refusée.',
+                '  %s n\'a jamais alimenté cette caisse - imputation refusée.',
                 $centre->nom_centre
             ));
 
@@ -128,7 +128,7 @@ final class ImputerCentreTransfert extends Command
 
         if ($this->option('dry-run')) {
             $this->line('');
-            $this->comment('  DRY-RUN — rien écrit. Relancer sans --dry-run pour appliquer.');
+            $this->comment('  DRY-RUN - rien écrit. Relancer sans --dry-run pour appliquer.');
 
             return self::SUCCESS;
         }

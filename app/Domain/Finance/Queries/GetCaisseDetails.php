@@ -124,7 +124,7 @@ final class GetCaisseDetails
             'statut' => $caisse->statut,
             'encaissements' => $encaissements->map(fn ($enc): array => [
                 'reference' => $enc->reference,
-                'label' => $enc->student?->nomComplet() ?? '—',
+                'label' => $enc->student?->nomComplet() ?? '-',
                 'date' => $enc->date_paiement?->format('d/m/Y'),
                 'montant' => number_format((float) $enc->montant, 2, '.', ''),
                 'extra' => $enc->methode,
@@ -134,13 +134,13 @@ final class GetCaisseDetails
             ])->values()->all(),
             'depenses' => $depenses->map(fn ($dep): array => [
                 'reference' => $dep->reference,
-                'label' => $dep->typeDepense?->nom ?? '—',
+                'label' => $dep->typeDepense?->nom ?? '-',
                 'date' => $dep->date_depense?->format('d/m/Y'),
                 'montant' => number_format((float) $dep->montant, 2, '.', ''),
             ])->values()->all(),
             'remboursements' => $remboursements->map(fn ($rmb): array => [
                 'reference' => $rmb->reference,
-                'label' => $rmb->beneficiaire?->nomComplet() ?? '—',
+                'label' => $rmb->beneficiaire?->nomComplet() ?? '-',
                 'date' => $rmb->date_remboursement?->format('d/m/Y'),
                 'montant' => number_format((float) $rmb->montant, 2, '.', ''),
             ])->values()->all(),
@@ -149,7 +149,7 @@ final class GetCaisseDetails
 
                 return [
                     'reference' => $transfer->reference,
-                    'label' => $sortant ? ($transfer->caisseDestination?->nom ?? '—') : ($transfer->caisseSource?->nom ?? '—'),
+                    'label' => $sortant ? ($transfer->caisseDestination?->nom ?? '-') : ($transfer->caisseSource?->nom ?? '-'),
                     'date' => $transfer->date_transfert?->format('d/m/Y'),
                     'montant' => number_format((float) $transfer->montant, 2, '.', ''),
                     'direction' => $sortant ? 'out' : 'in',

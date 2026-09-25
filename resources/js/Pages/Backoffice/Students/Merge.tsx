@@ -190,7 +190,7 @@ export default function StudentMerge({ filters, candidats, dossier }: Props) {
     const fraisOptions = (dossier?.inscriptions ?? []).flatMap((i) =>
         i.frais.map((f) => ({
             value: String(f.id),
-            label: `${i.reference} · ${i.statut}${i.annee ? ` · ${i.annee}` : ''} — ${f.nom} (${t('remaining')} ${money(f.reste)})${f.masque ? ` — ${t('hidden fee')}` : ''}`,
+            label: `${i.reference} · ${i.statut}${i.annee ? ` · ${i.annee}` : ''} - ${f.nom} (${t('remaining')} ${money(f.reste)})${f.masque ? ` - ${t('hidden fee')}` : ''}`,
         })),
     );
 
@@ -209,7 +209,7 @@ export default function StudentMerge({ filters, candidats, dossier }: Props) {
                 <div>
                     <strong>{t('Super-admin repair tool.')}</strong>{' '}
                     {t(
-                        'Registrations of every status are listed, across all centres and years. No amount, payment date, cash register or agent is ever modified — only which student record and which fee a row is attached to.',
+                        'Registrations of every status are listed, across all centres and years. No amount, payment date, cash register or agent is ever modified - only which student record and which fee a row is attached to.',
                     )}
                 </div>
             </div>
@@ -279,9 +279,9 @@ export default function StudentMerge({ filters, candidats, dossier }: Props) {
                                         <td>
                                             {c.prenom} {c.nom}
                                         </td>
-                                        <td className="text-normal-case">{c.telephone ?? '—'}</td>
-                                        <td>{c.dateNaissance ?? '—'}</td>
-                                        <td>{c.centre ?? '—'}</td>
+                                        <td className="text-normal-case">{c.telephone ?? '-'}</td>
+                                        <td>{c.dateNaissance ?? '-'}</td>
+                                        <td>{c.centre ?? '-'}</td>
                                         <td className="text-center">{c.inscriptionsCount}</td>
                                         <td className="text-center">{c.encaissementsCount}</td>
                                         <td className="text-end">
@@ -401,9 +401,9 @@ export default function StudentMerge({ filters, candidats, dossier }: Props) {
                                                 <td>{p.reference}</td>
                                                 <td className="text-end">{money(p.montant)}</td>
                                                 <td>{p.methode}</td>
-                                                <td>{p.datePaiement ?? '—'}</td>
-                                                <td>{p.caisse ?? '—'}</td>
-                                                <td>{p.agent ?? '—'}</td>
+                                                <td>{p.datePaiement ?? '-'}</td>
+                                                <td>{p.caisse ?? '-'}</td>
+                                                <td>{p.agent ?? '-'}</td>
                                                 <td>
                                                     {p.estAvance ? (
                                                         <span className="badge badge-soft-info">{t('Advance')}</span>
@@ -482,14 +482,14 @@ export default function StudentMerge({ filters, candidats, dossier }: Props) {
                                                 {fiche.reference}
                                                 {fiche.legacyRef ? ` (${fiche.legacyRef})` : ''}
                                             </div>
-                                            <div className="text-muted">{fiche.centre ?? '—'}</div>
+                                            <div className="text-muted">{fiche.centre ?? '-'}</div>
                                             <div className="mt-2">
                                                 {fiche.inscriptionsCount} {t('registrations')} ·{' '}
                                                 {fiche.encaissementsCount} {t('payments')}
                                             </div>
                                         </>
                                     ) : (
-                                        <span className="text-muted">—</span>
+                                        <span className="text-muted">-</span>
                                     )}
                                 </div>
                             </div>
@@ -535,7 +535,7 @@ export default function StudentMerge({ filters, candidats, dossier }: Props) {
                 <form onSubmit={submitMove}>
                     {movePayment && (
                         <p className="text-muted">
-                            {movePayment.reference} — <strong>{money(movePayment.montant)}</strong>,{' '}
+                            {movePayment.reference} - <strong>{money(movePayment.montant)}</strong>,{' '}
                             {movePayment.methode}, {movePayment.datePaiement}.{' '}
                             {t(
                                 'Only the fee it is attached to changes. Amount, method, date, cash register and agent stay exactly as they are.',
@@ -550,7 +550,7 @@ export default function StudentMerge({ filters, candidats, dossier }: Props) {
                         onChange={(e) => moveForm.setData('fee_id', e.target.value)}
                         error={moveForm.errors.fee_id ?? moveForm.errors.encaissement_id}
                         options={[
-                            { value: '', label: t('— Detach (becomes a free advance) —') },
+                            { value: '', label: t('- Detach (becomes a free advance) -') },
                             ...fraisOptions,
                         ]}
                     />

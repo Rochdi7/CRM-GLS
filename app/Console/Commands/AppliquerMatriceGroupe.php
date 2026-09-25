@@ -117,7 +117,7 @@ final class AppliquerMatriceGroupe extends Command
             $groupe = $this->trouverGroupe($nomGroupe);
 
             if ($groupe === null) {
-                $this->warn(sprintf('  Groupe « %s » introuvable — fichier ignoré.', $nomGroupe));
+                $this->warn(sprintf('  Groupe « %s » introuvable - fichier ignoré.', $nomGroupe));
 
                 continue;
             }
@@ -275,7 +275,7 @@ final class AppliquerMatriceGroupe extends Command
                 }
 
                 if ($manque > 0.0) {
-                    $sansFonds[] = sprintf('%s — %s : manque %s', trim($student->prenom.' '.$student->nom), $fee->nom, number_format($manque, 2, '.', ''));
+                    $sansFonds[] = sprintf('%s - %s : manque %s', trim($student->prenom.' '.$student->nom), $fee->nom, number_format($manque, 2, '.', ''));
                 }
             }
 

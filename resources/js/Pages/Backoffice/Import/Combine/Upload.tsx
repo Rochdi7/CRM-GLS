@@ -52,12 +52,12 @@ interface UploadFormState {
 
 /** Post-translation statut values (the file's "Archivée" imports as "Changement"). */
 const STATUT_OPTIONS = [
-    { value: 'Active', label: 'Active', fileLabel: 'Fichier Inscriptions — Actives (.xlsx)' },
-    { value: 'Annulée', label: 'Annulée', fileLabel: 'Fichier Inscriptions — Annulées (.xlsx)' },
+    { value: 'Active', label: 'Active', fileLabel: 'Fichier Inscriptions - Actives (.xlsx)' },
+    { value: 'Annulée', label: 'Annulée', fileLabel: 'Fichier Inscriptions - Annulées (.xlsx)' },
     {
         value: 'Changement',
         label: 'Changement (« Archivée » dans l’ancien CRM)',
-        fileLabel: 'Fichier Inscriptions — Archivées (.xlsx)',
+        fileLabel: 'Fichier Inscriptions - Archivées (.xlsx)',
     },
 ] as const;
 
@@ -122,7 +122,7 @@ function guessNiveau(label: string, niveaux: string[]): string {
 
 /** Option label: the year tag marks a group that will be re-affected to the selected année if mapped. */
 function groupOptionLabel(group: ExistingGroup, ambiguous: boolean): string {
-    const annee = group.horsAnnee && group.anneeNom ? ` — ${group.anneeNom}` : '';
+    const annee = group.horsAnnee && group.anneeNom ? ` - ${group.anneeNom}` : '';
 
     return ambiguous ? `${group.nom}${annee} (#${group.id})` : `${group.nom}${annee}`;
 }
@@ -305,7 +305,7 @@ export default function CombinedImportUpload({ etablissements, centerLocked }: C
                     <div className="alert alert-info">
                         Les <strong>étudiants sont importés d&apos;abord</strong> (les lignes propres sont insérées
                         automatiquement), puis les <strong>inscriptions sont résolues contre eux</strong> dans la même
-                        opération — plus de conflits « étudiant introuvable » entre deux imports séparés.
+                        opération - plus de conflits « étudiant introuvable » entre deux imports séparés.
                     </div>
                     <form onSubmit={handlePeekSubmit}>
                         <ImportScopeFields
@@ -392,7 +392,7 @@ export default function CombinedImportUpload({ etablissements, centerLocked }: C
 
                         <div className="mb-3">
                             <label className="form-label" htmlFor="encaissements-file">
-                                Fichier Encaissements (.xlsx) <span className="text-muted">— optionnel</span>
+                                Fichier Encaissements (.xlsx) <span className="text-muted">- optionnel</span>
                             </label>
                             <input
                                 id="encaissements-file"
@@ -407,7 +407,7 @@ export default function CombinedImportUpload({ etablissements, centerLocked }: C
                             <small className="text-muted d-block mt-1">
                                 Avec ce fichier, les inscriptions sont insérées automatiquement puis les paiements sont
                                 rattachés aux inscriptions de cet import. Pour Annulée / Changement, les inscriptions
-                                inactives sont acceptées d&apos;office — plus besoin de cocher une case.
+                                inactives sont acceptées d&apos;office - plus besoin de cocher une case.
                             </small>
                         </div>
 
@@ -423,9 +423,9 @@ export default function CombinedImportUpload({ etablissements, centerLocked }: C
             {step === 'mapping' && (
                 <Card title="Associer les groupes">
                     <div className="alert alert-info">
-                        Associer un groupe marqué d&apos;une autre année (ex. « — 2026/2027 ») le
+                        Associer un groupe marqué d&apos;une autre année (ex. « - 2026/2027 ») le
                         <strong> réaffecte automatiquement à l&apos;année sélectionnée</strong>, avec ses inscriptions
-                        et séances — rien ne reste réparti sur deux années.
+                        et séances - rien ne reste réparti sur deux années.
                     </div>
                     <form onSubmit={submitAnalyze}>
                         <table className="table">
@@ -471,7 +471,7 @@ export default function CombinedImportUpload({ etablissements, centerLocked }: C
                                                     </select>
                                                     {entry.group_id === '' && duplicateNames.has(groupKey(entry.label)) && (
                                                         <small className="text-warning d-block mt-1">
-                                                            Plusieurs groupes portent ce nom — choisir lequel.
+                                                            Plusieurs groupes portent ce nom - choisir lequel.
                                                         </small>
                                                     )}
                                                 </>

@@ -3,7 +3,7 @@
 
     Deliberately standalone Blade, NOT the Inertia root shell: an error page
     must render when the app itself is failing, so it loads no Vite bundle and
-    no React — a broken build or a boot-time exception would otherwise turn the
+    no React - a broken build or a boot-time exception would otherwise turn the
     error page into a second error. Only the static PreSkool CSS is used
     (CLAUDE.md §12), so the page still looks like GLS.
 
@@ -16,7 +16,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>@yield('title') — {{ config('app.name', 'GLS CRM') }}</title>
+    <title>@yield('title') - {{ config('app.name', 'GLS CRM') }}</title>
 
     <link rel="icon" type="image/png" sizes="96x96" href="{{ asset('assets/images/favicon/favicon-96x96.png') }}">
     <link rel="shortcut icon" href="{{ asset('favicon.ico') }}">

@@ -48,7 +48,7 @@ function SexeIcon({ sexe }: { sexe: string | null }) {
         );
     }
 
-    return <>—</>;
+    return <>-</>;
 }
 
 /**
@@ -239,15 +239,15 @@ export default function ProfileIndex({ user, employee, phonePays, telephone, wha
                                 </div>
                                 <div className="d-flex justify-content-between mb-2">
                                     <span className="text-muted">Email</span>
-                                    <span className="fw-medium text-end text-truncate ms-2">{employee.email ?? '—'}</span>
+                                    <span className="fw-medium text-end text-truncate ms-2">{employee.email ?? '-'}</span>
                                 </div>
                                 <div className="d-flex justify-content-between mb-2">
                                     <span className="text-muted">Date de naissance</span>
-                                    <span className="fw-medium">{employee.date_naissance ?? '—'}</span>
+                                    <span className="fw-medium">{employee.date_naissance ?? '-'}</span>
                                 </div>
                                 <div className="d-flex justify-content-between mb-2">
                                     <span className="text-muted">Date d'embauche</span>
-                                    <span className="fw-medium">{employee.date_embauche ?? '—'}</span>
+                                    <span className="fw-medium">{employee.date_embauche ?? '-'}</span>
                                 </div>
                                 <div className="d-flex justify-content-between">
                                     <span className="text-muted">Centre</span>

@@ -40,7 +40,8 @@ export const backofficeNavigation: NavGroup[] = [
                 label: t('Groups'),
                 href: '/backoffice/groups',
                 icon: 'ti ti-users-group',
-                permissions: ['groups.view'],
+                // groups.view-own = portée enseignant (ses groupes seulement).
+                permissions: ['groups.view', 'groups.view-own'],
                 matchPaths: ['/backoffice/groups'],
                 inertia: true,
             },
@@ -67,7 +68,7 @@ export const backofficeNavigation: NavGroup[] = [
                 label: t('Students'),
                 href: '/backoffice/students',
                 icon: 'ti ti-school',
-                permissions: ['students.view'],
+                permissions: ['students.view', 'groups.view-own'],
                 // « Fusion de fiches & réaffectation des paiements »
                 // (/backoffice/students/fusion) n'a PAS d'entrée propre :
                 // outil de réparation super-admin, atteignable par son URL
@@ -76,6 +77,16 @@ export const backofficeNavigation: NavGroup[] = [
                 // Chèques. Le préfixe ci-dessous suffit à garder l'entrée
                 // Étudiants active pendant qu'on y est.
                 matchPaths: ['/backoffice/students'],
+                inertia: true,
+            },
+            {
+                // Demandes de transfert d'un étudiant vers un autre centre
+                // (25/09/2026) : le guichet demande, le super-admin décide.
+                label: t('Student transfers'),
+                href: '/backoffice/student-transfers',
+                icon: 'ti ti-arrows-exchange',
+                permissions: ['student-transfers.view'],
+                matchPaths: ['/backoffice/student-transfers'],
                 inertia: true,
             },
             {

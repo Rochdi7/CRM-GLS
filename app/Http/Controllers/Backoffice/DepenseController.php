@@ -329,7 +329,7 @@ final class DepenseController extends Controller
             $request,
             'backoffice.depenses.index',
         )->with('success', $depense->isEnAttente()
-            ? __('Expense submitted — awaiting approval.')
+            ? __('Expense submitted - awaiting approval.')
             : __('Expense recorded.'));
     }
 
@@ -356,7 +356,7 @@ final class DepenseController extends Controller
         return $this->backToListPreservingFilters(
             $request,
             'backoffice.depenses.index',
-        )->with('success', __('Expense approved — the till has been debited.'));
+        )->with('success', __('Expense approved - the till has been debited.'));
     }
 
     /**
@@ -389,7 +389,7 @@ final class DepenseController extends Controller
         return $this->backToListPreservingFilters(
             $request,
             'backoffice.depenses.index',
-        )->with('success', __('Expense cancelled — the till has been credited back.'));
+        )->with('success', __('Expense cancelled - the till has been credited back.'));
     }
 
     /** Refuse a pending expense — no money ever moves; the row is kept. */
@@ -407,7 +407,7 @@ final class DepenseController extends Controller
         return $this->backToListPreservingFilters(
             $request,
             'backoffice.depenses.index',
-        )->with('success', __('Expense refused — no money was moved.'));
+        )->with('success', __('Expense refused - no money was moved.'));
     }
 
     /**

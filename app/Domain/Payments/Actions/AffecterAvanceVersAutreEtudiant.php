@@ -156,7 +156,7 @@ final class AffecterAvanceVersAutreEtudiant
                     'etablissement_id' => $cible->etablissement_id,
                 ])
                 ->log(sprintf(
-                    'Avance %s (%s MAD) affectée de %s au frais « %s » de %s (%s) — motif : %s',
+                    'Avance %s (%s MAD) affectée de %s au frais « %s » de %s (%s) - motif : %s',
                     $row->reference,
                     number_format($montant, 2, '.', ' '),
                     $ancienNom ?? '?',

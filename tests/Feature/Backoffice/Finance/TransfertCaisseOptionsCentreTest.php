@@ -88,7 +88,7 @@ final class TransfertCaisseOptionsCentreTest extends TestCase
         $this->assertSame(
             $centre->id,
             app(CurrentContext::class)->etablissementId(),
-            'The active centre was not applied — the assertion below would test nothing.',
+            'The active centre was not applied - the assertion below would test nothing.',
         );
 
         return app(GetCaisseTransfersList::class)
@@ -199,7 +199,7 @@ final class TransfertCaisseOptionsCentreTest extends TestCase
         $this->assertGreaterThan(
             0,
             \App\Models\CaisseTransfer::query()->count(),
-            'No transfer row was created — the POST was accepted but nothing was filed.',
+            'No transfer row was created - the POST was accepted but nothing was filed.',
         );
 
         // Filed as a REQUEST — the two-person control is what protects this

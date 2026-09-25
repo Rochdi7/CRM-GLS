@@ -22,9 +22,16 @@ use Illuminate\Validation\Rule;
  */
 final class AnnulerSeanceRequest extends FormRequest
 {
+    /**
+     * Refuse (403) BEFORE validating: someone who may not cancel this séance
+     * (a teacher, PorteeEnseignant) must never be answered with the catalog of
+     * cancellation reasons. The controller re-checks the same ability.
+     */
     public function authorize(): bool
     {
-        return true;
+        $seance = $this->route('seance');
+
+        return $seance !== null && ($this->user()?->can('cancel', $seance) ?? false);
     }
 
     /**

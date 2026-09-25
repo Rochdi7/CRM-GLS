@@ -250,7 +250,7 @@ export default function UsersAuthorization({
                                 <div className="alert alert-warning d-flex align-items-center mb-0" role="alert">
                                     <i className="ti ti-shield-star fs-20 me-2" />
                                     <div>
-                                        <strong>Super administrateur</strong> — cet utilisateur contourne toutes les
+                                        <strong>Super administrateur</strong> - cet utilisateur contourne toutes les
                                         vérifications de permissions.
                                     </div>
                                 </div>

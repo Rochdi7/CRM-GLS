@@ -8,6 +8,7 @@ use App\Models\Employee;
 use App\Models\Group;
 use App\Models\Salle;
 use App\Models\User;
+use App\Domain\Groups\Support\PorteeEnseignant;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
 
@@ -31,6 +32,7 @@ final class GetCreneauFormOptions
         return Group::query()
             ->whereIn('statut', [Group::STATUT_EN_INSCRIPTION, Group::STATUT_EN_FORMATION])
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+            ->tap(fn ($q) => PorteeEnseignant::scopeGroupes($q, $user))
             ->tap(fn ($q): mixed => $this->scopeToActiveCenter($q))
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
             ->orderBy('nom')
@@ -71,6 +73,8 @@ final class GetCreneauFormOptions
             ->where('categorie', Employee::CATEGORIE_ENSEIGNANT)
             ->where('statut', Employee::STATUT_ACTIF)
             ->tap(fn ($q) => $this->scopeEnseignantsToCenters($q, $user))
+            // Portée enseignant : il ne filtre que sur lui-même.
+            ->when(PorteeEnseignant::enseignantId($user), fn ($q, $id) => $q->whereKey($id))
             ->orderBy('nom')
             ->get(['id', 'nom', 'prenom', 'etablissement_id'])
             ->map(fn (Employee $employee): array => [

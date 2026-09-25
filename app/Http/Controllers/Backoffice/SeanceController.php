@@ -11,6 +11,7 @@ use App\Domain\Attendance\Queries\GetAbsencesParGroupe;
 use App\Domain\Attendance\Queries\GetSeanceDetails;
 use App\Domain\Attendance\Queries\GetSeanceFormOptions;
 use App\Domain\Attendance\Queries\GetSeancesList;
+use App\Domain\Groups\Support\PorteeEnseignant;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Attendance\AnnulerSeanceRequest;
@@ -63,6 +64,20 @@ final class SeanceController extends Controller
         $perPage = (int) $request->integer('perPage', GetSeancesList::DEFAULT_PER_PAGE);
         $user = $request->user();
 
+        // Portée enseignant : sa propre vue en cartes par jour — il fait
+        // l'appel, rien d'autre (aucun menu, aucun modal de création).
+        if (PorteeEnseignant::estRestreint($user)) {
+            $filters['enseignantFilter'] = '';
+
+            return Inertia::render('Backoffice/Seances/MesSeances', [
+                'seances' => $getSeancesList($user, $filters, 25),
+                'filters' => $filters,
+                'groupOptions' => $formOptions->allGroups($user),
+                'statuts' => Seance::STATUTS,
+                'today' => now()->toDateString(),
+            ]);
+        }
+
         return Inertia::render('Backoffice/Seances/Index', [
             'seances' => $getSeancesList($user, $filters, $perPage),
             'filters' => $filters + [
@@ -84,6 +99,8 @@ final class SeanceController extends Controller
                 'update' => $user->can('attendance.update'),
                 'delete' => $user->can('attendance.delete'),
                 'mark' => $user->can('attendance.mark'),
+                // Même règle que SeancePolicy@cancel (UI seulement, §5).
+                'cancel' => $user->can('attendance.mark') && $user->can('attendance.update'),
             ],
         ]);
     }
@@ -132,6 +149,8 @@ final class SeanceController extends Controller
             ? Seance::find($request->integer('seance'))
             : Seance::query()
                 ->tap(fn ($q) => $centerAccess->scopeAccessibleCenters($q, $user))
+                // Portée enseignant : un prof arrive sur SA séance du jour.
+                ->tap(fn ($q) => PorteeEnseignant::scopeSeances($q, $user))
                 ->tap(function ($q) use ($context): void {
                     $etablissementId = $context->etablissementId();
 
@@ -177,11 +196,25 @@ final class SeanceController extends Controller
         Request $request,
         GetAbsencesParGroupe $getAbsencesParGroupe,
         GetSeanceFormOptions $formOptions,
-    ): Response {
+    ): Response|RedirectResponse {
         $this->authorize('viewAny', Seance::class);
 
         $user = $request->user();
         $filters = $this->absenceFilters($request);
+
+        // Fenêtre par défaut (24/09/2026) : un groupe choisi SANS aucune clé
+        // de date (la page les retire au changement de groupe ; lien « Absences »
+        // d'une carte de groupe) ⇒ redirection vers l'URL canonique portant
+        // explicitement « 22 dernières séances → aujourd'hui ». Une date que
+        // l'utilisateur a EFFACÉE arrive, elle, en clé vide et reste effacée —
+        // jamais de défaut réinjecté en lecture (voir EncaissementController).
+        if ($filters['groupFilter'] !== '' && ! $request->has('dateFrom') && ! $request->has('dateTo')) {
+            return redirect()->route('backoffice.seances.absence-par-groupe', [
+                ...$filters,
+                'dateFrom' => $getAbsencesParGroupe->debutFenetreParDefaut($user, (int) $filters['groupFilter']) ?? '',
+                'dateTo' => now()->toDateString(),
+            ]);
+        }
 
         return Inertia::render('Backoffice/Seances/AbsenceParGroupe', [
             'matrice' => $getAbsencesParGroupe($user, $filters),
@@ -352,6 +385,8 @@ final class SeanceController extends Controller
                 'update' => $user->can('attendance.update'),
                 'delete' => $user->can('attendance.delete'),
                 'mark' => $user->can('attendance.mark'),
+                // Même règle que SeancePolicy@cancel (UI seulement, §5).
+                'cancel' => $user->can('attendance.mark') && $user->can('attendance.update'),
             ],
         ]);
     }

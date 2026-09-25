@@ -165,7 +165,7 @@ final class MettreAJourFraisInscription
                         // AUGMENTER reste toujours permis.
                         if ($montant + 0.005 < $paye) {
                             throw ValidationException::withMessages([
-                                'fee_lines' => __('« :fee » has already received :paye DH — it cannot be priced below that. Refund the student instead.', [
+                                'fee_lines' => __('« :fee » has already received :paye DH - it cannot be priced below that. Refund the student instead.', [
                                     'fee' => $existing->nom,
                                     'paye' => number_format($paye, 2, '.', ''),
                                 ]),
@@ -187,7 +187,7 @@ final class MettreAJourFraisInscription
                         if (! empty($attributes['frais_id'])
                             && $inscription->fees()->where('frais_id', $attributes['frais_id'])->whereNotNull('masque_le')->exists()) {
                             throw ValidationException::withMessages([
-                                'fee_lines' => __('This fee already exists on the registration as a hidden line — restore it instead of adding it again.'),
+                                'fee_lines' => __('This fee already exists on the registration as a hidden line - restore it instead of adding it again.'),
                             ]);
                         }
 

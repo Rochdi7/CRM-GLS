@@ -278,7 +278,7 @@ final class InscriptionImporter implements Importer
                             'errors' => [[
                                 'field' => 'legacy_ref',
                                 'code' => 'already_imported',
-                                'message' => 'Inscription déjà importée — ligne ignorée.',
+                                'message' => 'Inscription déjà importée - ligne ignorée.',
                             ]],
                         ]);
 
@@ -379,13 +379,13 @@ final class InscriptionImporter implements Importer
     {
         if (($resolution['student_id'] ?? $data['student_id'] ?? null) === null) {
             throw new \RuntimeException(
-                "Étudiant introuvable dans ce centre — vérifier l'orthographe ou importer d'abord les étudiants."
+                "Étudiant introuvable dans ce centre - vérifier l'orthographe ou importer d'abord les étudiants."
             );
         }
 
         if (($resolution['group_id'] ?? $data['group_id'] ?? null) === null) {
             throw new \RuntimeException(
-                "Groupe non associé — revenir à l'écran d'association des groupes."
+                "Groupe non associé - revenir à l'écran d'association des groupes."
             );
         }
 
@@ -511,7 +511,7 @@ final class InscriptionImporter implements Importer
                 'errors' => [[
                     'field' => 'statut',
                     'code' => 'statut_filtre',
-                    'message' => sprintf('Statut « %s » non retenu pour cet import — ligne ignorée.', $statut),
+                    'message' => sprintf('Statut « %s » non retenu pour cet import - ligne ignorée.', $statut),
                 ]],
                 'legacy_ref' => $legacyRef !== '' ? $legacyRef : null,
                 'resolution' => null,
@@ -984,7 +984,7 @@ final class InscriptionImporter implements Importer
                     'code' => 'already_in_database',
                     'message' => sprintf(
                         'Déjà importée : %sla réf. %s existe déjà dans ce centre (import précédent).',
-                        $etudiant !== '' ? $etudiant.' — ' : '',
+                        $etudiant !== '' ? $etudiant.' - ' : '',
                         $legacyRef
                     ),
                 ];
@@ -996,7 +996,7 @@ final class InscriptionImporter implements Importer
                     'code' => 'duplicate_in_file',
                     'message' => sprintf(
                         'Doublon dans le fichier : %sla réf. %s apparaît sur une ligne précédente avec le même groupe et la même date.',
-                        $etudiant !== '' ? $etudiant.' — ' : '',
+                        $etudiant !== '' ? $etudiant.' - ' : '',
                         $legacyRef
                     ),
                 ];
@@ -1027,7 +1027,7 @@ final class InscriptionImporter implements Importer
                 'code' => 'duplicate_in_file',
                 'message' => sprintf(
                     'Doublon dans le fichier : %smême groupe et même date (%s) sur une ligne précédente.',
-                    $etudiant !== '' ? $etudiant.' — ' : 'même étudiant, ',
+                    $etudiant !== '' ? $etudiant.' - ' : 'même étudiant, ',
                     $dateInscription
                 ),
             ];

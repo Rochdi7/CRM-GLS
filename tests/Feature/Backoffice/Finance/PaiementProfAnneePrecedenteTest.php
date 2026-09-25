@@ -175,7 +175,7 @@ final class PaiementProfAnneePrecedenteTest extends TestCase
         $this->assertNotContains($actif->id, $ids, 'l’année active est déjà dans `groups`, pas ici');
 
         $this->assertSame(
-            $attendu->nom.' — 2024/2025',
+            $attendu->nom.' - 2024/2025',
             $options->firstWhere('id', $attendu->id)['nom'],
             'le libellé doit porter l’année, sinon deux homonymes sont indiscernables',
         );

@@ -54,14 +54,14 @@ final class AnnulerRemboursementDoublon extends Command
         }
 
         if ($doublon->caisse === null) {
-            $this->error("Le remboursement {$reference} n'a pas de caisse — rien à recréditer.");
+            $this->error("Le remboursement {$reference} n'a pas de caisse - rien à recréditer.");
 
             return self::FAILURE;
         }
 
         // Already reversed? The note carries the marker written below.
         if (str_contains((string) $doublon->note, self::MARKER)) {
-            $this->warn("Le remboursement {$reference} a déjà été annulé — aucune action.");
+            $this->warn("Le remboursement {$reference} a déjà été annulé - aucune action.");
 
             return self::SUCCESS;
         }
@@ -71,7 +71,7 @@ final class AnnulerRemboursementDoublon extends Command
 
         $this->line('');
         $this->line("  Remboursement en trop : <info>{$doublon->reference}</info>");
-        $this->line('  Bénéficiaire          : '.($doublon->beneficiaire?->nomComplet() ?? '—'));
+        $this->line('  Bénéficiaire          : '.($doublon->beneficiaire?->nomComplet() ?? '-'));
         $this->line('  Montant               : '.number_format($montant, 2, ',', ' ').' DH');
         $this->line("  Caisse à recréditer   : {$caisse->nom}");
         $this->line('  Solde actuel          : '.number_format((float) $caisse->solde, 2, ',', ' ').' DH');
@@ -101,7 +101,7 @@ final class AnnulerRemboursementDoublon extends Command
         $this->line('');
 
         if (! $apply) {
-            $this->warn('  SIMULATION — relancez avec --apply pour appliquer.');
+            $this->warn('  SIMULATION - relancez avec --apply pour appliquer.');
 
             return self::SUCCESS;
         }
@@ -123,7 +123,7 @@ final class AnnulerRemboursementDoublon extends Command
             );
 
             $note = trim((string) $doublon->note);
-            $suffix = self::MARKER.' le '.now()->format('d/m/Y').' — saisi en double, caisse recréditée de '
+            $suffix = self::MARKER.' le '.now()->format('d/m/Y').' - saisi en double, caisse recréditée de '
                 .number_format($montant, 2, ',', ' ').' DH.';
 
             $doublon->update([

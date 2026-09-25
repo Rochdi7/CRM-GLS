@@ -120,7 +120,7 @@ export default function ReallocatePayments({ paiements, montantTotal, filters, g
         >
             <Card title={t('Move payments to another group / year')}>
                 <p className="text-muted fs-13 mb-3">
-                    {t('Every year is listed here on purpose — the rows to fix are the ones the active year hides. The payment date is never changed, and no money leaves the till: only which fee it is booked against.')}
+                    {t('Every year is listed here on purpose - the rows to fix are the ones the active year hides. The payment date is never changed, and no money leaves the till: only which fee it is booked against.')}
                 </p>
 
                 <TableToolbar
@@ -161,7 +161,7 @@ export default function ReallocatePayments({ paiements, montantTotal, filters, g
                 {selected.length > 0 && (
                     <div className="alert alert-info d-flex align-items-center justify-content-between py-2 mb-3">
                         <span>
-                            <strong>{selected.length}</strong> {t('payment(s) selected')} —{' '}
+                            <strong>{selected.length}</strong> {t('payment(s) selected')} -{' '}
                             <strong>{selectedTotal.toFixed(2)} MAD</strong>
                         </span>
                         <span className="d-flex gap-2">
@@ -210,11 +210,11 @@ export default function ReallocatePayments({ paiements, montantTotal, filters, g
                                 </td>
                                 <td className="text-normal-case">{row.reference}</td>
                                 <td>{row.etudiant}</td>
-                                <td>{row.frais ?? '—'}</td>
-                                <td>{row.groupe ?? '—'}</td>
-                                <td>{row.annee ?? '—'}</td>
+                                <td>{row.frais ?? '-'}</td>
+                                <td>{row.groupe ?? '-'}</td>
+                                <td>{row.annee ?? '-'}</td>
                                 <td className="text-end">{Number(row.montant).toFixed(2)}</td>
-                                <td className="text-normal-case">{row.datePaiement ?? '—'}</td>
+                                <td className="text-normal-case">{row.datePaiement ?? '-'}</td>
                             </tr>
                         ))}
                         {rows.length === 0 && (
@@ -251,7 +251,7 @@ export default function ReallocatePayments({ paiements, montantTotal, filters, g
             >
                 <form id="reallocate-form" onSubmit={submit}>
                     <p className="text-muted fs-13">
-                        {selected.length} {t('payment(s)')} — {selectedTotal.toFixed(2)} MAD.{' '}
+                        {selected.length} {t('payment(s)')} - {selectedTotal.toFixed(2)} MAD.{' '}
                         {t('Each payment lands on the target registration’s fee of the SAME name, capped at what that fee still owes. One with no matching fee stays an unallocated advance.')}
                     </p>
 
@@ -284,7 +284,7 @@ export default function ReallocatePayments({ paiements, montantTotal, filters, g
                             </table>
                         </div>
                         <p className="text-muted fs-13 mt-2 mb-0">
-                            {t('Each student’s money goes to HIS OWN registration in that group — money never moves between students. A student not enrolled there keeps his payment as an unallocated advance.')}
+                            {t('Each student’s money goes to HIS OWN registration in that group - money never moves between students. A student not enrolled there keeps his payment as an unallocated advance.')}
                         </p>
                     </div>
                 </form>

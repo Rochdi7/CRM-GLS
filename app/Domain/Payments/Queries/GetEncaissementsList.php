@@ -803,7 +803,7 @@ final class GetEncaissementsList
             ->get()
             ->map(fn (Inscription $i): array => [
                 'id' => $i->id,
-                'label' => $i->reference.' — '.($i->group?->nom ?? '—'),
+                'label' => $i->reference.' - '.($i->group?->nom ?? '-'),
                 'statut' => $i->statut,
                 'payable' => $i->statut === Inscription::STATUT_ACTIVE,
                 // Une avance s'applique quel que soit le statut : l'argent est
@@ -845,7 +845,7 @@ final class GetEncaissementsList
             ->get()
             ->map(fn (Inscription $i): array => [
                 'id' => $i->id,
-                'label' => $i->reference.' — '.($i->group?->nom ?? '—'),
+                'label' => $i->reference.' - '.($i->group?->nom ?? '-'),
                 'statut' => $i->statut,
                 'payable' => true,
                 'avanceApplicable' => true,

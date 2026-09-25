@@ -114,7 +114,7 @@ function guessNiveau(label: string, niveaux: string[]): string {
 
 /** Option label: the year tag marks a group that will be re-affected to the selected année if mapped. */
 function groupOptionLabel(group: ExistingGroup, ambiguous: boolean): string {
-    const annee = group.horsAnnee && group.anneeNom ? ` — ${group.anneeNom}` : '';
+    const annee = group.horsAnnee && group.anneeNom ? ` - ${group.anneeNom}` : '';
 
     return ambiguous ? `${group.nom}${annee} (#${group.id})` : `${group.nom}${annee}`;
 }
@@ -271,7 +271,7 @@ export default function InscriptionImportUpload({ etablissements, centerLocked }
                                 </div>
                             ))}
                             <small className="text-muted d-block mt-1">
-                                Les lignes des statuts non cochés sont ignorées (comptées, jamais perdues) — utile pour
+                                Les lignes des statuts non cochés sont ignorées (comptées, jamais perdues) - utile pour
                                 importer l&apos;historique (Annulée + Changement) dans l&apos;ancienne année, puis les
                                 Actives dans l&apos;année en cours, à partir du même fichier.
                             </small>
@@ -289,9 +289,9 @@ export default function InscriptionImportUpload({ etablissements, centerLocked }
             {step === 'mapping' && (
                 <Card title="Associer les groupes">
                     <div className="alert alert-info">
-                        Associer un groupe marqué d&apos;une autre année (ex. « — 2026/2027 ») le
+                        Associer un groupe marqué d&apos;une autre année (ex. « - 2026/2027 ») le
                         <strong> réaffecte automatiquement à l&apos;année sélectionnée</strong>, avec ses inscriptions
-                        et séances — rien ne reste réparti sur deux années.
+                        et séances - rien ne reste réparti sur deux années.
                     </div>
                     <form onSubmit={submitAnalyze}>
                         <table className="table">
@@ -337,7 +337,7 @@ export default function InscriptionImportUpload({ etablissements, centerLocked }
                                                     </select>
                                                     {entry.group_id === '' && duplicateNames.has(groupKey(entry.label)) && (
                                                         <small className="text-warning d-block mt-1">
-                                                            Plusieurs groupes portent ce nom — choisir lequel.
+                                                            Plusieurs groupes portent ce nom - choisir lequel.
                                                         </small>
                                                     )}
                                                 </>

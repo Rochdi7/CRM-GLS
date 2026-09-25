@@ -219,7 +219,7 @@ export default function RecouvrementIndex({
                                                 {row.studentNom}
                                             </a>
                                         ) : (
-                                            row.studentNom ?? '—'
+                                            row.studentNom ?? '-'
                                         )}
                                     </td>
                                     <td>
@@ -246,8 +246,8 @@ export default function RecouvrementIndex({
                                             )}
                                         </div>
                                     </td>
-                                    <td>{row.frais ?? '—'}</td>
-                                    <td>{row.dateEcheance ?? '—'}</td>
+                                    <td>{row.frais ?? '-'}</td>
+                                    <td>{row.dateEcheance ?? '-'}</td>
                                     <td>
                                         <span className="badge badge-soft-danger">
                                             {row.retardJours} {t('days')}

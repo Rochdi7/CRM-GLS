@@ -29,6 +29,7 @@ use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionRequest;
 use App\Models\Encaissement;
 use App\Models\Group;
 use App\Domain\Settings\Support\FraisEcheanceResolver;
+use App\Domain\Students\Support\GardeEtudiantTransfere;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
 use App\Models\MotifAnnulation;
@@ -505,7 +506,11 @@ final class InscriptionController extends Controller
         $this->assertGroupInContext($request, $group);
 
         if (! $creatingStudent) {
-            $this->assertStudentInContext($request, Student::findOrFail((int) $data['student_id']));
+            $student = Student::findOrFail((int) $data['student_id']);
+            $this->assertStudentInContext($request, $student);
+            // Une fiche « Transféré » est close ici : son dossier vit sur
+            // la copie du centre d'arrivée (GardeEtudiantTransfere).
+            GardeEtudiantTransfere::assertNonTransfere($student);
         }
         $this->assertFeeLinesBelongToGroup($group, $data['fee_lines'] ?? []);
 
@@ -720,7 +725,9 @@ final class InscriptionController extends Controller
         $this->assertInscriptionInContext($request, $inscription, 'student_id');
 
         $data = $request->validated();
-        $this->assertStudentInContext($request, Student::findOrFail((int) $data['student_id']));
+        $student = Student::findOrFail((int) $data['student_id']);
+        $this->assertStudentInContext($request, $student);
+        GardeEtudiantTransfere::assertNonTransfere($student);
 
         // Once money has been received on this registration its student is
         // frozen: the payments carry that student_id, and re-pointing the

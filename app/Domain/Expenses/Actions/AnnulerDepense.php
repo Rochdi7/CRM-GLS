@@ -67,7 +67,7 @@ final class AnnulerDepense
 
             if (! $verrouillee->isApprouvee()) {
                 throw ValidationException::withMessages([
-                    'statut' => __('Only an approved expense can be cancelled — a pending or refused one never debited the till.'),
+                    'statut' => __('Only an approved expense can be cancelled - a pending or refused one never debited the till.'),
                 ]);
             }
 
@@ -101,7 +101,7 @@ final class AnnulerDepense
 
             $note = trim((string) $verrouillee->note);
             $suffixe = Depense::MARQUEUR_ANNULE.' le '.now()->format('d/m/Y')
-                .' — '.$correction.' : '.rtrim($motif, '.')
+                .' - '.$correction.' : '.rtrim($motif, '.')
                 .', caisse recréditée de '.number_format($montant, 2, ',', ' ').' DH.';
 
             $verrouillee->update([

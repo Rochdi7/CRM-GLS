@@ -63,13 +63,13 @@ final class ReparerRemboursementElwardi extends Command
         $garde = Remboursement::with(['caisse', 'beneficiaire', 'encaissement'])->where('reference', 'RMB-002')->first();
 
         if ($doublon === null || $garde === null) {
-            $this->error('RMB-001 et/ou RMB-002 introuvable — rien à faire.');
+            $this->error('RMB-001 et/ou RMB-002 introuvable - rien à faire.');
 
             return self::FAILURE;
         }
 
         if (str_contains((string) $doublon->note, self::MARKER)) {
-            $this->warn('RMB-001 est déjà annulé — la correction a déjà été appliquée.');
+            $this->warn('RMB-001 est déjà annulé - la correction a déjà été appliquée.');
 
             return self::SUCCESS;
         }
@@ -97,8 +97,8 @@ final class ReparerRemboursementElwardi extends Command
         $montant = (float) $garde->montant;
 
         $this->line('');
-        $this->line('  <comment>Étudiant</comment>        : '.($garde->beneficiaire?->nomComplet() ?? '—'));
-        $this->line('  <comment>Conservé</comment>        : '.$garde->reference.' (lié à '.($garde->encaissement?->reference ?? '—').')');
+        $this->line('  <comment>Étudiant</comment>        : '.($garde->beneficiaire?->nomComplet() ?? '-'));
+        $this->line('  <comment>Conservé</comment>        : '.$garde->reference.' (lié à '.($garde->encaissement?->reference ?? '-').')');
         $this->line('  <comment>Annulé</comment>          : '.$doublon->reference.' (non lié)');
         $this->line('');
         $this->line('  Mouvements de caisse :');
@@ -129,7 +129,7 @@ final class ReparerRemboursementElwardi extends Command
         $this->line('');
 
         if (! $apply) {
-            $this->warn('  SIMULATION — relancez avec --apply pour appliquer.');
+            $this->warn('  SIMULATION - relancez avec --apply pour appliquer.');
 
             return self::SUCCESS;
         }
@@ -152,7 +152,7 @@ final class ReparerRemboursementElwardi extends Command
 
             $note = trim((string) $doublon->note);
             $suffix = self::MARKER.' le '.now()->format('d/m/Y')
-                .' — saisi en double (doublon de '.$garde->reference.'), caisse recréditée de '
+                .' - saisi en double (doublon de '.$garde->reference.'), caisse recréditée de '
                 .number_format((float) $doublon->montant, 2, ',', ' ').' DH.';
             $doublon->update(['note' => $note === '' ? $suffix : $note."\n".$suffix]);
 

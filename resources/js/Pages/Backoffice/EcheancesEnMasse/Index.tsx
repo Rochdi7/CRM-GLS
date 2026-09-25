@@ -260,7 +260,7 @@ export default function EcheancesEnMasseIndex({
                                         </td>
                                         <td className="fw-medium">{ligne.studentNom}</td>
                                         <td>
-                                            <code className="text-normal-case">{ligne.reference ?? '—'}</code>
+                                            <code className="text-normal-case">{ligne.reference ?? '-'}</code>
                                         </td>
                                         <td>
                                             <StatusBadge
@@ -273,7 +273,7 @@ export default function EcheancesEnMasseIndex({
                                         <td>{ligne.montantPaye} DH</td>
                                         <td>
                                             <div className="d-flex align-items-center gap-2">
-                                                <span>{ligne.dateEcheance ?? '—'}</span>
+                                                <span>{ligne.dateEcheance ?? '-'}</span>
                                                 {sameDateCount > 1 && (
                                                     <button
                                                         type="button"

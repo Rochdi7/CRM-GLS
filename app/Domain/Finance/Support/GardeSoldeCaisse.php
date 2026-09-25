@@ -136,7 +136,7 @@ final class GardeSoldeCaisse
             // que l'agent a sous les yeux.
             if ($centreId !== null && $disponible < $physique) {
                 $message .= ' '.__('This is the share of :centre in the till, which physically holds :tiroir DH.', [
-                    'centre' => Etablissement::query()->whereKey($centreId)->value('nom_centre') ?? '—',
+                    'centre' => Etablissement::query()->whereKey($centreId)->value('nom_centre') ?? '-',
                     'tiroir' => number_format((float) $caisse->solde, 2, ',', ' '),
                 ]);
             }

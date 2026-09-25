@@ -130,7 +130,7 @@ function rowTip(row: GroupPaymentRow): MatrixTip {
     const entete = STATUT_TITRE[row.statut];
 
     if (!entete) {
-        return { lines: [`${row.reference} — ${row.statut}`] };
+        return { lines: [`${row.reference} - ${row.statut}`] };
     }
 
     const lines: string[] = [];
@@ -392,10 +392,10 @@ function MatrixBody({ matrix, loading }: { matrix: GroupPaymentMatrix | null; lo
                                             />
                                             {row.studentShowUrl ? (
                                                 <a href={row.studentShowUrl} className="text-reset">
-                                                    {row.student ?? '—'}
+                                                    {row.student ?? '-'}
                                                 </a>
                                             ) : (
-                                                (row.student ?? '—')
+                                                (row.student ?? '-')
                                             )}
                                         </span>
                                     </td>

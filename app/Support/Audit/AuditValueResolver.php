@@ -59,6 +59,13 @@ final class AuditValueResolver
         'salle_id' => Salle::class,
         'group_id' => Group::class,
         'student_id' => Student::class,
+        'nouveau_student_id' => Student::class,
+        'transfere_vers_student_id' => Student::class,
+        'transfere_depuis_student_id' => Student::class,
+        'group_cible_id' => Group::class,
+        'etablissement_source_id' => Etablissement::class,
+        'etablissement_cible_id' => Etablissement::class,
+        'nouvelle_inscription_id' => Inscription::class,
         'inscription_id' => Inscription::class,
         'inscription_fee_id' => InscriptionFee::class,
         'frais_id' => Frais::class,
@@ -170,6 +177,15 @@ final class AuditValueResolver
         'salle_id' => 'Salle',
         'group_id' => 'Groupe',
         'student_id' => 'Étudiant',
+        'nouveau_student_id' => 'Nouvelle fiche étudiant',
+        'transfere_vers_student_id' => 'Transféré vers la fiche',
+        'transfere_depuis_student_id' => 'Transféré depuis la fiche',
+        'group_cible_id' => 'Groupe cible',
+        'etablissement_source_id' => 'Centre de départ',
+        'etablissement_cible_id' => "Centre d'arrivée",
+        'nouvelle_inscription_id' => 'Nouvelle inscription',
+        'montant_transfere' => 'Montant transféré',
+        'motif_decision' => 'Motif de la décision',
         'inscription_id' => 'Inscription',
         'inscription_fee_id' => "Frais d'inscription",
         'frais_id' => 'Frais',
@@ -344,7 +360,7 @@ final class AuditValueResolver
         $base = $this->baseName($model);
         $student = $this->studentNameOf($model);
 
-        return $student === null ? $base : $base.' — '.$student;
+        return $student === null ? $base : $base.' - '.$student;
     }
 
     /** The record's own label, before any student suffix. */

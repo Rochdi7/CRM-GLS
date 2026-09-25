@@ -398,7 +398,7 @@ export default function RapportsIndex({
                             Vide pour un rapport sans colonne monétaire. */}
                         {montantTotal !== '' && nombreLignes > 0 && (
                             <span className="ms-2 fw-semibold text-dark">
-                                — {messages.total} : {montantTotal}
+                                - {messages.total} : {montantTotal}
                             </span>
                         )}
                     </p>

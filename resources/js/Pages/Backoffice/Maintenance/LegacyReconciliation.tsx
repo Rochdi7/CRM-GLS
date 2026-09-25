@@ -111,7 +111,7 @@ export default function LegacyReconciliation({ etablissements, dossierDefaut, re
                                 type="text"
                                 className={`form-control text-normal-case ${form.errors.etudiant ? 'is-invalid' : ''}`}
                                 value={form.data.etudiant}
-                                placeholder={t('e.g. E812 or ETU-695 — leave empty for all')}
+                                placeholder={t('e.g. E812 or ETU-695 - leave empty for all')}
                                 onChange={(e) => form.setData('etudiant', e.target.value)}
                             />
                             {form.errors.etudiant && (
@@ -146,7 +146,7 @@ export default function LegacyReconciliation({ etablissements, dossierDefaut, re
                     <Card
                         title={
                             resultat
-                                ? `${resultat.apply ? t('Applied') : t('Simulation')} — ${resultat.lancee_le}`
+                                ? `${resultat.apply ? t('Applied') : t('Simulation')} - ${resultat.lancee_le}`
                                 : t('Result')
                         }
                     >

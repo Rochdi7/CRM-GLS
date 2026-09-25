@@ -35,7 +35,7 @@ export default function EspaceEnseignant({ data, onMoisChange, loading }: Props)
     }
 
     function fmtDate(d: string | null): string {
-        return d === null ? '—' : new Date(d + 'T00:00:00').toLocaleDateString('fr-FR');
+        return d === null ? '-' : new Date(d + 'T00:00:00').toLocaleDateString('fr-FR');
     }
 
     function moisVoisin(delta: number): string {
@@ -149,12 +149,12 @@ export default function EspaceEnseignant({ data, onMoisChange, loading }: Props)
                                                 <span className="text-muted"> / {g.appels}</span>
                                             </>
                                         ) : (
-                                            '—'
+                                            '-'
                                         )}
                                     </td>
                                     <td className="text-center">
                                         {g.tauxPresence === null ? (
-                                            '—'
+                                            '-'
                                         ) : (
                                             <span
                                                 className={`badge badge-soft-${
@@ -206,10 +206,10 @@ export default function EspaceEnseignant({ data, onMoisChange, loading }: Props)
                                     <td className="text-normal-case fw-semibold">{p.reference}</td>
                                     <td>{fmtDate(p.date)}</td>
                                     <td className="fs-13">
-                                        {p.periodeDebut !== null ? `${fmtDate(p.periodeDebut)} → ${fmtDate(p.periodeFin)}` : '—'}
+                                        {p.periodeDebut !== null ? `${fmtDate(p.periodeDebut)} → ${fmtDate(p.periodeFin)}` : '-'}
                                     </td>
                                     <td>
-                                        {p.groupNom ?? '—'}
+                                        {p.groupNom ?? '-'}
                                         {/* Ligne antérieure à la colonne enseignant_id :
                                             rattachée par le groupe, pas écrite sur la
                                             ligne. Le dire, sinon deux certitudes

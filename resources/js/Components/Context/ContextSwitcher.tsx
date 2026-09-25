@@ -195,7 +195,7 @@ export default function ContextSwitcher({ context }: ContextSwitcherProps) {
                                 writing is locked (server-side). The padlock
                                 says so before the user starts keying. */}
                             {annee.cloturee && (
-                                <i className="ti ti-lock ms-2 text-warning" title="Année clôturée — aucune saisie possible" />
+                                <i className="ti ti-lock ms-2 text-warning" title="Année clôturée - aucune saisie possible" />
                             )}
                         </button>
                     ))}

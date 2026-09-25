@@ -81,7 +81,7 @@ final class StockController extends Controller
             ->get(['id', 'nom', 'reference', 'quantite', 'statut'])
             ->map(fn (StockArticle $article): array => [
                 'value' => $article->id,
-                'label' => "{$article->nom} ({$article->reference}) — {$article->quantite} en stock",
+                'label' => "{$article->nom} ({$article->reference}) - {$article->quantite} en stock",
             ])
             ->all();
 

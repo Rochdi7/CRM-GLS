@@ -116,7 +116,7 @@ export default function MovePaymentIndex({ filters, diagnostic }: MovePaymentPag
 
                   return {
                       value: f.id,
-                      label: `${f.nom} — ${t('Due')} ${f.montant} / ${t('Paid')} ${f.paye} / ${t('Remaining')} ${f.reste}`,
+                      label: `${f.nom} - ${t('Due')} ${f.montant} / ${t('Paid')} ${f.paye} / ${t('Remaining')} ${f.reste}`,
                       disabled: f.masque || tropPetit,
                       disabledReason: f.masque ? t('Hidden') : tropPetit ? t('Remaining due too small') : undefined,
                   };
@@ -196,7 +196,7 @@ export default function MovePaymentIndex({ filters, diagnostic }: MovePaymentPag
                                     <div className="d-flex flex-wrap align-items-center justify-content-center gap-3 text-center">
                                         <div>
                                             <div className="text-muted fs-12">{t('Current student')}</div>
-                                            <div className="fw-bold">{d.source.etudiant ?? '—'}</div>
+                                            <div className="fw-bold">{d.source.etudiant ?? '-'}</div>
                                             <div className="fs-12 text-muted">{d.source.inscription ?? t('Advance (no fee)')}</div>
                                         </div>
                                         <div className="px-2">
@@ -205,7 +205,7 @@ export default function MovePaymentIndex({ filters, diagnostic }: MovePaymentPag
                                         </div>
                                         <div>
                                             <div className="text-muted fs-12">{t('Target registration')}</div>
-                                            <div className="fw-bold">{d.cible.etudiant ?? '—'}</div>
+                                            <div className="fw-bold">{d.cible.etudiant ?? '-'}</div>
                                             <div className="fs-12 text-muted">
                                                 {d.cible.reference}
                                                 {d.mode === 'frais' && d.fraisDetecte ? ` · ${d.fraisDetecte.nom}` : ''}
@@ -216,14 +216,14 @@ export default function MovePaymentIndex({ filters, diagnostic }: MovePaymentPag
                             </div>
 
                             {/* ── Ce qui ne bouge PAS ─────────────────────── */}
-                            <Card title={t('Source payment — what will NOT change')}>
+                            <Card title={t('Source payment - what will NOT change')}>
                                 <div className="row g-3">
                                     <Frozen icon="ti-hash" label={t('Reference')} value={<span className="text-normal-case">{d.source.reference}</span>} />
                                     <Frozen icon="ti-coins" label={t('Amount')} value={`${d.source.montant} MAD`} />
                                     <Frozen icon="ti-credit-card" label={t('Method')} value={d.source.methode} />
-                                    <Frozen icon="ti-calendar" label={t('Date')} value={d.source.date ?? '—'} />
-                                    <Frozen icon="ti-user" label={t('Agent')} value={d.source.agent ?? '—'} />
-                                    <Frozen icon="ti-building-bank" label={t('Till')} value={d.source.caisse ?? '—'} />
+                                    <Frozen icon="ti-calendar" label={t('Date')} value={d.source.date ?? '-'} />
+                                    <Frozen icon="ti-user" label={t('Agent')} value={d.source.agent ?? '-'} />
+                                    <Frozen icon="ti-building-bank" label={t('Till')} value={d.source.caisse ?? '-'} />
                                 </div>
                             </Card>
 
@@ -231,17 +231,17 @@ export default function MovePaymentIndex({ filters, diagnostic }: MovePaymentPag
                                 {/* ── Source ──────────────────────────────── */}
                                 <div className="col-xl-4">
                                     <Card title={t('Current student')}>
-                                        <Row label={t('Student')} value={d.source.etudiant ?? '—'} />
+                                        <Row label={t('Student')} value={d.source.etudiant ?? '-'} />
                                         <Row
                                             label={t('Current fee')}
                                             value={d.mode === 'avance' ? <span className="badge badge-soft-warning">{t('Advance (no fee)')}</span> : d.source.frais}
                                         />
                                         <Row
                                             label={t('Registration')}
-                                            value={d.source.inscription ? <span className="text-normal-case">{d.source.inscription}</span> : '—'}
+                                            value={d.source.inscription ? <span className="text-normal-case">{d.source.inscription}</span> : '-'}
                                         />
-                                        <Row label={t('Status')} value={d.source.inscriptionStatut ?? '—'} />
-                                        <Row label={t('Group')} value={d.source.groupe ?? '—'} />
+                                        <Row label={t('Status')} value={d.source.inscriptionStatut ?? '-'} />
+                                        <Row label={t('Group')} value={d.source.groupe ?? '-'} />
                                         <Row
                                             label={t('Attendance lines in this group')}
                                             value={
@@ -257,10 +257,10 @@ export default function MovePaymentIndex({ filters, diagnostic }: MovePaymentPag
                                 <div className="col-xl-8">
                                     <Card title={t('Target registration')} bodyClassName="p-0">
                                         <div className="px-3 pt-2">
-                                            <Row label={t('Student')} value={d.cible.etudiant ?? '—'} />
+                                            <Row label={t('Student')} value={d.cible.etudiant ?? '-'} />
                                             <Row label={t('Registration')} value={<span className="text-normal-case">{d.cible.reference}</span>} />
                                             <Row label={t('Status')} value={d.cible.statut} />
-                                            <Row label={t('Group')} value={d.cible.groupe ?? '—'} />
+                                            <Row label={t('Group')} value={d.cible.groupe ?? '-'} />
                                             <Row
                                                 label={t('Attendance lines in this group')}
                                                 value={<span className="badge badge-soft-info">{d.cible.presences}</span>}
@@ -345,7 +345,7 @@ export default function MovePaymentIndex({ filters, diagnostic }: MovePaymentPag
                                     </div>
                                     <CheckboxField
                                         id="purger-presences"
-                                        label={`${t('Erase these ghost « Absent » lines before transferring (journaled)')} — ${d.presences.length}`}
+                                        label={`${t('Erase these ghost « Absent » lines before transferring (journaled)')} - ${d.presences.length}`}
                                         checked={form.data.purger_presences}
                                         disabled={!d.purgeable}
                                         onChange={(e) => form.setData('purger_presences', e.target.checked)}
@@ -359,7 +359,7 @@ export default function MovePaymentIndex({ filters, diagnostic }: MovePaymentPag
                                 <div className="alert alert-info d-flex align-items-center" role="status">
                                     <i className="ti ti-target-arrow me-2 fs-18" aria-hidden="true" />
                                     <span>
-                                        <span className="fw-semibold">{t('Detected target fee')} :</span> {d.fraisDetecte.nom} — {t('remaining due')}{' '}
+                                        <span className="fw-semibold">{t('Detected target fee')} :</span> {d.fraisDetecte.nom} - {t('remaining due')}{' '}
                                         <span className="fw-semibold">{d.fraisDetecte.reste} MAD</span>
                                     </span>
                                 </div>
@@ -390,7 +390,7 @@ export default function MovePaymentIndex({ filters, diagnostic }: MovePaymentPag
                                     id="motif"
                                     label={t('Reason')}
                                     rows={3}
-                                    placeholder={t('Explain why this money changes hands — kept in the audit journal.')}
+                                    placeholder={t('Explain why this money changes hands - kept in the audit journal.')}
                                     value={form.data.motif}
                                     onChange={(e) => form.setData('motif', e.target.value)}
                                     error={form.errors.motif}

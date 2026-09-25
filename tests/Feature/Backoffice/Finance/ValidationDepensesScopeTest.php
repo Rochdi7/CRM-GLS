@@ -307,7 +307,7 @@ final class ValidationDepensesScopeTest extends TestCase
         $this->assertSame(
             $avant,
             $this->centreQueryCount($approver),
-            'La colonne Centre déclenche une requête par ligne — vérifier les eager loads de GetDepensesList.',
+            'La colonne Centre déclenche une requête par ligne - vérifier les eager loads de GetDepensesList.',
         );
     }
 

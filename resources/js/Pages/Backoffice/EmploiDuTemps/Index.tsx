@@ -420,12 +420,12 @@ export default function EmploiDuTempsIndex({
                                                     </span>
                                                 )}
                                             </td>
-                                            <td>{jours[String(row.jourSemaine)] ?? '—'}</td>
+                                            <td>{jours[String(row.jourSemaine)] ?? '-'}</td>
                                             <td className="text-nowrap">
                                                 de {row.heureDebut} à {row.heureFin}
                                             </td>
-                                            <td>{row.salle ?? '—'}</td>
-                                            <td>{row.enseignant ?? '—'}</td>
+                                            <td>{row.salle ?? '-'}</td>
+                                            <td>{row.enseignant ?? '-'}</td>
                                             <td className="text-end">
                                                 <RowActions>
                                                     {permissions.update && (
@@ -589,16 +589,16 @@ export default function EmploiDuTempsIndex({
                         </dd>
 
                         <dt className="col-sm-4 text-muted fw-normal">Jour</dt>
-                        <dd className="col-sm-8">{jours[String(viewing.jourSemaine)] ?? '—'}</dd>
+                        <dd className="col-sm-8">{jours[String(viewing.jourSemaine)] ?? '-'}</dd>
 
                         <dt className="col-sm-4 text-muted fw-normal">Horaire</dt>
                         <dd className="col-sm-8">de {viewing.heureDebut} à {viewing.heureFin}</dd>
 
                         <dt className="col-sm-4 text-muted fw-normal">Enseignant</dt>
-                        <dd className="col-sm-8">{viewing.enseignant ?? '—'}</dd>
+                        <dd className="col-sm-8">{viewing.enseignant ?? '-'}</dd>
 
                         <dt className="col-sm-4 text-muted fw-normal">Salle</dt>
-                        <dd className="col-sm-8">{viewing.salle ?? '—'}</dd>
+                        <dd className="col-sm-8">{viewing.salle ?? '-'}</dd>
 
                         {/*
                           Une case morte s'explique ici comme sur la grille : une fin
@@ -626,7 +626,7 @@ export default function EmploiDuTempsIndex({
             <ConfirmDialog
                 show={deleteTarget !== null}
                 title="Supprimer ce créneau ?"
-                recordLabel={deleteTarget ? `${deleteTarget.groupNom} — ${jours[String(deleteTarget.jourSemaine)]}` : ''}
+                recordLabel={deleteTarget ? `${deleteTarget.groupNom} - ${jours[String(deleteTarget.jourSemaine)]}` : ''}
                 message="Les séances futures déjà générées à partir de ce créneau (non encore effectuées) seront aussi supprimées."
                 error={deleteError}
                 processing={deleting}

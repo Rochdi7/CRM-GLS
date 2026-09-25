@@ -29,7 +29,7 @@ final class PreparerGroupesSeptembre2026 extends Command
 {
     protected $signature = 'paiement-prof:preparer-groupes-septembre {--apply : Écrire réellement (sinon dry-run)}';
 
-    protected $description = 'Affecte enseignant + date de début aux groupes SEPTEMBRE 2026/2027 de Marrakech — LOCAL uniquement';
+    protected $description = 'Affecte enseignant + date de début aux groupes SEPTEMBRE 2026/2027 de Marrakech - LOCAL uniquement';
 
     /**
      * Groupe → [référence employé, jour de démarrage, horaire].
@@ -56,7 +56,7 @@ final class PreparerGroupesSeptembre2026 extends Command
         }
 
         $apply = (bool) $this->option('apply');
-        $this->info($apply ? 'MODE ÉCRITURE' : 'DRY-RUN — rien n’est écrit (ajoutez --apply)');
+        $this->info($apply ? 'MODE ÉCRITURE' : 'DRY-RUN - rien n’est écrit (ajoutez --apply)');
         $this->newLine();
 
         $profs = Employee::query()

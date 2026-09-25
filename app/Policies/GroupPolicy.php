@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Policies;
 
+use App\Domain\Groups\Support\PorteeEnseignant;
 use App\Models\Group;
 use App\Models\User;
 use App\Policies\Concerns\ResourcePolicy;
@@ -13,6 +14,23 @@ use Illuminate\Database\Eloquent\Model;
 final class GroupPolicy extends ResourcePolicy
 {
     protected string $module = 'groups';
+
+    /**
+     * `groups.view` = every group of the reachable centres;
+     * `groups.view-own` = the teacher's own groups only (PorteeEnseignant).
+     */
+    public function viewAny(User $user): bool
+    {
+        return $user->can('groups.view') || $user->can(PorteeEnseignant::PERMISSION);
+    }
+
+    public function view(User $user, Model $model): bool
+    {
+        /** @var Group $model */
+        return $this->viewAny($user)
+            && $this->withinCenter($user, $model)
+            && PorteeEnseignant::couvreGroupe($user, $model);
+    }
 
     /**
      * ⚠ L'EXCEPTION à « un groupe ne se supprime jamais » (CLAUDE.md §11,

@@ -35,6 +35,7 @@ use App\Models\StockArticle;
 use App\Models\StockMouvement;
 use App\Models\StockType;
 use App\Models\Student;
+use App\Models\StudentTransfer;
 use App\Models\TypeDepense;
 use App\Models\User;
 use App\Support\Access\HiddenAccount;
@@ -106,6 +107,7 @@ final class AuditLogRegistry
 
             // ── Scolarité ──────────────────────────────────────────────
             Student::class => ['student', 'Étudiant'],
+            StudentTransfer::class => ['student_transfer', "Transfert d'étudiant"],
             Inscription::class => ['inscription', 'Inscription'],
             InscriptionHistorique::class => ['inscription_historique', "Historique d'inscription"],
             InscriptionLivre::class => ['inscription_livre', 'Livre remis'],

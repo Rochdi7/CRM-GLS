@@ -1,5 +1,5 @@
 {{--
-    403 — a real permission refusal (CLAUDE.md §16). Distinct from 500 on
+    403 - a real permission refusal (CLAUDE.md §16). Distinct from 500 on
     purpose: here the app worked correctly and deliberately said no, so the
     wording must NOT apologise for a failure or suggest retrying.
 --}}

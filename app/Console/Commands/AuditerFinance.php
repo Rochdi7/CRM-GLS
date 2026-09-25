@@ -63,25 +63,25 @@ final class AuditerFinance extends Command
         $especes = Caisse::withoutGlobalScopes()->whereIn('type', Caisse::TYPES_ESPECES)->get();
 
         $points = 0;
-        $points += $this->section('1. Parts négatives — argent sorti d\'un centre qui ne l\'avait pas', $this->partsNegatives($especes),
+        $points += $this->section('1. Parts négatives - argent sorti d\'un centre qui ne l\'avait pas', $this->partsNegatives($especes),
             'transferts:imputer-centre <REF> --centre=<X> --dry-run  (prouver par les encaissements)');
-        $this->section('2. Somme des parts ≠ solde stocké — informatif', $this->ecartsVentilation($especes),
+        $this->section('2. Somme des parts ≠ solde stocké - informatif', $this->ecartsVentilation($especes),
             'un PETIT écart = mouvements antérieurs au 01/09 non ventilables, normal ; un GROS écart = à investiguer');
         $points += $this->section('3. Transferts sans centre dont le repli rend une part négative', $this->transfertsNullFautifs(),
             'transferts:imputer-centre <REF> --centre=<X> --dry-run');
-        $points += $this->section('4. Avances importées dont le fichier source nomme un frais — par centre', $this->avancesImporteesAvecFrais(),
+        $points += $this->section('4. Avances importées dont le fichier source nomme un frais - par centre', $this->avancesImporteesAvecFrais(),
             'paiements:reconcilier --centre=<X> --dossier=<data>  (simulation par défaut, --apply pour écrire)');
-        $points += $this->section('5. Frais à 0 DH avec un montant initial > 0 — montant écrasé', $this->fraisEcrases(),
+        $points += $this->section('5. Frais à 0 DH avec un montant initial > 0 - montant écrasé', $this->fraisEcrases(),
             'vérifier au journal QUI l\'a mis à 0 ; remettre le montant SEULEMENT si une avance attend (cas Décembre), sinon demander au centre');
-        $this->section('6. Trop-perçu ≥ 500 DH — INDICATIF, non compté', $this->tropPercus((int) $this->option('top')),
-            'légitime si avance volontaire ; suspect si double saisie ou inscription annulée jamais remboursée — vérification humaine');
+        $this->section('6. Trop-perçu ≥ 500 DH - INDICATIF, non compté', $this->tropPercus((int) $this->option('top')),
+            'légitime si avance volontaire ; suspect si double saisie ou inscription annulée jamais remboursée - vérification humaine');
         $points += $this->section('7. Agent non-encaisseur sur des saisies CRM des 30 derniers jours', $this->agentsNonEncaisseurs(),
             'corriger la CATÉGORIE dans la fiche employé (vraie caissière mal classée) ; encaissements:reattribuer-agent pour l\'historique importé');
 
         $this->newLine();
 
         if ($points === 0) {
-            $this->info('Aucun point à traiter — le réseau est sain sur les familles corrigibles.');
+            $this->info('Aucun point à traiter - le réseau est sain sur les familles corrigibles.');
 
             return self::SUCCESS;
         }
@@ -97,7 +97,7 @@ final class AuditerFinance extends Command
     private function section(string $titre, array $rows, string $remede): int
     {
         $this->newLine();
-        $this->line("<options=bold>{$titre}</> — ".count($rows));
+        $this->line("<options=bold>{$titre}</> - ".count($rows));
 
         if ($rows !== []) {
             $this->table(array_keys($rows[0]), $rows);

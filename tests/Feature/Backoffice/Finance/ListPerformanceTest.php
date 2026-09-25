@@ -107,7 +107,7 @@ final class ListPerformanceTest extends TestCase
         }
         $withFifteen = $this->countQueries(route('backoffice.recouvrement.index', ['dateFrom' => '', 'dateTo' => '']));
 
-        $this->assertSame($withThree, $withFifteen, "Recouvrement queries grew from {$withThree} to {$withFifteen} — per-fee montantPaye() is back.");
+        $this->assertSame($withThree, $withFifteen, "Recouvrement queries grew from {$withThree} to {$withFifteen} - per-fee montantPaye() is back.");
     }
 
     public function test_recouvrement_reports_the_remaining_balance_from_the_aggregated_sum(): void

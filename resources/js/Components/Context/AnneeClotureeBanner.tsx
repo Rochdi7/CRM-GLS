@@ -26,7 +26,7 @@ export default function AnneeClotureeBanner() {
             <i className="ti ti-lock fs-20 me-2 mt-1 flex-shrink-0" />
             <div>
                 <strong>
-                    Année {context.currentAcademicYear?.name ?? ''} clôturée — consultation uniquement.
+                    Année {context.currentAcademicYear?.name ?? ''} clôturée - consultation uniquement.
                 </strong>
                 <div className="mt-1">
                     Aucun enregistrement ne peut être créé ni modifié dans cette année. Pour saisir une

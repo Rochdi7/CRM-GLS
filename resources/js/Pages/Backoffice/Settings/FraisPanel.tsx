@@ -183,7 +183,7 @@ export default function FraisPanel({ frais, centerOptions, permissions }: FraisP
                         <td>{row.montantDefaut} MAD</td>
                         <td>
                             {row.centres.length === 0 ? (
-                                <span className="text-muted">—</span>
+                                <span className="text-muted">-</span>
                             ) : (
                                 <div className="d-flex flex-wrap gap-1">
                                     {row.centres.map((centre) => (

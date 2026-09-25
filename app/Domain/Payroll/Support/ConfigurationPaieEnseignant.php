@@ -41,7 +41,7 @@ final class ConfigurationPaieEnseignant
             return new self(
                 mode: $mode ?? '',
                 taux: 0.0,
-                probleme: __('No pay mode is set on :name — fill the « Paiement prof » tab of their employee record.', [
+                probleme: __('No pay mode is set on :name - fill the « Paiement prof » tab of their employee record.', [
                     'name' => $enseignant->nomComplet(),
                 ]),
             );
@@ -87,7 +87,7 @@ final class ConfigurationPaieEnseignant
             return new self(
                 Employee::MODE_PAIEMENT_WIN_WIN,
                 0.0,
-                __('No win-win amount is set on :name for :month — add it in the « Paiement prof » tab.', [
+                __('No win-win amount is set on :name for :month - add it in the « Paiement prof » tab.', [
                     'name' => $e->nomComplet(),
                     'month' => $mois->locale('fr')->isoFormat('MMMM YYYY'),
                 ]),

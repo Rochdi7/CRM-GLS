@@ -6,10 +6,23 @@ import EmptyState from '@/Components/Shared/EmptyState';
 import Modal from '@/Components/Modals/Modal';
 import SelectField from '@/Components/Forms/SelectField';
 import FormField from '@/Components/Forms/FormField';
+import DataTable from '@/Components/Tables/DataTable';
+import Pagination from '@/Components/Tables/Pagination';
+import RowActions from '@/Components/Tables/RowActions';
+import StatusBadge from '@/Components/Details/StatusBadge';
+import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { useFilterReset } from '@/Hooks/useFilterReset';
 import { t } from '@/Lib/i18n';
 import { formatDuree, parseDuree } from '@/Lib/duree';
 import type { PaiementProfGroupOptions, PaiementProfPageProps, SelectOption } from '@/Types';
+
+/** Même table que la liste Dépenses : statut d'approbation → badge PreSkool. */
+const DEPENSE_STATUT_BADGE: Record<string, 'success' | 'warning' | 'danger' | 'secondary'> = {
+    'En attente': 'warning',
+    'Approuvée': 'success',
+    'Refusée': 'danger',
+    'Annulée': 'secondary',
+};
 
 /**
  * « Calcul paiement prof » — dérive, depuis les appels DÉJÀ SAISIS, le
@@ -35,7 +48,9 @@ export default function PaiementProfIndex({
     seancesMaxParMois,
     paiementProfTypeId,
     canCreateDepense,
+    paiementsProf,
 }: PaiementProfPageProps) {
+    const isLoading = useInertiaLoading();
     // Ajustements manuels — état LOCAL, jamais persisté.
     const [ajustements, setAjustements] = useState<Record<number, string>>({});
 
@@ -136,7 +151,7 @@ export default function PaiementProfIndex({
 
     const enseignantOptions: SelectOption[] = (options?.enseignants ?? []).map((e) => ({
         value: e.value,
-        label: e.seancesCeMois > 0 ? `${e.label} — ${e.seancesCeMois} ${t('sessions')}` : e.label,
+        label: e.seancesCeMois > 0 ? `${e.label} - ${e.seancesCeMois} ${t('sessions')}` : e.label,
         // Un prof mal configuré reste LISTÉ mais désactivé, avec le motif :
         // le retirer ferait croire qu'il n'est pas affecté au groupe.
         disabled: e.probleme !== null,
@@ -299,7 +314,9 @@ export default function PaiementProfIndex({
             prefill_montant: totalAffiche.toFixed(2),
             prefill_periode_debut: calcul.periode.debut,
             prefill_periode_fin: calcul.periode.fin,
-            prefill_description: `${t('Teacher payment')} — ${calcul.enseignant.nom} — ${calcul.group.nom} — ${calcul.periode.libelle}`,
+            // Pas de « Paiement prof » en tête : la colonne Type le dit déjà.
+            // Séparateur « - » simple, jamais le tiret cadratin.
+            prefill_description: [calcul.enseignant.nom, calcul.group.nom, calcul.periode.libelle].join(' - '),
             prefill_retour: `?${retour.toString()}`,
             ...(paiementProfTypeId !== null ? { prefill_type_depense_id: String(paiementProfTypeId) } : {}),
         });
@@ -480,7 +497,7 @@ export default function PaiementProfIndex({
                                             </div>
                                         ) : (
                                             <div className="form-text mt-n2 mb-3 text-warning">
-                                                {t('This group has no start date — calendar month used.')}
+                                                {t('This group has no start date - calendar month used.')}
                                             </div>
                                         )}
                                     </div>
@@ -547,10 +564,10 @@ export default function PaiementProfIndex({
                                                     </span>
                                                 ) : saisie.dureeSeance !== '' ? (
                                                     <span className="text-danger">
-                                                        {t('Unreadable duration — use 2h30, 2:30 or 2.30.')}
+                                                        {t('Unreadable duration - use 2h30, 2:30 or 2.30.')}
                                                     </span>
                                                 ) : (
-                                                    t('e.g. 2h30 — multiplied by the month’s sessions.')
+                                                    t('e.g. 2h30 - multiplied by the month’s sessions.')
                                                 )}
                                             </div>
                                         </div>
@@ -575,7 +592,7 @@ export default function PaiementProfIndex({
                                                 <span>
                                                     {saisie.heures !== '' && Number(saisie.heures) > 0
                                                         ? formatDuree(Number(saisie.heures))
-                                                        : t('Editable — overrides the calculation.')}
+                                                        : t('Editable - overrides the calculation.')}
                                                 </span>
                                                 {heuresManuelles && dureeParSeance !== null && (
                                                     <button
@@ -606,7 +623,7 @@ export default function PaiementProfIndex({
                     <EmptyState
                         title={t('No calculation yet')}
                         message={t(
-                            'The payment is computed from the roll-call already recorded for that group — nothing is imported.',
+                            'The payment is computed from the roll-call already recorded for that group - nothing is imported.',
                         )}
                     >
                         <button type="button" className="btn btn-primary" onClick={ouvrirModal}>
@@ -755,7 +772,7 @@ export default function PaiementProfIndex({
                     {/* Mode horaire : pas de grille par étudiant, le total suffit. */}
                     {estHoraire && (
                         <Card
-                            title={`${calcul.enseignant.nom} — ${calcul.group.nom}`}
+                            title={`${calcul.enseignant.nom} - ${calcul.group.nom}`}
                             tools={
                                 <div className="d-flex align-items-center gap-2">
                                     <span className="badge badge-soft-warning">
@@ -790,7 +807,7 @@ export default function PaiementProfIndex({
                     <>
                     {/* ── Grille de présence + paie ─────────────────── */}
                     <Card
-                        title={`${calcul.enseignant.nom} — ${calcul.group.nom}`}
+                        title={`${calcul.enseignant.nom} - ${calcul.group.nom}`}
                         bodyClassName="p-0 py-3"
                         tools={
                             <div className="d-flex align-items-center gap-2">
@@ -896,7 +913,7 @@ export default function PaiementProfIndex({
                                                         <td
                                                             key={date}
                                                             className={`pp-jour ${cellule.classe}${classeSemaine(date)}`}
-                                                            title={`${new Date(date + 'T00:00:00').toLocaleDateString('fr-FR')} — ${statut ?? t('No roll call')}`}
+                                                            title={`${new Date(date + 'T00:00:00').toLocaleDateString('fr-FR')} - ${statut ?? t('No roll call')}`}
                                                         >
                                                             {statut !== undefined ? (
                                                                 <span className="pp-pastille">{cellule.texte}</span>
@@ -918,7 +935,7 @@ export default function PaiementProfIndex({
                                                         }`}
                                                         step="0.01"
                                                         min="0"
-                                                        aria-label={`${t('Adjustment')} — ${ligne.nom}`}
+                                                        aria-label={`${t('Adjustment')} - ${ligne.nom}`}
                                                         placeholder={ligne.montantAuto.toFixed(2)}
                                                         value={saisi ?? ''}
                                                         onChange={(event) =>
@@ -984,6 +1001,70 @@ export default function PaiementProfIndex({
                     </>
                     )}
                 </>
+            )}
+
+            {/* ── Paiements déjà enregistrés ─────────────────────────────
+                Un calcul n'est pas un paiement : ces lignes sont les
+                dépenses « Paiement prof » réellement saisies. */}
+            {paiementsProf !== null && (
+                <Card title={t('Recorded teacher payments')} className="mt-3">
+                    <p className="fw-medium mb-3">
+                        {t('Total amount')} : {Number(paiementsProf.montantTotal).toFixed(2)} MAD
+                    </p>
+                    {paiementsProf.data.data.length === 0 ? (
+                        <EmptyState title={t('No teacher payment recorded')} icon="ti ti-user-dollar" />
+                    ) : (
+                        <>
+                            <DataTable
+                                loading={isLoading}
+                                head={
+                                    <tr>
+                                        <th>{t('Reference')}</th>
+                                        <th>{t('Group')}</th>
+                                        <th>{t('Teacher')}</th>
+                                        <th>{t('Period')}</th>
+                                        <th className="text-end">{t('Amount')}</th>
+                                        <th>{t('Status')}</th>
+                                        <th>{t('Date')}</th>
+                                        <th className="text-end">{t('Action')}</th>
+                                    </tr>
+                                }
+                            >
+                                {paiementsProf.data.data.map((row) => (
+                                    <tr key={row.id} className={row.isAnnulee ? 'opacity-50' : undefined}>
+                                        <td>
+                                            <code>{row.reference}</code>
+                                        </td>
+                                        <td>{row.groupNom ?? '-'}</td>
+                                        <td>{row.enseignant ?? '-'}</td>
+                                        <td>
+                                            {row.periodeDebut && row.periodeFin
+                                                ? `${row.periodeDebut} → ${row.periodeFin}`
+                                                : '-'}
+                                        </td>
+                                        <td
+                                            className={`text-end fw-medium${row.isAnnulee ? ' text-muted text-decoration-line-through' : ''}`}
+                                        >
+                                            {Number(row.montant).toFixed(2)} MAD
+                                        </td>
+                                        <td>
+                                            <StatusBadge
+                                                label={row.statut}
+                                                variant={DEPENSE_STATUT_BADGE[row.statut] ?? 'warning'}
+                                                dot
+                                            />
+                                        </td>
+                                        <td>{row.dateDepense ?? '-'}</td>
+                                        <td>
+                                            <RowActions view={row.showUrl} />
+                                        </td>
+                                    </tr>
+                                ))}
+                            </DataTable>
+                            <Pagination paginator={paiementsProf.data} />
+                        </>
+                    )}
+                </Card>
             )}
         </BackofficeLayout>
     );

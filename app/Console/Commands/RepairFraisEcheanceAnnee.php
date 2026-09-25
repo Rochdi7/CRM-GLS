@@ -130,7 +130,7 @@ final class RepairFraisEcheanceAnnee extends Command
         ));
 
         if (! $apply) {
-            $this->warn('Dry-run — relancer avec --apply pour écrire.');
+            $this->warn('Dry-run - relancer avec --apply pour écrire.');
 
             return self::SUCCESS;
         }

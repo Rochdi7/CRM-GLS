@@ -1,11 +1,11 @@
 {{--
-    Reçu de paiement — variante PDF (mPDF) du reçu imprimable
+    Reçu de paiement - variante PDF (mPDF) du reçu imprimable
     recu.blade.php, utilisée pour la pièce jointe email
     (App\Domain\Payments\Mail\EncaissementRecuMail). Même design (en-tête
     FR/logo/AR, ligne ICE, bande « Reçu N° », lignes libellé FR / valeur /
     libellé AR, signature) mais construit en tableaux : mPDF ne supporte pas
     flexbox. L'arabe est façonné par mPDF (autoScriptToLang/autoLangToFont)
-    — c'est la raison du passage dompdf → mPDF, dompdf n'ayant aucun support
+    - c'est la raison du passage dompdf → mPDF, dompdf n'ayant aucun support
     RTL. Ne pas réutiliser cette vue pour l'impression navigateur : la page
     imprimable reste recu.blade.php.
 --}}
@@ -112,7 +112,7 @@
         </tr>
     </table>
 
-    <div class="ice-line">ICE : {{ $centre?->ice ?? '—' }}</div>
+    <div class="ice-line">ICE : {{ $centre?->ice ?? '-' }}</div>
 
     <table class="recu-num-table">
         <tr>
@@ -125,22 +125,22 @@
     <table class="row-table">
         <tr>
             <td class="row-fr">Année scolaire</td>
-            <td class="row-val">{{ $anneeScolaire ?? '—' }}</td>
+            <td class="row-val">{{ $anneeScolaire ?? '-' }}</td>
             <td class="row-ar">السنة الدراسية</td>
         </tr>
         <tr>
             <td class="row-fr">Prénom et nom</td>
-            <td class="row-val">{{ $encaissement->student?->nomComplet() ?? '—' }}</td>
+            <td class="row-val">{{ $encaissement->student?->nomComplet() ?? '-' }}</td>
             <td class="row-ar">اسم و نسب التلميذ(ة)</td>
         </tr>
         <tr>
             <td class="row-fr">Matricule</td>
-            <td class="row-val">{{ $encaissement->student?->reference ?? '—' }}</td>
+            <td class="row-val">{{ $encaissement->student?->reference ?? '-' }}</td>
             <td class="row-ar">رقــم التسجيل</td>
         </tr>
         <tr>
             <td class="row-fr">Groupe</td>
-            <td class="row-val">{{ $niveau ?? '—' }}</td>
+            <td class="row-val">{{ $niveau ?? '-' }}</td>
             <td class="row-ar">المجموعة</td>
         </tr>
         <tr class="row-spacer">
@@ -160,7 +160,7 @@
         </tr>
         <tr>
             <td class="row-fr">Date de paiement</td>
-            <td class="row-val">{{ $encaissement->date_paiement?->format('d/m/Y') ?? '—' }}</td>
+            <td class="row-val">{{ $encaissement->date_paiement?->format('d/m/Y') ?? '-' }}</td>
             <td class="row-ar">تاريخ الأداء</td>
         </tr>
     </table>

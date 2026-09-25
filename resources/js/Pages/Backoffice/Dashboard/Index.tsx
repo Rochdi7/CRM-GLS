@@ -20,6 +20,9 @@ interface QuickAction {
     hue: number;
 }
 
+/** « Résumé des frais annuels » masqué temporairement (22/09/2026), chiffres en cours de vérification. */
+const SHOW_ANNUAL_FRAIS: boolean = false;
+
 /**
  * Shortcuts to the screens an employee opens dozens of times a day. Each
  * one is a plain link to the module's list page (every CRUD module is a
@@ -41,13 +44,21 @@ const QUICK_ACTIONS: QuickAction[] = [
     { label: 'Groups', icon: 'ti-users-group', href: '/backoffice/groups?nouveau=1', permissions: ['groups.view'], hue: 340 },
 ];
 
+const TEACHER_ACTIONS: QuickAction[] = [
+    { label: 'Roll call', icon: 'ti-clipboard-check', href: '/backoffice/seances/saisir-absence', permissions: [], hue: 120 },
+    { label: 'My groups', icon: 'ti-users-group', href: '/backoffice/groups', permissions: [], hue: 340 },
+    { label: 'My students', icon: 'ti-school', href: '/backoffice/students', permissions: [], hue: 190 },
+    { label: 'Sessions', icon: 'ti-checklist', href: '/backoffice/seances', permissions: [], hue: 35 },
+    { label: 'Timetable', icon: 'ti-calendar-time', href: '/backoffice/emploi-du-temps', permissions: [], hue: 275 },
+];
+
 /**
  * Tableau de bord — welcome hero (context + quick actions), the KPI grid
  * (StatsGrid), the séances calendar with its day agenda, and the annual
  * fees chart (GetAnnualFraisSummary). Everything follows the top-bar
  * année/centre switcher server-side; nothing here re-filters client-side.
  */
-export default function DashboardIndex({ stats, annualFrais, annualFraisPeriode, seancesCalendar, nouvellesInscriptions, espaceEnseignant }: DashboardPageProps) {
+export default function DashboardIndex({ porteeEnseignant, stats, annualFrais, annualFraisPeriode, seancesCalendar, nouvellesInscriptions, espaceEnseignant }: DashboardPageProps) {
     // auth.user is a shared prop (HandleInertiaRequests) — no page prop needed.
     const { auth } = usePage<SharedProps>().props;
     const [selectedDay, setSelectedDay] = useState<string>(() => isoDate(new Date()));
@@ -70,7 +81,8 @@ export default function DashboardIndex({ stats, annualFrais, annualFraisPeriode,
 
     const canAny = (permissions: string[]) =>
         auth.isSuperAdmin || permissions.some((p) => auth.permissions.includes(p));
-    const quickActions = QUICK_ACTIONS.filter((a) => canAny(a.permissions));
+    // Portée enseignant : ses propres raccourcis, jamais ceux du front-office.
+    const quickActions = porteeEnseignant ? TEACHER_ACTIONS : QUICK_ACTIONS.filter((a) => canAny(a.permissions));
 
     const todayLabel = new Date().toLocaleDateString('fr-FR', {
         weekday: 'long',
@@ -146,7 +158,7 @@ export default function DashboardIndex({ stats, annualFrais, annualFraisPeriode,
                                         <span className="gls-dash-hero-muted">{t('Showing data for')}</span>
                                         <span className="gls-dash-chip gls-dash-chip-year">
                                             <i className="ti ti-calendar me-1" />
-                                            {stats.anneeLabel ?? '—'}
+                                            {stats.anneeLabel ?? '-'}
                                         </span>
                                         <span className="gls-dash-chip gls-dash-chip-centre">
                                             <i className="ti ti-building me-1" />
@@ -187,7 +199,8 @@ export default function DashboardIndex({ stats, annualFrais, annualFraisPeriode,
                 <EspaceEnseignant data={espaceEnseignant} onMoisChange={changeEspaceMois} loading={espaceLoading} />
             )}
 
-            <StatsGrid stats={stats} />
+            {/* Portée enseignant : le serveur n'envoie aucun compteur du centre. */}
+            {!porteeEnseignant && <StatsGrid stats={stats} />}
 
             <div className="row">
                 <div className="col-xl-8 d-flex">
@@ -218,7 +231,7 @@ export default function DashboardIndex({ stats, annualFrais, annualFraisPeriode,
 
             {/* Masqué temporairement (22/09/2026) : chiffres du « Résumé des frais annuels »
                 en cours de vérification. Décommenter pour le réafficher. */}
-            {false && (
+            {SHOW_ANNUAL_FRAIS && annualFrais && (
                 <div className="row">
                     <div className="col-md-12">
                         <AnnualFraisChart data={annualFrais} periode={annualFraisPeriode} />

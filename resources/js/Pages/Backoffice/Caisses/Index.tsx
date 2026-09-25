@@ -268,15 +268,15 @@ function JournalPanel({ scope, data, centerLocked }: { scope: 'mine' | 'all'; da
                             {journal.rows.map((row, i) => (
                                 <tr key={`${row.type}-${row.reference}-${i}`}>
                                     <td>{row.url ? <a href={row.url}><code>{row.reference}</code></a> : <code>{row.reference}</code>}</td>
-                                    <td>{row.libelle ?? '—'}</td>
-                                    <td>{row.tiers ?? '—'}</td>
+                                    <td>{row.libelle ?? '-'}</td>
+                                    <td>{row.tiers ?? '-'}</td>
                                     <td className={`text-end fw-medium ${row.sens < 0 ? 'text-danger' : 'text-success'}`}>
                                         {row.sens < 0 ? '−' : '+'}
                                         {Number(row.montant).toFixed(2)} DH
                                     </td>
-                                    <td>{row.date ?? '—'}</td>
-                                    <td>{row.agent ?? '—'}</td>
-                                    {!centerLocked && <td>{row.centre ?? '—'}</td>}
+                                    <td>{row.date ?? '-'}</td>
+                                    <td>{row.agent ?? '-'}</td>
+                                    {!centerLocked && <td>{row.centre ?? '-'}</td>}
                                 </tr>
                             ))}
                         </DataTable>
@@ -437,7 +437,7 @@ export default function CaissesIndex({
     // of the row being edited. Display-only either way — the server
     // independently re-validates against the caisse's real balance.
     const editingSourceCaisse = editingTransfer ? transferCaisses.find((c) => c.id === editingTransfer.caisseSourceId) : null;
-    const sourceCaisseNom = editingTransfer ? (editingSourceCaisse?.nom ?? '—') : (myCaisse?.nom ?? '—');
+    const sourceCaisseNom = editingTransfer ? (editingSourceCaisse?.nom ?? '-') : (myCaisse?.nom ?? '-');
     const soldeSource = editingTransfer
         ? (editingSourceCaisse ? Number(editingSourceCaisse.solde) : null)
         : (myCaisse ? Number(myCaisse.solde) : null);
@@ -720,8 +720,8 @@ export default function CaissesIndex({
                             >
                                 {transfers.data.map((row) => (
                                     <tr key={row.id}>
-                                        <td>{row.expediteur ?? '—'}</td>
-                                        <td>{row.destinataire ?? '—'}</td>
+                                        <td>{row.expediteur ?? '-'}</td>
+                                        <td>{row.destinataire ?? '-'}</td>
                                         <td>
                                             <StatusBadge label={row.typeTransaction} variant={TRANSACTION_TYPE_BADGE[row.typeTransaction] ?? 'secondary'} />
                                         </td>
@@ -729,8 +729,8 @@ export default function CaissesIndex({
                                         <td>
                                             <StatusBadge label={row.statut} variant={TRANSFER_STATUT_BADGE[row.statut] ?? 'warning'} dot />
                                         </td>
-                                        <td>{row.dateTransfert ? row.dateTransfert.slice(0, 10) : '—'}</td>
-                                        <td>{row.note ?? '—'}</td>
+                                        <td>{row.dateTransfert ? row.dateTransfert.slice(0, 10) : '-'}</td>
+                                        <td>{row.note ?? '-'}</td>
                                         <td>
                                             {/* Mutating actions are permission-gated client-side
                                                 (hidden, not just refused): Modifier/Annuler need
@@ -798,11 +798,11 @@ export default function CaissesIndex({
                         ? 'Vous confirmez avoir reçu ce montant. Les soldes des deux caisses vont bouger immédiatement.'
                         : confirmAction?.row.cancelNeedsMotif
                             ? "Vous annulez le transfert d'un autre employé. Indiquez pourquoi : le motif est enregistré avec votre nom dans la note du transfert. Aucun solde ne bouge."
-                            : 'Le transfert sera marqué comme annulé — aucun solde ne bouge.'
+                            : 'Le transfert sera marqué comme annulé - aucun solde ne bouge.'
                 }
                 recordLabel={
                     confirmAction
-                        ? `${Number(confirmAction.row.montant).toFixed(2)} DH — ${confirmAction.row.expediteur ?? '—'} → ${confirmAction.row.destinataire ?? '—'}`
+                        ? `${Number(confirmAction.row.montant).toFixed(2)} DH - ${confirmAction.row.expediteur ?? '-'} → ${confirmAction.row.destinataire ?? '-'}`
                         : ''
                 }
                 error={actionError}
@@ -843,12 +843,12 @@ export default function CaissesIndex({
                 <form id="transfer-form" onSubmit={submitTransfer}>
                     <div className="alert alert-info">
                         {editingTransfer
-                            ? 'Seule la note peut être modifiée — les caisses et le montant sont figés.'
+                            ? 'Seule la note peut être modifiée - les caisses et le montant sont figés.'
                             : 'Les soldes ne bougent pas maintenant : un autre employé doit valider ce transfert.'}
                     </div>
                     {!editingTransfer && !myCaisse && (
                         <div className="alert alert-warning">
-                            Votre compte n'est lié à aucune caisse — impossible de demander un transfert.
+                            Votre compte n'est lié à aucune caisse - impossible de demander un transfert.
                         </div>
                     )}
                     <div className="row">
@@ -885,7 +885,7 @@ export default function CaissesIndex({
                             <div className="mb-3">
                                 <label className="form-label">
                                     {!editingTransfer && myCaisse?.centreNom
-                                        ? `Solde disponible — ${myCaisse.centreNom}`
+                                        ? `Solde disponible - ${myCaisse.centreNom}`
                                         : 'Solde'}
                                 </label>
                                 <div className="input-group">

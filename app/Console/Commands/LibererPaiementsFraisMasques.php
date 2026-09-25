@@ -91,7 +91,7 @@ final class LibererPaiementsFraisMasques extends Command
             $etudiant = trim(($inscription->student?->prenom ?? '').' '.($inscription->student?->nom ?? ''));
 
             $this->line(sprintf(
-                '  %s — %s (%s) : %s DH sur %d encaissement(s)',
+                '  %s - %s (%s) : %s DH sur %d encaissement(s)',
                 $inscription->reference,
                 $fee->nom,
                 $etudiant !== '' ? $etudiant : 'étudiant inconnu',
@@ -116,7 +116,7 @@ final class LibererPaiementsFraisMasques extends Command
         ));
 
         if ($ignores > 0) {
-            $this->warn("{$ignores} ligne(s) ignorée(s) — voir ci-dessus.");
+            $this->warn("{$ignores} ligne(s) ignorée(s) - voir ci-dessus.");
         }
 
         if (! $apply) {
