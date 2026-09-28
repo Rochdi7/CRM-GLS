@@ -374,6 +374,36 @@ final class GroupPaymentMatrixTest extends TestCase
         $this->assertSame('1600.00', $matrix['totals']['general']);
     }
 
+    /**
+     * The « masquer ce frais » shortcut on the matrix posts to
+     * inscriptions.fees.hide with the cell's own fee line id — so every cell
+     * must say WHICH inscription_fees row it renders. A cell that merged two
+     * lines of the same fee carries NULL instead: one click would hide only
+     * half of what the cell shows, so the shortcut is not offered there.
+     */
+    public function test_each_cell_carries_its_fee_line_id_for_the_hide_shortcut(): void
+    {
+        $inscription = $this->enrol('Chaimae', 'Bammadi');
+        $fee = $this->addFee($inscription, 'mars', 1300, 1000);
+
+        $cells = $this->matrix()['rows'][0]['cells'];
+
+        $this->assertSame($fee->id, $cells[(string) $this->frais['mars']->id]['feeId']);
+    }
+
+    public function test_a_merged_cell_carries_no_fee_line_id(): void
+    {
+        $inscription = $this->enrol('Chaimae', 'Bammadi');
+        $this->addFee($inscription, 'mars', 700, 700);
+        $this->addFee($inscription, 'mars', 600, 0);
+
+        $cells = $this->matrix()['rows'][0]['cells'];
+
+        $this->assertNull($cells[(string) $this->frais['mars']->id]['feeId']);
+        // The merge itself is unchanged.
+        $this->assertSame('700.00', $cells[(string) $this->frais['mars']->id]['montant']);
+    }
+
     public function test_a_fee_line_outside_the_groups_catalog_still_counts_in_the_row_total(): void
     {
         $inscription = $this->enrol('Chaimae', 'Bammadi');

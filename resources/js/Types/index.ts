@@ -1101,6 +1101,8 @@ export type PermissionGroups = Record<string, Record<string, string>>;
 
 export interface RoleCreatePageProps {
     permissionGroups: PermissionGroups;
+    /** PermissionRegistry::superAdminOnly() — drawn disabled, never submitted. */
+    lockedPermissions: string[];
     [key: string]: unknown;
 }
 
@@ -1115,6 +1117,8 @@ export interface RoleEditPageProps {
     role: RoleEditSummary;
     selectedPermissions: string[];
     permissionGroups: PermissionGroups;
+    /** PermissionRegistry::superAdminOnly() — drawn disabled, never submitted. */
+    lockedPermissions: string[];
     [key: string]: unknown;
 }
 
@@ -1534,6 +1538,8 @@ export interface GroupPaymentCell {
     reste: string;
     /** The note typed on the fee line in the inscription modal, if any. */
     note: string | null;
+    /** inscription_fees.id behind the cell — null when two lines were merged into it. */
+    feeId: number | null;
 }
 
 export interface GroupPaymentColumn {

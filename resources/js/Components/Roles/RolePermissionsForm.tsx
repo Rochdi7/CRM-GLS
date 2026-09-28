@@ -17,6 +17,10 @@ interface RolePermissionsFormProps {
     selected: string[];
     onSelectedChange: (next: string[]) => void;
     permissionGroups: PermissionGroups;
+    /** Super-admin-only permissions: drawn disabled, never selectable on a role. */
+    lockedPermissions?: string[];
+    /** Locked permissions the role still holds in DB — named in a warning, dropped on save. */
+    staleLockedPermissions?: string[];
     errors: LaravelValidationErrors;
     processing: boolean;
     onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -48,6 +52,8 @@ export default function RolePermissionsForm({
     selected,
     onSelectedChange,
     permissionGroups,
+    lockedPermissions = [],
+    staleLockedPermissions = [],
     errors,
     processing,
     onSubmit,
@@ -87,6 +93,14 @@ export default function RolePermissionsForm({
 
     const groupEntries = Object.entries(visibleGroups);
 
+    const locked = useMemo(() => new Set(lockedPermissions), [lockedPermissions]);
+
+    // Validation errors for one entry arrive as `permissions.N` — surface
+    // them too, otherwise a refused save looks like nothing happened.
+    const permissionErrors = Object.entries(errors)
+        .filter(([key]) => key === 'permissions' || key.startsWith('permissions.'))
+        .map(([, message]) => message);
+
     const totalPermissions = useMemo(
         () => Object.values(permissionGroups).reduce((sum, permissions) => sum + Object.keys(permissions).length, 0),
         [permissionGroups],
@@ -104,7 +118,7 @@ export default function RolePermissionsForm({
     // so a search narrows them too — never on permissions the user filtered
     // out and cannot see.
     function selectGroup(group: string) {
-        const names = Object.keys(visibleGroups[group] ?? {});
+        const names = Object.keys(visibleGroups[group] ?? {}).filter((name) => !locked.has(name));
         onSelectedChange(Array.from(new Set([...selected, ...names])));
     }
 
@@ -114,7 +128,9 @@ export default function RolePermissionsForm({
     }
 
     function selectAllVisible() {
-        const names = groupEntries.flatMap(([, permissions]) => Object.keys(permissions));
+        const names = groupEntries
+            .flatMap(([, permissions]) => Object.keys(permissions))
+            .filter((name) => !locked.has(name));
         onSelectedChange(Array.from(new Set([...selected, ...names])));
     }
 
@@ -209,9 +225,18 @@ export default function RolePermissionsForm({
                 </div>
 
                 <div className="card-body">
-                    {errors.permissions && (
+                    {permissionErrors.length > 0 && (
                         <div className="alert alert-danger" role="alert">
-                            {errors.permissions}
+                            {Array.from(new Set(permissionErrors)).map((message) => (
+                                <div key={message}>{message}</div>
+                            ))}
+                        </div>
+                    )}
+
+                    {staleLockedPermissions.length > 0 && (
+                        <div className="alert alert-warning" role="alert">
+                            Ce rôle porte encore des permissions réservées au super-admin, qui seront retirées à
+                            l'enregistrement : <code>{staleLockedPermissions.join(', ')}</code>
                         </div>
                     )}
 
@@ -221,10 +246,11 @@ export default function RolePermissionsForm({
                         <div className="row g-3">
                             {groupEntries.map(([group, permissions]) => {
                                 const permissionEntries = Object.entries(permissions);
-                                const held = permissionEntries.filter(([permission]) =>
+                                const selectable = permissionEntries.filter(([permission]) => !locked.has(permission));
+                                const held = selectable.filter(([permission]) =>
                                     selected.includes(permission),
                                 ).length;
-                                const all = held === permissionEntries.length;
+                                const all = selectable.length > 0 && held === selectable.length;
 
                                 return (
                                     <div className="col-xxl-4 col-lg-6" key={group}>
@@ -241,7 +267,7 @@ export default function RolePermissionsForm({
                                                                   : 'badge-soft-primary'
                                                         }`}
                                                     >
-                                                        {held}/{permissionEntries.length}
+                                                        {held}/{selectable.length}
                                                     </span>
                                                 </h6>
                                                 <div className="btn-group btn-group-sm">
@@ -264,7 +290,8 @@ export default function RolePermissionsForm({
 
                                             <div className="d-flex flex-column gap-1">
                                                 {permissionEntries.map(([permission, permLabel]) => {
-                                                    const checked = selected.includes(permission);
+                                                    const isLocked = locked.has(permission);
+                                                    const checked = !isLocked && selected.includes(permission);
 
                                                     return (
                                                         <label
@@ -272,8 +299,9 @@ export default function RolePermissionsForm({
                                                             htmlFor={`perm-${permission}`}
                                                             className={`d-flex align-items-start rounded px-2 py-1 mb-0${
                                                                 checked ? ' bg-primary-transparent' : ''
-                                                            }`}
-                                                            style={{ cursor: 'pointer' }}
+                                                            }${isLocked ? ' opacity-50' : ''}`}
+                                                            style={{ cursor: isLocked ? 'not-allowed' : 'pointer' }}
+                                                            title={isLocked ? 'Réservé au super-admin' : undefined}
                                                         >
                                                             <input
                                                                 className="form-check-input mt-1 me-2 flex-shrink-0"
@@ -281,12 +309,20 @@ export default function RolePermissionsForm({
                                                                 id={`perm-${permission}`}
                                                                 value={permission}
                                                                 checked={checked}
+                                                                disabled={isLocked}
                                                                 onChange={(event) =>
                                                                     toggle(permission, event.target.checked)
                                                                 }
                                                             />
                                                             <span className="flex-fill">
-                                                                <span className="d-block">{permLabel}</span>
+                                                                <span className="d-block">
+                                                                    {permLabel}
+                                                                    {isLocked && (
+                                                                        <span className="badge badge-soft-secondary ms-2">
+                                                                            Réservé au super-admin
+                                                                        </span>
+                                                                    )}
+                                                                </span>
                                                                 <span className="text-muted d-block fs-12">
                                                                     <code>{permission}</code>
                                                                 </span>

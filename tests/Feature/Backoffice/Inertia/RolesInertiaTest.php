@@ -153,6 +153,36 @@ final class RolesInertiaTest extends TestCase
         );
     }
 
+    /**
+     * Regression 28/09/2026: « Directeur » held employees.delete in
+     * production (a grant from before superAdminOnly()). The edit page
+     * re-submitted it, UpdateRoleRequest refused it under `permissions.N`,
+     * and every save of the role silently failed. The page now marks those
+     * permissions locked and never submits them; a save without them goes
+     * through and removes the stale grant.
+     */
+    public function test_a_role_holding_a_super_admin_only_permission_can_still_be_saved(): void
+    {
+        $this->actingAs($this->superAdmin());
+        $role = Role::findByName('director');
+        $role->givePermissionTo('employees.delete');
+
+        $this->get(route('backoffice.roles.edit', $role))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/Roles/Edit', false)
+                ->where('lockedPermissions', fn ($locked) => in_array('employees.delete', collect($locked)->all(), true))
+            );
+
+        $this->put(route('backoffice.roles.update', $role), [
+            'label' => 'Directeur',
+            'permissions' => ['employees.view', 'employees.update'],
+        ])->assertSessionHasNoErrors()->assertRedirect();
+
+        $role->refresh();
+        $this->assertEqualsCanonicalizing(['employees.view', 'employees.update'], $role->permissions->pluck('name')->all());
+    }
+
     public function test_update_is_hard_403_for_the_protected_role(): void
     {
         $this->actingAs($this->superAdmin());

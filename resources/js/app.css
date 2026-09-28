@@ -1624,6 +1624,52 @@ html[data-theme='dark'] .gls-payment-matrix > :not(caption) > * > * {
     border-color: #3a3352;
 }
 
+/* « Masquer ce frais » shortcut on a money cell: the icon only surfaces on
+ * hover so the grid keeps reading as the legacy sheet, and it sits in the
+ * cell's top-right corner without shifting the centred amount. Dark text on
+ * purpose — the fills are light in both themes (see above). */
+.gls-matrix-cell--hideable {
+    position: relative;
+}
+
+.gls-matrix-hide-btn {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    display: none;
+    padding: 0 2px;
+    border: 0;
+    background: transparent;
+    color: rgba(0, 0, 0, 0.55);
+    font-size: 0.75rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.gls-matrix-cell--hideable:hover .gls-matrix-hide-btn,
+.gls-matrix-hide-btn:focus-visible {
+    display: inline-block;
+}
+
+.gls-matrix-hide-btn:hover {
+    color: #000;
+}
+
+/* A SELECTED cell keeps its icon visible (dark pill + check) whatever the
+ * hover state, so the batch being built stays readable across the grid. */
+.gls-matrix-hide-btn--active,
+.gls-matrix-cell--hideable .gls-matrix-hide-btn--active {
+    display: inline-block;
+    color: #fff;
+    background: rgba(17, 17, 17, 0.75);
+    border-radius: 3px;
+}
+
+.gls-matrix-hide-btn--active:hover {
+    color: #fff;
+    background: rgba(17, 17, 17, 0.9);
+}
+
 /* React-controlled hover tooltip of the matrix (replaces the flaky native
  * `title`): fixed so neither the scroll box nor the modal can clip it, above
  * the modal z-index, and inert to the pointer so it never steals the hover. */

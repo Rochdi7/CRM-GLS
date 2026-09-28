@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type {
     GroupPaymentCell,
     GroupPaymentColumn,
@@ -12,6 +12,17 @@ interface GroupPaymentMatrixProps {
     loading: boolean;
     sort: GroupPaymentSort;
     onSortChange: (sort: GroupPaymentSort) => void;
+    /**
+     * Draws the « masquer ce frais » icon on each money cell. Clicking it
+     * SELECTS the cell (multi-select), and one « Masquer la sélection »
+     * button hides the whole batch. UI convenience only — each hide goes
+     * through the endpoint, which re-checks `registrations.manage-fees`,
+     * that the fee belongs to the inscription, and the active context
+     * (InscriptionController@hideFee).
+     */
+    canHideFees?: boolean;
+    /** Re-fetches the matrix after a fee was hidden, without the full-page spinner. */
+    onFeeHidden?: () => Promise<void> | void;
 }
 
 const SORT_OPTIONS: Array<{ value: GroupPaymentSort; label: string }> = [
@@ -269,7 +280,14 @@ function useMatrixTooltip() {
  * it read as a set of coloured tiles rather than one sheet. The one
  * departure is the scroll box around the table — see the comment on it.
  */
-export default function GroupPaymentMatrixTable({ matrix, loading, sort, onSortChange }: GroupPaymentMatrixProps) {
+export default function GroupPaymentMatrixTable({
+    matrix,
+    loading,
+    sort,
+    onSortChange,
+    canHideFees = false,
+    onFeeHidden,
+}: GroupPaymentMatrixProps) {
     return (
         <>
             <div className="row g-3 align-items-end mb-3">
@@ -293,13 +311,177 @@ export default function GroupPaymentMatrixTable({ matrix, loading, sort, onSortC
                 </div>
             </div>
 
-            <MatrixBody matrix={matrix} loading={loading} />
+            <MatrixBody matrix={matrix} loading={loading} canHideFees={canHideFees} onFeeHidden={onFeeHidden} />
         </>
     );
 }
 
-function MatrixBody({ matrix, loading }: { matrix: GroupPaymentMatrix | null; loading: boolean }) {
+/** A cell ticked for masking — keyed by its fee line id in the selection map. */
+interface SelectedCell {
+    row: GroupPaymentRow;
+    column: GroupPaymentColumn;
+    cell: GroupPaymentCell;
+}
+
+/**
+ * POSTs to the SAME endpoint as the trash icon of the inscription edit modal
+ * (inscriptions.fees.hide → BasculerVisibiliteFraisInscription::hide): the
+ * line is masked (never deleted) and, when money was paid on it, that money
+ * is released as an avance for the student — nothing new server-side, so the
+ * matrix shortcut and the inscription modal can never diverge.
+ */
+async function postHideFee(inscriptionId: string, feeId: number): Promise<{ montantLibere?: number | string }> {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
+    const response = await fetch(`/backoffice/inscriptions/${inscriptionId}/fees/${feeId}/hide`, {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': csrf, Accept: 'application/json' },
+    });
+
+    if (response.status === 419) {
+        throw new Error('Session expirée — rechargez la page (Ctrl + F5) puis recommencez.');
+    }
+
+    if (!response.ok) {
+        let message = 'Impossible de masquer ce frais.';
+        try {
+            const data = await response.json();
+            if (typeof data?.message === 'string' && data.message !== '') {
+                message = data.message;
+            }
+        } catch {
+            // Non-JSON error page — keep the generic message.
+        }
+        throw new Error(message);
+    }
+
+    // A 2xx that is NOT JSON means the request was redirected (login page,
+    // an HTML error rendered down the redirect path): the hide did not
+    // report success, so it must never be counted as one.
+    if (!(response.headers.get('content-type') ?? '').includes('application/json')) {
+        throw new Error('Réponse inattendue du serveur — rechargez la page et vérifiez ce frais.');
+    }
+
+    return response.json();
+}
+
+function MatrixBody({
+    matrix,
+    loading,
+    canHideFees,
+    onFeeHidden,
+}: {
+    matrix: GroupPaymentMatrix | null;
+    loading: boolean;
+    canHideFees: boolean;
+    onFeeHidden?: () => Promise<void> | void;
+}) {
     const { ref: tipRef, bind, hide } = useMatrixTooltip();
+    // Multi-select: clicking a cell's icon toggles it in/out of this map
+    // (keyed by fee line id), then ONE button masks the whole batch.
+    const [selection, setSelection] = useState<Map<number, SelectedCell>>(new Map());
+    const [processing, setProcessing] = useState(false);
+    // Batch progress while masking: how many POSTs are done out of how many
+    // were selected — drives the button's « n/total » and the bar.
+    const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+    const [errors, setErrors] = useState<string[]>([]);
+    const [success, setSuccess] = useState<string | null>(null);
+    // Synchronous re-entry guard: `processing` only disables the button on
+    // the NEXT render, so a fast double-click could start the batch twice.
+    const runningRef = useRef(false);
+
+    function toggleSelect(row: GroupPaymentRow, column: GroupPaymentColumn, cell: GroupPaymentCell) {
+        if (cell.feeId === null) {
+            return;
+        }
+        const feeId = cell.feeId;
+        setSuccess(null);
+        setSelection((prev) => {
+            const next = new Map(prev);
+            if (next.has(feeId)) {
+                next.delete(feeId);
+            } else {
+                next.set(feeId, { row, column, cell });
+            }
+            return next;
+        });
+    }
+
+    /**
+     * Masks the batch by POSTing each fee to the SAME per-fee endpoint,
+     * sequentially. Each hide is its own guarded transaction server-side,
+     * so a refusal mid-batch loses nothing: the ones already masked stay
+     * masked, the refused ones stay SELECTED with their reason listed —
+     * reported, never silently skipped (CLAUDE.md §16 « signaler plutôt
+     * que masquer »).
+     */
+    async function confirmHide() {
+        if (selection.size === 0 || runningRef.current) {
+            return;
+        }
+
+        runningRef.current = true;
+        setProcessing(true);
+        setErrors([]);
+        setSuccess(null);
+
+        const total = selection.size;
+        let traites = 0;
+        setProgress({ done: 0, total });
+
+        let masques = 0;
+        let libere = 0;
+        const failures: string[] = [];
+        const failedIds = new Set<number>();
+
+        for (const entry of selection.values()) {
+            const feeId = entry.cell.feeId as number;
+            try {
+                const data = await postHideFee(entry.row.key, feeId);
+                masques += 1;
+                libere += Number(data.montantLibere ?? 0);
+            } catch (e) {
+                failedIds.add(feeId);
+                failures.push(
+                    `${entry.column.nom} — ${entry.row.student ?? entry.row.reference} : ${
+                        e instanceof Error ? e.message : 'refusé'
+                    }`,
+                );
+            }
+            traites += 1;
+            setProgress({ done: traites, total });
+        }
+
+        // Keep only the refused cells selected, so the user sees exactly
+        // what did NOT go through and can retry or deselect them.
+        setSelection((prev) => {
+            const next = new Map<number, SelectedCell>();
+            for (const [feeId, entry] of prev) {
+                if (failedIds.has(feeId)) {
+                    next.set(feeId, entry);
+                }
+            }
+            return next;
+        });
+        setErrors(failures);
+
+        if (masques > 0) {
+            setSuccess(
+                libere > 0
+                    ? `${masques} frais masqué${masques > 1 ? 's' : ''}, ${money(String(libere))} libérés en avance pour les étudiants.`
+                    : `${masques} frais masqué${masques > 1 ? 's' : ''}.`,
+            );
+            try {
+                await onFeeHidden?.();
+            } catch {
+                // The masking itself succeeded; a failed refresh only leaves
+                // the grid stale until the next sort / reopen.
+            }
+        }
+
+        setProgress(null);
+        setProcessing(false);
+        runningRef.current = false;
+    }
 
     if (loading) {
         return (
@@ -332,14 +514,117 @@ function MatrixBody({ matrix, loading }: { matrix: GroupPaymentMatrix | null; lo
         );
     }
 
+    // What the batch would release in avance — the sum of what is PAID on
+    // the selected lines (the server recomputes it line by line; this figure
+    // is only the banner's preview).
+    const selectionPaye = [...selection.values()].reduce((sum, e) => sum + Number(e.cell.montant), 0);
+
     return (
         <>
+            {success && selection.size === 0 && errors.length === 0 && (
+                <div className="alert alert-success d-flex align-items-center justify-content-between py-2 mb-2">
+                    <span>
+                        <i className="ti ti-circle-check me-1" />
+                        {success}
+                    </span>
+                    <button type="button" className="btn-close" aria-label="Fermer" onClick={() => setSuccess(null)} />
+                </div>
+            )}
+
+            {/* Selection banner inline, not a second modal stacked on the
+                matrix's own: Modal.tsx owns focus trap + Escape for ONE
+                dialog, and a nested dialog would fight it. */}
+            {(selection.size > 0 || errors.length > 0) && (
+                <div className="alert alert-warning py-2 mb-2">
+                    <div className="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <div>
+                            <i className="ti ti-eye-off me-1" />
+                            <strong>{selection.size}</strong> frais sélectionné{selection.size > 1 ? 's' : ''}
+                            <div className="fs-13 mt-1">
+                                {selectionPaye > 0
+                                    ? `${money(String(selectionPaye))} déjà payés sur ces lignes seront libérés en avance pour les étudiants (rien n'est supprimé, la caisse ne bouge pas).`
+                                    : "Ces frais ne seront plus dus. Ils restent restaurables depuis la corbeille de l'inscription."}
+                            </div>
+                            {processing && progress && (
+                                <div className="d-flex align-items-center gap-2 mt-2" style={{ minWidth: '220px' }}>
+                                    <span className="spinner-border spinner-border-sm text-warning" role="status" />
+                                    <div
+                                        className="progress flex-grow-1"
+                                        style={{ height: '6px' }}
+                                        role="progressbar"
+                                        aria-valuenow={progress.done}
+                                        aria-valuemin={0}
+                                        aria-valuemax={progress.total}
+                                    >
+                                        <div
+                                            className="progress-bar bg-warning"
+                                            style={{ width: `${(progress.done / progress.total) * 100}%` }}
+                                        />
+                                    </div>
+                                    <span className="fs-13 text-nowrap">
+                                        {progress.done}/{progress.total}
+                                    </span>
+                                </div>
+                            )}
+                            {success && <div className="text-success fs-13 mt-1">{success}</div>}
+                            {errors.map((message) => (
+                                <div key={message} className="text-danger fs-13 mt-1">
+                                    {message}
+                                </div>
+                            ))}
+                        </div>
+                        <div className="d-flex gap-2">
+                            <button
+                                type="button"
+                                className="btn btn-sm btn-light"
+                                disabled={processing}
+                                onClick={() => {
+                                    setSelection(new Map());
+                                    setErrors([]);
+                                }}
+                            >
+                                Tout désélectionner
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-sm btn-danger"
+                                disabled={processing || selection.size === 0}
+                                onClick={() => void confirmHide()}
+                            >
+                                {processing ? (
+                                    <>
+                                        <span className="spinner-border spinner-border-sm me-1" role="status" />
+                                        Masquage…{progress ? ` ${progress.done}/${progress.total}` : ''}
+                                    </>
+                                ) : (
+                                    `Masquer la sélection (${selection.size})`
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Caps the grid at a readable height instead of letting a
                 45-student group stretch the dialog past the viewport: the box
                 scrolls in BOTH directions (down through the students, sideways
                 through a year of fee columns) while the modal itself stays a
                 centred dialog. */}
-            <div className="table-responsive" style={{ maxHeight: '75vh' }} onScroll={hide} onMouseLeave={hide}>
+            <div
+                className="table-responsive"
+                style={{
+                    maxHeight: '75vh',
+                    // The grid stays visible but reads as « busy » while the
+                    // batch runs — and ignores clicks, so the selection can't
+                    // change mid-masquage.
+                    opacity: processing ? 0.55 : undefined,
+                    pointerEvents: processing ? 'none' : undefined,
+                    transition: 'opacity 0.15s ease',
+                }}
+                aria-busy={processing}
+                onScroll={hide}
+                onMouseLeave={hide}
+            >
                 <table className="table table-bordered w-100 mb-0 gls-payment-matrix">
                     <thead>
                         <tr className="bg-light">
@@ -419,13 +704,38 @@ function MatrixBody({ matrix, loading }: { matrix: GroupPaymentMatrix | null; lo
                                             );
                                         }
 
+                                        const canHide = canHideFees && cell.feeId !== null;
+                                        const selected = cell.feeId !== null && selection.has(cell.feeId);
+
                                         return (
                                             <td
                                                 key={column.key}
+                                                className={canHide ? 'gls-matrix-cell--hideable' : undefined}
                                                 style={{ ...MONEY_CELL_STYLE, background: CELL_FILL[cell.state] }}
                                                 {...bind(cellTip(cell, column))}
                                             >
                                                 {money(cell.montant)}
+                                                {canHide && (
+                                                    <button
+                                                        type="button"
+                                                        className={
+                                                            selected
+                                                                ? 'gls-matrix-hide-btn gls-matrix-hide-btn--active'
+                                                                : 'gls-matrix-hide-btn'
+                                                        }
+                                                        title={selected ? 'Retirer de la sélection' : 'Sélectionner pour masquer'}
+                                                        aria-pressed={selected}
+                                                        aria-label={`Masquer ${column.nom} pour ${row.student ?? row.reference}`}
+                                                        disabled={processing}
+                                                        onClick={(event) => {
+                                                            event.stopPropagation();
+                                                            hide();
+                                                            toggleSelect(row, column, cell);
+                                                        }}
+                                                    >
+                                                        <i className={selected ? 'ti ti-check' : 'ti ti-eye-off'} />
+                                                    </button>
+                                                )}
                                             </td>
                                         );
                                     })}

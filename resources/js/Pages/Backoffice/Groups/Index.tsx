@@ -306,6 +306,12 @@ export default function GroupsIndex({
     // UI convenience only — backoffice.groups.payment-matrix carries the real
     // permission:payments.view gate (CLAUDE.md §5).
     const canViewPayments = auth.isSuperAdmin || auth.permissions.includes('payments.view');
+    // The matrix's « masquer ce frais » shortcut posts to the SAME endpoint
+    // as the inscription modal's trash (inscriptions.fees.hide), so it is
+    // drawn under the same permission. UI convenience only — the route
+    // carries permission:registrations.manage-fees and the controller
+    // re-checks scope (CLAUDE.md §5).
+    const canManageFees = auth.isSuperAdmin || auth.permissions.includes('registrations.manage-fees');
     // `groups.delete` est dans superAdminOnly() : aucun rôle ne le porte,
     // donc en pratique seul un super-admin voit l'entrée de menu.
     const canDeleteGroups = auth.isSuperAdmin || auth.permissions.includes('groups.delete');
@@ -602,14 +608,21 @@ export default function GroupsIndex({
      * re-ordered client-side, so the numbering (#1, #2…) and the column
      * totals always come from one authoritative computation.
      */
-    async function loadPaymentMatrix(group: GroupRow, sort: GroupPaymentSort) {
-        setLoadingPayments(true);
+    async function loadPaymentMatrix(group: GroupRow, sort: GroupPaymentSort, silent = false) {
+        // `silent` refreshes the grid in place after « masquer ce frais »:
+        // swapping the whole table for the spinner would also hide the
+        // success message the user is reading.
+        if (!silent) {
+            setLoadingPayments(true);
+        }
         try {
             const response = await fetch(`/backoffice/groups/${group.id}/payment-matrix?sort=${sort}`);
             const data: { matrix: GroupPaymentMatrix } = await response.json();
             setPaymentsMatrix(data.matrix);
         } finally {
-            setLoadingPayments(false);
+            if (!silent) {
+                setLoadingPayments(false);
+            }
         }
     }
 
@@ -1421,6 +1434,12 @@ export default function GroupsIndex({
                     loading={loadingPayments}
                     sort={paymentsSort}
                     onSortChange={changePaymentsSort}
+                    canHideFees={canManageFees}
+                    onFeeHidden={async () => {
+                        if (paymentsGroup) {
+                            await loadPaymentMatrix(paymentsGroup, paymentsSort, true);
+                        }
+                    }}
                 />
             </Modal>
 

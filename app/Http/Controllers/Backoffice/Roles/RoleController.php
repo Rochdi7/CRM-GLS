@@ -62,6 +62,7 @@ final class RoleController extends Controller
 
         return Inertia::render('Backoffice/Roles/Create', [
             'permissionGroups' => PermissionRegistry::groupedGrantable(),
+            'lockedPermissions' => PermissionRegistry::superAdminOnly(),
         ]);
     }
 
@@ -113,6 +114,13 @@ final class RoleController extends Controller
             ],
             'selectedPermissions' => $role->permissions()->pluck('name')->all(),
             'permissionGroups' => PermissionRegistry::groupedGrantable(),
+            // superAdminOnly() can never sit on a role (UpdateRoleRequest
+            // refuses it). The form draws them disabled and never submits
+            // them — a role still holding one from before the rule (e.g.
+            // Directeur with employees.delete) could otherwise never be
+            // saved again: every submit carried the stale grant back and
+            // was refused under a `permissions.N` key the page never showed.
+            'lockedPermissions' => PermissionRegistry::superAdminOnly(),
         ]);
     }
 

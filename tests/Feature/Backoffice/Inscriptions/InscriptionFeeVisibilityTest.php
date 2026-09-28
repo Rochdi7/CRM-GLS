@@ -99,6 +99,30 @@ final class InscriptionFeeVisibilityTest extends TestCase
         $this->assertSame($fee->id, $response['hiddenFees'][0]['id']);
     }
 
+    /**
+     * A stale screen (the group payment matrix loaded earlier, a second tab,
+     * a double-submitted batch) can post hide for a line already masked. It
+     * is refused in JSON with a reason — never re-masked in silence, which
+     * would rewrite masque_le / masque_origine.
+     */
+    public function test_hiding_an_already_hidden_fee_is_refused_in_json_and_changes_nothing(): void
+    {
+        [$inscription, $fee] = $this->inscriptionWithFee();
+        $fee->update([
+            'masque_le' => '2026-01-01 10:00:00',
+            'masque_origine' => InscriptionFee::MASQUE_ORIGINE_GROUPE,
+        ]);
+
+        $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
+            ->postJson(route('backoffice.inscriptions.fees.hide', [$inscription, $fee]))
+            ->assertStatus(422)
+            ->assertJsonStructure(['message']);
+
+        $fresh = $fee->fresh();
+        $this->assertSame('2026-01-01 10:00:00', $fresh->masque_le->format('Y-m-d H:i:s'));
+        $this->assertSame(InscriptionFee::MASQUE_ORIGINE_GROUPE, $fresh->masque_origine);
+    }
+
     public function test_hiding_recomputes_montant_total_from_remaining_visible_fees(): void
     {
         [$inscription, $fee] = $this->inscriptionWithFee(1300.0);

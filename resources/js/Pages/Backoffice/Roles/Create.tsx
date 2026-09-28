@@ -14,7 +14,7 @@ import type { RoleCreatePageProps, RoleFormPayload } from '@/Types';
  * was typed and displays back the `name` validation error verbatim if the
  * slugified result collides with an existing role.
  */
-export default function RoleCreate({ permissionGroups }: RoleCreatePageProps) {
+export default function RoleCreate({ permissionGroups, lockedPermissions }: RoleCreatePageProps) {
     const form = useForm<RoleFormPayload>({
         label: '',
         name: '',
@@ -47,6 +47,7 @@ export default function RoleCreate({ permissionGroups }: RoleCreatePageProps) {
                 selected={form.data.permissions}
                 onSelectedChange={(next) => form.setData('permissions', next)}
                 permissionGroups={permissionGroups}
+                lockedPermissions={lockedPermissions}
                 errors={form.errors}
                 processing={form.processing}
                 onSubmit={handleSubmit}

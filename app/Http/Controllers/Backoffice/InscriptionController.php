@@ -237,11 +237,30 @@ final class InscriptionController extends Controller
         // honest answer.
         abort_unless($fee->inscription_id === $inscription->id, 404);
 
+        // Deja masque : un ecran perime (matrice « Statistique de groupe »
+        // chargee avant, second onglet, double envoi d'un lot) le renverrait.
+        // Le re-masquer reecrirait masque_le / masque_origine en silence —
+        // on le DIT plutot, en JSON comme le reste de cet endpoint.
+        if ($fee->masque_le !== null) {
+            return response()->json(['message' => __('This fee is already hidden.')], 422);
+        }
+
         // Un frais deja paye rend son argent a l'etudiant sous forme d'avance
         // (voir l'action) : on renvoie le montant libere pour que le modal le
         // DISE, sinon l'utilisateur voit 500 DH disparaitre de l'ecran sans
         // savoir qu'ils l'attendent dans l'onglet Avances.
-        $montantLibere = $action->hide($inscription, $fee);
+        //
+        // Un refus metier de la conversion en avance (ValidationException)
+        // repart en JSON 422 avec son motif : bootstrap/app.php ne rend du
+        // JSON que pour `api/*`, sans quoi le client recevrait une
+        // redirection HTML au lieu de la raison (meme garde que
+        // assertInscriptionInContextJson). La transaction de l'action est
+        // deja annulee a ce stade — rien n'a bouge.
+        try {
+            $montantLibere = $action->hide($inscription, $fee);
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 422);
+        }
 
         // JSON, not back(): this fires from INSIDE the open edit modal, whose
         // React state already reflects the change optimistically. An Inertia

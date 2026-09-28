@@ -202,9 +202,16 @@ final class GetGroupPaymentMatrix
                     // for the money instead of reopening the inscription.
                     $note = trim((string) $fee->note) !== '' ? trim((string) $fee->note) : null;
 
+                    // The fee LINE behind the cell — what the « masquer » icon
+                    // posts to (inscriptions.fees.hide, the same endpoint as
+                    // the inscription modal's trash). NULL on a merged cell:
+                    // one click would hide only half of what the cell shows.
+                    $feeId = $fee->id;
+
                     // Two lines for the same fee on one inscription should not
                     // happen, but if they do, merge rather than drop.
                     if (isset($cells[$key])) {
+                        $feeId = null;
                         $du += (float) $cells[$key]['du'];
                         $paye += (float) $cells[$key]['montant'];
                         $note = implode(' · ', array_filter([$cells[$key]['note'], $note])) ?: null;
@@ -218,6 +225,7 @@ final class GetGroupPaymentMatrix
                         'du' => $this->money($du),
                         'reste' => $this->money($restant),
                         'note' => $note,
+                        'feeId' => $feeId,
                     ];
                 }
 

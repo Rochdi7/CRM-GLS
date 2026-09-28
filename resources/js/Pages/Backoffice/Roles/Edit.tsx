@@ -15,11 +15,15 @@ import type { RoleEditPageProps, RoleFormPayload } from '@/Types';
  * (RoleController@edit's `abort_if($role->isProtected(), 403, ...)`), so no
  * redundant client-side re-check is added here.
  */
-export default function RoleEdit({ role, selectedPermissions, permissionGroups }: RoleEditPageProps) {
+export default function RoleEdit({ role, selectedPermissions, permissionGroups, lockedPermissions }: RoleEditPageProps) {
+    // A super-admin-only grant still stored on the role is never sent back —
+    // UpdateRoleRequest refuses it, which made the whole save fail. It is
+    // named in a warning instead, and the save removes it from the role.
+    const staleLocked = selectedPermissions.filter((permission) => lockedPermissions.includes(permission));
     const form = useForm<RoleFormPayload>({
         label: role.label,
         name: role.name,
-        permissions: selectedPermissions,
+        permissions: selectedPermissions.filter((permission) => !lockedPermissions.includes(permission)),
     });
 
     function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -49,6 +53,8 @@ export default function RoleEdit({ role, selectedPermissions, permissionGroups }
                 selected={form.data.permissions}
                 onSelectedChange={(next) => form.setData('permissions', next)}
                 permissionGroups={permissionGroups}
+                lockedPermissions={lockedPermissions}
+                staleLockedPermissions={staleLocked}
                 errors={form.errors}
                 processing={form.processing}
                 onSubmit={handleSubmit}
