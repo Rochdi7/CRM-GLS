@@ -91,7 +91,7 @@ export default function StatCard({
         </div>
     );
 
-    const className = 'card flex-fill border-0 gls-stat-card';
+    const className = `card flex-fill border-0 gls-stat-card gls-stat-${variant}`;
 
     return (
         <div className="col-xxl-3 col-xl-4 col-sm-6 d-flex">

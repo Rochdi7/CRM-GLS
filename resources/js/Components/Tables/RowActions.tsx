@@ -91,7 +91,7 @@ export default function RowActions({ view, viewLabel = 'Voir', children }: RowAc
             {view && (
                 <a
                     href={view}
-                    className="btn btn-outline-light bg-white btn-icon d-flex align-items-center justify-content-center rounded-circle p-0 me-2"
+                    className="btn btn-outline-light bg-white btn-icon d-flex align-items-center justify-content-center rounded-circle p-0 me-2 gls-row-view"
                     title={viewLabel}
                 >
                     <i className="ti ti-eye" />
@@ -102,7 +102,7 @@ export default function RowActions({ view, viewLabel = 'Voir', children }: RowAc
                     <button
                         ref={buttonRef}
                         type="button"
-                        className="btn btn-white btn-icon btn-sm d-flex align-items-center justify-content-center rounded-circle p-0"
+                        className="btn btn-white btn-icon btn-sm d-flex align-items-center justify-content-center rounded-circle p-0 gls-row-more"
                         onClick={toggle}
                         aria-expanded={open}
                         aria-label="Actions"

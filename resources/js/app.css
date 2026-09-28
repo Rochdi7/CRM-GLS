@@ -4070,3 +4070,656 @@ html[data-theme='dark'] .sidebar .sidebar-menu > ul > li ul li a.nav-coming-soon
     color: #ffc46b;
     background: rgba(255, 171, 0, 0.16);
 }
+
+/* ---------------------------------------------------------------------------
+ * Passe COULEUR & MODERNITÉ (28/09/2026)
+ *
+ * Demande : « plus moderne, plus de couleurs pour mieux voir, sans toucher au
+ * thème ». Les passes précédentes ont réglé le CONTRASTE (texte noir, gris
+ * relevés) ; l'écran restait monochrome : rien ne distinguait une section du
+ * menu d'une autre, un en-tête de tableau de ses lignes, ni une action de
+ * modification d'une suppression.
+ *
+ * Même règle que les autres couches : strictement présentationnel, aucun
+ * fichier du thème modifié (§3/§12), la teinte PreSkool #3D5EE1 reste la
+ * couleur de marque — on l'ACCOMPAGNE d'une palette d'accents, on ne la
+ * remplace pas. Les hooks posés dans le markup sont de simples classes :
+ * `gls-page-header` (PageHeader), `gls-nav-accent-N` (Sidebar),
+ * `gls-stat-<variant>` (StatCard), `gls-row-view` / `gls-row-more`
+ * (RowActions), `gls-empty-icon` (EmptyState). Propriétés logiques
+ * (inline-start) partout : l'arabe (RTL) reçoit le miroir sans règle dédiée.
+ * Chaque couleur a son jumeau `html[data-theme='dark']` en fin de bloc.
+ * Annuler la passe = supprimer ce bloc.
+ * ------------------------------------------------------------------------- */
+
+:root {
+    --gls-brand: #3d5ee1;
+    --gls-brand-rgb: 61, 94, 225;
+    --gls-brand-deep: #2f49b8;
+    --gls-violet: #7c5cfc;
+    --gls-teal: #0fa3b1;
+    --gls-surface-line: #e6eaf3;
+    --gls-thead-bg: #eef2fd;
+    --gls-thead-text: #1e2a5a;
+    --gls-shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 6px 18px rgba(31, 50, 120, 0.05);
+}
+
+/* --- Fond de page ----------------------------------------------------------
+ * #FBFBFD (thème) est presque blanc : les cartes blanches s'y fondaient. Un
+ * gris bleuté léger les détache sans ajouter un seul trait. */
+html:not([data-theme='dark']) .page-wrapper .content {
+    background: #f4f6fb;
+}
+
+/* --- Titre de page ---------------------------------------------------------
+ * Barre d'accent dégradée devant le titre : le premier repère de l'écran. */
+.gls-page-header .page-title {
+    position: relative;
+    padding-inline-start: 14px;
+}
+
+.gls-page-header .page-title::before {
+    content: '';
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0.18em;
+    bottom: 0.18em;
+    width: 4px;
+    border-radius: 4px;
+    background: linear-gradient(180deg, var(--gls-brand), var(--gls-violet));
+}
+
+.gls-page-header .breadcrumb {
+    padding-inline-start: 14px;
+}
+
+.gls-page-header .breadcrumb-item a {
+    color: #5b6fb8;
+}
+
+.gls-page-header .breadcrumb-item a:hover {
+    color: var(--gls-brand);
+}
+
+.gls-page-header .breadcrumb-item.active {
+    color: var(--gls-brand);
+    font-weight: 600;
+}
+
+/* --- Barre supérieure : liseré de marque ---------------------------------- */
+.header::after {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--gls-brand), var(--gls-violet) 50%, var(--gls-teal));
+    opacity: 0.85;
+    pointer-events: none;
+}
+
+/* --- Cartes ---------------------------------------------------------------- */
+.page-wrapper .card {
+    border-color: var(--gls-surface-line);
+    border-radius: 12px;
+    box-shadow: var(--gls-shadow-card);
+}
+
+.page-wrapper .card > .card-header {
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    border-bottom-color: var(--gls-surface-line);
+}
+
+.page-wrapper .card > .card-header h4,
+.page-wrapper .card > .card-header .card-title {
+    color: var(--gls-thead-text);
+}
+
+/* --- Barre de filtres ------------------------------------------------------
+ * Un panneau teinté regroupe les filtres : l'œil sépare d'un coup « ce que je
+ * cherche » de « ce que je trouve ». */
+.gls-filter-bar {
+    background: linear-gradient(135deg, rgba(var(--gls-brand-rgb), 0.05), rgba(15, 163, 177, 0.035));
+    border: 1px solid rgba(var(--gls-brand-rgb), 0.12);
+    border-radius: 10px;
+    padding: 10px 12px;
+}
+
+/* --- Tableaux --------------------------------------------------------------
+ * En-tête teinté (couleur OPAQUE : certains en-têtes sont `sticky`, un fond
+ * translucide laisserait voir les lignes défiler dessous) + filet de marque.
+ * La matrice de paiement (thead nu) garde ses propres couleurs. */
+.table > thead.thead-light > tr > th,
+.table > thead.table-light > tr > th {
+    --bs-table-bg: var(--gls-thead-bg);
+    background-color: var(--gls-thead-bg);
+    color: var(--gls-thead-text);
+    border-bottom: 2px solid rgba(var(--gls-brand-rgb), 0.22);
+    letter-spacing: 0.03em;
+}
+
+/* Survol de ligne : fond de marque + barre d'accent sur la première cellule.
+ * Bootstrap peint l'état de ligne en `box-shadow` inset : la barre s'y ajoute
+ * au lieu de le remplacer, sinon la cellule perdrait son fond de survol. */
+.table-hover > tbody > tr:hover > * {
+    --bs-table-bg-state: rgba(var(--gls-brand-rgb), 0.055);
+}
+
+.table-hover > tbody > tr:hover > *:first-child {
+    box-shadow: inset 3px 0 0 var(--gls-brand), inset 0 0 0 9999px var(--bs-table-bg-state, transparent);
+}
+
+[dir='rtl'] .table-hover > tbody > tr:hover > *:first-child {
+    box-shadow: inset -3px 0 0 var(--gls-brand), inset 0 0 0 9999px var(--bs-table-bg-state, transparent);
+}
+
+/* --- Actions de ligne ------------------------------------------------------ */
+.gls-row-view {
+    background-color: rgba(var(--gls-brand-rgb), 0.1) !important;
+    border-color: transparent !important;
+    color: var(--gls-brand) !important;
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.gls-row-view:hover,
+.gls-row-view:focus-visible {
+    background-color: var(--gls-brand) !important;
+    color: #fff !important;
+    transform: translateY(-1px);
+}
+
+.gls-row-more {
+    background-color: rgba(124, 92, 252, 0.1) !important;
+    border-color: transparent !important;
+    color: #5b3fd6 !important;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.gls-row-more:hover,
+.gls-row-more:focus-visible,
+.gls-row-more[aria-expanded='true'] {
+    background-color: var(--gls-violet) !important;
+    color: #fff !important;
+}
+
+/* Menus déroulants : l'icône porte le SENS de l'action — modifier (ambre),
+ * supprimer/annuler (rouge), voir (bleu), imprimer/envoyer (sarcelle),
+ * argent/valider (vert), déplacer/transférer (violet). Le libellé reste
+ * neutre ; une entrée `text-danger` garde son rouge entier. */
+.dropdown-menu .dropdown-item {
+    border-radius: 6px;
+    transition: background-color 0.12s ease;
+}
+
+.dropdown-menu .dropdown-item:hover,
+.dropdown-menu .dropdown-item:focus {
+    background-color: rgba(var(--gls-brand-rgb), 0.07);
+}
+
+.dropdown-menu .dropdown-item > i.ti {
+    color: var(--gls-brand);
+}
+
+.dropdown-menu .dropdown-item > i:is(.ti-edit, .ti-pencil, .ti-edit-circle, .ti-writing, .ti-calendar-event, .ti-calendar-due) {
+    color: #d97706;
+}
+
+.dropdown-menu .dropdown-item > i:is(.ti-trash, .ti-trash-x, .ti-ban, .ti-x, .ti-circle-x, .ti-square-x, .ti-arrow-back-up) {
+    color: #e82646;
+}
+
+.dropdown-menu .dropdown-item > i:is(.ti-eye, .ti-info-circle, .ti-file-text, .ti-list-details) {
+    color: #0f65cd;
+}
+
+.dropdown-menu .dropdown-item > i:is(.ti-printer, .ti-download, .ti-file-download, .ti-file-type-pdf, .ti-brand-whatsapp, .ti-send) {
+    color: #0f9aa6;
+}
+
+.dropdown-menu .dropdown-item > i:is(.ti-cash, .ti-coin, .ti-coins, .ti-wallet, .ti-receipt, .ti-currency-dollar, .ti-check, .ti-circle-check, .ti-building-bank) {
+    color: #16a34a;
+}
+
+.dropdown-menu .dropdown-item > i:is(.ti-arrows-exchange, .ti-transfer, .ti-switch-horizontal, .ti-arrows-right-left, .ti-arrow-right, .ti-replace, .ti-git-merge) {
+    color: #7c5cfc;
+}
+
+.dropdown-menu .dropdown-item.text-danger > i {
+    color: inherit;
+}
+
+/* --- Onglets ---------------------------------------------------------------
+ * Onglet actif : barre de marque en haut (le style « intercalaire » du thème
+ * est conservé) ; les onglets inactifs gagnent un survol teinté. */
+.nav-tabs .nav-link {
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.nav-tabs .nav-link:not(.active):not(.disabled):hover {
+    background-color: rgba(var(--gls-brand-rgb), 0.06);
+    color: var(--gls-brand);
+}
+
+.nav-tabs .nav-link > i {
+    color: #7d8cc4;
+}
+
+.nav-tabs .nav-link.active {
+    box-shadow: inset 0 3px 0 var(--gls-brand);
+}
+
+.nav-tabs .nav-link.active > i,
+.nav-tabs .nav-link:hover > i {
+    color: var(--gls-brand);
+}
+
+/* --- Boutons --------------------------------------------------------------- */
+.btn {
+    transition: background-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-primary {
+    background-image: linear-gradient(135deg, #4a6cf0, var(--gls-brand) 55%, var(--gls-brand-deep));
+    border-color: var(--gls-brand);
+    box-shadow: 0 4px 12px rgba(var(--gls-brand-rgb), 0.24);
+}
+
+.btn-success {
+    box-shadow: 0 4px 12px rgba(26, 190, 23, 0.22);
+}
+
+.btn-danger {
+    box-shadow: 0 4px 12px rgba(232, 38, 70, 0.22);
+}
+
+.btn-warning {
+    box-shadow: 0 4px 12px rgba(234, 179, 0, 0.24);
+}
+
+.btn:is(.btn-primary, .btn-success, .btn-danger, .btn-warning):not(:disabled):not(.disabled):hover {
+    transform: translateY(-1px);
+}
+
+.btn:is(.btn-primary, .btn-success, .btn-danger, .btn-warning):is(:disabled, .disabled) {
+    box-shadow: none;
+}
+
+/* --- Formulaires ----------------------------------------------------------- */
+.form-control:focus,
+.form-select:focus {
+    border-color: #8ea2f0;
+    box-shadow: 0 0 0 0.2rem rgba(var(--gls-brand-rgb), 0.14);
+}
+
+.form-check-input:checked {
+    background-color: var(--gls-brand);
+    border-color: var(--gls-brand);
+}
+
+/* --- Badges : pastilles ---------------------------------------------------- */
+.table .badge,
+.card-body .badge,
+.modal-body .badge {
+    border-radius: 999px;
+    padding-inline: 0.7em;
+}
+
+/* --- Pagination ------------------------------------------------------------ */
+.pagination .page-link {
+    border-radius: 8px !important;
+    margin-inline: 2px;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.pagination .page-item:not(.active):not(.disabled) .page-link:hover {
+    background-color: rgba(var(--gls-brand-rgb), 0.08);
+    color: var(--gls-brand);
+}
+
+.pagination .page-item.active .page-link {
+    background-image: linear-gradient(135deg, #4a6cf0, var(--gls-brand-deep));
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 3px 10px rgba(var(--gls-brand-rgb), 0.3);
+}
+
+/* --- Modals ----------------------------------------------------------------
+ * En-tête teinté + barre d'accent devant le titre, fond flouté derrière. Pas
+ * d'`overflow: hidden` sur `.modal-content` : il couperait les listes
+ * déroulantes des champs du formulaire. */
+.modal-content {
+    border: 0;
+    border-radius: 14px;
+    box-shadow: 0 24px 60px rgba(16, 24, 40, 0.22);
+}
+
+.modal .modal-header {
+    background: linear-gradient(135deg, rgba(var(--gls-brand-rgb), 0.09), rgba(124, 92, 252, 0.06));
+    border-top-left-radius: 14px;
+    border-top-right-radius: 14px;
+    border-bottom-color: rgba(var(--gls-brand-rgb), 0.14);
+}
+
+.modal .modal-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--gls-thead-text);
+}
+
+.modal .modal-title::before {
+    content: '';
+    flex-shrink: 0;
+    width: 4px;
+    height: 1.1em;
+    border-radius: 4px;
+    background: linear-gradient(180deg, var(--gls-brand), var(--gls-violet));
+}
+
+.modal .modal-footer {
+    background: #f8f9fd;
+    border-bottom-left-radius: 14px;
+    border-bottom-right-radius: 14px;
+}
+
+.modal-backdrop.show {
+    background-color: #0b1233;
+    opacity: 0.45;
+    backdrop-filter: blur(2px);
+}
+
+/* --- Cartes de statistique -------------------------------------------------
+ * Icône en dégradé plein (le cercle pâle du thème se perdait) + halo de la
+ * même couleur dans le coin de la carte. Le chiffre, lui, reste foncé. */
+.gls-stat-card {
+    --gls-stat: var(--gls-brand);
+    --gls-stat-rgb: var(--gls-brand-rgb);
+    background-image: radial-gradient(circle at 100% 0%, rgba(var(--gls-stat-rgb), 0.12), transparent 55%);
+    border: 1px solid rgba(var(--gls-stat-rgb), 0.14) !important;
+}
+
+.gls-stat-secondary { --gls-stat: #2bb3c4; --gls-stat-rgb: 43, 179, 196; }
+.gls-stat-success   { --gls-stat: #1abe17; --gls-stat-rgb: 26, 190, 23; }
+.gls-stat-danger    { --gls-stat: #e82646; --gls-stat-rgb: 232, 38, 70; }
+.gls-stat-warning   { --gls-stat: #eab300; --gls-stat-rgb: 234, 179, 0; }
+.gls-stat-info      { --gls-stat: #0f65cd; --gls-stat-rgb: 15, 101, 205; }
+.gls-stat-teal      { --gls-stat: #02a8b5; --gls-stat-rgb: 2, 168, 181; }
+.gls-stat-skyblue   { --gls-stat: #0bb4dc; --gls-stat-rgb: 11, 180, 220; }
+
+.gls-stat-card .gls-stat-icon {
+    background-image: linear-gradient(135deg, rgba(var(--gls-stat-rgb), 0.78), var(--gls-stat));
+    color: #fff !important;
+    box-shadow: 0 6px 14px rgba(var(--gls-stat-rgb), 0.3);
+}
+
+.gls-stat-card-link:hover,
+.gls-stat-card-link:focus-visible {
+    box-shadow: 0 10px 24px rgba(var(--gls-stat-rgb), 0.18);
+}
+
+/* --- État vide ------------------------------------------------------------- */
+.gls-empty-icon {
+    background: linear-gradient(135deg, rgba(var(--gls-brand-rgb), 0.12), rgba(124, 92, 252, 0.12)) !important;
+}
+
+.gls-empty-icon > i {
+    color: var(--gls-brand) !important;
+}
+
+/* --- Barre latérale : une couleur par section ------------------------------
+ * Chaque section du menu reçoit son accent (Principal bleu, Inscriptions
+ * violet, Suivi pédagogique sarcelle, Finance vert, RH orange, Établissement
+ * rose, Rapports bleu ciel, Configuration ardoise) : le carré d'icône se
+ * teinte, l'entrée active prend un fond de la même couleur. On repère sa
+ * section à la couleur avant d'avoir lu le libellé. Les variantes de barre
+ * colorée du thème (`data-sidebar=…`) ne sont pas utilisées par l'app ; elles
+ * restent intactes par précaution (`:not([data-sidebar])`). */
+.gls-nav-accent-0 { --gls-nav: #3d5ee1; --gls-nav-rgb: 61, 94, 225; }
+.gls-nav-accent-1 { --gls-nav: #7c5cfc; --gls-nav-rgb: 124, 92, 252; }
+.gls-nav-accent-2 { --gls-nav: #0f9aa6; --gls-nav-rgb: 15, 154, 166; }
+.gls-nav-accent-3 { --gls-nav: #16a34a; --gls-nav-rgb: 22, 163, 74; }
+.gls-nav-accent-4 { --gls-nav: #ea6a0c; --gls-nav-rgb: 234, 106, 12; }
+.gls-nav-accent-5 { --gls-nav: #db2777; --gls-nav-rgb: 219, 39, 119; }
+.gls-nav-accent-6 { --gls-nav: #0284c7; --gls-nav-rgb: 2, 132, 199; }
+.gls-nav-accent-7 { --gls-nav: #52607a; --gls-nav-rgb: 82, 96, 122; }
+
+html:not([data-sidebar]) .sidebar .sidebar-menu > ul > li[class*='gls-nav-accent-'] .submenu-hdr span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+html:not([data-sidebar]) .sidebar .sidebar-menu > ul > li[class*='gls-nav-accent-'] .submenu-hdr span::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--gls-nav);
+}
+
+html:not([data-sidebar]) .sidebar .sidebar-menu > ul > li[class*='gls-nav-accent-'] ul li a i {
+    background: rgba(var(--gls-nav-rgb), 0.12);
+    color: var(--gls-nav);
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+html:not([data-sidebar]) .sidebar .sidebar-menu > ul > li[class*='gls-nav-accent-'] ul li a {
+    border-radius: 8px;
+    transition: background-color 0.15s ease;
+}
+
+html:not([data-sidebar]) .sidebar .sidebar-menu > ul > li[class*='gls-nav-accent-'] ul li a:hover {
+    background: rgba(var(--gls-nav-rgb), 0.07);
+}
+
+html:not([data-sidebar]) .sidebar .sidebar-menu > ul > li[class*='gls-nav-accent-'] ul li.active a {
+    background: rgba(var(--gls-nav-rgb), 0.12);
+    box-shadow: inset 3px 0 0 var(--gls-nav);
+}
+
+html:not([data-sidebar])[dir='rtl'] .sidebar .sidebar-menu > ul > li[class*='gls-nav-accent-'] ul li.active a {
+    box-shadow: inset -3px 0 0 var(--gls-nav);
+}
+
+html:not([data-sidebar]) .sidebar .sidebar-menu > ul > li[class*='gls-nav-accent-'] ul li.active a i {
+    background: var(--gls-nav);
+    color: #fff;
+}
+
+html:not([data-sidebar]) .sidebar .sidebar-menu > ul > li[class*='gls-nav-accent-'] ul li.active a span {
+    color: var(--gls-nav);
+}
+
+/* --- Barres de défilement fines ------------------------------------------- */
+.table-responsive,
+.sidebar-inner,
+.modal-body {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(var(--gls-brand-rgb), 0.35) transparent;
+}
+
+/* --- Mode sombre ----------------------------------------------------------
+ * Mêmes accents, éclaircis pour rester lisibles sur #131022 ; les fonds
+ * teintés montent un peu en opacité (une teinte à 5 % disparaît sur du
+ * sombre). */
+html[data-theme='dark'] {
+    --gls-surface-line: #231d40;
+    --gls-thead-bg: #1c1838;
+    --gls-thead-text: #e9e7f5;
+    --gls-shadow-card: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+html[data-theme='dark'] .gls-page-header .breadcrumb-item a {
+    color: #9aa8e6;
+}
+
+html[data-theme='dark'] .gls-page-header .breadcrumb-item.active,
+html[data-theme='dark'] .gls-page-header .breadcrumb-item a:hover {
+    color: #8fa3ff;
+}
+
+html[data-theme='dark'] .gls-filter-bar {
+    background: linear-gradient(135deg, rgba(143, 163, 255, 0.07), rgba(15, 163, 177, 0.05));
+    border-color: rgba(143, 163, 255, 0.16);
+}
+
+html[data-theme='dark'] .table > thead.thead-light > tr > th,
+html[data-theme='dark'] .table > thead.table-light > tr > th {
+    border-bottom-color: rgba(143, 163, 255, 0.3);
+}
+
+html[data-theme='dark'] .table-hover > tbody > tr:hover > * {
+    --bs-table-bg-state: rgba(143, 163, 255, 0.08);
+}
+
+html[data-theme='dark'] .gls-row-view {
+    background-color: rgba(143, 163, 255, 0.14) !important;
+    color: #9fb0ff !important;
+}
+
+html[data-theme='dark'] .gls-row-more {
+    background-color: rgba(167, 139, 250, 0.14) !important;
+    color: #c4b5fd !important;
+}
+
+html[data-theme='dark'] .gls-row-view:hover,
+html[data-theme='dark'] .gls-row-view:focus-visible {
+    background-color: var(--gls-brand) !important;
+    color: #fff !important;
+}
+
+html[data-theme='dark'] .gls-row-more:hover,
+html[data-theme='dark'] .gls-row-more:focus-visible,
+html[data-theme='dark'] .gls-row-more[aria-expanded='true'] {
+    background-color: var(--gls-violet) !important;
+    color: #fff !important;
+}
+
+html[data-theme='dark'] .dropdown-menu .dropdown-item:hover,
+html[data-theme='dark'] .dropdown-menu .dropdown-item:focus {
+    background-color: rgba(143, 163, 255, 0.1);
+}
+
+html[data-theme='dark'] .dropdown-menu .dropdown-item > i.ti {
+    color: #8fa3ff;
+}
+
+html[data-theme='dark'] .dropdown-menu .dropdown-item > i:is(.ti-edit, .ti-pencil, .ti-edit-circle, .ti-writing, .ti-calendar-event, .ti-calendar-due) { color: #fbbf24; }
+html[data-theme='dark'] .dropdown-menu .dropdown-item > i:is(.ti-trash, .ti-trash-x, .ti-ban, .ti-x, .ti-circle-x, .ti-square-x, .ti-arrow-back-up) { color: #fb7185; }
+html[data-theme='dark'] .dropdown-menu .dropdown-item > i:is(.ti-eye, .ti-info-circle, .ti-file-text, .ti-list-details) { color: #60a5fa; }
+html[data-theme='dark'] .dropdown-menu .dropdown-item > i:is(.ti-printer, .ti-download, .ti-file-download, .ti-file-type-pdf, .ti-brand-whatsapp, .ti-send) { color: #2dd4bf; }
+html[data-theme='dark'] .dropdown-menu .dropdown-item > i:is(.ti-cash, .ti-coin, .ti-coins, .ti-wallet, .ti-receipt, .ti-currency-dollar, .ti-check, .ti-circle-check, .ti-building-bank) { color: #4ade80; }
+html[data-theme='dark'] .dropdown-menu .dropdown-item > i:is(.ti-arrows-exchange, .ti-transfer, .ti-switch-horizontal, .ti-arrows-right-left, .ti-arrow-right, .ti-replace, .ti-git-merge) { color: #a78bfa; }
+
+html[data-theme='dark'] .dropdown-menu .dropdown-item.text-danger > i {
+    color: inherit;
+}
+
+html[data-theme='dark'] .nav-tabs .nav-link:not(.active):not(.disabled):hover {
+    background-color: rgba(143, 163, 255, 0.08);
+    color: #9fb0ff;
+}
+
+html[data-theme='dark'] .nav-tabs .nav-link > i {
+    color: #8a93b8;
+}
+
+html[data-theme='dark'] .nav-tabs .nav-link.active {
+    box-shadow: inset 0 3px 0 #8fa3ff;
+}
+
+html[data-theme='dark'] .nav-tabs .nav-link.active > i,
+html[data-theme='dark'] .nav-tabs .nav-link:hover > i {
+    color: #9fb0ff;
+}
+
+html[data-theme='dark'] .form-control:focus,
+html[data-theme='dark'] .form-select:focus {
+    border-color: #5b6fd6;
+    box-shadow: 0 0 0 0.2rem rgba(143, 163, 255, 0.18);
+}
+
+html[data-theme='dark'] .pagination .page-item:not(.active):not(.disabled) .page-link:hover {
+    background-color: rgba(143, 163, 255, 0.12);
+    color: #9fb0ff;
+}
+
+html[data-theme='dark'] .modal-content {
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
+html[data-theme='dark'] .modal .modal-header {
+    background: linear-gradient(135deg, rgba(143, 163, 255, 0.12), rgba(167, 139, 250, 0.08));
+    border-bottom-color: rgba(143, 163, 255, 0.18);
+}
+
+html[data-theme='dark'] .modal .modal-footer {
+    background: #17132b;
+}
+
+html[data-theme='dark'] .modal-backdrop.show {
+    background-color: #000;
+    opacity: 0.6;
+}
+
+html[data-theme='dark'] .gls-stat-card {
+    background-image: radial-gradient(circle at 100% 0%, rgba(var(--gls-stat-rgb), 0.2), transparent 55%);
+    border-color: rgba(var(--gls-stat-rgb), 0.22) !important;
+}
+
+html[data-theme='dark'] .gls-stat-card .gls-stat-icon {
+    box-shadow: 0 6px 16px rgba(var(--gls-stat-rgb), 0.28);
+}
+
+html[data-theme='dark'] .gls-empty-icon > i {
+    color: #9fb0ff !important;
+}
+
+html[data-theme='dark'] .gls-page-header .page-title::before,
+html[data-theme='dark'] .modal .modal-title::before {
+    background: linear-gradient(180deg, #8fa3ff, #a78bfa);
+}
+
+html[data-theme='dark']:not([data-sidebar]) .sidebar .sidebar-menu > ul > li[class*='gls-nav-accent-'] ul li a i {
+    background: rgba(var(--gls-nav-rgb), 0.2);
+    color: color-mix(in srgb, var(--gls-nav) 65%, #fff);
+}
+
+html[data-theme='dark']:not([data-sidebar]) .sidebar .sidebar-menu > ul > li[class*='gls-nav-accent-'] ul li a:hover {
+    background: rgba(var(--gls-nav-rgb), 0.12);
+}
+
+html[data-theme='dark']:not([data-sidebar]) .sidebar .sidebar-menu > ul > li[class*='gls-nav-accent-'] ul li.active a {
+    background: rgba(var(--gls-nav-rgb), 0.2);
+}
+
+html[data-theme='dark']:not([data-sidebar]) .sidebar .sidebar-menu > ul > li[class*='gls-nav-accent-'] ul li.active a i {
+    background: var(--gls-nav);
+    color: #fff;
+}
+
+html[data-theme='dark']:not([data-sidebar]) .sidebar .sidebar-menu > ul > li[class*='gls-nav-accent-'] ul li.active a span {
+    color: color-mix(in srgb, var(--gls-nav) 55%, #fff);
+}
+
+html[data-theme='dark'] .table-responsive,
+html[data-theme='dark'] .sidebar-inner,
+html[data-theme='dark'] .modal-body {
+    scrollbar-color: rgba(143, 163, 255, 0.35) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .btn,
+    .gls-row-view,
+    .gls-row-more,
+    .nav-tabs .nav-link,
+    .pagination .page-link {
+        transition: none;
+    }
+
+    .btn:hover,
+    .gls-row-view:hover {
+        transform: none !important;
+    }
+}

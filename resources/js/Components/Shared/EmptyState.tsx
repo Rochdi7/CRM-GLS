@@ -10,7 +10,7 @@ interface EmptyStateProps extends PropsWithChildren {
 export default function EmptyState({ title, message, icon = 'ti ti-database-off', children }: EmptyStateProps) {
     return (
         <div className="text-center py-5">
-            <span className="avatar avatar-xl bg-light rounded-circle mb-3 d-inline-flex align-items-center justify-content-center">
+            <span className="avatar avatar-xl bg-light rounded-circle mb-3 d-inline-flex align-items-center justify-content-center gls-empty-icon">
                 <i className={`${icon} fs-24 text-muted`} />
             </span>
             <h5 className="mb-1">{title}</h5>

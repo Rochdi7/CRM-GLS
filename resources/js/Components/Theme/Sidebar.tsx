@@ -46,7 +46,7 @@ export default function Sidebar({ permissions, isSuperAdmin, mobileOpen, onNavig
             <div className="sidebar-inner slimscroll">
                 <div id="sidebar-menu" className="sidebar-menu">
                     <ul>
-                        {backofficeNavigation.map((group) => {
+                        {backofficeNavigation.map((group, groupIndex) => {
                             const visibleItems = group.items.filter((item) =>
                                 hasAnyPermission(permissions, isSuperAdmin, item.permissions),
                             );
@@ -56,7 +56,9 @@ export default function Sidebar({ permissions, isSuperAdmin, mobileOpen, onNavig
                             }
 
                             return (
-                                <li key={group.label}>
+                                // L'accent suit la place de la section dans la CONFIG, jamais son
+                                // rang affiché : une section masquée ne recolore pas les suivantes.
+                                <li key={group.label} className={`gls-nav-accent-${groupIndex % 8}`}>
                                     <h6 className="submenu-hdr">
                                         <span>{group.label}</span>
                                     </h6>

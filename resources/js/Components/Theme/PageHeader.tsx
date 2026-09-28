@@ -10,7 +10,7 @@ interface PageHeaderProps extends PropsWithChildren {
 /** Markup matches components/backoffice/layout/page-header.blade.php exactly. `children` fills the actions slot. */
 export default function PageHeader({ title, breadcrumbs = [], children }: PageHeaderProps) {
     return (
-        <div className="d-md-flex d-block align-items-center justify-content-between mb-3">
+        <div className="d-md-flex d-block align-items-center justify-content-between mb-3 gls-page-header">
             <div className="my-auto mb-2">
                 <h3 className="page-title mb-1">{title}</h3>
                 {breadcrumbs.length > 0 && <Breadcrumbs items={breadcrumbs} />}
