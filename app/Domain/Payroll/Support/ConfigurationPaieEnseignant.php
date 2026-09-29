@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Payroll\Support;
 
 use App\Models\Employee;
+use App\Models\Group;
 use Illuminate\Support\Carbon;
 
 /**
@@ -22,6 +23,10 @@ use Illuminate\Support\Carbon;
  *  - mode `gls` / `horaire` sans son taux ;
  *  - mode `win_win` sans ligne pour le MOIS demandé — on ne prend jamais le
  *    mois voisin ni le taux GLS à la place.
+ *
+ * Win-win PAR GROUPE (29/09/2026) : la ligne du mois portant CE groupe prime ;
+ * à défaut, la ligne « Tous les groupes » (group_id NULL) du même mois. Le
+ * montant d'un AUTRE groupe n'est jamais emprunté.
  */
 final class ConfigurationPaieEnseignant
 {
@@ -33,7 +38,7 @@ final class ConfigurationPaieEnseignant
         public readonly ?string $probleme = null,
     ) {}
 
-    public static function pour(Employee $enseignant, Carbon $mois): self
+    public static function pour(Employee $enseignant, Carbon $mois, ?Group $group = null): self
     {
         $mode = $enseignant->mode_paiement_prof;
 
@@ -50,7 +55,7 @@ final class ConfigurationPaieEnseignant
         return match ($mode) {
             Employee::MODE_PAIEMENT_HORAIRE => self::horaire($enseignant),
             Employee::MODE_PAIEMENT_GLS => self::gls($enseignant),
-            Employee::MODE_PAIEMENT_WIN_WIN => self::winWin($enseignant, $mois),
+            Employee::MODE_PAIEMENT_WIN_WIN => self::winWin($enseignant, $mois, $group),
         };
     }
 
@@ -77,20 +82,32 @@ final class ConfigurationPaieEnseignant
             : new self(Employee::MODE_PAIEMENT_GLS, 0.0, __('No amount per student is set on :name.', ['name' => $e->nomComplet()]));
     }
 
-    private static function winWin(Employee $e, Carbon $mois): self
+    private static function winWin(Employee $e, Carbon $mois, ?Group $group): self
     {
+        // La ligne du groupe d'abord, la ligne générale ensuite — l'ordre
+        // `group_id NULLS LAST` fait le choix en une requête.
         $ligne = $e->tauxMensuels()
+            ->reorder()
             ->whereDate('mois', $mois->copy()->startOfMonth()->toDateString())
+            ->where(fn ($q) => $q->whereNull('group_id')
+                ->when($group !== null, fn ($q) => $q->orWhere('group_id', $group->id)))
+            ->orderByRaw('group_id NULLS LAST')
             ->first();
 
         if ($ligne === null) {
             return new self(
                 Employee::MODE_PAIEMENT_WIN_WIN,
                 0.0,
-                __('No win-win amount is set on :name for :month - add it in the « Paiement prof » tab.', [
-                    'name' => $e->nomComplet(),
-                    'month' => $mois->locale('fr')->isoFormat('MMMM YYYY'),
-                ]),
+                $group !== null
+                    ? __('No win-win amount is set on :name for :month and the group :group - add it in the « Paiement prof » tab.', [
+                        'name' => $e->nomComplet(),
+                        'month' => $mois->locale('fr')->isoFormat('MMMM YYYY'),
+                        'group' => $group->nom,
+                    ])
+                    : __('No win-win amount is set on :name for :month - add it in the « Paiement prof » tab.', [
+                        'name' => $e->nomComplet(),
+                        'month' => $mois->locale('fr')->isoFormat('MMMM YYYY'),
+                    ]),
             );
         }
 

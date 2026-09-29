@@ -115,6 +115,7 @@ function emptyForm(defaultCountry: string, contextCenterId: number | null): Stud
 export default function StudentsIndex({
     students,
     filters,
+    studentOptions,
     niveauxInteret,
     domaines,
     examenTypes,
@@ -153,6 +154,7 @@ export default function StudentsIndex({
 
     const form = useForm<StudentFormState>(emptyForm(defaultCountry, contextCenterId));
 
+    const studentFilterOptions: SelectOption[] = studentOptions.map((s) => ({ value: s.id, label: s.label }));
     const niveauOptions: SelectOption[] = niveauxInteret.map((n) => ({ value: n, label: n }));
     const domaineOptions: SelectOption[] = domaines.map((d) => ({ value: d, label: d }));
     const examenOptions: SelectOption[] = examenTypes.map((e) => ({ value: e, label: e }));
@@ -416,26 +418,16 @@ export default function StudentsIndex({
                                 placeholder="ex : E95"
                             />
                         </div>
-                        <div style={{ width: 160 }}>
-                            <label className="form-label" htmlFor="stu-f-nom">
-                                Nom
+                        <div style={{ width: 240 }}>
+                            <label className="form-label" htmlFor="stu-f-student">
+                                Étudiant
                             </label>
-                            <FilterTextInput
-                                id="stu-f-nom"
-                                value={filters.nomFilter}
-                                onChange={(value) => reload({ nomFilter: value })}
-                                placeholder="ex : Alaoui"
-                            />
-                        </div>
-                        <div style={{ width: 160 }}>
-                            <label className="form-label" htmlFor="stu-f-prenom">
-                                Prénom
-                            </label>
-                            <FilterTextInput
-                                id="stu-f-prenom"
-                                value={filters.prenomFilter}
-                                onChange={(value) => reload({ prenomFilter: value })}
-                                placeholder="ex : Ahmed"
+                            <SelectField
+                                id="stu-f-student"
+                                options={studentFilterOptions}
+                                placeholder="Choisir un étudiant"
+                                value={filters.studentFilter}
+                                onChange={(event) => reload({ studentFilter: event.target.value })}
                             />
                         </div>
                         <div style={{ width: 160 }}>

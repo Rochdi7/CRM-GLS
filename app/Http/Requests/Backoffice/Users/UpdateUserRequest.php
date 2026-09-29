@@ -28,8 +28,13 @@ final class UpdateUserRequest extends FormRequest
     {
         $userId = $this->route('user')?->id;
 
+        // A login linked to an employee takes its name from the employee
+        // (SynchroniserNomEmploye) — renamed on the Employees screen or in
+        // Profil, never here, or the login and the caisse would diverge.
+        $linked = $this->route('user')?->employee()->exists() ?? false;
+
         return [
-            'name' => ['required', 'string', 'max:255'],
+            'name' => $linked ? ['nullable', 'string', 'max:255'] : ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($userId)],
             'username' => ['nullable', 'string', 'max:255', Rule::unique('users', 'username')->ignore($userId)],
             'is_active' => ['boolean'],

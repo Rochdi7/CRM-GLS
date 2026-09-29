@@ -10,6 +10,8 @@ interface Props {
     tauxHoraire: string;
     montantParEtudiant: string;
     tauxMensuels: TauxMensuelRow[];
+    /** Groupes de l'enseignant (vide à la création : il n'en tient encore aucun). */
+    groupes: SelectOption[];
     errors: Record<string, string | undefined>;
     onModeChange: (mode: ModePaiementProf) => void;
     onTauxHoraireChange: (value: string) => void;
@@ -28,7 +30,9 @@ interface Props {
  *                   mois (22 max) et multiplié par les présences.
  *  - Win-win      : même formule, mais le montant par étudiant change
  *                   CHAQUE MOIS (400, 420, 450… jusqu'à 600) — un tableau
- *                   mois → montant, saisi ici à la main.
+ *                   mois → montant, saisi ici à la main. Chaque ligne
+ *                   peut viser UN groupe (29/09/2026) : elle prime alors
+ *                   sur la ligne « Tous les groupes » du même mois.
  *
  * Le contrat (quel champ est requis pour quel mode) est tenu côté serveur
  * par PaiementProfEnseignantRules ; ce composant ne fait que le refléter.
@@ -38,6 +42,7 @@ export default function PaiementProfTab({
     tauxHoraire,
     montantParEtudiant,
     tauxMensuels,
+    groupes,
     errors,
     onModeChange,
     onTauxHoraireChange,
@@ -50,23 +55,28 @@ export default function PaiementProfTab({
         { value: 'win_win', label: t('Win-win system') },
     ];
 
-    function moisSuivant(): string {
-        // Propose le mois qui suit le dernier saisi — la progression win-win
-        // se fait mois après mois, l'écran n'a pas à le redemander.
-        const dernier = [...tauxMensuels].sort((a, b) => a.mois.localeCompare(b.mois)).at(-1);
-        const base = dernier ? new Date(dernier.mois + '-01T00:00:00') : new Date();
-        if (dernier) {
-            base.setMonth(base.getMonth() + 1);
-        }
-
-        return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}`;
-    }
+    const libelleGroupe = (id: string) =>
+        id === '' ? t('All groups') : (groupes.find((g) => String(g.value) === id)?.label ?? `#${id}`);
 
     function ajouterMois() {
-        const dernier = [...tauxMensuels].sort((a, b) => a.mois.localeCompare(b.mois)).at(-1);
+        // Propose le mois qui suit la dernière ligne saisie, pour le MÊME
+        // groupe — la progression win-win se fait mois après mois, groupe par
+        // groupe ; l'écran n'a pas à le redemander.
+        const derniere = tauxMensuels.at(-1);
+        const groupId = derniere?.group_id ?? '';
+        const dernierDuGroupe = tauxMensuels
+            .filter((row) => row.group_id === groupId)
+            .sort((a, b) => a.mois.localeCompare(b.mois))
+            .at(-1);
+        const base = dernierDuGroupe ? new Date(dernierDuGroupe.mois + '-01T00:00:00') : new Date();
+        if (dernierDuGroupe) {
+            base.setMonth(base.getMonth() + 1);
+        }
+        const mois = `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}`;
+
         onTauxMensuelsChange([
             ...tauxMensuels,
-            { mois: moisSuivant(), montant_par_etudiant: dernier?.montant_par_etudiant ?? '' },
+            { group_id: groupId, mois, montant_par_etudiant: dernierDuGroupe?.montant_par_etudiant ?? '' },
         ]);
     }
 
@@ -78,9 +88,19 @@ export default function PaiementProfTab({
         onTauxMensuelsChange(tauxMensuels.filter((_, i) => i !== index));
     }
 
+    // Groupées par groupe (« Tous les groupes » en tête), puis par mois.
     const lignesTriees = tauxMensuels
         .map((row, index) => ({ row, index }))
-        .sort((a, b) => a.row.mois.localeCompare(b.row.mois));
+        .sort((a, b) => {
+            if (a.row.group_id !== b.row.group_id) {
+                if (a.row.group_id === '') return -1;
+                if (b.row.group_id === '') return 1;
+
+                return libelleGroupe(a.row.group_id).localeCompare(libelleGroupe(b.row.group_id));
+            }
+
+            return a.row.mois.localeCompare(b.row.mois);
+        });
 
     return (
         <div>
@@ -142,10 +162,16 @@ export default function PaiementProfTab({
                 <>
                     {errors.taux_mensuels && <div className="text-danger fs-13 mb-2">{errors.taux_mensuels}</div>}
 
-                    <div className="table-responsive" style={{ maxWidth: 560 }}>
+                    <p className="text-muted fs-13 mb-2">
+                        <i className="ti ti-info-circle me-1" />
+                        {t('A row for a specific group takes priority over the « All groups » row of the same month.')}
+                    </p>
+
+                    <div className="table-responsive" style={{ maxWidth: 860 }}>
                         <table className="table table-sm align-middle mb-2">
                             <thead className="thead-light">
                                 <tr>
+                                    <th style={{ width: 300 }}>{t('Group')}</th>
                                     <th style={{ width: 220 }}>{t('Month')}</th>
                                     <th className="text-end">{t('Amount per student (MAD)')}</th>
                                     {/* Colonne d'action : juste la largeur du bouton. */}
@@ -155,17 +181,35 @@ export default function PaiementProfTab({
                             <tbody>
                                 {lignesTriees.length === 0 && (
                                     <tr>
-                                        <td colSpan={3} className="text-muted text-center py-3">
+                                        <td colSpan={4} className="text-muted text-center py-3">
                                             {t('No month entered yet.')}
                                         </td>
                                     </tr>
                                 )}
                                 {lignesTriees.map(({ row, index }) => {
                                     const erreurMois = errors[`taux_mensuels.${index}.mois`];
+                                    const erreurGroupe = errors[`taux_mensuels.${index}.group_id`];
                                     const erreurMontant = errors[`taux_mensuels.${index}.montant_par_etudiant`];
 
                                     return (
                                         <tr key={index}>
+                                            <td>
+                                                <select
+                                                    className={`form-select form-select-sm${
+                                                        erreurGroupe ? ' is-invalid' : ''
+                                                    }`}
+                                                    value={row.group_id}
+                                                    onChange={(event) => majLigne(index, 'group_id', event.target.value)}
+                                                    aria-label={t('Group')}
+                                                >
+                                                    <option value="">{t('All groups')}</option>
+                                                    {groupes.map((g) => (
+                                                        <option key={g.value} value={String(g.value)}>
+                                                            {g.label}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </td>
                                             <td>
                                                 {/* Le champ « month » natif affiche DÉJÀ « septembre
                                                     2026 » : répéter le libellé en dessous doublait la
@@ -216,6 +260,7 @@ export default function PaiementProfTab({
                                     grandir une ligne et désalignerait la suivante. */}
                                 {lignesTriees.map(({ index }) => {
                                     const messages = [
+                                        errors[`taux_mensuels.${index}.group_id`],
                                         errors[`taux_mensuels.${index}.mois`],
                                         errors[`taux_mensuels.${index}.montant_par_etudiant`],
                                     ].filter((m): m is string => Boolean(m));
@@ -226,7 +271,7 @@ export default function PaiementProfTab({
 
                                     return (
                                         <tr key={`err-${index}`}>
-                                            <td colSpan={3} className="py-1 border-0">
+                                            <td colSpan={4} className="py-1 border-0">
                                                 <div className="text-danger fs-12">{messages.join(' · ')}</div>
                                             </td>
                                         </tr>

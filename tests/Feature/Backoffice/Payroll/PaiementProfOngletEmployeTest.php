@@ -6,6 +6,7 @@ namespace Tests\Feature\Backoffice\Payroll;
 
 use App\Models\Employee;
 use App\Models\Etablissement;
+use App\Models\Group;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -139,7 +140,57 @@ final class PaiementProfOngletEmployeTest extends TestCase
                     ['mois' => '2025-09', 'montant_par_etudiant' => '420'],
                 ],
             ]))
-            ->assertSessionHasErrors('taux_mensuels.0.mois');
+            ->assertSessionHasErrors('taux_mensuels.1.mois');
+    }
+
+    #[Test]
+    public function the_win_win_table_accepts_one_amount_per_group_and_month(): void
+    {
+        $groupe = Group::factory()->create(['etablissement_id' => $this->centre->id, 'enseignant_id' => $this->prof->id]);
+
+        $this->actingAs($this->admin())
+            ->put("/backoffice/employees/{$this->prof->id}", $this->payload([
+                'mode_paiement_prof' => Employee::MODE_PAIEMENT_WIN_WIN,
+                'taux_mensuels' => [
+                    ['mois' => '2025-09', 'montant_par_etudiant' => '400', 'group_id' => ''],
+                    ['mois' => '2025-09', 'montant_par_etudiant' => '480', 'group_id' => (string) $groupe->id],
+                ],
+            ]))
+            ->assertSessionHasNoErrors()
+            ->assertRedirect();
+
+        $this->assertSame(
+            ['tous' => '400.00', $groupe->id => '480.00'],
+            $this->prof->tauxMensuels()->get()
+                ->mapWithKeys(fn ($t) => [$t->group_id ?? 'tous' => (string) $t->montant_par_etudiant])->all(),
+        );
+
+        // Le même (groupe, mois) deux fois est refusé.
+        $this->actingAs($this->admin())
+            ->put("/backoffice/employees/{$this->prof->id}", $this->payload([
+                'mode_paiement_prof' => Employee::MODE_PAIEMENT_WIN_WIN,
+                'taux_mensuels' => [
+                    ['mois' => '2025-09', 'montant_par_etudiant' => '480', 'group_id' => (string) $groupe->id],
+                    ['mois' => '2025-09', 'montant_par_etudiant' => '500', 'group_id' => (string) $groupe->id],
+                ],
+            ]))
+            ->assertSessionHasErrors('taux_mensuels.1.mois');
+    }
+
+    #[Test]
+    public function a_win_win_amount_cannot_target_a_group_of_another_teacher(): void
+    {
+        $collegue = Employee::factory()->create(['categorie' => Employee::CATEGORIE_ENSEIGNANT, 'etablissement_id' => $this->centre->id]);
+        $groupe = Group::factory()->create(['etablissement_id' => $this->centre->id, 'enseignant_id' => $collegue->id]);
+
+        $this->actingAs($this->admin())
+            ->put("/backoffice/employees/{$this->prof->id}", $this->payload([
+                'mode_paiement_prof' => Employee::MODE_PAIEMENT_WIN_WIN,
+                'taux_mensuels' => [
+                    ['mois' => '2025-09', 'montant_par_etudiant' => '480', 'group_id' => (string) $groupe->id],
+                ],
+            ]))
+            ->assertSessionHasErrors('taux_mensuels.0.group_id');
     }
 
     #[Test]

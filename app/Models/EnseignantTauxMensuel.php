@@ -19,6 +19,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * le taux GLS à la place, sinon l'enseignant est payé sur un chiffre que
  * personne n'a décidé.
  *
+ * `group_id` (29/09/2026) : NULL = le montant vaut pour TOUS les groupes de
+ * l'enseignant ; renseigné = il ne vaut que pour ce groupe et PRIME sur la
+ * ligne générale du même mois. Un même prof peut ainsi toucher 400 DH par
+ * étudiant sur un groupe et 450 DH sur un autre, le même mois.
+ *
  * `mois` est TOUJOURS le 1er du mois (normalisé à l'écriture) : une date
  * plutôt qu'un couple (mois, année), pour trier et borner en SQL.
  *
@@ -31,7 +36,7 @@ class EnseignantTauxMensuel extends Model
 
     protected $table = 'enseignant_taux_mensuels';
 
-    protected $fillable = ['employee_id', 'mois', 'montant_par_etudiant'];
+    protected $fillable = ['employee_id', 'group_id', 'mois', 'montant_par_etudiant'];
 
     protected function casts(): array
     {
@@ -44,5 +49,10 @@ class EnseignantTauxMensuel extends Model
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    public function group(): BelongsTo
+    {
+        return $this->belongsTo(Group::class);
     }
 }

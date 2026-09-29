@@ -231,11 +231,17 @@ export default function UsersIndex({ users, filters, centerLocked }: UsersIndexP
                             <FormField
                                 id="u-name"
                                 label="Nom"
-                                required
                                 value={form.data.name}
                                 onChange={(event) => form.setData('name', event.target.value)}
                                 error={form.errors.name}
+                                disabled={editingUser?.employee != null}
+                                required={editingUser?.employee == null}
                             />
+                            {editingUser?.employee != null && (
+                                <div className="form-text mt-n2 mb-3">
+                                    Le nom se modifie sur la fiche employé (ou dans Profil) ; le compte et la caisse suivent.
+                                </div>
+                            )}
                         </div>
                         <div className="col-md-6">
                             <FormField

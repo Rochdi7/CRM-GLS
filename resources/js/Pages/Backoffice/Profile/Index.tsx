@@ -8,6 +8,8 @@ import PhoneField from '@/Components/Forms/PhoneField';
 import SubmitButton from '@/Components/Forms/SubmitButton';
 interface EmployeeSummary {
     reference: string;
+    prenom: string;
+    nom: string;
     categorie: string;
     sexe: string | null;
     email: string | null;
@@ -60,6 +62,8 @@ function SexeIcon({ sexe }: { sexe: string | null }) {
 export default function ProfileIndex({ user, employee, phonePays, telephone, whatsapp }: ProfileIndexProps) {
     const profileForm = useForm({
         name: user.name,
+        prenom: employee?.prenom ?? '',
+        nom: employee?.nom ?? '',
         email: user.email,
         phone_pays: phonePays,
         telephone,
@@ -262,17 +266,47 @@ export default function ProfileIndex({ user, employee, phonePays, telephone, wha
                     <Card title="Informations du profil">
                         <form onSubmit={submitProfile}>
                             <div className="row">
-                                <div className="col-md-6">
-                                    <FormField
-                                        id="p-name"
-                                        label="Nom"
-                                        required
-                                        value={profileForm.data.name}
-                                        onChange={(event) => profileForm.setData('name', event.target.value)}
-                                        error={profileForm.errors.name}
-                                        placeholder="ex : Mohammed Rafik"
-                                    />
-                                </div>
+                                {employee ? (
+                                    <>
+                                        {/* Linked employee: renaming here renames the
+                                            employee, and the server re-copies the name
+                                            onto the login AND the caisse. */}
+                                        <div className="col-md-6">
+                                            <FormField
+                                                id="p-prenom"
+                                                label="Prénom"
+                                                required
+                                                value={profileForm.data.prenom}
+                                                onChange={(event) => profileForm.setData('prenom', event.target.value)}
+                                                error={profileForm.errors.prenom}
+                                                placeholder="ex : Mohammed"
+                                            />
+                                        </div>
+                                        <div className="col-md-6">
+                                            <FormField
+                                                id="p-nom"
+                                                label="Nom"
+                                                required
+                                                value={profileForm.data.nom}
+                                                onChange={(event) => profileForm.setData('nom', event.target.value)}
+                                                error={profileForm.errors.nom}
+                                                placeholder="ex : Rafik"
+                                            />
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="col-md-6">
+                                        <FormField
+                                            id="p-name"
+                                            label="Nom"
+                                            required
+                                            value={profileForm.data.name}
+                                            onChange={(event) => profileForm.setData('name', event.target.value)}
+                                            error={profileForm.errors.name}
+                                            placeholder="ex : Mohammed Rafik"
+                                        />
+                                    </div>
+                                )}
                                 <div className="col-md-6">
                                     <FormField
                                         id="p-email"

@@ -7,6 +7,7 @@ import SeancesAgenda from '@/Components/Dashboard/SeancesAgenda';
 import SeancesCalendar, { isoDate } from '@/Components/Dashboard/SeancesCalendar';
 import StatsGrid from '@/Components/Dashboard/StatsGrid';
 import EspaceEnseignant from '@/Components/Dashboard/EspaceEnseignant';
+import GroupesAVenir from '@/Components/Dashboard/GroupesAVenir';
 import { t } from '@/Lib/i18n';
 import type { DashboardPageProps, NouvellesInscriptionsDuree, SharedProps } from '@/Types';
 
@@ -58,7 +59,7 @@ const TEACHER_ACTIONS: QuickAction[] = [
  * fees chart (GetAnnualFraisSummary). Everything follows the top-bar
  * année/centre switcher server-side; nothing here re-filters client-side.
  */
-export default function DashboardIndex({ porteeEnseignant, stats, annualFrais, annualFraisPeriode, seancesCalendar, nouvellesInscriptions, espaceEnseignant }: DashboardPageProps) {
+export default function DashboardIndex({ porteeEnseignant, stats, annualFrais, annualFraisPeriode, seancesCalendar, nouvellesInscriptions, espaceEnseignant, groupesAVenir }: DashboardPageProps) {
     // auth.user is a shared prop (HandleInertiaRequests) — no page prop needed.
     const { auth } = usePage<SharedProps>().props;
     const [selectedDay, setSelectedDay] = useState<string>(() => isoDate(new Date()));
@@ -201,6 +202,15 @@ export default function DashboardIndex({ porteeEnseignant, stats, annualFrais, a
 
             {/* Portée enseignant : le serveur n'envoie aucun compteur du centre. */}
             {!porteeEnseignant && <StatsGrid stats={stats} />}
+
+            {/* Groupes « En inscription » — NULL sans groups.view (gate serveur). */}
+            {groupesAVenir && (
+                <div className="row">
+                    <div className="col-md-12">
+                        <GroupesAVenir data={groupesAVenir} />
+                    </div>
+                </div>
+            )}
 
             <div className="row">
                 <div className="col-xl-8 d-flex">

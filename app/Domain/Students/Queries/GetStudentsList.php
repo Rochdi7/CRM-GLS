@@ -40,8 +40,7 @@ final class GetStudentsList
         string $ageSort = '',
         int $perPage = self::DEFAULT_PER_PAGE,
         string $referenceFilter = '',
-        string $nomFilter = '',
-        string $prenomFilter = '',
+        string $studentFilter = '',
         string $telephoneFilter = '',
         string $inscriptionFilter = '',
         string $groupeFilter = '',
@@ -91,8 +90,9 @@ final class GetStudentsList
                 });
             })
             ->when($referenceFilter !== '', fn ($q) => $q->where('reference', 'ilike', "%{$referenceFilter}%"))
-            ->when($nomFilter !== '', fn ($q) => $q->where('nom', 'ilike', "%{$nomFilter}%"))
-            ->when($prenomFilter !== '', fn ($q) => $q->where('prenom', 'ilike', "%{$prenomFilter}%"))
+            // Filtre « Étudiant » — un id choisi dans le dropdown, comme sur
+            // Inscriptions (studentOptions() ci-dessous en sert la liste).
+            ->when($studentFilter !== '', fn ($q) => $q->whereKey((int) $studentFilter))
             ->when($telephoneFilter !== '', fn ($q) => $q->where(fn ($sub) => $sub
                 ->where('telephone', 'ilike', "%{$telephoneFilter}%")
                 ->orWhere('whatsapp', 'ilike', "%{$telephoneFilter}%")))
@@ -188,5 +188,31 @@ final class GetStudentsList
         ]);
 
         return $students;
+    }
+
+    /**
+     * Options of the « Étudiant » filter dropdown — the same label format as
+     * the Inscriptions filter (« Prénom Nom (ETU-…) ») and the SAME scoping
+     * as the list above (centre reach + active centre), so the dropdown never
+     * offers a student the table would refuse to show. « Transféré » fiches
+     * stay listed: the table lists them too.
+     *
+     * @return list<array{id: int, label: string}>
+     */
+    public function studentOptions(User $user): array
+    {
+        return Student::query()
+            ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+            ->tap(fn ($q) => PorteeEnseignant::scopeStudents($q, $user))
+            ->tap(function ($q): void {
+                if (! $this->context->isAllCenters()) {
+                    $q->where(fn ($sub) => $sub->whereNull('etablissement_id')->orWhere('etablissement_id', $this->context->etablissementId()));
+                }
+            })
+            ->orderBy('nom')
+            ->orderBy('prenom')
+            ->get(['id', 'nom', 'prenom', 'reference'])
+            ->map(fn (Student $s): array => ['id' => $s->id, 'label' => "{$s->nomComplet()} ({$s->reference})"])
+            ->all();
     }
 }

@@ -460,3 +460,24 @@ END $$;
 -- La table `student_transfers` elle-même : voir la migration create_* (aucun
 -- rattrapage nécessaire, c'est une table neuve).
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 29/09/2026 — Win-win PAR GROUPE : `enseignant_taux_mensuels.group_id`
+-- (NULL = tous les groupes, prioritaire quand renseigné).
+--
+-- ⚠ RIEN À FAIRE À LA MAIN : la migration additive
+-- `2026_09_29_100000_add_group_id_to_enseignant_taux_mensuels_table.php` est
+-- jouée par le `php artisan migrate --force` du déploiement. SQL conservé
+-- pour mémoire (idempotent).
+ALTER TABLE enseignant_taux_mensuels ADD COLUMN IF NOT EXISTS group_id bigint NULL;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'enseignant_taux_mensuels_group_id_foreign') THEN
+    ALTER TABLE enseignant_taux_mensuels ADD CONSTRAINT enseignant_taux_mensuels_group_id_foreign
+      FOREIGN KEY (group_id) REFERENCES groups (id) ON DELETE CASCADE;
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS enseignant_taux_mensuels_group_id_index ON enseignant_taux_mensuels (group_id);
+ALTER TABLE enseignant_taux_mensuels DROP CONSTRAINT IF EXISTS enseignant_taux_mensuels_unique;
+CREATE UNIQUE INDEX IF NOT EXISTS enseignant_taux_mensuels_groupe_unique
+  ON enseignant_taux_mensuels (employee_id, group_id, mois) NULLS NOT DISTINCT;
+-- ---------------------------------------------------------------------------

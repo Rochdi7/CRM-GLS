@@ -9,6 +9,7 @@ use App\Domain\Payroll\Queries\GetEspaceEnseignant;
 use App\Domain\Reports\DTOs\DashboardStatsData;
 use App\Domain\Reports\Actions\GetAnnualFraisSummary;
 use App\Domain\Reports\Actions\GetDashboardStats;
+use App\Domain\Reports\Actions\GetGroupesAVenir;
 use App\Domain\Reports\Actions\GetNouvellesInscriptionsChart;
 use App\Domain\Reports\Actions\GetSeancesCalendar;
 use App\Http\Controllers\Controller;
@@ -26,6 +27,7 @@ final class DashboardController extends Controller
         GetSeancesCalendar $getSeancesCalendar,
         GetNouvellesInscriptionsChart $getNouvellesInscriptions,
         GetEspaceEnseignant $getEspaceEnseignant,
+        GetGroupesAVenir $getGroupesAVenir,
         CurrentContext $context,
     ): Response {
         // "Résumé des séances" calendar month — the chart itself follows the
@@ -76,6 +78,13 @@ final class DashboardController extends Controller
             'annualFraisPeriode' => fn () => $restreint ? '' : $getAnnualFraisSummary->periodeLabel(),
             'seancesCalendar' => fn () => $getSeancesCalendar($context, $calMonth, $user),
             'nouvellesInscriptions' => fn () => $restreint ? null : $getNouvellesInscriptions($duree),
+            // « Groupes à venir » (29/09/2026) — groupes « En inscription » du
+            // contexte actif. Servi à qui lit la liste des groupes
+            // (`groups.view`), jamais à un prof restreint : ses groupes sont
+            // dans son espace.
+            'groupesAVenir' => fn () => ! $restreint && $user?->can('groups.view')
+                ? $getGroupesAVenir()
+                : null,
             'espaceEnseignant' => fn () => $estEnseignant
                 ? $getEspaceEnseignant($employee, $espaceMois !== '' ? $espaceMois : null)
                 : null,

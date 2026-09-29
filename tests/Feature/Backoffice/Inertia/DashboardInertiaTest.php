@@ -153,6 +153,52 @@ final class DashboardInertiaTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->where('seancesCalendar.month', now()->format('Y-m')));
     }
 
+    public function test_upcoming_groups_lists_only_groups_open_for_registration_soonest_first(): void
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole(Role::SUPER_ADMIN);
+        $annee = AnneeScolaire::query()->firstOrFail();
+        $rabat = Etablissement::factory()->create();
+        $casa = Etablissement::factory()->create();
+        $base = ['annee_scolaire_id' => $annee->id, 'etablissement_id' => $rabat->id];
+
+        Group::factory()->create($base + ['nom' => 'Tard', 'statut' => Group::STATUT_EN_INSCRIPTION, 'date_debut_formation' => now()->addDays(20)->toDateString(), 'capacite_max' => 10]);
+        Group::factory()->create($base + ['nom' => 'Bientot', 'statut' => Group::STATUT_EN_INSCRIPTION, 'date_debut_formation' => now()->addDays(3)->toDateString()]);
+        Group::factory()->create($base + ['nom' => 'Sans date', 'statut' => Group::STATUT_EN_INSCRIPTION, 'date_debut_formation' => null]);
+        Group::factory()->create($base + ['nom' => 'En cours', 'statut' => Group::STATUT_EN_FORMATION]);
+        Group::factory()->create(['annee_scolaire_id' => $annee->id, 'etablissement_id' => $casa->id, 'nom' => 'Casa', 'statut' => Group::STATUT_EN_INSCRIPTION]);
+
+        // « Tous les centres » : Casa compte, et chaque carte nomme son centre.
+        $this->actingAs($admin)
+            ->get(route('backoffice.dashboard'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('groupesAVenir.total', 4)
+                ->where('groupesAVenir.groupes.0.centre', $rabat->nom_centre)
+            );
+
+        app(\App\Services\Context\CurrentContext::class)->setEtablissement($rabat->id);
+
+        $this->actingAs($admin)
+            ->get(route('backoffice.dashboard'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('groupesAVenir.total', 3)
+                ->where('groupesAVenir.groupes.0.centre', null)
+                ->where('groupesAVenir.groupes.0.nom', 'Bientot')
+                ->where('groupesAVenir.groupes.0.joursAvantDebut', 3)
+                ->where('groupesAVenir.groupes.1.nom', 'Tard')
+                ->where('groupesAVenir.groupes.1.capacite', 10)
+                ->where('groupesAVenir.groupes.2.nom', 'Sans date')
+                ->where('groupesAVenir.groupes.2.joursAvantDebut', null)
+            );
+    }
+
+    public function test_upcoming_groups_is_not_served_without_groups_view(): void
+    {
+        $this->actingAs(User::factory()->create())
+            ->get(route('backoffice.dashboard'))
+            ->assertInertia(fn (Assert $page) => $page->where('groupesAVenir', null));
+    }
+
     public function test_stats_follow_the_selected_center(): void
     {
         $admin = User::factory()->create();

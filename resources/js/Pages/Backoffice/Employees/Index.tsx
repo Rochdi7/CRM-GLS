@@ -877,6 +877,7 @@ export default function EmployeesIndex({
                                     tauxHoraire={form.data.taux_horaire_prof}
                                     montantParEtudiant={form.data.montant_par_etudiant_prof}
                                     tauxMensuels={form.data.taux_mensuels}
+                                    groupes={editingEmployee?.groupesEnseignes ?? []}
                                     errors={form.errors as Record<string, string | undefined>}
                                     onModeChange={(mode) => form.setData('mode_paiement_prof', mode)}
                                     onTauxHoraireChange={(value) => form.setData('taux_horaire_prof', value)}

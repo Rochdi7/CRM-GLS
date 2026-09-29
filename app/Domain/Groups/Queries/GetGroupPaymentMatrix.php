@@ -87,15 +87,25 @@ final class GetGroupPaymentMatrix
         // nothing is due any more — but the note typed on it is still the
         // cashier's explanation of WHY (« bloqué », « reporté »…). It rides
         // per row, keyed by frais, so the grey cell can show it on hover.
-        $notesMasquees = InscriptionFee::query()
+        //
+        // The SAME query also feeds « restaurer »: every retired line, with
+        // or without a note, is offered on its grey cell
+        // (inscriptions.fees.restore — the inscription modal's corbeille).
+        // One query for both, never one per row (§17).
+        $lignesMasquees = InscriptionFee::query()
             ->whereIn('inscription_id', $inscriptions->pluck('id'))
             ->whereNotNull('masque_le')
             ->whereNotNull('frais_id')
-            ->whereRaw("btrim(note) <> ''")
-            ->get(['inscription_id', 'frais_id', 'note'])
+            ->get(['id', 'inscription_id', 'frais_id', 'note'])
             ->groupBy('inscription_id');
 
-        $rows = $this->rows($inscriptions, $feesByInscription, $columnKeys, $notesMasquees);
+        $notesMasquees = $lignesMasquees
+            ->map(fn (Collection $lignes): Collection => $lignes
+                ->filter(fn (InscriptionFee $fee): bool => trim((string) $fee->note) !== '')
+                ->values())
+            ->filter(fn (Collection $lignes): bool => $lignes->isNotEmpty());
+
+        $rows = $this->rows($inscriptions, $feesByInscription, $columnKeys, $notesMasquees, $lignesMasquees);
         $rows = $this->sortRows($rows, $sort);
 
         // Renumber AFTER sorting so #1 is always the first visible line.
@@ -167,12 +177,13 @@ final class GetGroupPaymentMatrix
      * @param  Collection<int, Collection<int, InscriptionFee>>  $feesByInscription
      * @param  list<string>  $columnKeys
      * @param  Collection<int, Collection<int, InscriptionFee>>  $notesMasquees  retired fee lines that carry a note, by inscription
+     * @param  Collection<int, Collection<int, InscriptionFee>>  $lignesMasquees  every retired fee line (id + frais), by inscription
      * @return list<array<string, mixed>>
      */
-    private function rows(Collection $inscriptions, Collection $feesByInscription, array $columnKeys, Collection $notesMasquees): array
+    private function rows(Collection $inscriptions, Collection $feesByInscription, array $columnKeys, Collection $notesMasquees, Collection $lignesMasquees): array
     {
         return $inscriptions
-            ->map(function (Inscription $inscription) use ($feesByInscription, $columnKeys, $notesMasquees): array {
+            ->map(function (Inscription $inscription) use ($feesByInscription, $columnKeys, $notesMasquees, $lignesMasquees): array {
                 $cells = [];
                 $total = 0.0;
                 $reste = 0.0;
@@ -266,6 +277,7 @@ final class GetGroupPaymentMatrix
                         ->filter(fn (InscriptionFee $fee) => in_array((string) $fee->frais_id, $columnKeys, true))
                         ->mapWithKeys(fn (InscriptionFee $fee) => [(string) $fee->frais_id => trim((string) $fee->note)])
                         ->all(),
+                    'masques' => $this->masquesRestaurables($lignesMasquees->get($inscription->id, collect()), $columnKeys, $cells),
                     'dateInscription' => $inscription->date_inscription?->format('d/m/Y'),
                     'dateInscriptionIso' => $inscription->date_inscription?->format('Y-m-d'),
                     'total' => $this->money($total),
@@ -274,6 +286,31 @@ final class GetGroupPaymentMatrix
                 ];
             })
             ->values()
+            ->all();
+    }
+
+    /**
+     * The retired line a grey cell can RESTORE, keyed by frais: only where
+     * the answer is unambiguous. A frais that still has a VISIBLE line on
+     * the inscription (a cell is drawn) is skipped — restoring would put a
+     * duplicate next to it; and so is a frais retired TWICE — one click
+     * cannot know which of the two lines the user means (the inscription
+     * modal's corbeille lists them apart).
+     *
+     * @param  Collection<int, InscriptionFee>  $lignes
+     * @param  list<string>  $columnKeys
+     * @param  array<string, mixed>  $cells
+     * @return array<string, int>
+     */
+    private function masquesRestaurables(Collection $lignes, array $columnKeys, array $cells): array
+    {
+        return $lignes
+            ->groupBy(fn (InscriptionFee $fee): string => (string) $fee->frais_id)
+            // PHP turns the numeric-string group keys back into ints.
+            ->filter(fn (Collection $parFrais, int|string $key): bool => $parFrais->count() === 1
+                && in_array((string) $key, $columnKeys, true)
+                && ! isset($cells[(string) $key]))
+            ->map(fn (Collection $parFrais): int => (int) $parFrais->first()->id)
             ->all();
     }
 

@@ -1670,6 +1670,23 @@ html[data-theme='dark'] .gls-payment-matrix > :not(caption) > * > * {
     background: rgba(17, 17, 17, 0.9);
 }
 
+/* « Restaurer » on a grey (retired) cell: same corner, green so it never
+ * reads as the hide icon. Selected, it turns into the same solid pill in
+ * green. */
+.gls-matrix-restore-btn {
+    color: #0f5132;
+}
+
+.gls-matrix-restore-btn:hover {
+    color: #0a3622;
+}
+
+.gls-matrix-restore-btn.gls-matrix-hide-btn--active,
+.gls-matrix-restore-btn.gls-matrix-hide-btn--active:hover {
+    color: #fff;
+    background: #198754;
+}
+
 /* React-controlled hover tooltip of the matrix (replaces the flaky native
  * `title`): fixed so neither the scroll box nor the modal can clip it, above
  * the modal z-index, and inert to the pointer so it never steals the hover. */
@@ -2667,6 +2684,87 @@ html[data-theme='dark'] .card-body .border-top p {
     flex-shrink: 0;
 }
 
+/* « Groupes à venir » (GroupesAVenir.tsx) — one tile per group « En inscription ». */
+.gls-upcoming-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #eef1fd;
+    color: #3d5ee1;
+    font-size: 20px;
+    flex-shrink: 0;
+}
+.gls-upcoming-tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid #e9edf4;
+    border-top-width: 4px;
+    border-radius: 10px;
+    color: inherit;
+    background: #fff;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.gls-upcoming-tile:hover,
+.gls-upcoming-tile:focus-visible {
+    color: inherit;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(32, 44, 75, 0.08);
+}
+.gls-upcoming-primary   { border-top-color: #3d5ee1; }
+.gls-upcoming-warning   { border-top-color: #eab300; }
+.gls-upcoming-danger    { border-top-color: #ef6879; }
+.gls-upcoming-secondary { border-top-color: #b9c0cf; }
+.gls-upcoming-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: #202c4b;
+    margin-bottom: 8px;
+}
+.gls-upcoming-meta {
+    list-style: none;
+    margin: 0 0 10px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
+    color: #6a7287;
+}
+.gls-upcoming-meta li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+.gls-upcoming-meta i {
+    font-size: 15px;
+    flex-shrink: 0;
+}
+.gls-upcoming-slots {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+.gls-upcoming-slot {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #f3f5f9;
+    color: #505667;
+    white-space: nowrap;
+}
+.gls-upcoming-fill .progress {
+    height: 6px;
+    background: #eef1f6;
+}
+
 /* Dark mode twins. */
 html[data-theme='dark'] .gls-dash-section-title h5,
 html[data-theme='dark'] .gls-agenda-time strong,
@@ -2694,6 +2792,25 @@ html[data-theme='dark'] .gls-agenda-item {
 }
 html[data-theme='dark'] .gls-agenda-item:hover {
     background: rgba(255, 255, 255, 0.05);
+}
+html[data-theme='dark'] .gls-upcoming-tile {
+    background: transparent;
+    border-color: #393f4d;
+}
+html[data-theme='dark'] .gls-upcoming-tile:hover {
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+html[data-theme='dark'] .gls-upcoming-name {
+    color: #e6e5ee;
+}
+html[data-theme='dark'] .gls-upcoming-slot,
+html[data-theme='dark'] .gls-upcoming-fill .progress {
+    background: rgba(255, 255, 255, 0.06);
+    color: #d5d8de;
+}
+html[data-theme='dark'] .gls-upcoming-icon {
+    background: rgba(143, 163, 255, 0.12);
+    color: #8fa3ff;
 }
 html[data-theme='dark'] .gls-frais-legend-pill {
     background: #1b1f27;

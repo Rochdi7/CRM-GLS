@@ -53,6 +53,9 @@ export default function PaiementProfIndex({
     const isLoading = useInertiaLoading();
     // Ajustements manuels — état LOCAL, jamais persisté.
     const [ajustements, setAjustements] = useState<Record<number, string>>({});
+    // Base « Détails paiement » (Système GLS seulement) — décochée par défaut :
+    // le calcul par séances reste la référence, celui-ci est un contrôle.
+    const [parPaiements, setParPaiements] = useState(false);
 
     const [showModal, setShowModal] = useState(false);
     const [saisie, setSaisie] = useState(filters);
@@ -202,6 +205,7 @@ export default function PaiementProfIndex({
 
         setShowModal(false);
         setAjustements({});
+        setParPaiements(false);
         // `dureeSeance` est une aide de saisie : le serveur ne connaît que le
         // total d'heures, l'envoyer polluerait l'URL sans rien décider.
         const { dureeSeance: _, ...payload } = saisie;
@@ -216,7 +220,10 @@ export default function PaiementProfIndex({
 
     const estHoraire = calcul?.enseignant.mode === 'horaire';
 
-    const totalAffiche = useMemo(() => {
+    const verification = calcul?.verificationPaiements ?? null;
+    const baseePaiements = parPaiements && verification !== null;
+
+    const totalSeances = useMemo(() => {
         if (calcul === null) {
             return 0;
         }
@@ -232,6 +239,10 @@ export default function PaiementProfIndex({
             return somme + (Number.isFinite(valeur) ? valeur : ligne.montantEffectif);
         }, 0);
     }, [calcul, ajustements, estHoraire]);
+
+    // Le total AFFICHÉ — et celui que « Enregistrer la dépense » pré-remplit —
+    // suit la base choisie par la case à cocher.
+    const totalAffiche = baseePaiements && verification !== null ? verification.total : totalSeances;
 
     const nombreAjustements = useMemo(
         () => Object.values(ajustements).filter((v) => v !== undefined && v !== '').length,
@@ -696,7 +707,13 @@ export default function PaiementProfIndex({
                             <Card className="w-100 h-100">
                                 <div className="text-muted fs-12 text-uppercase mb-1">{t('Total payment')}</div>
                                 <div className="fs-24 fw-bold text-success">{totalAffiche.toFixed(2)} MAD</div>
-                                {nombreAjustements > 0 && (
+                                {baseePaiements && (
+                                    <small className="text-info">
+                                        <i className="ti ti-receipt me-1" />
+                                        {t('Based on payment details')}
+                                    </small>
+                                )}
+                                {!baseePaiements && nombreAjustements > 0 && (
                                     <small className="text-warning">
                                         <i className="ti ti-pencil me-1" />
                                         {t(':count adjusted line(s) · computed :total', {
@@ -739,7 +756,9 @@ export default function PaiementProfIndex({
                                     <Card className="w-100 h-100">
                                         <div className="text-muted fs-12 text-uppercase mb-1">{t('Paying students')}</div>
                                         <div className="fs-24 fw-bold">
-                                            {calcul.etudiantsRemunerateurs} / {calcul.lignes.length}
+                                            {baseePaiements && verification !== null
+                                                ? `${verification.etudiantsPayants} / ${verification.lignes.length}`
+                                                : `${calcul.etudiantsRemunerateurs} / ${calcul.lignes.length}`}
                                         </div>
                                     </Card>
                                 </div>
@@ -756,7 +775,55 @@ export default function PaiementProfIndex({
                         )}
                     </div>
 
-                    {!estHoraire && calcul.nombreSeances > calcul.seancesRemunerees && (
+                    {/* ── Contrôle par les Détails paiement (Système GLS) ── */}
+                    {verification !== null && (
+                        <div className="card mb-3">
+                            <div className="card-body py-2 d-flex flex-wrap align-items-center gap-3">
+                                <div className="form-check form-switch mb-0">
+                                    <input
+                                        id="pp-par-paiements"
+                                        type="checkbox"
+                                        className="form-check-input"
+                                        checked={parPaiements}
+                                        disabled={verification.frais.length === 0}
+                                        onChange={(event) => setParPaiements(event.target.checked)}
+                                    />
+                                    <label htmlFor="pp-par-paiements" className="form-check-label fw-semibold">
+                                        {t('Calculate from payment details')}
+                                    </label>
+                                </div>
+                                {verification.frais.length === 0 ? (
+                                    <span className="text-warning fs-13">
+                                        <i className="ti ti-alert-triangle me-1" />
+                                        {t('No fee for :mois is assigned to this group.', {
+                                            mois: calcul.periode.libelle,
+                                        })}
+                                    </span>
+                                ) : (
+                                    <span className="text-muted fs-13">
+                                        {verification.frais.join(', ')}
+                                        {' · '}
+                                        {t('By sessions')} : <strong>{totalSeances.toFixed(2)} MAD</strong>
+                                        {' · '}
+                                        {t('By payments')} : <strong>{verification.total.toFixed(2)} MAD</strong>
+                                        {' · '}
+                                        {t('Difference')} :{' '}
+                                        <strong
+                                            className={
+                                                Math.abs(verification.total - totalSeances) < 0.005
+                                                    ? 'text-success'
+                                                    : 'text-danger'
+                                            }
+                                        >
+                                            {(verification.total - totalSeances).toFixed(2)} MAD
+                                        </strong>
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {!estHoraire && !baseePaiements && calcul.nombreSeances > calcul.seancesRemunerees && (
                         <div className="alert alert-info d-flex align-items-center gap-2">
                             <i className="ti ti-info-circle" />
                             <span>
@@ -803,7 +870,88 @@ export default function PaiementProfIndex({
                         </Card>
                     )}
 
-                    {!estHoraire && (
+                    {/* ── Base « Détails paiement » : une ligne par dossier ── */}
+                    {baseePaiements && verification !== null && (
+                        <Card
+                            title={`${calcul.enseignant.nom} - ${calcul.group.nom}`}
+                            bodyClassName="p-0"
+                            tools={
+                                <div className="d-flex align-items-center gap-2">
+                                    <span className="badge badge-soft-warning">
+                                        <i className="ti ti-file-pencil me-1" />
+                                        {t('Draft')}
+                                    </span>
+                                    {canCreateDepense && totalAffiche > 0 && (
+                                        <button type="button" className="btn btn-primary btn-sm" onClick={creerDepense}>
+                                            <i className="ti ti-cash me-1" />
+                                            {t('Record the expense')}
+                                        </button>
+                                    )}
+                                </div>
+                            }
+                        >
+                            <div className="px-3 pt-3 text-muted fs-13">
+                                {t('Rate × paid ÷ due on :frais (a fully paid fee earns the full rate).', {
+                                    frais: verification.frais.join(', '),
+                                })}
+                            </div>
+                            <div className="table-responsive">
+                                <table className="table table-sm mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>{t('Student')}</th>
+                                            <th>{t('Status')}</th>
+                                            <th className="text-end">{t('Due')}</th>
+                                            <th className="text-end">{t('Paid')}</th>
+                                            <th className="text-end">{t('Total')}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {verification.lignes.length === 0 && (
+                                            <tr>
+                                                <td colSpan={6} className="text-center text-muted py-3">
+                                                    {t('No student carries this fee.')}
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {verification.lignes.map((ligne, index) => {
+                                            const solde = ligne.du > 0 && ligne.paye >= ligne.du - 0.004;
+                                            const classe = solde
+                                                ? 'text-success'
+                                                : ligne.paye > 0.004
+                                                  ? 'text-warning'
+                                                  : 'text-danger';
+
+                                            return (
+                                                <tr key={`${ligne.studentId}-${index}`}>
+                                                    <td className="text-muted">{index + 1}</td>
+                                                    <td className="fw-semibold">{ligne.nom}</td>
+                                                    <td>{ligne.statut}</td>
+                                                    <td className="text-end">{ligne.du.toFixed(2)} MAD</td>
+                                                    <td className={`text-end fw-semibold ${classe}`}>
+                                                        {ligne.paye.toFixed(2)} MAD
+                                                    </td>
+                                                    <td className={`text-end fw-bold${ligne.montant > 0 ? '' : ' text-muted'}`}>
+                                                        {ligne.montant.toFixed(2)} MAD
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr className="fw-bold">
+                                            <td />
+                                            <td colSpan={4}>{t('Total')}</td>
+                                            <td className="text-end">{verification.total.toFixed(2)} MAD</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </Card>
+                    )}
+
+                    {!estHoraire && !baseePaiements && (
                     <>
                     {/* ── Grille de présence + paie ─────────────────── */}
                     <Card

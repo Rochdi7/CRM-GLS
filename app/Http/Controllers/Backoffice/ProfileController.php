@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Support\Phone\Countries;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -45,6 +46,8 @@ final class ProfileController
             ],
             'employee' => $user->employee === null ? null : [
                 'reference' => $user->employee->reference,
+                'prenom' => $user->employee->prenom,
+                'nom' => $user->employee->nom,
                 'categorie' => $user->employee->categorie,
                 'sexe' => $user->employee->sexe,
                 'email' => $user->employee->email,
@@ -64,14 +67,19 @@ final class ProfileController
         $user = $request->user();
         $data = $request->validated();
 
-        $user->update(['name' => $data['name'], 'email' => $data['email']]);
+        DB::transaction(function () use ($user, $data): void {
+            $user->update(['email' => $data['email']] + ($user->employee === null ? ['name' => $data['name']] : []));
 
-        // Keep the linked employee's contact info in sync (no-op if the
-        // authenticated user has no linked Employee record).
-        $user->employee?->update([
-            'telephone' => Countries::join($data['phone_pays'], $data['telephone'] ?? null),
-            'whatsapp' => Countries::join($data['phone_pays'], $data['whatsapp'] ?? null),
-        ]);
+            // Linked employee: the name is written on the EMPLOYEE, and
+            // EmployeeObserver re-copies it onto the login and the till
+            // (SynchroniserNomEmploye) — one rename, every screen follows.
+            $user->employee?->update([
+                'prenom' => trim($data['prenom']),
+                'nom' => trim($data['nom']),
+                'telephone' => Countries::join($data['phone_pays'], $data['telephone'] ?? null),
+                'whatsapp' => Countries::join($data['phone_pays'], $data['whatsapp'] ?? null),
+            ]);
+        });
 
         return back()->with('success', __('Profile updated.'));
     }

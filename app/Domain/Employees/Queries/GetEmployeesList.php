@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Domain\Employees\Queries;
 
 use App\Models\Employee;
+use App\Models\Group;
+use App\Models\GroupEnseignant;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
@@ -95,6 +97,8 @@ final class GetEmployeesList
             ->paginate($perPage)
             ->withQueryString();
 
+        $groupesParEnseignant = $this->groupesParEnseignant($employees->getCollection());
+
         $employees->through(fn (Employee $employee): array => [
             'id' => $employee->id,
             'reference' => $employee->reference,
@@ -120,7 +124,11 @@ final class GetEmployeesList
             'tauxMensuels' => $employee->tauxMensuels->map(fn ($t) => [
                 'mois' => $t->mois->format('Y-m'),
                 'montant_par_etudiant' => (string) $t->montant_par_etudiant,
+                // '' = « Tous les groupes » (29/09/2026).
+                'group_id' => $t->group_id !== null ? (string) $t->group_id : '',
             ])->values()->all(),
+            // Les groupes proposés dans la colonne « Groupe » du win-win.
+            'groupesEnseignes' => $groupesParEnseignant[$employee->id] ?? [],
             'etablissementId' => $employee->etablissement_id,
             'etablissement' => $employee->etablissement?->nom_centre,
             'etablissementIds' => $employee->etablissements->pluck('id')->all(),
@@ -133,5 +141,74 @@ final class GetEmployeesList
         ]);
 
         return $employees;
+    }
+
+    /**
+     * Groupes de chaque employé de la page, pour le win-win PAR GROUPE : ceux
+     * qu'il a tenus (affectation courante ou passée — un groupe clos reste
+     * payable pour ses derniers mois), plus ceux déjà cités par un de ses
+     * montants, pour qu'une ligne enregistrée garde toujours son libellé.
+     *
+     * Trois requêtes pour toute la page, jamais une par ligne (§17).
+     *
+     * @param  iterable<int, Employee>  $employees
+     * @return array<int, list<array{value: string, label: string}>>
+     */
+    private function groupesParEnseignant(iterable $employees): array
+    {
+        $ids = [];
+        $paires = [];
+
+        foreach ($employees as $employee) {
+            $ids[] = $employee->id;
+
+            foreach ($employee->tauxMensuels as $taux) {
+                if ($taux->group_id !== null) {
+                    $paires[] = [$employee->id, (int) $taux->group_id];
+                }
+            }
+        }
+
+        if ($ids === []) {
+            return [];
+        }
+
+        foreach (GroupEnseignant::query()->whereIn('enseignant_id', $ids)->get(['group_id', 'enseignant_id']) as $a) {
+            $paires[] = [(int) $a->enseignant_id, (int) $a->group_id];
+        }
+
+        foreach (Group::query()->whereIn('enseignant_id', $ids)->get(['id', 'enseignant_id']) as $g) {
+            $paires[] = [(int) $g->enseignant_id, (int) $g->id];
+        }
+
+        if ($paires === []) {
+            return [];
+        }
+
+        $groupes = Group::query()
+            ->with('anneeScolaire:id,nom')
+            ->whereIn('id', array_unique(array_column($paires, 1)))
+            ->get(['id', 'nom', 'annee_scolaire_id'])
+            ->keyBy('id');
+
+        $parEmploye = [];
+        foreach ($paires as [$employeeId, $groupId]) {
+            $groupe = $groupes->get($groupId);
+
+            if ($groupe !== null) {
+                $parEmploye[$employeeId][$groupId] = $groupe;
+            }
+        }
+
+        return array_map(
+            fn (array $liste): array => collect($liste)
+                ->sortBy([['annee_scolaire_id', 'desc'], ['nom', 'asc']])
+                ->map(fn (Group $g): array => [
+                    'value' => (string) $g->id,
+                    'label' => $g->anneeScolaire !== null ? "{$g->nom} ({$g->anneeScolaire->nom})" : (string) $g->nom,
+                ])
+                ->values()->all(),
+            $parEmploye,
+        );
     }
 }

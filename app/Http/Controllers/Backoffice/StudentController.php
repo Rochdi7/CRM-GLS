@@ -56,8 +56,7 @@ final class StudentController extends Controller
         $etablissementFilter = (string) $request->string('etablissementFilter');
         $ageSort = (string) $request->string('ageSort');
         $referenceFilter = (string) $request->string('referenceFilter');
-        $nomFilter = (string) $request->string('nomFilter');
-        $prenomFilter = (string) $request->string('prenomFilter');
+        $studentFilter = (string) $request->string('studentFilter');
         $telephoneFilter = (string) $request->string('telephoneFilter');
         $inscriptionFilter = (string) $request->string('inscriptionFilter');
         $perPage = (int) $request->integer('perPage', GetStudentsList::DEFAULT_PER_PAGE);
@@ -70,7 +69,7 @@ final class StudentController extends Controller
             return Inertia::render('Backoffice/Students/MesEtudiants', [
                 'students' => $getStudentsList(
                     $request->user(), $search, '', '', '', '', 25,
-                    '', '', '', '', '', $groupeFilter,
+                    '', '', '', '', $groupeFilter,
                 ),
                 'filters' => ['search' => $search, 'groupeFilter' => $groupeFilter],
                 'groupOptions' => $seanceOptions->allGroups($request->user()),
@@ -88,8 +87,7 @@ final class StudentController extends Controller
                 $ageSort,
                 $perPage,
                 $referenceFilter,
-                $nomFilter,
-                $prenomFilter,
+                $studentFilter,
                 $telephoneFilter,
                 $inscriptionFilter,
             ),
@@ -100,8 +98,7 @@ final class StudentController extends Controller
                 'etablissementFilter' => $etablissementFilter,
                 'ageSort' => $ageSort,
                 'referenceFilter' => $referenceFilter,
-                'nomFilter' => $nomFilter,
-                'prenomFilter' => $prenomFilter,
+                'studentFilter' => $studentFilter,
                 'telephoneFilter' => $telephoneFilter,
                 'inscriptionFilter' => $inscriptionFilter,
                 'perPage' => in_array($perPage, GetStudentsList::PER_PAGE_OPTIONS, true)
@@ -109,6 +106,9 @@ final class StudentController extends Controller
                     : GetStudentsList::DEFAULT_PER_PAGE,
             ],
             'perPageOptions' => GetStudentsList::PER_PAGE_OPTIONS,
+            // Dropdown « Étudiant » du filtre — même portée que la liste.
+            // Closure : une recherche/pagination (only: [...]) ne le recalcule pas.
+            'studentOptions' => fn () => $getStudentsList->studentOptions($request->user()),
             'niveauxInteret' => Student::NIVEAUX_TRACKS,
             'domaines' => Student::DOMAINES,
             'examenTypes' => Student::EXAMEN_TYPES,

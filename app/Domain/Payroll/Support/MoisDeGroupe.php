@@ -41,7 +41,7 @@ final class MoisDeGroupe
      */
     public static function pour(Group $group, string $mois): self
     {
-        $civil = Carbon::createFromFormat('Y-m', $mois)?->startOfMonth()
+        $civil = Carbon::createFromFormat('!Y-m', $mois)?->startOfMonth()
             ?? Carbon::now()->startOfMonth();
 
         $ancrage = $group->date_debut_formation;

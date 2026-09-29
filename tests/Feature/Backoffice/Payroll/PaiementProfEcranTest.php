@@ -334,6 +334,48 @@ final class PaiementProfEcranTest extends TestCase
     }
 
     #[Test]
+    public function a_win_win_amount_for_the_group_takes_priority_over_the_general_one(): void
+    {
+        $autre = Group::factory()->create([
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'enseignant_id' => $this->prof->id,
+        ]);
+        $this->prof->update(['mode_paiement_prof' => Employee::MODE_PAIEMENT_WIN_WIN, 'montant_par_etudiant_prof' => null]);
+        $this->prof->tauxMensuels()->create(['mois' => '2025-09-01', 'montant_par_etudiant' => 400]);
+        $this->prof->tauxMensuels()->create(['mois' => '2025-09-01', 'group_id' => $this->group->id, 'montant_par_etudiant' => 480]);
+        $this->prof->tauxMensuels()->create(['mois' => '2025-09-01', 'group_id' => $autre->id, 'montant_par_etudiant' => 600]);
+        $this->moisPlein($this->student('Sara'));
+
+        // Le montant de CE groupe (480), ni le général (400) ni l'autre groupe (600).
+        $this->calculer()
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('calcul.enseignant.taux', fn ($v) => (float) $v === 480.0)
+                ->where('calcul.total', fn ($v) => (float) $v === 480.0));
+    }
+
+    #[Test]
+    public function a_win_win_amount_of_another_group_is_never_borrowed(): void
+    {
+        $autre = Group::factory()->create([
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'enseignant_id' => $this->prof->id,
+        ]);
+        $this->prof->update(['mode_paiement_prof' => Employee::MODE_PAIEMENT_WIN_WIN, 'montant_par_etudiant_prof' => null]);
+        $this->prof->tauxMensuels()->create(['mois' => '2025-09-01', 'group_id' => $autre->id, 'montant_par_etudiant' => 600]);
+        $this->moisPlein($this->student('Nora'));
+
+        $this->calculer()
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('calcul.enseignant.taux', fn ($v) => (float) $v === 0.0)
+                ->where('calcul.enseignant.probleme', fn ($v) => is_string($v) && str_contains($v, (string) $this->group->nom))
+                ->where('calcul.total', fn ($v) => (float) $v === 0.0));
+    }
+
+    #[Test]
     public function the_win_win_mode_refuses_a_month_that_was_never_entered(): void
     {
         $this->prof->update(['mode_paiement_prof' => Employee::MODE_PAIEMENT_WIN_WIN, 'montant_par_etudiant_prof' => null]);

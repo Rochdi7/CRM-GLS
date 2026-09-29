@@ -47,6 +47,7 @@ final class GetPaiementProfCalcul
     public function __construct(
         private readonly CalculerPaiementProfParSeance $parSeance,
         private readonly CalculerPaiementProfHoraire $horaire,
+        private readonly GetVerificationParPaiements $parPaiements,
         private readonly CenterAccessService $centerAccess,
         private readonly CurrentContext $context,
     ) {}
@@ -117,8 +118,8 @@ final class GetPaiementProfCalcul
                 'libelle' => $fenetre->libelle,
                 'ancreSurLeGroupe' => $fenetre->ancreSurLeGroupe,
             ],
-            'enseignants' => $enseignants->map(function (Employee $e) use ($parProf, $fenetre): array {
-                $config = ConfigurationPaieEnseignant::pour($e, $fenetre->moisCivil);
+            'enseignants' => $enseignants->map(function (Employee $e) use ($parProf, $fenetre, $group): array {
+                $config = ConfigurationPaieEnseignant::pour($e, $fenetre->moisCivil, $group);
 
                 return [
                     'value' => $e->id,
@@ -147,7 +148,7 @@ final class GetPaiementProfCalcul
         array $ajustements = [],
     ): array {
         $fenetre = MoisDeGroupe::pour($group, $mois);
-        $config = ConfigurationPaieEnseignant::pour($enseignant, $fenetre->moisCivil);
+        $config = ConfigurationPaieEnseignant::pour($enseignant, $fenetre->moisCivil, $group);
 
         // Séances EFFECTUÉES de CET enseignant sur la fenêtre. Celles d'un
         // autre prof (ou sans prof) sont comptées à part, jamais ici.
@@ -195,6 +196,12 @@ final class GetPaiementProfCalcul
             // plutôt que masquer »). L'écran les nomme, l'opérateur corrige
             // la séance.
             'seancesHoraireInvalide' => $this->seancesHoraireInvalide($seances),
+            // Contrôle « par les paiements » (Détails paiement du frais du
+            // mois) — Système GLS seulement ; l'écran le propose derrière une
+            // case à cocher, le calcul par séances restant la base.
+            'verificationPaiements' => $config->estValide() && $config->mode === Employee::MODE_PAIEMENT_GLS
+                ? ($this->parPaiements)($group, $fenetre, $config->taux)
+                : null,
         ];
 
         // Configuration incomplète : on rend l'en-tête (l'écran a besoin du

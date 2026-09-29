@@ -295,7 +295,18 @@ final class InscriptionController extends Controller
         // honest answer.
         abort_unless($fee->inscription_id === $inscription->id, 404);
 
-        $action->restore($inscription, $fee);
+        // Deja visible : meme raison que dans hideFee() — un ecran perime
+        // (matrice « Statistique de groupe », second onglet, lot envoye deux
+        // fois) le renverrait. On le DIT en JSON plutot que de repondre ok.
+        if ($fee->masque_le === null) {
+            return response()->json(['message' => __('This fee is not hidden.')], 422);
+        }
+
+        try {
+            $action->restore($inscription, $fee);
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 422);
+        }
 
         // JSON — see hideFee(). The restored line's full shape comes back
         // here too, so the client can splice it straight into the table

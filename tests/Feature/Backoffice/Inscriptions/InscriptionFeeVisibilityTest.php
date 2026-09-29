@@ -123,6 +123,18 @@ final class InscriptionFeeVisibilityTest extends TestCase
         $this->assertSame(InscriptionFee::MASQUE_ORIGINE_GROUPE, $fresh->masque_origine);
     }
 
+    public function test_restoring_a_visible_fee_is_refused_in_json(): void
+    {
+        [$inscription, $fee] = $this->inscriptionWithFee();
+
+        $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
+            ->postJson(route('backoffice.inscriptions.fees.restore', [$inscription, $fee]))
+            ->assertStatus(422)
+            ->assertJsonStructure(['message']);
+
+        $this->assertNull($fee->fresh()->masque_le);
+    }
+
     public function test_hiding_recomputes_montant_total_from_remaining_visible_fees(): void
     {
         [$inscription, $fee] = $this->inscriptionWithFee(1300.0);

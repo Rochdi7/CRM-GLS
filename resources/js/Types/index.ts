@@ -181,7 +181,32 @@ export interface DashboardPageProps {
     nouvellesInscriptions: NouvellesInscriptionsChartData | null;
     /** Espace enseignant — NULL sauf pour un prof connecté (gate serveur). */
     espaceEnseignant: EspaceEnseignantData | null;
+    /** « Groupes à venir » — NULL sans `groups.view` ou pour un prof restreint. */
+    groupesAVenir: GroupesAVenirData | null;
     [key: string]: unknown;
+}
+
+/** Mirrors App\Domain\Reports\Actions\GetGroupesAVenir. */
+export interface GroupeAVenir {
+    id: number;
+    nom: string;
+    niveau: string | null;
+    enseignant: string | null;
+    salle: string | null;
+    /** Only on « Tous les centres ». */
+    centre: string | null;
+    dateDebut: string | null;
+    /** Signed: negative = start date passed while still « En inscription ». */
+    joursAvantDebut: number | null;
+    inscrits: number;
+    capacite: number | null;
+    creneaux: Array<{ jour: string; heureDebut: string; heureFin: string }>;
+}
+
+export interface GroupesAVenirData {
+    /** Every « En inscription » group of the context (the list shows at most 8). */
+    total: number;
+    groupes: GroupeAVenir[];
 }
 
 // --- Espace enseignant ------------------------------------------------------
@@ -1209,10 +1234,12 @@ export interface SyncUserAuthorizationForm {
 // --- Phase 7: Employees (Inertia/React list + modal CRUD) -------------------
 
 /** One row of the Employees list — mirrors GetEmployeesList's ->through() mapping exactly. */
-/** Une ligne du tableau win-win : « YYYY-MM » → montant par étudiant. */
+/** Une ligne du tableau win-win : (groupe, « YYYY-MM ») → montant par étudiant. */
 export interface TauxMensuelRow {
     mois: string;
     montant_par_etudiant: string;
+    /** '' = « Tous les groupes » ; sinon l'id du groupe visé (prioritaire). */
+    group_id: string;
 }
 
 export interface EmployeeRow {
@@ -1236,8 +1263,10 @@ export interface EmployeeRow {
     modePaiementProf: 'horaire' | 'gls' | 'win_win' | null;
     tauxHoraireProf: MoneyDisplay | null;
     montantParEtudiantProf: MoneyDisplay | null;
-    /** Montants win-win, un par mois (« YYYY-MM »). */
+    /** Montants win-win, un par (groupe, mois « YYYY-MM »). */
     tauxMensuels: TauxMensuelRow[];
+    /** Groupes tenus par l'employé — options de la colonne « Groupe » du win-win. */
+    groupesEnseignes: SelectOption[];
     /** Primary center — where the employee is based and its Caisse lives.
      *  Chosen explicitly on the form (« Centre principal »); defaults to the
      *  first assigned center. Always one of `etablissementIds`. */
@@ -1365,8 +1394,8 @@ export interface StudentsFilters {
     etablissementFilter: string;
     ageSort: string;
     referenceFilter: string;
-    nomFilter: string;
-    prenomFilter: string;
+    /** Filtre « Étudiant » — id choisi dans le dropdown ('' = tous). */
+    studentFilter: string;
     telephoneFilter: string;
     /** État d'inscription — '' (tous) | 'active' | 'cancelled' | 'none'. */
     inscriptionFilter: string;
@@ -1379,6 +1408,8 @@ export interface StudentsPageProps {
     students: PaginatedData<StudentRow>;
     filters: StudentsFilters;
     perPageOptions: number[];
+    /** Options du filtre « Étudiant » — même format que sur Inscriptions. */
+    studentOptions: Array<{ id: number; label: string }>;
     niveauxInteret: string[];
     domaines: string[];
     examenTypes: string[];
@@ -1572,6 +1603,11 @@ export interface GroupPaymentRow {
     note: string | null;
     /** Notes of fee lines RETIRED from this inscription, keyed by frais id — the grey cell shows them on hover. */
     notesMasquees: Record<string, string>;
+    /**
+     * The ONE retired fee line a grey cell can restore, keyed by frais id.
+     * Absent when the frais still has a visible line or was retired twice.
+     */
+    masques: Record<string, number>;
     dateInscription: string | null;
     dateInscriptionIso: string | null;
     total: string;
@@ -2719,6 +2755,19 @@ export interface PaiementProfCalcul {
     /** Heures RETENUES (saisies, sinon effectuées) — mode horaire seulement. */
     heuresSaisies: number | null;
     totalHoraire: number | null;
+    /**
+     * Contrôle « par les paiements » — Système GLS seulement (null sinon) :
+     * taux × min(1, payé net ÷ dû) sur le frais du MOIS (« Frais de Juillet »).
+     * `frais` vide = aucun frais du mois trouvé sur le groupe.
+     */
+    verificationPaiements: PaiementProfVerificationPaiements | null;
+}
+
+export interface PaiementProfVerificationPaiements {
+    frais: string[];
+    lignes: { studentId: number; nom: string; statut: string; du: number; paye: number; montant: number }[];
+    total: number;
+    etudiantsPayants: number;
 }
 
 export type PaiementProfMode = 'horaire' | 'gls' | 'win_win';

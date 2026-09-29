@@ -49,7 +49,7 @@ final class GetEspaceEnseignant
     public function __invoke(Employee $enseignant, ?string $mois = null): array
     {
         $moisCivil = $mois !== null && preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $mois) === 1
-            ? Carbon::createFromFormat('Y-m', $mois)->startOfMonth()
+            ? Carbon::createFromFormat('!Y-m', $mois)->startOfMonth()
             : Carbon::now()->startOfMonth();
 
         return [

@@ -68,7 +68,9 @@ final class UserController extends Controller
 
         DB::transaction(function () use ($user, $data, $isActive, $deactivating): void {
             $user->update([
-                'name' => $data['name'],
+                // Linked login: the name is the employee's, copied by
+                // SynchroniserNomEmploye — a submitted value is ignored.
+                'name' => $user->employee !== null ? $user->employee->nomComplet() : $data['name'],
                 'email' => $data['email'],
                 'username' => $data['username'] ?? null,
                 'is_active' => $isActive,

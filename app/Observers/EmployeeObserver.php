@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Observers;
 
+use App\Domain\Employees\Actions\SynchroniserNomEmploye;
 use App\Models\Employee;
 use App\Models\Role;
 use App\Services\CaisseProvisioner;
@@ -53,6 +54,12 @@ final class EmployeeObserver
     {
         if ($employee->wasChanged('categorie')) {
             $this->assignDefaultRole($employee);
+        }
+
+        // The till and the login carry a copy of the name — re-copy it on
+        // every rename, whichever screen made it (Employees, Profil, import).
+        if ($employee->wasChanged(['prenom', 'nom'])) {
+            app(SynchroniserNomEmploye::class)->handle($employee);
         }
     }
 

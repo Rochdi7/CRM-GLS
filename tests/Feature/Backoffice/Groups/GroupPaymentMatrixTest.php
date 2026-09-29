@@ -404,6 +404,45 @@ final class GroupPaymentMatrixTest extends TestCase
         $this->assertSame('700.00', $cells[(string) $this->frais['mars']->id]['montant']);
     }
 
+    /**
+     * The grey cell of a RETIRED line offers « restaurer » — it posts to
+     * inscriptions.fees.restore with that line's id, so the row must carry
+     * it. A never-added fee (no line at all) offers nothing.
+     */
+    public function test_a_retired_fee_line_is_offered_for_restore(): void
+    {
+        $inscription = $this->enrol('Chaimae', 'Bammadi');
+        $retire = $this->addFee($inscription, 'mars', 1300, 0);
+        $retire->update(['masque_le' => now()]);
+
+        $row = $this->matrix()['rows'][0];
+
+        $this->assertSame([(string) $this->frais['mars']->id => $retire->id], $row['masques']);
+        $this->assertArrayNotHasKey((string) $this->frais['avril']->id, $row['masques']);
+    }
+
+    /**
+     * Restoring must be unambiguous: a frais that still has a VISIBLE line
+     * would get a duplicate next to it, and a frais retired twice leaves no
+     * way to tell which line one click means.
+     */
+    public function test_restore_is_not_offered_when_it_would_be_ambiguous(): void
+    {
+        $inscription = $this->enrol('Chaimae', 'Bammadi');
+
+        // Retired line + a visible twin of the same frais.
+        $this->addFee($inscription, 'mars', 1300, 0)->update(['masque_le' => now()]);
+        $this->addFee($inscription, 'mars', 1300, 0);
+
+        // Same frais retired twice.
+        $this->addFee($inscription, 'avril', 1300, 0)->update(['masque_le' => now()]);
+        $this->addFee($inscription, 'avril', 1300, 0)->update(['masque_le' => now()]);
+
+        $row = $this->matrix()['rows'][0];
+
+        $this->assertSame([], $row['masques']);
+    }
+
     public function test_a_fee_line_outside_the_groups_catalog_still_counts_in_the_row_total(): void
     {
         $inscription = $this->enrol('Chaimae', 'Bammadi');

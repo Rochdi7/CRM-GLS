@@ -316,23 +316,36 @@ export default function GroupPaymentMatrixTable({
     );
 }
 
-/** A cell ticked for masking — keyed by its fee line id in the selection map. */
+/**
+ * A cell ticked in the grid — keyed by its fee line id in the selection map.
+ * A coloured cell is ticked to MASK its line; a grey cell whose line was
+ * retired is ticked to RESTORE it. Both live in one selection so a single
+ * click applies the whole batch.
+ */
 interface SelectedCell {
+    action: 'hide' | 'restore';
+    feeId: number;
     row: GroupPaymentRow;
     column: GroupPaymentColumn;
-    cell: GroupPaymentCell;
+    /** What is paid on the line (hide only — the avance preview). */
+    montant: string;
 }
 
 /**
- * POSTs to the SAME endpoint as the trash icon of the inscription edit modal
- * (inscriptions.fees.hide → BasculerVisibiliteFraisInscription::hide): the
- * line is masked (never deleted) and, when money was paid on it, that money
- * is released as an avance for the student — nothing new server-side, so the
+ * POSTs to the SAME endpoints as the inscription edit modal's trash and
+ * corbeille (inscriptions.fees.hide / .restore →
+ * BasculerVisibiliteFraisInscription): hiding masks the line (never deletes
+ * it) and releases what was paid on it as an avance; restoring makes it due
+ * again and never re-attaches that avance. Nothing new server-side, so the
  * matrix shortcut and the inscription modal can never diverge.
  */
-async function postHideFee(inscriptionId: string, feeId: number): Promise<{ montantLibere?: number | string }> {
+async function postFeeVisibility(
+    action: 'hide' | 'restore',
+    inscriptionId: string,
+    feeId: number,
+): Promise<{ montantLibere?: number | string }> {
     const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
-    const response = await fetch(`/backoffice/inscriptions/${inscriptionId}/fees/${feeId}/hide`, {
+    const response = await fetch(`/backoffice/inscriptions/${inscriptionId}/fees/${feeId}/${action}`, {
         method: 'POST',
         headers: { 'X-CSRF-TOKEN': csrf, Accept: 'application/json' },
     });
@@ -342,7 +355,7 @@ async function postHideFee(inscriptionId: string, feeId: number): Promise<{ mont
     }
 
     if (!response.ok) {
-        let message = 'Impossible de masquer ce frais.';
+        let message = action === 'hide' ? 'Impossible de masquer ce frais.' : 'Impossible de restaurer ce frais.';
         try {
             const data = await response.json();
             if (typeof data?.message === 'string' && data.message !== '') {
@@ -355,7 +368,7 @@ async function postHideFee(inscriptionId: string, feeId: number): Promise<{ mont
     }
 
     // A 2xx that is NOT JSON means the request was redirected (login page,
-    // an HTML error rendered down the redirect path): the hide did not
+    // an HTML error rendered down the redirect path): the call did not
     // report success, so it must never be counted as one.
     if (!(response.headers.get('content-type') ?? '').includes('application/json')) {
         throw new Error('Réponse inattendue du serveur — rechargez la page et vérifiez ce frais.');
@@ -389,26 +402,22 @@ function MatrixBody({
     // the NEXT render, so a fast double-click could start the batch twice.
     const runningRef = useRef(false);
 
-    function toggleSelect(row: GroupPaymentRow, column: GroupPaymentColumn, cell: GroupPaymentCell) {
-        if (cell.feeId === null) {
-            return;
-        }
-        const feeId = cell.feeId;
+    function toggleSelect(entry: SelectedCell) {
         setSuccess(null);
         setSelection((prev) => {
             const next = new Map(prev);
-            if (next.has(feeId)) {
-                next.delete(feeId);
+            if (next.has(entry.feeId)) {
+                next.delete(entry.feeId);
             } else {
-                next.set(feeId, { row, column, cell });
+                next.set(entry.feeId, entry);
             }
             return next;
         });
     }
 
     /**
-     * Masks the batch by POSTing each fee to the SAME per-fee endpoint,
-     * sequentially. Each hide is its own guarded transaction server-side,
+     * Applies the batch by POSTing each fee to its SAME per-fee endpoint
+     * (hide or restore), sequentially. Each hide is its own guarded transaction server-side,
      * so a refusal mid-batch loses nothing: the ones already masked stay
      * masked, the refused ones stay SELECTED with their reason listed —
      * reported, never silently skipped (CLAUDE.md §16 « signaler plutôt
@@ -429,16 +438,21 @@ function MatrixBody({
         setProgress({ done: 0, total });
 
         let masques = 0;
+        let restaures = 0;
         let libere = 0;
         const failures: string[] = [];
         const failedIds = new Set<number>();
 
         for (const entry of selection.values()) {
-            const feeId = entry.cell.feeId as number;
+            const feeId = entry.feeId;
             try {
-                const data = await postHideFee(entry.row.key, feeId);
-                masques += 1;
-                libere += Number(data.montantLibere ?? 0);
+                const data = await postFeeVisibility(entry.action, entry.row.key, feeId);
+                if (entry.action === 'hide') {
+                    masques += 1;
+                    libere += Number(data.montantLibere ?? 0);
+                } else {
+                    restaures += 1;
+                }
             } catch (e) {
                 failedIds.add(feeId);
                 failures.push(
@@ -464,12 +478,18 @@ function MatrixBody({
         });
         setErrors(failures);
 
-        if (masques > 0) {
-            setSuccess(
-                libere > 0
-                    ? `${masques} frais masqué${masques > 1 ? 's' : ''}, ${money(String(libere))} libérés en avance pour les étudiants.`
-                    : `${masques} frais masqué${masques > 1 ? 's' : ''}.`,
-            );
+        if (masques + restaures > 0) {
+            const parts: string[] = [];
+            if (masques > 0) {
+                parts.push(
+                    `${masques} frais masqué${masques > 1 ? 's' : ''}` +
+                        (libere > 0 ? ` (${money(String(libere))} libérés en avance pour les étudiants)` : ''),
+                );
+            }
+            if (restaures > 0) {
+                parts.push(`${restaures} frais restauré${restaures > 1 ? 's' : ''}`);
+            }
+            setSuccess(`${parts.join(', ')}.`);
             try {
                 await onFeeHidden?.();
             } catch {
@@ -517,7 +537,16 @@ function MatrixBody({
     // What the batch would release in avance — the sum of what is PAID on
     // the selected lines (the server recomputes it line by line; this figure
     // is only the banner's preview).
-    const selectionPaye = [...selection.values()].reduce((sum, e) => sum + Number(e.cell.montant), 0);
+    const selected = [...selection.values()];
+    const aMasquer = selected.filter((e) => e.action === 'hide');
+    const aRestaurer = selected.filter((e) => e.action === 'restore');
+    const selectionPaye = aMasquer.reduce((sum, e) => sum + Number(e.montant), 0);
+    const boutonLibelle =
+        aRestaurer.length === 0
+            ? `Masquer la sélection (${selection.size})`
+            : aMasquer.length === 0
+              ? `Restaurer la sélection (${selection.size})`
+              : `Appliquer la sélection (${selection.size})`;
 
     return (
         <>
@@ -538,13 +567,28 @@ function MatrixBody({
                 <div className="alert alert-warning py-2 mb-2">
                     <div className="d-flex flex-wrap align-items-center justify-content-between gap-2">
                         <div>
-                            <i className="ti ti-eye-off me-1" />
+                            <i className="ti ti-list-check me-1" />
                             <strong>{selection.size}</strong> frais sélectionné{selection.size > 1 ? 's' : ''}
-                            <div className="fs-13 mt-1">
-                                {selectionPaye > 0
-                                    ? `${money(String(selectionPaye))} déjà payés sur ces lignes seront libérés en avance pour les étudiants (rien n'est supprimé, la caisse ne bouge pas).`
-                                    : "Ces frais ne seront plus dus. Ils restent restaurables depuis la corbeille de l'inscription."}
-                            </div>
+                            {aMasquer.length > 0 && aRestaurer.length > 0 && (
+                                <span>
+                                    {' '}
+                                    — {aMasquer.length} à masquer, {aRestaurer.length} à restaurer
+                                </span>
+                            )}
+                            {aMasquer.length > 0 && (
+                                <div className="fs-13 mt-1">
+                                    <i className="ti ti-eye-off me-1" />
+                                    {selectionPaye > 0
+                                        ? `Masquer : ${money(String(selectionPaye))} déjà payés sur ces lignes seront libérés en avance pour les étudiants (rien n'est supprimé, la caisse ne bouge pas).`
+                                        : "Masquer : ces frais ne seront plus dus. Ils restent restaurables."}
+                                </div>
+                            )}
+                            {aRestaurer.length > 0 && (
+                                <div className="fs-13 mt-1">
+                                    <i className="ti ti-arrow-back-up me-1" />
+                                    Restaurer : ces frais redeviennent dus. Un paiement libéré en avance lors du masquage n&apos;est PAS recollé automatiquement — il reste dans l&apos;onglet Avances.
+                                </div>
+                            )}
                             {processing && progress && (
                                 <div className="d-flex align-items-center gap-2 mt-2" style={{ minWidth: '220px' }}>
                                     <span className="spinner-border spinner-border-sm text-warning" role="status" />
@@ -594,10 +638,10 @@ function MatrixBody({
                                 {processing ? (
                                     <>
                                         <span className="spinner-border spinner-border-sm me-1" role="status" />
-                                        Masquage…{progress ? ` ${progress.done}/${progress.total}` : ''}
+                                        Traitement…{progress ? ` ${progress.done}/${progress.total}` : ''}
                                     </>
                                 ) : (
-                                    `Masquer la sélection (${selection.size})`
+                                    boutonLibelle
                                 )}
                             </button>
                         </div>
@@ -691,16 +735,53 @@ function MatrixBody({
                                         // this student's inscription: grey and
                                         // empty, never a 0 DH debt.
                                         if (!cell) {
+                                            // A RETIRED line (not a never-added
+                                            // one) can be restored from here.
+                                            const masqueId = row.masques?.[column.key] ?? null;
+                                            const canRestore = canHideFees && masqueId !== null;
+                                            const restoreSelected = masqueId !== null && selection.has(masqueId);
+
                                             return (
                                                 <td
                                                     key={column.key}
+                                                    className={canRestore ? 'gls-matrix-cell--hideable' : undefined}
                                                     style={{ ...MONEY_CELL_STYLE, background: ABSENT_FILL }}
                                                     {...bind(
                                                         row.notesMasquees[column.key]
                                                             ? { lines: ['Frais retiré de cette inscription'], note: row.notesMasquees[column.key] }
-                                                            : { lines: ['Frais non affecté à cet étudiant'] },
+                                                            : masqueId !== null
+                                                              ? { lines: ['Frais retiré de cette inscription'] }
+                                                              : { lines: ['Frais non affecté à cet étudiant'] },
                                                     )}
-                                                />
+                                                >
+                                                    {canRestore && (
+                                                        <button
+                                                            type="button"
+                                                            className={
+                                                                restoreSelected
+                                                                    ? 'gls-matrix-hide-btn gls-matrix-restore-btn gls-matrix-hide-btn--active'
+                                                                    : 'gls-matrix-hide-btn gls-matrix-restore-btn'
+                                                            }
+                                                            title={restoreSelected ? 'Retirer de la sélection' : 'Sélectionner pour restaurer'}
+                                                            aria-pressed={restoreSelected}
+                                                            aria-label={`Restaurer ${column.nom} pour ${row.student ?? row.reference}`}
+                                                            disabled={processing}
+                                                            onClick={(event) => {
+                                                                event.stopPropagation();
+                                                                hide();
+                                                                toggleSelect({
+                                                                    action: 'restore',
+                                                                    feeId: masqueId,
+                                                                    row,
+                                                                    column,
+                                                                    montant: '0',
+                                                                });
+                                                            }}
+                                                        >
+                                                            <i className={restoreSelected ? 'ti ti-check' : 'ti ti-arrow-back-up'} />
+                                                        </button>
+                                                    )}
+                                                </td>
                                             );
                                         }
 
@@ -730,7 +811,13 @@ function MatrixBody({
                                                         onClick={(event) => {
                                                             event.stopPropagation();
                                                             hide();
-                                                            toggleSelect(row, column, cell);
+                                                            toggleSelect({
+                                                                action: 'hide',
+                                                                feeId: cell.feeId as number,
+                                                                row,
+                                                                column,
+                                                                montant: cell.montant,
+                                                            });
                                                         }}
                                                     >
                                                         <i className={selected ? 'ti ti-check' : 'ti ti-eye-off'} />

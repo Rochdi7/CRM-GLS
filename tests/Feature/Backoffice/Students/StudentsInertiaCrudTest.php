@@ -64,6 +64,27 @@ final class StudentsInertiaCrudTest extends TestCase
     }
 
     /**
+     * The « Étudiant » filter is a dropdown (same as Inscriptions): the page
+     * serves its options and the list narrows to the chosen student's id.
+     */
+    public function test_the_student_filter_is_a_dropdown_that_narrows_to_one_student(): void
+    {
+        $alaoui = Student::factory()->create(['etablissement_id' => null, 'prenom' => 'Ahmed', 'nom' => 'Alaoui']);
+        Student::factory()->create(['etablissement_id' => null, 'prenom' => 'Sara', 'nom' => 'Bennani']);
+
+        $this->actingAs($this->userWith('students.view'))
+            ->get(route('backoffice.students.index', ['studentFilter' => (string) $alaoui->id]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('filters.studentFilter', (string) $alaoui->id)
+                ->has('studentOptions', 2)
+                ->where('studentOptions.0.label', "Ahmed Alaoui ({$alaoui->reference})")
+                ->has('students.data', 1)
+                ->where('students.data.0.id', $alaoui->id)
+            );
+    }
+
+    /**
      * A STUDENT carries no academic year — only their inscriptions do. The
      * list therefore shows every student of the centre whatever the top-bar
      * year says: the same person enrolled in 2025/2026 must stay findable
