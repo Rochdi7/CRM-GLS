@@ -199,9 +199,14 @@ final class GetPaiementProfCalcul
             // Contrôle « par les paiements » (Détails paiement du frais du
             // mois) — Système GLS seulement ; l'écran le propose derrière une
             // case à cocher, le calcul par séances restant la base.
-            'verificationPaiements' => $config->estValide() && $config->mode === Employee::MODE_PAIEMENT_GLS
-                ? ($this->parPaiements)($group, $fenetre, $config->taux)
-                : null,
+            //
+            // ⚠ MASQUÉ le 29/09/2026 en attendant la formule exacte du CEO :
+            // `null` ⇒ l'écran ne dessine ni la case ni le tableau. Pour
+            // réactiver, rétablir l'appel ci-dessous.
+            // 'verificationPaiements' => $config->estValide() && $config->mode === Employee::MODE_PAIEMENT_GLS
+            //     ? ($this->parPaiements)($group, $fenetre, $config->taux)
+            //     : null,
+            'verificationPaiements' => null,
         ];
 
         // Configuration incomplète : on rend l'en-tête (l'écran a besoin du

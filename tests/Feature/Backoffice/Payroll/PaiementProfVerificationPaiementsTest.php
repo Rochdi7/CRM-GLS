@@ -148,6 +148,8 @@ final class PaiementProfVerificationPaiementsTest extends TestCase
     #[Test]
     public function it_pays_the_rate_prorated_on_what_was_paid_on_the_months_fee(): void
     {
+        $this->markTestSkipped("Vérification par paiements masquée (29/09/2026) en attendant la formule exacte.");
+
         $plein = $this->inscrire('Plein', 1000);
         $moitie = $this->inscrire('Moitie', 500, 1000);   // Avril payé : ne compte pas pour Mars
         $rien = $this->inscrire('Rien', 0, 1000);
@@ -192,6 +194,8 @@ final class PaiementProfVerificationPaiementsTest extends TestCase
     #[Test]
     public function a_month_without_its_fee_on_the_group_says_so(): void
     {
+        $this->markTestSkipped("Vérification par paiements masquée (29/09/2026) en attendant la formule exacte.");
+
         $this->inscrire('Plein', 1000);
         $this->group->frais()->detach($this->fraisMars->id);
 

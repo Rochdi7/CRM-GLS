@@ -177,15 +177,15 @@ export const backofficeNavigation: NavGroup[] = [
                 inertia: true,
             },
             {
-                // « Bientôt disponible » : AUCUN lien — l'entrée est dessinée
-                // sans href (Sidebar, `comingSoon`). La page existe
-                // (/backoffice/paiement-prof, prof-payments.calculate) mais
-                // reste accessible par son URL directe tant qu'elle est en test.
+                // Disponible depuis le 29/09/2026 (était « Bientôt »). La
+                // permission décide, pas le menu : la route porte aussi
+                // `prof-payments.calculate` et le contrôleur la revérifie.
                 label: t('Teacher payment'),
-                href: '#paiement-prof',
+                href: '/backoffice/paiement-prof',
                 icon: 'ti ti-report-money',
-                matchPaths: [],
-                comingSoon: true,
+                permissions: ['prof-payments.calculate'],
+                matchPaths: ['/backoffice/paiement-prof'],
+                inertia: true,
             },
         ],
     },
