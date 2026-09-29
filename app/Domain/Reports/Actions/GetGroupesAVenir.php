@@ -22,9 +22,6 @@ use Illuminate\Support\Carbon;
  */
 final class GetGroupesAVenir
 {
-    /** Cards drawn on the dashboard — the rest is one click away on the Groupes list. */
-    public const LIMITE = 8;
-
     public function __construct(private readonly CurrentContext $context) {}
 
     /**
@@ -40,8 +37,8 @@ final class GetGroupesAVenir
             ->when($anneeId, fn ($q) => $q->where('annee_scolaire_id', $anneeId))
             ->when($centreId, fn ($q) => $q->where('etablissement_id', $centreId));
 
-        $total = (clone $query)->count();
-
+        // Every group is served: the widget is a carousel, not a top-N. The
+        // set is small by nature (groups not started yet in one année).
         $groups = $query
             ->with([
                 'enseignant:id,nom,prenom',
@@ -54,13 +51,12 @@ final class GetGroupesAVenir
             ])
             // A group with no start date yet is the least imminent: last.
             ->orderByRaw('date_debut_formation IS NULL, date_debut_formation ASC, nom ASC')
-            ->limit(self::LIMITE)
             ->get();
 
         $today = Carbon::today();
 
         return [
-            'total' => $total,
+            'total' => $groups->count(),
             'groupes' => $groups->map(fn (Group $group): array => [
                 'id' => $group->id,
                 'nom' => $group->nom,

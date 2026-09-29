@@ -1,4 +1,5 @@
 import { Link } from '@inertiajs/react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '@/Lib/i18n';
 import type { GroupeAVenir, GroupesAVenirData } from '@/Types';
 
@@ -40,9 +41,36 @@ function fillTone(pct: number): string {
  * « Groupes à venir » — the groups still « En inscription » in the active
  * année + centre (GetGroupesAVenir), soonest start first: countdown, teacher,
  * room, open timetable and how full each one is. Each tile opens the group.
+ *
+ * Every group is listed in a carousel: a native horizontal scroll-snap track
+ * (touch swipe on mobile, trackpad/shift-wheel on desktop) driven by two
+ * arrow buttons — no carousel library, no Bootstrap JS (§3/§6).
  */
 export default function GroupesAVenir({ data }: GroupesAVenirProps) {
-    const reste = data.total - data.groupes.length;
+    const trackRef = useRef<HTMLDivElement>(null);
+    const [canPrev, setCanPrev] = useState(false);
+    const [canNext, setCanNext] = useState(false);
+
+    const updateArrows = useCallback(() => {
+        const el = trackRef.current;
+        if (!el) return;
+        setCanPrev(el.scrollLeft > 4);
+        setCanNext(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+    }, []);
+
+    useEffect(() => {
+        updateArrows();
+        window.addEventListener('resize', updateArrows);
+
+        return () => window.removeEventListener('resize', updateArrows);
+    }, [updateArrows, data.groupes.length]);
+
+    function slide(direction: 1 | -1) {
+        const el = trackRef.current;
+        if (!el) return;
+        // One "page" of visible tiles per click.
+        el.scrollBy({ left: direction * el.clientWidth * 0.9, behavior: 'smooth' });
+    }
 
     return (
         <div className="card gls-dash-card gls-upcoming">
@@ -59,13 +87,32 @@ export default function GroupesAVenir({ data }: GroupesAVenirProps) {
                     </div>
                 </div>
                 {data.total > 0 && (
-                    <Link
-                        href={`/backoffice/groups?statutFilter=${encodeURIComponent('En inscription')}`}
-                        className="btn btn-sm btn-outline-primary"
-                    >
-                        {t('See all')}
-                        {reste > 0 && <span className="badge bg-primary ms-1">+{reste}</span>}
-                    </Link>
+                    <div className="d-flex align-items-center gap-2">
+                        <button
+                            type="button"
+                            className="btn btn-sm btn-outline-light border gls-cal-nav"
+                            onClick={() => slide(-1)}
+                            disabled={!canPrev}
+                            aria-label={t('Previous')}
+                        >
+                            <i className="ti ti-chevron-left" />
+                        </button>
+                        <button
+                            type="button"
+                            className="btn btn-sm btn-outline-light border gls-cal-nav"
+                            onClick={() => slide(1)}
+                            disabled={!canNext}
+                            aria-label={t('Next')}
+                        >
+                            <i className="ti ti-chevron-right" />
+                        </button>
+                        <Link
+                            href={`/backoffice/groups?statutFilter=${encodeURIComponent('En inscription')}`}
+                            className="btn btn-sm btn-outline-primary"
+                        >
+                            {t('See all')}
+                        </Link>
+                    </div>
                 )}
             </div>
 
@@ -78,14 +125,14 @@ export default function GroupesAVenir({ data }: GroupesAVenirProps) {
                         <p className="text-muted mb-0">{t('No group open for registration.')}</p>
                     </div>
                 ) : (
-                    <div className="row g-3">
+                    <div ref={trackRef} className="gls-upcoming-track" onScroll={updateArrows}>
                         {data.groupes.map((groupe) => {
                             const chip = countdown(groupe);
                             const pct = groupe.capacite ? Math.round((groupe.inscrits / groupe.capacite) * 100) : null;
 
                             return (
-                                <div key={groupe.id} className="col-xxl-3 col-lg-4 col-md-6 d-flex">
-                                    <Link href={`/backoffice/groups/${groupe.id}`} className={`gls-upcoming-tile gls-upcoming-${chip.tone}`}>
+                                <div key={groupe.id} className="gls-upcoming-slide">
+                                    <Link href={`/backoffice/groups/${groupe.id}`} className="gls-upcoming-tile">
                                         <div className="d-flex align-items-center justify-content-between gap-2 mb-2">
                                             {groupe.niveau ? (
                                                 <span className="badge badge-soft-primary">{groupe.niveau}</span>

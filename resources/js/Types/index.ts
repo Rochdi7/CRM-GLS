@@ -204,7 +204,7 @@ export interface GroupeAVenir {
 }
 
 export interface GroupesAVenirData {
-    /** Every « En inscription » group of the context (the list shows at most 8). */
+    /** Every « En inscription » group of the context — all of them are in `groupes`. */
     total: number;
     groupes: GroupeAVenir[];
 }

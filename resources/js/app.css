@@ -2697,29 +2697,46 @@ html[data-theme='dark'] .card-body .border-top p {
     font-size: 20px;
     flex-shrink: 0;
 }
+.gls-upcoming-track {
+    display: flex;
+    gap: 16px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 4px 2px 8px;
+    margin: -4px -2px -8px;
+}
+.gls-upcoming-track::-webkit-scrollbar {
+    display: none;
+}
+/* 1 tile on phones (with a peek of the next), 2 / 3 / 4 as the card widens. */
+.gls-upcoming-slide {
+    flex: 0 0 85%;
+    display: flex;
+    scroll-snap-align: start;
+}
+@media (min-width: 576px)  { .gls-upcoming-slide { flex-basis: calc((100% - 16px) / 2); } }
+@media (min-width: 992px)  { .gls-upcoming-slide { flex-basis: calc((100% - 32px) / 3); } }
+@media (min-width: 1400px) { .gls-upcoming-slide { flex-basis: calc((100% - 48px) / 4); } }
 .gls-upcoming-tile {
-    position: relative;
     display: flex;
     flex-direction: column;
     width: 100%;
     padding: 14px 16px;
     border: 1px solid #e9edf4;
-    border-top-width: 4px;
     border-radius: 10px;
     color: inherit;
     background: #fff;
-    transition: box-shadow 0.15s ease, transform 0.15s ease;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 .gls-upcoming-tile:hover,
 .gls-upcoming-tile:focus-visible {
     color: inherit;
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(32, 44, 75, 0.08);
+    border-color: #c8cfe0;
+    box-shadow: 0 6px 16px rgba(32, 44, 75, 0.08);
 }
-.gls-upcoming-primary   { border-top-color: #3d5ee1; }
-.gls-upcoming-warning   { border-top-color: #eab300; }
-.gls-upcoming-danger    { border-top-color: #ef6879; }
-.gls-upcoming-secondary { border-top-color: #b9c0cf; }
 .gls-upcoming-name {
     font-size: 15px;
     font-weight: 600;
