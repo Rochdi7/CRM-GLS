@@ -44,6 +44,13 @@ import type { EncaissementRow, EncaissementsPageProps, InscriptionPaymentRow, Pa
  */
 const TRANSFERT_ETUDIANT_ACTIF = false;
 
+/**
+ * « Envoyer le reçu par WhatsApp » (ligne + envoi groupé) — masqué pour
+ * l'instant, gardé pour plus tard. Repasser à `true` pour le réafficher :
+ * le code, la route et `RecuWhatsAppLink` restent en place.
+ */
+const RECU_WHATSAPP_ACTIF = false;
+
 interface CreateFormState {
     student_id: number | '';
     inscription_id: number | '';
@@ -1291,20 +1298,24 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                         Générer le reçu format A5
                                     </button>
                                 </li>
-                                <li><hr className="dropdown-divider" /></li>
-                                <li>
-                                    <button
-                                        type="button"
-                                        className="dropdown-item rounded-1 w-100 text-start border-0 bg-transparent"
-                                        disabled={bulkDisabled || whatsAppBulkSending}
-                                        onClick={openWhatsAppRecuGroupe}
-                                    >
-                                        <i className="ti ti-brand-whatsapp me-2" aria-hidden="true" />
-                                        {whatsAppBulkSending
-                                            ? 'Ouverture de WhatsApp…'
-                                            : 'Envoyer le reçu par WhatsApp'}
-                                    </button>
-                                </li>
+                                {RECU_WHATSAPP_ACTIF && (
+                                    <>
+                                        <li><hr className="dropdown-divider" /></li>
+                                        <li>
+                                            <button
+                                                type="button"
+                                                className="dropdown-item rounded-1 w-100 text-start border-0 bg-transparent"
+                                                disabled={bulkDisabled || whatsAppBulkSending}
+                                                onClick={openWhatsAppRecuGroupe}
+                                            >
+                                                <i className="ti ti-brand-whatsapp me-2" aria-hidden="true" />
+                                                {whatsAppBulkSending
+                                                    ? 'Ouverture de WhatsApp…'
+                                                    : 'Envoyer le reçu par WhatsApp'}
+                                            </button>
+                                        </li>
+                                    </>
+                                )}
                             </ul>
                         </div>
                     )}
@@ -1541,12 +1552,14 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                 <RowActionItem icon="ti-mail" onClick={() => openEmailRecu(row)}>
                                                     Envoyer le reçu par email
                                                 </RowActionItem>
-                                                <RowActionItem
-                                                    icon="ti-brand-whatsapp"
-                                                    onClick={() => openWhatsAppRecu(row)}
-                                                >
-                                                    Envoyer le reçu par WhatsApp
-                                                </RowActionItem>
+                                                {RECU_WHATSAPP_ACTIF && (
+                                                    <RowActionItem
+                                                        icon="ti-brand-whatsapp"
+                                                        onClick={() => openWhatsAppRecu(row)}
+                                                    >
+                                                        Envoyer le reçu par WhatsApp
+                                                    </RowActionItem>
+                                                )}
                                                 {can?.delete && (
                                                     <>
                                                         <RowActionDivider />
