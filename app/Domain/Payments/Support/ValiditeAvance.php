@@ -114,7 +114,7 @@ final class ValiditeAvance
         }
 
         throw ValidationException::withMessages([
-            $champ => __('This advance expired on :date (:jours days after it was received or released) and can no longer be applied.', [
+            $champ => __('This advance expired on :date (:jours days after it was received or released) and can no longer be applied. Please contact the back office.', [
                 'date' => self::expireLe($encaissement)?->format('d/m/Y'),
                 'jours' => self::DUREE_JOURS,
             ]),
@@ -144,7 +144,7 @@ final class ValiditeAvance
     /** Le motif affiché à l'écran ET renvoyé par l'action — une seule phrase. */
     public static function motifConversionRefusee(Encaissement $encaissement): string
     {
-        return __('Payment :reference dates from :date, more than :jours days ago: it can no longer be converted into an advance.', [
+        return __('Payment :reference dates from :date, more than :jours days ago: it can no longer be converted into an advance. Please contact the back office.', [
             'reference' => $encaissement->reference,
             'date' => $encaissement->date_paiement?->format('d/m/Y'),
             'jours' => self::DUREE_JOURS,

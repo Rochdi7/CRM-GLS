@@ -2357,12 +2357,12 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                 {(applyForm.errors as Record<string, string | undefined>).avance}
                             </div>
                         )}
-                        {/* Seul un super-admin arrive ici avec une avance expirée
-                            (`applicable` la refuse aux autres) : on lui DIT qu'il
-                            passe outre le délai, et que le journal le note. */}
+                        {/* Une avance expirée n'arrive ici que pour qui peut encore
+                            l'appliquer (`applicable` la refuse aux autres). On
+                            signale simplement le délai dépassé, sans nommer de rôle. */}
                         {applyTarget.avanceExpiree && (
                             <div className="alert alert-warning" role="alert">
-                                {t('This advance expired on :date. You are applying it as a super-admin: the override is recorded in the audit journal.').replace(
+                                {t('This advance expired on :date (14-day limit exceeded).').replace(
                                     ':date',
                                     applyTarget.avanceExpireLe ?? '',
                                 )}

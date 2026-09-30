@@ -1647,7 +1647,7 @@
     "Move the payment": "Déplacer le paiement",
     "Moving…": "Déplacement…",
     "This payment sits on a hidden fee (« :frais »): restore the fee, or release its money as an advance first, before refunding it.": "Ce paiement est posé sur un frais masqué (« :frais ») : restaurez le frais, ou libérez d’abord son argent en avance, avant de le rembourser.",
-    "This advance expired on :date (:jours days after it was received or released) and can no longer be applied.": "Cette avance a expiré le :date (:jours jours après sa réception ou sa libération) et ne peut plus être appliquée.",
+    "This advance expired on :date (:jours days after it was received or released) and can no longer be applied. Please contact the back office.": "Cette avance a expiré le :date (:jours jours après sa réception ou sa libération) et ne peut plus être appliquée. Merci de contacter le back-office.",
     "A reason is required to extend an advance.": "Un motif est obligatoire pour prolonger une avance.",
     "This advance has no remaining balance: there is nothing to extend.": "Cette avance n'a plus de reste : il n'y a rien à prolonger.",
     "Advance extended until :date.": "Avance prolongée jusqu'au :date.",
@@ -1663,7 +1663,7 @@
     "Extend by 14 days": "Prolonger de 14 jours",
     "Reason for the extension": "Motif de la prolongation",
     "Required: it is what will explain, later, why expired money could be applied.": "Obligatoire : c'est ce qui expliquera, plus tard, pourquoi de l'argent expiré a pu être appliqué.",
-    "Payment :reference dates from :date, more than :jours days ago: it can no longer be converted into an advance.": "Le paiement :reference date du :date, soit plus de :jours jours : il ne peut plus être converti en avance.",
+    "Payment :reference dates from :date, more than :jours days ago: it can no longer be converted into an advance. Please contact the back office.": "Le paiement :reference date du :date, soit plus de :jours jours : il ne peut plus être converti en avance. Merci de contacter le back-office.",
     "Over 14 days": "Plus de 14 jours",
-    "This advance expired on :date. You are applying it as a super-admin: the override is recorded in the audit journal.": "Cette avance a expiré le :date. Vous l'appliquez en tant que super-admin : le dépassement du délai est noté au journal d'audit."
+    "This advance expired on :date (14-day limit exceeded).": "Cette avance a expiré le :date (délai de 14 jours dépassé)."
 }
