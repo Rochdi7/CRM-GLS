@@ -15,6 +15,7 @@ namespace App\Domain\Payroll\DTOs;
 final readonly class LignePaiementProf
 {
     /**
+     * @param  string|null $inscriptionStatut statut du dossier dans le groupe (null = appelé sans y être inscrit)
      * @param  int         $joursRetenus  présences — la SEULE donnée qui paie
      * @param  int         $joursIgnores  « Retard » / « Justifié » hérités, ne rapportent rien
      * @param  int         $semainesPayees palier atteint : 0, 1, 2 ou 4 (= complet)
@@ -23,6 +24,7 @@ final readonly class LignePaiementProf
     public function __construct(
         public int $studentId,
         public string $nom,
+        public ?string $inscriptionStatut,
         public int $joursRetenus,
         public int $joursAbsents,
         public int $joursIgnores,
@@ -38,6 +40,7 @@ final readonly class LignePaiementProf
         return [
             'studentId' => $this->studentId,
             'nom' => $this->nom,
+            'inscriptionStatut' => $this->inscriptionStatut,
             'joursRetenus' => $this->joursRetenus,
             'joursAbsents' => $this->joursAbsents,
             'joursIgnores' => $this->joursIgnores,

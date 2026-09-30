@@ -2708,12 +2708,17 @@ export interface EcheancesEnMassePageProps {
 /** Une ligne du calcul : ce qu'UN étudiant rapporte à l'enseignant. */
 export interface PaiementProfLigne {
     studentId: number;
+    /** « Prénom Nom », comme « Absence par groupe ». */
     nom: string;
+    /** Statut du dossier dans le groupe ; null = appelé sans y être inscrit. */
+    inscriptionStatut: string | null;
     /** Présences — la SEULE donnée qui paie. */
     joursRetenus: number;
     joursAbsents: number;
     /** « Retard » / « Justifié » hérités de l'ancien import — ne rapportent rien. */
     joursIgnores: number;
+    /** Palier atteint : 0, 1, 2 ou 4 (= mois complet). */
+    semainesPayees: number;
     montantAuto: number;
     montantAjuste: number | null;
     montantEffectif: number;
@@ -2776,8 +2781,6 @@ export interface PaiementProfEnseignantOption {
     label: string;
     /** Séances qu'il a réellement données sur le mois choisi. */
     seancesCeMois: number;
-    /** Palier atteint : 0, 1, 2 ou 4 (= mois complet). */
-    semainesPayees: number;
     mode: PaiementProfMode | '';
     taux: number;
     probleme: string | null;

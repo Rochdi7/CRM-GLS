@@ -10,6 +10,7 @@ use App\Models\Employee;
 use App\Models\Etablissement;
 use App\Models\Group;
 use App\Models\GroupEnseignant;
+use App\Models\Inscription;
 use App\Models\Presence;
 use App\Models\Seance;
 use App\Models\Student;
@@ -476,5 +477,71 @@ final class PaiementProfEcranTest extends TestCase
                 'mois' => '2025-09',
             ]))
             ->assertSessionHasErrors('groupFilter');
+    }
+
+    /*
+    |--------------------------------------------------------------------
+    | Liste des étudiants : comme « Absence par groupe »
+    |--------------------------------------------------------------------
+    */
+
+    private function inscrire(string $prenom, string $nom, string $statut): Student
+    {
+        $student = Student::factory()->create([
+            'etablissement_id' => $this->centre->id, 'prenom' => $prenom, 'nom' => $nom,
+        ]);
+
+        Inscription::create([
+            'reference' => 'INS-PP-'.$student->id,
+            'student_id' => $student->id,
+            'group_id' => $this->group->id,
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'statut' => $statut,
+            'date_inscription' => '2025-08-20',
+        ]);
+
+        return $student;
+    }
+
+    #[Test]
+    public function students_are_listed_like_the_absence_matrix(): void
+    {
+        // Même liste, même ordre, mêmes statuts que « Absence par groupe » :
+        // les inscrits du groupe (même sans appel ce mois), Active d'abord,
+        // puis les dossiers clos, « prénom nom » alphabétique dans chaque
+        // bloc ; un étudiant appelé sans inscription arrive en dernier.
+        $annulee = $this->inscrire('Ahmed', 'Lagreni', Inscription::STATUT_ANNULEE);
+        $zineb = $this->inscrire('Zineb', 'Assadi', Inscription::STATUT_ACTIVE);
+        $changement = $this->inscrire('Haitam', 'Abbadi', Inscription::STATUT_CHANGEMENT);
+        $adham = $this->inscrire('Adham', 'Annabou', Inscription::STATUT_ACTIVE);
+        $sansAppel = $this->inscrire('Mouad', 'Derbal', Inscription::STATUT_ACTIVE);
+        $horsGroupe = Student::factory()->create([
+            'etablissement_id' => $this->centre->id, 'prenom' => 'Abid', 'nom' => 'Ghizlane',
+        ]);
+
+        $this->seance('2025-09-01', [
+            $annulee->id => Presence::STATUT_PRESENT,
+            $zineb->id => Presence::STATUT_PRESENT,
+            $changement->id => Presence::STATUT_PRESENT,
+            $adham->id => Presence::STATUT_ABSENT,
+            $horsGroupe->id => Presence::STATUT_ABSENT,
+        ]);
+
+        $this->calculer()
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('calcul.lignes', 6)
+                ->where('calcul.lignes.0.nom', 'Adham Annabou')
+                ->where('calcul.lignes.0.inscriptionStatut', Inscription::STATUT_ACTIVE)
+                ->where('calcul.lignes.1.nom', 'Mouad Derbal')
+                ->where('calcul.lignes.1.joursRetenus', 0)
+                ->where('calcul.lignes.2.nom', 'Zineb Assadi')
+                ->where('calcul.lignes.3.nom', 'Haitam Abbadi')
+                ->where('calcul.lignes.3.inscriptionStatut', Inscription::STATUT_CHANGEMENT)
+                ->where('calcul.lignes.4.nom', 'Ahmed Lagreni')
+                ->where('calcul.lignes.4.inscriptionStatut', Inscription::STATUT_ANNULEE)
+                ->where('calcul.lignes.5.nom', 'Abid Ghizlane')
+                ->where('calcul.lignes.5.inscriptionStatut', null));
     }
 }

@@ -64,7 +64,7 @@ final class CalculerPaiementProfParPaliers
     }
 
     /**
-     * @param  array<int, array{student_id: int, nom: string, retenus: int, absents: int, ignores: int}>  $etudiants
+     * @param  array<int, array{student_id: int, nom: string, inscription_statut?: ?string, retenus: int, absents: int, ignores: int}>  $etudiants
      * @param  int  $nombreSeances  séances RÉELLEMENT effectuées sur la période (affichage seulement)
      * @param  array<int, float|null>  $ajustements  student_id => montant imposé
      */
@@ -98,6 +98,7 @@ final class CalculerPaiementProfParPaliers
             $lignes[] = new LignePaiementProf(
                 studentId: $etudiant['student_id'],
                 nom: $etudiant['nom'],
+                inscriptionStatut: $etudiant['inscription_statut'] ?? null,
                 joursRetenus: $etudiant['retenus'],
                 joursAbsents: $etudiant['absents'],
                 joursIgnores: $etudiant['ignores'],

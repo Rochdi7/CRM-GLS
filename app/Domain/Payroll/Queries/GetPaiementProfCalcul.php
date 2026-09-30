@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Payroll\Queries;
 
+use App\Domain\Attendance\Queries\GetAbsencesParGroupe;
 use App\Domain\Payroll\Actions\CalculerPaiementProfHoraire;
 use App\Domain\Payroll\Actions\CalculerPaiementProfParPaliers;
 use App\Domain\Payroll\Support\ConfigurationPaieEnseignant;
@@ -12,7 +13,9 @@ use App\Domain\Payroll\Support\StatutPresencePaie;
 use App\Models\Employee;
 use App\Models\Group;
 use App\Models\GroupEnseignant;
+use App\Models\Inscription;
 use App\Models\Seance;
+use App\Models\Student;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
@@ -245,36 +248,31 @@ final class GetPaiementProfCalcul
 
         $lignes = DB::table('presences')
             ->join('seances', 'seances.id', '=', 'presences.seance_id')
-            ->join('students', 'students.id', '=', 'presences.student_id')
             ->whereIn('presences.seance_id', $seanceIds)
-            ->select(['presences.student_id', 'presences.statut', 'seances.date_seance', 'students.nom', 'students.prenom'])
-            ->orderBy('students.nom')->orderBy('students.prenom')
+            ->select(['presences.student_id', 'presences.statut', 'seances.date_seance'])
             ->get();
 
-        $parEtudiant = [];
+        $compteurs = [];
         $grille = [];
 
         foreach ($lignes as $ligne) {
             $studentId = (int) $ligne->student_id;
             $jour = Carbon::parse($ligne->date_seance)->toDateString();
 
-            $parEtudiant[$studentId] ??= [
-                'student_id' => $studentId,
-                'nom' => trim(($ligne->nom ?? '').' '.($ligne->prenom ?? '')),
-                'retenus' => 0, 'absents' => 0, 'ignores' => 0,
-            ];
+            $compteurs[$studentId] ??= ['retenus' => 0, 'absents' => 0, 'ignores' => 0];
 
             if (StatutPresencePaie::estRetenu($ligne->statut)) {
-                $parEtudiant[$studentId]['retenus']++;
+                $compteurs[$studentId]['retenus']++;
             } elseif (StatutPresencePaie::estHerite($ligne->statut)) {
-                $parEtudiant[$studentId]['ignores']++;
+                $compteurs[$studentId]['ignores']++;
             } else {
-                $parEtudiant[$studentId]['absents']++;
+                $compteurs[$studentId]['absents']++;
             }
 
             $grille[$studentId][$jour] = $ligne->statut;
         }
 
+        $parEtudiant = $this->etudiantsDuGroupe($group, $compteurs);
         $resultat = $this->parPaliers->handle(
             etudiants: array_values($parEtudiant),
             nombreSeances: $seances->count(),
@@ -290,6 +288,68 @@ final class GetPaiementProfCalcul
             'heuresSaisies' => null,
             'totalHoraire' => null,
         ];
+    }
+
+    /**
+     * Les lignes du calcul, dans l'ordre et avec les étudiants de
+     * « Absence par groupe » (30/09/2026) : une ligne par étudiant INSCRIT
+     * dans le groupe — même ceux sans aucun appel sur la période (0 DH), et
+     * les dossiers clos (Changement / Annulée…) avec leur statut, que
+     * l'écran peint comme la matrice. Ordre : bloc de statut
+     * (`GetAbsencesParGroupe::STATUT_ORDRE`, Active d'abord), puis
+     * « prénom nom » — la MÊME définition, jamais recopiée.
+     *
+     * Un étudiant appelé dans ce groupe SANS y être inscrit n'est pas perdu :
+     * ses présences sont réelles, il est ajouté en fin de liste, sans statut
+     * (« signaler plutôt que masquer »).
+     *
+     * @param  array<int, array{retenus: int, absents: int, ignores: int}>  $compteurs
+     * @return list<array{student_id: int, nom: string, inscription_statut: ?string, retenus: int, absents: int, ignores: int}>
+     */
+    private function etudiantsDuGroupe(Group $group, array $compteurs): array
+    {
+        $inscriptions = Inscription::query()
+            ->with('student:id,nom,prenom')
+            ->where('group_id', $group->id)
+            ->get(['id', 'student_id', 'statut'])
+            ->filter(fn (Inscription $i): bool => $i->student !== null)
+            // Réinscrit dans le même groupe : le dossier Active l'emporte.
+            ->sortByDesc(fn (Inscription $i): int => $i->statut === Inscription::STATUT_ACTIVE ? 1 : 0)
+            ->unique('student_id');
+
+        $vide = ['retenus' => 0, 'absents' => 0, 'ignores' => 0];
+        $etudiants = [];
+
+        foreach ($inscriptions as $inscription) {
+            $etudiants[] = [
+                'student_id' => $inscription->student_id,
+                'nom' => $inscription->student->nomComplet(),
+                'inscription_statut' => $inscription->statut,
+                ...($compteurs[$inscription->student_id] ?? $vide),
+            ];
+        }
+
+        $sansInscription = array_diff(array_keys($compteurs), $inscriptions->pluck('student_id')->all());
+
+        if ($sansInscription !== []) {
+            foreach (Student::query()->whereKey($sansInscription)->get(['id', 'nom', 'prenom']) as $student) {
+                $etudiants[] = [
+                    'student_id' => $student->id,
+                    'nom' => $student->nomComplet(),
+                    'inscription_statut' => null,
+                    ...$compteurs[$student->id],
+                ];
+            }
+        }
+
+        $rang = static fn (?string $statut): int => $statut === null
+            ? count(GetAbsencesParGroupe::STATUT_ORDRE) + 1
+            : GetAbsencesParGroupe::rangStatut($statut);
+
+        usort($etudiants, static fn (array $a, array $b): int => ($rang($a['inscription_statut']) <=> $rang($b['inscription_statut']))
+            ?: strcoll($a['nom'], $b['nom']));
+
+        return $etudiants;
     }
 
     /**

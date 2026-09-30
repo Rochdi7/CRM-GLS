@@ -45,7 +45,7 @@ final class GetAbsencesParGroupe
      * from this map sorts after every known one, never interleaved with the
      * active students.
      */
-    private const STATUT_ORDRE = [
+    public const STATUT_ORDRE = [
         Inscription::STATUT_ACTIVE => 0,
         Inscription::STATUT_CHANGEMENT => 1,
         Inscription::STATUT_EXPIREE => 2,
@@ -178,7 +178,7 @@ final class GetAbsencesParGroupe
      * Position of a statut's block, with unknown values pushed past every
      * known one — mirrors GetGroupPaymentMatrix::rangStatut().
      */
-    private function rangStatut(string $statut): int
+    public static function rangStatut(string $statut): int
     {
         return self::STATUT_ORDRE[$statut] ?? count(self::STATUT_ORDRE);
     }
@@ -205,7 +205,7 @@ final class GetAbsencesParGroupe
         // way on both screens).
         $students = $inscriptions
             ->sort(function (Inscription $a, Inscription $b): int {
-                $bloc = $this->rangStatut($a->statut) <=> $this->rangStatut($b->statut);
+                $bloc = self::rangStatut($a->statut) <=> self::rangStatut($b->statut);
 
                 return $bloc !== 0
                     ? $bloc

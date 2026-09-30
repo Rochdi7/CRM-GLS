@@ -25,6 +25,19 @@ const DEPENSE_STATUT_BADGE: Record<string, 'success' | 'warning' | 'danger' | 's
 };
 
 /**
+ * Couleur de la cellule « Étudiant » selon le statut du dossier — la MÊME
+ * répartition que « Absence par groupe » (Seances/AbsenceParGroupe.tsx
+ * ROW_CLASS) : rien tant que l'inscription est Active, rouge pour une
+ * annulation, gris pour tout autre dossier clos ou sans inscription.
+ */
+function classeNom(statut: string | null): string {
+    if (statut === 'Active') return '';
+    if (statut === 'Annulée') return 'pp-annulee';
+
+    return 'pp-clos';
+}
+
+/**
  * Présences minimales d'un palier (`paliersPaie` = { présences min: semaines }).
  * Le barème vient du serveur (`CalculerPaiementProfParPaliers::PALIERS`) :
  * l'écran ne le recopie pas, il le lit.
@@ -394,6 +407,12 @@ export default function PaiementProfIndex({
                 .pp-wrap tbody tr:hover td.pp-num,
                 .pp-wrap tbody tr:hover td.pp-nom,
                 .pp-wrap tbody tr:hover td.pp-total { background: #F7F9FC; }
+                /* Dossiers clos : mêmes couleurs que « Absence par groupe »
+                   (gris = changement / expirée / archivée, rouge = annulée). */
+                .pp-wrap tbody td.pp-nom.pp-clos,
+                .pp-wrap tbody tr:hover td.pp-nom.pp-clos { background: rgb(170, 170, 170); color: #1a1a1a; }
+                .pp-wrap tbody td.pp-nom.pp-annulee,
+                .pp-wrap tbody tr:hover td.pp-nom.pp-annulee { background: rgb(246, 45, 81); color: #fff; }
                 .pp-wrap tfoot td { position: sticky; bottom: 0; z-index: 9;
                                     background: #F2F4F8; font-weight: 600;
                                     border-top: 1px solid var(--bs-border-color); }
@@ -1041,7 +1060,18 @@ export default function PaiementProfIndex({
                                         return (
                                             <tr key={ligne.studentId}>
                                                 <td className="pp-num text-center text-muted">{index + 1}</td>
-                                                <td className="pp-nom fw-semibold ps-2">{ligne.nom}</td>
+                                                <td
+                                                    className={`pp-nom fw-semibold ps-2 ${classeNom(ligne.inscriptionStatut)}`}
+                                                    title={
+                                                        ligne.inscriptionStatut === 'Active'
+                                                            ? undefined
+                                                            : ligne.inscriptionStatut === null
+                                                              ? t('Not enrolled in this group')
+                                                              : `Inscription ${ligne.inscriptionStatut}`
+                                                    }
+                                                >
+                                                    {ligne.nom}
+                                                </td>
                                                 <td
                                                     className="pp-compte"
                                                     title={
