@@ -13,8 +13,11 @@ use App\Domain\Expenses\Actions\RefuserDepense;
 use App\Domain\Expenses\Queries\GetDepenseDetails;
 use App\Domain\Expenses\Queries\GetDepensesList;
 use App\Domain\Finance\Queries\GetRemboursementsList;
+use App\Domain\Payroll\Actions\CalculerPaiementProfParPaliers;
+use App\Domain\Payroll\Queries\GetPaiementProfCalcul;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
+use App\Http\Controllers\Backoffice\Concerns\ResolvesPaiementProfCalcul;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Depenses\StoreDepenseRequest;
 use App\Http\Requests\Backoffice\Depenses\UpdateDepenseRequest;
@@ -43,6 +46,7 @@ final class DepenseController extends Controller
 {
     use AssertsContextScope;
     use RedirectsPreservingFilters;
+    use ResolvesPaiementProfCalcul;
 
     /** Mirrors Depense::registerMediaCollections()'s mime allowlist. */
     private const JUSTIFICATIF_MIMES = ['jpeg', 'jpg', 'png', 'webp', 'pdf'];
@@ -61,9 +65,26 @@ final class DepenseController extends Controller
         Request $request,
         GetDepensesList $getDepensesList,
         GetRemboursementsList $getRemboursementsList,
+        GetPaiementProfCalcul $getPaiementProfCalcul,
     ): Response {
         $user = $request->user();
         abort_unless($user->canAny(['expenses.view', 'refunds.view']), 403);
+
+        // « Calcul paiement prof » VIT dans l'onglet Paiements prof depuis le
+        // 30/09/2026 (il était un écran de la barre latérale) : « Ajouter un
+        // paiement prof » ouvre d'abord le calcul, et « Enregistrer la
+        // dépense » ouvre le modal habituel pré-rempli. Ses paramètres
+        // portent le préfixe `pp` pour ne jamais se mêler aux filtres de la
+        // liste (ils SURVIVENT à un rechargement de filtre, mais le bouton
+        // « Réinitialiser les filtres » ne les touche pas — un calcul n'est
+        // pas un filtre). Même résolution et même garde de portée que
+        // l'écran dédié (ResolvesPaiementProfCalcul). ⚠ Aucune écriture :
+        // le calcul PROPOSE, la dépense reste une soumission ordinaire.
+        $canCalculer = $user->can('prof-payments.calculate') && $user->can('expenses.view');
+        $calculKeys = ['groupFilter' => 'ppGroup', 'enseignantFilter' => 'ppEnseignant', 'mois' => 'ppMois', 'heures' => 'ppHeures'];
+        ['calcul' => $calcul, 'filters' => $calculFilters] = $canCalculer
+            ? $this->resolvePaiementProfCalcul($request, $getPaiementProfCalcul, $calculKeys)
+            : ['calcul' => null, 'filters' => ['groupFilter' => '', 'enseignantFilter' => '', 'mois' => '', 'heures' => '', 'dureeSeance' => '']];
 
         // The operation trail (créée le / modifiée le) and the « Validation
         // des dépenses » tab are for auditing who keyed what and when — they
@@ -174,6 +195,12 @@ final class DepenseController extends Controller
             'enAttenteCount' => $depensesList['enAttenteCount'] ?? 0,
             'paiementsProf' => $this->scrubOperationDates($paiementsProfList['data'] ?? null, $canAudit),
             'paiementsProfTotal' => $paiementsProfList['montantTotal'] ?? null,
+            // « Calcul paiement prof » dans l'onglet — voir $canCalculer.
+            'canCalculerPaiementProf' => $canCalculer,
+            'calculPaiementProf' => $calcul,
+            'calculPaiementProfFilters' => $calculFilters,
+            'calculGroupOptions' => fn (): array => $canCalculer ? $getPaiementProfCalcul->groupOptions($user) : [],
+            'paliersPaie' => CalculerPaiementProfParPaliers::PALIERS,
             // The Validation tab's own rows and totals — over BOTH kinds, so
             // the badge and the « En attente » figure report the real amount
             // held across the tills, not just the Dépenses tab's share.

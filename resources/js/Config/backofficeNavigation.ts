@@ -176,17 +176,11 @@ export const backofficeNavigation: NavGroup[] = [
                 matchPaths: ['/backoffice/employees'],
                 inertia: true,
             },
-            {
-                // Disponible depuis le 29/09/2026 (était « Bientôt »). La
-                // permission décide, pas le menu : la route porte aussi
-                // `prof-payments.calculate` et le contrôleur la revérifie.
-                label: t('Teacher payment'),
-                href: '/backoffice/paiement-prof',
-                icon: 'ti ti-report-money',
-                permissions: ['prof-payments.calculate'],
-                matchPaths: ['/backoffice/paiement-prof'],
-                inertia: true,
-            },
+            // « Paiement prof » n'a plus d'entrée ici (30/09/2026) : le calcul
+            // vit dans l'onglet « Paiements prof » de Gestion des dépenses.
+            // L'écran dédié `/backoffice/paiement-prof` reste servi par sa
+            // route et protégé par `prof-payments.calculate` — hors menu
+            // n'est pas hors protection (§16).
         ],
     },
     {

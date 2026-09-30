@@ -8,6 +8,7 @@ use App\Domain\Expenses\Queries\GetDepensesList;
 use App\Domain\Payroll\Actions\CalculerPaiementProfParPaliers;
 use App\Domain\Payroll\Queries\GetPaiementProfCalcul;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
+use App\Http\Controllers\Backoffice\Concerns\ResolvesPaiementProfCalcul;
 use App\Http\Controllers\Controller;
 use App\Models\Employee;
 use App\Models\Group;
@@ -36,6 +37,7 @@ use Inertia\Response;
 final class PaiementProfController extends Controller
 {
     use AssertsContextScope;
+    use ResolvesPaiementProfCalcul;
 
     public function index(Request $request, GetPaiementProfCalcul $query, GetDepensesList $depenses): Response
     {
@@ -43,50 +45,11 @@ final class PaiementProfController extends Controller
 
         abort_unless($user->can('prof-payments.calculate'), 403);
 
-        $groupFilter = (string) $request->string('groupFilter');
-        $enseignantFilter = (string) $request->string('enseignantFilter');
-        $mois = (string) $request->string('mois');
-        $heuresFilter = (string) $request->string('heures');
-
-        $group = null;
-        $enseignant = null;
-        $calcul = null;
-
-        if ($groupFilter !== '') {
-            $group = Group::query()->with('enseignant')->find((int) $groupFilter);
-
-            if ($group !== null) {
-                // L'id vient de la query string, donc du navigateur : la
-                // portée se rejoue là où il entre (§11).
-                $this->assertGroupInContext($request, $group, 'groupFilter');
-            }
-        }
-
-        if ($group !== null && $enseignantFilter !== '') {
-            $enseignant = Employee::query()->find((int) $enseignantFilter);
-        }
-
-        if ($group !== null && $enseignant !== null && $mois !== '') {
-            $calcul = $query(
-                group: $group,
-                enseignant: $enseignant,
-                mois: $mois,
-                heures: $heuresFilter !== '' ? (float) $heuresFilter : null,
-            );
-        }
+        ['calcul' => $calcul, 'filters' => $filters] = $this->resolvePaiementProfCalcul($request, $query);
 
         return Inertia::render('Backoffice/PaiementProf/Index', [
             'calcul' => $calcul,
-            'filters' => [
-                'groupFilter' => $groupFilter,
-                'enseignantFilter' => $enseignantFilter,
-                'mois' => $mois,
-                'heures' => $heuresFilter,
-                // Aide de saisie côté écran uniquement (durée d'une séance,
-                // « 2h30 ») : le serveur ne s'en sert pas, mais la page
-                // initialise son état depuis `filters`.
-                'dureeSeance' => '',
-            ],
+            'filters' => $filters,
             'groupOptions' => fn (): array => $query->groupOptions($user),
             'paliersPaie' => CalculerPaiementProfParPaliers::PALIERS,
             'modes' => Employee::MODES_PAIEMENT_PROF,

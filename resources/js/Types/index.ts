@@ -2637,6 +2637,19 @@ export interface DepensesPageProps {
     depenseStatuts: string[];
     filters: DepensesFilters;
     /**
+     * « Calcul paiement prof » dans l'onglet Paiements prof (30/09/2026) —
+     * `prof-payments.calculate` + `expenses.view`. UI convenience only ; le
+     * contrôleur ne résout le calcul que pour qui les tient.
+     */
+    canCalculerPaiementProf: boolean;
+    /** `null` tant qu'un groupe, un enseignant et un mois n'ont pas été choisis. */
+    calculPaiementProf: PaiementProfCalcul | null;
+    /** Les paramètres du calcul tels que le serveur les a lus (`pp*` dans l'URL). */
+    calculPaiementProfFilters: PaiementProfFilters;
+    calculGroupOptions: SelectOption[];
+    /** Barème : présences minimales => semaines payées (11 => 4, 7 => 2, 5 => 1). */
+    paliersPaie: Record<string, number>;
+    /**
      * La fenêtre de l'année active est-elle LEVÉE ? Décidé au serveur, jamais
      * redérivé des champs date : après un effacement explicite ceux-ci
      * reviennent vides alors que la liste reste élargie, et sans ce drapeau

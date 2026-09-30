@@ -204,6 +204,79 @@ final class PaiementProfEcranTest extends TestCase
 
     /*
     |--------------------------------------------------------------------
+    | Le même calcul dans l'onglet « Paiements prof » de Gestion des dépenses
+    | (30/09/2026 — l'entrée normale ; la barre latérale ne pointe plus
+    | vers l'écran dédié, qui reste servi par sa route)
+    |--------------------------------------------------------------------
+    */
+
+    #[Test]
+    public function the_depenses_tab_resolves_the_same_calculation_from_its_own_query_keys(): void
+    {
+        $this->moisPlein($this->student('Karim'));
+
+        $this->actingAs($this->user('prof-payments.calculate', 'expenses.view'))
+            ->get('/backoffice/depenses?'.http_build_query([
+                'tab' => 'paiements-prof',
+                'ppGroup' => $this->group->id,
+                'ppEnseignant' => $this->prof->id,
+                'ppMois' => '2025-09',
+            ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Backoffice/Depenses/Index')
+                ->where('canCalculerPaiementProf', true)
+                ->where('calculPaiementProf.total', 500)
+                ->where('calculPaiementProfFilters.groupFilter', (string) $this->group->id)
+                ->where('calculPaiementProfFilters.mois', '2025-09')
+                ->has('calculGroupOptions'));
+
+        // Toujours aucune écriture : l'onglet PROPOSE, comme l'écran dédié.
+        $this->assertSame(0, Depense::count());
+    }
+
+    #[Test]
+    public function the_depenses_tab_serves_no_calculation_without_the_permission(): void
+    {
+        $this->moisPlein($this->student('Karim'));
+
+        $this->actingAs($this->user('expenses.view'))
+            ->get('/backoffice/depenses?'.http_build_query([
+                'tab' => 'paiements-prof',
+                'ppGroup' => $this->group->id,
+                'ppEnseignant' => $this->prof->id,
+                'ppMois' => '2025-09',
+            ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('canCalculerPaiementProf', false)
+                ->where('calculPaiementProf', null)
+                ->where('calculGroupOptions', []));
+    }
+
+    #[Test]
+    public function the_depenses_tab_refuses_a_group_of_another_centre_on_its_own_key(): void
+    {
+        $autreCentre = Etablissement::factory()->create();
+        $autreGroupe = Group::factory()->create([
+            'statut' => Group::STATUT_EN_FORMATION,
+            'etablissement_id' => $autreCentre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $this->actingAs($this->user('prof-payments.calculate', 'expenses.view'))
+            ->withSession(['context.etablissement_id' => $this->centre->id])
+            ->get('/backoffice/depenses?'.http_build_query([
+                'tab' => 'paiements-prof',
+                'ppGroup' => $autreGroupe->id,
+                'ppEnseignant' => $this->prof->id,
+                'ppMois' => '2025-09',
+            ]))
+            ->assertSessionHasErrors('ppGroup');
+    }
+
+    /*
+    |--------------------------------------------------------------------
     | Le calcul, mode GLS
     |--------------------------------------------------------------------
     */

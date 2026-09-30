@@ -18,6 +18,10 @@ import FormField from '@/Components/Forms/FormField';
 import TextareaField from '@/Components/Forms/TextareaField';
 import TagsInput from '@/Components/Forms/TagsInput';
 import FormActions from '@/Components/Forms/FormActions';
+import CalculPaiementProf, {
+    type PaiementProfCalculParams,
+    type PaiementProfPrefill,
+} from '@/Components/PaiementProf/CalculPaiementProf';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { useFilterReset } from '@/Hooks/useFilterReset';
 import { t } from '@/Lib/i18n';
@@ -186,6 +190,11 @@ export default function DepensesIndex({
     enAttenteCount,
     filters,
     dateFilterEngaged,
+    canCalculerPaiementProf,
+    calculPaiementProf,
+    calculPaiementProfFilters,
+    calculGroupOptions,
+    paliersPaie,
 }: DepensesPageProps) {
     const isLoading = useInertiaLoading();
     // The Types de dépenses tab links to its own page — UI-gate it like the
@@ -210,9 +219,32 @@ export default function DepensesIndex({
     const [showDepenseModal, setShowDepenseModal] = useState(false);
     /**
      * Lien de retour vers « Calcul paiement prof » quand le modal a été
-     * ouvert depuis cet écran — `null` pour une saisie ordinaire.
+     * ouvert depuis un calcul — `null` pour une saisie ordinaire.
      */
     const [retourCalcul, setRetourCalcul] = useState<string | null>(null);
+    // « Ajouter un paiement prof » ouvre le modal de CALCUL du composant
+    // embarqué : chaque incrément est une demande d'ouverture.
+    const [calculOpenRequest, setCalculOpenRequest] = useState(0);
+
+    /**
+     * Les paramètres du calcul en cours, sous leurs noms d'URL (`pp*`) —
+     * reportés dans CHAQUE rechargement de la page (filtre, recherche,
+     * onglet), sinon changer un filtre de la liste effacerait le calcul
+     * affiché au-dessus. Ce ne sont pas des filtres : « Réinitialiser les
+     * filtres » ne les touche pas ; seul « Effacer » du calcul le fait.
+     */
+    function calculQuery(params: PaiementProfCalculParams | null = calculPaiementProfFilters): Record<string, string> {
+        if (params === null) {
+            return {};
+        }
+
+        return {
+            ...(params.groupFilter !== '' ? { ppGroup: params.groupFilter } : {}),
+            ...(params.enseignantFilter !== '' ? { ppEnseignant: params.enseignantFilter } : {}),
+            ...(params.mois !== '' ? { ppMois: params.mois } : {}),
+            ...(params.heures !== '' ? { ppHeures: params.heures } : {}),
+        };
+    }
     // Which of the TWO expense modals is open: the ordinary « Ajouter une
     // dépense » one, or the « Paiement prof » one (type locked, Groupe
     // required, payment period instead of a supplier invoice reference).
@@ -274,11 +306,60 @@ export default function DepensesIndex({
             ? { ...next, dateFrom: '-', dateTo: '-' }
             : next;
 
-        router.get('/backoffice/depenses', { ...carried, page: undefined, pageProf: undefined, pageValidation: undefined, tab }, {
+        router.get('/backoffice/depenses', { ...carried, ...calculQuery(), page: undefined, pageProf: undefined, pageValidation: undefined, tab }, {
             preserveState: true,
             preserveScroll: true,
             replace: true,
         });
+    }
+
+    /**
+     * (Re)charger ou effacer le calcul paiement prof — même mécanique que
+     * reload(), avec les filtres de la liste REPORTÉS tels quels (un calcul
+     * ne touche pas aux filtres, et réciproquement).
+     */
+    function naviguerCalcul(params: PaiementProfCalculParams | null) {
+        const carried = dateFilterEngaged && filters.dateFrom === '' && filters.dateTo === ''
+            ? { ...filters, dateFrom: '-', dateTo: '-' }
+            : filters;
+
+        router.get('/backoffice/depenses', { ...carried, ...calculQuery(params), page: undefined, pageProf: undefined, pageValidation: undefined, tab: 'paiements-prof' }, {
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+        });
+    }
+
+    /**
+     * « Enregistrer la dépense » depuis le calcul embarqué : le modal
+     * « Paiement prof » habituel s'ouvre PRÉ-REMPLI — même contrat que
+     * l'ouverture par `prefill_*` depuis l'écran dédié (ci-dessous), sans
+     * quitter la page. ⚠ Rien n'est créé : le montant, le groupe et la
+     * période restent revérifiés côté serveur par PaiementProfRules, et
+     * l'argent ne bouge qu'à la soumission, via EnregistrerDepense (§11).
+     */
+    function enregistrerDepuisCalcul(prefill: PaiementProfPrefill) {
+        // Le calcul reste affiché derrière le modal, mais le lien « Revoir le
+        // calcul » doit aussi survivre à une fermeture : il pointe sur cet
+        // onglet avec les mêmes paramètres.
+        const retour = new URLSearchParams({ tab: 'paiements-prof', ...calculQuery(prefill.retour) });
+        setRetourCalcul(`/backoffice/depenses?${retour.toString()}`);
+
+        setEditingDepense(null);
+        setProfMode(true);
+        setGroupesAnneesPrecedentes(false);
+        depenseForm.clearErrors();
+        depenseForm.setData({
+            ...emptyDepenseForm(),
+            type_depense_id: paiementProfTypeId ?? '',
+            group_id: prefill.groupId,
+            enseignant_id: prefill.enseignantId,
+            montant: prefill.montant,
+            periode_debut: prefill.periodeDebut,
+            periode_fin: prefill.periodeFin,
+            description: prefill.description,
+        });
+        setShowDepenseModal(true);
     }
 
     /**
@@ -399,7 +480,7 @@ export default function DepensesIndex({
 
     function switchTab(next: Tab) {
         setTab(next);
-        router.get('/backoffice/depenses', { ...filters, page: undefined, pageProf: undefined, pageValidation: undefined, tab: next }, { preserveState: true, preserveScroll: true, replace: true });
+        router.get('/backoffice/depenses', { ...filters, ...calculQuery(), page: undefined, pageProf: undefined, pageValidation: undefined, tab: next }, { preserveState: true, preserveScroll: true, replace: true });
     }
 
     // --- Dépenses ---
@@ -977,8 +1058,29 @@ export default function DepensesIndex({
 
             {/* Paiements prof — the same dépenses (same table, same caisse,
                 same modal), only the "Paiement prof" type, listed apart so
-                the Dépenses table above stays readable. */}
+                the Dépenses table above stays readable.
+
+                Depuis le 30/09/2026 l'onglet EMBARQUE « Calcul paiement
+                prof » (Components/PaiementProf/CalculPaiementProf) : pour qui
+                tient `prof-payments.calculate`, « Ajouter un paiement prof »
+                ouvre d'abord le calcul, et « Enregistrer la dépense » ouvre
+                le modal habituel pré-rempli (enregistrerDepuisCalcul). Sans
+                cette permission, le bouton ouvre le modal vide comme avant. */}
             {tab === 'paiements-prof' && canViewDepenses && paiementsProf && (
+                <>
+                {canCalculerPaiementProf && (
+                    <CalculPaiementProf
+                        embedded
+                        calcul={calculPaiementProf}
+                        filters={calculPaiementProfFilters}
+                        groupOptions={calculGroupOptions}
+                        paliersPaie={paliersPaie}
+                        canCreateDepense
+                        onNavigate={naviguerCalcul}
+                        onEnregistrer={enregistrerDepuisCalcul}
+                        openRequest={calculOpenRequest}
+                    />
+                )}
                 <Card
                     title="Paiements prof"
                     bodyClassName="p-0 py-3"
@@ -986,9 +1088,13 @@ export default function DepensesIndex({
                         <button
                             type="button"
                             className="btn btn-primary d-flex align-items-center mb-3"
-                            onClick={openCreatePaiementProf}
+                            onClick={() =>
+                                canCalculerPaiementProf
+                                    ? setCalculOpenRequest((n) => n + 1)
+                                    : openCreatePaiementProf()
+                            }
                         >
-                            <i className="ti ti-square-rounded-plus me-2" />
+                            <i className={`ti ${canCalculerPaiementProf ? 'ti-calculator' : 'ti-square-rounded-plus'} me-2`} />
                             Ajouter un paiement prof
                         </button>
                     }
@@ -1132,6 +1238,7 @@ export default function DepensesIndex({
                         </>
                     )}
                 </Card>
+                </>
             )}
 
             {tab === 'remboursements' && canViewRemboursements && remboursements && (
