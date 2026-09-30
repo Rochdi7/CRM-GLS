@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Domain\Payments\Support\ResoudreAllocationsAvance;
+use App\Domain\Payments\Support\ValiditeAvance;
 use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -48,7 +49,7 @@ class Encaissement extends Model
 
     protected $fillable = [
         'reference', 'legacy_ref', 'legacy_source', 'etablissement_id', 'student_id', 'inscription_fee_id', 'applied_from_encaissement_id', 'cheque_id', 'montant', 'methode',
-        'date_paiement', 'caisse_id', 'agent_id',
+        'date_paiement', 'avance_expire_le', 'caisse_id', 'agent_id',
         'numero_cheque', 'banque', 'date_echeance_cheque', 'note',
     ];
 
@@ -57,8 +58,54 @@ class Encaissement extends Model
         return [
             'montant' => 'decimal:2',
             'date_paiement' => 'date',
+            'avance_expire_le' => 'date',
             'date_echeance_cheque' => 'date',
         ];
+    }
+
+    /**
+     * Tampon de validité d'une avance (ValiditeAvance, 29/09/2026) — posé ICI
+     * pour qu'aucun chemin ne puisse l'oublier : la saisie d'une avance, la
+     * conversion, le changement de groupe, le retrait d'un frais payé et le
+     * détachement unitaire passent tous par un `save()` Eloquent.
+     *
+     *  - la ligne NAÎT avance  → `date_paiement` + 14 jours, PLAFONNÉ à
+     *    aujourd'hui + 14 : la date de paiement est saisie au guichet, et
+     *    une date future fabriquerait une avance valable des mois ;
+     *  - la ligne REDEVIENT avance (frais détaché) → aujourd'hui + 14 jours ;
+     *  - la ligne est posée sur un frais → la date est effacée (elle ne
+     *    décrit que de l'argent non affecté).
+     * Une valeur écrite explicitement (prolongation) n'est jamais écrasée.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (self $encaissement): void {
+            if ($encaissement->isDirty('avance_expire_le')) {
+                return;
+            }
+
+            if ($encaissement->inscription_fee_id !== null) {
+                if ($encaissement->avance_expire_le !== null) {
+                    $encaissement->avance_expire_le = null;
+                }
+
+                return;
+            }
+
+            if (! $encaissement->exists) {
+                $depuis = $encaissement->date_paiement ?? now();
+
+                $encaissement->avance_expire_le = ValiditeAvance::echeanceDepuis(
+                    $depuis->isFuture() ? now() : $depuis,
+                );
+
+                return;
+            }
+
+            if ($encaissement->isDirty('inscription_fee_id')) {
+                $encaissement->avance_expire_le = ValiditeAvance::echeanceDepuis(now());
+            }
+        });
     }
 
 

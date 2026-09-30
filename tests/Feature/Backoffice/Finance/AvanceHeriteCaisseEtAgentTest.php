@@ -52,6 +52,10 @@ final class AvanceHeriteCaisseEtAgentTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // Les avances de ce fichier sont datees du 05/05/2026 : on se place
+        // dans leur delai de validite (14 jours, ValiditeAvance), sinon
+        // chacune serait refusee comme expiree avant meme la regle testee.
+        $this->travelTo('2026-05-06 10:00:00');
         $this->seed(RolesAndPermissionsSeeder::class);
 
         AnneeScolaire::create([

@@ -61,6 +61,12 @@ final class AffecterAvanceVersAutreEtudiant
                 ]);
             }
 
+            // ⚠ Pas de contrôle d'expiration ici, volontairement
+            // (ValiditeAvance, 29/09/2026) : cet outil répare un paiement
+            // saisi sur le MAUVAIS nom, erreur qu'on découvre souvent après
+            // le délai. Il est réservé au compte de maintenance, exige un
+            // motif et journalise le geste — l'expiration protège le guichet.
+
             // Une ligne d'APPLICATION porte l'argent de son avance parente :
             // la déplacer laisserait le parent compter de l'argent dépensé
             // au nom de quelqu'un d'autre.

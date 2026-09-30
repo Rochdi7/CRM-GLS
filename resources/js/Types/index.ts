@@ -618,6 +618,10 @@ export interface EncaissementDetails {
     isAvance: boolean;
     montantUtilise: MoneyDisplay;
     montantRestant: MoneyDisplay;
+    /** Avance only — dd/mm/yyyy from which the remaining money is no longer applicable (ValiditeAvance). */
+    avanceExpireLe?: string | null;
+    /** Past its validity AND still holding money. */
+    avanceExpiree?: boolean;
     /** Fee lines this avance paid for (empty for an ordinary payment). */
     applications: Array<{
         id: number;
@@ -2144,6 +2148,16 @@ export interface EncaissementRow {
     /** The funding cheque bounced: the money was reversed off the Chèque account. */
     chequeRejete?: boolean;
     /**
+     * Avances only — the day from which the remaining money can no longer be
+     * applied to a fee (14 days, ValiditeAvance). ISO date; null on a row
+     * that is not an avance.
+     */
+    avanceExpireLe?: string | null;
+    /** Past its validity AND still holding money — `applicable` is then false. */
+    avanceExpiree?: boolean;
+    /** Whether ProlongerValiditeAvance would accept this row (the right to do it is `can.overrideAvanceExpiry`). */
+    avanceProlongeable?: boolean;
+    /**
      * Whether RequalifierMethodeEncaissement would accept this row — false
      * for an advance allocation (it credited no caisse), a payment linked to
      * a tracked cheque, and an already-refunded payment. Gate the « Méthode »
@@ -2269,6 +2283,8 @@ export interface EncaissementsPageProps {
         updateAmount?: boolean;
         /** Direction + super-admin — dessine « Transférer vers un autre étudiant ». */
         transferToStudent?: boolean;
+        /** Super-admin uniquement — dessine « Prolonger la validité » d'une avance. */
+        overrideAvanceExpiry?: boolean;
     };
     [key: string]: unknown;
 }
@@ -2401,6 +2417,12 @@ export interface InscriptionPaymentRow {
     splittable: boolean;
     /** French reason when `splittable` is false, null otherwise. */
     splitBlocker: string | null;
+    /** Paid 14 days ago or more (ValiditeAvance) — shown to everyone, blocking for anyone but a super-admin. */
+    ancien: boolean;
+    /** Whether the conversion itself is accepted for this row and this user (refunded / too old). */
+    convertible: boolean;
+    /** French reason when `convertible` is false, null otherwise. */
+    convertBlocker: string | null;
 }
 
 /** One editable payment line in the create-form's cascade table — mirrors Livewire's $paymentLines shape. */

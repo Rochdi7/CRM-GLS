@@ -56,6 +56,10 @@ final class AvanceScindeeSurConversionTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // Les avances de ce fichier sont datees du 20/09/2025 : on se place
+        // dans leur delai de validite (14 jours, ValiditeAvance), sinon
+        // chacune serait refusee comme expiree avant meme la regle testee.
+        $this->travelTo('2025-09-22 10:00:00');
         $this->seed(RolesAndPermissionsSeeder::class);
 
         $this->annee = AnneeScolaire::create([

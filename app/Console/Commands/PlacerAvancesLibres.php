@@ -194,7 +194,9 @@ final class PlacerAvancesLibres extends Command
                         $part = min($part, $avance->montantRestant(), round((float) $cible->montant - $cible->montantPaye(), 2));
 
                         if ($part > 0.0) {
-                            $appliquer->handle($avance, $cible, $part);
+                            // Réparation legacy : de l'argent ancien par construction,
+                            // donc hors délai de validité (ValiditeAvance).
+                            $appliquer->handle($avance, $cible, $part, ignorerExpiration: true);
                         }
                     });
                 }

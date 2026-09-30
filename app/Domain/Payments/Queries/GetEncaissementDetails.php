@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Payments\Queries;
 
 use App\Domain\Payments\Support\ResoudreAllocationsAvance;
+use App\Domain\Payments\Support\ValiditeAvance;
 use App\Models\Activity;
 use App\Models\Encaissement;
 
@@ -115,6 +116,10 @@ final class GetEncaissementDetails
             'isAvance' => $encaissement->inscription_fee_id === null,
             'montantUtilise' => number_format($encaissement->montantUtilise(), 2, '.', ''),
             'montantRestant' => number_format($encaissement->montantRestant(), 2, '.', ''),
+            // Délai de validité d'une avance (ValiditeAvance) : passé cette
+            // date l'argent restant ne s'applique plus à un frais.
+            'avanceExpireLe' => ValiditeAvance::expireLe($encaissement)?->format('d/m/Y'),
+            'avanceExpiree' => ValiditeAvance::estExpiree($encaissement) && $encaissement->montantRestant() > 0,
             'fee' => $fee === null ? null : [
                 'nom' => $fee->nom,
                 'dateEcheance' => $fee->date_echeance?->format('d/m/Y'),

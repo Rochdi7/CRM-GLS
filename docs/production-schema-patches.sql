@@ -481,3 +481,34 @@ ALTER TABLE enseignant_taux_mensuels DROP CONSTRAINT IF EXISTS enseignant_taux_m
 CREATE UNIQUE INDEX IF NOT EXISTS enseignant_taux_mensuels_groupe_unique
   ON enseignant_taux_mensuels (employee_id, group_id, mois) NULLS NOT DISTINCT;
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 29/09/2026 — Une avance EXPIRE : `encaissements.avance_expire_le`
+-- (NULL = ligne antérieure à la colonne : la règle se lit alors
+-- `date_paiement + 14 jours` à la LECTURE, aucun backfill).
+--
+-- ⚠ RIEN À FAIRE À LA MAIN : la migration additive
+-- `2026_09_29_110000_add_avance_expire_le_to_encaissements_table.php` est
+-- jouée par le `php artisan migrate --force` du déploiement. SQL conservé
+-- pour mémoire (idempotent).
+--
+-- ⚠ EFFET AU DÉPLOIEMENT : pour tout le monde SAUF le super-admin, toute
+-- avance de plus de 14 jours qui porte encore un reste cesse aussitôt d'être
+-- APPLICABLE, et tout paiement de plus de 14 jours cesse d'être CONVERTIBLE
+-- en avance. L'argent reste remboursable ; le super-admin garde les deux
+-- gestes (journalisés) et peut rendre une avance au guichet pour 14 jours.
+-- À mesurer AVANT de déployer :
+--   SELECT count(*), sum(e.montant
+--            - coalesce((SELECT sum(a.montant) FROM encaissements a WHERE a.applied_from_encaissement_id = e.id), 0)
+--            - coalesce((SELECT sum(r.montant) FROM remboursements r WHERE r.encaissement_id = e.id), 0)) AS reste
+--     FROM encaissements e
+--    WHERE e.inscription_fee_id IS NULL
+--      AND e.date_paiement + 14 <= current_date
+--      AND e.montant
+--            - coalesce((SELECT sum(a.montant) FROM encaissements a WHERE a.applied_from_encaissement_id = e.id), 0)
+--            - coalesce((SELECT sum(r.montant) FROM remboursements r WHERE r.encaissement_id = e.id), 0) > 0;
+--
+-- La permission `payments.override-advance-expiry` (super-admin uniquement) est créée
+-- par `php artisan db:seed --class=RolesAndPermissionsSeeder --force`.
+ALTER TABLE encaissements ADD COLUMN IF NOT EXISTS avance_expire_le date NULL;
+-- ---------------------------------------------------------------------------

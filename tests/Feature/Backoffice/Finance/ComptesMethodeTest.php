@@ -52,6 +52,10 @@ final class ComptesMethodeTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // Les avances de ce fichier sont datees du 10-21/09/2025 : on se place
+        // dans leur delai de validite (14 jours, ValiditeAvance), sinon
+        // chacune serait refusee comme expiree avant meme la regle testee.
+        $this->travelTo('2025-09-22 10:00:00');
         $this->seed(RolesAndPermissionsSeeder::class);
         $this->annee = AnneeScolaire::create([
             'nom' => '2025/2026', 'date_debut' => '2025-09-01', 'date_fin' => '2026-08-31',

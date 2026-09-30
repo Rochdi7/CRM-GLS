@@ -1094,6 +1094,57 @@ the database layer. Non-negotiable invariants already enforced in code:
   `::test_an_advance_can_be_applied_to_a_closed_registration`,
   `::test_an_advance_is_still_refused_on_a_hidden_fee_of_a_closed_registration`,
   `::test_an_advance_is_still_refused_on_another_students_closed_registration`.
+- **⚠ Un paiement de plus de 14 jours ne se RÉUTILISE plus au guichet —
+  seul le super-admin garde l'accès** (29/09/2026,
+  `Domain\Payments\Support\ValiditeAvance`, colonne
+  `encaissements.avance_expire_le`). De l'argent ancien restait réutilisable
+  indéfiniment : un employé convertissait un vieux paiement en avance, ou
+  appliquait une avance vieille de plusieurs mois, « quand il voulait », sans
+  que rien ne le signale. Deux gestes sont désormais fermés passé 14 jours :
+  **APPLIQUER** une avance (`AppliquerAvance`, `estExpiree()`) et
+  **CONVERTIR** un paiement en avance (`ConvertirEncaissementsEnAvance`,
+  `tropAncienPourConversion()`, mesuré sur `date_paiement`) — la seconde
+  borne est ce qui rend la première utile, sinon il suffit de reconvertir un
+  vieux paiement pour lui rendre 14 jours. Sept bornes :
+  (1) **le passe-droit est UNE permission**, `ValiditeAvance::PERMISSION`
+  (`payments.override-advance-expiry`), dans `superAdminOnly()` : aucun
+  preset ne peut la porter, directeur compris. Les contrôleurs la DÉRIVENT
+  (`peutOutrepasser($user)`) et la passent à l'action — jamais un champ du
+  formulaire, jamais un rôle ; et chaque dépassement est JOURNALISÉ
+  (`delai_outrepasse` sur `avance_applied`, `avance_conversion_ancienne`) ;
+  (2) **`ConvertirEncaissementsEnAvance` a trois états** —
+  `$guichetPeutOutrepasser` `null` = flux SYSTÈME (retrait d'un frais payé,
+  clôture, fusion, réaffectation, console : jamais bornés, ils libèrent de
+  l'argent qui resterait accroché à une ligne invisible), `false` = geste du
+  guichet (un seul paiement trop ancien refuse le LOT ENTIER, en le
+  nommant), `true` = même geste par un super-admin. Seul
+  `EncaissementController@convertAvance` passe une valeur ;
+  (3) **le délai d'une avance part de sa `date_paiement` quand elle est
+  SAISIE, du jour du DÉTACHEMENT quand un paiement est libéré** (conversion,
+  changement de groupe, retrait d'un frais payé) — partir de la date de
+  paiement ferait naître l'avance déjà morte. Le tampon est posé par
+  `Encaissement::booted()` (`saving`), donc aucun chemin ne peut l'oublier ;
+  une date de paiement FUTURE est plafonnée à aujourd'hui + 14 (elle est
+  saisie au guichet) ;
+  (4) **NULL = ligne antérieure à la colonne**, lue `date_paiement + 14`
+  à la LECTURE — aucun backfill, aucune ligne de production réécrite ;
+  (5) **dépassé DÈS le quatorzième jour révolu** (payée le 01/10 :
+  utilisable jusqu'au 14/10 inclus) ;
+  (6) **la règle a deux formes et une définition** — PHP pour les actions,
+  `SQL_EXPIRE_LE` pour les listes ; `GetEncaissementsList` (`applicable`,
+  `avanceExpiree`, filtre Solde « Expirées ») et `GetInscriptionPayments`
+  (`convertible`, `convertBlocker`, `ancien`) la portent à l'écran POUR
+  L'UTILISATEUR CONNECTÉ. Une ligne refusée reste LISTÉE et désactivée avec
+  son motif, jamais retirée ;
+  (7) **l'expiration ne prend RIEN** : ni montant, ni caisse, ni reste.
+  L'argent reste listé (badgé « Expirée »), compté dans le total de l'onglet
+  et REMBOURSABLE. Un super-admin peut aussi RENDRE une avance au guichet
+  pour 14 jours (`ProlongerValiditeAvance`, motif OBLIGATOIRE, durée non
+  saisissable — sinon on écrit 2099 et le délai devient décoratif).
+  Deux exceptions assumées : les commandes console de RÉPARATION de l'import
+  legacy passent `ignorerExpiration: true`, et l'outil de maintenance
+  `AffecterAvanceVersAutreEtudiant` ne contrôle pas le délai. Tests :
+  `tests/Feature/Backoffice/Finance/AvanceExpirationTest.php`.
 - **⚠ PAYÉ = ENCAISSÉ − REMBOURSÉ** (24/09/2026). Le payé d'un frais est
   `Σ encaissements du frais − Σ remboursements NON annulés de ces
   encaissements`, et UNE définition le porte : `InscriptionFee::montantPaye()`

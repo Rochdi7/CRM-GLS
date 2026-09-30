@@ -118,6 +118,7 @@ final class AuditValueResolver
         'methode' => 'Méthode de paiement',
         'methode_paiement' => 'Méthode de paiement',
         'date_paiement' => 'Date de paiement',
+        'avance_expire_le' => "Avance applicable jusqu'au",
         'date_depense' => 'Date de la dépense',
         'date_echeance' => "Date d'échéance",
         'date_inscription' => "Date d'inscription",

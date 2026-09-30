@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Payments\Actions;
 
 use App\Domain\Payments\Support\ChequeOrigine;
+use App\Domain\Payments\Support\ValiditeAvance;
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Models\Encaissement;
 use App\Models\InscriptionFee;
@@ -41,13 +42,24 @@ use Illuminate\Validation\ValidationException;
  *    detached application row is RE-applied, since that row carries the
  *    same three fields forward.
  *
- * Tests: tests/Feature/Backoffice/Finance/AvanceHeriteCaisseEtAgentTest.php
+ * ⚠ UNE AVANCE EXPIRE (29/09/2026, ValiditeAvance) : passé 14 jours, de
+ * l'argent non affecté ne s'applique plus. Le contrôle est fait ICI, sur la
+ * ligne verrouillée, pour couvrir tous les appelants. `$ignorerExpiration`
+ * a DEUX appelants légitimes et aucun autre : les commandes console de
+ * RÉPARATION de l'import legacy (de l'argent ancien par construction), et
+ * `EncaissementController@applyAvance` qui le dérive de la PERMISSION
+ * `ValiditeAvance::PERMISSION` — super-admin uniquement. Jamais un champ du
+ * formulaire, jamais un rôle. Quand le délai est réellement outrepassé,
+ * l'entrée de journal le dit (`delai_outrepasse`).
+ *
+ * Tests: tests/Feature/Backoffice/Finance/AvanceHeriteCaisseEtAgentTest.php,
+ * AvanceExpirationTest.php
  */
 final class AppliquerAvance
 {
-    public function handle(Encaissement $avance, InscriptionFee $fee, float $montant): Encaissement
+    public function handle(Encaissement $avance, InscriptionFee $fee, float $montant, bool $ignorerExpiration = false): Encaissement
     {
-        return DB::transaction(function () use ($avance, $fee, $montant): Encaissement {
+        return DB::transaction(function () use ($avance, $fee, $montant, $ignorerExpiration): Encaissement {
             $avance = Encaissement::query()->whereKey($avance->getKey())->lockForUpdate()->firstOrFail();
             $fee = InscriptionFee::query()->with('inscription')->whereKey($fee->getKey())->lockForUpdate()->firstOrFail();
 
@@ -55,6 +67,19 @@ final class AppliquerAvance
                 throw ValidationException::withMessages([
                     'avance' => __('This payment is not an unallocated advance.'),
                 ]);
+            }
+
+            // Expired money is no longer applicable — read on the LOCKED row,
+            // so a prolongation racing this call is either seen or not, never
+            // half-seen (§11).
+            $delaiOutrepasse = false;
+
+            if (ValiditeAvance::estExpiree($avance)) {
+                if (! $ignorerExpiration) {
+                    ValiditeAvance::assertNonExpiree($avance);
+                }
+
+                $delaiOutrepasse = true;
             }
 
             // The fee must belong to the SAME student as the avance: a
@@ -143,8 +168,15 @@ final class AppliquerAvance
                     'frais_id' => $fee->id,
                     'etudiant_id' => $avance->student_id,
                     'caisse_id' => $avance->caisse_id,
+                    // De l'argent périmé appliqué quand même : seul un
+                    // super-admin (ou une réparation console) le peut, et
+                    // c'est exactement ce qu'un contrôle voudra retrouver.
+                    'delai_outrepasse' => $delaiOutrepasse,
+                    'avance_expiree_le' => $delaiOutrepasse ? ValiditeAvance::expireLe($avance)?->toDateString() : null,
                 ])
-                ->log("Avance {$avance->reference} appliquée au frais « {$fee->nom} »");
+                ->log($delaiOutrepasse
+                    ? "Avance {$avance->reference} (expirée) appliquée au frais « {$fee->nom} » - délai outrepassé"
+                    : "Avance {$avance->reference} appliquée au frais « {$fee->nom} »");
 
             return $application;
         });

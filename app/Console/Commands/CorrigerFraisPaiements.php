@@ -151,7 +151,7 @@ final class CorrigerFraisPaiements extends Command
                     }
 
                     if ($part > 0.0) {
-                        $appliquer->handle($avance, $fee->fresh(), $part);
+                        $appliquer->handle($avance, $fee->fresh(), $part, ignorerExpiration: true);
                     }
                 });
             }

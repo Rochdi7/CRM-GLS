@@ -139,6 +139,9 @@ function inscriptionOption(inscription: StudentInscriptionOption, mode: 'paiemen
 
 const SOLDE_OPTIONS: SelectOption[] = [
     { value: 'restant', label: 'Avec reste à utiliser' },
+    // De l'argent qui reste mais qui a dépassé son délai de validité
+    // (14 jours) : il ne s'applique plus, il se rembourse ou se prolonge.
+    { value: 'expire', label: 'Expirées (reste non applicable)' },
     { value: 'epuise', label: 'Épuisées (entièrement utilisées)' },
     { value: 'tous', label: 'Toutes' },
 ];
@@ -252,6 +255,10 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
     });
     const avanceForm = useForm<AvanceFormState>(emptyAvanceForm());
     const applyForm = useForm<ApplyAvanceFormState>({ inscription_id: '', fee_id: '', montant: '' });
+    // « Prolonger la validité » d'une avance expirée (super-admin). Aucune
+    // date à saisir : le serveur rouvre toujours 14 jours depuis aujourd'hui.
+    const [prolongerTarget, setProlongerTarget] = useState<EncaissementRow | null>(null);
+    const prolongerForm = useForm<{ motif: string }>({ motif: '' });
     // Aucun montant, aucune date, aucun frais ici : le paiement n'est jamais
     // réécrit, seule son affectation change — et le frais cible est DÉTECTÉ
     // par le serveur (même entrée du catalogue que le frais quitté), jamais
@@ -689,7 +696,9 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
             : total;
     }
 
-    const convertiblePayments = avancePayments.filter((p) => !p.rembourse);
+    // `convertible` porte les refus de l'ACTION (remboursé, ou plus de 14
+    // jours pour qui n'est pas super-admin) — jamais redérivé ici.
+    const convertiblePayments = avancePayments.filter((p) => p.convertible);
     const allAvanceSelected = convertiblePayments.length > 0 && convertiblePayments.every((p) => avanceForm.data.encaissement_ids.includes(p.id));
     const avanceSelectedTotal = avancePayments
         .filter((p) => avanceForm.data.encaissement_ids.includes(p.id))
@@ -780,6 +789,26 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
         applyForm.post(`/backoffice/avances/${applyTarget.id}/apply`, {
             preserveScroll: true,
             onSuccess: () => closeApplyModal(),
+        });
+    }
+
+    function openProlonger(row: EncaissementRow) {
+        prolongerForm.clearErrors();
+        prolongerForm.setData('motif', '');
+        setProlongerTarget(row);
+    }
+
+    function closeProlonger() {
+        setProlongerTarget(null);
+        prolongerForm.clearErrors();
+    }
+
+    function submitProlonger(event: FormEvent) {
+        event.preventDefault();
+        if (!prolongerTarget) return;
+        prolongerForm.post(`/backoffice/avances/${prolongerTarget.id}/prolonger`, {
+            preserveScroll: true,
+            onSuccess: () => closeProlonger(),
         });
     }
 
@@ -1342,6 +1371,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                         <th>Date</th>
                                         <th className="text-end">Montant utilisé</th>
                                         <th className="text-end">Montant restant</th>
+                                        <th>{t('Validity')}</th>
                                         <th className="text-end">Action</th>
                                     </tr>
                                 }
@@ -1379,15 +1409,47 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                 </div>
                                             )}
                                         </td>
+                                        {/* Délai de validité (14 jours, ValiditeAvance). Une avance
+                                            épuisée n'a plus rien à périmer : la cellule reste vide.
+                                            L'argent expiré reste AFFICHÉ — il n'a pas disparu, il
+                                            n'est simplement plus applicable à un frais. */}
+                                        <td>
+                                            {Number(row.montantRestant ?? row.montant) > 0 && row.avanceExpireLe ? (
+                                                row.avanceExpiree ? (
+                                                    <>
+                                                        <span className="badge bg-danger-transparent">{t('Expired')}</span>
+                                                        <div className="text-muted fs-12">
+                                                            {t('since')} {row.avanceExpireLe}
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <span className="badge badge-soft-success">{t('Valid')}</span>
+                                                        <div className="text-muted fs-12">
+                                                            {t('until')} {row.avanceExpireLe}
+                                                        </div>
+                                                    </>
+                                                )
+                                            ) : (
+                                                <span className="text-muted">-</span>
+                                            )}
+                                        </td>
                                         <td className="text-end">
                                             <RowActions view={row.showUrl}>
                                                 {/* `applicable` carries AppliquerAvance's OWN rule (a
-                                                    bounced-cheque avance is refused there). Gating on the
-                                                    remaining amount alone offered the action on money that
-                                                    could only ever fail. */}
+                                                    bounced-cheque avance is refused there, and so is an
+                                                    EXPIRED one). Gating on the remaining amount alone
+                                                    offered the action on money that could only ever fail. */}
                                                 {row.applicable && Number(row.montantRestant ?? row.montant) > 0 && (
                                                     <RowActionItem icon="ti-arrow-forward" onClick={() => openApplyAvance(row)}>
                                                         Appliquer à un frais
+                                                    </RowActionItem>
+                                                )}
+                                                {/* Super-admin uniquement (`can.overrideAvanceExpiry`) — confort
+                                                    d'interface, prolongerAvance() ré-autorise. */}
+                                                {can?.overrideAvanceExpiry && row.avanceProlongeable && (
+                                                    <RowActionItem icon="ti-clock-plus" onClick={() => openProlonger(row)}>
+                                                        {t('Extend validity (14 days)')}
                                                     </RowActionItem>
                                                 )}
                                             </RowActions>
@@ -2187,7 +2249,8 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                                 type="checkbox"
                                                                 className="form-check-input"
                                                                 aria-label={`Sélectionner ${payment.reference}`}
-                                                                disabled={payment.rembourse}
+                                                                disabled={!payment.convertible}
+                                                                title={payment.convertBlocker ?? undefined}
                                                                 checked={ticked}
                                                                 onChange={() => toggleAvancePayment(payment.id)}
                                                             />
@@ -2199,6 +2262,16 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                             {payment.feeNom ?? '-'}
                                                             {payment.rembourse && (
                                                                 <span className="badge badge-soft-danger ms-2">Remboursé</span>
+                                                            )}
+                                                            {/* Plus de 14 jours : affiché à tous, bloquant pour le
+                                                                guichet. La ligne reste LISTÉE avec son motif, jamais
+                                                                retirée — la caissière doit voir que le paiement existe
+                                                                et pourquoi elle ne peut pas le libérer. */}
+                                                            {payment.ancien && (
+                                                                <span className="badge badge-soft-warning ms-2">{t('Over 14 days')}</span>
+                                                            )}
+                                                            {!payment.rembourse && payment.convertBlocker && (
+                                                                <div className="fs-12 text-danger mt-1">{payment.convertBlocker}</div>
                                                             )}
                                                         </td>
                                                         <td className="text-end fw-medium">{Number(payment.montant).toFixed(2)} MAD</td>
@@ -2276,6 +2349,25 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
             >
                 {applyTarget && (
                     <form id="apply-avance-form" onSubmit={submitApplyAvance}>
+                        {/* Refus portant sur l'avance elle-même (expirée entre le
+                            chargement de la liste et l'envoi, chèque rejeté) : sans
+                            ce bloc le modal restait ouvert sans rien dire. */}
+                        {(applyForm.errors as Record<string, string | undefined>).avance && (
+                            <div className="alert alert-danger" role="alert">
+                                {(applyForm.errors as Record<string, string | undefined>).avance}
+                            </div>
+                        )}
+                        {/* Seul un super-admin arrive ici avec une avance expirée
+                            (`applicable` la refuse aux autres) : on lui DIT qu'il
+                            passe outre le délai, et que le journal le note. */}
+                        {applyTarget.avanceExpiree && (
+                            <div className="alert alert-warning" role="alert">
+                                {t('This advance expired on :date. You are applying it as a super-admin: the override is recorded in the audit journal.').replace(
+                                    ':date',
+                                    applyTarget.avanceExpireLe ?? '',
+                                )}
+                            </div>
+                        )}
                         <div className="d-flex justify-content-between mb-3">
                             <span className="text-muted">Montant restant de l'avance</span>
                             <span className="fw-medium">{avanceRestant.toFixed(2)} MAD</span>
@@ -2326,6 +2418,62 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                             onChange={(e) => applyForm.setData('montant', e.target.value)}
                             error={applyForm.errors.montant}
                         />
+                    </form>
+                )}
+            </Modal>
+
+            {/* « Prolonger la validité » — rouvre une avance expirée pour 14
+                jours à compter d'aujourd'hui. Super-admin uniquement, motif
+                obligatoire : c'est ce que le journal garde pour expliquer
+                pourquoi de l'argent périmé a pu être appliqué. */}
+            <Modal
+                show={prolongerTarget !== null}
+                title={prolongerTarget ? `${t('Extend the advance')} ${prolongerTarget.reference}` : ''}
+                onClose={closeProlonger}
+                processing={prolongerForm.processing}
+                footer={
+                    <FormActions
+                        form="prolonger-avance-form"
+                        onCancel={closeProlonger}
+                        processing={prolongerForm.processing}
+                        submitLabel={t('Extend by 14 days')}
+                    />
+                }
+            >
+                {prolongerTarget && (
+                    <form id="prolonger-avance-form" onSubmit={submitProlonger}>
+                        {(prolongerForm.errors as Record<string, string | undefined>).avance && (
+                            <div className="alert alert-danger" role="alert">
+                                {(prolongerForm.errors as Record<string, string | undefined>).avance}
+                            </div>
+                        )}
+                        <div className="d-flex justify-content-between mb-2">
+                            <span className="text-muted">Étudiant</span>
+                            <span className="fw-medium">{prolongerTarget.student ?? '-'}</span>
+                        </div>
+                        <div className="d-flex justify-content-between mb-2">
+                            <span className="text-muted">Montant restant</span>
+                            <span className="fw-medium">
+                                {Number(prolongerTarget.montantRestant ?? prolongerTarget.montant).toFixed(2)} MAD
+                            </span>
+                        </div>
+                        <div className="d-flex justify-content-between mb-3">
+                            <span className="text-muted">
+                                {prolongerTarget.avanceExpiree ? t('Expired since') : t('Valid until')}
+                            </span>
+                            <span className="fw-medium">{prolongerTarget.avanceExpireLe ?? '-'}</span>
+                        </div>
+                        <TextareaField
+                            id="pr-motif"
+                            label={t('Reason for the extension')}
+                            required
+                            value={prolongerForm.data.motif}
+                            onChange={(e) => prolongerForm.setData('motif', e.target.value)}
+                            error={prolongerForm.errors.motif}
+                        />
+                        <div className="form-text">
+                            {t('Required: it is what will explain, later, why expired money could be applied.')}
+                        </div>
                     </form>
                 )}
             </Modal>

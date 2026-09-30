@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Payments\Queries;
 
 use App\Domain\Payments\Support\ResoudreAllocationsAvance;
+use App\Domain\Payments\Support\ValiditeAvance;
 use App\Models\Activity;
 use App\Models\Caisse;
 use App\Domain\Payments\Support\ChequeOrigine;
@@ -185,6 +186,14 @@ final class GetEncaissementsList
             ->when($view === 'avance' && in_array($soldeFilter, ['restant', 'epuise'], true), fn ($q) => $q->whereRaw(
                 self::AVANCE_RESTANT_SQL.($soldeFilter === 'restant' ? ' > 0' : ' <= 0'),
             ))
+            // 'expire' = de l'argent qui reste mais qui a dépassé son délai
+            // de validité (ValiditeAvance) : ce que la direction doit
+            // regarder — rembourser, ou prolonger avec un motif. 'restant'
+            // continue de lister ces lignes (badgées) : les retirer du
+            // défaut les ferait disparaître de l'écran où on les cherche.
+            ->when($view === 'avance' && $soldeFilter === 'expire', fn ($q) => $q
+                ->whereRaw(self::AVANCE_RESTANT_SQL.' > 0')
+                ->whereRaw(ValiditeAvance::SQL_EXPIRE_LE.' <= current_date'))
             // Default "Encaissements" tab = money RECEIVED: every original
             // row, whether allocated to a fee or still an avance (the Frais
             // column then reads « Avance » so a cashier sees at a glance that
@@ -348,7 +357,11 @@ final class GetEncaissementsList
             ? ChequeOrigine::pour($encaissements->getCollection()->pluck('id')->all())
             : [];
 
-        $encaissements->through(function (Encaissement $e) use ($view, $anciensFrais, $fraisAppliques, $chequesOrigine): array {
+        // Seul le super-admin applique encore une avance expirée
+        // (ValiditeAvance::PERMISSION) — évalué une fois pour la page.
+        $peutOutrepasser = ValiditeAvance::peutOutrepasser($user);
+
+        $encaissements->through(function (Encaissement $e) use ($view, $anciensFrais, $fraisAppliques, $chequesOrigine, $peutOutrepasser): array {
             $isAvance = $e->inscription_fee_id === null;
             $utilise = $isAvance && $view !== 'cheque' ? (float) ($e->applications_sum_montant ?? 0) : null;
 
@@ -364,6 +377,13 @@ final class GetEncaissementsList
             // the intended remedy, and it debits the Chèque account, not the
             // till (CaisseResolver::forRemboursement).
             $chequeRejete = ($chequesOrigine[$e->id] ?? $e->cheque)?->statut === Cheque::STATUT_REJETE;
+            // Même principe pour le délai de validité : la règle est celle de
+            // l'action (ValiditeAvance), portée telle quelle jusqu'à l'écran.
+            $expireLe = ValiditeAvance::expireLe($e);
+            $expiree = ValiditeAvance::estExpiree($e);
+            $resteReel = $isAvance
+                ? round((float) $e->montant - (float) ($e->applications_sum_montant ?? 0) - (float) ($e->remboursements_total ?? 0), 2)
+                : 0.0;
             $feeTotal = $e->fee !== null ? (float) $e->fee->montant : null;
             $feePaye = $e->fee !== null ? $e->fee->payeNet() : null;
 
@@ -400,8 +420,16 @@ final class GetEncaissementsList
                 'montantUtilise' => $utilise !== null ? number_format($utilise, 2, '.', '') : null,
                 'montantRestant' => $utilise !== null ? number_format(max(0.0, (float) $e->montant - $utilise), 2, '.', '') : null,
                 // Whether AppliquerAvance would accept this row at all.
-                'applicable' => $isAvance && ! $chequeRejete,
+                'applicable' => $isAvance && ! $chequeRejete && (! $expiree || $peutOutrepasser),
                 'chequeRejete' => $chequeRejete,
+                // Délai de validité de l'avance (14 jours, ValiditeAvance).
+                // `avanceExpiree` n'a de sens que s'il reste de l'argent :
+                // une avance épuisée n'a plus rien à périmer.
+                'avanceExpireLe' => $expireLe?->toDateString(),
+                'avanceExpiree' => $expiree && $resteReel > 0,
+                // Ce que ProlongerValiditeAvance accepterait — le droit de
+                // le faire (`can.overrideAvanceExpiry`) est une autre question.
+                'avanceProlongeable' => $isAvance && ! $chequeRejete && $resteReel > 0,
                 // Porte la règle de RequalifierMethodeEncaissement jusqu'à
                 // l'UI plutôt que de la laisser la redériver (CLAUDE.md §11
                 // « un read-model ne redérive jamais une règle métier ») :

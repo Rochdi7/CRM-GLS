@@ -269,6 +269,14 @@ final class PermissionRegistry
                 // frais redevient dû, donc l'écran de l'étudiant change.
                 // Deliberately in NO role preset (superAdminOnly() ci-dessous).
                 'payments.detach' => "Détacher un paiement de son frais (retour en avance)",
+                // Une avance expire 14 jours après sa réception ou sa
+                // libération, et un paiement de plus de 14 jours ne se
+                // convertit plus en avance (ValiditeAvance, 29/09/2026).
+                // Passer outre est ce qui permet de réutiliser de l'argent
+                // ancien : si le guichet pouvait le faire lui-même, le délai
+                // ne protégerait rien.
+                // Deliberately in NO role preset (superAdminOnly() ci-dessous).
+                'payments.override-advance-expiry' => "Passer outre le délai de 14 jours d'une avance (appliquer, prolonger, convertir un paiement ancien)",
                 // ⚠ Déplacement fiche par fiche vers le frais d'une AUTRE
                 // inscription du même étudiant, quel que soit le STATUT de
                 // cette inscription (Annulée, Changement, Expirée, Archivée)
@@ -614,6 +622,9 @@ final class PermissionRegistry
             // et renvoie l'argent au pool de l'avance : une réallocation
             // silencieuse si elle est ouverte à tous (03/09/2026).
             'payments.detach',
+            // Rouvrir une avance expirée : c'est la clé du délai de validité,
+            // elle ne peut pas être tenue par ceux qu'il encadre (29/09/2026).
+            'payments.override-advance-expiry',
             // Corriger un MONTANT déjà encaissé réécrit une somme que la
             // caisse a réellement reçue : c'est le court-circuit de la
             // correction normale (remboursement + nouvel encaissement), donc

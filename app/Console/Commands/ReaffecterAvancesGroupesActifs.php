@@ -158,7 +158,9 @@ final class ReaffecterAvancesGroupesActifs extends Command
                 ));
 
                 if (! $this->option('dry-run')) {
-                    DB::transaction(fn () => $appliquer->handle($avance, $fee, $part));
+                    // Réparation legacy : de l'argent ancien par construction,
+                    // donc hors délai de validité (ValiditeAvance).
+                    DB::transaction(fn () => $appliquer->handle($avance, $fee, $part, ignorerExpiration: true));
                 }
 
                 $rattaches++;

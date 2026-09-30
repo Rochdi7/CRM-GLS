@@ -719,6 +719,11 @@ Route::prefix('backoffice')
             // super-admin (payments.detach ∈ superAdminOnly).
             Route::post('encaissements/{encaissement}/detach', [EncaissementController::class, 'detach'])
                 ->middleware('permission:payments.detach')->name('encaissements.detach');
+            // Rouvrir une avance EXPIRÉE pour 14 jours (ValiditeAvance) —
+            // super-admin uniquement (payments.override-advance-expiry ∈
+            // superAdminOnly), motif obligatoire, journalisé.
+            Route::post('avances/{encaissement}/prolonger', [EncaissementController::class, 'prolongerAvance'])
+                ->middleware('permission:payments.override-advance-expiry')->name('avances.prolonger');
 
             // Chèques — off-ledger inventory of physical checks in hand
             // (garantie / à déposer), tracked reception -> dépôt ->

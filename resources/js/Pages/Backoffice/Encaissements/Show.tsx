@@ -180,6 +180,23 @@ export default function EncaissementShow({ encaissement, canDetach = false }: En
                                         {Number(encaissement.montantRestant).toFixed(2)} MAD
                                     </span>
                                 </div>
+                                {/* Délai de validité (14 jours, ValiditeAvance) : affiché tant
+                                    qu'il reste de l'argent. Expiré, ce reste ne s'applique plus
+                                    à un frais — il se rembourse, ou un super-admin le prolonge. */}
+                                {Number(encaissement.montantRestant) > 0 && encaissement.avanceExpireLe && (
+                                    <div className="d-flex justify-content-between align-items-center mb-3">
+                                        <span className="text-muted">Validité</span>
+                                        {encaissement.avanceExpiree ? (
+                                            <span className="badge bg-danger-transparent">
+                                                Expirée depuis le {encaissement.avanceExpireLe}
+                                            </span>
+                                        ) : (
+                                            <span className="badge badge-soft-success">
+                                                Valable jusqu'au {encaissement.avanceExpireLe}
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
 
                                 {encaissement.applications.length === 0 ? (
                                     // Detached lines are filtered out server-side, so an

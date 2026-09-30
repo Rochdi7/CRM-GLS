@@ -300,7 +300,7 @@ final class ReconcilierPaiementsLegacy extends Command
             $part = min($avance->montantRestant(), (float) $avance->montant);
 
             if ($part > 0.0) {
-                $appliquer->handle($avance, $cible->fresh(), $part);
+                $appliquer->handle($avance, $cible->fresh(), $part, ignorerExpiration: true);
             }
         });
 

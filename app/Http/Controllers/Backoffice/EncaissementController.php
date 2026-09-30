@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Students\Support\GardeEtudiantTransfere;
 use App\Domain\Payments\Actions\AppliquerAvance;
+use App\Domain\Payments\Actions\ProlongerValiditeAvance;
 use App\Domain\Payments\Actions\ConvertirEncaissementsEnAvance;
 use App\Domain\Payments\Actions\DetacherEncaissementDuFrais;
 use App\Domain\Payments\Actions\CorrigerMontantEncaissement;
@@ -19,6 +20,7 @@ use App\Domain\Payments\Actions\SupprimerEncaissement;
 use App\Domain\Payments\Actions\TransfererFraisVersAutreEtudiant;
 use App\Domain\Payments\Support\CibleTransfertFrais;
 use App\Domain\Payments\Support\StatutChequeSolde;
+use App\Domain\Payments\Support\ValiditeAvance;
 use App\Domain\Payments\Queries\GetEncaissementDetails;
 use App\Domain\Payments\Queries\GetEncaissementsList;
 use App\Domain\Payments\Queries\GetInscriptionPayments;
@@ -29,6 +31,7 @@ use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Http\Requests\Backoffice\Encaissements\ApplyAvanceRequest;
 use App\Http\Requests\Backoffice\Encaissements\ConvertAvanceRequest;
+use App\Http\Requests\Backoffice\Encaissements\ProlongerAvanceRequest;
 use App\Http\Requests\Backoffice\Encaissements\SendRecuEmailRequest;
 use App\Http\Requests\Backoffice\Encaissements\StoreAvanceRequest;
 use App\Http\Requests\Backoffice\Encaissements\StoreEncaissementRequest;
@@ -150,9 +153,10 @@ final class EncaissementController extends Controller
             $view = '';
         }
         // Avances tab only: 'restant' (default — avances with money still to
-        // allocate) | 'epuise' (fully used) | 'tous'.
+        // allocate) | 'expire' (money left but past its validity —
+        // ValiditeAvance) | 'epuise' (fully used) | 'tous'.
         $soldeFilter = (string) $request->string('soldeFilter');
-        if (! in_array($soldeFilter, ['restant', 'epuise', 'tous'], true)) {
+        if (! in_array($soldeFilter, ['restant', 'expire', 'epuise', 'tous'], true)) {
             $soldeFilter = 'restant';
         }
 
@@ -250,6 +254,11 @@ final class EncaissementController extends Controller
                 // et la règle des zéro présence est appliquée dans la
                 // transaction de l'action.
                 'transferToStudent' => $request->user()?->can('payments.transfer-student') ?? false,
+                // Passer outre le délai de 14 jours d'une avance — appliquer
+                // ou prolonger une avance expirée, convertir un paiement
+                // ancien (ValiditeAvance, 29/09/2026) : super-admin
+                // uniquement. Confort d'interface ; chaque action ré-autorise.
+                'overrideAvanceExpiry' => ValiditeAvance::peutOutrepasser($request->user()),
             ],
         ]);
     }
@@ -329,7 +338,9 @@ final class EncaissementController extends Controller
         $this->authorize('create', Encaissement::class);
         $this->assertCenterAccess($request, $inscription->etablissement_id);
 
-        return response()->json(['payments' => $getInscriptionPayments($inscription)]);
+        return response()->json([
+            'payments' => $getInscriptionPayments($inscription, ValiditeAvance::peutOutrepasser($request->user())),
+        ]);
     }
 
     public function store(StoreEncaissementRequest $request, EnregistrerEncaissement $action): RedirectResponse
@@ -590,7 +601,14 @@ final class EncaissementController extends Controller
             }
         }
 
-        $action->handle($inscription, array_map('intval', $data['encaissement_ids']), $montants);
+        // Un paiement de plus de 14 jours ne se convertit plus au guichet :
+        // seul le super-admin garde ce geste (ValiditeAvance, 29/09/2026).
+        $action->handle(
+            $inscription,
+            array_map('intval', $data['encaissement_ids']),
+            $montants,
+            guichetPeutOutrepasser: ValiditeAvance::peutOutrepasser($request->user()),
+        );
 
         return $this->backToListPreservingFilters($request, 'backoffice.encaissements.index', ['view' => 'avance'])
             ->with('success', __('Payments converted into advances.'));
@@ -634,10 +652,41 @@ final class EncaissementController extends Controller
             $this->assertInscriptionInContext($request, $fee->inscription, 'fee_id');
         }
 
-        $action->handle($encaissement, $fee, (float) $data['montant']);
+        // Une avance expirée (14 jours) ne s'applique plus au guichet : seul
+        // le super-admin passe outre, dérivé de SA permission — jamais d'un
+        // champ du formulaire (ValiditeAvance, 29/09/2026).
+        $action->handle(
+            $encaissement,
+            $fee,
+            (float) $data['montant'],
+            ignorerExpiration: ValiditeAvance::peutOutrepasser($request->user()),
+        );
 
         return $this->backToListPreservingFilters($request, 'backoffice.encaissements.index', ['view' => 'avance'])
             ->with('success', __('Advance applied.'));
+    }
+
+    /**
+     * Rouvre une avance expirée pour 14 jours à compter d'aujourd'hui.
+     * Super-admin uniquement (`payments.override-advance-expiry`) ; les bornes (motif,
+     * reste à appliquer, chèque rejeté) vivent dans ProlongerValiditeAvance,
+     * sous verrou.
+     */
+    public function prolongerAvance(ProlongerAvanceRequest $request, Encaissement $encaissement, ProlongerValiditeAvance $action): RedirectResponse
+    {
+        // En plus du `permission:` de la route (défense en profondeur, §16).
+        $this->authorize('update', $encaissement);
+
+        if (! ValiditeAvance::peutOutrepasser($request->user())) {
+            abort(403);
+        }
+
+        $row = $action->handle($encaissement, (string) $request->validated('motif'));
+
+        return $this->backToListPreservingFilters($request, 'backoffice.encaissements.index', ['view' => 'avance'])
+            ->with('success', __('Advance extended until :date.', [
+                'date' => $row->avance_expire_le?->format('d/m/Y'),
+            ]));
     }
 
     /**

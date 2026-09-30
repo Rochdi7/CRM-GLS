@@ -208,7 +208,7 @@ final class RapatrierPaiementsGroupesActifs extends Command
                         );
 
                         if ($part > 0.0) {
-                            $appliquer->handle($avance, $cible, $part);
+                            $appliquer->handle($avance, $cible, $part, ignorerExpiration: true);
                         }
                     });
                 }
