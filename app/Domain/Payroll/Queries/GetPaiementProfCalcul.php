@@ -300,7 +300,8 @@ final class GetPaiementProfCalcul
      * « prénom nom » — la MÊME définition, jamais recopiée.
      *
      * Un étudiant appelé dans ce groupe SANS y être inscrit n'est pas perdu :
-     * ses présences sont réelles, il est ajouté en fin de liste, sans statut
+     * ses présences sont réelles, il est ajouté parmi les dossiers clos (avant
+     * les annulées, qui restent en dernier), sans statut
      * (« signaler plutôt que masquer »).
      *
      * @param  array<int, array{retenus: int, absents: int, ignores: int}>  $compteurs
@@ -342,9 +343,11 @@ final class GetPaiementProfCalcul
             }
         }
 
-        $rang = static fn (?string $statut): int => $statut === null
-            ? count(GetAbsencesParGroupe::STATUT_ORDRE) + 1
-            : GetAbsencesParGroupe::rangStatut($statut);
+        // Sans inscription = ligne grise : elle rejoint les dossiers clos,
+        // juste AVANT les annulées — le rouge reste toujours en dernier.
+        $rang = static fn (?string $statut): float => $statut === null
+            ? GetAbsencesParGroupe::rangStatut(Inscription::STATUT_ANNULEE) - 0.5
+            : (float) GetAbsencesParGroupe::rangStatut($statut);
 
         usort($etudiants, static fn (array $a, array $b): int => ($rang($a['inscription_statut']) <=> $rang($b['inscription_statut']))
             ?: strcoll($a['nom'], $b['nom']));

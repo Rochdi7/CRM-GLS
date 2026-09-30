@@ -510,7 +510,8 @@ final class PaiementProfEcranTest extends TestCase
         // Même liste, même ordre, mêmes statuts que « Absence par groupe » :
         // les inscrits du groupe (même sans appel ce mois), Active d'abord,
         // puis les dossiers clos, « prénom nom » alphabétique dans chaque
-        // bloc ; un étudiant appelé sans inscription arrive en dernier.
+        // bloc ; un étudiant appelé sans inscription rejoint les dossiers
+        // clos (gris), avant les annulées qui restent en dernier.
         $annulee = $this->inscrire('Ahmed', 'Lagreni', Inscription::STATUT_ANNULEE);
         $zineb = $this->inscrire('Zineb', 'Assadi', Inscription::STATUT_ACTIVE);
         $changement = $this->inscrire('Haitam', 'Abbadi', Inscription::STATUT_CHANGEMENT);
@@ -539,9 +540,10 @@ final class PaiementProfEcranTest extends TestCase
                 ->where('calcul.lignes.2.nom', 'Zineb Assadi')
                 ->where('calcul.lignes.3.nom', 'Haitam Abbadi')
                 ->where('calcul.lignes.3.inscriptionStatut', Inscription::STATUT_CHANGEMENT)
-                ->where('calcul.lignes.4.nom', 'Ahmed Lagreni')
-                ->where('calcul.lignes.4.inscriptionStatut', Inscription::STATUT_ANNULEE)
-                ->where('calcul.lignes.5.nom', 'Abid Ghizlane')
-                ->where('calcul.lignes.5.inscriptionStatut', null));
+                ->where('calcul.lignes.4.nom', 'Abid Ghizlane')
+                ->where('calcul.lignes.4.inscriptionStatut', null)
+                // Les annulées (rouge) toujours en DERNIER.
+                ->where('calcul.lignes.5.nom', 'Ahmed Lagreni')
+                ->where('calcul.lignes.5.inscriptionStatut', Inscription::STATUT_ANNULEE));
     }
 }
