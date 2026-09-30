@@ -17,6 +17,7 @@ final readonly class LignePaiementProf
     /**
      * @param  int         $joursRetenus  présences — la SEULE donnée qui paie
      * @param  int         $joursIgnores  « Retard » / « Justifié » hérités, ne rapportent rien
+     * @param  int         $semainesPayees palier atteint : 0, 1, 2 ou 4 (= complet)
      * @param  float|null  $montantAjuste ajustement manuel, s'il y en a un
      */
     public function __construct(
@@ -25,6 +26,7 @@ final readonly class LignePaiementProf
         public int $joursRetenus,
         public int $joursAbsents,
         public int $joursIgnores,
+        public int $semainesPayees,
         public float $montantAuto,
         public ?float $montantAjuste,
         public float $montantEffectif,
@@ -39,6 +41,7 @@ final readonly class LignePaiementProf
             'joursRetenus' => $this->joursRetenus,
             'joursAbsents' => $this->joursAbsents,
             'joursIgnores' => $this->joursIgnores,
+            'semainesPayees' => $this->semainesPayees,
             'montantAuto' => $this->montantAuto,
             'montantAjuste' => $this->montantAjuste,
             'montantEffectif' => $this->montantEffectif,

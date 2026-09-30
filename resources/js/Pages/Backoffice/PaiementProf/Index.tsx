@@ -25,6 +25,25 @@ const DEPENSE_STATUT_BADGE: Record<string, 'success' | 'warning' | 'danger' | 's
 };
 
 /**
+ * Présences minimales d'un palier (`paliersPaie` = { présences min: semaines }).
+ * Le barème vient du serveur (`CalculerPaiementProfParPaliers::PALIERS`) :
+ * l'écran ne le recopie pas, il le lit.
+ */
+function seuilPalier(paliers: Record<string, number>, semaines: number): number {
+    const entree = Object.entries(paliers).find(([, s]) => s === semaines);
+
+    return entree ? Number(entree[0]) : 0;
+}
+
+/** Libellé du palier atteint par une ligne (0, 1, 2 ou 4 semaines). */
+function libellePalier(semaines: number): string {
+    if (semaines >= 4) return t('Full month');
+    if (semaines === 0) return t('Below the minimum');
+
+    return t(':count week(s)', { count: String(semaines) });
+}
+
+/**
  * « Calcul paiement prof » — dérive, depuis les appels DÉJÀ SAISIS, le
  * montant dû à UN enseignant pour UN groupe sur UN mois de groupe, selon
  * le mode de paie configuré sur SA fiche (onglet « Paiement prof »).
@@ -45,7 +64,7 @@ export default function PaiementProfIndex({
     calcul,
     filters,
     groupOptions,
-    seancesMaxParMois,
+    paliersPaie,
     paiementProfTypeId,
     canCreateDepense,
     paiementsProf,
@@ -539,8 +558,15 @@ export default function PaiementProfIndex({
                                         {enseignantChoisi.probleme === null && enseignantChoisi.mode !== 'horaire' && (
                                             <div className="fs-13 text-muted mt-2">
                                                 {t(
-                                                    'Each student earns the rate divided by the number of sessions, times their attendance (:max sessions per month at most).',
-                                                ).replace(':max', String(seancesMaxParMois))}
+                                                    'Each student is paid by attendance tier: fewer than :un present → 0; :un–:deuxMoins1 → 1 week; :deux–:completMoins1 → 2 weeks; :complet or more → the full rate (1 week = rate ÷ 4).',
+                                                    {
+                                                        un: String(seuilPalier(paliersPaie, 1)),
+                                                        deuxMoins1: String(seuilPalier(paliersPaie, 2) - 1),
+                                                        deux: String(seuilPalier(paliersPaie, 2)),
+                                                        completMoins1: String(seuilPalier(paliersPaie, 4) - 1),
+                                                        complet: String(seuilPalier(paliersPaie, 4)),
+                                                    },
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -820,19 +846,6 @@ export default function PaiementProfIndex({
                                     </span>
                                 )}
                             </div>
-                        </div>
-                    )}
-
-                    {!estHoraire && !baseePaiements && calcul.nombreSeances > calcul.seancesRemunerees && (
-                        <div className="alert alert-info d-flex align-items-center gap-2">
-                            <i className="ti ti-info-circle" />
-                            <span>
-                                {t(
-                                    'This period holds :real sessions; the rate is divided by :max (monthly cap), so full attendance earns more than the rate.',
-                                )
-                                    .replace(':real', String(calcul.nombreSeances))
-                                    .replace(':max', String(calcul.seancesRemunerees))}
-                            </span>
                         </div>
                     )}
 
@@ -1120,10 +1133,14 @@ export default function PaiementProfIndex({
                                                     className={`pp-total ${effectif > 0 ? '' : 'text-muted'}`}
                                                 >
                                                     {effectif.toFixed(2)} MAD
-                                                    {estModifie && (
+                                                    {estModifie ? (
                                                         <div className="fs-12 text-warning fw-normal">
                                                             <i className="ti ti-pencil me-1" />
                                                             {t('adjusted')} ({ligne.montantAuto.toFixed(2)})
+                                                        </div>
+                                                    ) : (
+                                                        <div className="fs-12 text-muted fw-normal">
+                                                            {libellePalier(ligne.semainesPayees)}
                                                         </div>
                                                     )}
                                                 </td>

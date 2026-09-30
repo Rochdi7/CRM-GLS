@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Expenses\Queries\GetDepensesList;
-use App\Domain\Payroll\Actions\CalculerPaiementProfParSeance;
+use App\Domain\Payroll\Actions\CalculerPaiementProfParPaliers;
 use App\Domain\Payroll\Queries\GetPaiementProfCalcul;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Controllers\Controller;
@@ -88,7 +88,7 @@ final class PaiementProfController extends Controller
                 'dureeSeance' => '',
             ],
             'groupOptions' => fn (): array => $query->groupOptions($user),
-            'seancesMaxParMois' => CalculerPaiementProfParSeance::SEANCES_MAX_PAR_MOIS,
+            'paliersPaie' => CalculerPaiementProfParPaliers::PALIERS,
             'modes' => Employee::MODES_PAIEMENT_PROF,
             'paiementProfTypeId' => fn (): ?int => TypeDepense::query()
                 ->where('nom', TypeDepense::SYSTEM_PAIEMENT_PROF)

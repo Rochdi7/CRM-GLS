@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Backoffice\Payroll;
 
 use App\Domain\Payroll\Actions\CalculerPaiementProfHoraire;
-use App\Domain\Payroll\Actions\CalculerPaiementProfParSeance;
+use App\Domain\Payroll\Actions\CalculerPaiementProfParPaliers;
 use App\Domain\Payroll\DTOs\ResultatPaiementProf;
 use App\Domain\Payroll\Support\StatutPresencePaie;
 use App\Models\Presence;
@@ -15,8 +15,8 @@ use Tests\TestCase;
 /**
  * Calcul « Paiement prof » — la règle de rémunération elle-même.
  *
- *     montant par séance = taux ÷ séances du mois (plafond 22)
- *     montant étudiant   = montant par séance × ses présences
+ *     < 5 présences → 0 · 5–6 → 1 semaine · 7–10 → 2 semaines · 11+ → complet
+ *     une semaine = taux ÷ 4
  *
  * Tests PURS (aucune base) : ils portent sur le calcul, pas sur l'écran.
  */
@@ -41,97 +41,92 @@ final class CalculPaiementProfTest extends TestCase
         float $taux = 500.0,
         array $ajustements = [],
     ): ResultatPaiementProf {
-        return (new CalculerPaiementProfParSeance())
+        return (new CalculerPaiementProfParPaliers())
             ->handle($etudiants, $seances, $taux, $ajustements);
     }
 
     /*
     |--------------------------------------------------------------------
-    | La règle
+    | Les paliers (règle du CEO, 30/09/2026)
     |--------------------------------------------------------------------
     */
 
     #[Test]
-    public function it_pays_the_rate_divided_by_sessions_times_attendance(): void
+    public function each_attendance_tier_pays_its_weeks(): void
     {
-        // Exemple de référence (22/09/2026) : taux 500 sur 22 séances ⇒
-        // 22,73 DH la séance ; 18 présences ⇒ 409,09 DH.
-        $resultat = $this->calculer([$this->etudiant(18, 4)], 22);
+        // taux 400 ⇒ une semaine = 100.
+        $attendu = [
+            0 => 0.0, 4 => 0.0,
+            5 => 100.0, 6 => 100.0,
+            7 => 200.0, 10 => 200.0,
+            11 => 400.0, 15 => 400.0, 20 => 400.0,
+        ];
 
-        $this->assertSame(22.73, $resultat->montantParSeance);
-        $this->assertSame(409.09, $resultat->lignes[0]->montantEffectif);
-        $this->assertSame(409.09, $resultat->total);
+        foreach ($attendu as $presences => $montant) {
+            $this->assertSame(
+                $montant,
+                $this->calculer([$this->etudiant($presences)], 20, 400.0)->lignes[0]->montantEffectif,
+                "$presences présences",
+            );
+        }
     }
 
     #[Test]
-    public function a_student_present_at_every_session_is_worth_exactly_the_rate(): void
+    public function absences_no_longer_cut_a_full_month(): void
     {
-        // ⚠ Le produit se calcule sur le taux ENTIER, jamais sur la part
-        // arrondie : 22,73 × 22 rendrait 500,06 et « présent partout » ne
-        // vaudrait plus le prix plein.
-        $this->assertSame(500.0, $this->calculer([$this->etudiant(22)], 22)->lignes[0]->montantEffectif);
-        $this->assertSame(500.0, $this->calculer([$this->etudiant(13)], 13)->lignes[0]->montantEffectif);
-        $this->assertSame(500.0, $this->calculer([$this->etudiant(7)], 7)->lignes[0]->montantEffectif);
+        // Le cas réel qui a fait changer la règle — « Yassmina 10H A1 »,
+        // septembre 2026, 20 séances, win-win 400 : 18/2 sortait à 360 DH,
+        // 17/3 à 340 DH, et le CEO les remettait à la main à 400.
+        $resultat = $this->calculer([
+            $this->etudiant(18, 2, 0, 1),
+            $this->etudiant(17, 3, 0, 2),
+            $this->etudiant(15, 5, 0, 3),
+        ], 20, 400.0);
+
+        foreach ($resultat->lignes as $ligne) {
+            $this->assertSame(400.0, $ligne->montantEffectif);
+            $this->assertSame(4, $ligne->semainesPayees);
+        }
+        $this->assertSame(1200.0, $resultat->total);
     }
 
     #[Test]
-    public function a_student_never_present_earns_nothing(): void
+    public function a_student_who_came_late_or_left_early_is_paid_by_what_he_followed(): void
     {
-        $resultat = $this->calculer([$this->etudiant(0, 22)], 22);
+        // Même groupe : arrivés en fin de mois (3/0, 3/1) ou partis tôt
+        // (1/5, 3/10) — le CEO les mettait à 0. 5 présences ⇒ 1 semaine.
+        $resultat = $this->calculer([
+            $this->etudiant(3, 0, 0, 1),
+            $this->etudiant(1, 5, 0, 2),
+            $this->etudiant(3, 10, 0, 3),
+            $this->etudiant(5, 0, 0, 4),
+        ], 20, 400.0);
 
-        $this->assertSame(0.0, $resultat->lignes[0]->montantEffectif);
-        $this->assertSame(0, $resultat->etudiantsRemunerateurs);
-    }
-
-    #[Test]
-    public function there_is_no_threshold_anymore(): void
-    {
-        // UNE seule présence paie : le modèle hebdomadaire exigeait 3 jours
-        // dans la semaine, celui-ci est strictement proportionnel.
-        $resultat = $this->calculer([$this->etudiant(1, 21)], 22);
-
-        $this->assertSame(22.73, $resultat->lignes[0]->montantEffectif);
+        $this->assertSame([0.0, 0.0, 0.0, 100.0], array_map(
+            static fn ($l) => $l->montantEffectif,
+            $resultat->lignes,
+        ));
         $this->assertSame(1, $resultat->etudiantsRemunerateurs);
     }
 
-    /*
-    |--------------------------------------------------------------------
-    | Le plafond de 22 séances
-    |--------------------------------------------------------------------
-    */
-
     #[Test]
-    public function a_short_month_divides_by_its_real_session_count(): void
+    public function the_session_count_of_the_month_does_not_change_the_tier(): void
     {
-        // « 22 séances AU MAXIMUM » est un plafond, jamais un plancher : un
-        // mois creux ne doit pas faire perdre d'argent à l'enseignant.
-        $resultat = $this->calculer([$this->etudiant(13)], 13);
-
-        $this->assertSame(13, $resultat->seancesRemunerees);
-        $this->assertSame(38.46, $resultat->montantParSeance);
+        // Un mois court ou chargé ne déplace pas les seuils.
+        foreach ([8, 13, 20, 25] as $seances) {
+            $this->assertSame(500.0, $this->calculer([$this->etudiant(11)], $seances)->lignes[0]->montantEffectif);
+        }
     }
 
     #[Test]
-    public function a_busy_month_is_capped_at_twenty_two_sessions(): void
+    public function a_week_is_a_quarter_of_the_rate_computed_on_the_full_rate(): void
     {
-        // 25 séances : on divise par 22, pas par 25. Les séances au-delà du
-        // plafond rapportent EN PLUS — l'étudiant a suivi plus de cours que
-        // le mois n'en compte normalement.
-        $resultat = $this->calculer([$this->etudiant(25)], 25);
+        $resultat = $this->calculer([$this->etudiant(7), $this->etudiant(22, 0, 0, 2)], 22, 450.0);
 
-        $this->assertSame(CalculerPaiementProfParSeance::SEANCES_MAX_PAR_MOIS, $resultat->seancesRemunerees);
-        $this->assertSame(25, $resultat->nombreSeances);
-        $this->assertSame(22.73, $resultat->montantParSeance);
-        $this->assertGreaterThan(500.0, $resultat->lignes[0]->montantEffectif);
-    }
-
-    #[Test]
-    public function a_month_without_any_session_never_divides_by_zero(): void
-    {
-        $resultat = $this->calculer([$this->etudiant(0)], 0);
-
-        $this->assertSame(0.0, $resultat->montantParSeance);
-        $this->assertSame(0.0, $resultat->total);
+        $this->assertSame(112.5, $resultat->montantParSemaine);
+        $this->assertSame(225.0, $resultat->lignes[0]->montantEffectif);
+        // « Complet » vaut EXACTEMENT le taux.
+        $this->assertSame(450.0, $resultat->lignes[1]->montantEffectif);
     }
 
     /*
@@ -159,11 +154,11 @@ final class CalculPaiementProfTest extends TestCase
     #[Test]
     public function a_legacy_late_row_pays_nothing(): void
     {
-        // 20 présences + 2 « Retard » sur 22 séances : seules les 20
-        // présences paient.
-        $resultat = $this->calculer([$this->etudiant(20, 0, 2)], 22);
+        // 9 présences + 2 « Retard » : seules les 9 présences comptent, donc
+        // 2 semaines — les Retard ne font pas franchir le palier des 11.
+        $resultat = $this->calculer([$this->etudiant(9, 0, 2)], 22);
 
-        $this->assertSame(round(500 * 20 / 22, 2), $resultat->lignes[0]->montantEffectif);
+        $this->assertSame(250.0, $resultat->lignes[0]->montantEffectif);
     }
 
     /*
@@ -189,11 +184,11 @@ final class CalculPaiementProfTest extends TestCase
     {
         $resultat = $this->calculer([
             $this->etudiant(22, 0, 0, 1),
-            $this->etudiant(11, 11, 0, 2),
+            $this->etudiant(8, 14, 0, 2),
             $this->etudiant(0, 22, 0, 3),
         ], 22);
 
-        // 500 + 250 + 0
+        // 500 + 250 (2 semaines) + 0
         $this->assertSame(750.0, $resultat->total);
         $this->assertSame(2, $resultat->etudiantsRemunerateurs);
     }

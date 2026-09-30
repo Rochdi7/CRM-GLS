@@ -8,8 +8,8 @@ namespace App\Domain\Payroll\DTOs;
  * Résultat complet d'un calcul « Paiement prof » : le total, et TOUT ce qui
  * permet de le refaire à la main.
  *
- *     montant par séance = taux ÷ séances rémunérées (plafond 22)
- *     montant étudiant   = montant par séance × ses présences
+ *     < 5 présences → 0 · 5–6 → 1 semaine · 7–10 → 2 semaines · 11+ → complet
+ *     une semaine = taux ÷ 4 (voir `CalculerPaiementProfParPaliers`)
  *
  * ⚠ Ce total n'est pas un paiement. Rien n'est écrit, aucune caisse n'est
  * touchée : c'est une proposition de montant que l'utilisateur relit avant
@@ -19,16 +19,15 @@ final readonly class ResultatPaiementProf
 {
     /**
      * @param  list<LignePaiementProf>  $lignes
-     * @param  int  $nombreSeances      séances réellement effectuées
-     * @param  int  $seancesRemunerees  diviseur retenu (le réel, plafonné à 22)
+     * @param  float  $montantParSemaine  taux ÷ 4 — ce que vaut UNE semaine payée
+     * @param  int    $nombreSeances      séances réellement effectuées (affichage)
      */
     public function __construct(
         public array $lignes,
         public float $total,
         public float $montantParEtudiant,
-        public float $montantParSeance,
+        public float $montantParSemaine,
         public int $nombreSeances,
-        public int $seancesRemunerees,
         public int $etudiantsRemunerateurs,
     ) {}
 
@@ -39,9 +38,8 @@ final readonly class ResultatPaiementProf
             'lignes' => array_map(static fn (LignePaiementProf $l): array => $l->toArray(), $this->lignes),
             'total' => $this->total,
             'montantParEtudiant' => $this->montantParEtudiant,
-            'montantParSeance' => $this->montantParSeance,
+            'montantParSemaine' => $this->montantParSemaine,
             'nombreSeances' => $this->nombreSeances,
-            'seancesRemunerees' => $this->seancesRemunerees,
             'etudiantsRemunerateurs' => $this->etudiantsRemunerateurs,
         ];
     }

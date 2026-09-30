@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Payroll\Queries;
 
 use App\Domain\Payroll\Actions\CalculerPaiementProfHoraire;
-use App\Domain\Payroll\Actions\CalculerPaiementProfParSeance;
+use App\Domain\Payroll\Actions\CalculerPaiementProfParPaliers;
 use App\Domain\Payroll\Support\ConfigurationPaieEnseignant;
 use App\Domain\Payroll\Support\MoisDeGroupe;
 use App\Domain\Payroll\Support\StatutPresencePaie;
@@ -45,7 +45,7 @@ use Illuminate\Support\Facades\DB;
 final class GetPaiementProfCalcul
 {
     public function __construct(
-        private readonly CalculerPaiementProfParSeance $parSeance,
+        private readonly CalculerPaiementProfParPaliers $parPaliers,
         private readonly CalculerPaiementProfHoraire $horaire,
         private readonly GetVerificationParPaiements $parPaiements,
         private readonly CenterAccessService $centerAccess,
@@ -214,7 +214,7 @@ final class GetPaiementProfCalcul
         if (! $config->estValide() || $seances->isEmpty()) {
             return [
                 ...$entete,
-                ...$this->parSeance->handle([], 0, $config->taux)->toArray(),
+                ...$this->parPaliers->handle([], 0, $config->taux)->toArray(),
                 'datesDeCours' => [],
                 'grille' => [],
                 'heuresSaisies' => $heures,
@@ -228,7 +228,7 @@ final class GetPaiementProfCalcul
 
             return [
                 ...$entete,
-                ...$this->parSeance->handle([], $seances->count(), 0.0)->toArray(),
+                ...$this->parPaliers->handle([], $seances->count(), 0.0)->toArray(),
                 'datesDeCours' => $seances->pluck('date_seance')->map(fn (Carbon $d) => $d->toDateString())->all(),
                 'grille' => [],
                 'heuresSaisies' => $heuresRetenues,
@@ -275,7 +275,7 @@ final class GetPaiementProfCalcul
             $grille[$studentId][$jour] = $ligne->statut;
         }
 
-        $resultat = $this->parSeance->handle(
+        $resultat = $this->parPaliers->handle(
             etudiants: array_values($parEtudiant),
             nombreSeances: $seances->count(),
             montantParEtudiant: $config->taux,

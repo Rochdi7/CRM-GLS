@@ -23,7 +23,7 @@ understand the rules and redo any calculation by hand.
 | Reads the configuration | `app/Domain/Payroll/Support/ConfigurationPaieEnseignant.php` |
 | Computes the month window | `app/Domain/Payroll/Support/MoisDeGroupe.php` |
 | Decides which attendance pays | `app/Domain/Payroll/Support/StatutPresencePaie.php` |
-| Formula — GLS & win-win | `app/Domain/Payroll/Actions/CalculerPaiementProfParSeance.php` |
+| Formula — GLS & win-win | `app/Domain/Payroll/Actions/CalculerPaiementProfParPaliers.php` |
 | Formula — hourly | `app/Domain/Payroll/Actions/CalculerPaiementProfHoraire.php` |
 | Gathers the data and runs the formula | `app/Domain/Payroll/Queries/GetPaiementProfCalcul.php` |
 | Tests | `tests/Feature/Backoffice/Payroll/` |
@@ -103,43 +103,34 @@ as **not paid**.
 
 ---
 
-## 4. Formula — GLS and win-win (per session, proportional)
+## 4. Formula — GLS and win-win (attendance tiers)
+
+Rule set by the CEO on 30/09/2026 (replaces the proportional
+`rate × presences ÷ min(sessions, 22)` formula of 22/09/2026):
+
+| « Présent » in the month | Paid | Amount |
+|---|---|---|
+| fewer than 5 | nothing | 0 DH |
+| 5 – 6 | 1 week | rate ÷ 4 |
+| 7 – 10 | 2 weeks | rate ÷ 2 |
+| 11 or more | full month | rate |
 
 ```
-divisor              = min(number of sessions held in the month, 22)
-amount for a student = rate × (student's « Présent » count) ÷ divisor
-teacher total        = sum of every student's amount
+teacher total = sum of every student's tier amount
 ```
 
 - **rate** = `montant_par_etudiant_prof` (GLS) or the month's amount (win-win).
-- **number of sessions held** = the teacher's « Effectuée » sessions in the
-  window.
-- **22 is a cap on the divisor**, not a minimum:
-  - a short month (e.g. 18 sessions) divides by its real 18 → a student present
-    every time is worth exactly the full rate; the teacher is not penalised
-    for a short month (holidays etc.);
-  - a heavy month (e.g. 25 sessions with make-up classes) still divides by 22
-    → extra sessions earn extra money; a student present 25 times is worth
-    more than the rate. This is intentional.
-- Every attendance counts: there is **no threshold** and **no weekly
-  bucket** (an older "4 weeks, minimum 3 days per week" model was removed on
-  22/09/2026).
-- No sessions in the month → everything is 0 (never a division by zero).
-
-### Rounding
-
-Each student's amount is computed from the **full rate** and rounded to 2
-decimals **once**:
-
-```
-round(rate × presences ÷ divisor, 2)
-```
-
-It is *not* `round(rate ÷ divisor, 2) × presences`. Example: 500 ÷ 22 =
-22.7272…; using the rounded 22.73 × 22 would give 500.06 instead of 500.00.
-The screen still shows the "amount per session" (22.73) for information, but
-the product uses the exact value. The teacher total is the sum of the
-already-rounded student lines.
+- The tier depends ONLY on the student's « Présent » count — not on how many
+  sessions the month held. A short or heavy month moves nothing.
+- Why it changed: on « Yassmina 10H A1 » (September 2026, 20 sessions,
+  win-win 400) the proportional formula paid 360 DH for 18/2 and 340 DH for
+  17/3, and the CEO was overriding every line by hand — to 400 for regular
+  students, to 0 for those who joined at the end or left at the start. His
+  overrides land exactly on these tiers.
+- The thresholds live in ONE place, `CalculerPaiementProfParPaliers::PALIERS`;
+  the screen reads them from the `paliersPaie` prop, never re-types them.
+- Each amount is computed from the full rate (`rate × weeks ÷ 4`), so "full
+  month" is exactly the rate.
 
 ### Manual adjustment
 
@@ -148,42 +139,17 @@ student. That value **replaces** the computed amount for that student, and
 the total is recomputed. Adjustments are not stored anywhere; they only
 change the total carried to the expense form.
 
-### Worked examples (rate = 500 DH per student)
+### Worked example (win-win, rate = 400 DH)
 
-**A. Normal month — 22 sessions held** → divisor 22
-
-| Student | Présent | Calculation | Amount |
+| Student | Présent / Absent | Tier | Amount |
 |---|---|---|---|
-| Amina | 22 | 500 × 22 ÷ 22 | 500.00 |
-| Youssef | 18 | 500 × 18 ÷ 22 | 409.09 |
-| Salma | 11 | 500 × 11 ÷ 22 | 250.00 |
-| Omar | 0 | 500 × 0 ÷ 22 | 0.00 |
-| **Total** | | | **1 159.09 DH** |
-
-**B. Short month — 18 sessions held** → divisor 18 (below the cap)
-
-| Student | Présent | Calculation | Amount |
-|---|---|---|---|
-| Amina | 18 | 500 × 18 ÷ 18 | 500.00 |
-| Youssef | 15 | 500 × 15 ÷ 18 | 416.67 |
-| **Total** | | | **916.67 DH** |
-
-**C. Heavy month — 25 sessions held** → divisor capped at 22
-
-| Student | Présent | Calculation | Amount |
-|---|---|---|---|
-| Amina | 25 | 500 × 25 ÷ 22 | 568.18 |
-| Youssef | 20 | 500 × 20 ÷ 22 | 454.55 |
-| **Total** | | | **1 022.73 DH** |
-
-**D. Win-win** — teacher configured with September = 400, October = 420.
-Same formula; only the rate changes with the month.
-
-| Month | Sessions | Student present | Calculation | Amount |
-|---|---|---|---|---|
-| Septembre | 20 | 20 | 400 × 20 ÷ 20 | 400.00 |
-| Octobre | 22 | 19 | 420 × 19 ÷ 22 | 362.73 |
-| Novembre | — | — | no November line on the teacher | **refused**: "No win-win amount is set for novembre 2026" |
+| Benichou | 20 / 0 | full | 400.00 |
+| Mechbal | 18 / 2 | full | 400.00 |
+| Assadi | 15 / 5 | full | 400.00 |
+| Ettalby | 8 / 3 | 2 weeks | 200.00 |
+| Maouzoun | 5 / 0 | 1 week | 100.00 |
+| Taous | 4 / 12 | below 5 | 0.00 |
+| El Aichi | 3 / 1 | below 5 | 0.00 |
 
 ---
 
@@ -247,7 +213,7 @@ balance check applies. The calculation screen itself never records anything.
 |---|---|---|---|
 | Rate source | employee's hourly rate | employee's fixed amount per student | employee's amount **for this month** |
 | Unit paid | hour | student attendance | student attendance |
-| Formula | rate × hours | rate × présences ÷ min(sessions, 22) per student, summed | same as GLS |
+| Formula | rate × hours | attendance tier per student (<5 → 0, 5–6 → ¼, 7–10 → ½, 11+ → full), summed | same as GLS |
 | Uses attendance? | no | yes, « Présent » only | yes, « Présent » only |
 | Month | group-anchored window | group-anchored window | group-anchored window; rate of the window's starting month |
 | Missing config | refused, named | refused, named | refused if the month has no line |

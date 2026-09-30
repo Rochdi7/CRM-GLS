@@ -2723,12 +2723,10 @@ export interface PaiementProfCalcul {
     lignes: PaiementProfLigne[];
     total: number;
     montantParEtudiant: number;
-    /** taux ÷ séances rémunérées — ce que vaut UNE présence. */
-    montantParSeance: number;
-    /** Séances réellement effectuées sur la période. */
+    /** taux ÷ 4 — ce que vaut UNE semaine payée. */
+    montantParSemaine: number;
+    /** Séances réellement effectuées sur la période (affichage seulement). */
     nombreSeances: number;
-    /** Diviseur retenu : le réel, plafonné à 22. */
-    seancesRemunerees: number;
     nombreJoursDeCours: number;
     etudiantsRemunerateurs: number;
     group: { id: number; nom: string; niveau: string };
@@ -2778,6 +2776,8 @@ export interface PaiementProfEnseignantOption {
     label: string;
     /** Séances qu'il a réellement données sur le mois choisi. */
     seancesCeMois: number;
+    /** Palier atteint : 0, 1, 2 ou 4 (= mois complet). */
+    semainesPayees: number;
     mode: PaiementProfMode | '';
     taux: number;
     probleme: string | null;
@@ -2815,8 +2815,8 @@ export interface PaiementProfPageProps {
     calcul: PaiementProfCalcul | null;
     filters: PaiementProfFilters;
     groupOptions: SelectOption[];
-    /** Plafond metier : un mois compte 22 seances au maximum. */
-    seancesMaxParMois: number;
+    /** Barème : présences minimales => semaines payées (11 => 4, 7 => 2, 5 => 1). */
+    paliersPaie: Record<string, number>;
     modes: PaiementProfMode[];
     paiementProfTypeId: number | null;
     canCreateDepense: boolean;
