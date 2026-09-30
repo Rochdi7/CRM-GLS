@@ -401,6 +401,7 @@ export default function PaiementProfIndex({
                             font-weight: 600; background: var(--bs-body-bg);
                             box-shadow: -4px 0 6px -4px rgba(0,0,0,.2); }
                 .pp-wrap thead .pp-total { z-index: 12; background: #F2F4F8; }
+                .pp-reste { text-transform: none; font-weight: 500; cursor: help; margin-top: 2px; }
                 .pp-ajust { width: 100px; text-align: right; font-weight: 600; }
                 .pp-ajust.pp-modifie { border-color: var(--bs-warning) !important; background: #FFFBF0; }
                 .pp-wrap tbody tr:hover td { background: #F7F9FC; }
@@ -1171,6 +1172,26 @@ export default function PaiementProfIndex({
                                                     ) : (
                                                         <div className="fs-12 text-muted fw-normal">
                                                             {libellePalier(ligne.semainesPayees)}
+                                                        </div>
+                                                    )}
+                                                    {calcul.retardsPaiement[ligne.studentId] && (
+                                                        <div>
+                                                            <span
+                                                                className="badge bg-danger pp-reste"
+                                                                title={t(
+                                                                    'Unpaid balance in this group (due date: :date). Check before paying the full amount.',
+                                                                    {
+                                                                        date: calcul.retardsPaiement[ligne.studentId]
+                                                                            .dateEcheance,
+                                                                    },
+                                                                )}
+                                                            >
+                                                                <i className="ti ti-alert-triangle me-1" />
+                                                                {t('Balance due: :montant MAD', {
+                                                                    montant:
+                                                                        calcul.retardsPaiement[ligne.studentId].montant,
+                                                                })}
+                                                            </span>
                                                         </div>
                                                     )}
                                                 </td>

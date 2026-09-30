@@ -11,6 +11,7 @@ use App\Models\Etablissement;
 use App\Models\Group;
 use App\Models\GroupEnseignant;
 use App\Models\Inscription;
+use App\Models\InscriptionFee;
 use App\Models\Presence;
 use App\Models\Seance;
 use App\Models\Student;
@@ -545,5 +546,33 @@ final class PaiementProfEcranTest extends TestCase
                 // Les annulées (rouge) toujours en DERNIER.
                 ->where('calcul.lignes.5.nom', 'Ahmed Lagreni')
                 ->where('calcul.lignes.5.inscriptionStatut', Inscription::STATUT_ANNULEE));
+    }
+
+    #[Test]
+    public function a_student_with_an_overdue_balance_is_flagged_without_touching_the_amount(): void
+    {
+        // Même règle que la fiche d'appel : frais échu, non soldé, dossier
+        // Active dans CE groupe. Le signal n'enlève rien au montant calculé.
+        $doit = $this->inscrire('Mouad', 'Derbal', Inscription::STATUT_ACTIVE);
+        $ajour = $this->inscrire('Adham', 'Annabou', Inscription::STATUT_ACTIVE);
+
+        InscriptionFee::create([
+            'inscription_id' => Inscription::where('student_id', $doit->id)->value('id'),
+            'nom' => 'Frais de Septembre',
+            'montant_initial' => 1400,
+            'montant' => 1400,
+            'date_echeance' => '2025-09-01',
+        ]);
+
+        $this->moisPlein($doit);
+
+        $this->calculer()
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where("calcul.retardsPaiement.{$doit->id}.montant", '1400.00')
+                ->missing("calcul.retardsPaiement.{$ajour->id}")
+                // Présent partout ⇒ toujours le taux entier : signal seulement.
+                ->where('calcul.lignes.1.nom', 'Mouad Derbal')
+                ->where('calcul.lignes.1.montantEffectif', fn ($v) => (float) $v === 500.0));
     }
 }

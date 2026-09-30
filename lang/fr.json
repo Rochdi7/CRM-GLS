@@ -1504,6 +1504,8 @@
     "Each student is paid by attendance tier: fewer than :un present → 0; :un–:deuxMoins1 → 1 week; :deux–:completMoins1 → 2 weeks; :complet or more → the full rate (1 week = rate ÷ 4).": "Chaque étudiant est payé par palier de présences : moins de :un → 0 DH ; :un–:deuxMoins1 → 1 semaine ; :deux–:completMoins1 → 2 semaines ; :complet et plus → le prix entier (1 semaine = taux ÷ 4).",
     "Full month": "Complet",
     "Not enrolled in this group": "Non inscrit dans ce groupe",
+    "Balance due: :montant MAD": "Reste à payer : :montant MAD",
+    "Unpaid balance in this group (due date: :date). Check before paying the full amount.": "Reste à payer échu dans ce groupe (échéance : :date). À vérifier avant de payer le montant entier.",
     "Below the minimum": "Sous le seuil",
     ":count week(s)": ":count sem.",
     "Legacy status - earns nothing": "Statut hérité - ne rapporte rien",

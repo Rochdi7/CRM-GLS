@@ -2751,6 +2751,12 @@ export interface PaiementProfCalcul {
     datesDeCours: string[];
     /** student_id → { 'YYYY-MM-DD': statut } — la grille d'appel brute. */
     grille: Record<number, Record<string, string>>;
+    /**
+     * student_id → reste à payer ÉCHU dans ce groupe (même règle que la fiche
+     * d'appel et le recouvrement). Absent = à jour. Un signal : le montant de
+     * la ligne n'est pas modifié.
+     */
+    retardsPaiement: Record<number, RetardPaiementEtudiant>;
     /** Heures dérivées des séances effectuées (aide à la saisie, mode horaire). */
     heuresEffectuees: number;
     /** Dates des séances dont l'horaire est inexploitable (manquant ou inversé) — comptées 0 h. */

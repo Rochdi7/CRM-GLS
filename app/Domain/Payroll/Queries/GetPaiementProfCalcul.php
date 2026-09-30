@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Payroll\Queries;
 
 use App\Domain\Attendance\Queries\GetAbsencesParGroupe;
+use App\Domain\Payments\Support\RetardPaiementEtudiant;
 use App\Domain\Payroll\Actions\CalculerPaiementProfHoraire;
 use App\Domain\Payroll\Actions\CalculerPaiementProfParPaliers;
 use App\Domain\Payroll\Support\ConfigurationPaieEnseignant;
@@ -53,6 +54,7 @@ final class GetPaiementProfCalcul
         private readonly GetVerificationParPaiements $parPaiements,
         private readonly CenterAccessService $centerAccess,
         private readonly CurrentContext $context,
+        private readonly RetardPaiementEtudiant $retards,
     ) {}
 
     /** @return array<int, array{value:int,label:string}> */
@@ -220,6 +222,7 @@ final class GetPaiementProfCalcul
                 ...$this->parPaliers->handle([], 0, $config->taux)->toArray(),
                 'datesDeCours' => [],
                 'grille' => [],
+                'retardsPaiement' => (object) [],
                 'heuresSaisies' => $heures,
                 'totalHoraire' => null,
             ];
@@ -234,6 +237,7 @@ final class GetPaiementProfCalcul
                 ...$this->parPaliers->handle([], $seances->count(), 0.0)->toArray(),
                 'datesDeCours' => $seances->pluck('date_seance')->map(fn (Carbon $d) => $d->toDateString())->all(),
                 'grille' => [],
+                'retardsPaiement' => (object) [],
                 'heuresSaisies' => $heuresRetenues,
                 'totalHoraire' => $this->horaire->handle($config->taux, (float) $heuresRetenues),
                 'total' => $this->horaire->handle($config->taux, (float) $heuresRetenues),
@@ -285,6 +289,15 @@ final class GetPaiementProfCalcul
             ...$resultat->toArray(),
             'datesDeCours' => $datesDeCours,
             'grille' => $grille,
+            // Étudiants qui ont encore un reste à payer ÉCHU dans CE groupe —
+            // la MÊME règle que le badge de la fiche d'appel et que « Gestion
+            // des recouvrements » (`RetardPaiementEtudiant`), calculée en lot.
+            // Un SIGNAL seulement : le montant de la ligne ne bouge pas, c'est
+            // l'opérateur qui décide de l'ajuster.
+            'retardsPaiement' => (object) $this->retards->pourEtudiants(
+                array_column($parEtudiant, 'student_id'),
+                $group->id,
+            ),
             'heuresSaisies' => null,
             'totalHoraire' => null,
         ];
