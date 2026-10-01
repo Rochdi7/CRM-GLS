@@ -221,6 +221,34 @@ final class ComptesMethodeTest extends TestCase
         ];
     }
 
+    public function test_filtering_on_a_cashiers_till_also_lists_her_non_cash_payments(): void
+    {
+        $loubna = $this->userWith('payments.view', 'payments.create');
+        $collegue = $this->userWith('payments.view', 'payments.create');
+        [$s1, $i1, $f1] = $this->enrolledStudentWithFee(300);
+        [$s2, $i2, $f2] = $this->enrolledStudentWithFee(1100);
+        [$s3, $i3, $f3] = $this->enrolledStudentWithFee(500);
+
+        $this->payLine($loubna, $s1, $i1, $f1, '300', Encaissement::METHODE_ESPECES);
+        $this->payLine($loubna, $s2, $i2, $f2, '1100', Encaissement::METHODE_TPE);
+        $this->payLine($collegue, $s3, $i3, $f3, '500', Encaissement::METHODE_TPE);
+
+        $tillId = $loubna->employee->till->id;
+        $query = ['caisseFilter' => $tillId, 'dateFrom' => '2025-09-20', 'dateTo' => '2025-09-20'];
+
+        // Her till: her cash AND her TPE payment (the TPE money sits in the
+        // centre's account, not her till) — never a colleague's TPE row.
+        $this->actingAs($this->superAdmin())
+            ->get(route('backoffice.encaissements.index', $query))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('encaissements.total', 2)
+                ->where('montantTotal', fn ($v) => (float) $v === 1400.0));
+
+        // A method account stays a strict filter.
+        $this->get(route('backoffice.encaissements.index', [...$query, 'caisseFilter' => $this->compte($this->centre, Encaissement::METHODE_TPE)->id]))
+            ->assertInertia(fn (Assert $page) => $page->where('encaissements.total', 2));
+    }
+
     public function test_one_submit_with_mixed_methods_splits_across_accounts(): void
     {
         $user = $this->userWith('payments.view', 'payments.create');

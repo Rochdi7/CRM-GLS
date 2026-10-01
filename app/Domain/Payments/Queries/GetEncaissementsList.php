@@ -206,7 +206,7 @@ final class GetEncaissementsList
             // on the inscription's fee lines. The Chèques tab keeps every
             // cheque row because it tracks each échéance, allocated or not.
             ->when($view === '', fn ($q) => $q->whereNull('applied_from_encaissement_id'))
-            ->when($caisseFilter !== '', fn ($q) => $q->where('caisse_id', (int) $caisseFilter))
+            ->when($caisseFilter !== '', fn ($q) => $this->filtrerParCaisse($q, (int) $caisseFilter))
             ->when($methodeFilter !== '', fn ($q) => $q->where('methode', $methodeFilter))
             // `date_paiement` is a DATE column: a plain comparison keeps the
             // index usable, whereas whereDate() wraps the column in a cast.
@@ -727,6 +727,37 @@ final class GetEncaissementsList
         }
 
         return $this->caisseOptions($user)->contains('id', $tillId) ? $tillId : null;
+    }
+
+    /**
+     * Filtre « Caisse ». Une caisse « Caissière » est le tiroir d'UNE
+     * personne, mais seuls ses paiements en ESPÈCES y atterrissent : un
+     * paiement TPE / Chèque / Virement qu'elle encaisse est crédité au compte
+     * de méthode du centre (CaisseResolver, §11), jamais à son tiroir.
+     * Filtrer sur le seul `caisse_id` cachait donc tout son encaissement non
+     * espèces (signalé le 01/10/2026 : 6 lignes / 2 300 MAD au lieu de 20).
+     * On ajoute ses lignes posées sur un compte de méthode (`agent_id` =
+     * responsable du tiroir). Lecture seule : aucune ligne ne change de
+     * caisse. Un compte de méthode ou une caisse « Externe » reste filtré
+     * strictement sur `caisse_id`.
+     */
+    private function filtrerParCaisse(Builder $q, int $caisseId): void
+    {
+        $caisse = Caisse::query()->find($caisseId, ['id', 'type', 'responsable_employee_id']);
+
+        if ($caisse === null
+            || $caisse->type !== Caisse::TYPE_CAISSIERE
+            || $caisse->responsable_employee_id === null) {
+            $q->where('caisse_id', $caisseId);
+
+            return;
+        }
+
+        $q->where(fn ($w) => $w
+            ->where('caisse_id', $caisseId)
+            ->orWhere(fn ($m) => $m
+                ->where('agent_id', $caisse->responsable_employee_id)
+                ->whereIn('caisse_id', Caisse::query()->whereIn('type', Caisse::TYPES_METHODE)->select('id'))));
     }
 
     private static function isIsoDate(string $value): bool
