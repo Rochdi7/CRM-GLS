@@ -244,6 +244,10 @@ final class ComptesMethodeTest extends TestCase
                 ->where('encaissements.total', 2)
                 ->where('montantTotal', fn ($v) => (float) $v === 1400.0));
 
+        // Only the Encaissements tab widens: the Chèques tab stays strict.
+        $this->get(route('backoffice.encaissements.index', [...$query, 'view' => 'cheque']))
+            ->assertInertia(fn (Assert $page) => $page->where('encaissements.total', 0));
+
         // A method account stays a strict filter.
         $this->get(route('backoffice.encaissements.index', [...$query, 'caisseFilter' => $this->compte($this->centre, Encaissement::METHODE_TPE)->id]))
             ->assertInertia(fn (Assert $page) => $page->where('encaissements.total', 2));

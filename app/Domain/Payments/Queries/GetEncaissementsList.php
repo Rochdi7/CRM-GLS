@@ -206,7 +206,10 @@ final class GetEncaissementsList
             // on the inscription's fee lines. The Chèques tab keeps every
             // cheque row because it tracks each échéance, allocated or not.
             ->when($view === '', fn ($q) => $q->whereNull('applied_from_encaissement_id'))
-            ->when($caisseFilter !== '', fn ($q) => $this->filtrerParCaisse($q, (int) $caisseFilter))
+            // Onglet Encaissements seulement : Avances et Chèques gardent le
+            // filtre strict sur `caisse_id`.
+            ->when($caisseFilter !== '' && $view === '', fn ($q) => $this->filtrerParCaisse($q, (int) $caisseFilter))
+            ->when($caisseFilter !== '' && $view !== '', fn ($q) => $q->where('caisse_id', (int) $caisseFilter))
             ->when($methodeFilter !== '', fn ($q) => $q->where('methode', $methodeFilter))
             // `date_paiement` is a DATE column: a plain comparison keeps the
             // index usable, whereas whereDate() wraps the column in a cast.
