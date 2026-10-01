@@ -37,19 +37,12 @@ use Illuminate\Validation\ValidationException;
  * Le tampon est posé par `Encaissement::booted()`, donc aucun chemin de
  * détachement ne peut l'oublier.
  *
- * LES DEUX GESTES DU GUICHET QUE LE DÉLAI FERME (précision du propriétaire,
- * 29/09/2026 : « passé 2 semaines, restreint — seul le super-admin garde
- * l'accès ») :
- *  - APPLIQUER une avance de plus de 14 jours (`estExpiree()`) ;
- *  - CONVERTIR en avance un paiement de plus de 14 jours
- *    (`tropAncienPourConversion()`), mesuré sur sa `date_paiement`. Sans
- *    cette seconde borne la première ne protège rien : il suffirait de
- *    reconvertir un vieux paiement pour lui rendre 14 jours.
- * Le SUPER-ADMIN passe outre les deux (`PERMISSION`, `superAdminOnly()`), et
- * le journal le note. Les flux SYSTÈME qui détachent un paiement (changement
- * de groupe, retrait d'un frais payé, clôture) ne sont pas bornés : ils
- * libèrent de l'argent qui resterait sinon accroché à une ligne invisible
- * (§11), et ce ne sont pas des gestes libres du guichet.
+ * LE SEUL GESTE QUE LE DÉLAI FERME est l'APPLICATION d'une avance de plus
+ * de 14 jours (`estExpiree()`). CONVERTIR un paiement en avance n'a aucune
+ * limite d'âge (décision du propriétaire, 01/10/2026) : l'avance qui en naît
+ * reçoit simplement ses 14 jours à compter de la conversion. Le SUPER-ADMIN
+ * applique une avance expirée (`PERMISSION`, `superAdminOnly()`), et le
+ * journal le note (`delai_outrepasse`).
  *
  * CE QUE L'EXPIRATION NE FAIT PAS : elle ne supprime rien, ne bouge aucune
  * caisse et ne touche pas au montant restant — l'argent reste reçu et reste
@@ -63,7 +56,7 @@ final class ValiditeAvance
 {
     public const DUREE_JOURS = 14;
 
-    /** Passer outre le délai — convertir, appliquer, prolonger. Super-admin uniquement. */
+    /** Passer outre le délai — appliquer ou prolonger une avance expirée. Super-admin uniquement. */
     public const PERMISSION = 'payments.override-advance-expiry';
 
     /**
@@ -125,29 +118,5 @@ final class ValiditeAvance
     public static function peutOutrepasser(?User $user): bool
     {
         return $user?->can(self::PERMISSION) ?? false;
-    }
-
-    /**
-     * Un paiement posé sur un frais est trop ancien pour être converti en
-     * avance par le guichet : 14 jours ou plus depuis sa `date_paiement`.
-     * Même borne que `estExpiree()` (le jour J compte comme dépassé).
-     */
-    public static function tropAncienPourConversion(Encaissement $encaissement): bool
-    {
-        if ($encaissement->date_paiement === null) {
-            return false;
-        }
-
-        return self::echeanceDepuis($encaissement->date_paiement)->lessThanOrEqualTo(CarbonImmutable::today());
-    }
-
-    /** Le motif affiché à l'écran ET renvoyé par l'action — une seule phrase. */
-    public static function motifConversionRefusee(Encaissement $encaissement): string
-    {
-        return __('Payment :reference dates from :date, more than :jours days ago: it can no longer be converted into an advance. Please contact the back office.', [
-            'reference' => $encaissement->reference,
-            'date' => $encaissement->date_paiement?->format('d/m/Y'),
-            'jours' => self::DUREE_JOURS,
-        ]);
     }
 }

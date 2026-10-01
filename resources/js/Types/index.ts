@@ -2417,9 +2417,7 @@ export interface InscriptionPaymentRow {
     splittable: boolean;
     /** French reason when `splittable` is false, null otherwise. */
     splitBlocker: string | null;
-    /** Paid 14 days ago or more (ValiditeAvance) — shown to everyone, blocking for anyone but a super-admin. */
-    ancien: boolean;
-    /** Whether the conversion itself is accepted for this row and this user (refunded / too old). */
+    /** Whether the conversion itself is accepted for this row (a refunded payment is not). No age limit. */
     convertible: boolean;
     /** French reason when `convertible` is false, null otherwise. */
     convertBlocker: string | null;

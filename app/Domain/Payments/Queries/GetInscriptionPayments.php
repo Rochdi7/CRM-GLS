@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Domain\Payments\Queries;
 
 use App\Domain\Payments\Support\ChequeOrigine;
-use App\Domain\Payments\Support\ValiditeAvance;
 use App\Models\Cheque;
 use App\Models\Encaissement;
 use App\Models\Inscription;
@@ -27,11 +26,10 @@ use Illuminate\Support\Collection;
  * a read-model never re-derives a business rule (CLAUDE.md §5). A
  * whole-row conversion of such a payment stays allowed.
  *
- * `convertible` / `convertBlocker` carry the two refusals of the conversion
- * ITSELF: a refunded payment, and — for anyone but the super-admin — a
- * payment older than 14 days (ValiditeAvance). The row stays LISTED and
- * disabled with its reason, never removed: a cashier must see that the
- * payment exists and why she cannot release it.
+ * `convertible` / `convertBlocker` carry the conversion's own refusal: a
+ * refunded payment. There is NO age limit on converting (01/10/2026) — only
+ * APPLYING the resulting avance is bound to 14 days (ValiditeAvance). The
+ * row stays LISTED and disabled with its reason, never removed.
  */
 final class GetInscriptionPayments
 {
@@ -40,10 +38,10 @@ final class GetInscriptionPayments
      *     id: int, reference: string, feeNom: ?string, montant: string,
      *     methode: string, datePaiement: ?string, rembourse: bool,
      *     splittable: bool, splitBlocker: ?string,
-     *     convertible: bool, convertBlocker: ?string, ancien: bool,
+     *     convertible: bool, convertBlocker: ?string,
      * }>
      */
-    public function __invoke(Inscription $inscription, bool $peutOutrepasserDelai = false): Collection
+    public function __invoke(Inscription $inscription): Collection
     {
         $rows = Encaissement::query()
             ->with('fee')
@@ -58,13 +56,10 @@ final class GetInscriptionPayments
         $cheques = ChequeOrigine::pour($rows->pluck('id')->all());
 
         return $rows
-            ->map(function (Encaissement $e) use ($cheques, $peutOutrepasserDelai): array {
-                $ancien = ValiditeAvance::tropAncienPourConversion($e);
-                $convertBlocker = match (true) {
-                    (bool) $e->remboursements_exists => __('A refunded payment cannot be converted into an advance.'),
-                    $ancien && ! $peutOutrepasserDelai => ValiditeAvance::motifConversionRefusee($e),
-                    default => null,
-                };
+            ->map(function (Encaissement $e) use ($cheques): array {
+                $convertBlocker = $e->remboursements_exists
+                    ? __('A refunded payment cannot be converted into an advance.')
+                    : null;
 
                 $blocker = match (true) {
                     $e->fee?->estMasque() === true => __('Hidden fee: the payment can only be converted in full.'),
@@ -82,9 +77,6 @@ final class GetInscriptionPayments
                     'rembourse' => (bool) $e->remboursements_exists,
                     'splittable' => $blocker === null,
                     'splitBlocker' => $blocker,
-                    // Plus de 14 jours : affiché à tous, bloquant pour le
-                    // guichet seulement.
-                    'ancien' => $ancien,
                     'convertible' => $convertBlocker === null,
                     'convertBlocker' => $convertBlocker,
                 ];

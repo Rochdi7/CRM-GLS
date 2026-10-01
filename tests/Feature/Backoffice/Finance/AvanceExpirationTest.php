@@ -26,22 +26,22 @@ use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 /**
- * Un paiement de plus de 14 jours ne se réutilise plus au guichet
- * (29/09/2026, ValiditeAvance).
+ * Une avance ne s'APPLIQUE que pendant 14 jours (29/09/2026, ValiditeAvance) ;
+ * la CONVERSION d'un paiement en avance n'a pas de limite d'âge (01/10/2026).
  *
  * Le problème : de l'argent ancien restait réutilisable indéfiniment. Un
  * employé pouvait convertir un vieux paiement en avance, ou appliquer une
  * avance vieille de plusieurs mois, « quand il voulait », sans que rien ne
- * le signale. Désormais, passé 14 jours :
- *  - une avance ne s'APPLIQUE plus ;
- *  - un paiement ne se CONVERTIT plus en avance ;
- *  - seul le SUPER-ADMIN garde ces deux gestes, et le journal le note.
+ * le signale. Désormais, passé 14 jours une avance ne s'APPLIQUE plus ;
+ * seul le SUPER-ADMIN garde ce geste, et le journal le note. Convertir un
+ * paiement reste possible à tout moment : l'avance qui en naît reçoit ses
+ * 14 jours à compter de la conversion.
  *
  * Ce que ces tests fixent aussi :
  *  - une ligne antérieure à la colonne (NULL) suit la même règle à la
  *    lecture, sans backfill — la production n'est pas réécrite ;
- *  - les flux SYSTÈME (retrait d'un frais payé, changement de groupe…) ne
- *    sont pas bornés, et l'avance qu'ils libèrent a 14 jours devant elle ;
+ *  - toute conversion (guichet ou flux système) donne à l'avance libérée
+ *    14 jours devant elle ;
  *  - l'écran porte la règle de l'action (`applicable`, `convertible`) ;
  *  - l'expiration ne touche ni au montant restant ni à la caisse.
  */
@@ -368,44 +368,14 @@ final class AvanceExpirationTest extends TestCase
         $this->assertSame('2026-11-03', $paiement->fresh()->avance_expire_le->toDateString());
     }
 
-    public function test_le_guichet_ne_peut_plus_convertir_un_paiement_de_plus_de_14_jours(): void
+    public function test_le_guichet_convertit_un_paiement_ancien_et_l_avance_recoit_14_jours(): void
     {
-        [$student, $inscription, $fee] = $this->enrolled();
-        $paiement = $this->paiementSurFrais($student, $fee, '2026-08-20', 600);
-        $this->actingAs($this->guichet);
-
-        $this->post(route('backoffice.avances.convert'), [
-            'inscription_id' => $inscription->id,
-            'encaissement_ids' => [$paiement->id],
-        ])->assertSessionHasErrors('encaissement_ids');
-
-        $this->assertSame($fee->id, (int) $paiement->fresh()->inscription_fee_id);
-        $this->assertSame(InscriptionFee::STATUT_PAYE_PARTIELLEMENT, $fee->fresh()->statut);
-    }
-
-    public function test_un_seul_paiement_trop_ancien_refuse_le_lot_entier(): void
-    {
-        [$student, $inscription, $fee] = $this->enrolled();
-        $recent = $this->paiementSurFrais($student, $fee, '2026-10-12', 300);
-        $ancien = $this->paiementSurFrais($student, $fee, '2026-08-20', 300);
-        $this->actingAs($this->guichet);
-
-        $this->post(route('backoffice.avances.convert'), [
-            'inscription_id' => $inscription->id,
-            'encaissement_ids' => [$recent->id, $ancien->id],
-        ])->assertSessionHasErrors('encaissement_ids');
-
-        // Le paiement récent n'a PAS été converti à moitié de lot.
-        $this->assertFalse($recent->fresh()->isAvance());
-        $this->assertFalse($ancien->fresh()->isAvance());
-    }
-
-    public function test_le_super_admin_convertit_encore_un_paiement_ancien_et_le_journal_le_note(): void
-    {
+        // Aucune limite d'âge sur la conversion (01/10/2026) : seule
+        // l'APPLICATION de l'avance est bornée.
         [$student, $inscription, $fee] = $this->enrolled(1000);
         $autreFee = $this->feeSur($inscription, 'Frais de Novembre', 600);
         $paiement = $this->paiementSurFrais($student, $fee, '2026-08-20', 600);
-        $this->actingAs($this->admin);
+        $this->actingAs($this->guichet);
 
         $this->post(route('backoffice.avances.convert'), [
             'inscription_id' => $inscription->id,
@@ -414,32 +384,43 @@ final class AvanceExpirationTest extends TestCase
 
         $avance = $paiement->fresh();
         $this->assertTrue($avance->isAvance());
+        // 14 jours à compter de la CONVERSION (20/10), pas du paiement (20/08).
         $this->assertSame('2026-11-03', $avance->avance_expire_le->toDateString());
 
-        $entree = Activity::query()->where('event', 'avance_conversion_ancienne')->latest('id')->firstOrFail();
-        $this->assertSame('2026-08-20', $entree->properties['date_paiement']);
-        $this->assertSame($this->admin->id, (int) $entree->causer_id);
-
-        // Rendue au guichet pour 14 jours : l'employé peut la poser.
-        $this->actingAs($this->guichet);
         $this->post(route('backoffice.avances.apply', $avance), ['fee_id' => $autreFee->id, 'montant' => '600'])
             ->assertSessionHasNoErrors();
-
         $this->assertSame(InscriptionFee::STATUT_PAYE, $autreFee->fresh()->statut);
     }
 
-    public function test_les_flux_systeme_ne_sont_pas_bornes_par_l_age_du_paiement(): void
+    public function test_l_avance_issue_d_une_conversion_expire_14_jours_apres_la_conversion(): void
+    {
+        [$student, $inscription, $fee] = $this->enrolled(1000);
+        $autreFee = $this->feeSur($inscription, 'Frais de Novembre', 600);
+        $paiement = $this->paiementSurFrais($student, $fee, '2026-08-20', 600);
+        $this->actingAs($this->guichet);
+
+        $this->post(route('backoffice.avances.convert'), [
+            'inscription_id' => $inscription->id,
+            'encaissement_ids' => [$paiement->id],
+        ])->assertSessionHasNoErrors();
+
+        // Trois semaines plus tard, le guichet ne peut plus l'appliquer.
+        $this->travelTo('2026-11-10 10:00:00');
+        $this->post(route('backoffice.avances.apply', $paiement->fresh()), ['fee_id' => $autreFee->id, 'montant' => '600'])
+            ->assertSessionHasErrors('avance');
+        $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $autreFee->fresh()->statut);
+    }
+
+    public function test_une_scission_a_la_conversion_passe_malgre_un_paiement_ancien(): void
     {
         [$student, $inscription, $fee] = $this->enrolled(1400);
         $paiement = $this->paiementSurFrais($student, $fee, '2026-08-20', 1400);
 
-        // Appel sans troisième valeur = retrait d'un frais payé, clôture,
-        // fusion… : 700 libérés, 700 ré-appliqués au même frais.
+        // 700 libérés, 700 ré-appliqués au même frais dans la même transaction.
         app(ConvertirEncaissementsEnAvance::class)->handle($inscription, [$paiement->id], [$paiement->id => 700.0]);
 
         $this->assertSame(700.0, $paiement->fresh()->montantRestant());
         $this->assertSame(InscriptionFee::STATUT_PAYE_PARTIELLEMENT, $fee->fresh()->statut);
-        $this->assertSame(0, Activity::query()->where('event', 'avance_conversion_ancienne')->count());
     }
 
     // ------------------------------------------------------------------ //
@@ -474,7 +455,7 @@ final class AvanceExpirationTest extends TestCase
         $this->assertTrue($row['applicable']);
     }
 
-    public function test_le_modal_de_conversion_montre_le_paiement_ancien_et_le_desactive(): void
+    public function test_le_modal_de_conversion_propose_tout_paiement_non_rembourse(): void
     {
         [$student, $inscription, $fee] = $this->enrolled();
         $recent = $this->paiementSurFrais($student, $fee, '2026-10-12', 300);
@@ -482,21 +463,12 @@ final class AvanceExpirationTest extends TestCase
 
         $this->actingAs($this->guichet);
 
-        $ligne = $this->ligneDuModal($inscription, $ancien->id);
-        $this->assertTrue($ligne['ancien']);
-        $this->assertFalse($ligne['convertible']);
-        $this->assertNotNull($ligne['convertBlocker']);
-
-        $ligne = $this->ligneDuModal($inscription, $recent->id);
-        $this->assertFalse($ligne['ancien']);
-        $this->assertTrue($ligne['convertible']);
-
-        $this->actingAs($this->admin);
-
-        $ligne = $this->ligneDuModal($inscription, $ancien->id);
-        $this->assertTrue($ligne['ancien']);
-        $this->assertTrue($ligne['convertible']);
-        $this->assertNull($ligne['convertBlocker']);
+        foreach ([$recent, $ancien] as $paiement) {
+            $ligne = $this->ligneDuModal($inscription, $paiement->id);
+            $this->assertTrue($ligne['convertible']);
+            $this->assertNull($ligne['convertBlocker']);
+            $this->assertArrayNotHasKey('ancien', $ligne);
+        }
     }
 
     public function test_le_filtre_expire_ne_liste_que_l_argent_perime_qui_reste(): void

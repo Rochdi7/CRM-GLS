@@ -255,9 +255,9 @@ final class EncaissementController extends Controller
                 // transaction de l'action.
                 'transferToStudent' => $request->user()?->can('payments.transfer-student') ?? false,
                 // Passer outre le délai de 14 jours d'une avance — appliquer
-                // ou prolonger une avance expirée, convertir un paiement
-                // ancien (ValiditeAvance, 29/09/2026) : super-admin
-                // uniquement. Confort d'interface ; chaque action ré-autorise.
+                // ou prolonger une avance expirée (ValiditeAvance) :
+                // super-admin uniquement. Confort d'interface ; chaque action
+                // ré-autorise.
                 'overrideAvanceExpiry' => ValiditeAvance::peutOutrepasser($request->user()),
             ],
         ]);
@@ -338,9 +338,7 @@ final class EncaissementController extends Controller
         $this->authorize('create', Encaissement::class);
         $this->assertCenterAccess($request, $inscription->etablissement_id);
 
-        return response()->json([
-            'payments' => $getInscriptionPayments($inscription, ValiditeAvance::peutOutrepasser($request->user())),
-        ]);
+        return response()->json(['payments' => $getInscriptionPayments($inscription)]);
     }
 
     public function store(StoreEncaissementRequest $request, EnregistrerEncaissement $action): RedirectResponse
@@ -601,14 +599,9 @@ final class EncaissementController extends Controller
             }
         }
 
-        // Un paiement de plus de 14 jours ne se convertit plus au guichet :
-        // seul le super-admin garde ce geste (ValiditeAvance, 29/09/2026).
-        $action->handle(
-            $inscription,
-            array_map('intval', $data['encaissement_ids']),
-            $montants,
-            guichetPeutOutrepasser: ValiditeAvance::peutOutrepasser($request->user()),
-        );
+        // Aucune limite d'âge sur la conversion (01/10/2026) : seule
+        // l'APPLICATION de l'avance est bornée à 14 jours (ValiditeAvance).
+        $action->handle($inscription, array_map('intval', $data['encaissement_ids']), $montants);
 
         return $this->backToListPreservingFilters($request, 'backoffice.encaissements.index', ['view' => 'avance'])
             ->with('success', __('Payments converted into advances.'));

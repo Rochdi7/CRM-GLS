@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Domain\Payments\Actions;
 
 use App\Domain\Payments\Support\ChequeOrigine;
-use App\Domain\Payments\Support\ValiditeAvance;
 use App\Models\Encaissement;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
@@ -70,20 +69,13 @@ use Illuminate\Validation\ValidationException;
  * jamais existé). `GetInscriptionPayments` porte ces deux règles à l'écran
  * (`splittable`) plutôt que de laisser le modal les redécouvrir.
  *
- * ⚠ UN PAIEMENT DE PLUS DE 14 JOURS NE SE CONVERTIT PLUS AU GUICHET
- * (29/09/2026, ValiditeAvance). `$guichetPeutOutrepasser` a TROIS valeurs :
- *  - `null` (défaut) — flux SYSTÈME (retrait d'un frais payé, clôture,
- *    fusion, réaffectation, commandes console) : aucun contrôle d'âge, ils
- *    libèrent de l'argent qui resterait sinon accroché à une ligne invisible
- *    (§11) et ne doivent jamais échouer sur l'âge d'un paiement ;
- *  - `false` — le geste LIBRE du guichet (modal « Convertir des paiements en
- *    avance ») par quelqu'un qui n'est pas super-admin : un seul paiement
- *    trop ancien refuse le LOT ENTIER, en le nommant ;
- *  - `true` — le même geste par un super-admin : accepté, et JOURNALISÉ
- *    (`avance_conversion_ancienne`).
- * Seul `EncaissementController@convertAvance` passe une valeur, dérivée de
- * la permission `ValiditeAvance::PERMISSION` — jamais d'un champ du
- * formulaire.
+ * ⚠ CONVERTIR N'A PAS DE LIMITE D'ÂGE (décision du propriétaire,
+ * 01/10/2026) : un paiement se convertit en avance quand on veut, quelle
+ * que soit sa date. Ce qui est borné, c'est l'APPLICATION de l'avance qui
+ * en naît — 14 jours à compter de la conversion (tampon posé par
+ * `Encaissement::booted()`, règle dans `ValiditeAvance`). La version du
+ * 29/09/2026 refusait aussi la conversion d'un paiement ancien ; elle a été
+ * retirée à la demande du propriétaire.
  *
  * Tests : tests/Feature/Backoffice/Finance/AvanceScindeeSurConversionTest.php,
  * AvanceExpirationTest.php
@@ -95,12 +87,11 @@ final class ConvertirEncaissementsEnAvance
     /**
      * @param  list<int>  $encaissementIds
      * @param  array<int, float>  $montants  montant to RELEASE per encaissement id — missing key = the whole row
-     * @param  bool|null  $guichetPeutOutrepasser  null = system flow; false = front-desk gesture bound by the 14-day rule; true = same gesture by a super-admin
      * @return int number of payments converted
      */
-    public function handle(Inscription $inscription, array $encaissementIds, array $montants = [], ?bool $guichetPeutOutrepasser = null): int
+    public function handle(Inscription $inscription, array $encaissementIds, array $montants = []): int
     {
-        return DB::transaction(function () use ($inscription, $encaissementIds, $montants, $guichetPeutOutrepasser): int {
+        return DB::transaction(function () use ($inscription, $encaissementIds, $montants): int {
             $encaissements = Encaissement::query()
                 ->with(['fee', 'cheque'])
                 ->whereIn('id', $encaissementIds)
@@ -117,14 +108,6 @@ final class ConvertirEncaissementsEnAvance
                 if ($encaissement->remboursements()->exists()) {
                     throw ValidationException::withMessages([
                         'encaissement_ids' => __('A refunded payment cannot be converted into an advance.'),
-                    ]);
-                }
-
-                // Avant tout détachement : un seul paiement trop ancien
-                // refuse le lot entier (§11 « signaler plutôt que masquer »).
-                if ($guichetPeutOutrepasser === false && ValiditeAvance::tropAncienPourConversion($encaissement)) {
-                    throw ValidationException::withMessages([
-                        'encaissement_ids' => ValiditeAvance::motifConversionRefusee($encaissement),
                     ]);
                 }
             }
@@ -149,35 +132,9 @@ final class ConvertirEncaissementsEnAvance
 
             foreach ($encaissements as $encaissement) {
                 $fee = $encaissement->fee;
-                $delaiOutrepasse = $guichetPeutOutrepasser === true
-                    && ValiditeAvance::tropAncienPourConversion($encaissement);
 
                 // Audit-logged (LogsActivity tracks inscription_fee_id).
                 $encaissement->update(['inscription_fee_id' => null]);
-
-                // Un paiement de plus de 14 jours libéré en avance par le
-                // geste du guichet : seul un super-admin le peut, et le
-                // journal garde qui l'a fait et d'où venait l'argent.
-                if ($delaiOutrepasse) {
-                    activity('encaissement')
-                        ->performedOn($encaissement)
-                        ->event('avance_conversion_ancienne')
-                        ->withProperties([
-                            'date_paiement' => $encaissement->date_paiement?->toDateString(),
-                            'montant' => number_format((float) $encaissement->montant, 2, '.', ''),
-                            'frais' => $fee?->nom,
-                            'frais_id' => $fee?->id,
-                            'inscription_id' => $inscription->id,
-                            'etudiant_id' => $encaissement->student_id,
-                            'delai_outrepasse' => true,
-                        ])
-                        ->log(sprintf(
-                            'Paiement %s du %s (plus de %d jours) converti en avance - délai outrepassé',
-                            $encaissement->reference,
-                            (string) $encaissement->date_paiement?->format('d/m/Y'),
-                            ValiditeAvance::DUREE_JOURS,
-                        ));
-                }
 
                 if (! isset($aConserver[$encaissement->id])) {
                     continue;

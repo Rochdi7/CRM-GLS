@@ -494,9 +494,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS enseignant_taux_mensuels_groupe_unique
 --
 -- ⚠ EFFET AU DÉPLOIEMENT : pour tout le monde SAUF le super-admin, toute
 -- avance de plus de 14 jours qui porte encore un reste cesse aussitôt d'être
--- APPLICABLE, et tout paiement de plus de 14 jours cesse d'être CONVERTIBLE
--- en avance. L'argent reste remboursable ; le super-admin garde les deux
--- gestes (journalisés) et peut rendre une avance au guichet pour 14 jours.
+-- APPLICABLE. La conversion d'un paiement en avance reste libre (01/10/2026).
+-- L'argent reste remboursable ; le super-admin applique une avance expirée
+-- (journalisé) et peut la rendre au guichet pour 14 jours.
 -- À mesurer AVANT de déployer :
 --   SELECT count(*), sum(e.montant
 --            - coalesce((SELECT sum(a.montant) FROM encaissements a WHERE a.applied_from_encaissement_id = e.id), 0)

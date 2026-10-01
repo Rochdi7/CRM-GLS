@@ -696,8 +696,8 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
             : total;
     }
 
-    // `convertible` porte les refus de l'ACTION (remboursé, ou plus de 14
-    // jours pour qui n'est pas super-admin) — jamais redérivé ici.
+    // `convertible` porte le refus de l'ACTION (paiement remboursé) —
+    // jamais redérivé ici. Aucune limite d'âge sur la conversion.
     const convertiblePayments = avancePayments.filter((p) => p.convertible);
     const allAvanceSelected = convertiblePayments.length > 0 && convertiblePayments.every((p) => avanceForm.data.encaissement_ids.includes(p.id));
     const avanceSelectedTotal = avancePayments
@@ -2262,13 +2262,6 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                             {payment.feeNom ?? '-'}
                                                             {payment.rembourse && (
                                                                 <span className="badge badge-soft-danger ms-2">Remboursé</span>
-                                                            )}
-                                                            {/* Plus de 14 jours : affiché à tous, bloquant pour le
-                                                                guichet. La ligne reste LISTÉE avec son motif, jamais
-                                                                retirée — la caissière doit voir que le paiement existe
-                                                                et pourquoi elle ne peut pas le libérer. */}
-                                                            {payment.ancien && (
-                                                                <span className="badge badge-soft-warning ms-2">{t('Over 14 days')}</span>
                                                             )}
                                                             {!payment.rembourse && payment.convertBlocker && (
                                                                 <div className="fs-12 text-danger mt-1">{payment.convertBlocker}</div>

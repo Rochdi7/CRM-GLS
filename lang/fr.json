@@ -1663,7 +1663,5 @@
     "Extend by 14 days": "Prolonger de 14 jours",
     "Reason for the extension": "Motif de la prolongation",
     "Required: it is what will explain, later, why expired money could be applied.": "Obligatoire : c'est ce qui expliquera, plus tard, pourquoi de l'argent expiré a pu être appliqué.",
-    "Payment :reference dates from :date, more than :jours days ago: it can no longer be converted into an advance. Please contact the back office.": "Le paiement :reference date du :date, soit plus de :jours jours : il ne peut plus être converti en avance. Merci de contacter le back-office.",
-    "Over 14 days": "Plus de 14 jours",
     "This advance expired on :date (14-day limit exceeded).": "Cette avance a expiré le :date (délai de 14 jours dépassé)."
 }
