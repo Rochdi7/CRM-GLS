@@ -1521,6 +1521,73 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $response->assertSee('500', false);
     }
 
+    public function test_recu_groupe_merges_the_registration_fees_into_one_line(): void
+    {
+        $user = $this->userWith('payments.view');
+        $this->actingAs($user);
+        [$student, $inscription] = $this->enrolledStudentWithFee(1500);
+        $fraisB2 = InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => "Frais d'inscription B2",
+            'montant_initial' => 200, 'montant' => 200,
+            'date_echeance' => '2025-09-30', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+        $fraisA1 = InscriptionFee::create([
+            'inscription_id' => $inscription->id, 'nom' => "Frais d'inscription A1/A2/B1",
+            'montant_initial' => 300, 'montant' => 300,
+            'date_echeance' => '2025-09-30', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+
+        $a = $this->paiementSur($fraisB2, $student, $user, 200, 'ENC-I1');
+        $b = $this->paiementSur($fraisA1, $student, $user, 300, 'ENC-I2');
+
+        $response = $this->get(route('backoffice.encaissements.recu-groupe', [
+            'ids' => $a->id.','.$b->id, 'format' => 'a5',
+        ]))->assertOk();
+
+        // Affichage seulement : une ligne « Frais d'inscription » à 500, les
+        // deux références restent sur le reçu.
+        $response->assertSee('ENC-I1 / ENC-I2', false);
+        $response->assertSee('<td>Frais d&#039;inscription</td>', false);
+        $response->assertSee('<td class="num">500</td>', false);
+        $response->assertDontSee('Frais d&#039;inscription B2', false);
+        $response->assertDontSee('Frais d&#039;inscription A1/A2/B1', false);
+        $this->assertSame(2, Encaissement::query()->whereIn('id', [$a->id, $b->id])->count());
+    }
+
+    public function test_recu_groupe_accepts_two_registrations_of_the_same_student(): void
+    {
+        $user = $this->userWith('payments.view');
+        $this->actingAs($user);
+        [$student, $inscriptionA, $feeA] = $this->enrolledStudentWithFee(1500);
+
+        $groupB = Group::factory()->create([
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id, 'nom' => 'Groupe Second Dossier',
+        ]);
+        $inscriptionB = Inscription::create([
+            'reference' => 'INS-'.fake()->unique()->numerify('#####'),
+            'student_id' => $student->id, 'group_id' => $groupB->id,
+            'etablissement_id' => $this->centre->id, 'annee_scolaire_id' => $this->annee->id,
+            'statut' => Inscription::STATUT_ACTIVE, 'date_inscription' => '2025-09-15',
+            'montant_total' => 200,
+        ]);
+        $feeB = InscriptionFee::create([
+            'inscription_id' => $inscriptionB->id, 'nom' => "Frais d'inscription B2",
+            'montant_initial' => 200, 'montant' => 200,
+            'date_echeance' => '2025-09-30', 'statut' => InscriptionFee::STATUT_NON_PAYE,
+        ]);
+
+        $a = $this->paiementSur($feeA, $student, $user, 300, 'ENC-M1');
+        $b = $this->paiementSur($feeB, $student, $user, 200, 'ENC-M2');
+
+        // Un seul étudiant, deux dossiers : le reçu passe et l'en-tête nomme
+        // les DEUX groupes au lieu de n'en garder qu'un.
+        $response = $this->get(route('backoffice.encaissements.recu-groupe', [
+            'ids' => $a->id.','.$b->id, 'format' => 'a5',
+        ]))->assertOk();
+
+        $response->assertSee($inscriptionA->group->nom.' / Groupe Second Dossier', false);
+    }
+
     public function test_recu_groupe_refuses_payments_of_two_different_registrations(): void
     {
         $user = $this->userWith('payments.view');

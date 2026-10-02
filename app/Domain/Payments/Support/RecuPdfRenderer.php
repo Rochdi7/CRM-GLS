@@ -62,11 +62,11 @@ final class RecuPdfRenderer
     }
 
     /**
-     * Même document, version GROUPÉE : plusieurs encaissements de la MÊME
-     * inscription sur un seul reçu (une ligne par frais + total). C'est le
+     * Même document, version GROUPÉE : plusieurs encaissements du MÊME
+     * étudiant (une ou plusieurs inscriptions, RecuGroupeLot) sur un seul reçu (une ligne par frais + total). C'est le
      * PDF que porte le lien WhatsApp d'un envoi groupé.
      *
-     * ⚠ L'appelant a déjà vérifié l'appartenance à une seule inscription et
+     * ⚠ L'appelant a déjà vérifié l'appartenance à un seul étudiant et
      * autorisé chaque ligne : ce renderer ne fait que dessiner. Il ne
      * recalcule NI le reste par frais (agrégat passé en paramètre, jamais
      * InscriptionFee::montantPaye() dans la boucle — CLAUDE.md §17) ni le
@@ -78,15 +78,13 @@ final class RecuPdfRenderer
     public function renderGroupe(Collection $encaissements, $payeParFee): string
     {
         $first = $encaissements->first();
-        $inscription = $first?->fee?->inscription;
-        $centre = $inscription?->etablissement ?? $first?->student?->etablissement;
 
         $html = view('backoffice.encaissements.recu-groupe-pdf', [
             'encaissements' => $encaissements,
             'student' => $first?->student,
-            'centre' => $centre,
-            'anneeScolaire' => $inscription?->anneeScolaire?->nom,
-            'niveau' => $inscription?->group?->nom ?? $first?->student?->niveau,
+            'centre' => RecuGroupeLot::centre($encaissements),
+            'anneeScolaire' => RecuGroupeLot::anneeScolaire($encaissements),
+            'niveau' => RecuGroupeLot::niveau($encaissements),
             'montantTotal' => (float) $encaissements->sum('montant'),
             'reference' => $first?->reference,
             'payeParFee' => $payeParFee,

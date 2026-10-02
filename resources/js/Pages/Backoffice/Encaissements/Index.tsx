@@ -51,6 +51,14 @@ const TRANSFERT_ETUDIANT_ACTIF = false;
  */
 const RECU_WHATSAPP_ACTIF = false;
 
+/**
+ * Formats de reçu alternatifs (deux copies demi-feuille A4, ticket A6) — masqués : le
+ * guichet n'imprime que « Imprimer le reçu » (un seul exemplaire A5
+ * paysage, ?format=a5). Repasser à `true` pour les réafficher :
+ * le contrôleur et la vue Blade gèrent toujours les trois formats.
+ */
+const RECU_FORMATS_ALTERNATIFS_ACTIFS = false;
+
 interface CreateFormState {
     student_id: number | '';
     inscription_id: number | '';
@@ -327,8 +335,8 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
     });
 
     // ── Sélection multi-lignes / reçu groupé ─────────────────────────────
-    // Le reçu est refusé côté serveur si les lignes ne partagent pas la même
-    // inscription (EncaissementController@recuGroupe) ; ici on ne fait que
+    // Le reçu est refusé côté serveur si les lignes ne partagent pas le même
+    // étudiant (EncaissementController@recuGroupe, RecuGroupeLot) ; ici on ne fait que
     // désactiver le menu et l'expliquer, comme sur la maquette où « Action »
     // apparaît grisé dès qu'un autre étudiant entre dans la sélection.
     const selectableRows = filters.view === 'avance'
@@ -347,13 +355,15 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
     }, [encaissements.data, filters.view]);
 
     const selectedRows = selectableRows.filter((row) => selectedIds.includes(row.id));
-    const selectedInscriptionIds = Array.from(new Set(selectedRows.map((row) => row.inscriptionId)));
-    const sameInscription = selectedRows.length > 0 && selectedInscriptionIds.length === 1;
-    const bulkDisabled = !sameInscription;
+    // Même règle que le serveur (RecuGroupeLot) : UN étudiant, une ou
+    // plusieurs de ses inscriptions.
+    const selectedStudentIds = Array.from(new Set(selectedRows.map((row) => row.studentId)));
+    const sameStudent = selectedRows.length > 0 && selectedStudentIds.length === 1;
+    const bulkDisabled = !sameStudent;
     const bulkHint = selectedRows.length === 0
         ? 'Sélectionnez au moins un paiement.'
-        : selectedInscriptionIds.length > 1
-            ? "Un reçu ne couvre qu'une seule inscription - décochez les paiements rattachés à une autre inscription."
+        : selectedStudentIds.length > 1
+            ? "Un reçu ne couvre qu'un seul étudiant - décochez les paiements d'un autre étudiant."
             : '';
 
     function toggleRowSelection(id: number) {
@@ -1299,6 +1309,19 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                         type="button"
                                         className="dropdown-item rounded-1 w-100 text-start border-0 bg-transparent"
                                         disabled={bulkDisabled}
+                                        onClick={() => openRecuGroupe('a5')}
+                                    >
+                                        <i className="ti ti-printer me-2" aria-hidden="true" />
+                                        Imprimer le reçu
+                                    </button>
+                                </li>
+                                {RECU_FORMATS_ALTERNATIFS_ACTIFS && (
+                                <>
+                                <li>
+                                    <button
+                                        type="button"
+                                        className="dropdown-item rounded-1 w-100 text-start border-0 bg-transparent"
+                                        disabled={bulkDisabled}
                                         onClick={() => openRecuGroupe('a5x2')}
                                     >
                                         <i className="ti ti-file-text me-2" aria-hidden="true" />
@@ -1316,17 +1339,8 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                         Générer le reçu pour une imprimante ticket (format A6)
                                     </button>
                                 </li>
-                                <li>
-                                    <button
-                                        type="button"
-                                        className="dropdown-item rounded-1 w-100 text-start border-0 bg-transparent"
-                                        disabled={bulkDisabled}
-                                        onClick={() => openRecuGroupe('a5')}
-                                    >
-                                        <i className="ti ti-file-text me-2" aria-hidden="true" />
-                                        Générer le reçu format A5
-                                    </button>
-                                </li>
+                                </>
+                                )}
                                 {RECU_WHATSAPP_ACTIF && (
                                     <>
                                         <li><hr className="dropdown-divider" /></li>
@@ -1579,6 +1593,14 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                 </RowActionItem>
                                                 <RowActionDivider />
                                                 <RowActionItem
+                                                    icon="ti-printer"
+                                                    onClick={() => window.open(`${row.recuUrl}?format=a5`, '_blank')}
+                                                >
+                                                    Imprimer le reçu
+                                                </RowActionItem>
+                                                {RECU_FORMATS_ALTERNATIFS_ACTIFS && (
+                                                <>
+                                                <RowActionItem
                                                     icon="ti-file-text"
                                                     onClick={() => window.open(`${row.recuUrl}?format=a5x2`, '_blank')}
                                                 >
@@ -1590,12 +1612,8 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                 >
                                                     Générer le reçu pour une imprimante ticket (format A6)
                                                 </RowActionItem>
-                                                <RowActionItem
-                                                    icon="ti-file-text"
-                                                    onClick={() => window.open(`${row.recuUrl}?format=a5`, '_blank')}
-                                                >
-                                                    Générer le reçu format A5
-                                                </RowActionItem>
+                                                </>
+                                                )}
                                                 {/* « Transfert vers un autre étudiant » — le frère qui a
                                                     payé sans jamais venir cède ses frais à la sœur qui prend
                                                     la place. L'entrée reste VISIBLE quand la règle refuse :

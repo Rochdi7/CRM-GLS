@@ -49,12 +49,11 @@ final class RecuGroupeController extends Controller
 
         abort_if($encaissements->count() !== $ids->count(), 404);
 
-        // Une seule inscription — la même règle que le reçu groupé imprimé.
-        // Redondant avec la signature (le lot signé était déjà homogène),
-        // gardé parce qu'un reçu qui mélangerait deux dossiers serait un
-        // document faux, pas seulement une URL inattendue.
-        $inscriptionIds = $encaissements->map(fn ($e) => $e->fee?->inscription_id)->unique();
-        abort_if($inscriptionIds->count() !== 1 || $inscriptionIds->first() === null, 404);
+        // Un seul étudiant — la même règle que le reçu groupé imprimé
+        // (RecuGroupeLot). Redondant avec la signature (le lot signé était
+        // déjà homogène), gardé parce qu'un reçu qui mélangerait deux
+        // étudiants serait un document faux, pas seulement une URL inattendue.
+        abort_unless(\App\Domain\Payments\Support\RecuGroupeLot::estValide($encaissements), 404);
 
         // Reste par frais en UNE requête agrégée — jamais un accesseur money
         // par ligne dans la boucle du reçu (CLAUDE.md §17).

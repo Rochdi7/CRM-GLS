@@ -1216,6 +1216,7 @@
     "Établissement mis à jour.": "Établissement mis à jour.",
     "Établissement supprimé.": "Établissement supprimé.",
     "A grouped receipt must cover payments of a single registration.": "Un reçu groupé doit couvrir des paiements d'une seule inscription.",
+    "A grouped receipt must cover payments of a single student.": "Un reçu groupé doit couvrir des paiements d'un seul étudiant.",
     "This group has séances and cannot be deleted. Cancel or close it instead.": "Ce groupe porte des séances et ne peut pas être supprimé. Annulez-le ou clôturez-le à la place.",
     "This group has :count payment(s) attached and cannot be deleted. Handle the payments first.": "Ce groupe a reçu :count paiement(s) et ne peut pas être supprimé. Traitez d'abord les paiements.",
     "Type the exact group name to confirm the deletion.": "Retapez le nom exact du groupe pour confirmer la suppression.",

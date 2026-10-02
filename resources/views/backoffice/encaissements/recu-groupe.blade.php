@@ -27,6 +27,45 @@
         ->implode(' / ');
     $dates = $encaissements->map(fn ($e) => $e->date_paiement?->format('d/m/Y'))->filter()->unique();
     $dateAffichee = $dates->count() === 1 ? $dates->first() : $dates->first().' - '.$dates->last();
+
+    // Lignes AFFICHÉES du tableau des frais. Les frais d'inscription
+    // (« Frais d'inscription B2 », « Frais d'inscription A1/A2/B1 »…) sont
+    // fusionnés en UNE ligne « Frais d'inscription » au montant cumulé : à
+    // la caisse l'étudiant paie « l'inscription », pas deux niveaux. C'est
+    // de l'AFFICHAGE seulement — les encaissements restent distincts en base,
+    // chacun avec sa référence (toujours listée dans « Reçu N° »), et le
+    // total du reçu ne change pas. Le reste est sommé par FRAIS distinct,
+    // jamais par paiement, pour ne pas compter deux fois un frais réglé en
+    // deux fois.
+    $estInscription = fn (string $libelle): bool => str_starts_with(
+        mb_strtolower(trim($libelle)),
+        "frais d'inscription"
+    );
+    $resteDuFrais = fn ($e): float => $e->fee
+        ? max(0, (float) $e->fee->montant - (float) ($payeParFee[$e->fee->id] ?? 0))
+        : 0.0;
+    $lignesFrais = collect();
+    $inscriptions = $encaissements->filter(fn ($e) => $estInscription($e->libelleFrais()));
+    foreach ($encaissements as $e) {
+        if ($inscriptions->count() > 1 && $estInscription($e->libelleFrais())) {
+            if (! $lignesFrais->has('inscription')) {
+                $lignesFrais->put('inscription', [
+                    'libelle' => "Frais d'inscription",
+                    'montant' => (float) $inscriptions->sum('montant'),
+                    'reste' => (float) $inscriptions->unique(fn ($i) => $i->inscription_fee_id ?? 'e'.$i->id)->sum($resteDuFrais),
+                    'date' => $inscriptions->max('date_paiement')?->format('d/m/Y'),
+                ]);
+            }
+
+            continue;
+        }
+        $lignesFrais->put('e'.$e->id, [
+            'libelle' => $e->libelleFrais(),
+            'montant' => (float) $e->montant,
+            'reste' => $resteDuFrais($e),
+            'date' => $e->date_paiement?->format('d/m/Y'),
+        ]);
+    }
 @endphp
 <!DOCTYPE html>
 <html lang="fr">
@@ -329,18 +368,12 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach ($encaissements as $e)
-                                @php
-                                    $fee = $e->fee;
-                                    $reste = $fee
-                                        ? max(0, (float) $fee->montant - (float) ($payeParFee[$fee->id] ?? 0))
-                                        : 0;
-                                @endphp
+                            @foreach ($lignesFrais as $ligne)
                                 <tr>
-                                    <td>{{ $e->libelleFrais() }}</td>
-                                    <td class="num">{{ $fmt($e->montant) }}</td>
-                                    <td class="num">{{ $fmt($reste) }}</td>
-                                    <td class="num">{{ $e->date_paiement?->format('d/m/Y') ?? '-' }}</td>
+                                    <td>{{ $ligne['libelle'] }}</td>
+                                    <td class="num">{{ $fmt($ligne['montant']) }}</td>
+                                    <td class="num">{{ $fmt($ligne['reste']) }}</td>
+                                    <td class="num">{{ $ligne['date'] ?? '-' }}</td>
                                 </tr>
                             @endforeach
                         </tbody>

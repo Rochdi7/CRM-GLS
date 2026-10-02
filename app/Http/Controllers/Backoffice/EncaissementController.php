@@ -856,15 +856,13 @@ final class EncaissementController extends Controller
             $this->authorize('view', $encaissement);
         }
 
-        // Même inscription pour toutes les lignes. Une avance n'a pas de fee
-        // — donc pas d'inscription — et ne peut pas être groupée : elle
-        // n'appartient encore à aucun dossier d'inscription.
-        $inscriptionIds = $encaissements->map(fn ($e) => $e->fee?->inscription_id)->unique();
-        abort_if($inscriptionIds->count() !== 1 || $inscriptionIds->first() === null, 422, __('A grouped receipt must cover payments of a single registration.'));
+        // Même ÉTUDIANT pour toutes les lignes (plusieurs de ses inscriptions
+        // permises). Une avance n'a pas de fee — donc pas d'inscription — et
+        // ne peut pas être groupée. Règle unique : RecuGroupeLot.
+        abort_unless(\App\Domain\Payments\Support\RecuGroupeLot::estValide($encaissements), 422, __('A grouped receipt must cover payments of a single student.'));
 
         $first = $encaissements->first();
-        $inscription = $first->fee?->inscription;
-        $centre = $inscription?->etablissement ?? $first->student?->etablissement;
+        $centre = \App\Domain\Payments\Support\RecuGroupeLot::centre($encaissements);
 
         // Reste par frais, en UNE requête agrégée — jamais
         // InscriptionFee::montantPaye() dans la boucle du reçu (CLAUDE.md §17,
@@ -881,8 +879,8 @@ final class EncaissementController extends Controller
             'encaissements' => $encaissements,
             'student' => $first->student,
             'centre' => $centre,
-            'anneeScolaire' => $inscription?->anneeScolaire?->nom,
-            'niveau' => $inscription?->group?->nom ?? $first->student?->niveau,
+            'anneeScolaire' => \App\Domain\Payments\Support\RecuGroupeLot::anneeScolaire($encaissements),
+            'niveau' => \App\Domain\Payments\Support\RecuGroupeLot::niveau($encaissements),
             'montantTotal' => (float) $encaissements->sum('montant'),
             'reference' => $first->reference,
             'payeParFee' => $payeParFee,
@@ -984,11 +982,9 @@ final class EncaissementController extends Controller
             $this->authorize('view', $encaissement);
         }
 
-        $inscriptionIds = $encaissements->map(fn ($e) => $e->fee?->inscription_id)->unique();
-
-        if ($inscriptionIds->count() !== 1 || $inscriptionIds->first() === null) {
+        if (! \App\Domain\Payments\Support\RecuGroupeLot::estValide($encaissements)) {
             return response()->json([
-                'message' => __('A grouped receipt must cover payments of a single registration.'),
+                'message' => __('A grouped receipt must cover payments of a single student.'),
             ], 422);
         }
 
