@@ -19,7 +19,6 @@ use App\Domain\Payments\Support\RecuWhatsAppLink;
 use App\Domain\Payments\Actions\SupprimerEncaissement;
 use App\Domain\Payments\Actions\TransfererFraisVersAutreEtudiant;
 use App\Domain\Payments\Support\CibleTransfertFrais;
-use App\Domain\Payments\Support\StatutChequeSolde;
 use App\Domain\Payments\Support\ValiditeAvance;
 use App\Domain\Payments\Queries\GetEncaissementDetails;
 use App\Domain\Payments\Queries\GetEncaissementsList;
@@ -425,6 +424,24 @@ final class EncaissementController extends Controller
                     ]);
                 }
 
+                // ⚠ Une GARANTIE ne paie JAMAIS (30/09/2026) : c'est une
+                // caution, rendue à l'étudiant quand il règle autrement
+                // (RestituerChequeGarantie). Le menu ne l'offre pas
+                // (ChequeController@studentCheques) ; la règle est tenue ici.
+                if ($cheque->type === Cheque::TYPE_GARANTIE) {
+                    throw ValidationException::withMessages([
+                        'payment_lines' => __('A guarantee cheque cannot be used to pay: return it to its owner once they have paid another way.'),
+                    ]);
+                }
+
+                // Remis à la banque (ou déjà encaissé) : le papier n'est plus
+                // en main, il ne finance plus aucun paiement.
+                if ($cheque->statut !== Cheque::STATUT_EN_POSSESSION) {
+                    throw ValidationException::withMessages([
+                        'payment_lines' => __('This cheque is no longer in hand (deposited at the bank) and cannot fund a new payment.'),
+                    ]);
+                }
+
                 // ⚠ Relu SOUS VERROU, comme le reste : entre le chargement du
                 // formulaire et l'envoi, un collègue a pu rendre le chèque de
                 // garantie à l'étudiant qui réglait en espèces au guichet
@@ -503,12 +520,6 @@ final class EncaissementController extends Controller
                     'date_echeance_cheque' => $cheque?->date_echeance?->toDateString(),
                     'note' => $data['note'] ?? null,
                 ], $agent);
-            }
-
-            // Un chèque « À déposer » dont ce paiement épuise le reste passe
-            // « Encaissé » (StatutChequeSolde) — même transaction, même verrou.
-            foreach ($cheques as $cheque) {
-                StatutChequeSolde::synchroniser($cheque);
             }
         });
 

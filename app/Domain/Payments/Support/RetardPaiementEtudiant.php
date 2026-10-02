@@ -36,8 +36,12 @@ final class RetardPaiementEtudiant
      *                                                                                                         dit laquelle). `montant` cumule le reste dû de TOUTES les lignes
      *                                                                                                         échues, quelle que soit la date affichée.
      */
-    public function pourEtudiants(array $studentIds, ?int $groupId = null): array
-    {
+    public function pourEtudiants(
+        array $studentIds,
+        ?int $groupId = null,
+        ?string $echeanceDebut = null,
+        ?string $echeanceFin = null,
+    ): array {
         $studentIds = array_values(array_unique(array_filter($studentIds)));
 
         if ($studentIds === []) {
@@ -58,6 +62,10 @@ final class RetardPaiementEtudiant
             ->whereNull('inscription_fees.masque_le')
             ->whereNotNull('inscription_fees.date_echeance')
             ->where('inscription_fees.date_echeance', '<', $today)
+            // Fenêtre optionnelle (calcul du paiement prof) : seules les
+            // échéances du MOIS calculé comptent, pas toute la dette du groupe.
+            ->when($echeanceDebut !== null, fn ($q) => $q->where('inscription_fees.date_echeance', '>=', $echeanceDebut))
+            ->when($echeanceFin !== null, fn ($q) => $q->where('inscription_fees.date_echeance', '<=', $echeanceFin))
             ->get();
 
         $retards = [];

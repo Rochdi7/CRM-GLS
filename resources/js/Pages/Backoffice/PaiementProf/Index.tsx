@@ -61,7 +61,8 @@ export default function PaiementProfIndex({
         const retour = new URLSearchParams({
             groupFilter: prefill.retour.groupFilter,
             enseignantFilter: prefill.retour.enseignantFilter,
-            mois: prefill.retour.mois,
+            debut: prefill.retour.debut,
+            fin: prefill.retour.fin,
             ...(prefill.retour.heures !== '' ? { heures: prefill.retour.heures } : {}),
         });
 

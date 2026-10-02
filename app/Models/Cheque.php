@@ -9,6 +9,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
 
 /**
  * Physical chèque in hand — OFF-LEDGER inventory (never touches
@@ -18,14 +20,33 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * from those linked rows, mirroring Encaissement's own avance
  * applications() pattern.
  *
- * statut lifecycle: En possession -> Déposé (Remise à la banque) ->
- * Encaissé | Rejeté. Type "Garantie (À encaisser)" chèques are held as
- * security and may never be deposited at all.
+ * statut lifecycle (30/09/2026): En possession -> Déposé (Remise à la
+ * banque : date + reçu de dépôt, DeposerChequeEnBanque) -> Encaissé (la
+ * banque a accepté) | Rejeté, décidé par le comptable (ValiderRemiseCheque).
+ * Aucun de ces statuts ne bouge d'argent : il reste au compte « Chèque ».
+ *
+ * Type "Garantie (À encaisser)" : une CAUTION. Elle ne paie jamais un
+ * encaissement et ne va jamais à la banque ; elle reste en main jusqu'à ce
+ * que l'étudiant règle autrement, puis se RESTITUE en nommant le paiement
+ * qui l'a remplacée (RestituerChequeGarantie).
+ *
+ * Media: `photo` (the chèque itself, required at creation) and
+ * `justificatif_depot` (the bank deposit receipt, required at deposit).
  */
-class Cheque extends Model
+class Cheque extends Model implements HasMedia
 {
     use HasFactory;
     use Auditable;
+    use InteractsWithMedia;
+
+    public const MEDIA_PHOTO = 'photo';
+
+    public const MEDIA_JUSTIFICATIF_DEPOT = 'justificatif_depot';
+
+    /** Accepted upload extensions — mirrors registerMediaCollections(). */
+    public const MEDIA_MIMES = ['jpeg', 'jpg', 'png', 'webp', 'pdf'];
+
+    public const MEDIA_MAX_KB = 5120;
 
     public const SOURCE_ETUDIANT = 'Étudiant';
     public const SOURCE_PARENTS = 'Parents';
@@ -61,6 +82,9 @@ class Cheque extends Model
         'type', 'date_echeance', 'statut', 'note',
         'etablissement_id', 'agent_id',
         'retourne_le', 'retourne_par_id',
+        'date_remise', 'depose_par_id',
+        'depot_valide_le', 'depot_valide_par_id',
+        'restitution_encaissement_id',
     ];
 
     /**
@@ -86,7 +110,33 @@ class Cheque extends Model
             'date_reception' => 'date',
             'date_echeance' => 'date',
             'retourne_le' => 'datetime',
+            'date_remise' => 'date',
+            'depot_valide_le' => 'datetime',
         ];
+    }
+
+    public function registerMediaCollections(): void
+    {
+        $mimes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+
+        $this->addMediaCollection(self::MEDIA_PHOTO)->singleFile()->acceptsMimeTypes($mimes);
+        $this->addMediaCollection(self::MEDIA_JUSTIFICATIF_DEPOT)->singleFile()->acceptsMimeTypes($mimes);
+    }
+
+    public function deposePar(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'depose_par_id');
+    }
+
+    public function depotValidePar(): BelongsTo
+    {
+        return $this->belongsTo(Employee::class, 'depot_valide_par_id');
+    }
+
+    /** The payment (espèces / TPE / virement) that replaced a returned garantie. */
+    public function restitutionEncaissement(): BelongsTo
+    {
+        return $this->belongsTo(Encaissement::class, 'restitution_encaissement_id');
     }
 
 

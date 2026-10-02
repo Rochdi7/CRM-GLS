@@ -80,7 +80,14 @@ final class PaiementProfController extends Controller
         $this->assertGroupInContext($request, $group, 'group');
 
         $mois = (string) $request->string('mois');
+        $debut = (string) $request->string('debut');
+        $fin = (string) $request->string('fin');
 
-        return response()->json($query->optionsPourGroupe($group, $mois !== '' ? $mois : null));
+        return response()->json($query->optionsPourGroupe(
+            $group,
+            $mois !== '' ? $mois : null,
+            $debut !== '' ? $debut : null,
+            $fin !== '' ? $fin : null,
+        ));
     }
 }

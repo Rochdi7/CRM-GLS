@@ -470,7 +470,20 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
 
     // Raccourci « Actions rapides » du tableau de bord : ?nouveau=1 ouvre
     // directement ce formulaire (confort d'interface seulement, §5).
-    useAutoOpenCreate(openCreate);
+    // `&etudiant=<id>` (bouton « Encaisser » de la restitution d'une
+    // garantie, page Chèques) pré-sélectionne l'étudiant.
+    useAutoOpenCreate(() => {
+        openCreate();
+
+        const url = new URL(window.location.href);
+        const etudiant = Number(url.searchParams.get('etudiant'));
+
+        if (etudiant > 0) {
+            url.searchParams.delete('etudiant');
+            window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+            void onStudentChange(etudiant);
+        }
+    });
 
     function openEdit(row: EncaissementRow) {
         setEditingRow(row);
@@ -1707,43 +1720,6 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                         </div>
                     </div>
 
-                    {/* ⚠ Rappel de garantie — l'étudiant a laissé un chèque en
-                        garantie et il est DEVANT le guichet en train de régler
-                        autrement : c'est le seul moment où on peut lui rendre
-                        son papier. Sans ce rappel, le chèque reste à l'école
-                        indéfiniment (c'est le cas réel qui a motivé l'écran).
-
-                        Simple information : la restitution est un geste tracé,
-                        avec motif obligatoire, sur la page Chèques — elle ne
-                        se déclenche pas en même temps qu'un encaissement, pour
-                        que chaque fait garde sa propre écriture et son propre
-                        auteur. Aucun argent n'est en jeu des deux côtés. */}
-                    {studentGaranties.length > 0 && (
-                        <div className="alert alert-warning d-flex align-items-start gap-2 py-2" role="alert">
-                            <i className="ti ti-alert-triangle fs-18 mt-1" />
-                            <div className="text-normal-case">
-                                <strong>
-                                    {studentGaranties.length === 1
-                                        ? 'Chèque de garantie en main pour cet étudiant'
-                                        : `${studentGaranties.length} chèques de garantie en main pour cet étudiant`}
-                                </strong>
-                                <ul className="mb-1 mt-1 ps-3">
-                                    {studentGaranties.map((g) => (
-                                        <li key={g.id}>
-                                            {g.numeroCheque}
-                                            {g.banque ? ` - ${g.banque}` : ''} - {Number(g.montant).toFixed(2)} DH
-                                        </li>
-                                    ))}
-                                </ul>
-                                <span className="fs-12">
-                                    Si ce règlement remplace la garantie, rendez-lui son chèque depuis{' '}
-                                    <a href="/backoffice/cheques" className="alert-link">Chèques</a>
-                                    {' '}(action « Restituer au client »).
-                                </span>
-                            </div>
-                        </div>
-                    )}
-
                     {loadingFees && <p className="text-muted">Chargement des frais…</p>}
 
                     {createForm.data.payment_lines.length > 0 && (
@@ -1856,6 +1832,14 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                                                         }
                                                                         error={chequeError}
                                                                     />
+                                                                    {/* Une garantie ne paie jamais (ChequeController@studentCheques
+                                                                        l'exclut, le serveur la refuse) : on le dit, en une ligne. */}
+                                                                    {studentGaranties.length > 0 && (
+                                                                        <div className="text-warning fs-12 mt-1 text-normal-case">
+                                                                            <i className="ti ti-lock me-1" />
+                                                                            {studentGaranties.map((g) => g.numeroCheque).join(', ')}  : garantie, ne peut pas payer.
+                                                                        </div>
+                                                                    )}
                                                                 </td>
                                                             </tr>
                                                         )}

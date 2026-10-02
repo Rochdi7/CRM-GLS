@@ -15,7 +15,7 @@ use Tests\TestCase;
 /**
  * Calcul « Paiement prof » — la règle de rémunération elle-même.
  *
- *     < 5 présences → 0 · 5–6 → 1 semaine · 7–10 → 2 semaines · 11+ → complet
+ *     < 5 présences → 0 · 5–6 → 1 semaine · 7–12 → 2 semaines · 13+ → complet
  *     une semaine = taux ÷ 4
  *
  * Tests PURS (aucune base) : ils portent sur le calcul, pas sur l'écran.
@@ -58,8 +58,8 @@ final class CalculPaiementProfTest extends TestCase
         $attendu = [
             0 => 0.0, 4 => 0.0,
             5 => 100.0, 6 => 100.0,
-            7 => 200.0, 10 => 200.0,
-            11 => 400.0, 15 => 400.0, 20 => 400.0,
+            7 => 200.0, 10 => 200.0, 11 => 200.0, 12 => 200.0,
+            13 => 400.0, 15 => 400.0, 20 => 400.0,
         ];
 
         foreach ($attendu as $presences => $montant) {
@@ -114,7 +114,7 @@ final class CalculPaiementProfTest extends TestCase
     {
         // Un mois court ou chargé ne déplace pas les seuils.
         foreach ([8, 13, 20, 25] as $seances) {
-            $this->assertSame(500.0, $this->calculer([$this->etudiant(11)], $seances)->lignes[0]->montantEffectif);
+            $this->assertSame(500.0, $this->calculer([$this->etudiant(13)], $seances)->lignes[0]->montantEffectif);
         }
     }
 
@@ -155,7 +155,7 @@ final class CalculPaiementProfTest extends TestCase
     public function a_legacy_late_row_pays_nothing(): void
     {
         // 9 présences + 2 « Retard » : seules les 9 présences comptent, donc
-        // 2 semaines — les Retard ne font pas franchir le palier des 11.
+        // 2 semaines — les Retard ne font pas franchir le palier des 13.
         $resultat = $this->calculer([$this->etudiant(9, 0, 2)], 22);
 
         $this->assertSame(250.0, $resultat->lignes[0]->montantEffectif);

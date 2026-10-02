@@ -29,4 +29,13 @@ final class ChequePolicy extends ResourcePolicy
     {
         return $user->can('cheques.deposit') && $this->withinCenter($user, $model);
     }
+
+    /**
+     * Accept or reject a bank deposit (30/09/2026) — the accountant's check
+     * of the deposit receipt. Centre scope kept, like every other ability.
+     */
+    public function validateDeposit(User $user, Model $model): bool
+    {
+        return $user->can('cheques.validate-deposit') && $this->withinCenter($user, $model);
+    }
 }

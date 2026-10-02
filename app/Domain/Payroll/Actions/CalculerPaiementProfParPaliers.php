@@ -14,8 +14,10 @@ use App\Domain\Payroll\DTOs\ResultatPaiementProf;
  *     présences du mois   rémunération
  *     < 5                 0 DH
  *     5 – 6               1 semaine  (taux ÷ 4)
- *     7 – 10              2 semaines (taux ÷ 2)
- *     11 et +             le mois complet (taux entier)
+ *     7 – 12              2 semaines (taux ÷ 2)
+ *     13 et +             le mois complet (taux entier)
+ *
+ * (Seuil du « complet » relevé de 11 à 13 le 02/10/2026.)
  *
  * ⚠ Ceci REMPLACE le calcul proportionnel du 22/09/2026
  * (`taux ÷ séances × présences`, plafonné à 22 séances), qui retirait de
@@ -46,7 +48,7 @@ final class CalculerPaiementProfParPaliers
      * @var array<int, int>
      */
     public const PALIERS = [
-        11 => self::SEMAINES_PAR_MOIS, // complet
+        13 => self::SEMAINES_PAR_MOIS, // complet
         7 => 2,
         5 => 1,
     ];

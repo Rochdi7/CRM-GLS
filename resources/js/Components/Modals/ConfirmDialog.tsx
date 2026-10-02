@@ -20,6 +20,8 @@ interface ConfirmDialogProps {
     confirmLabel?: string;
     /** Confirm button label while processing. Defaults to the delete wording. */
     processingLabel?: string;
+    /** Keeps the confirm button disabled until the dialog's own field is filled. */
+    confirmDisabled?: boolean;
     /**
      * Optional extra input rendered between the message and the buttons —
      * for confirmations that need one field (e.g. a refusal motive). Keep it
@@ -53,6 +55,7 @@ export default function ConfirmDialog({
     variant = 'danger',
     confirmLabel,
     processingLabel,
+    confirmDisabled = false,
     children,
 }: ConfirmDialogProps) {
     return (
@@ -74,7 +77,7 @@ export default function ConfirmDialog({
                     <button type="button" className="btn btn-light me-3" onClick={onCancel} disabled={processing}>
                         {t('Cancel')}
                     </button>
-                    <button type="button" className={`btn btn-${variant}`} onClick={onConfirm} disabled={processing}>
+                    <button type="button" className={`btn btn-${variant}`} onClick={onConfirm} disabled={processing || confirmDisabled}>
                         {processing ? (
                             <>
                                 <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true" />

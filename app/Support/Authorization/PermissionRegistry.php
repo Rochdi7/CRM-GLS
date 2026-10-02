@@ -394,6 +394,18 @@ final class PermissionRegistry
                 // deux responsabilités différentes. Accordé à TOUS les
                 // rôles via defaultForEveryRole().
                 'cheques.deposit' => 'Remettre un chèque à la banque et suivre son statut',
+                // Décision sur une remise à la banque (30/09/2026) : le
+                // comptable vérifie le reçu de dépôt puis ACCEPTE (le chèque
+                // passe « Encaissé » et son argent quitte le compte Chèque
+                // du centre pour le compte bancaire choisi) ou REJETTE. Séparé
+                // de `cheques.deposit` : celui qui porte le chèque ne valide
+                // pas sa propre remise (ValiderRemiseCheque le refuse aussi).
+                'cheques.validate-deposit' => 'Valider ou rejeter une remise de chèque à la banque (comptable)',
+                // Suppression d'un chèque (29/09/2026) — super-admin
+                // uniquement (tout `*.delete` est filtré par
+                // superAdminOnly()). Les paiements financés restent, seul
+                // leur lien est détaché (SupprimerCheque).
+                'cheques.delete' => 'Supprimer un chèque (super-admin)',
             ],
             'Transferts de caisse' => [
                 'cash-transfers.view' => 'Consulter les transferts de caisse',
@@ -1019,6 +1031,9 @@ final class PermissionRegistry
                 'expenses.create', 'expenses.update',
                 'refunds.create', 'refunds.update',
                 'cheques.create', 'cheques.update',
+                // Vérifie les remises à la banque (reçu de dépôt) et les
+                // accepte ou les rejette (30/09/2026).
+                'cheques.validate-deposit',
                 'cash-transfers.create', 'cash-transfers.update',
                 // Le comptable tient une caisse : il doit pouvoir accepter
                 // un transfert entrant vers SA propre caisse (regle

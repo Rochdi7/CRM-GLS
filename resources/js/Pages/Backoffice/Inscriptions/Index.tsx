@@ -183,6 +183,50 @@ function computeLineMontant(initial: number, remisePct: number | null, remiseMon
     return Math.round(Math.max(0, initial - (remiseMontant ?? 0)) * 100) / 100;
 }
 
+/** Weeks of a monthly fee: each « Sem » is a quarter of the initial amount. */
+const SEMAINES = [1, 2, 3, 4] as const;
+
+const MOIS_FR = [
+    'janvier', 'fevrier', 'mars', 'avril', 'mai', 'juin',
+    'juillet', 'aout', 'septembre', 'octobre', 'novembre', 'decembre',
+];
+
+/**
+ * A MONTHLY fee (« Frais de Septembre », « Frais d'Avril »…) gets the Sem 1–4
+ * columns; an inscription / exam fee never does. The catalog stores no
+ * « mensuel » flag, so the month name in the label decides.
+ */
+function isMonthlyFee(nom: string): boolean {
+    const normalized = nom
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+
+    if (normalized.includes('inscription')) {
+        return false;
+    }
+
+    const mots = normalized.split(/[^a-z]+/);
+
+    return MOIS_FR.some((mois) => mots.includes(mois));
+}
+
+/** The weeks ticked on a line — exactly the stored selection, never guessed. */
+function lineSemaines(line: InscriptionFeeLine): number[] {
+    return line.semaines ?? [];
+}
+
+/** remiseMontant for a week selection: nothing ticked ⇒ full month, no remise. */
+function remiseForSemaines(initial: number, semaines: number[]): string {
+    if (semaines.length === 0 || semaines.length === 4) {
+        return '';
+    }
+
+    const montant = Math.round((initial / 4) * semaines.length * 100) / 100;
+
+    return String(Math.round((initial - montant) * 100) / 100);
+}
+
 
 /** Rows per page of the "Frais disponibles" table — client-side only, no server round trip for this in-memory list. */
 const AVAILABLE_FEES_PER_PAGE = 5;
@@ -838,8 +882,11 @@ export default function InscriptionsIndex({
         // display value for the still-open field only.
         if (field === 'remisePct') {
             line.remiseMontant = '';
+            line.semaines = null;
         } else if (field === 'remiseMontant') {
             line.remisePct = '';
+            // A typed remise replaces any week selection.
+            line.semaines = null;
         } else if (field === 'montantInitial' && line.remisePct !== '') {
             const initial = parseFloat(value || '0');
             const pct = Math.min(100, Math.max(0, parseFloat(line.remisePct || '0')));
@@ -848,6 +895,65 @@ export default function InscriptionsIndex({
 
         next[index] = line;
         setLines(next);
+    }
+
+    /**
+     * Ticks / unticks one week of a monthly fee and rewrites the line's
+     * remise so that montant = initial / 4 × weeks ticked.
+     */
+    function toggleSemaine(
+        lines: InscriptionFeeLine[],
+        setLines: (next: InscriptionFeeLine[]) => void,
+        index: number,
+        semaine: number,
+    ) {
+        const next = [...lines];
+        const current = lineSemaines(next[index]);
+        const semaines = current.includes(semaine)
+            ? current.filter((s) => s !== semaine)
+            : [...current, semaine].sort((a, b) => a - b);
+        const initial = parseFloat(next[index].montantInitial || '0');
+
+        next[index] = {
+            ...next[index],
+            semaines,
+            remisePct: '',
+            remiseMontant: remiseForSemaines(initial, semaines),
+        };
+        setLines(next);
+    }
+
+    /** The four « Sem » cells of one fee row — empty cells on a non-monthly fee. */
+    function renderSemaineCells(
+        line: InscriptionFeeLine,
+        rowKey: string,
+        onToggle: (semaine: number) => void,
+        disabled: boolean,
+    ) {
+        if (!isMonthlyFee(line.nom)) {
+            return SEMAINES.map((semaine) => <td key={semaine} />);
+        }
+
+        const quart = parseFloat(line.montantInitial || '0') / 4;
+        const ticked = lineSemaines(line);
+
+        return SEMAINES.map((semaine) => (
+            <td key={semaine} className="text-center" style={{ width: 80 }}>
+                <div className="form-check d-inline-flex flex-column align-items-center mb-0 ps-0">
+                    <input
+                        type="checkbox"
+                        className="form-check-input ms-0"
+                        id={`${rowKey}-sem-${semaine}`}
+                        checked={ticked.includes(semaine)}
+                        disabled={disabled}
+                        onChange={() => onToggle(semaine)}
+                    />
+                    <label className="form-check-label fs-12 text-muted" htmlFor={`${rowKey}-sem-${semaine}`}>
+                        {quart.toFixed(2)}
+                    </label>
+                </div>
+            </td>
+        ));
     }
 
     function linesTotal(lines: InscriptionFeeLine[]): number {
@@ -899,6 +1005,7 @@ export default function InscriptionsIndex({
                 montant_initial: line.montantInitial,
                 remise_pct: line.remisePct,
                 remise_montant: line.remiseMontant,
+                semaines: line.semaines ?? null,
                 note: line.note,
                 date_echeance: line.dateEcheance,
             })),
@@ -1194,6 +1301,7 @@ export default function InscriptionsIndex({
                 montant_initial: line.montantInitial,
                 remise_pct: line.remisePct,
                 remise_montant: line.remiseMontant,
+                semaines: line.semaines ?? null,
                 note: line.note,
                 date_echeance: line.dateEcheance,
             })),
@@ -1906,6 +2014,9 @@ export default function InscriptionsIndex({
                                                     <tr>
                                                         <th>Frais</th>
                                                         <th>Initial (DH)</th>
+                                                        {SEMAINES.map((semaine) => (
+                                                            <th key={semaine} className="text-center">Sem {semaine}</th>
+                                                        ))}
                                                         <th>Remise</th>
                                                         <th>Note</th>
                                                         <th className="text-end">Montant</th>
@@ -1935,24 +2046,25 @@ export default function InscriptionsIndex({
                                                                         type="number"
                                                                         step="0.01"
                                                                         min="0"
-                                                                        className={`form-control form-control-sm${montantError ? ' is-invalid' : ''}`}
+                                                                        readOnly
+                                                                        tabIndex={-1}
+                                                                        className={`form-control form-control-sm bg-light${montantError ? ' is-invalid' : ''}`}
                                                                         value={line.montantInitial}
-                                                                        onChange={(event) => setLine(index, 'montantInitial', event.target.value)}
                                                                     />
                                                                 </td>
-                                                                <td style={{ width: 210, minWidth: 210 }}>
+                                                                {renderSemaineCells(
+                                                                    line,
+                                                                    `ins-fee-${index}`,
+                                                                    (semaine) => toggleSemaine(
+                                                                        form.data.fee_lines,
+                                                                        (next) => form.setData('fee_lines', next),
+                                                                        index,
+                                                                        semaine,
+                                                                    ),
+                                                                    false,
+                                                                )}
+                                                                <td style={{ width: 130, minWidth: 130 }}>
                                                                     <div className="input-group input-group-sm flex-nowrap fee-remise-group">
-                                                                        <input
-                                                                            type="number"
-                                                                            step="0.01"
-                                                                            min="0"
-                                                                            max="100"
-                                                                            className="form-control"
-                                                                            placeholder="%"
-                                                                            value={line.remisePct}
-                                                                            onChange={(event) => setLine(index, 'remisePct', event.target.value)}
-                                                                        />
-                                                                        <span className="input-group-text">%</span>
                                                                         <input
                                                                             type="number"
                                                                             step="0.01"
@@ -1999,7 +2111,7 @@ export default function InscriptionsIndex({
                                                 </tbody>
                                                 <tfoot>
                                                     <tr>
-                                                        <td colSpan={4} className="text-end fw-semibold">
+                                                        <td colSpan={8} className="text-end fw-semibold">
                                                             Total à payer
                                                         </td>
                                                         <td className="text-end fw-bold">{lineTotal().toFixed(2)} DH</td>
@@ -2090,6 +2202,9 @@ export default function InscriptionsIndex({
                                                     <tr>
                                                         <th>Frais</th>
                                                         <th>Initial (DH)</th>
+                                                        {SEMAINES.map((semaine) => (
+                                                            <th key={semaine} className="text-center">Sem {semaine}</th>
+                                                        ))}
                                                         <th>Remise</th>
                                                         <th>Note</th>
                                                         <th className="text-end">Montant</th>
@@ -2147,29 +2262,32 @@ export default function InscriptionsIndex({
                                                                         type="number"
                                                                         step="0.01"
                                                                         min="0"
+                                                                        readOnly
+                                                                        tabIndex={-1}
                                                                         disabled={!canManageFees}
-                                                                        className={`form-control form-control-sm${montantError ? ' is-invalid' : ''}`}
+                                                                        className={`form-control form-control-sm bg-light${montantError ? ' is-invalid' : ''}`}
                                                                         value={line.montantInitial}
-                                                                        onChange={(event) => setEditingLine(index, 'montantInitial', event.target.value)}
-                                                                        onBlur={commitEditingLine}
                                                                     />
                                                                 </td>
-                                                                <td style={{ width: 210, minWidth: 210 }}>
+                                                                {renderSemaineCells(
+                                                                    line,
+                                                                    `ins-edit-fee-${index}`,
+                                                                    (semaine) => toggleSemaine(
+                                                                        feesForm.data.fee_lines,
+                                                                        (next) => {
+                                                                            feesForm.setData('fee_lines', next);
+                                                                            // A tick is a finished choice, not a
+                                                                            // half-typed number: save right away.
+                                                                            pendingFeesSave.current = null;
+                                                                            scheduleFeesSave(next);
+                                                                        },
+                                                                        index,
+                                                                        semaine,
+                                                                    ),
+                                                                    !canManageFees,
+                                                                )}
+                                                                <td style={{ width: 130, minWidth: 130 }}>
                                                                     <div className="input-group input-group-sm flex-nowrap fee-remise-group">
-                                                                        <input
-                                                                            type="number"
-                                                                            step="0.01"
-                                                                            min="0"
-                                                                            max="100"
-                                                                            className="form-control"
-                                                                            placeholder="%"
-                                                                            value={line.remisePct}
-                                                                            onChange={(event) => setEditingLine(index, 'remisePct', event.target.value)}
-                                                                            onBlur={commitEditingLine}
-                                                                            disabled={!canManageFees}
-                                                                            title={sousLePaye ? remiseBloqueeTitre : undefined}
-                                                                        />
-                                                                        <span className="input-group-text">%</span>
                                                                         <input
                                                                             type="number"
                                                                             step="0.01"
@@ -2249,7 +2367,7 @@ export default function InscriptionsIndex({
                                                 </tbody>
                                                 <tfoot>
                                                     <tr>
-                                                        <td colSpan={4} className="text-end fw-semibold">
+                                                        <td colSpan={8} className="text-end fw-semibold">
                                                             Total à payer
                                                         </td>
                                                         <td className="text-end fw-bold">{linesTotal(feesForm.data.fee_lines).toFixed(2)} DH</td>

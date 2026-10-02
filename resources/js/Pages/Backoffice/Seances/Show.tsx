@@ -24,6 +24,7 @@ interface SeanceListFilters {
     search: string;
     groupFilter: string;
     statutFilter: string;
+    groupStatutFilter: string;
     enseignantFilter: string;
     dateFrom: string;
     dateTo: string;
@@ -48,6 +49,8 @@ interface SeanceShowProps {
     perPageOptions: number[];
     groupOptions: GroupOption[];
     statuts: string[];
+    /** Filtre « Statut du groupe » : Active / Terminé / Annulée. */
+    groupStatuts: string[];
     listPermissions: { create: boolean; update: boolean; delete: boolean; mark: boolean };
 }
 
@@ -94,7 +97,7 @@ export default function SeanceShow({
     seances,
     listFilters,
     groupOptions,
-    statuts,
+    groupStatuts,
     listPermissions,
 }: SeanceShowProps) {
     const [activeTab, setActiveTab] = useState<ShowTab>('appel');
@@ -376,10 +379,10 @@ export default function SeanceShow({
                                 </label>
                                 <SelectField
                                     id="seance-list-f-statut"
-                                    options={statuts.map((statut) => ({ value: statut, label: statut }))}
+                                    options={groupStatuts.map((statut) => ({ value: statut, label: statut }))}
                                     placeholder="Choisir un statut"
-                                    value={listFilters.statutFilter}
-                                    onChange={(event) => reloadList({ statutFilter: event.target.value })}
+                                    value={listFilters.groupStatutFilter}
+                                    onChange={(event) => reloadList({ groupStatutFilter: event.target.value })}
                                 />
                             </div>
                             <div style={{ width: 220 }}>

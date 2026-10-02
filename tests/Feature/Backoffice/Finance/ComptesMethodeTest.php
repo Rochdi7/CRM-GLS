@@ -563,7 +563,8 @@ final class ComptesMethodeTest extends TestCase
         $cheque = \App\Models\Cheque::create([
             'reference' => 'CHQ-OK', 'source' => \App\Models\Cheque::SOURCE_ETUDIANT, 'student_id' => $student->id,
             'numero_cheque' => '0010', 'banque' => 'BMCE', 'date_reception' => '2025-09-01', 'date_echeance' => '2025-10-01',
-            'type' => \App\Models\Cheque::TYPE_A_DEPOSER, 'statut' => \App\Models\Cheque::STATUT_ENCAISSE,
+            // En main : seul un chèque « À déposer » encore en possession paie.
+            'type' => \App\Models\Cheque::TYPE_A_DEPOSER, 'statut' => \App\Models\Cheque::STATUT_EN_POSSESSION,
             'montant' => 1000, 'etablissement_id' => $this->centre->id, 'agent_id' => $user->employee->id,
         ]);
         $this->post(route('backoffice.encaissements.store'), [

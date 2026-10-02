@@ -512,3 +512,34 @@ CREATE UNIQUE INDEX IF NOT EXISTS enseignant_taux_mensuels_groupe_unique
 -- par `php artisan db:seed --class=RolesAndPermissionsSeeder --force`.
 ALTER TABLE encaissements ADD COLUMN IF NOT EXISTS avance_expire_le date NULL;
 -- ---------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------
+-- 30/09/2026 — Parcours bancaire d'un chèque : remise à la banque (date +
+-- reçu) → « Déposé », puis décision du comptable (« Encaissé » = accepté par
+-- la banque, ou « Rejeté »), et le paiement qui remplace une garantie rendue.
+--
+-- ⚠ RIEN À FAIRE À LA MAIN : la migration additive
+-- `2026_09_30_100000_add_remise_banque_to_cheques_table.php` est jouée par
+-- le `php artisan migrate --force` du déploiement. SQL conservé pour mémoire
+-- (idempotent). La permission `cheques.validate-deposit` (comptable) est
+-- créée par `php artisan db:seed --class=RolesAndPermissionsSeeder --force`.
+--
+-- ⚠ EFFETS AU DÉPLOIEMENT (aucun solde de caisse ne bouge, ni maintenant ni
+-- à la validation) :
+--  - « Encaissé » n'est plus posé automatiquement quand le reste d'un chèque
+--    tombe à 0 : seule la décision du comptable le pose. Les chèques déjà
+--    « Encaissé » restent tels quels.
+--  - Une GARANTIE ne paie plus aucun encaissement et ne va plus à la banque.
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS date_remise date NULL;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS depose_par_id bigint NULL REFERENCES employees(id) ON DELETE RESTRICT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS depot_valide_le timestamp(0) without time zone NULL;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS depot_valide_par_id bigint NULL REFERENCES employees(id) ON DELETE RESTRICT;
+ALTER TABLE cheques ADD COLUMN IF NOT EXISTS restitution_encaissement_id bigint NULL REFERENCES encaissements(id) ON DELETE RESTRICT;
+CREATE INDEX IF NOT EXISTS cheques_restitution_encaissement_id_idx ON cheques (restitution_encaissement_id);
+-- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 02/10/2026 — inscription_fees.semaines : semaines facturées d'un frais
+-- MENSUEL (Sem 1–4, montant = initial / 4 × semaines cochées). NULL = mois
+-- complet. Ajoutée dans create_inscription_fees_table ; à appliquer à la main.
+ALTER TABLE inscription_fees ADD COLUMN IF NOT EXISTS semaines jsonb NULL;
+-- ---------------------------------------------------------------------------

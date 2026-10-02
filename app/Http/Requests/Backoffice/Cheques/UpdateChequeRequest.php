@@ -44,6 +44,9 @@ final class UpdateChequeRequest extends FormRequest
             'type' => ['required', Rule::in(Cheque::TYPES)],
             'date_echeance' => ['nullable', 'date'],
             'note' => ['nullable', 'string'],
+            // Remplace la photo du chèque ; facultatif à la modification
+            // (les chèques saisis avant le 30/09/2026 n'en ont pas).
+            'photo' => ['nullable', 'file', 'mimes:'.implode(',', Cheque::MEDIA_MIMES), 'max:'.Cheque::MEDIA_MAX_KB],
         ];
     }
 }

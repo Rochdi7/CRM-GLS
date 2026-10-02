@@ -12,6 +12,8 @@ use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -33,6 +35,7 @@ final class ChequesInertiaCrudTest extends TestCase
     {
         parent::setUp();
         $this->seed(RolesAndPermissionsSeeder::class);
+        Storage::fake('media');
         $this->annee = AnneeScolaire::create([
             'nom' => '2025/2026', 'date_debut' => '2025-09-01', 'date_fin' => '2026-08-31',
             'par_defaut' => true, 'inscription_ouverte' => true,
@@ -83,6 +86,7 @@ final class ChequesInertiaCrudTest extends TestCase
             'date_reception' => '2026-08-11',
             'type' => Cheque::TYPE_GARANTIE,
             'date_echeance' => '2026-12-01',
+            'photo' => UploadedFile::fake()->image('cheque.jpg'),
         ])->assertRedirect(route('backoffice.cheques.index'));
 
         $cheque = Cheque::firstOrFail();
@@ -90,6 +94,24 @@ final class ChequesInertiaCrudTest extends TestCase
         $this->assertSame($student->id, $cheque->student_id);
         $this->assertSame(Cheque::STATUT_EN_POSSESSION, $cheque->statut);
         $this->assertSame('500.00', (string) $cheque->montant);
+        $this->assertNotSame('', $cheque->getFirstMediaUrl(Cheque::MEDIA_PHOTO));
+    }
+
+    public function test_the_cheque_photo_is_required_at_creation(): void
+    {
+        $this->actingAs($this->userWith('cheques.view', 'cheques.create'));
+        $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+
+        $this->post(route('backoffice.cheques.store'), [
+            'source' => Cheque::SOURCE_ETUDIANT,
+            'student_id' => $student->id,
+            'numero_cheque' => 'A1',
+            'montant' => '500',
+            'date_reception' => '2026-08-11',
+            'type' => Cheque::TYPE_A_DEPOSER,
+        ])->assertSessionHasErrors('photo');
+
+        $this->assertSame(0, Cheque::count());
     }
 
     public function test_a_cheque_can_be_recorded_for_a_non_student_owner(): void
@@ -103,9 +125,11 @@ final class ChequesInertiaCrudTest extends TestCase
             'montant' => '300',
             'date_reception' => '2026-08-11',
             'type' => Cheque::TYPE_A_DEPOSER,
+            'photo' => UploadedFile::fake()->image('cheque.png'),
         ])->assertSessionDoesntHaveErrors();
 
         $cheque = Cheque::firstOrFail();
+        $this->assertSame(Cheque::STATUT_EN_POSSESSION, $cheque->statut);
         $this->assertNull($cheque->student_id);
         $this->assertSame('Mme Bennani', $cheque->proprietaire_nom);
         $this->assertSame('Mme Bennani', $cheque->proprietaireLabel());
@@ -170,33 +194,11 @@ final class ChequesInertiaCrudTest extends TestCase
         ]);
     }
 
-    public function test_remise_a_la_banque_moves_en_possession_to_depose(): void
-    {
-        $this->actingAs($this->userWith('cheques.view', 'cheques.update', 'cheques.deposit'));
-        $cheque = $this->makeCheque(Cheque::STATUT_EN_POSSESSION);
-
-        $this->patch(route('backoffice.cheques.update-statut', $cheque), [
-            'statut' => Cheque::STATUT_DEPOSE,
-        ])->assertRedirect(route('backoffice.cheques.index'));
-
-        $this->assertSame(Cheque::STATUT_DEPOSE, $cheque->fresh()->statut);
-    }
-
-    public function test_deposited_cheque_can_be_marked_encaisse_or_rejete(): void
-    {
-        $this->actingAs($this->userWith('cheques.view', 'cheques.update', 'cheques.deposit'));
-        $cheque = $this->makeCheque(Cheque::STATUT_DEPOSE);
-
-        $this->patch(route('backoffice.cheques.update-statut', $cheque), [
-            'statut' => Cheque::STATUT_ENCAISSE,
-        ])->assertRedirect(route('backoffice.cheques.index'));
-
-        $this->assertSame(Cheque::STATUT_ENCAISSE, $cheque->fresh()->statut);
-    }
+    // Remise à la banque + décision du comptable : ChequeRemiseBanqueTest.
 
     public function test_a_direct_en_possession_to_encaisse_move_is_refused(): void
     {
-        $this->actingAs($this->userWith('cheques.view', 'cheques.update', 'cheques.deposit'));
+        $this->actingAs($this->userWith('cheques.view', 'cheques.validate-deposit'));
         $cheque = $this->makeCheque(Cheque::STATUT_EN_POSSESSION);
 
         $this->patch(route('backoffice.cheques.update-statut', $cheque), [
@@ -206,20 +208,32 @@ final class ChequesInertiaCrudTest extends TestCase
         $this->assertSame(Cheque::STATUT_EN_POSSESSION, $cheque->fresh()->statut);
     }
 
-    public function test_a_rejete_cheque_cannot_be_transitioned_further(): void
+    public function test_the_statut_endpoint_no_longer_deposits_a_cheque(): void
     {
-        $this->actingAs($this->userWith('cheques.view', 'cheques.update', 'cheques.deposit'));
-        $cheque = $this->makeCheque(Cheque::STATUT_REJETE);
+        $this->actingAs($this->userWith('cheques.view', 'cheques.validate-deposit'));
+        $cheque = $this->makeCheque(Cheque::STATUT_EN_POSSESSION);
 
         $this->patch(route('backoffice.cheques.update-statut', $cheque), [
             'statut' => Cheque::STATUT_DEPOSE,
         ])->assertSessionHasErrors('statut');
+
+        $this->assertSame(Cheque::STATUT_EN_POSSESSION, $cheque->fresh()->statut);
     }
 
-    /** « Encaissé » peut être automatique (reste 0) : un rejet bancaire ultérieur reste saisissable. */
-    public function test_an_encaisse_cheque_can_still_be_marked_rejete(): void
+    public function test_a_rejete_cheque_cannot_be_transitioned_further(): void
     {
-        $this->actingAs($this->userWith('cheques.view', 'cheques.update', 'cheques.deposit'));
+        $this->actingAs($this->userWith('cheques.view', 'cheques.validate-deposit'));
+        $cheque = $this->makeCheque(Cheque::STATUT_REJETE);
+
+        $this->patch(route('backoffice.cheques.update-statut', $cheque), [
+            'statut' => Cheque::STATUT_ENCAISSE,
+        ])->assertSessionHasErrors('statut');
+    }
+
+    /** Un ancien « Encaissé » (aucun argent passé à la banque) peut encore être rejeté. */
+    public function test_a_legacy_encaisse_cheque_can_still_be_marked_rejete(): void
+    {
+        $this->actingAs($this->userWith('cheques.view', 'cheques.validate-deposit'));
         $cheque = $this->makeCheque(Cheque::STATUT_ENCAISSE);
 
         $this->patch(route('backoffice.cheques.update-statut', $cheque), [
@@ -229,10 +243,23 @@ final class ChequesInertiaCrudTest extends TestCase
         $this->assertSame(Cheque::STATUT_REJETE, $cheque->fresh()->statut);
     }
 
-    public function test_lowering_the_amount_to_what_was_used_marks_the_cheque_encaisse(): void
+    public function test_the_deposit_permission_alone_no_longer_decides_a_bank_outcome(): void
+    {
+        $this->actingAs($this->userWith('cheques.view', 'cheques.deposit'));
+        $cheque = $this->makeCheque(Cheque::STATUT_DEPOSE);
+
+        $this->patch(route('backoffice.cheques.update-statut', $cheque), [
+            'statut' => Cheque::STATUT_REJETE,
+        ])->assertForbidden();
+
+        $this->assertSame(Cheque::STATUT_DEPOSE, $cheque->fresh()->statut);
+    }
+
+    /** « Encaissé » n'est plus automatique (30/09/2026) : seule la décision du comptable le pose. */
+    public function test_lowering_the_amount_to_what_was_used_no_longer_changes_the_status(): void
     {
         $this->actingAs($this->userWith('cheques.view', 'cheques.update', 'cheques.deposit'));
-        $cheque = $this->makeCheque(Cheque::STATUT_DEPOSE);
+        $cheque = $this->makeCheque(Cheque::STATUT_EN_POSSESSION);
         $this->useCheque($cheque, 700);
 
         $this->put(route('backoffice.cheques.update', $cheque), [
@@ -241,26 +268,7 @@ final class ChequesInertiaCrudTest extends TestCase
             'date_reception' => '2026-08-01', 'type' => Cheque::TYPE_A_DEPOSER,
         ])->assertSessionHasNoErrors();
 
-        $this->assertSame(Cheque::STATUT_ENCAISSE, $cheque->fresh()->statut);
-    }
-
-    public function test_catch_up_command_marks_fully_used_cheques_and_never_a_rejected_one(): void
-    {
-        $plein = $this->makeCheque(Cheque::STATUT_DEPOSE);
-        $this->useCheque($plein, 1000);
-        $partiel = $this->makeCheque(Cheque::STATUT_DEPOSE);
-        $this->useCheque($partiel, 400);
-        $rejete = $this->makeCheque(Cheque::STATUT_REJETE);
-        $this->useCheque($rejete, 1000);
-
-        $this->artisan('cheques:marquer-encaisses')->assertSuccessful();
-        $this->assertSame(Cheque::STATUT_DEPOSE, $plein->fresh()->statut, 'dry-run writes nothing');
-
-        $this->artisan('cheques:marquer-encaisses', ['--apply' => true])->assertSuccessful();
-
-        $this->assertSame(Cheque::STATUT_ENCAISSE, $plein->fresh()->statut);
-        $this->assertSame(Cheque::STATUT_DEPOSE, $partiel->fresh()->statut);
-        $this->assertSame(Cheque::STATUT_REJETE, $rejete->fresh()->statut);
+        $this->assertSame(Cheque::STATUT_EN_POSSESSION, $cheque->fresh()->statut);
     }
 
     private function useCheque(Cheque $cheque, float $montant): void
@@ -271,6 +279,72 @@ final class ChequesInertiaCrudTest extends TestCase
             'caisse_id' => \App\Models\Caisse::factory()->create(['etablissement_id' => $this->centre->id])->id,
             'agent_id' => $agent->id, 'montant' => $montant, 'methode' => 'Chèque', 'date_paiement' => '2026-08-05',
         ]);
+    }
+
+    // --- suppression (super-admin uniquement) ------------------------------
+
+    private function superAdmin(): User
+    {
+        $user = User::factory()->create()->assignRole('super-admin');
+        Employee::factory()->create(['user_id' => $user->id, 'etablissement_id' => $this->centre->id]);
+
+        return $user->fresh();
+    }
+
+    public function test_a_super_admin_can_delete_an_unused_cheque(): void
+    {
+        $cheque = $this->makeCheque();
+
+        $this->actingAs($this->superAdmin())
+            ->delete(route('backoffice.cheques.destroy', $cheque))
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertModelMissing($cheque);
+    }
+
+    public function test_deleting_a_used_cheque_keeps_its_payments_and_only_detaches_them(): void
+    {
+        $cheque = $this->makeCheque(Cheque::STATUT_ENCAISSE);
+        $this->useCheque($cheque, 300);
+        $encaissement = $cheque->encaissements()->firstOrFail();
+        $solde = (float) $encaissement->caisse->fresh()->solde;
+
+        $this->actingAs($this->superAdmin())
+            ->delete(route('backoffice.cheques.destroy', $cheque))
+            ->assertSessionHasNoErrors();
+
+        $this->assertModelMissing($cheque);
+        $encaissement->refresh();
+        $this->assertNull($encaissement->cheque_id);
+        $this->assertSame('300.00', number_format((float) $encaissement->montant, 2, '.', ''));
+        $this->assertSame($solde, (float) $encaissement->caisse->fresh()->solde);
+    }
+
+    public function test_a_rejected_cheque_that_funded_payments_cannot_be_deleted(): void
+    {
+        $cheque = $this->makeCheque(Cheque::STATUT_REJETE);
+        $this->useCheque($cheque, 300);
+
+        $this->actingAs($this->superAdmin())
+            ->delete(route('backoffice.cheques.destroy', $cheque))
+            ->assertSessionHasErrors('cheque');
+
+        $this->assertModelExists($cheque);
+    }
+
+    public function test_no_role_preset_can_delete_a_cheque(): void
+    {
+        $cheque = $this->makeCheque();
+        $director = User::factory()->create()->assignRole('director');
+        Employee::factory()->create(['user_id' => $director->id, 'etablissement_id' => $this->centre->id]);
+
+        $this->actingAs($director->fresh())
+            ->delete(route('backoffice.cheques.destroy', $cheque))
+            ->assertForbidden();
+
+        $this->assertModelExists($cheque);
+        $this->assertNotContains('cheques.delete', \App\Models\Role::findByName('director')->permissions->pluck('name')->all());
     }
 
     // --- retour (returned to owner) tracking -------------------------------

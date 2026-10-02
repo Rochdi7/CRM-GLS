@@ -21,6 +21,10 @@ return new class extends Migration
             $table->decimal('montant_initial', 10, 2)->nullable();
             $table->decimal('remise_pct', 5, 2)->nullable();
             $table->decimal('remise_montant', 10, 2)->nullable();
+            // Semaines facturées d'un frais MENSUEL (ex. [1, 2]) : montant =
+            // initial / 4 × nombre de semaines. NULL = mois complet. Gardé
+            // pour réafficher EXACTEMENT les cases cochées (02/10/2026).
+            $table->jsonb('semaines')->nullable();
             $table->foreignId('frais_id')->nullable()->constrained('frais')->nullOnDelete();
             $table->decimal('montant', 10, 2);
             $table->date('date_echeance');

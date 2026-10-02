@@ -44,6 +44,8 @@ final class StoreChequeRequest extends FormRequest
             'type' => ['required', Rule::in(Cheque::TYPES)],
             'date_echeance' => ['nullable', 'date'],
             'note' => ['nullable', 'string'],
+            // Photo / scan du chèque — OBLIGATOIRE à la saisie (30/09/2026).
+            'photo' => ['required', 'file', 'mimes:'.implode(',', Cheque::MEDIA_MIMES), 'max:'.Cheque::MEDIA_MAX_KB],
         ];
     }
 }

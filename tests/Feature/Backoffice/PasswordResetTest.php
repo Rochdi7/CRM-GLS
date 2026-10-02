@@ -123,6 +123,38 @@ final class PasswordResetTest extends TestCase
             ->assertSessionHasErrors('password');
     }
 
+    public function test_an_inactive_account_is_told_it_is_inactive_and_gets_no_link(): void
+    {
+        Notification::fake();
+        $user = User::factory()->create(['is_active' => false]);
+
+        $this->post(route('backoffice.password.email'), ['email' => $user->email])
+            ->assertSessionHasErrors([
+                'email' => __('Your account is not active. Please contact the administration.'),
+            ]);
+
+        Notification::assertNothingSent();
+    }
+
+    public function test_a_link_emailed_before_deactivation_no_longer_resets_the_password(): void
+    {
+        $user = User::factory()->create();
+        $token = Password::createToken($user);
+        $user->forceFill(['is_active' => false])->save();
+        $before = $user->fresh()->password;
+
+        $this->post(route('backoffice.password.update'), [
+            'token' => $token,
+            'email' => $user->email,
+            'password' => 'new-password-123',
+            'password_confirmation' => 'new-password-123',
+        ])->assertSessionHasErrors([
+            'email' => __('Your account is not active. Please contact the administration.'),
+        ]);
+
+        $this->assertSame($before, $user->fresh()->password);
+    }
+
     public function test_reset_fails_with_an_invalid_token(): void
     {
         $user = User::factory()->create();

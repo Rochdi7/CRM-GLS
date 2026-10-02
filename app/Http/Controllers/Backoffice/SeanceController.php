@@ -52,6 +52,7 @@ final class SeanceController extends Controller
             'search' => (string) $request->string('search'),
             'groupFilter' => (string) $request->string('groupFilter'),
             'statutFilter' => (string) $request->string('statutFilter'),
+            'groupStatutFilter' => (string) $request->string('groupStatutFilter'),
             'enseignantFilter' => (string) $request->string('enseignantFilter'),
             'dateFrom' => (string) $request->string('dateFrom'),
             'dateTo' => (string) $request->string('dateTo'),
@@ -59,6 +60,10 @@ final class SeanceController extends Controller
 
         if (! in_array($filters['statutFilter'], Seance::STATUTS, true)) {
             $filters['statutFilter'] = '';
+        }
+
+        if (! array_key_exists($filters['groupStatutFilter'], GetSeancesList::GROUP_STATUTS)) {
+            $filters['groupStatutFilter'] = '';
         }
 
         $perPage = (int) $request->integer('perPage', GetSeancesList::DEFAULT_PER_PAGE);
@@ -78,6 +83,11 @@ final class SeanceController extends Controller
             ]);
         }
 
+        // La liste d'administration filtre sur le statut du GROUPE, plus sur
+        // celui de la séance : un ?statutFilter resté dans l'URL ne doit pas
+        // restreindre la liste sans contrôle visible pour l'effacer.
+        $filters['statutFilter'] = '';
+
         return Inertia::render('Backoffice/Seances/Index', [
             'seances' => $getSeancesList($user, $filters, $perPage),
             'filters' => $filters + [
@@ -89,6 +99,7 @@ final class SeanceController extends Controller
             'groupOptions' => $formOptions->groups($user),
             'enseignants' => $formOptions->enseignants($user),
             'statuts' => Seance::STATUTS,
+            'groupStatuts' => array_keys(GetSeancesList::GROUP_STATUTS),
             // Cancellation reasons for the "Annuler la séance" form, read from
             // the managed catalog (Paramètres → Raisons d'annulation ou
             // archivage) — never a hard-coded list. A closure so a partial
@@ -345,13 +356,17 @@ final class SeanceController extends Controller
             'search' => (string) $request->string('search'),
             'groupFilter' => (string) $request->string('groupFilter'),
             'statutFilter' => (string) $request->string('statutFilter'),
+            'groupStatutFilter' => (string) $request->string('groupStatutFilter'),
             'enseignantFilter' => (string) $request->string('enseignantFilter'),
             'dateFrom' => (string) $request->string('dateFrom'),
             'dateTo' => (string) $request->string('dateTo'),
         ];
 
-        if (! in_array($listFilters['statutFilter'], Seance::STATUTS, true)) {
-            $listFilters['statutFilter'] = '';
+        // Même règle que index() : l'onglet filtre sur le statut du groupe.
+        $listFilters['statutFilter'] = '';
+
+        if (! array_key_exists($listFilters['groupStatutFilter'], GetSeancesList::GROUP_STATUTS)) {
+            $listFilters['groupStatutFilter'] = '';
         }
 
         $perPage = (int) $request->integer('perPage', GetSeancesList::DEFAULT_PER_PAGE);
@@ -380,6 +395,7 @@ final class SeanceController extends Controller
             'perPageOptions' => GetSeancesList::PER_PAGE_OPTIONS,
             'groupOptions' => $formOptions->groups($user),
             'statuts' => Seance::STATUTS,
+            'groupStatuts' => array_keys(GetSeancesList::GROUP_STATUTS),
             'listPermissions' => [
                 'create' => $user->can('create', Seance::class),
                 'update' => $user->can('attendance.update'),

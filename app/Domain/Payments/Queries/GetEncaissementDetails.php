@@ -52,6 +52,9 @@ final class GetEncaissementDetails
             'groupe' => $inscription?->group?->nom,
             'caisse' => $encaissement->caisse?->nom,
             'agent' => $encaissement->agent?->nomComplet(),
+            // Date de SAISIE au guichet (created_at), distincte de
+            // `date_paiement` qui peut être antidatée ou re-datée.
+            'dateOperation' => $encaissement->created_at?->format('d/m/Y H:i'),
             'note' => $encaissement->note,
             'cheque' => $encaissement->methode === Encaissement::METHODE_CHEQUE ? [
                 'numero' => $encaissement->numero_cheque,

@@ -264,14 +264,15 @@ final class TransfertEtudiantQaTest extends TestCase
     // 2. Chèques
     // ---------------------------------------------------------------
 
-    public function test_a_guarantee_cheque_follows_the_student_and_only_the_copy_can_pay_with_it(): void
+    public function test_a_cheque_follows_the_student_and_only_the_copy_can_pay_with_it(): void
     {
         $student = $this->etudiant();
         $this->inscription($student, $this->groupeRabat);
         $cheque = Cheque::create([
             'reference' => 'CHQ-Q1', 'source' => Cheque::SOURCE_ETUDIANT, 'student_id' => $student->id,
             'numero_cheque' => '123456', 'montant' => 1500, 'banque' => 'CIH', 'date_reception' => '2026-09-10',
-            'type' => Cheque::TYPE_GARANTIE, 'statut' => Cheque::STATUT_EN_POSSESSION,
+            // « À déposer » : une garantie ne paie jamais (30/09/2026).
+            'type' => Cheque::TYPE_A_DEPOSER, 'statut' => Cheque::STATUT_EN_POSSESSION,
             'etablissement_id' => $this->rabat->id, 'agent_id' => $this->guichet->id,
         ]);
 

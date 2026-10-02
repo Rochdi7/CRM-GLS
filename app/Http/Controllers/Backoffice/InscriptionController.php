@@ -185,6 +185,7 @@ final class InscriptionController extends Controller
                 'montantInitial' => (string) $fee->montant_initial,
                 'remisePct' => $fee->remise_pct !== null ? (string) $fee->remise_pct : '',
                 'remiseMontant' => $fee->remise_montant !== null ? (string) $fee->remise_montant : '',
+                'semaines' => $fee->semaines,
                 'note' => $fee->note ?? '',
                 'dateEcheance' => $fee->date_echeance?->toDateString() ?? '',
                 'statut' => $fee->statut,
@@ -321,6 +322,7 @@ final class InscriptionController extends Controller
                 'montantInitial' => (string) $fee->montant_initial,
                 'remisePct' => $fee->remise_pct !== null ? (string) $fee->remise_pct : '',
                 'remiseMontant' => $fee->remise_montant !== null ? (string) $fee->remise_montant : '',
+                'semaines' => $fee->semaines,
                 'note' => $fee->note ?? '',
                 'dateEcheance' => $fee->date_echeance?->toDateString() ?? '',
                 'statut' => $fee->statut,
@@ -589,6 +591,13 @@ final class InscriptionController extends Controller
                 $initial = (float) ($line['montant_initial'] ?? 0);
                 $remisePct = isset($line['remise_pct']) && $line['remise_pct'] !== '' ? (float) $line['remise_pct'] : null;
                 $remiseMontant = isset($line['remise_montant']) && $line['remise_montant'] !== '' ? (float) $line['remise_montant'] : null;
+                $semaines = InscriptionFee::normaliserSemaines($line['semaines'] ?? null);
+
+                if ($semaines !== null) {
+                    $remisePct = null;
+                    $remiseMontant = InscriptionFee::remisePourSemaines($initial, $semaines);
+                }
+
                 $final = InscriptionFee::computeMontant($initial, $remisePct, $remiseMontant);
 
                 return [
@@ -597,6 +606,7 @@ final class InscriptionController extends Controller
                     'montant_initial' => $initial,
                     'remise_pct' => $remisePct,
                     'remise_montant' => $remiseMontant,
+                    'semaines' => $semaines,
                     'montant' => $final,
                     'note' => $line['note'] ?? null,
                     'date_echeance' => $line['date_echeance'] ?? now()->toDateString(),

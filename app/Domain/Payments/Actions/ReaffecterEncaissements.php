@@ -291,6 +291,7 @@ final class ReaffecterEncaissements
             'montant_initial' => $source?->montant_initial,
             'remise_pct' => $source?->remise_pct,
             'remise_montant' => $source?->remise_montant,
+            'semaines' => $source?->semaines,
             'montant' => $source?->montant,
             // The source fee's own due date: this line is the same fee moved
             // to another registration, not a new one falling due today.

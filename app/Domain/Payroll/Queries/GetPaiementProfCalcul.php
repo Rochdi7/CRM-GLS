@@ -26,7 +26,8 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Lit les appels réels d'un groupe sur UN MOIS DE GROUPE et en dérive le
+ * Lit les appels réels d'un groupe sur UNE PÉRIODE (mois de groupe par
+ * défaut, ou dates libres saisies — 02/10/2026) et en dérive le
  * paiement d'UN enseignant, selon SON mode de paie.
  *
  * Depuis le 22/09/2026 la configuration de paie vit sur l'EMPLOYÉ
@@ -76,11 +77,17 @@ final class GetPaiementProfCalcul
      *
      * @return array<string, mixed>
      */
-    public function optionsPourGroupe(Group $group, ?string $mois = null): array
+    public function optionsPourGroupe(Group $group, ?string $mois = null, ?string $debut = null, ?string $fin = null): array
     {
         $moisOptions = MoisDeGroupe::options($group);
-        $mois ??= $moisOptions[0]['value'] ?? Carbon::now()->format('Y-m');
-        $fenetre = MoisDeGroupe::pour($group, $mois);
+        // Période saisie (dates libres) si elle est valide, sinon le dernier
+        // mois de groupe — c'est ce qui pré-remplit les deux dates du modal.
+        $fenetre = MoisDeGroupe::resoudre($group, $mois, $debut, $fin)
+            ?? MoisDeGroupe::pour($group, $moisOptions[0]['value'] ?? Carbon::now()->format('Y-m'));
+        $mois = $fenetre->moisCivil->format('Y-m');
+        // La fenêtre HABITUELLE du groupe pour ce mois — l'écran la propose
+        // quand la période saisie s'en écarte.
+        $habituelle = MoisDeGroupe::pour($group, $mois);
 
         // Tous les enseignants jamais affectés au groupe (actifs ou archivés
         // — un prof parti en cours de mois doit rester payable pour ce mois),
@@ -102,6 +109,9 @@ final class GetPaiementProfCalcul
             ->pluck('n', 'enseignant_id');
 
         $sansEnseignant = (int) ($parProf[''] ?? $parProf[null] ?? 0);
+        // Toutes les séances effectuées de la période, quel que soit le prof
+        // — affiché sous les dates dès qu'elles changent.
+        $seancesPeriode = (int) $parProf->sum();
         $parProf = $parProf->filter(fn ($n, $id) => $id !== null && $id !== '');
 
         $principal = $parProf->sortDesc()->keys()->first();
@@ -123,6 +133,12 @@ final class GetPaiementProfCalcul
                 'libelle' => $fenetre->libelle,
                 'ancreSurLeGroupe' => $fenetre->ancreSurLeGroupe,
             ],
+            'fenetreHabituelle' => [
+                'debut' => $habituelle->debut->toDateString(),
+                'fin' => $habituelle->fin->toDateString(),
+                'libelle' => $habituelle->libelle,
+                'ancreSurLeGroupe' => $habituelle->ancreSurLeGroupe,
+            ],
             'enseignants' => $enseignants->map(function (Employee $e) use ($parProf, $fenetre, $group): array {
                 $config = ConfigurationPaieEnseignant::pour($e, $fenetre->moisCivil, $group);
 
@@ -137,6 +153,7 @@ final class GetPaiementProfCalcul
             })->values()->all(),
             'enseignantParDefaut' => $principal !== null ? (int) $principal : ($group->enseignant_id ?? null),
             'dureeHabituelle' => $dureeHabituelle,
+            'seancesPeriode' => $seancesPeriode,
             'seancesSansEnseignant' => $sansEnseignant,
         ];
     }
@@ -148,11 +165,14 @@ final class GetPaiementProfCalcul
     public function __invoke(
         Group $group,
         Employee $enseignant,
-        string $mois,
+        MoisDeGroupe|string $mois,
         ?float $heures = null,
         array $ajustements = [],
     ): array {
-        $fenetre = MoisDeGroupe::pour($group, $mois);
+        // Une période libre (dates saisies) arrive déjà résolue ; un
+        // « YYYY-MM » reste accepté pour les anciens liens.
+        $fenetre = $mois instanceof MoisDeGroupe ? $mois : MoisDeGroupe::pour($group, $mois);
+        $mois = $fenetre->moisCivil->format('Y-m');
         $config = ConfigurationPaieEnseignant::pour($enseignant, $fenetre->moisCivil, $group);
 
         // Séances EFFECTUÉES de CET enseignant sur la fenêtre. Celles d'un
@@ -289,7 +309,10 @@ final class GetPaiementProfCalcul
             ...$resultat->toArray(),
             'datesDeCours' => $datesDeCours,
             'grille' => $grille,
-            // Étudiants qui ont encore un reste à payer ÉCHU dans CE groupe —
+            // Étudiants qui ont encore un reste à payer ÉCHU dans CE groupe,
+            // sur les échéances du MOIS calculé seulement (02/10/2026 : le
+            // badge cumulait toute la dette du groupe, 1 300 DH au lieu du
+            // reste du mois) —
             // la MÊME règle que le badge de la fiche d'appel et que « Gestion
             // des recouvrements » (`RetardPaiementEtudiant`), calculée en lot.
             // Un SIGNAL seulement : le montant de la ligne ne bouge pas, c'est
@@ -297,6 +320,11 @@ final class GetPaiementProfCalcul
             'retardsPaiement' => (object) $this->retards->pourEtudiants(
                 array_column($parEtudiant, 'student_id'),
                 $group->id,
+                // Mois CIVIL, pas la fenêtre ancrée : les frais mensuels
+                // tombent le 1er du mois (« Frais de Septembre » = 01/09),
+                // qu'une fenêtre du 15 au 14 laisserait dehors.
+                $fenetre->moisCivil->copy()->startOfMonth()->toDateString(),
+                $fenetre->moisCivil->copy()->endOfMonth()->toDateString(),
             ),
             'heuresSaisies' => null,
             'totalHoraire' => null,

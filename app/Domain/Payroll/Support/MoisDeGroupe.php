@@ -70,6 +70,73 @@ final class MoisDeGroupe
         );
     }
 
+    /** Plus longue période saisissable : les paliers raisonnent sur UN mois. */
+    public const DUREE_MAX_JOURS = 62;
+
+    /**
+     * Période LIBRE (02/10/2026) : l'opérateur saisit date de début et date
+     * de fin, parce qu'un enseignant décale parfois ses cours et que la
+     * fenêtre ancrée ne tombe plus juste. Le mois CIVIL reste celui de la
+     * date de début : c'est la clé du taux mensuel de l'enseignant
+     * (`enseignant_taux_mensuels`) et des frais du mois (badge de retard) —
+     * exactement comme pour une fenêtre ancrée, dont le début tombe toujours
+     * dans son mois civil.
+     *
+     * `null` quand les dates sont illisibles, inversées ou trop longues :
+     * l'appelant n'affiche alors aucun calcul plutôt qu'un chiffre faux.
+     */
+    public static function periode(Group $group, string $debut, string $fin): ?self
+    {
+        try {
+            $d = Carbon::createFromFormat('!Y-m-d', $debut) ?: null;
+            $f = Carbon::createFromFormat('!Y-m-d', $fin) ?: null;
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if ($d === null || $f === null || $d->format('Y-m-d') !== $debut || $f->format('Y-m-d') !== $fin) {
+            return null;
+        }
+
+        if ($f->lessThan($d) || $d->diffInDays($f) + 1 > self::DUREE_MAX_JOURS) {
+            return null;
+        }
+
+        $civil = $d->copy()->startOfMonth();
+        $habituelle = self::pour($group, $civil->format('Y-m'));
+
+        // La fenêtre habituelle du groupe saisie telle quelle garde son
+        // libellé de mois ; une période décalée se nomme par ses dates.
+        if ($habituelle->debut->equalTo($d) && $habituelle->fin->equalTo($f)) {
+            return $habituelle;
+        }
+
+        return new self(
+            debut: $d,
+            fin: $f,
+            libelle: $d->format('d/m/Y').' - '.$f->format('d/m/Y'),
+            moisCivil: $civil,
+            ancreSurLeGroupe: false,
+        );
+    }
+
+    /**
+     * La période demandée : dates libres si fournies, sinon le mois
+     * (« 2026-09 », ancienne forme des liens), sinon `null`.
+     */
+    public static function resoudre(Group $group, ?string $mois, ?string $debut, ?string $fin): ?self
+    {
+        if ($debut !== null && $debut !== '' && $fin !== null && $fin !== '') {
+            return self::periode($group, $debut, $fin);
+        }
+
+        if ($mois !== null && $mois !== '') {
+            return self::pour($group, $mois);
+        }
+
+        return null;
+    }
+
     /**
      * Mois proposables pour ce groupe.
      *

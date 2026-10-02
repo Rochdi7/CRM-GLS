@@ -131,6 +131,44 @@ final class SeancesInertiaCrudTest extends TestCase
             );
     }
 
+    public function test_index_filters_by_group_statut_active_termine_annulee(): void
+    {
+        $groupeTermine = Group::factory()->create([
+            'statut' => Group::STATUT_FIN_FORMATION,
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+        $groupeAnnule = Group::factory()->create([
+            'statut' => Group::STATUT_ANNULEE,
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+        $active = $this->makeSeance();
+        $termine = $this->makeSeance(['group_id' => $groupeTermine->id]);
+        $annule = $this->makeSeance(['group_id' => $groupeAnnule->id]);
+        $user = $this->userWith('attendance.view');
+
+        foreach (['Active' => $active, 'Terminé' => $termine, 'Annulée' => $annule] as $statut => $seance) {
+            $this->actingAs($user)
+                ->get(route('backoffice.seances.index', ['groupStatutFilter' => $statut]))
+                ->assertOk()
+                ->assertInertia(fn (Assert $page) => $page
+                    ->where('groupStatuts', ['Active', 'Terminé', 'Annulée'])
+                    ->where('filters.groupStatutFilter', $statut)
+                    ->has('seances.data', 1)
+                    ->where('seances.data.0.id', $seance->id)
+                );
+        }
+
+        // Une valeur inconnue est ignorée : la liste n'est pas filtrée.
+        $this->actingAs($user)
+            ->get(route('backoffice.seances.index', ['groupStatutFilter' => 'Bidon']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('filters.groupStatutFilter', '')
+                ->has('seances.data', 3)
+            );
+    }
+
     public function test_a_seance_inherits_center_and_year_from_its_group(): void
     {
         $this->actingAs($this->userWith('attendance.view', 'attendance.create'));

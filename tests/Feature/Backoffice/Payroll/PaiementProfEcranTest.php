@@ -228,11 +228,72 @@ final class PaiementProfEcranTest extends TestCase
                 ->where('canCalculerPaiementProf', true)
                 ->where('calculPaiementProf.total', 500)
                 ->where('calculPaiementProfFilters.groupFilter', (string) $this->group->id)
-                ->where('calculPaiementProfFilters.mois', '2025-09')
+                ->where('calculPaiementProfFilters.debut', '2025-09-01')
+                ->where('calculPaiementProfFilters.fin', '2025-09-30')
                 ->has('calculGroupOptions'));
 
         // Toujours aucune écriture : l'onglet PROPOSE, comme l'écran dédié.
         $this->assertSame(0, Depense::count());
+    }
+
+    #[Test]
+    public function a_free_period_replaces_the_group_month(): void
+    {
+        // L'enseignant a décalé : on paie du 10/09 au 09/10, pas le mois de
+        // groupe. Seules les séances de la période comptent (10 → 26/09 = 13).
+        $this->moisPlein($this->student('Karim'));
+
+        $this->actingAs($this->user('prof-payments.calculate'))
+            ->get('/backoffice/paiement-prof?'.http_build_query([
+                'groupFilter' => $this->group->id,
+                'enseignantFilter' => $this->prof->id,
+                'debut' => '2025-09-10',
+                'fin' => '2025-10-09',
+            ]))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('calcul.nombreSeances', 13)
+                ->where('calcul.total', 500)
+                ->where('calcul.mois', '2025-09')
+                ->where('calcul.periode.debut', '2025-09-10')
+                ->where('calcul.periode.fin', '2025-10-09')
+                ->where('calcul.periode.libelle', '10/09/2025 - 09/10/2025')
+                ->where('filters.debut', '2025-09-10')
+                ->where('filters.fin', '2025-10-09'));
+
+        $this->assertSame(0, Depense::count());
+    }
+
+    #[Test]
+    public function an_inverted_or_too_long_period_calculates_nothing(): void
+    {
+        $this->moisPlein($this->student('Karim'));
+
+        foreach ([['2025-09-30', '2025-09-01'], ['2025-09-01', '2025-12-31']] as [$debut, $fin]) {
+            $this->actingAs($this->user('prof-payments.calculate'))
+                ->get('/backoffice/paiement-prof?'.http_build_query([
+                    'groupFilter' => $this->group->id,
+                    'enseignantFilter' => $this->prof->id,
+                    'debut' => $debut,
+                    'fin' => $fin,
+                ]))
+                ->assertOk()
+                ->assertInertia(fn (Assert $page) => $page->where('calcul', null));
+        }
+    }
+
+    #[Test]
+    public function the_group_options_return_the_usual_window_next_to_a_free_period(): void
+    {
+        $this->moisPlein($this->student('Karim'));
+
+        $this->actingAs($this->user('prof-payments.calculate'))
+            ->getJson("/backoffice/paiement-prof/groupes/{$this->group->id}/options?debut=2025-09-10&fin=2025-10-09")
+            ->assertOk()
+            ->assertJsonPath('fenetre.debut', '2025-09-10')
+            ->assertJsonPath('fenetre.fin', '2025-10-09')
+            ->assertJsonPath('fenetreHabituelle.debut', '2025-09-01')
+            ->assertJsonPath('fenetreHabituelle.fin', '2025-09-30');
     }
 
     #[Test]
@@ -647,5 +708,32 @@ final class PaiementProfEcranTest extends TestCase
                 // Présent partout ⇒ toujours le taux entier : signal seulement.
                 ->where('calcul.lignes.1.nom', 'Mouad Derbal')
                 ->where('calcul.lignes.1.montantEffectif', fn ($v) => (float) $v === 500.0));
+    }
+
+    #[Test]
+    public function the_overdue_balance_only_counts_the_fees_of_the_calculated_month(): void
+    {
+        // Signalé le 02/10/2026 : le badge cumulait toute la dette du groupe
+        // (inscription + autres mois) au lieu du seul reste du mois calculé.
+        $doit = $this->inscrire('Mouad', 'Derbal', Inscription::STATUT_ACTIVE);
+        $inscriptionId = Inscription::where('student_id', $doit->id)->value('id');
+
+        foreach ([['Frais de Septembre', 1300, '2025-09-01'], ['Frais d\'Octobre', 1300, '2025-10-01'], ['Frais d\'Août', 1300, '2025-08-01']] as [$nom, $montant, $echeance]) {
+            InscriptionFee::create([
+                'inscription_id' => $inscriptionId,
+                'nom' => $nom,
+                'montant_initial' => $montant,
+                'montant' => $montant,
+                'date_echeance' => $echeance,
+            ]);
+        }
+
+        $this->moisPlein($doit);
+
+        $this->calculer()
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where("calcul.retardsPaiement.{$doit->id}.montant", '1300.00')
+                ->where("calcul.retardsPaiement.{$doit->id}.dateEcheance", '01/09/2025'));
     }
 }

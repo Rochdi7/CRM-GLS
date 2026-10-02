@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domain\Payments\Queries;
 
+use App\Domain\Payments\Actions\DeposerChequeEnBanque;
+use App\Domain\Payments\Actions\ValiderRemiseCheque;
 use App\Models\Cheque;
 use App\Models\Student;
 use App\Models\User;
@@ -37,7 +39,7 @@ final class GetChequesList
     ) {}
 
     /**
-     * @return array{data: LengthAwarePaginator, montantTotal: string}
+     * @return array{data: LengthAwarePaginator, montantTotal: string, remisesEnAttente: int}
      */
     public function __invoke(
         User $user,
@@ -96,8 +98,13 @@ final class GetChequesList
             // — every chèque in production has a NULL échéance and is kept by
             // the orWhereNull below — but the shape is the bug, and the first
             // dated chèque would hit it.
+            // Une remise « Déposé » attend la décision du comptable : elle ne
+            // se cache jamais derrière la fenêtre de l'année (même raison que
+            // la boîte de validation des transferts, §11).
             ->when(
-                ! $dateFilterEngaged && $this->context->anneeDateRange() !== null,
+                ! $dateFilterEngaged
+                    && $statutFilter !== Cheque::STATUT_DEPOSE
+                    && $this->context->anneeDateRange() !== null,
                 fn ($q) => $q->where(fn ($sub) => $sub
                     ->whereBetween('date_echeance', $this->context->anneeDateRange())
                     ->orWhereNull('date_echeance')),
@@ -125,12 +132,44 @@ final class GetChequesList
             )
             ->sum('montant');
 
+        // Remises à la banque en attente du comptable — même portée centre
+        // que la liste, sans ses filtres (le badge dit ce qu'il reste à
+        // traiter, pas ce que la recherche courante montre).
+        $remisesEnAttente = Cheque::query()
+            ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+            ->tap(function ($q): void {
+                $id = $this->context->etablissementId();
+                if ($id !== null) {
+                    $q->where(fn ($sub) => $sub->whereNull('etablissement_id')->orWhere('etablissement_id', $id));
+                }
+            })
+            ->where('statut', Cheque::STATUT_DEPOSE)
+            ->count();
+
         $cheques = (clone $base)
-            ->with(['student', 'agent', 'retournePar', 'encaissements' => fn ($q) => $q->with('student')])
+            ->with([
+                'student', 'agent', 'retournePar', 'media',
+                'deposePar', 'depotValidePar', 'restitutionEncaissement',
+                'encaissements' => fn ($q) => $q->with('student'),
+            ])
             ->paginate($perPage)
             ->withQueryString();
 
-        $cheques->through(fn (Cheque $cheque): array => [
+        $cheques->through(fn (Cheque $cheque): array => $this->row($cheque));
+
+        return [
+            'data' => $cheques,
+            'montantTotal' => number_format((float) $montantTotal, 2, '.', ''),
+            'remisesEnAttente' => $remisesEnAttente,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function row(Cheque $cheque): array
+    {
+        $utilise = round((float) $cheque->encaissements->sum('montant'), 2);
+
+        return [
             'id' => $cheque->id,
             'reference' => $cheque->reference,
             'source' => $cheque->source,
@@ -147,10 +186,7 @@ final class GetChequesList
             // full page (audit 07/09/2026, M-14; §17 forbids a per-row money
             // accessor in a read model). The accessor stays as-is: the money
             // ACTIONS need it to re-read a freshly locked row.
-            'reste' => number_format(
-                round(max(0.0, (float) $cheque->montant - (float) $cheque->encaissements->sum('montant')), 2),
-                2, '.', ''
-            ),
+            'reste' => number_format(round(max(0.0, (float) $cheque->montant - $utilise), 2), 2, '.', ''),
             'banque' => $cheque->banque,
             'dateReception' => $cheque->date_reception?->toDateString(),
             'type' => $cheque->type,
@@ -181,7 +217,23 @@ final class GetChequesList
             'restituable' => $cheque->type === Cheque::TYPE_GARANTIE
                 && $cheque->statut === Cheque::STATUT_EN_POSSESSION
                 && ! $cheque->estRetourne()
-                && round((float) $cheque->encaissements->sum('montant'), 2) <= 0.0,
+                && $utilise <= 0.0,
+            'restitutionPaiement' => $cheque->restitutionEncaissement === null ? null : [
+                'reference' => $cheque->restitutionEncaissement->reference,
+                'methode' => $cheque->restitutionEncaissement->methode,
+                'montant' => number_format((float) $cheque->restitutionEncaissement->montant, 2, '.', ''),
+            ],
+            // Photo du chèque et reçu de dépôt (medialibrary, /media/…).
+            'photoUrl' => $cheque->getFirstMediaUrl(Cheque::MEDIA_PHOTO) ?: null,
+            'justificatifDepotUrl' => $cheque->getFirstMediaUrl(Cheque::MEDIA_JUSTIFICATIF_DEPOT) ?: null,
+            // Remise à la banque : la règle vient de l'action, jamais
+            // redérivée ici (§5) — la ligne reste affichée avec son motif.
+            'depotBlocker' => DeposerChequeEnBanque::blocage($cheque, $utilise),
+            'dateRemise' => $cheque->date_remise?->toDateString(),
+            'deposeParNom' => $cheque->deposePar?->nomComplet(),
+            'depotValideLe' => $cheque->depot_valide_le?->toDateTimeString(),
+            'depotValideParNom' => $cheque->depotValidePar?->nomComplet(),
+            'rejetable' => ValiderRemiseCheque::rejetable($cheque),
             'encaissements' => $cheque->encaissements->map(fn ($e): array => [
                 'id' => $e->id,
                 'reference' => $e->reference,
@@ -189,11 +241,6 @@ final class GetChequesList
                 'studentId' => $e->student_id,
                 'studentNom' => $e->student?->nomComplet(),
             ])->values()->all(),
-        ]);
-
-        return [
-            'data' => $cheques,
-            'montantTotal' => number_format((float) $montantTotal, 2, '.', ''),
         ];
     }
 

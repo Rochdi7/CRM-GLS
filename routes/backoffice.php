@@ -729,20 +729,33 @@ Route::prefix('backoffice')
             // (garantie / à déposer), tracked reception -> dépôt ->
             // encaissé/rejeté. A Cheque row never moves money by itself;
             // paying with one goes through the normal Encaissement flow
-            // (cheque_id link). ⚠ NEVER add a destroy route.
+            // (cheque_id link). The ONE destroy route (29/09/2026) is
+            // super-admin only (`cheques.delete` ∈ superAdminOnly()): the
+            // payments it funded are kept, only their cheque_id is detached
+            // (SupprimerCheque) — refused for a Rejeté chèque with payments.
             Route::get('cheques', [ChequeController::class, 'index'])
                 ->middleware('permission:cheques.view')->name('cheques.index');
             Route::post('cheques', [ChequeController::class, 'store'])
                 ->middleware('permission:cheques.create')->name('cheques.store');
             Route::put('cheques/{cheque}', [ChequeController::class, 'update'])
                 ->middleware('permission:cheques.update')->name('cheques.update');
-            // Parcours bancaire (Remise à la banque, Encaissé, Rejeté) :
+            Route::delete('cheques/{cheque}', [ChequeController::class, 'destroy'])
+                ->middleware('permission:cheques.delete')->name('cheques.destroy');
+            // Parcours bancaire (30/09/2026). La REMISE À LA BANQUE (compte
+            // bancaire du centre + date + reçu de dépôt obligatoire) est
             // `cheques.deposit`, ouvert à tous les rôles — porter les chèques
-            // à la banque est un geste de guichet, pas une correction de
-            // document (07/09/2026). L'édition du chèque reste sur
-            // `cheques.update`, réservée aux rôles de direction.
+            // à la banque est un geste de guichet (07/09/2026). La DÉCISION
+            // (accepter → Encaissé, l'argent passe du compte Chèque au compte
+            // bancaire ; rejeter → Rejeté) est `cheques.validate-deposit`, le
+            // comptable. L'édition du chèque reste sur `cheques.update`.
+            Route::post('cheques/{cheque}/remise-banque', [ChequeController::class, 'remiseBanque'])
+                ->middleware('permission:cheques.deposit')->name('cheques.remise-banque');
             Route::patch('cheques/{cheque}/statut', [ChequeController::class, 'updateStatut'])
-                ->middleware('permission:cheques.deposit')->name('cheques.update-statut');
+                ->middleware('permission:cheques.validate-deposit')->name('cheques.update-statut');
+            // Paiements (espèces / TPE / virement) qui peuvent remplacer une
+            // garantie — alimente le modal « Restituer au client ».
+            Route::get('cheques/{cheque}/remplacements', [ChequeController::class, 'remplacements'])
+                ->middleware('permission:cheques.deposit')->name('cheques.remplacements');
             // Records that a rejected chèque was physically handed back to
             // its owner — off-ledger bookkeeping only, same permission as
             // every other chèque lifecycle move.

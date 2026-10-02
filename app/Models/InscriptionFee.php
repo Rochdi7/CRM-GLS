@@ -34,7 +34,7 @@ class InscriptionFee extends Model
 
     protected $fillable = [
         'inscription_id', 'frais_id', 'nom',
-        'montant_initial', 'remise_pct', 'remise_montant', 'montant',
+        'montant_initial', 'remise_pct', 'remise_montant', 'semaines', 'montant',
         'date_echeance', 'note', 'statut', 'masque_le', 'masque_origine',
     ];
 
@@ -63,6 +63,7 @@ class InscriptionFee extends Model
             'montant_initial' => 'decimal:2',
             'remise_pct' => 'decimal:2',
             'remise_montant' => 'decimal:2',
+            'semaines' => 'array',
             'date_echeance' => 'date',
             'masque_le' => 'datetime',
         ];
@@ -88,6 +89,40 @@ class InscriptionFee extends Model
     /**
      * Final amount after discount: initial − (pct% of initial) OR − fixed DH.
      */
+    /**
+     * Semaines cochées d'un frais mensuel, nettoyées : entiers 1–4, triés,
+     * sans doublon. Aucune ou les quatre ⇒ NULL (mois complet).
+     *
+     * @return list<int>|null
+     */
+    public static function normaliserSemaines(mixed $semaines): ?array
+    {
+        if (! is_array($semaines)) {
+            return null;
+        }
+
+        $propres = array_values(array_unique(array_filter(
+            array_map('intval', $semaines),
+            fn (int $semaine): bool => $semaine >= 1 && $semaine <= 4,
+        )));
+        sort($propres);
+
+        return $propres === [] || count($propres) === 4 ? null : $propres;
+    }
+
+    /**
+     * Remise (DH) qui fait payer initial / 4 × semaines cochées. Le serveur la
+     * recalcule lui-même : la remise envoyée par le client n'est pas crue.
+     *
+     * @param  list<int>  $semaines
+     */
+    public static function remisePourSemaines(float $initial, array $semaines): float
+    {
+        $montant = round($initial / 4 * count($semaines), 2);
+
+        return round($initial - $montant, 2);
+    }
+
     public static function computeMontant(float $initial, ?float $remisePct, ?float $remiseMontant): float
     {
         if ($remisePct !== null && $remisePct > 0) {

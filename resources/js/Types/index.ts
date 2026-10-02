@@ -583,6 +583,8 @@ export interface EncaissementDetails {
     groupe: string | null;
     caisse: string | null;
     agent: string | null;
+    /** Date de saisie (created_at), « d/m/Y H:i ». */
+    dateOperation: string | null;
     note: string | null;
     cheque: {
         numero: string | null;
@@ -1830,6 +1832,13 @@ export interface InscriptionFeeLine {
      * Absent on create-form lines.
      */
     montantEnregistre?: string;
+    /**
+     * Weeks (1–4) ticked on a MONTHLY fee, stored as-is in
+     * `inscription_fees.semaines` so the SAME boxes come back ticked.
+     * The server recomputes the remise from it (initial − initial/4 × n).
+     * null / absent ⇒ full month.
+     */
+    semaines?: number[] | null;
 }
 
 /** One hidden ("masqué") fee line on an existing inscription — read-only, restorable via inscriptions.fees.restore. */
@@ -2334,7 +2343,34 @@ export interface ChequeRow {
      * La page l'AFFICHE, elle ne le redérive jamais (§5).
      */
     restituable: boolean;
+    /** Le paiement qui a remplacé une garantie restituée (RestituerChequeGarantie). */
+    restitutionPaiement: { reference: string; methode: string; montant: MoneyDisplay } | null;
+    /** Photo / scan du chèque (obligatoire depuis le 30/09/2026 ; null pour les anciens). */
+    photoUrl: string | null;
+    /** Reçu de dépôt joint à la remise à la banque. */
+    justificatifDepotUrl: string | null;
+    /**
+     * Pourquoi ce chèque ne peut pas être remis à la banque — null s'il le
+     * peut. Vient du serveur (DeposerChequeEnBanque::blocage), jamais
+     * redérivé ici (§5).
+     */
+    depotBlocker: string | null;
+    dateRemise: string | null;
+    deposeParNom: string | null;
+    depotValideLe: string | null;
+    depotValideParNom: string | null;
+    /** Le comptable peut-il marquer ce chèque « Rejeté » ? (ValiderRemiseCheque::rejetable) */
+    rejetable: boolean;
     encaissements: ChequeLinkedEncaissement[];
+}
+
+/** A payment that can replace a guarantee cheque (ChequeController::remplacements). */
+export interface PaiementRemplacantOption {
+    id: number;
+    reference: string;
+    methode: string;
+    montant: MoneyDisplay;
+    datePaiement: string | null;
 }
 
 export interface ChequesFilters {
@@ -2372,6 +2408,14 @@ export interface ChequesPageProps {
     canUpdate: boolean;
     /** Bank lifecycle moves (remise, encaissé, rejeté, restitué) — `cheques.deposit`, held by every role. */
     canDeposit: boolean;
+    /** Suppression d'un chèque (super-admin, `cheques.delete`). */
+    canDelete: boolean;
+    /** Accepter / rejeter une remise à la banque (comptable, `cheques.validate-deposit`). */
+    canValidateDeposit: boolean;
+    /** Remises « Déposé » en attente du comptable (portée centre, hors filtres). */
+    remisesEnAttente: number;
+    chequeMimes: string[];
+    chequeMaxKb: number;
     [key: string]: unknown;
 }
 
@@ -2829,19 +2873,25 @@ export interface PaiementProfEnseignantOption {
 export interface PaiementProfGroupOptions {
     moisOptions: { value: string; label: string }[];
     mois: string;
+    /** Période retenue : celle saisie si valide, sinon le dernier mois de groupe. */
     fenetre: { debut: string; fin: string; libelle: string; ancreSurLeGroupe: boolean };
+    /** Mois de groupe habituel qui contient le début de la période. */
+    fenetreHabituelle: { debut: string; fin: string; libelle: string; ancreSurLeGroupe: boolean };
     enseignants: PaiementProfEnseignantOption[];
     enseignantParDefaut: number | null;
     /** Durée habituelle d une séance du mois (2.5 = 2h30), déduite des horaires réels. */
     dureeHabituelle: number | null;
+    /** Séances EFFECTUÉES de la période, tous profs confondus. */
+    seancesPeriode: number;
     seancesSansEnseignant: number;
 }
 
 export interface PaiementProfFilters {
     groupFilter: string;
     enseignantFilter: string;
-    /** « YYYY-MM ». */
-    mois: string;
+    /** Période payée « YYYY-MM-DD » — libre, pré-remplie avec le mois de groupe. */
+    debut: string;
+    fin: string;
     /** Heures saisies — mode horaire seulement. */
     heures: string;
     /**

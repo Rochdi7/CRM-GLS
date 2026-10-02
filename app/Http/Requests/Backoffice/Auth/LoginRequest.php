@@ -56,11 +56,29 @@ final class LoginRequest extends FormRequest
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
-                'login' => __('auth.failed'),
+                'login' => $this->isInactiveWithValidPassword($field, $login)
+                    ? __('Your account is not active. Please contact the administration.')
+                    : __('auth.failed'),
             ]);
         }
 
         RateLimiter::clear($this->throttleKey());
+    }
+
+    /**
+     * A deactivated account with the RIGHT password is told why it is refused,
+     * instead of the generic "wrong credentials" — which made the user retry
+     * or reset a password that was never the problem. Only once the password
+     * is proven, so a wrong guess learns nothing about the account's state.
+     */
+    private function isInactiveWithValidPassword(string $field, string $login): bool
+    {
+        $provider = Auth::getProvider();
+        $user = $provider->retrieveByCredentials([$field => $login]);
+
+        return $user !== null
+            && ! $user->is_active
+            && $provider->validateCredentials($user, ['password' => $this->string('password')->value()]);
     }
 
     /**

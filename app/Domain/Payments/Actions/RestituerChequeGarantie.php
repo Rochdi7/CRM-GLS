@@ -6,6 +6,9 @@ namespace App\Domain\Payments\Actions;
 
 use App\Models\Cheque;
 use App\Models\Employee;
+use App\Models\Encaissement;
+use App\Models\Student;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -20,10 +23,11 @@ use Illuminate\Validation\ValidationException;
  * `caisses.solde` n'a jamais bougé quand le chèque est entré, et ne bouge
  * pas quand il sort. L'encaissement qui l'a remplacé est une écriture
  * ordinaire, enregistrée séparément par EnregistrerEncaissement avec sa
- * propre méthode — il n'est PAS lié au chèque (`cheque_id` reste NULL :
- * ce chèque n'a rien financé, c'est tout l'intérêt de l'opération).
+ * propre méthode — il n'est PAS financé par le chèque (`cheque_id` reste
+ * NULL : ce chèque n'a rien financé, c'est tout l'intérêt de l'opération) ;
+ * il est seulement NOMMÉ dans `restitution_encaissement_id` (borne 6).
  *
- * Aucune colonne n'a été ajoutée : `retourne_le` / `retourne_par_id`
+ * `retourne_le` / `retourne_par_id`
  * existaient déjà pour la restitution d'un chèque REJETÉ, et portent
  * exactement le même fait — « le papier a quitté l'école, par qui, quand ».
  * Le MOTIF vit dans la note (append, jamais écrasée — même convention que
@@ -45,6 +49,16 @@ use Illuminate\Validation\ValidationException;
  *      pointent dessus sont append-only.
  *   4. jamais deux fois — estRetourne() refuse la seconde.
  *   5. motif obligatoire — c'est ce que le journal conserve.
+ *   6. (30/09/2026) le PAIEMENT QUI REMPLACE la garantie est désigné —
+ *      espèces / TPE / virement, du même étudiant (ou, source « Parents »,
+ *      d'un étudiant du centre dont ce parent est le responsable), daté au
+ *      plus tôt du jour de réception du chèque, jamais déjà utilisé pour
+ *      libérer une autre garantie. Tant qu'un tel paiement n'existe pas, la
+ *      garantie RESTE en main : on ne rend le papier que contre un
+ *      règlement. Il est gardé dans `restitution_encaissement_id` (un lien
+ *      de traçabilité, pas `cheque_id` : ce paiement n'est pas financé par
+ *      le chèque). L'écran et la vérification sous verrou lisent la MÊME
+ *      requête, paiementsRemplacants().
  *
  * La restitution d'un chèque REJETÉ (ChequeController@markRetourne) reste
  * telle quelle : c'est un autre fait (la banque a refusé, on rend le papier
@@ -64,8 +78,14 @@ final class RestituerChequeGarantie
      * @param  string  $motif  phrase française lue par un humain, conservée
      *                         dans la note du chèque et dans le journal
      */
-    public function handle(Cheque $cheque, string $motif, Employee $restituePar): Cheque
+    public function handle(Cheque $cheque, string $motif, Employee $restituePar, ?int $encaissementId = null): Cheque
     {
+        if ($encaissementId === null) {
+            throw ValidationException::withMessages([
+                'encaissement_id' => __('Choose the payment (cash, card or transfer) that replaced this guarantee.'),
+            ]);
+        }
+
         $motif = trim($motif);
 
         if ($motif === '') {
@@ -74,7 +94,7 @@ final class RestituerChequeGarantie
             ]);
         }
 
-        return DB::transaction(function () use ($cheque, $motif, $restituePar): Cheque {
+        return DB::transaction(function () use ($cheque, $motif, $restituePar, $encaissementId): Cheque {
             /** @var Cheque $verrouille */
             $verrouille = Cheque::query()
                 ->whereKey($cheque->getKey())
@@ -112,13 +132,27 @@ final class RestituerChequeGarantie
                 ]);
             }
 
+            /** @var Encaissement|null $remplacant */
+            $remplacant = self::paiementsRemplacants($verrouille)
+                ->whereKey($encaissementId)
+                ->lockForUpdate()
+                ->first();
+
+            if ($remplacant === null) {
+                throw ValidationException::withMessages([
+                    'encaissement_id' => __('This payment cannot replace the guarantee: it must be a cash, card or transfer payment of the same student, made on or after the cheque was received, and not already used for another guarantee.'),
+                ]);
+            }
+
             $note = trim((string) $verrouille->note);
             $suffixe = '[RESTITUÉ] le '.now()->format('d/m/Y')
-                .' - '.rtrim($motif, '.').'.';
+                .' - '.rtrim($motif, '.')
+                .' (remplacé par '.$remplacant->reference.', '.$remplacant->methode.').';
 
             $verrouille->update([
                 'retourne_le' => now(),
                 'retourne_par_id' => $restituePar->id,
+                'restitution_encaissement_id' => $remplacant->id,
                 'note' => $note === '' ? $suffixe : $note."\n".$suffixe,
             ]);
 
@@ -141,11 +175,53 @@ final class RestituerChequeGarantie
                     'type' => $verrouille->type,
                     'date_echeance' => $verrouille->date_echeance?->toDateString(),
                     'motif' => $motif,
+                    'paiement_remplacant' => $remplacant->reference,
+                    'paiement_remplacant_methode' => $remplacant->methode,
+                    'paiement_remplacant_montant' => number_format((float) $remplacant->montant, 2, '.', ''),
                     'restitue_par' => $restituePar->nomComplet(),
                 ])
                 ->log("Chèque de garantie {$verrouille->reference} restitué à son propriétaire");
 
             return $verrouille;
         });
+    }
+
+    /**
+     * Les paiements qui peuvent remplacer cette garantie. SEULE définition,
+     * lue par l'écran (ChequeController@remplacements) et rejouée sous
+     * verrou par handle().
+     *
+     * @return Builder<Encaissement>
+     */
+    public static function paiementsRemplacants(Cheque $cheque): Builder
+    {
+        return Encaissement::query()
+            ->whereIn('methode', [
+                Encaissement::METHODE_ESPECES,
+                Encaissement::METHODE_TPE,
+                Encaissement::METHODE_VIREMENT,
+            ])
+            ->whereNull('applied_from_encaissement_id')
+            ->whereNull('cheque_id')
+            ->whereDate('date_paiement', '>=', $cheque->date_reception?->toDateString() ?? '1900-01-01')
+            ->whereNotIn('id', Cheque::query()
+                ->whereNotNull('restitution_encaissement_id')
+                ->whereKeyNot($cheque->getKey())
+                ->select('restitution_encaissement_id'))
+            ->where(function (Builder $q) use ($cheque): void {
+                if ($cheque->student_id !== null) {
+                    $q->where('student_id', $cheque->student_id);
+
+                    return;
+                }
+
+                // Source « Parents » : le chèque ne porte que le nom du
+                // parent ; ses enfants sont les étudiants du centre dont il
+                // est le responsable enregistré.
+                $q->whereIn('student_id', Student::query()
+                    ->where('etablissement_id', $cheque->etablissement_id)
+                    ->where('parent_nom', 'ilike', trim((string) $cheque->proprietaire_nom))
+                    ->select('id'));
+            });
     }
 }

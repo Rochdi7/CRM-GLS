@@ -51,7 +51,7 @@ final class MettreAJourFraisInscription
     ) {}
 
     /**
-     * @param  list<array{id?: int, frais_id?: ?int, nom: string, montant_initial?: ?float, remise_pct?: ?float, remise_montant?: ?float, date_echeance?: ?string, note?: ?string}>  $lines
+     * @param  list<array{id?: int, frais_id?: ?int, nom: string, montant_initial?: ?float, remise_pct?: ?float, remise_montant?: ?float, semaines?: ?list<int>, date_echeance?: ?string, note?: ?string}>  $lines
      */
     public function handle(Inscription $inscription, array $lines): Inscription
     {
@@ -63,6 +63,13 @@ final class MettreAJourFraisInscription
                     $initial = (float) ($line['montant_initial'] ?? 0);
                     $remisePct = isset($line['remise_pct']) && $line['remise_pct'] !== null ? (float) $line['remise_pct'] : null;
                     $remiseMontant = isset($line['remise_montant']) && $line['remise_montant'] !== null ? (float) $line['remise_montant'] : null;
+                    $semaines = InscriptionFee::normaliserSemaines($line['semaines'] ?? null);
+
+                    if ($semaines !== null) {
+                        $remisePct = null;
+                        $remiseMontant = InscriptionFee::remisePourSemaines($initial, $semaines);
+                    }
+
                     $montant = InscriptionFee::computeMontant($initial, $remisePct, $remiseMontant);
 
                     $existing = isset($line['id'])
@@ -76,6 +83,7 @@ final class MettreAJourFraisInscription
                         'montant_initial' => $initial,
                         'remise_pct' => $remisePct,
                         'remise_montant' => $remiseMontant,
+                        'semaines' => $semaines,
                         'montant' => $montant,
                         // date_echeance is NOT NULL — an omitted value keeps
                         // the existing row's date on update, or defaults to

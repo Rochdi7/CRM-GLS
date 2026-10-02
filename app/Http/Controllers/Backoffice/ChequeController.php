@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Domain\Payments\Actions\DeposerChequeEnBanque;
 use App\Domain\Payments\Actions\RestituerChequeGarantie;
-use App\Domain\Payments\Support\StatutChequeSolde;
+use App\Domain\Payments\Actions\SupprimerCheque;
+use App\Domain\Payments\Actions\ValiderRemiseCheque;
 use App\Domain\Payments\Queries\GetChequesList;
 use App\Domain\Payments\Queries\GetEncaissementsList;
 use App\Domain\Settings\Queries\GetBanquesList;
@@ -13,9 +15,12 @@ use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
+use App\Http\Requests\Backoffice\Cheques\RemiseBanqueChequeRequest;
 use App\Http\Requests\Backoffice\Cheques\StoreChequeRequest;
 use App\Http\Requests\Backoffice\Cheques\UpdateChequeRequest;
 use App\Models\Cheque;
+use App\Models\Employee;
+use App\Models\Encaissement;
 use App\Models\Student;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
@@ -31,9 +36,8 @@ use Inertia\Response;
  * Chèques in hand — off-ledger inventory of physical checks received.
  * A Cheque row never moves money by itself (caisses.solde is only touched
  * by EnregistrerEncaissement); "Remise à la banque" and the other statut
- * moves are pure lifecycle bookkeeping. No destroy route: like every
- * money-adjacent record, corrections go through edits/statut changes,
- * never deletion.
+ * moves are pure lifecycle bookkeeping. Deletion exists for super-admins
+ * only; the payments it funded are kept and merely detached (destroy()).
  *
  * A Rejeté chèque has two distinct, independent follow-ups (neither
  * automatic — always a separate reviewed user action, matching how every
@@ -116,6 +120,12 @@ final class ChequeController extends Controller
             // Remise à la banque / Encaissé / Rejeté / Restitué — ouvert à
             // tous les rôles, séparé de l'édition du chèque lui-même.
             'canDeposit' => $request->user()->can('cheques.deposit'),
+            'canDelete' => $request->user()->can('cheques.delete'),
+            // Accepter / rejeter une remise à la banque — le comptable.
+            'canValidateDeposit' => $request->user()->can('cheques.validate-deposit'),
+            'remisesEnAttente' => $chequesList['remisesEnAttente'],
+            'chequeMimes' => Cheque::MEDIA_MIMES,
+            'chequeMaxKb' => Cheque::MEDIA_MAX_KB,
         ]);
     }
 
@@ -156,13 +166,20 @@ final class ChequeController extends Controller
             ?? app(CurrentContext::class)->etablissementId()
             ?? $agent->etablissement_id;
 
-        Cheque::create([
-            ...$this->normalizedPayload($data),
-            'reference' => ReferenceGenerator::make('CHQ', 'cheques'),
-            'statut' => Cheque::STATUT_EN_POSSESSION,
-            'etablissement_id' => $etablissementId,
-            'agent_id' => $agent->id,
-        ]);
+        // Toujours « En possession » à la saisie, quel que soit le type : le
+        // papier est dans nos mains. La photo du chèque est obligatoire
+        // (StoreChequeRequest) et rattachée dans la même transaction.
+        DB::transaction(function () use ($data, $etablissementId, $agent, $request): void {
+            $cheque = Cheque::create([
+                ...$this->normalizedPayload($data),
+                'reference' => ReferenceGenerator::make('CHQ', 'cheques'),
+                'statut' => Cheque::STATUT_EN_POSSESSION,
+                'etablissement_id' => $etablissementId,
+                'agent_id' => $agent->id,
+            ]);
+
+            $cheque->addMediaFromRequest('photo')->toMediaCollection(Cheque::MEDIA_PHOTO);
+        });
 
         return $this->backToListPreservingFilters($request, 'backoffice.cheques.index')
             ->with('success', __('Cheque recorded.'));
@@ -213,19 +230,19 @@ final class ChequeController extends Controller
             }
         }
 
-        DB::transaction(function () use ($cheque, $payload): void {
+        DB::transaction(function () use ($cheque, $payload, $request): void {
             $cheque = Cheque::query()->whereKey($cheque->id)->lockForUpdate()->firstOrFail();
             $cheque->update($payload);
+
+            if ($request->hasFile('photo')) {
+                $cheque->addMediaFromRequest('photo')->toMediaCollection(Cheque::MEDIA_PHOTO);
+            }
 
             foreach ($cheque->encaissements()->lockForUpdate()->get() as $encaissement) {
                 $encaissement->numero_cheque = $cheque->numero_cheque;
                 $encaissement->banque = $cheque->banque;
                 $encaissement->save();
             }
-
-            // Ramener le montant au déjà-utilisé, ou repasser le type en
-            // « À déposer », peut épuiser le reste : même règle qu'au paiement.
-            StatutChequeSolde::synchroniser($cheque);
         });
 
         return $this->backToListPreservingFilters($request, 'backoffice.cheques.index')
@@ -233,17 +250,68 @@ final class ChequeController extends Controller
     }
 
     /**
-     * Lifecycle moves: En possession -> Déposé ("Remise à la banque"),
-     * Déposé -> Encaissé | Rejeté. Any other transition is refused.
+     * Supprime un chèque — super-admin uniquement (`cheques.delete` ∈
+     * superAdminOnly()). Les paiements qu'il a financés sont conservés et
+     * seulement détachés ; aucune caisse ne bouge. La règle entière vit
+     * dans SupprimerCheque (sous verrou).
      */
-    public function updateStatut(Request $request, Cheque $cheque): RedirectResponse
+    public function destroy(Request $request, Cheque $cheque, SupprimerCheque $action): RedirectResponse
     {
-        // `deposit`, not `update` (07/09/2026) : suivre le parcours bancaire
-        // d'un chèque est ouvert à tous les rôles, modifier son identité non.
+        $this->authorize('delete', $cheque);
+
+        $action->handle($cheque);
+
+        return $this->backToListPreservingFilters($request, 'backoffice.cheques.index')
+            ->with('success', __('Cheque deleted.'));
+    }
+
+    /**
+     * « Remise à la banque » (30/09/2026) — date et reçu de dépôt (le
+     * compte bancaire est choisi par le comptable à la validation). Ouvert à tous les rôles (`cheques.deposit`) : c'est
+     * l'employé qui porte le chèque qui le consigne. Aucun argent ne bouge ;
+     * le comptable décide ensuite (updateStatut). La règle entière vit dans
+     * DeposerChequeEnBanque (sous verrou).
+     */
+    public function remiseBanque(
+        RemiseBanqueChequeRequest $request,
+        Cheque $cheque,
+        DeposerChequeEnBanque $action,
+    ): RedirectResponse {
         $this->authorize('deposit', $cheque);
+        $this->assertRecordInContext(
+            $request,
+            'date_remise',
+            $cheque->etablissement_id,
+            null,
+            __('This cheque belongs to another centre than the active one.'),
+            '',
+        );
+
+        $agent = $this->agentOrFail($request, 'date_remise');
+        $data = $request->validated();
+
+        $action->handle(
+            $cheque,
+            (string) $data['date_remise'],
+            $request->file('justificatif'),
+            $agent,
+        );
+
+        return $this->backToListPreservingFilters($request, 'backoffice.cheques.index')
+            ->with('success', __('Cheque deposit recorded: it now awaits the accountant validation.'));
+    }
+
+    /**
+     * The accountant's decision on a deposit (`cheques.validate-deposit`):
+     * « Encaissé » = the bank accepted the cheque, « Rejeté » = it bounced.
+     * Neither moves any money. Everything lives in ValiderRemiseCheque.
+     */
+    public function updateStatut(Request $request, Cheque $cheque, ValiderRemiseCheque $action): RedirectResponse
+    {
+        $this->authorize('validateDeposit', $cheque);
         // Marking « Rejeté » has money consequences downstream
-        // (CaisseResolver::forRemboursement branches on it), so the lifecycle
-        // move is guarded like every other write: reach AND active centre.
+        // (CaisseResolver::forRemboursement branches on it), so the move is
+        // guarded like every other write: reach AND active centre.
         $this->assertRecordInContext(
             $request,
             'statut',
@@ -253,51 +321,56 @@ final class ChequeController extends Controller
             '',
         );
 
-        $statut = $request->string('statut')->toString();
+        $agent = $this->agentOrFail($request, 'statut');
 
-        $allowed = match ($cheque->statut) {
-            Cheque::STATUT_EN_POSSESSION => [Cheque::STATUT_DEPOSE],
-            Cheque::STATUT_DEPOSE => [Cheque::STATUT_ENCAISSE, Cheque::STATUT_REJETE],
-            // « Encaissé » peut être posé AUTOMATIQUEMENT dès que le reste du
-            // chèque tombe à 0 (StatutChequeSolde), avant que la banque ait
-            // répondu : un rejet ultérieur (signature…) doit rester saisissable.
-            Cheque::STATUT_ENCAISSE => [Cheque::STATUT_REJETE],
-            default => [],
-        };
-
-        if (! in_array($statut, $allowed, true)) {
-            throw ValidationException::withMessages([
+        match ($request->string('statut')->toString()) {
+            Cheque::STATUT_ENCAISSE => $action->accepter($cheque, $agent),
+            Cheque::STATUT_REJETE => $action->rejeter($cheque, $agent),
+            default => throw ValidationException::withMessages([
                 'statut' => __('This status change is not allowed from the current status.'),
-            ]);
-        }
-
-        $ancien = $cheque->statut;
-
-        $cheque->update(['statut' => $statut]);
-
-        // The Auditable trait already records the statut column change, but a
-        // bare "statut: Déposé → Rejeté" hides what it MEANS for the money.
-        // A rejected cheque is cash the school counted and will not receive,
-        // so the amount, the payer and the bank belong on the same line as
-        // the transition an investigator is reading.
-        activity('cheque')
-            ->performedOn($cheque)
-            ->event('cheque_statut')
-            ->withProperties([
-                'reference' => $cheque->reference,
-                'statut_avant' => $ancien,
-                'statut_apres' => $statut,
-                'montant' => number_format((float) $cheque->montant, 2, '.', ''),
-                'numero_cheque' => $cheque->numero_cheque,
-                'banque' => $cheque->banque,
-                'proprietaire' => $cheque->proprietaire_nom,
-                'etudiant_id' => $cheque->student_id,
-                'date_echeance' => $cheque->date_echeance?->toDateString(),
-            ])
-            ->log("Chèque {$cheque->reference} : {$ancien} → {$statut}");
+            ]),
+        };
 
         return $this->backToListPreservingFilters($request, 'backoffice.cheques.index')
             ->with('success', __('Cheque status updated.'));
+    }
+
+    /**
+     * Payments that can replace a guarantee cheque — the SAME query
+     * RestituerChequeGarantie re-runs under lock (paiementsRemplacants).
+     */
+    public function remplacements(Request $request, Cheque $cheque): JsonResponse
+    {
+        $this->authorize('deposit', $cheque);
+
+        $paiements = RestituerChequeGarantie::paiementsRemplacants($cheque)
+            ->orderByDesc('date_paiement')
+            ->orderByDesc('id')
+            ->limit(50)
+            ->get(['id', 'reference', 'methode', 'montant', 'date_paiement']);
+
+        return response()->json([
+            'paiements' => $paiements->map(fn (Encaissement $e): array => [
+                'id' => $e->id,
+                'reference' => $e->reference,
+                'methode' => $e->methode,
+                'montant' => number_format((float) $e->montant, 2, '.', ''),
+                'datePaiement' => $e->date_paiement?->toDateString(),
+            ])->values(),
+        ]);
+    }
+
+    private function agentOrFail(Request $request, string $field): Employee
+    {
+        $agent = $request->user()->employee;
+
+        if ($agent === null) {
+            throw ValidationException::withMessages([
+                $field => __('Your account is not linked to any employee record.'),
+            ]);
+        }
+
+        return $agent;
     }
 
     /**
@@ -387,7 +460,12 @@ final class ChequeController extends Controller
             ]);
         }
 
-        $action->handle($cheque, (string) $request->string('motif'), $agent);
+        $action->handle(
+            $cheque,
+            (string) $request->string('motif'),
+            $agent,
+            $request->filled('encaissement_id') ? (int) $request->input('encaissement_id') : null,
+        );
 
         return $this->backToListPreservingFilters($request, 'backoffice.cheques.index')
             ->with('success', __('Guarantee cheque returned to its owner.'));
@@ -433,8 +511,13 @@ final class ChequeController extends Controller
         ]);
 
         return response()->json([
+            // Seul un chèque « À déposer » encore EN MAIN paie (30/09/2026) :
+            // une GARANTIE est une caution, jamais un moyen de paiement, et un
+            // chèque déjà remis à la banque ne finance plus rien.
             'cheques' => $mapped
-                ->filter(fn (array $c): bool => (float) $c['reste'] > 0)
+                ->filter(fn (array $c): bool => (float) $c['reste'] > 0
+                    && $c['type'] === Cheque::TYPE_A_DEPOSER
+                    && $c['statut'] === Cheque::STATUT_EN_POSSESSION)
                 ->values(),
             // Les chèques de GARANTIE encore en main de cet étudiant. Ils ne
             // servent PAS à payer — ils sont rappelés dans le formulaire pour

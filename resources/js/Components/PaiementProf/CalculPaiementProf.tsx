@@ -21,17 +21,6 @@ function classeNom(statut: string | null): string {
     return 'pp-clos';
 }
 
-/**
- * Présences minimales d'un palier (`paliersPaie` = { présences min: semaines }).
- * Le barème vient du serveur (`CalculerPaiementProfParPaliers::PALIERS`) :
- * l'écran ne le recopie pas, il le lit.
- */
-function seuilPalier(paliers: Record<string, number>, semaines: number): number {
-    const entree = Object.entries(paliers).find(([, s]) => s === semaines);
-
-    return entree ? Number(entree[0]) : 0;
-}
-
 /** Libellé du palier atteint par une ligne (0, 1, 2 ou 4 semaines). */
 function libellePalier(semaines: number): string {
     if (semaines >= 4) return t('Full month');
@@ -40,12 +29,37 @@ function libellePalier(semaines: number): string {
     return t(':count week(s)', { count: String(semaines) });
 }
 
-/** Les 4 paramètres qui identifient un calcul — ce que l'hôte met dans son URL. */
+/** Les paramètres qui identifient un calcul — ce que l'hôte met dans son URL. */
 export interface PaiementProfCalculParams {
     groupFilter: string;
     enseignantFilter: string;
-    mois: string;
+    debut: string;
+    fin: string;
     heures: string;
+}
+
+/** Même borne que `MoisDeGroupe::DUREE_MAX_JOURS` côté serveur. */
+const DUREE_MAX_JOURS = 62;
+
+/** Motif de refus d'une période, `null` si elle est exploitable. */
+function erreurPeriode(debut: string, fin: string): string | null {
+    if (debut === '' || fin === '') {
+        return null;
+    }
+
+    const jours = (new Date(fin + 'T00:00:00').getTime() - new Date(debut + 'T00:00:00').getTime()) / 86_400_000 + 1;
+
+    if (!Number.isFinite(jours)) {
+        return null;
+    }
+    if (jours < 1) {
+        return t('The end date must be on or after the start date.');
+    }
+    if (jours > DUREE_MAX_JOURS) {
+        return t('The period cannot exceed :count days.', { count: String(DUREE_MAX_JOURS) });
+    }
+
+    return null;
 }
 
 /**
@@ -101,13 +115,16 @@ interface CalculPaiementProfProps {
  * désormais l'entrée normale — la barre latérale ne pointe plus vers
  * l'écran dédié.
  *
- * Le modal enchaîne : groupe → (le serveur renvoie ses mois, ses profs et
- * les séances sans prof) → enseignant → mois → heures si mode horaire. Le
+ * Le modal enchaîne : groupe → (le serveur renvoie sa période habituelle, ses
+ * profs et les séances sans prof) → enseignant → période → heures si mode
+ * horaire. Le
  * mode et le taux ne se saisissent JAMAIS ici : ils viennent de la fiche,
  * et un prof mal configuré est refusé avec le problème nommé.
  *
- * Les « mois » sont ceux du GROUPE : un groupe parti le 07/09 se paie
- * 07/09 → 06/10, puis 07/10 → 06/11 (MoisDeGroupe côté serveur).
+ * La période est LIBRE (date de début / date de fin, 02/10/2026) : un
+ * enseignant décale parfois ses cours. Elle arrive pré-remplie avec le mois
+ * du GROUPE (un groupe parti le 07/09 se paie 07/09 → 06/10 —
+ * MoisDeGroupe côté serveur), et le mois de la date de début fixe le taux.
  *
  * ⚠ Cet écran n'écrit RIEN et ne touche AUCUNE caisse. Il PROPOSE un
  * montant ; « Enregistrer la dépense » ouvre le modal « Paiement prof »
@@ -117,7 +134,6 @@ export default function CalculPaiementProf({
     calcul,
     filters,
     groupOptions,
-    paliersPaie,
     canCreateDepense,
     onNavigate,
     onEnregistrer,
@@ -163,9 +179,11 @@ export default function CalculPaiementProf({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [openRequest]);
 
-    // Groupe choisi ⇒ on demande au serveur ses mois, ses profs et les
-    // séances orphelines. Re-demandé quand le mois change, parce que
-    // « qui a enseigné » et « séances sans prof » dépendent du mois.
+    const periodeInvalide = erreurPeriode(saisie.debut, saisie.fin);
+
+    // Groupe choisi ⇒ on demande au serveur sa période habituelle, ses profs
+    // et les séances orphelines. Re-demandé quand la période change, parce
+    // que « qui a enseigné » et « séances sans prof » en dépendent.
     useEffect(() => {
         if (!showModal || saisie.groupFilter === '') {
             setOptions(null);
@@ -176,7 +194,10 @@ export default function CalculPaiementProf({
         let annule = false;
         setChargement(true);
 
-        const params = new URLSearchParams(saisie.mois !== '' ? { mois: saisie.mois } : {});
+        // Une période incomplète ou invalide n'est pas envoyée : le serveur
+        // répond alors avec le mois de groupe par défaut.
+        const periodeEnvoyee = saisie.debut !== '' && saisie.fin !== '' && erreurPeriode(saisie.debut, saisie.fin) === null;
+        const params = new URLSearchParams(periodeEnvoyee ? { debut: saisie.debut, fin: saisie.fin } : {});
         fetch(`/backoffice/paiement-prof/groupes/${saisie.groupFilter}/options?${params.toString()}`, {
             headers: { Accept: 'application/json' },
         })
@@ -189,8 +210,9 @@ export default function CalculPaiementProf({
                 setOptions(data);
                 setSaisie((precedent) => ({
                     ...precedent,
-                    // Le mois par défaut du serveur si l'écran n'en avait pas.
-                    mois: precedent.mois !== '' ? precedent.mois : data.mois,
+                    // La période par défaut du serveur si l'écran n'en avait pas.
+                    debut: precedent.debut !== '' ? precedent.debut : data.fenetre.debut,
+                    fin: precedent.fin !== '' ? precedent.fin : data.fenetre.fin,
                     // Durée habituelle d'une séance du groupe, déduite des
                     // horaires réels : le champ arrive PRÉ-REMPLI et le total
                     // se calcule tout seul. L'opérateur n'a rien à saisir dans
@@ -226,7 +248,7 @@ export default function CalculPaiementProf({
             annule = true;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [showModal, saisie.groupFilter, saisie.mois]);
+    }, [showModal, saisie.groupFilter, saisie.debut, saisie.fin]);
 
     const enseignantChoisi = useMemo(
         () => options?.enseignants.find((e) => String(e.value) === saisie.enseignantFilter) ?? null,
@@ -241,8 +263,6 @@ export default function CalculPaiementProf({
         disabled: e.probleme !== null,
         disabledReason: e.probleme ?? undefined,
     }));
-
-    const moisOptions: SelectOption[] = (options?.moisOptions ?? []).map((m) => ({ value: m.value, label: m.label }));
 
     /** Séances du mois pour l'enseignant choisi — le multiplicateur. */
     const seancesDuMois = enseignantChoisi?.seancesCeMois ?? 0;
@@ -266,7 +286,9 @@ export default function CalculPaiementProf({
     const formulaireComplet =
         saisie.groupFilter !== '' &&
         saisie.enseignantFilter !== '' &&
-        saisie.mois !== '' &&
+        saisie.debut !== '' &&
+        saisie.fin !== '' &&
+        periodeInvalide === null &&
         enseignantChoisi !== null &&
         enseignantChoisi.probleme === null &&
         (enseignantChoisi.mode !== 'horaire' || (saisie.heures !== '' && Number(saisie.heures) > 0));
@@ -395,7 +417,8 @@ export default function CalculPaiementProf({
             retour: {
                 groupFilter: String(calcul.group.id),
                 enseignantFilter: String(calcul.enseignant.id),
-                mois: calcul.mois,
+                debut: calcul.periode.debut,
+                fin: calcul.periode.fin,
                 heures: calcul.heuresSaisies !== null ? String(calcul.heuresSaisies) : '',
             },
         });
@@ -515,9 +538,9 @@ export default function CalculPaiementProf({
                     options={groupOptions}
                     placeholder={t('Select a group')}
                     onChange={(event) =>
-                        // Changer de groupe remet prof et mois à zéro : ils
+                        // Changer de groupe remet prof et période à zéro : ils
                         // n'ont de sens que pour LE groupe choisi.
-                        majSaisie({ groupFilter: event.target.value, enseignantFilter: '', mois: '', heures: '', dureeSeance: '' })
+                        majSaisie({ groupFilter: event.target.value, enseignantFilter: '', debut: '', fin: '', heures: '', dureeSeance: '' })
                     }
                 />
 
@@ -540,7 +563,7 @@ export default function CalculPaiementProf({
                                         <i className="ti ti-alert-triangle mt-1" />
                                         <div>
                                             {t(
-                                                ':count completed session(s) of this month have no teacher assigned and will pay nobody.',
+                                                ':count completed session(s) of this period have no teacher assigned and will pay nobody.',
                                                 { count: String(options.seancesSansEnseignant) },
                                             )}{' '}
                                             <a href={`/backoffice/groups/${saisie.groupFilter}`} className="fw-semibold">
@@ -551,7 +574,7 @@ export default function CalculPaiementProf({
                                 )}
 
                                 <div className="row">
-                                    <div className="col-md-6">
+                                    <div className="col-12">
                                         <SelectField
                                             id="pp-enseignant"
                                             label={t('Teacher')}
@@ -564,29 +587,53 @@ export default function CalculPaiementProf({
                                             }
                                         />
                                     </div>
+                                </div>
+
+                                {/* Période LIBRE : pré-remplie avec le mois du
+                                    groupe, modifiable quand l'enseignant a
+                                    décalé ses cours. */}
+                                <div className="row">
                                     <div className="col-md-6">
-                                        <SelectField
-                                            id="pp-mois"
-                                            label={t('Month')}
+                                        <FormField
+                                            id="pp-debut"
+                                            label={t('Start date')}
+                                            type="date"
                                             required
-                                            value={saisie.mois}
-                                            options={moisOptions}
-                                            placeholder={t('Select a month')}
-                                            onChange={(event) => majSaisie({ mois: event.target.value })}
-                                            searchable={false}
+                                            value={saisie.debut}
+                                            onChange={(event) => majSaisie({ debut: event.target.value })}
                                         />
-                                        {options.fenetre.ancreSurLeGroupe ? (
-                                            <div className="form-text mt-n2 mb-3">
-                                                {new Date(options.fenetre.debut + 'T00:00:00').toLocaleDateString('fr-FR')}
-                                                {' → '}
-                                                {new Date(options.fenetre.fin + 'T00:00:00').toLocaleDateString('fr-FR')}
-                                            </div>
-                                        ) : (
-                                            <div className="form-text mt-n2 mb-3 text-warning">
-                                                {t('This group has no start date - calendar month used.')}
-                                            </div>
-                                        )}
                                     </div>
+                                    <div className="col-md-6">
+                                        <FormField
+                                            id="pp-fin"
+                                            label={t('End date')}
+                                            type="date"
+                                            required
+                                            min={saisie.debut !== '' ? saisie.debut : undefined}
+                                            value={saisie.fin}
+                                            onChange={(event) => majSaisie({ fin: event.target.value })}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="form-text mt-n2 mb-3">
+                                    {periodeInvalide !== null ? (
+                                        <span className="text-danger">{periodeInvalide}</span>
+                                    ) : chargement ? (
+                                        <span>
+                                            <i className="ti ti-loader me-1" />
+                                            {t('Loading…')}
+                                        </span>
+                                    ) : (
+                                        <span className={options.seancesPeriode === 0 ? 'text-warning' : 'text-success'}>
+                                            <i className="ti ti-calendar-check me-1" />
+                                            {t(':count completed session(s) over this period', {
+                                                count: String(options.seancesPeriode),
+                                            })}
+                                            {enseignantChoisi !== null &&
+                                                options.seancesPeriode !== enseignantChoisi.seancesCeMois &&
+                                                ` (${t(':count by this teacher', { count: String(enseignantChoisi.seancesCeMois) })})`}
+                                        </span>
+                                    )}
                                 </div>
 
                                 {enseignantChoisi !== null && (
@@ -610,21 +657,6 @@ export default function CalculPaiementProf({
                                                 {t('Edit on the employee record')} →
                                             </a>
                                         </div>
-
-                                        {enseignantChoisi.probleme === null && enseignantChoisi.mode !== 'horaire' && (
-                                            <div className="fs-13 text-muted mt-2">
-                                                {t(
-                                                    'Each student is paid by attendance tier: fewer than :un present → 0; :un–:deuxMoins1 → 1 week; :deux–:completMoins1 → 2 weeks; :complet or more → the full rate (1 week = rate ÷ 4).',
-                                                    {
-                                                        un: String(seuilPalier(paliersPaie, 1)),
-                                                        deuxMoins1: String(seuilPalier(paliersPaie, 2) - 1),
-                                                        deux: String(seuilPalier(paliersPaie, 2)),
-                                                        completMoins1: String(seuilPalier(paliersPaie, 4) - 1),
-                                                        complet: String(seuilPalier(paliersPaie, 4)),
-                                                    },
-                                                )}
-                                            </div>
-                                        )}
                                     </div>
                                 )}
 

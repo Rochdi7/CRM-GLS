@@ -99,6 +99,7 @@ export default function EncaissementShow({ encaissement, canDetach = false }: En
                         <DetailRow label="Groupe" value={encaissement.groupe} />
                         <DetailRow label="Caisse" value={encaissement.caisse} />
                         <DetailRow label="Enregistré par" value={encaissement.agent} />
+                        <DetailRow label="Date d'opération" value={encaissement.dateOperation} />
 
                         {/* This row IS the application of an earlier avance — name it,
                             otherwise the receipt looks like fresh money arriving twice. */}

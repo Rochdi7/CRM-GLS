@@ -1394,11 +1394,12 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $this->assertSame('BMCE', $encaissement->banque);
         $this->assertSame('2025-10-01', $encaissement->date_echeance_cheque->toDateString());
         $this->assertSame(0.0, $cheque->fresh()->montantRestant());
-        // « À déposer » + reste 0,00 DH ⇒ « Encaissé » (StatutChequeSolde).
-        $this->assertSame(\App\Models\Cheque::STATUT_ENCAISSE, $cheque->fresh()->statut);
+        // « Encaissé » n'est plus automatique (30/09/2026) : le chèque reste
+        // en main jusqu'à sa remise à la banque, validée par le comptable.
+        $this->assertSame(\App\Models\Cheque::STATUT_EN_POSSESSION, $cheque->fresh()->statut);
     }
 
-    public function test_a_partially_used_or_guarantee_cheque_keeps_its_status(): void
+    public function test_a_guarantee_or_deposited_cheque_can_never_pay(): void
     {
         $user = $this->userWith('payments.view', 'payments.create', 'cheques.view', 'cheques.create');
         $this->actingAs($user);
@@ -1417,19 +1418,27 @@ final class EncaissementsInertiaCrudTest extends TestCase
             'etablissement_id' => $this->centre->id, 'agent_id' => $user->employee->id,
         ]);
 
-        $this->post(route('backoffice.encaissements.store'), [
-            'student_id' => $student->id,
-            'inscription_id' => $inscription->id,
-            'date_paiement' => '2025-09-20',
-            'payment_lines' => [
-                ['fee_id' => $fee->id, 'montant' => '200', 'methode' => 'Chèque', 'date_paiement' => '2025-09-20', 'cheque_id' => $partiel->id],
-                ['fee_id' => $fee->id, 'montant' => '300', 'methode' => 'Chèque', 'date_paiement' => '2025-09-20', 'cheque_id' => $garantie->id],
-            ],
-        ])->assertSessionDoesntHaveErrors();
+        // Une GARANTIE est une caution, jamais un moyen de paiement ; un
+        // chèque remis à la banque n'est plus en main (30/09/2026).
+        foreach ([$partiel, $garantie] as $cheque) {
+            $this->post(route('backoffice.encaissements.store'), [
+                'student_id' => $student->id,
+                'inscription_id' => $inscription->id,
+                'date_paiement' => '2025-09-20',
+                'payment_lines' => [
+                    ['fee_id' => $fee->id, 'montant' => '200', 'methode' => 'Chèque', 'date_paiement' => '2025-09-20', 'cheque_id' => $cheque->id],
+                ],
+            ])->assertSessionHasErrors('payment_lines');
+        }
 
-        $this->assertSame(\App\Models\Cheque::STATUT_DEPOSE, $partiel->fresh()->statut);
-        $this->assertSame(0.0, $garantie->fresh()->montantRestant());
-        $this->assertSame(\App\Models\Cheque::STATUT_EN_POSSESSION, $garantie->fresh()->statut);
+        $this->assertSame(0, \App\Models\Encaissement::count());
+
+        // Ni l'un ni l'autre n'est offert dans « Payer avec un chèque » ; la
+        // garantie reste RAPPELÉE pour être rendue.
+        $this->getJson(route('backoffice.students.cheques', $student))
+            ->assertOk()
+            ->assertJsonCount(0, 'cheques')
+            ->assertJsonCount(1, 'garanties');
     }
 
     public function test_paying_with_a_tracked_cheque_cannot_exceed_its_remaining_balance(): void

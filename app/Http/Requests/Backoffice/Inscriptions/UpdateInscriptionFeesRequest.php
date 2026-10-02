@@ -34,6 +34,8 @@ final class UpdateInscriptionFeesRequest extends FormRequest
             'fee_lines.*.montant_initial' => ['nullable', 'numeric', 'min:0'],
             'fee_lines.*.remise_pct' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'fee_lines.*.remise_montant' => ['nullable', 'numeric', 'min:0'],
+            'fee_lines.*.semaines' => ['nullable', 'array', 'max:4'],
+            'fee_lines.*.semaines.*' => ['integer', 'between:1,4'],
             'fee_lines.*.date_echeance' => ['nullable', 'date'],
             'fee_lines.*.note' => ['nullable', 'string'],
         ];

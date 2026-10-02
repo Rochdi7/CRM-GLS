@@ -30,6 +30,7 @@ interface SeancesIndexProps {
         search: string;
         groupFilter: string;
         statutFilter: string;
+        groupStatutFilter: string;
         enseignantFilter: string;
         dateFrom: string;
         dateTo: string;
@@ -39,6 +40,8 @@ interface SeancesIndexProps {
     groupOptions: GroupOption[];
     enseignants: SelectOption[];
     statuts: string[];
+    /** Filtre « Statut du groupe » : Active / Terminé / Annulée. */
+    groupStatuts: string[];
     /** Active reasons from Paramètres → Raisons d'annulation ou archivage. */
     motifsAnnulation: string[];
     permissions: { create: boolean; update: boolean; delete: boolean; mark: boolean; cancel: boolean };
@@ -71,6 +74,7 @@ export default function SeancesIndex({
     groupOptions,
     enseignants,
     statuts,
+    groupStatuts,
     motifsAnnulation,
     permissions,
 }: SeancesIndexProps) {
@@ -288,10 +292,10 @@ export default function SeancesIndex({
                             </label>
                             <SelectField
                                 id="seance-f-statut"
-                                options={statuts.map((statut) => ({ value: statut, label: statut }))}
+                                options={groupStatuts.map((statut) => ({ value: statut, label: statut }))}
                                 placeholder="Choisir un statut"
-                                value={filters.statutFilter}
-                                onChange={(event) => reload({ statutFilter: event.target.value })}
+                                value={filters.groupStatutFilter}
+                                onChange={(event) => reload({ groupStatutFilter: event.target.value })}
                             />
                         </div>
                         <div style={{ width: 220 }}>

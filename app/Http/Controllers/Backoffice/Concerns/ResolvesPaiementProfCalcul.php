@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice\Concerns;
 
 use App\Domain\Payroll\Queries\GetPaiementProfCalcul;
+use App\Domain\Payroll\Support\MoisDeGroupe;
 use App\Models\Employee;
 use App\Models\Group;
 use Illuminate\Http\Request;
 
 /**
  * « Calcul paiement prof » — résolution des paramètres de la query string
- * (groupe, enseignant, mois, heures) en UN calcul, ou `null` tant que le
+ * (groupe, enseignant, période début/fin, heures) en UN calcul, ou `null` tant que le
  * trio n'est pas complet.
  *
  * Partagé par l'écran dédié (`PaiementProfController`) et par l'onglet
@@ -38,6 +39,8 @@ trait ResolvesPaiementProfCalcul
             'groupFilter' => 'groupFilter',
             'enseignantFilter' => 'enseignantFilter',
             'mois' => 'mois',
+            'debut' => 'debut',
+            'fin' => 'fin',
             'heures' => 'heures',
             ...$keys,
         ];
@@ -45,6 +48,8 @@ trait ResolvesPaiementProfCalcul
         $groupFilter = (string) $request->string($keys['groupFilter']);
         $enseignantFilter = (string) $request->string($keys['enseignantFilter']);
         $mois = (string) $request->string($keys['mois']);
+        $debut = (string) $request->string($keys['debut']);
+        $fin = (string) $request->string($keys['fin']);
         $heuresFilter = (string) $request->string($keys['heures']);
 
         $group = null;
@@ -65,11 +70,15 @@ trait ResolvesPaiementProfCalcul
             $enseignant = Employee::query()->find((int) $enseignantFilter);
         }
 
-        if ($group !== null && $enseignant !== null && $mois !== '') {
+        // Dates libres (début/fin) ; `mois` reste lu pour les anciens liens.
+        // Une période invalide (inversée, trop longue) ne calcule rien.
+        $periode = $group !== null ? MoisDeGroupe::resoudre($group, $mois, $debut, $fin) : null;
+
+        if ($group !== null && $enseignant !== null && $periode !== null) {
             $calcul = $query(
                 group: $group,
                 enseignant: $enseignant,
-                mois: $mois,
+                mois: $periode,
                 heures: $heuresFilter !== '' ? (float) $heuresFilter : null,
             );
         }
@@ -79,7 +88,8 @@ trait ResolvesPaiementProfCalcul
             'filters' => [
                 'groupFilter' => $groupFilter,
                 'enseignantFilter' => $enseignantFilter,
-                'mois' => $mois,
+                'debut' => $periode?->debut->toDateString() ?? $debut,
+                'fin' => $periode?->fin->toDateString() ?? $fin,
                 'heures' => $heuresFilter,
                 // Aide de saisie côté écran uniquement (durée d'une séance,
                 // « 2h30 ») : le serveur ne s'en sert pas, mais la page

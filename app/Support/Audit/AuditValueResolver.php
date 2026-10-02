@@ -80,6 +80,7 @@ final class AuditValueResolver
         'cheque_id' => Cheque::class,
         'encaissement_id' => Encaissement::class,
         'applied_from_encaissement_id' => Encaissement::class,
+        'restitution_encaissement_id' => Encaissement::class,
         'seance_id' => Seance::class,
         // People — an employee id can appear under several role-specific names.
         'employee_id' => Employee::class,
@@ -89,6 +90,8 @@ final class AuditValueResolver
         'beneficiaire_id' => Employee::class,
         'responsable_employee_id' => Employee::class,
         'retourne_par_id' => Employee::class,
+        'depose_par_id' => Employee::class,
+        'depot_valide_par_id' => Employee::class,
         // Users (actors), not employees.
         'user_id' => User::class,
         'created_by' => User::class,
@@ -114,6 +117,7 @@ final class AuditValueResolver
         'montant_defaut' => 'Montant par défaut',
         'remise_pct' => 'Remise (%)',
         'remise_montant' => 'Remise (DH)',
+        'semaines' => 'Semaines',
         'statut' => 'Statut',
         'methode' => 'Méthode de paiement',
         'methode_paiement' => 'Méthode de paiement',
@@ -211,6 +215,11 @@ final class AuditValueResolver
         'beneficiaire_id' => 'Bénéficiaire',
         'responsable_employee_id' => 'Responsable',
         'retourne_par_id' => 'Retourné par',
+        'date_remise' => 'Date de remise à la banque',
+        'depose_par_id' => 'Remis à la banque par',
+        'depot_valide_le' => 'Remise validée le',
+        'depot_valide_par_id' => 'Remise validée par',
+        'restitution_encaissement_id' => 'Paiement ayant remplacé la garantie',
         'user_id' => 'Utilisateur',
         'created_by' => 'Créé par',
         // Journal property keys (finance context blocks) — same French-label

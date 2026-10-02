@@ -66,7 +66,23 @@ final class AuthTest extends TestCase
                 'password' => 'password',
             ])
             ->assertRedirect(route('backoffice.login'))
-            ->assertSessionHasErrors('login');
+            ->assertSessionHasErrors([
+                'login' => __('Your account is not active. Please contact the administration.'),
+            ]);
+
+        $this->assertGuest();
+    }
+
+    public function test_a_wrong_password_on_a_deactivated_account_reveals_nothing(): void
+    {
+        $user = User::factory()->create(['is_active' => false]);
+
+        $this->from(route('backoffice.login'))
+            ->post(route('backoffice.login.store'), [
+                'login' => $user->email,
+                'password' => 'wrong-password',
+            ])
+            ->assertSessionHasErrors(['login' => __('auth.failed')]);
 
         $this->assertGuest();
     }

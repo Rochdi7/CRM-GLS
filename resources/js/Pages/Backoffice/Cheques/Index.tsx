@@ -1,5 +1,5 @@
 import { router, useForm } from '@inertiajs/react';
-import { useState, type FormEvent } from 'react';
+import { useState, type ChangeEvent, type FormEvent } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
@@ -18,7 +18,7 @@ import FormActions from '@/Components/Forms/FormActions';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { useFilterReset } from '@/Hooks/useFilterReset';
-import type { ChequeRow, ChequesPageProps, SelectOption } from '@/Types';
+import type { ChequeRow, ChequesPageProps, PaiementRemplacantOption, SelectOption } from '@/Types';
 
 interface ChequeFormState {
     source: string;
@@ -31,6 +31,17 @@ interface ChequeFormState {
     type: string;
     date_echeance: string;
     note: string;
+    /** Photo / scan du chèque — obligatoire à la saisie, facultatif en modification. */
+    photo: File | null;
+}
+
+interface RemiseFormState {
+    date_remise: string;
+    justificatif: File | null;
+}
+
+function todayIso(): string {
+    return new Date().toISOString().slice(0, 10);
 }
 
 function emptyForm(): ChequeFormState {
@@ -45,6 +56,7 @@ function emptyForm(): ChequeFormState {
         type: 'Garantie (À encaisser)',
         date_echeance: '',
         note: '',
+        photo: null,
     };
 }
 
@@ -116,11 +128,16 @@ export default function ChequesIndex({
     canCreate,
     canUpdate,
     canDeposit,
+    canDelete,
+    canValidateDeposit,
+    remisesEnAttente,
+    chequeMimes,
+    chequeMaxKb,
 }: ChequesPageProps) {
     const isLoading = useInertiaLoading();
     const [showModal, setShowModal] = useState(false);
     const [editingCheque, setEditingCheque] = useState<ChequeRow | null>(null);
-    const [statutTarget, setStatutTarget] = useState<{ cheque: ChequeRow; statut: 'Déposé' | 'Encaissé' | 'Rejeté' } | null>(null);
+    const [statutTarget, setStatutTarget] = useState<{ cheque: ChequeRow; statut: 'Rejeté' } | null>(null);
     const [statutError, setStatutError] = useState<string | undefined>(undefined);
     const [statutProcessing, setStatutProcessing] = useState(false);
     // After a chèque is marked Rejeté, offer to open the refund form —
@@ -140,6 +157,23 @@ export default function ChequesIndex({
     const [garantieError, setGarantieError] = useState<string | undefined>(undefined);
     const [garantieProcessing, setGarantieProcessing] = useState(false);
     const [detailsCheque, setDetailsCheque] = useState<ChequeRow | null>(null);
+    // Garantie : le paiement (espèces / TPE / virement) qui la remplace.
+    // La liste vient du SERVEUR (même requête que l'action) — sans paiement
+    // de remplacement, la garantie reste en main.
+    const [garantiePaiements, setGarantiePaiements] = useState<PaiementRemplacantOption[] | null>(null);
+    const [garantiePaiementId, setGarantiePaiementId] = useState<number | ''>('');
+    // Remise à la banque (tous les rôles) : compte bancaire + date + reçu.
+    const [remiseTarget, setRemiseTarget] = useState<ChequeRow | null>(null);
+    const remiseForm = useForm<RemiseFormState>({ date_remise: todayIso(), justificatif: null });
+    // Décision du comptable sur une remise.
+    const [validationTarget, setValidationTarget] = useState<ChequeRow | null>(null);
+    const [validationError, setValidationError] = useState<string | undefined>(undefined);
+    const [validationProcessing, setValidationProcessing] = useState(false);
+    // Suppression (super-admin) : le serveur refuse un chèque qui a financé
+    // un encaissement, et l'erreur s'affiche dans le dialogue.
+    const [deleteTarget, setDeleteTarget] = useState<ChequeRow | null>(null);
+    const [deleteError, setDeleteError] = useState<string | undefined>(undefined);
+    const [deleteProcessing, setDeleteProcessing] = useState(false);
 
     const form = useForm<ChequeFormState>(emptyForm());
 
@@ -147,6 +181,11 @@ export default function ChequesIndex({
     // La VALEUR reste celle de la base (c'est elle qui est soumise et
     // filtrée) ; seul le libellé est raccourci.
     const typeOptions: SelectOption[] = types.map((t) => ({ value: t, label: typeLabel(t) }));
+    const acceptMedia = chequeMimes.map((m) => `.${m}`).join(',');
+
+    // Onglet « Remises à valider » (comptable + super-admin) = le filtre
+    // statut « Déposé ». Le serveur fait la vraie garde.
+    const ongletValidation = canValidateDeposit && filters.statutFilter === 'Déposé';
     const statutFilterOptions: SelectOption[] = statuts.map((s) => ({ value: s, label: s }));
     const banqueOptions: SelectOption[] = banques.map((b) => ({ value: b, label: b }));
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.nom }));
@@ -187,6 +226,7 @@ export default function ChequesIndex({
             type: cheque.type,
             date_echeance: cheque.dateEcheance ?? '',
             note: cheque.note,
+            photo: null,
         });
         setShowModal(true);
     }
@@ -211,14 +251,20 @@ export default function ChequesIndex({
         event.preventDefault();
         const options = { preserveScroll: true, onSuccess: () => closeModal() };
 
+        // Multipart (photo) : un PUT passe par POST + _method, comme Dépenses.
         if (editingCheque) {
-            form.put(`/backoffice/cheques/${editingCheque.id}`, options);
+            form.transform((data) => ({ ...data, _method: 'put' }));
+            form.post(`/backoffice/cheques/${editingCheque.id}`, {
+                ...options,
+                forceFormData: true,
+                onFinish: () => form.transform((data) => data),
+            });
         } else {
-            form.post('/backoffice/cheques', options);
+            form.post('/backoffice/cheques', { ...options, forceFormData: true });
         }
     }
 
-    function confirmStatut(cheque: ChequeRow, statut: 'Déposé' | 'Encaissé' | 'Rejeté') {
+    function confirmStatut(cheque: ChequeRow, statut: 'Rejeté') {
         setStatutTarget({ cheque, statut });
         setStatutError(undefined);
     }
@@ -298,6 +344,25 @@ export default function ChequesIndex({
         );
     }
 
+    function handleDeleteConfirm() {
+        if (!deleteTarget) {
+            return;
+        }
+
+        setDeleteProcessing(true);
+        router.delete(`/backoffice/cheques/${deleteTarget.id}`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setDeleteTarget(null);
+                setDeleteError(undefined);
+            },
+            onError: (errors) => {
+                setDeleteError(errors.cheque ?? 'Suppression impossible.');
+            },
+            onFinish: () => setDeleteProcessing(false),
+        });
+    }
+
     // --- Restitution d'un chèque de GARANTIE (l'étudiant a réglé autrement) ---
     // Aucun argent ne bouge : un chèque est un inventaire off-ledger, et le
     // paiement qui le remplace est un encaissement ordinaire enregistré à
@@ -307,6 +372,21 @@ export default function ChequesIndex({
         setGarantieTarget(cheque);
         setGarantieMotif('');
         setGarantieError(undefined);
+        setGarantiePaiements(null);
+        setGarantiePaiementId('');
+
+        fetch(`/backoffice/cheques/${cheque.id}/remplacements`, { headers: { Accept: 'application/json' } })
+            .then((response) => (response.ok ? response.json() : Promise.reject(response)))
+            .then((data: { paiements: PaiementRemplacantOption[] }) => {
+                setGarantiePaiements(data.paiements);
+                if (data.paiements.length === 1) {
+                    setGarantiePaiementId(data.paiements[0].id);
+                }
+            })
+            .catch(() => {
+                setGarantiePaiements([]);
+                setGarantieError('Impossible de charger les paiements de cet étudiant.');
+            });
     }
 
     function closeRestituerGarantie() {
@@ -314,6 +394,8 @@ export default function ChequesIndex({
         setGarantieMotif('');
         setGarantieError(undefined);
         setGarantieProcessing(false);
+        setGarantiePaiements(null);
+        setGarantiePaiementId('');
     }
 
     function runRestituerGarantie() {
@@ -326,7 +408,7 @@ export default function ChequesIndex({
 
         router.patch(
             `/backoffice/cheques/${garantieTarget.id}/restituer-garantie`,
-            { motif: garantieMotif },
+            { motif: garantieMotif, encaissement_id: garantiePaiementId === '' ? null : garantiePaiementId },
             {
                 preserveScroll: true,
                 onSuccess: () => closeRestituerGarantie(),
@@ -339,23 +421,75 @@ export default function ChequesIndex({
         );
     }
 
-    const statutCopy: Record<'Déposé' | 'Encaissé' | 'Rejeté', { title: string; message: string; icon: string; variant: 'primary' | 'danger'; confirmLabel: string; processingLabel: string }> = {
-        'Déposé': {
-            title: 'Remise à la banque',
-            message: 'Marquer ce chèque comme déposé à la banque ?',
-            icon: 'ti-building-bank',
-            variant: 'primary',
-            confirmLabel: 'Oui, déposer',
-            processingLabel: 'Dépôt…',
-        },
-        'Encaissé': {
-            title: 'Marquer comme encaissé',
-            message: 'Confirmer que ce chèque a été encaissé par la banque ?',
-            icon: 'ti-check',
-            variant: 'primary',
-            confirmLabel: 'Oui, encaissé',
-            processingLabel: 'Enregistrement…',
-        },
+    // --- Remise à la banque (tous les rôles) -----------------------------------
+    // Aucun argent ne bouge : c'est une DEMANDE, que le comptable accepte ou
+    // rejette. Le reçu de dépôt est obligatoire.
+    function openRemise(cheque: ChequeRow) {
+        setRemiseTarget(cheque);
+        remiseForm.clearErrors();
+        remiseForm.setData({
+            date_remise: todayIso(),
+            justificatif: null,
+        });
+    }
+
+    function closeRemise() {
+        setRemiseTarget(null);
+        remiseForm.reset();
+        remiseForm.clearErrors();
+    }
+
+    function submitRemise(event: FormEvent) {
+        event.preventDefault();
+        if (!remiseTarget) {
+            return;
+        }
+
+        remiseForm.post(`/backoffice/cheques/${remiseTarget.id}/remise-banque`, {
+            preserveScroll: true,
+            forceFormData: true,
+            onSuccess: () => closeRemise(),
+        });
+    }
+
+    // --- Décision du comptable ---------------------------------------------
+    function openValidation(cheque: ChequeRow) {
+        setValidationTarget(cheque);
+        setValidationError(undefined);
+    }
+
+    function closeValidation() {
+        setValidationTarget(null);
+        setValidationError(undefined);
+        setValidationProcessing(false);
+    }
+
+    function decideValidation(statut: 'Encaissé' | 'Rejeté') {
+        if (!validationTarget) {
+            return;
+        }
+
+        setValidationProcessing(true);
+        setValidationError(undefined);
+        router.patch(
+            `/backoffice/cheques/${validationTarget.id}/statut`,
+            { statut },
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    const cheque = validationTarget;
+                    closeValidation();
+                    if (statut === 'Rejeté') {
+                        setRejectedCheque(cheque);
+                    }
+                },
+                onError: (errors) => setValidationError(Object.values(errors)[0] ?? 'Action impossible.'),
+                onFinish: () => setValidationProcessing(false),
+            },
+        );
+    }
+
+    const statutCopy: Record<'Rejeté', { title: string; message: string; icon: string; variant: 'primary' | 'danger'; confirmLabel: string; processingLabel: string }> = {
         'Rejeté': {
             title: 'Marquer comme rejeté',
             message: 'Confirmer que ce chèque a été rejeté (impayé) par la banque ?',
@@ -396,14 +530,35 @@ export default function ChequesIndex({
                     </a>
                 </li>
                 <li className="nav-item" role="presentation">
-                    <button type="button" className="nav-link d-inline-flex align-items-center active" aria-current="page">
+                    <button
+                        type="button"
+                        className={`nav-link d-inline-flex align-items-center${ongletValidation ? '' : ' active'}`}
+                        aria-current={ongletValidation ? undefined : 'page'}
+                        onClick={() => ongletValidation && reload({ statutFilter: '' })}
+                    >
                         <i className="ti ti-building-bank me-2" aria-hidden="true" />
                         Chèques
                     </button>
                 </li>
+                {canValidateDeposit && (
+                    <li className="nav-item" role="presentation">
+                        <button
+                            type="button"
+                            className={`nav-link d-inline-flex align-items-center${ongletValidation ? ' active' : ''}`}
+                            aria-current={ongletValidation ? 'page' : undefined}
+                            onClick={() => !ongletValidation && reload({ statutFilter: 'Déposé' })}
+                        >
+                            <i className="ti ti-checks me-2" aria-hidden="true" />
+                            Remises à valider
+                            {remisesEnAttente > 0 && (
+                                <span className="badge bg-warning text-dark ms-2">{remisesEnAttente}</span>
+                            )}
+                        </button>
+                    </li>
+                )}
             </ul>
 
-            <Card title="Chèques" bodyClassName="p-0 py-3">
+            <Card title={ongletValidation ? 'Remises à valider' : 'Chèques'} bodyClassName="p-0 py-3">
                 <div className="px-3 pt-2">
                     <TableToolbar onReset={filterReset.reset} resetActive={filterReset.active}>
                         <div style={{ width: 160 }}>
@@ -527,7 +682,19 @@ export default function ChequesIndex({
                             {cheques.data.map((cheque) => (
                                 <tr key={cheque.id}>
                                     <td>
-                                        <code>{cheque.numeroCheque}</code>
+                                        <div className="d-flex align-items-center gap-2">
+                                            <code>{cheque.numeroCheque}</code>
+                                            {cheque.photoUrl && (
+                                                <a
+                                                    href={cheque.photoUrl}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    title="Voir la photo du chèque"
+                                                >
+                                                    <i className="ti ti-photo" />
+                                                </a>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className="fw-medium">{cheque.proprietaire ?? '-'}</td>
                                     <td>
@@ -558,16 +725,14 @@ export default function ChequesIndex({
                                                 variant={statutVariant(cheque.statutAffiche)}
                                                 dot
                                             />
-                                            {cheque.statut === 'Rejeté' && (
-                                                <button
-                                                    type="button"
-                                                    className="btn btn-link p-0"
-                                                    title="Voir les responsables"
-                                                    onClick={() => setDetailsCheque(cheque)}
-                                                >
-                                                    <i className={`ti ${cheque.retourneLe ? 'ti-circle-check text-success' : 'ti-info-circle text-muted'}`} />
-                                                </button>
-                                            )}
+                                            <button
+                                                type="button"
+                                                className="btn btn-link p-0"
+                                                title="Historique du chèque"
+                                                onClick={() => setDetailsCheque(cheque)}
+                                            >
+                                                <i className={`ti ${cheque.retourneLe ? 'ti-circle-check text-success' : 'ti-info-circle text-muted'}`} />
+                                            </button>
                                         </div>
                                     </td>
                                     <td className="text-end">
@@ -577,12 +742,17 @@ export default function ChequesIndex({
                                                     Modifier
                                                 </RowActionItem>
                                             )}
-                                            {canDeposit && cheque.statut === 'En possession' && (
+                                            {canDeposit && cheque.statut === 'En possession' && !cheque.retourneLe && (
                                                 <>
                                                     {canUpdate && <RowActionDivider />}
-                                                    <RowActionItem icon="ti-building-bank" onClick={() => confirmStatut(cheque, 'Déposé')}>
-                                                        Remise à la banque
-                                                    </RowActionItem>
+                                                    {/* Une GARANTIE ne va jamais à la banque : elle se
+                                                        restitue contre un autre règlement. Un « À déposer »
+                                                        bloqué garde l'action, le modal dit pourquoi. */}
+                                                    {cheque.type !== 'Garantie (À encaisser)' && (
+                                                        <RowActionItem icon="ti-building-bank" onClick={() => openRemise(cheque)}>
+                                                            Remise à la banque
+                                                        </RowActionItem>
+                                                    )}
                                                     {/* L'étudiant a réglé en espèces / TPE / virement : il
                                                         repart avec sa garantie. `restituable` vient du
                                                         SERVEUR (GetChequesList) — la page n'a pas à savoir
@@ -595,20 +765,19 @@ export default function ChequesIndex({
                                                     )}
                                                 </>
                                             )}
-                                            {canDeposit && cheque.statut === 'Déposé' && (
+                                            {/* Décision du COMPTABLE sur une remise à la banque. */}
+                                            {canValidateDeposit && cheque.statut === 'Déposé' && (
                                                 <>
                                                     {canUpdate && <RowActionDivider />}
-                                                    <RowActionItem icon="ti-check" onClick={() => confirmStatut(cheque, 'Encaissé')}>
-                                                        Marquer encaissé
-                                                    </RowActionItem>
-                                                    <RowActionItem icon="ti-x" danger onClick={() => confirmStatut(cheque, 'Rejeté')}>
-                                                        Marquer rejeté
+                                                    <RowActionItem icon="ti-checks" onClick={() => openValidation(cheque)}>
+                                                        Valider la remise
                                                     </RowActionItem>
                                                 </>
                                             )}
-                                            {/* « Encaissé » peut être posé automatiquement (reste 0,00 DH)
-                                                avant la réponse de la banque : un rejet reste saisissable. */}
-                                            {canDeposit && cheque.statut === 'Encaissé' && (
+                                            {/* Ancien « Encaissé » (avant le 30/09/2026, aucun argent
+                                                passé à la banque) : un rejet reste saisissable.
+                                                `rejetable` vient du serveur. */}
+                                            {canValidateDeposit && cheque.statut === 'Encaissé' && cheque.rejetable && (
                                                 <>
                                                     {canUpdate && <RowActionDivider />}
                                                     <RowActionItem icon="ti-x" danger onClick={() => confirmStatut(cheque, 'Rejeté')}>
@@ -629,6 +798,21 @@ export default function ChequesIndex({
                                                             Marquer comme restitué
                                                         </RowActionItem>
                                                     )}
+                                                </>
+                                            )}
+                                            {canDelete && (
+                                                <>
+                                                    {(canUpdate || canDeposit || canValidateDeposit) && <RowActionDivider />}
+                                                    <RowActionItem
+                                                        icon="ti-trash"
+                                                        danger
+                                                        onClick={() => {
+                                                            setDeleteError(undefined);
+                                                            setDeleteTarget(cheque);
+                                                        }}
+                                                    >
+                                                        Supprimer
+                                                    </RowActionItem>
                                                 </>
                                             )}
                                         </RowActions>
@@ -755,6 +939,33 @@ export default function ChequesIndex({
                                 error={form.errors.date_echeance}
                             />
                         </div>
+                        <div className="col-12 mb-3">
+                            <label className="form-label" htmlFor="chq-photo">
+                                Photo du chèque{!editingCheque && <span className="text-danger ms-1">*</span>}
+                            </label>
+                            <input
+                                id="chq-photo"
+                                type="file"
+                                accept={acceptMedia}
+                                className={`form-control${form.errors.photo ? ' is-invalid' : ''}`}
+                                onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                                    form.setData('photo', event.target.files?.[0] ?? null)
+                                }
+                            />
+                            {form.errors.photo && <div className="invalid-feedback d-block">{form.errors.photo}</div>}
+                            <div className="form-text">
+                                Formats acceptés : {chequeMimes.join(', ')} - max {Math.round(chequeMaxKb / 1024)} Mo
+                                {editingCheque?.photoUrl && (
+                                    <>
+                                        {' - '}
+                                        <a href={editingCheque.photoUrl} target="_blank" rel="noreferrer">
+                                            voir la photo actuelle
+                                        </a>
+                                        {' (laisser vide pour la garder)'}
+                                    </>
+                                )}
+                            </div>
+                        </div>
                         <div className="col-12">
                             <TextareaField
                                 id="chq-note"
@@ -784,6 +995,28 @@ export default function ChequesIndex({
                 onCancel={() => {
                     setStatutTarget(null);
                     setStatutError(undefined);
+                }}
+            />
+
+            <ConfirmDialog
+                show={deleteTarget !== null}
+                title="Supprimer le chèque"
+                recordLabel={
+                    deleteTarget
+                        ? `${deleteTarget.numeroCheque} - ${Number(deleteTarget.montant).toFixed(2)} MAD`
+                        : ''
+                }
+                message={
+                    deleteTarget && deleteTarget.encaissements.length > 0
+                        ? `Suppression définitive. Ses ${deleteTarget.encaissements.length} paiement(s) sont conservés.`
+                        : 'Suppression définitive.'
+                }
+                error={deleteError}
+                processing={deleteProcessing}
+                onConfirm={handleDeleteConfirm}
+                onCancel={() => {
+                    setDeleteTarget(null);
+                    setDeleteError(undefined);
                 }}
             />
 
@@ -828,11 +1061,7 @@ export default function ChequesIndex({
                           + (garantieTarget.proprietaire ? ` - ${garantieTarget.proprietaire}` : '')
                         : ''
                 }
-                message={
-                    "Le chèque sort de l'inventaire des garanties et ne pourra plus servir à payer. "
-                    + "Aucun montant n'est débité ni crédité : enregistrez le règlement reçu "
-                    + "(espèces, TPE ou virement) comme un encaissement ordinaire."
-                }
+                message="Choisissez le paiement qui remplace la garantie."
                 icon="ti-corner-up-left"
                 variant="primary"
                 confirmLabel="Restituer au client"
@@ -841,7 +1070,40 @@ export default function ChequesIndex({
                 processing={garantieProcessing}
                 onConfirm={runRestituerGarantie}
                 onCancel={closeRestituerGarantie}
+                confirmDisabled={garantiePaiementId === ''}
             >
+                <div className="mb-3">
+                    {garantiePaiements === null ? (
+                        <div className="text-muted">Chargement des paiements…</div>
+                    ) : garantiePaiements.length === 0 ? (
+                        <div className="alert alert-warning mb-0 d-flex align-items-center justify-content-between gap-2">
+                            <span>Aucun paiement à associer : encaissez d'abord.</span>
+                            {/* Ouvre Encaissements avec l'étudiant déjà choisi ; la
+                                garantie reste en main tant que le paiement n'existe pas. */}
+                            <a
+                                href={`/backoffice/encaissements?nouveau=1${garantieTarget?.studentId ? `&etudiant=${garantieTarget.studentId}` : ''}`}
+                                className="btn btn-sm btn-primary text-nowrap"
+                            >
+                                Encaisser
+                            </a>
+                        </div>
+                    ) : (
+                        <SelectField
+                            id="chq-paiement-remplacant"
+                            label="Paiement qui remplace la garantie"
+                            required
+                            options={garantiePaiements.map((p) => ({
+                                value: p.id,
+                                label: `${p.reference} - ${p.methode} - ${Number(p.montant).toFixed(2)} MAD${p.datePaiement ? ` - ${p.datePaiement}` : ''}`,
+                            }))}
+                            placeholder="Choisir un paiement"
+                            value={garantiePaiementId}
+                            onChange={(event) =>
+                                setGarantiePaiementId(event.target.value ? Number(event.target.value) : '')
+                            }
+                        />
+                    )}
+                </div>
                 <TextareaField
                     id="chq-motif-restitution"
                     label="Motif de la restitution (obligatoire)"
@@ -849,6 +1111,160 @@ export default function ChequesIndex({
                     onChange={(e) => setGarantieMotif(e.target.value)}
                 />
             </ConfirmDialog>
+
+            {/* Remise à la banque — le compte bancaire DU CENTRE du chèque, la
+                date et le reçu de dépôt (obligatoire). Rien ne bouge : le
+                comptable accepte ou rejette ensuite. */}
+            <Modal
+                show={remiseTarget !== null}
+                title="Remise à la banque"
+                onClose={closeRemise}
+                processing={remiseForm.processing}
+                size="lg"
+                footer={
+                    remiseTarget?.depotBlocker ? (
+                        <button type="button" className="btn btn-light" onClick={closeRemise}>
+                            Fermer
+                        </button>
+                    ) : (
+                        <FormActions form="cheque-remise-form" onCancel={closeRemise} processing={remiseForm.processing} />
+                    )
+                }
+            >
+                {remiseTarget && (
+                    <form id="cheque-remise-form" onSubmit={submitRemise}>
+                        <div className="row">
+                            <div className="col-md-6 mb-3">
+                                <div className="text-muted small mb-1">Propriétaire</div>
+                                <div className="fw-medium">{remiseTarget.proprietaire ?? '-'}</div>
+                            </div>
+                            <div className="col-md-6 mb-3">
+                                <div className="text-muted small mb-1">Banque</div>
+                                <div className="fw-medium">{remiseTarget.banque ?? '-'}</div>
+                            </div>
+                            <div className="col-md-6 mb-3">
+                                <div className="text-muted small mb-1">Num Chèque</div>
+                                <div className="fw-medium">
+                                    <code>{remiseTarget.numeroCheque}</code>
+                                </div>
+                            </div>
+                            <div className="col-md-6 mb-3">
+                                <div className="text-muted small mb-1">Montant</div>
+                                <div className="fw-medium">{Number(remiseTarget.montant).toFixed(2)} MAD</div>
+                            </div>
+                        </div>
+                        {remiseTarget.depotBlocker ? (
+                            <div className="alert alert-warning mb-0">{remiseTarget.depotBlocker}</div>
+                        ) : (
+                            <div className="row">
+                                <div className="col-md-6 mb-3">
+                                    <DateField
+                                        id="chq-remise-date"
+                                        label="Date remise banque"
+                                        required
+                                        value={remiseForm.data.date_remise}
+                                        onChange={(event) => remiseForm.setData('date_remise', event.target.value)}
+                                        error={remiseForm.errors.date_remise}
+                                    />
+                                </div>
+                                <div className="col-12">
+                                    <label className="form-label" htmlFor="chq-remise-recu">
+                                        Reçu de dépôt<span className="text-danger ms-1">*</span>
+                                    </label>
+                                    <input
+                                        id="chq-remise-recu"
+                                        type="file"
+                                        accept={acceptMedia}
+                                        className={`form-control${remiseForm.errors.justificatif ? ' is-invalid' : ''}`}
+                                        onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                                            remiseForm.setData('justificatif', event.target.files?.[0] ?? null)
+                                        }
+                                    />
+                                    {remiseForm.errors.justificatif && (
+                                        <div className="invalid-feedback d-block">{remiseForm.errors.justificatif}</div>
+                                    )}
+                                    <div className="form-text">Photo ou scan du bordereau.</div>
+                                </div>
+                            </div>
+                        )}
+                    </form>
+                )}
+            </Modal>
+
+            {/* Décision du COMPTABLE — « Encaissé » = la banque a accepté le
+                chèque, « Rejeté » = elle l'a refusé. Aucun argent ne bouge. */}
+            <Modal
+                show={validationTarget !== null}
+                title="Valider la remise à la banque"
+                onClose={closeValidation}
+                processing={validationProcessing}
+                size="lg"
+                footer={
+                    <>
+                        <button type="button" className="btn btn-light" onClick={closeValidation} disabled={validationProcessing}>
+                            Annuler
+                        </button>
+                        <button
+                            type="button"
+                            className="btn btn-danger"
+                            onClick={() => decideValidation('Rejeté')}
+                            disabled={validationProcessing}
+                        >
+                            Rejeter
+                        </button>
+                        <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={() => decideValidation('Encaissé')}
+                            disabled={validationProcessing}
+                        >
+                            {validationProcessing ? 'Enregistrement…' : 'Valider (encaissé)'}
+                        </button>
+                    </>
+                }
+            >
+                {validationTarget && (
+                    <div className="row">
+                        <div className="col-md-6 mb-3">
+                            <div className="text-muted small mb-1">Chèque</div>
+                            <div className="fw-medium">
+                                <code>{validationTarget.numeroCheque}</code> - {validationTarget.proprietaire ?? '-'}
+                            </div>
+                        </div>
+                        <div className="col-md-6 mb-3">
+                            <div className="text-muted small mb-1">Montant</div>
+                            <div className="fw-medium">{Number(validationTarget.montant).toFixed(2)} MAD</div>
+                        </div>
+                        <div className="col-md-6 mb-3">
+                            <div className="text-muted small mb-1">Remis à la banque par</div>
+                            <div className="fw-medium">
+                                {validationTarget.deposeParNom ?? '-'}
+                                {validationTarget.dateRemise && ` le ${validationTarget.dateRemise}`}
+                            </div>
+                        </div>
+                        <div className="col-md-6 mb-3">
+                            <div className="text-muted small mb-1">Pièces</div>
+                            <div className="d-flex gap-3">
+                                {validationTarget.justificatifDepotUrl ? (
+                                    <a href={validationTarget.justificatifDepotUrl} target="_blank" rel="noreferrer">
+                                        <i className="ti ti-receipt me-1" />
+                                        Reçu de dépôt
+                                    </a>
+                                ) : (
+                                    <span className="text-muted">Aucun reçu</span>
+                                )}
+                                {validationTarget.photoUrl && (
+                                    <a href={validationTarget.photoUrl} target="_blank" rel="noreferrer">
+                                        <i className="ti ti-photo me-1" />
+                                        Photo du chèque
+                                    </a>
+                                )}
+                            </div>
+                        </div>
+                        {validationError && <div className="col-12 mt-3 alert alert-danger mb-0">{validationError}</div>}
+                    </div>
+                )}
+            </Modal>
 
             {/* After marking a chèque Rejeté: offer the refund follow-up. Never
                 auto-created — EnregistrerRemboursement always stays a reviewed,
@@ -900,7 +1316,7 @@ export default function ChequesIndex({
                 retourne_par_id via the "Marquer comme restitué" action). */}
             <Modal
                 show={detailsCheque !== null}
-                title="Responsables du chèque"
+                title="Historique du chèque"
                 onClose={() => setDetailsCheque(null)}
                 footer={
                     <button type="button" className="btn btn-light" onClick={() => setDetailsCheque(null)}>
@@ -918,8 +1334,49 @@ export default function ChequesIndex({
                         </div>
                         <div>
                             <div className="text-muted small mb-1">Reçu par</div>
-                            <div className="fw-medium">{detailsCheque.agentNom ?? '-'}</div>
+                            <div className="fw-medium">
+                                {detailsCheque.agentNom ?? '-'}
+                                {detailsCheque.dateReception && ` le ${detailsCheque.dateReception}`}
+                                {detailsCheque.photoUrl && (
+                                    <a href={detailsCheque.photoUrl} target="_blank" rel="noreferrer" className="ms-2">
+                                        <i className="ti ti-photo me-1" />
+                                        Photo
+                                    </a>
+                                )}
+                            </div>
                         </div>
+                        {detailsCheque.dateRemise && (
+                            <div>
+                                <div className="text-muted small mb-1">Remise à la banque</div>
+                                <div className="fw-medium">
+                                    Par {detailsCheque.deposeParNom ?? '-'} le {detailsCheque.dateRemise}
+                                    {detailsCheque.justificatifDepotUrl && (
+                                        <a href={detailsCheque.justificatifDepotUrl} target="_blank" rel="noreferrer" className="ms-2">
+                                            <i className="ti ti-receipt me-1" />
+                                            Reçu
+                                        </a>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                        {detailsCheque.depotValideLe && (
+                            <div>
+                                <div className="text-muted small mb-1">Remise validée</div>
+                                <div className="fw-medium">
+                                    <i className="ti ti-circle-check text-success me-1" />
+                                    Par {detailsCheque.depotValideParNom ?? '-'} le {detailsCheque.depotValideLe}
+                                </div>
+                            </div>
+                        )}
+                        {detailsCheque.restitutionPaiement && (
+                            <div>
+                                <div className="text-muted small mb-1">Garantie remplacée par</div>
+                                <div className="fw-medium">
+                                    {detailsCheque.restitutionPaiement.reference} - {detailsCheque.restitutionPaiement.methode} -{' '}
+                                    {Number(detailsCheque.restitutionPaiement.montant).toFixed(2)} MAD
+                                </div>
+                            </div>
+                        )}
                         <div>
                             <div className="text-muted small mb-1">Restitué au propriétaire</div>
                             {detailsCheque.retourneLe ? (

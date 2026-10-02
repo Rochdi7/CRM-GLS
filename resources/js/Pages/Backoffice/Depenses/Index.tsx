@@ -241,7 +241,8 @@ export default function DepensesIndex({
         return {
             ...(params.groupFilter !== '' ? { ppGroup: params.groupFilter } : {}),
             ...(params.enseignantFilter !== '' ? { ppEnseignant: params.enseignantFilter } : {}),
-            ...(params.mois !== '' ? { ppMois: params.mois } : {}),
+            ...(params.debut !== '' ? { ppDebut: params.debut } : {}),
+            ...(params.fin !== '' ? { ppFin: params.fin } : {}),
             ...(params.heures !== '' ? { ppHeures: params.heures } : {}),
         };
     }

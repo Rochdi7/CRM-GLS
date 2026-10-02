@@ -1046,6 +1046,43 @@ the database layer. Non-negotiable invariants already enforced in code:
   est sain — 4 conversions avec une scission au milieu, un seul dirham
   reçu, chaque lecture concorde, auditeur strict à 0. Tests :
   `tests/Feature/Backoffice/Finance/AvanceConvertieEnBoucleTest.php`.
+- **⚠ Un chèque va à la banque en DEUX temps, et une GARANTIE n'y va
+  jamais** (30/09/2026, `Payments\Actions\{DeposerChequeEnBanque,
+  ValiderRemiseCheque,RestituerChequeGarantie,SupprimerCheque}`).
+  (1) **Saisie** : photo du chèque OBLIGATOIRE (média `photo`), toujours
+  « En possession ». (2) **Remise à la banque** (`cheques.deposit`, tous les
+  rôles) : date + reçu de dépôt OBLIGATOIRE (média `justificatif_depot`) →
+  « Déposé » ; l'employé ne choisit AUCUN compte. Refusée pour
+  une garantie et pour un « À déposer » dont le reste n'est pas 0,00 — la
+  banque ne doit jamais recevoir un dirham qu'aucun encaissement ne
+  déclare. (3) **Décision du comptable** (`cheques.validate-deposit`,
+  preset `accountant` seul, + le bypass super-admin ; celui qui a déposé ne
+  valide jamais sa remise ; onglet « Remises à valider ») : ACCEPTER →
+  « Encaissé » = la banque a accepté le chèque ; REJETER → « Rejeté ».
+  **⚠ AUCUNE étape de ce parcours ne bouge un solde de caisse** (décision du
+  propriétaire, 01/10/2026 — une première version transférait l'argent du
+  compte « Chèque » vers un compte TPE/Virement à l'acceptation, avec
+  `caisse_transfers.cheque_id` et un choix « Caisse bancaire » : RETIRÉE,
+  ne pas la réintroduire). L'argent d'un chèque reste au compte « Chèque »
+  du centre, où l'encaissement l'a crédité ; ce parcours ne suit que le
+  PAPIER et qui a fait quoi (`date_remise`, `depose_par_id`,
+  `depot_valide_le`, `depot_valide_par_id`). **« Encaissé » n'est plus
+  automatique** : l'ancienne règle « reste 0 ⇒ Encaissé »
+  (`StatutChequeSolde`, `cheques:marquer-encaisses`, 23/09/2026) est
+  SUPPRIMÉE — elle faisait sauter l'étape banque. Un « Encaissé » peut
+  encore passer « Rejeté » (rejet tardif de la banque,
+  `ValiderRemiseCheque::rejetable`). Seul un « À déposer » EN POSSESSION
+  paie un encaissement. **Garantie** : une caution, jamais un moyen de
+  paiement (refus dans `EncaissementController@store`, absente de
+  `studentCheques`) ni envoyée à la banque ; elle se RESTITUE en nommant
+  le paiement espèces / TPE / virement du même étudiant (ou d'un enfant du
+  parent) qui l'a remplacée, daté au plus tôt de la réception, jamais déjà
+  utilisé pour une autre garantie — `restitution_encaissement_id`, une
+  seule définition `RestituerChequeGarantie::paiementsRemplacants()` lue
+  par l'écran et par l'action. Tant qu'un tel paiement n'existe pas, la
+  garantie reste en main. Tests :
+  `tests/Feature/Backoffice/Finance/ChequeRemiseBanqueTest.php`,
+  `RestitutionChequeGarantieTest.php`, `ChequesInertiaCrudTest.php`.
 - **⚠ Le cascade « inscription » LISTE tous les dossiers, et DIT lesquels ne
   se paient pas** (17/09/2026, `GetEncaissementsList::studentInscriptions`).
   Il ne renvoyait que les `Active` : la caissière voyait UN dossier sans
@@ -1776,9 +1813,9 @@ keeps the primary column stable when an edit merely adds a center. Enforcing
   système » crée un super-admin). Détail complet et tableau :
   `docs/roles-and-permissions.md` §5b.
 - **⚠ A physical front-desk GESTURE gets its own permission — never a wider
-  `*.update`** (07/09/2026). « Remise à la banque » and the rest of a
-  chèque's bank journey (En possession → Déposé → Encaissé | Rejeté, plus
-  « restitué ») are `cheques.deposit`, held by EVERY role through
+  `*.update`** (07/09/2026). « Remise à la banque » and the physical side of
+  a chèque's journey (En possession → Déposé, plus « restitué ») are
+  `cheques.deposit`, held by EVERY role through
   `defaultForEveryRole()`; `cheques.update` — rewriting a chèque's owner,
   number or amount — stays with the management roles. The employee who
   physically carries the chèques to the bank is the one who records it, and
@@ -1793,6 +1830,10 @@ keeps the primary column stable when an edit merely adds a center. Enforcing
   `cash-transfers.validate`. Tests:
   `RolesAndPermissionsSeederTest::test_every_role_can_deposit_a_cheque_at_the_bank`
   (both halves: everyone deposits, the front office still cannot update).
+  Since 30/09/2026 the bank's OUTCOME (Déposé → Encaissé | Rejeté) is NOT
+  this permission any more: it is `cheques.validate-deposit`, the
+  accountant's, because accepting now moves money (see §11 « Un chèque va à
+  la banque en DEUX temps »).
 - **⚠ Un écran ABSENT de la barre latérale n'est pas un écran protégé**
   (07/09/2026, « Échéances en masse », `/backoffice/bulk-echeance`,
   `FeeDueDateBulkController`). Un outil ponctuel peut légitimement ne pas

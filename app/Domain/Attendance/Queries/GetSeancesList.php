@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Attendance\Queries;
 
+use App\Models\Group;
 use App\Models\Presence;
 use App\Models\Seance;
 use App\Models\User;
@@ -26,13 +27,26 @@ final class GetSeancesList
 
     public const DEFAULT_PER_PAGE = 10;
 
+    /**
+     * Filtre « Statut du groupe » de la liste : regroupe les quatre statuts
+     * de Group en trois choix lisibles. « Active » = groupe encore ouvert
+     * (en inscription ou en formation).
+     *
+     * @var array<string, list<string>>
+     */
+    public const GROUP_STATUTS = [
+        'Active' => [Group::STATUT_EN_INSCRIPTION, Group::STATUT_EN_FORMATION],
+        'Terminé' => [Group::STATUT_FIN_FORMATION],
+        'Annulée' => [Group::STATUT_ANNULEE],
+    ];
+
     public function __construct(
         private readonly CenterAccessService $centerAccess,
         private readonly CurrentContext $context,
     ) {}
 
     /**
-     * @param  array{search?: string, groupFilter?: string, statutFilter?: string, enseignantFilter?: string, dateFrom?: string, dateTo?: string}  $filters
+     * @param  array{search?: string, groupFilter?: string, statutFilter?: string, groupStatutFilter?: string, enseignantFilter?: string, dateFrom?: string, dateTo?: string}  $filters
      */
     public function __invoke(User $user, array $filters = [], int $perPage = self::DEFAULT_PER_PAGE): LengthAwarePaginator
     {
@@ -43,6 +57,7 @@ final class GetSeancesList
         $search = $filters['search'] ?? '';
         $groupFilter = $filters['groupFilter'] ?? '';
         $statutFilter = $filters['statutFilter'] ?? '';
+        $groupStatuts = self::GROUP_STATUTS[$filters['groupStatutFilter'] ?? ''] ?? null;
         $enseignantFilter = $filters['enseignantFilter'] ?? '';
         $dateFrom = $filters['dateFrom'] ?? '';
         $dateTo = $filters['dateTo'] ?? '';
@@ -59,6 +74,10 @@ final class GetSeancesList
             ->tap(fn ($q) => PorteeEnseignant::scopeSeances($q, $user))
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
             ->when($statutFilter !== '', fn ($q) => $q->where('statut', $statutFilter))
+            ->when($groupStatuts !== null, fn ($q) => $q->whereHas(
+                'group',
+                fn ($g) => $g->whereIn('statut', $groupStatuts),
+            ))
             ->when($groupFilter !== '', fn ($q) => $q->where('group_id', (int) $groupFilter))
             ->when($enseignantFilter !== '', fn ($q) => $q->where('enseignant_id', (int) $enseignantFilter))
             ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_seance', '>=', $dateFrom))

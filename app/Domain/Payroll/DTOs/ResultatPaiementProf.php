@@ -8,7 +8,7 @@ namespace App\Domain\Payroll\DTOs;
  * Résultat complet d'un calcul « Paiement prof » : le total, et TOUT ce qui
  * permet de le refaire à la main.
  *
- *     < 5 présences → 0 · 5–6 → 1 semaine · 7–10 → 2 semaines · 11+ → complet
+ *     < 5 présences → 0 · 5–6 → 1 semaine · 7–12 → 2 semaines · 13+ → complet
  *     une semaine = taux ÷ 4 (voir `CalculerPaiementProfParPaliers`)
  *
  * ⚠ Ce total n'est pas un paiement. Rien n'est écrit, aucune caisse n'est

@@ -81,10 +81,10 @@ final class DepenseController extends Controller
         // l'écran dédié (ResolvesPaiementProfCalcul). ⚠ Aucune écriture :
         // le calcul PROPOSE, la dépense reste une soumission ordinaire.
         $canCalculer = $user->can('prof-payments.calculate') && $user->can('expenses.view');
-        $calculKeys = ['groupFilter' => 'ppGroup', 'enseignantFilter' => 'ppEnseignant', 'mois' => 'ppMois', 'heures' => 'ppHeures'];
+        $calculKeys = ['groupFilter' => 'ppGroup', 'enseignantFilter' => 'ppEnseignant', 'mois' => 'ppMois', 'debut' => 'ppDebut', 'fin' => 'ppFin', 'heures' => 'ppHeures'];
         ['calcul' => $calcul, 'filters' => $calculFilters] = $canCalculer
             ? $this->resolvePaiementProfCalcul($request, $getPaiementProfCalcul, $calculKeys)
-            : ['calcul' => null, 'filters' => ['groupFilter' => '', 'enseignantFilter' => '', 'mois' => '', 'heures' => '', 'dureeSeance' => '']];
+            : ['calcul' => null, 'filters' => ['groupFilter' => '', 'enseignantFilter' => '', 'debut' => '', 'fin' => '', 'heures' => '', 'dureeSeance' => '']];
 
         // The operation trail (créée le / modifiée le) and the « Validation
         // des dépenses » tab are for auditing who keyed what and when — they

@@ -89,6 +89,7 @@ final class RestitutionChequeGarantieTest extends TestCase
         $this->actingAs($user)
             ->patch(route('backoffice.cheques.restituer-garantie', $cheque), [
                 'motif' => 'Réglé en espèces le 19/09/2026',
+                'encaissement_id' => $this->remplacant($cheque),
             ])
             ->assertRedirect();
 
@@ -109,13 +110,14 @@ final class RestitutionChequeGarantieTest extends TestCase
     {
         $user = $this->userWith('cheques.view', 'cheques.deposit');
         $cheque = $this->cheque();
+        $paiement = $this->remplacant($cheque);
 
         $soldesAvant = Caisse::query()->pluck('solde', 'id')->all();
         $mouvementsAvant = Activity::query()
             ->where('log_name', 'caisse')->where('event', 'solde_movement')->count();
 
         $this->actingAs($user)
-            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => 'Réglé en espèces'])
+            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => 'Réglé en espèces', 'encaissement_id' => $paiement])
             ->assertRedirect();
 
         // Un chèque est un inventaire OFF-LEDGER : la caisse n'a pas bougé
@@ -133,6 +135,7 @@ final class RestitutionChequeGarantieTest extends TestCase
         $this->actingAs($user)
             ->patch(route('backoffice.cheques.restituer-garantie', $cheque), [
                 'motif' => 'Réglé par virement, chèque rendu au guichet',
+                'encaissement_id' => $this->remplacant($cheque),
             ])
             ->assertRedirect();
 
@@ -155,7 +158,7 @@ final class RestitutionChequeGarantieTest extends TestCase
         $cheque = $this->cheque();
 
         $this->actingAs($this->userWith('cheques.view', 'cheques.deposit'))
-            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => '   '])
+            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => '   ', 'encaissement_id' => $this->remplacant($cheque)])
             ->assertSessionHasErrors('motif');
 
         $this->assertFalse($cheque->fresh()->estRetourne());
@@ -168,7 +171,7 @@ final class RestitutionChequeGarantieTest extends TestCase
         $cheque = $this->cheque(['type' => Cheque::TYPE_A_DEPOSER]);
 
         $this->actingAs($this->userWith('cheques.view', 'cheques.deposit'))
-            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => 'Réglé en espèces'])
+            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => 'Réglé en espèces', 'encaissement_id' => $this->remplacant($cheque)])
             ->assertSessionHasErrors('motif');
 
         $this->assertFalse($cheque->fresh()->estRetourne());
@@ -181,7 +184,7 @@ final class RestitutionChequeGarantieTest extends TestCase
         $cheque = $this->cheque(['statut' => Cheque::STATUT_DEPOSE]);
 
         $this->actingAs($this->userWith('cheques.view', 'cheques.deposit'))
-            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => 'Réglé en espèces'])
+            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => 'Réglé en espèces', 'encaissement_id' => $this->remplacant($cheque)])
             ->assertSessionHasErrors('motif');
 
         $this->assertFalse($cheque->fresh()->estRetourne());
@@ -208,7 +211,7 @@ final class RestitutionChequeGarantieTest extends TestCase
         ]);
 
         $this->actingAs($user)
-            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => 'Réglé en espèces'])
+            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => 'Réglé en espèces', 'encaissement_id' => $this->remplacant($cheque)])
             ->assertSessionHasErrors('motif');
 
         // Le papier a payé : il n'est plus à rendre, et les lignes qui
@@ -222,13 +225,13 @@ final class RestitutionChequeGarantieTest extends TestCase
         $cheque = $this->cheque();
 
         $this->actingAs($user)
-            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => 'Premier'])
+            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => 'Premier', 'encaissement_id' => $this->remplacant($cheque)])
             ->assertRedirect();
 
         $premiereDate = $cheque->fresh()->retourne_le;
 
         $this->actingAs($user)
-            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => 'Second'])
+            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => 'Second', 'encaissement_id' => $this->remplacant($cheque)])
             ->assertSessionHasErrors('motif');
 
         $this->assertEquals($premiereDate, $cheque->fresh()->retourne_le);
@@ -241,7 +244,7 @@ final class RestitutionChequeGarantieTest extends TestCase
         // Rendre le papier au guichet n'est PAS réécrire le document :
         // `cheques.update` seul ne suffit pas.
         $this->actingAs($this->userWith('cheques.view', 'cheques.update'))
-            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => 'Réglé en espèces'])
+            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => 'Réglé en espèces', 'encaissement_id' => $this->remplacant($cheque)])
             ->assertForbidden();
 
         $this->assertFalse($cheque->fresh()->estRetourne());
@@ -258,13 +261,15 @@ final class RestitutionChequeGarantieTest extends TestCase
         $this->actingAs($user)
             ->getJson(route('backoffice.students.cheques', $student))
             ->assertOk()
-            ->assertJsonCount(1, 'cheques')
+            // Une GARANTIE ne paie jamais (30/09/2026) : elle n'est pas
+            // offerte au paiement, même encore en main.
+            ->assertJsonCount(0, 'cheques')
             // Il est aussi RAPPELÉ comme garantie en main, pour que la
             // caissière n'oublie pas de rendre le papier.
             ->assertJsonCount(1, 'garanties');
 
         $this->actingAs($user)
-            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => 'Réglé en espèces'])
+            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => 'Réglé en espèces', 'encaissement_id' => $this->remplacant($cheque)])
             ->assertRedirect();
 
         // Le papier n'est plus chez nous : l'offrir encore laisserait
@@ -284,7 +289,7 @@ final class RestitutionChequeGarantieTest extends TestCase
         $this->assertSame('En possession', $this->rows($user)[$cheque->id]['statutAffiche']);
 
         $this->actingAs($user)
-            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => 'Réglé en espèces'])
+            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => 'Réglé en espèces', 'encaissement_id' => $this->remplacant($cheque)])
             ->assertRedirect();
 
         // Ce que l'utilisateur LIT doit dire où est le chèque MAINTENANT.
@@ -306,7 +311,7 @@ final class RestitutionChequeGarantieTest extends TestCase
         $enMain = $this->cheque();
 
         $this->actingAs($user)
-            ->patch(route('backoffice.cheques.restituer-garantie', $rendu), ['motif' => 'Réglé en espèces'])
+            ->patch(route('backoffice.cheques.restituer-garantie', $rendu), ['motif' => 'Réglé en espèces', 'encaissement_id' => $this->remplacant($rendu)])
             ->assertRedirect();
 
         // Un badge que l'on affiche doit être filtrable, sinon l'écran
@@ -352,7 +357,7 @@ final class RestitutionChequeGarantieTest extends TestCase
         $this->assertSame('2000.00', $this->montantTotal($user));
 
         $this->actingAs($user)
-            ->patch(route('backoffice.cheques.restituer-garantie', $rendu), ['motif' => 'Réglé en espèces'])
+            ->patch(route('backoffice.cheques.restituer-garantie', $rendu), ['motif' => 'Réglé en espèces', 'encaissement_id' => $this->remplacant($rendu)])
             ->assertRedirect();
 
         // « Montant total » chapeaute les papiers que l'école DÉTIENT. Un
@@ -395,6 +400,110 @@ final class RestitutionChequeGarantieTest extends TestCase
         $this->assertSame('Garantie (À encaisser)', $cheque->fresh()->type);
         $this->assertSame('Garantie (À encaisser)', $this->rows($user)[$cheque->id]['type']);
         $this->assertContains('Garantie (À encaisser)', Cheque::TYPES);
+    }
+
+    /**
+     * Le règlement (espèces par défaut) qui remplace la garantie — la
+     * restitution l'exige depuis le 30/09/2026.
+     */
+    private function remplacant(Cheque $cheque, array $attributes = []): int
+    {
+        $caisse = Caisse::factory()->create(['etablissement_id' => $this->centre->id]);
+        $agent = Employee::factory()->create(['etablissement_id' => $this->centre->id]);
+
+        return Encaissement::create([
+            'reference' => 'ENC-'.random_int(100000, 999999),
+            'student_id' => $cheque->student_id,
+            'etablissement_id' => $this->centre->id,
+            'inscription_fee_id' => null,
+            'montant' => '5000.00',
+            'methode' => Encaissement::METHODE_ESPECES,
+            'date_paiement' => '2026-08-20',
+            'caisse_id' => $caisse->id,
+            'agent_id' => $agent->id,
+            ...$attributes,
+        ])->id;
+    }
+
+    public function test_the_replacing_payment_is_required_and_recorded(): void
+    {
+        $user = $this->userWith('cheques.view', 'cheques.deposit');
+        $cheque = $this->cheque();
+
+        $this->actingAs($user)
+            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), ['motif' => 'Réglé en espèces'])
+            ->assertSessionHasErrors('encaissement_id');
+        $this->assertFalse($cheque->fresh()->estRetourne());
+
+        $paiement = $this->remplacant($cheque, ['methode' => Encaissement::METHODE_TPE]);
+
+        $this->actingAs($user)
+            ->patch(route('backoffice.cheques.restituer-garantie', $cheque), [
+                'motif' => 'Réglé par TPE',
+                'encaissement_id' => $paiement,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $cheque->refresh();
+        $this->assertTrue($cheque->estRetourne());
+        $this->assertSame($paiement, $cheque->restitution_encaissement_id);
+        $this->assertSame($user->employee->id, $cheque->retourne_par_id);
+    }
+
+    public function test_a_payment_that_cannot_replace_the_guarantee_is_refused(): void
+    {
+        $user = $this->userWith('cheques.view', 'cheques.deposit');
+        $cheque = $this->cheque();
+        $autre = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+
+        $refuses = [
+            'paid by cheque' => $this->remplacant($cheque, ['methode' => Encaissement::METHODE_CHEQUE]),
+            'before reception' => $this->remplacant($cheque, ['date_paiement' => '2026-08-01']),
+            'another student' => $this->remplacant($cheque, ['student_id' => $autre->id]),
+        ];
+
+        foreach ($refuses as $cas => $id) {
+            $this->actingAs($user)
+                ->patch(route('backoffice.cheques.restituer-garantie', $cheque), [
+                    'motif' => 'Réglé',
+                    'encaissement_id' => $id,
+                ])
+                ->assertSessionHasErrors('encaissement_id');
+
+            $this->assertFalse($cheque->fresh()->estRetourne(), $cas);
+        }
+    }
+
+    public function test_one_payment_never_releases_two_guarantees(): void
+    {
+        $user = $this->userWith('cheques.view', 'cheques.deposit');
+        $premiere = $this->cheque();
+        $seconde = $this->cheque(['student_id' => $premiere->student_id]);
+        $paiement = $this->remplacant($premiere);
+
+        $this->actingAs($user)
+            ->patch(route('backoffice.cheques.restituer-garantie', $premiere), ['motif' => 'A', 'encaissement_id' => $paiement])
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($user)
+            ->patch(route('backoffice.cheques.restituer-garantie', $seconde), ['motif' => 'B', 'encaissement_id' => $paiement])
+            ->assertSessionHasErrors('encaissement_id');
+
+        $this->assertFalse($seconde->fresh()->estRetourne());
+    }
+
+    public function test_the_replacement_lookup_lists_only_eligible_payments(): void
+    {
+        $user = $this->userWith('cheques.view', 'cheques.deposit');
+        $cheque = $this->cheque();
+        $ok = $this->remplacant($cheque);
+        $this->remplacant($cheque, ['methode' => Encaissement::METHODE_CHEQUE]);
+
+        $this->actingAs($user)
+            ->getJson(route('backoffice.cheques.remplacements', $cheque))
+            ->assertOk()
+            ->assertJsonCount(1, 'paiements')
+            ->assertJsonPath('paiements.0.id', $ok);
     }
 
     public function test_the_read_model_reports_whether_a_row_can_be_returned(): void
