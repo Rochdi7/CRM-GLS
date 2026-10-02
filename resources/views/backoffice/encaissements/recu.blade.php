@@ -78,7 +78,6 @@
             position: relative;
             display: flex;
             flex-direction: column;
-            border-left: 1px dashed #999;
             padding: {{ $format === 'a5x2' ? '2mm 2mm 2mm 6mm' : '3mm 2mm 3mm 6mm' }};
             font-size: {{ $compact ? '7.5pt' : ($mid ? '8pt' : '10pt') }};
             line-height: {{ $mid ? '1.3' : '1.45' }};
