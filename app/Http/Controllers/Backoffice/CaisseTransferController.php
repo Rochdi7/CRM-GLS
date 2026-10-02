@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
-use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
+use App\Domain\Finance\Actions\ChangerDestinataireTransfert;
 use App\Domain\Finance\Actions\DemanderTransfertCaisse;
 use App\Domain\Finance\Actions\ValiderTransfertCaisse;
-use App\Domain\Finance\Support\CaisseResolver;
 use App\Domain\Finance\Queries\GetCaisseTransferDetails;
+use App\Domain\Finance\Support\CaisseResolver;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
+use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Backoffice\CaisseTransfers\ChangerDestinataireTransfertRequest;
 use App\Http\Requests\Backoffice\CaisseTransfers\StoreCaisseTransferRequest;
 use App\Http\Requests\Backoffice\CaisseTransfers\UpdateCaisseTransferRequest;
 use App\Models\CaisseTransfer;
@@ -174,6 +176,42 @@ final class CaisseTransferController extends Controller
 
         return $this->backToListPreservingFilters($request, 'backoffice.caisses.index', ['tab' => 'transferts'])
             ->with('success', __('Transfer updated.'));
+    }
+
+    /**
+     * Change the recipient of a PENDING transfer (PUT /…/{transfer}/destinataire).
+     *
+     * Gated by `cash-transfers.create` on the route, not `.update`: the
+     * person who made the request is the one fixing a wrong recipient, and
+     * the front office holds create only (§16). Who may do it on which
+     * transfer is decided by ChangerDestinataireTransfert, under lock — no
+     * money moves either way.
+     */
+    public function changeDestination(
+        ChangerDestinataireTransfertRequest $request,
+        CaisseTransfer $caisse_transfer,
+        ChangerDestinataireTransfert $action,
+    ): RedirectResponse {
+        $this->authorize('view', $caisse_transfer);
+        $this->assertContextAnneeOuverte('caisse_destination_id');
+
+        $employee = $request->user()->employee;
+
+        if ($employee === null) {
+            throw ValidationException::withMessages([
+                'caisse_destination_id' => __('Your account is not linked to any employee record.'),
+            ]);
+        }
+
+        $action->handle(
+            $caisse_transfer,
+            (int) $request->validated('caisse_destination_id'),
+            $employee,
+            HiddenAccount::isMaintainer($request->user()),
+        );
+
+        return $this->backToListPreservingFilters($request, 'backoffice.caisses.index', ['tab' => 'transferts'])
+            ->with('success', __('Transfer recipient changed.'));
     }
 
     /**

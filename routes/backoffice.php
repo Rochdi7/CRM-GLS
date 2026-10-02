@@ -752,6 +752,10 @@ Route::prefix('backoffice')
                 ->middleware('permission:cheques.deposit')->name('cheques.remise-banque');
             Route::patch('cheques/{cheque}/statut', [ChequeController::class, 'updateStatut'])
                 ->middleware('permission:cheques.validate-deposit')->name('cheques.update-statut');
+            // Annuler un chèque (comptable) : statut « Annulé », motif
+            // obligatoire, jamais supprimé ; refusé s'il a financé un paiement.
+            Route::patch('cheques/{cheque}/annuler', [ChequeController::class, 'annuler'])
+                ->middleware('permission:cheques.cancel')->name('cheques.annuler');
             // Paiements (espèces / TPE / virement) qui peuvent remplacer une
             // garantie — alimente le modal « Restituer au client ».
             Route::get('cheques/{cheque}/remplacements', [ChequeController::class, 'remplacements'])
@@ -836,6 +840,11 @@ Route::prefix('backoffice')
                 ->middleware('permission:cash-transfers.create')->name('caisse-transfers.store');
             Route::put('caisse-transfers/{caisse_transfer}', [CaisseTransferController::class, 'update'])
                 ->middleware('permission:cash-transfers.update')->name('caisse-transfers.update');
+            // The requester fixes a wrong recipient while the transfer is
+            // still pending — create, not update: the front office holds
+            // create only (§16). No money moves (ChangerDestinataireTransfert).
+            Route::put('caisse-transfers/{caisse_transfer}/destinataire', [CaisseTransferController::class, 'changeDestination'])
+                ->middleware('permission:cash-transfers.create')->name('caisse-transfers.change-destination');
             Route::put('caisse-transfers/{caisse_transfer}/validate', [CaisseTransferController::class, 'validateAction'])
                 ->middleware('permission:cash-transfers.validate')->name('caisse-transfers.validate');
             Route::get('caisse-transfers/{caisse_transfer}', [CaisseTransferController::class, 'show'])

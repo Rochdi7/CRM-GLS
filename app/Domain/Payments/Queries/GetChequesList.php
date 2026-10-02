@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Payments\Queries;
 
+use App\Domain\Payments\Actions\AnnulerCheque;
 use App\Domain\Payments\Actions\DeposerChequeEnBanque;
 use App\Domain\Payments\Actions\ValiderRemiseCheque;
 use App\Models\Cheque;
@@ -125,7 +126,11 @@ final class GetChequesList
         // EXCEPTION : quand l'utilisateur DEMANDE explicitement les
         // restitués (statutFilter = « Restitué »), le total porte sur eux,
         // sinon la page afficherait des lignes et un total à 0,00.
+        // Un chèque « Annulé » ne compte pas plus qu'un restitué : ce n'est
+        // pas de l'argent en main. Il reste LISTÉ (et sommable en filtrant
+        // sur son statut).
         $montantTotal = (clone $base)
+            ->when($statutFilter !== Cheque::STATUT_ANNULE, fn ($q) => $q->where('statut', '!=', Cheque::STATUT_ANNULE))
             ->when(
                 $statutFilter !== self::STATUT_RESTITUE,
                 fn ($q) => $q->whereNull('retourne_le'),
@@ -152,6 +157,10 @@ final class GetChequesList
                 'deposePar', 'depotValidePar', 'restitutionEncaissement',
                 'encaissements' => fn ($q) => $q->with('student'),
             ])
+            // Un paiement de ce chèque a-t-il été remboursé (non annulé) ? En
+            // lot, pas une requête par ligne (§17).
+            ->withExists(['encaissements as rembourse_exists' => fn ($q) => $q
+                ->whereHas('remboursements', fn ($r) => $r->nonAnnules())])
             ->paginate($perPage)
             ->withQueryString();
 
@@ -234,6 +243,10 @@ final class GetChequesList
             'depotValideLe' => $cheque->depot_valide_le?->toDateTimeString(),
             'depotValideParNom' => $cheque->depotValidePar?->nomComplet(),
             'rejetable' => ValiderRemiseCheque::rejetable($cheque),
+            // « Rejeté » cliqué par erreur → retour à « Déposé ». Null = possible.
+            'rejetAnnulable' => ValiderRemiseCheque::blocageAnnulationRejet($cheque, (bool) $cheque->rembourse_exists) === null,
+            // Annulation du chèque : la raison du refus vient de l'action.
+            'annulationBlocker' => AnnulerCheque::blocage($cheque, $utilise),
             'encaissements' => $cheque->encaissements->map(fn ($e): array => [
                 'id' => $e->id,
                 'reference' => $e->reference,

@@ -38,4 +38,10 @@ final class ChequePolicy extends ResourcePolicy
     {
         return $user->can('cheques.validate-deposit') && $this->withinCenter($user, $model);
     }
+
+    /** Cancel a cheque (statut « Annulé », 02/10/2026) — the accountant. */
+    public function cancel(User $user, Model $model): bool
+    {
+        return $user->can('cheques.cancel') && $this->withinCenter($user, $model);
+    }
 }

@@ -178,6 +178,7 @@ export default function DepensesIndex({
     remboursementsTotaux,
     canCancelRemboursement,
     canCancelDepense,
+    canUpdateDepenseMontant,
     remboursementCaisses,
     canChooseRemboursementCaisse,
     remboursementCaisseParDefaut,
@@ -548,6 +549,14 @@ export default function DepensesIndex({
         });
         setShowDepenseModal(true);
     }
+
+    // Super-admin only (`expenses.update-amount`): the edit modal shows an
+    // amount INPUT instead of the read-only figure. A refused/cancelled
+    // expense is never editable at all (DepensePolicy@update).
+    const montantEditable = editingDepense !== null
+        && canUpdateDepenseMontant
+        && !editingDepense.isRefusee
+        && !editingDepense.isAnnulee;
 
     function closeDepenseModal() {
         setShowDepenseModal(false);
@@ -1628,7 +1637,11 @@ export default function DepensesIndex({
                 <form id="depense-form" onSubmit={submitDepense}>
                     {editingDepense && (
                         <div className="alert alert-warning">
-                            Le montant et la caisse ne peuvent pas être modifiés après création.
+                            {montantEditable
+                                ? editingDepense.isEnAttente
+                                    ? 'La caisse ne peut pas être modifiée. Le montant est corrigeable : la dépense est en attente, rien n\'a encore été débité.'
+                                    : 'La caisse ne peut pas être modifiée. Corriger le montant débite (ou recrédite) la caisse de la différence.'
+                                : 'Le montant et la caisse ne peuvent pas être modifiés après création.'}
                         </div>
                     )}
                     {/* Ouvert depuis « Calcul paiement prof » : le montant
@@ -1744,7 +1757,7 @@ export default function DepensesIndex({
                             </div>
                         )}
                         <div className="col-md-4">
-                            {editingDepense ? (
+                            {editingDepense && !montantEditable ? (
                                 <div className="d-flex justify-content-between mb-3">
                                     <span className="text-muted">Montant</span>
                                     <span className="fw-medium">{Number(depenseForm.data.montant).toFixed(2)} MAD</span>

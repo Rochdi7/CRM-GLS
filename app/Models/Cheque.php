@@ -69,11 +69,15 @@ class Cheque extends Model implements HasMedia
     public const STATUT_ENCAISSE = 'Encaissé';
     public const STATUT_REJETE = 'Rejeté';
 
+    /** Cancelled by the accountant (AnnulerCheque) — kept, never deleted. */
+    public const STATUT_ANNULE = 'Annulé';
+
     public const STATUTS = [
         self::STATUT_EN_POSSESSION,
         self::STATUT_DEPOSE,
         self::STATUT_ENCAISSE,
         self::STATUT_REJETE,
+        self::STATUT_ANNULE,
     ];
 
     protected $fillable = [

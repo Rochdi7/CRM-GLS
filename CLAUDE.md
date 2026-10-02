@@ -684,7 +684,14 @@ the database layer. Non-negotiable invariants already enforced in code:
   (plus a `DEFAULTS`/`OPTION_DEFAULTS` entry) — never a new column.
 - **Money records (encaissements/depenses/remboursements/transfers) are never
   deleted** — no destroy routes; corrections use compensating entries.
-  `montant`/`caisse_id` are not editable after creation.
+  `montant`/`caisse_id` are not editable after creation. Exception
+  (02/10/2026): a dépense's `montant` may be corrected by a super-admin
+  (`expenses.update-amount`, `superAdminOnly()`) ONLY through
+  `Expenses\Actions\CorrigerMontantDepense` — pending: column only;
+  approved: the DIFFERENCE is debited (under `GardeSoldeCaisse`, centre
+  share) or credited on the stored till via `CaisseLedger`. A changed amount
+  from anyone else is refused (422), never silently ignored. Tests:
+  `tests/Feature/Backoffice/Finance/DepenseMontantCorrectionTest.php`.
 - **Every "read a balance, then write" money check runs INSIDE the
   transaction on a `lockForUpdate()` row** (audit 22/08/2026): the avance
   remaining (`AppliquerAvance`), the fee remaining and the cheque remaining
@@ -1071,7 +1078,20 @@ the database layer. Non-negotiable invariants already enforced in code:
   (`StatutChequeSolde`, `cheques:marquer-encaisses`, 23/09/2026) est
   SUPPRIMÉE — elle faisait sauter l'étape banque. Un « Encaissé » peut
   encore passer « Rejeté » (rejet tardif de la banque,
-  `ValiderRemiseCheque::rejetable`). Seul un « À déposer » EN POSSESSION
+  `ValiderRemiseCheque::rejetable`). **Deux corrections du comptable
+  (02/10/2026), aucune ne bouge d'argent** : (a) **« Annuler le rejet »**
+  (`annulerRejet`, même permission) remet « Rejeté » → « Déposé » ; refusé
+  si le papier a été restitué ou si un paiement du chèque porte un
+  remboursement non annulé — ce remboursement a débité le compte Chèque
+  PARCE QUE le chèque était rejeté. (b) **« Annuler le chèque »**
+  (`AnnulerCheque`, `cheques.cancel` — preset `accountant` seul +
+  super-admin, motif OBLIGATOIRE) pose `Cheque::STATUT_ANNULE` : la ligne
+  reste LISTÉE, barrée, hors du total « en main », avec son motif dans la
+  note — jamais supprimée. **Refusé dès que le chèque a financé un
+  paiement** (celui-là se REJETTE, il ne s'annule pas) ou qu'il a été
+  restitué. Un « Annulé » ne paie plus, ne va plus à la banque, ne se
+  modifie plus. Les deux raisons de refus viennent du serveur
+  (`rejetAnnulable`, `annulationBlocker`). Seul un « À déposer » EN POSSESSION
   paie un encaissement. **Garantie** : une caution, jamais un moyen de
   paiement (refus dans `EncaissementController@store`, absente de
   `studentCheques`) ni envoyée à la banque ; elle se RESTITUE en nommant

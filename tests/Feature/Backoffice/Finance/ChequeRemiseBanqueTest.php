@@ -369,9 +369,150 @@ final class ChequeRemiseBanqueTest extends TestCase
         $this->assertSame(0, CaisseTransfer::count());
     }
 
+    // --- Annuler un chèque (comptable) — statut « Annulé » -----------------
+
+    public function test_the_accountant_cancels_an_unused_cheque_and_no_money_moves(): void
+    {
+        $comptable = $this->userWith('cheques.view', 'cheques.cancel');
+        $cheque = $this->cheque(1000, 0);
+        [$soldes, $mouvements] = [$this->soldes(), $this->mouvementsDeCaisse()];
+
+        $this->actingInCentre($comptable)
+            ->patch(route('backoffice.cheques.annuler', $cheque), ['motif' => 'Saisi deux fois'])
+            ->assertSessionHasNoErrors();
+
+        $cheque->refresh();
+        $this->assertSame(Cheque::STATUT_ANNULE, $cheque->statut);
+        $this->assertStringContainsString('[ANNULÉ]', $cheque->note);
+        $this->assertStringContainsString('Saisi deux fois', $cheque->note);
+        $this->assertSame($soldes, $this->soldes());
+        $this->assertSame($mouvements, $this->mouvementsDeCaisse());
+        $this->assertTrue(\App\Models\Activity::query()->where('event', 'cheque_annule')->exists());
+    }
+
+    public function test_cancelling_needs_a_reason_and_the_permission(): void
+    {
+        $cheque = $this->cheque(1000, 0);
+
+        $this->actingInCentre($this->userWith('cheques.view', 'cheques.cancel'))
+            ->patch(route('backoffice.cheques.annuler', $cheque), ['motif' => '  '])
+            ->assertSessionHasErrors('motif');
+
+        // Depositing or validating is not cancelling.
+        $this->actingInCentre($this->userWith('cheques.view', 'cheques.deposit', 'cheques.update'))
+            ->patch(route('backoffice.cheques.annuler', $cheque), ['motif' => 'Erreur'])
+            ->assertForbidden();
+
+        $this->assertSame(Cheque::STATUT_EN_POSSESSION, $cheque->fresh()->statut);
+    }
+
+    public function test_a_cheque_that_paid_cannot_be_cancelled(): void
+    {
+        $comptable = $this->userWith('cheques.view', 'cheques.cancel');
+        $cheque = $this->cheque(1000, 400);
+
+        $this->actingInCentre($comptable)
+            ->patch(route('backoffice.cheques.annuler', $cheque), ['motif' => 'Erreur'])
+            ->assertSessionHasErrors('motif');
+
+        $this->assertSame(Cheque::STATUT_EN_POSSESSION, $cheque->fresh()->statut);
+    }
+
+    public function test_a_cancelled_cheque_is_closed_but_stays_listed_out_of_the_total(): void
+    {
+        $user = $this->userWith('cheques.view', 'cheques.cancel', 'cheques.deposit', 'cheques.update');
+        $vivant = $this->cheque(700, 0);
+        $annule = $this->cheque(1000, 0);
+        $this->actingInCentre($user)
+            ->patch(route('backoffice.cheques.annuler', $annule), ['motif' => 'Erreur'])
+            ->assertSessionHasNoErrors();
+
+        // No longer offered to pay, to deposit, to edit, nor to cancel twice.
+        $this->getJson(route('backoffice.students.cheques', $this->student))->assertJsonCount(1, 'cheques');
+        $this->remettre($user, $annule)->assertSessionHasErrors('date_remise');
+        $this->put(route('backoffice.cheques.update', $annule), [
+            'source' => Cheque::SOURCE_ETUDIANT, 'student_id' => $this->student->id,
+            'numero_cheque' => 'X1', 'montant' => '1000', 'date_reception' => '2026-08-01',
+            'type' => Cheque::TYPE_A_DEPOSER,
+        ])->assertSessionHasErrors('montant');
+        $this->patch(route('backoffice.cheques.annuler', $annule), ['motif' => 'Encore'])
+            ->assertSessionHasErrors('motif');
+
+        // Still listed, flagged, and out of the « en main » total.
+        $props = null;
+        $this->get(route('backoffice.cheques.index', ['dateEcheanceFrom' => '']))
+            ->assertOk()
+            ->assertInertia(function (\Inertia\Testing\AssertableInertia $page) use (&$props): void {
+                $props = $page->toArray()['props'];
+            });
+        $rows = collect($props['cheques']['data'])->keyBy('id');
+        $this->assertSame(Cheque::STATUT_ANNULE, $rows[$annule->id]['statut']);
+        $this->assertNotNull($rows[$annule->id]['annulationBlocker']);
+        $this->assertNull($rows[$vivant->id]['annulationBlocker']);
+        $this->assertSame('700.00', $props['montantTotal']);
+        $this->assertContains(Cheque::STATUT_ANNULE, $props['statuts']);
+    }
+
+    // --- Annuler un rejet (comptable) --------------------------------------
+
+    public function test_a_rejection_made_by_mistake_is_undone_back_to_depose(): void
+    {
+        $guichet = $this->userWith('cheques.view', 'cheques.deposit');
+        $comptable = $this->userWith('cheques.view', 'cheques.validate-deposit');
+        $cheque = $this->cheque();
+        $this->remettre($guichet, $cheque)->assertSessionHasNoErrors();
+        $this->actingInCentre($comptable)
+            ->patch(route('backoffice.cheques.update-statut', $cheque), ['statut' => Cheque::STATUT_REJETE])
+            ->assertSessionHasNoErrors();
+        $soldes = $this->soldes();
+
+        $this->actingInCentre($comptable)
+            ->patch(route('backoffice.cheques.update-statut', $cheque), ['statut' => Cheque::STATUT_DEPOSE])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(Cheque::STATUT_DEPOSE, $cheque->fresh()->statut);
+        $this->assertSame($soldes, $this->soldes());
+
+        // The decision is open again.
+        $this->actingInCentre($comptable)
+            ->patch(route('backoffice.cheques.update-statut', $cheque), ['statut' => Cheque::STATUT_ENCAISSE])
+            ->assertSessionHasNoErrors();
+        $this->assertSame(Cheque::STATUT_ENCAISSE, $cheque->fresh()->statut);
+    }
+
+    public function test_a_rejection_with_consequences_cannot_be_undone(): void
+    {
+        $comptable = $this->userWith('cheques.view', 'cheques.validate-deposit');
+
+        // 1. The paper already went back to its owner.
+        $rendu = $this->cheque();
+        $rendu->update(['statut' => Cheque::STATUT_REJETE, 'retourne_le' => now(), 'retourne_par_id' => $comptable->employee->id]);
+
+        // 2. A payment it funded was refunded because of the rejection.
+        $rembourse = $this->cheque();
+        $rembourse->update(['statut' => Cheque::STATUT_REJETE]);
+        $paiement = $rembourse->encaissements()->sole();
+        \App\Models\Remboursement::create([
+            'reference' => 'RMB-T1', 'beneficiaire_id' => $this->student->id, 'encaissement_id' => $paiement->id,
+            'caisse_id' => $paiement->caisse_id, 'etablissement_id' => $this->centre->id, 'montant' => 100,
+            'date_remboursement' => '2026-08-12', 'motif' => 'Chèque rejeté', 'agent_id' => $comptable->employee->id,
+        ]);
+
+        foreach ([$rendu, $rembourse] as $cheque) {
+            $this->actingInCentre($comptable)
+                ->patch(route('backoffice.cheques.update-statut', $cheque), ['statut' => Cheque::STATUT_DEPOSE])
+                ->assertSessionHasErrors('statut');
+
+            $this->assertSame(Cheque::STATUT_REJETE, $cheque->fresh()->statut);
+        }
+    }
+
     public function test_only_the_accountant_role_decides_a_deposit(): void
     {
         $this->assertTrue(Role::findByName('accountant')->hasPermissionTo('cheques.validate-deposit'));
+        $this->assertTrue(Role::findByName('accountant')->hasPermissionTo('cheques.cancel'));
+        $this->assertFalse(Role::findByName('administrative-assistant')->hasPermissionTo('cheques.cancel'));
+        $this->assertFalse(Role::findByName('director')->hasPermissionTo('cheques.cancel'));
         $this->assertFalse(Role::findByName('administrative-assistant')->hasPermissionTo('cheques.validate-deposit'));
         // Everyone still deposits.
         $this->assertTrue(Role::findByName('administrative-assistant')->hasPermissionTo('cheques.deposit'));

@@ -2013,6 +2013,8 @@ export interface CaisseTransferRow {
     canCancel: boolean;
     /** True when cancelling this row means cancelling somebody ELSE's transfer — a reason is then required. */
     cancelNeedsMotif: boolean;
+    /** The requester (or the maintainer) may still change the recipient — pending rows only. */
+    canChangeDestinataire: boolean;
     showUrl: string;
 }
 
@@ -2361,6 +2363,10 @@ export interface ChequeRow {
     depotValideParNom: string | null;
     /** Le comptable peut-il marquer ce chèque « Rejeté » ? (ValiderRemiseCheque::rejetable) */
     rejetable: boolean;
+    /** Un « Rejeté » posé par erreur peut-il revenir à « Déposé » ? (ValiderRemiseCheque::blocageAnnulationRejet) */
+    rejetAnnulable: boolean;
+    /** Pourquoi ce chèque ne peut pas être annulé — null s'il le peut (AnnulerCheque::blocage). */
+    annulationBlocker: string | null;
     encaissements: ChequeLinkedEncaissement[];
 }
 
@@ -2412,6 +2418,8 @@ export interface ChequesPageProps {
     canDelete: boolean;
     /** Accepter / rejeter une remise à la banque (comptable, `cheques.validate-deposit`). */
     canValidateDeposit: boolean;
+    /** Annuler un chèque — statut « Annulé » (comptable, `cheques.cancel`). */
+    canCancel: boolean;
     /** Remises « Déposé » en attente du comptable (portée centre, hors filtres). */
     remisesEnAttente: number;
     chequeMimes: string[];
@@ -2669,6 +2677,8 @@ export interface DepensesPageProps {
     canCancelRemboursement: boolean;
     /** `expenses.cancel` — super-admin only. UI convenience; the policy is the real gate. */
     canCancelDepense: boolean;
+    /** `expenses.update-amount` — super-admin only: the edit modal lets the amount be corrected (the till moves by the difference). UI convenience only. */
+    canUpdateDepenseMontant: boolean;
     /**
      * Same permission, different job: gates the « Date d'operation » column
      * and the « Validation des depenses » tab. When false the controller has

@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Expenses\Actions\AnnulerDepense;
 use App\Domain\Expenses\Actions\ApprouverDepense;
+use App\Domain\Expenses\Actions\CorrigerMontantDepense;
 use App\Domain\Expenses\Actions\EnregistrerDepense;
 use App\Domain\Finance\Support\CaisseResolver;
 use App\Domain\Finance\Support\VentilationCentre;
@@ -27,6 +28,7 @@ use App\Services\Context\CurrentContext;
 use App\Support\Settings\AppSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -216,6 +218,10 @@ final class DepenseController extends Controller
             // uniquement (`expenses.cancel` est dans superAdminOnly()). Prop
             // de CONFORT — la policy reste le vrai verrou (§5).
             'canCancelDepense' => $user->can('expenses.cancel'),
+            // Corriger le montant d'une dépense bouge la caisse de l'écart :
+            // super-admin uniquement (`expenses.update-amount`). Confort
+            // d'affichage — le contrôleur update() reste le vrai verrou.
+            'canUpdateDepenseMontant' => $user->can('expenses.update-amount'),
             // Drives BOTH the « Date d'opération » column and the
             // « Validation des dépenses » tab — see $canAudit above.
             'canAudit' => $canAudit,
@@ -558,7 +564,7 @@ final class DepenseController extends Controller
         });
     }
 
-    public function update(UpdateDepenseRequest $request, Depense $depense): RedirectResponse
+    public function update(UpdateDepenseRequest $request, Depense $depense, CorrigerMontantDepense $corrigerMontant): RedirectResponse
     {
         $this->authorize('update', $depense);
         $this->assertDepenseInContext($request, $depense);
@@ -568,7 +574,20 @@ final class DepenseController extends Controller
             $this->assertPaiementProfGroupInContext($request, Group::findOrFail((int) $request->validated('group_id')));
         }
 
-        $payload = collect($request->validated())->except(['justificatifs'])->all();
+        $payload = collect($request->validated())->except(['justificatifs', 'montant'])->all();
+
+        // The form echoes the stored amount on every edit; only a DIFFERENT
+        // value is a correction, and that one is super-admin only
+        // (expenses.update-amount) — refused, never silently ignored.
+        $nouveauMontant = $request->validated('montant');
+        $montantChange = $nouveauMontant !== null
+            && abs(round((float) $nouveauMontant, 2) - round((float) $depense->montant, 2)) >= 0.005;
+
+        if ($montantChange && ! $request->user()->can('expenses.update-amount')) {
+            throw ValidationException::withMessages([
+                'montant' => __('Only a super-admin can change the amount of an expense.'),
+            ]);
+        }
 
         // Switching a « Paiement prof » back to an ordinary type sends none
         // of the prof-only fields, and `prohibited` only rejects fields that
@@ -581,9 +600,18 @@ final class DepenseController extends Controller
             $payload['periode_fin'] = null;
         }
 
-        // montant / caisse_id are absent from $payload by construction — the
-        // till balance already moved (UpdateDepenseRequest excludes them).
-        $depense->update($payload);
+        // caisse_id is absent from $payload by construction and montant is
+        // stripped above: an amount change goes ONLY through
+        // CorrigerMontantDepense (difference debited/credited on the stored
+        // till when approved), in the same transaction as the other fields.
+        DB::transaction(function () use ($request, $depense, $payload, $montantChange, $nouveauMontant, $corrigerMontant): void {
+            if ($montantChange) {
+                $corrigerMontant->handle($depense, (float) $nouveauMontant, $request->user()->employee);
+                $depense->refresh();
+            }
+
+            $depense->update($payload);
+        });
 
         // New receipts can be attached during an edit too, not only at
         // creation — matches DepensesIndex::save() calling

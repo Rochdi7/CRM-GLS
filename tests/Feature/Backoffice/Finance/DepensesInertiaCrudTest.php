@@ -424,12 +424,21 @@ final class DepensesInertiaCrudTest extends TestCase
             'agent_id' => $user->employee->id,
         ]);
 
+        // A changed amount without expenses.update-amount (super-admin only,
+        // 02/10/2026) is REFUSED, never silently ignored.
+        $this->put(route('backoffice.depenses.update', $depense), [
+            'type_depense_id' => $this->type->id,
+            'date_depense' => '2025-09-16',
+            'description' => 'Updated',
+            'montant' => '9999',
+        ])->assertSessionHasErrors('montant');
+        $this->assertSame('120.00', (string) $depense->fresh()->montant);
+
         $this->put(route('backoffice.depenses.update', $depense), [
             'type_depense_id' => $this->type->id,
             'date_depense' => '2025-09-16',
             'description' => 'Updated',
             // Tampered — must have zero effect.
-            'montant' => '9999',
             'caisse_id' => $otherCaisse->id,
         ])->assertSessionDoesntHaveErrors();
 

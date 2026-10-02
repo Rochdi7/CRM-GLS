@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Attendance\Queries;
 
 use App\Models\Creneau;
+use App\Models\Group;
 use App\Models\User;
 use App\Domain\Groups\Support\PorteeEnseignant;
 use App\Services\Authorization\CenterAccessService;
@@ -56,6 +57,11 @@ final class GetCreneauxGrille
             ->whereHas('group', function ($q) use ($user): void {
                 $this->centerAccess->scopeAccessibleCenters($q, $user);
                 $this->scopeToActiveCenter($q);
+                // Un groupe « Fin de formation » / « Annulée » ne fait plus
+                // cours : ses créneaux n'ont rien à faire sur l'emploi du
+                // temps (même ensemble que le dropdown Groupe de la page,
+                // GetCreneauFormOptions::groups()).
+                $q->whereNotIn('statut', Group::STATUTS_HISTORIQUE);
                 if ($this->context->anneeScolaireId()) {
                     $q->where('annee_scolaire_id', $this->context->anneeScolaireId());
                 }

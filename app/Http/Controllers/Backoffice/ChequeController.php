@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Backoffice;
 
+use App\Domain\Payments\Actions\AnnulerCheque;
 use App\Domain\Payments\Actions\DeposerChequeEnBanque;
 use App\Domain\Payments\Actions\RestituerChequeGarantie;
 use App\Domain\Payments\Actions\SupprimerCheque;
@@ -123,6 +124,7 @@ final class ChequeController extends Controller
             'canDelete' => $request->user()->can('cheques.delete'),
             // Accepter / rejeter une remise à la banque — le comptable.
             'canValidateDeposit' => $request->user()->can('cheques.validate-deposit'),
+            'canCancel' => $request->user()->can('cheques.cancel'),
             'remisesEnAttente' => $chequesList['remisesEnAttente'],
             'chequeMimes' => Cheque::MEDIA_MIMES,
             'chequeMaxKb' => Cheque::MEDIA_MAX_KB,
@@ -189,6 +191,13 @@ final class ChequeController extends Controller
     {
         $this->authorize('update', $cheque);
         $this->assertContextAnneeOuverte('montant');
+
+        // Un chèque annulé est de l'histoire close : il ne se modifie plus.
+        if ($cheque->statut === Cheque::STATUT_ANNULE) {
+            throw ValidationException::withMessages([
+                'montant' => __('A cancelled cheque can no longer be edited.'),
+            ]);
+        }
 
         $data = $request->validated();
 
@@ -326,6 +335,8 @@ final class ChequeController extends Controller
         match ($request->string('statut')->toString()) {
             Cheque::STATUT_ENCAISSE => $action->accepter($cheque, $agent),
             Cheque::STATUT_REJETE => $action->rejeter($cheque, $agent),
+            // « Rejeté » cliqué par erreur : retour à « Déposé ».
+            Cheque::STATUT_DEPOSE => $action->annulerRejet($cheque, $agent),
             default => throw ValidationException::withMessages([
                 'statut' => __('This status change is not allowed from the current status.'),
             ]),
@@ -333,6 +344,28 @@ final class ChequeController extends Controller
 
         return $this->backToListPreservingFilters($request, 'backoffice.cheques.index')
             ->with('success', __('Cheque status updated.'));
+    }
+
+    /**
+     * Annule un chèque (`cheques.cancel`, comptable + super-admin) : statut
+     * « Annulé », motif obligatoire. La règle entière vit dans AnnulerCheque.
+     */
+    public function annuler(Request $request, Cheque $cheque, AnnulerCheque $action): RedirectResponse
+    {
+        $this->authorize('cancel', $cheque);
+        $this->assertRecordInContext(
+            $request,
+            'motif',
+            $cheque->etablissement_id,
+            null,
+            __('This cheque belongs to another centre than the active one.'),
+            '',
+        );
+
+        $action->handle($cheque, (string) $request->string('motif'), $this->agentOrFail($request, 'motif'));
+
+        return $this->backToListPreservingFilters($request, 'backoffice.cheques.index')
+            ->with('success', __('Cheque cancelled.'));
     }
 
     /**

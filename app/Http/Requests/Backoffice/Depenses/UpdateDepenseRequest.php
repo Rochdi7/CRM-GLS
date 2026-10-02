@@ -11,8 +11,10 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 /**
- * ⚠ `montant` and `caisse_id` are deliberately NOT editable after creation —
- * the till balance already moved; corrections need a compensating entry.
+ * ⚠ `caisse_id` is deliberately NOT editable after creation. `montant` is
+ * accepted, but only a holder of `expenses.update-amount` (super-admin) may
+ * CHANGE it — DepenseController@update hands it to CorrigerMontantDepense,
+ * which moves the difference on the till through CaisseLedger.
  * Edits are audit-logged (LogsActivity on the model).
  */
 final class UpdateDepenseRequest extends FormRequest
@@ -46,6 +48,9 @@ final class UpdateDepenseRequest extends FormRequest
                         : $w->where('statut', TypeDepense::STATUT_ACTIF));
                 }),
             ],
+            // The form echoes the stored amount on every edit; a DIFFERENT
+            // value is refused in the controller without expenses.update-amount.
+            'montant' => ['sometimes', 'numeric', 'min:0.01', 'max:9999999999.99'],
             // Nullable on edit: rows predating the field stay correctable.
             'methode_paiement' => ['nullable', Rule::in(Depense::METHODES)],
             'date_depense' => ['required', 'date'],

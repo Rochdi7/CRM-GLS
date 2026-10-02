@@ -413,6 +413,14 @@ export default function CaissesIndex({
     const [motifAnnulation, setMotifAnnulation] = useState('');
     const [actionProcessing, setActionProcessing] = useState(false);
 
+    // « Changer le destinataire » — the requester's own correction while the
+    // transfer is still pending (row.canChangeDestinataire). No money moves:
+    // only who may accept the receipt changes.
+    const [changingDest, setChangingDest] = useState<CaisseTransferRow | null>(null);
+    const [newDestId, setNewDestId] = useState<number | ''>('');
+    const [destError, setDestError] = useState<string | undefined>(undefined);
+    const [destProcessing, setDestProcessing] = useState(false);
+
     // Destination choices — every accessible till EXCEPT the acting
     // employee's own (the fixed source): transferring to yourself is
     // meaningless and refused server-side anyway. The unfiltered list stays
@@ -530,6 +538,41 @@ export default function CaissesIndex({
         transferForm.post('/backoffice/caisse-transfers', {
             preserveScroll: true,
             onSuccess,
+        });
+    }
+
+    // Same offered list as the create modal (the server checks it with the
+    // same rule), minus the two ends that would make no sense: the source,
+    // and the recipient being replaced.
+    const changeDestOptions: SelectOption[] = changingDest
+        ? transferCaisses
+            .filter((c) => c.id !== changingDest.caisseSourceId && c.id !== changingDest.caisseDestinationId)
+            .map((c) => ({ value: c.id, label: c.nom }))
+        : [];
+
+    function openChangeDest(row: CaisseTransferRow) {
+        setChangingDest(row);
+        setNewDestId('');
+        setDestError(undefined);
+    }
+
+    function closeChangeDest() {
+        setChangingDest(null);
+        setNewDestId('');
+        setDestError(undefined);
+    }
+
+    function submitChangeDest(event: FormEvent) {
+        event.preventDefault();
+        if (!changingDest) return;
+        setDestError(undefined);
+        setDestProcessing(true);
+
+        router.put(`/backoffice/caisse-transfers/${changingDest.id}/destinataire`, { caisse_destination_id: newDestId }, {
+            preserveScroll: true,
+            onSuccess: () => closeChangeDest(),
+            onError: (errors) => setDestError(Object.values(errors)[0]),
+            onFinish: () => setDestProcessing(false),
         });
     }
 
@@ -743,6 +786,14 @@ export default function CaissesIndex({
                                                         Modifier
                                                     </RowActionItem>
                                                 )}
+                                                {/* Changer le destinataire: the REQUESTER's own
+                                                    correction (any role - gated by create, not
+                                                    update), pending only. */}
+                                                {row.canChangeDestinataire && (
+                                                    <RowActionItem icon="ti-arrows-exchange" onClick={() => openChangeDest(row)}>
+                                                        Changer le destinataire
+                                                    </RowActionItem>
+                                                )}
                                                 {/* Annuler: the two parties, plus the maintainer
                                                     for any pending row (row.canCancel). Cancelling
                                                     someone else's transfer asks for a reason in the
@@ -831,6 +882,47 @@ export default function CaissesIndex({
                     </div>
                 )}
             </ConfirmDialog>
+
+            <Modal
+                show={changingDest !== null}
+                title="Changer le destinataire"
+                onClose={closeChangeDest}
+                processing={destProcessing}
+                footer={<FormActions form="change-dest-form" onCancel={closeChangeDest} processing={destProcessing} submitLabel="Valider" />}
+            >
+                <form id="change-dest-form" onSubmit={submitChangeDest}>
+                    <div className="alert alert-info">
+                        Aucun solde ne bouge : le transfert reste en attente, et c'est le nouveau destinataire
+                        qui devra accepter la réception.
+                    </div>
+                    {changingDest && (
+                        <div className="mb-3">
+                            <div className="d-flex justify-content-between">
+                                <span className="text-muted">Transfert</span>
+                                <span className="fw-medium">{changingDest.reference}</span>
+                            </div>
+                            <div className="d-flex justify-content-between">
+                                <span className="text-muted">Montant</span>
+                                <span className="fw-medium">{Number(changingDest.montant).toFixed(2)} DH</span>
+                            </div>
+                            <div className="d-flex justify-content-between">
+                                <span className="text-muted">Destinataire actuel</span>
+                                <span className="fw-medium">{changingDest.destinataire ?? '-'}</span>
+                            </div>
+                        </div>
+                    )}
+                    <SelectField
+                        id="ct-new-destination"
+                        label="Nouveau destinataire"
+                        options={changeDestOptions}
+                        placeholder="Choisir une caisse destination"
+                        required
+                        value={newDestId}
+                        onChange={(e) => setNewDestId(e.target.value === '' ? '' : Number(e.target.value))}
+                        error={destError}
+                    />
+                </form>
+            </Modal>
 
             <Modal
                 show={showTransferModal}

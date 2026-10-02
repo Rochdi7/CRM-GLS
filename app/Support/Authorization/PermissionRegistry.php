@@ -342,6 +342,11 @@ final class PermissionRegistry
                 // qui en est sorti — même classe que refunds.cancel, donc
                 // super-admin uniquement (superAdminOnly(), 09/09/2026).
                 'expenses.cancel' => 'Annuler une dépense approuvée (super-admin)',
+                // Corriger le MONTANT d'une dépense : sur une dépense
+                // approuvée la différence est débitée/recréditée à la caisse
+                // (CorrigerMontantDepense) — mouvement d'argent, donc
+                // super-admin uniquement (superAdminOnly(), 02/10/2026).
+                'expenses.update-amount' => "Modifier le montant d'une dépense (super-admin)",
                 'expenses.approve' => 'Approuver ou refuser une dépense',
             ],
             // Calcul « Paiement prof » (21/09/2026) — dérive, depuis les
@@ -401,6 +406,10 @@ final class PermissionRegistry
                 // de `cheques.deposit` : celui qui porte le chèque ne valide
                 // pas sa propre remise (ValiderRemiseCheque le refuse aussi).
                 'cheques.validate-deposit' => 'Valider ou rejeter une remise de chèque à la banque (comptable)',
+                // Annuler un chèque (02/10/2026) : il passe « Annulé » et
+                // reste listé avec son motif. Refusé s'il a financé un
+                // paiement (AnnulerCheque) — aucun argent ne bouge jamais.
+                'cheques.cancel' => 'Annuler un chèque (comptable)',
                 // Suppression d'un chèque (29/09/2026) — super-admin
                 // uniquement (tout `*.delete` est filtré par
                 // superAdminOnly()). Les paiements financés restent, seul
@@ -648,6 +657,9 @@ final class PermissionRegistry
             // Annuler une dépense approuvée recrédite la caisse — même
             // mouvement, même classe que refunds.cancel (09/09/2026).
             'expenses.cancel',
+            // Corriger le montant d'une dépense bouge la caisse de la
+            // différence — même classe que expenses.cancel (02/10/2026).
+            'expenses.update-amount',
             // Moving a group between années rewrites the year of every
             // inscription, séance (and therefore payment) hanging off it —
             // a history-altering act reserved to super-admins (24/08/2026).
@@ -1034,6 +1046,7 @@ final class PermissionRegistry
                 // Vérifie les remises à la banque (reçu de dépôt) et les
                 // accepte ou les rejette (30/09/2026).
                 'cheques.validate-deposit',
+                'cheques.cancel',
                 'cash-transfers.create', 'cash-transfers.update',
                 // Le comptable tient une caisse : il doit pouvoir accepter
                 // un transfert entrant vers SA propre caisse (regle

@@ -91,6 +91,41 @@ final class CreneauxInertiaCrudTest extends TestCase
     }
 
     /**
+     * Un groupe « Fin de formation » ou « Annulée » ne fait plus cours : ses
+     * créneaux ne figurent plus sur l'emploi du temps (02/10/2026).
+     */
+    public function test_the_grid_hides_creneaux_of_finished_or_cancelled_groups(): void
+    {
+        $termine = Group::factory()->create([
+            'statut' => Group::STATUT_FIN_FORMATION,
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+        $annule = Group::factory()->create([
+            'statut' => Group::STATUT_ANNULEE,
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        foreach ([$this->group, $termine, $annule] as $group) {
+            Creneau::create([
+                'group_id' => $group->id,
+                'jour_semaine' => 1,
+                'heure_debut' => '10:00',
+                'heure_fin' => '12:00',
+            ]);
+        }
+
+        $this->actingAs($this->userWith('attendance.view'))
+            ->get(route('backoffice.emploi-du-temps.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('creneaux', 1)
+                ->where('creneaux.0.groupId', $this->group->id)
+            );
+    }
+
+    /**
      * ⚠ Régression 03/09/2026 — la grille affichait un créneau CLÔTURÉ
      * exactement comme un créneau vivant. Sur B2 Mehdi Kouay17h (Salé), cinq
      * cases bien remplies laissaient croire à un emploi du temps en place

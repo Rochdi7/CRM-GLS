@@ -97,7 +97,8 @@ function typeLabel(type: string): string {
     return type === 'Garantie (À encaisser)' ? 'Garantie' : type;
 }
 
-function statutVariant(statut: string): 'primary' | 'warning' | 'success' | 'danger' {
+function statutVariant(statut: string): 'primary' | 'warning' | 'success' | 'danger' | 'secondary' {
+    if (statut === 'Annulé') return 'secondary';
     if (statut === 'Déposé') return 'warning';
     if (statut === 'Encaissé') return 'success';
     if (statut === 'Rejeté') return 'danger';
@@ -130,6 +131,7 @@ export default function ChequesIndex({
     canDeposit,
     canDelete,
     canValidateDeposit,
+    canCancel,
     remisesEnAttente,
     chequeMimes,
     chequeMaxKb,
@@ -137,7 +139,7 @@ export default function ChequesIndex({
     const isLoading = useInertiaLoading();
     const [showModal, setShowModal] = useState(false);
     const [editingCheque, setEditingCheque] = useState<ChequeRow | null>(null);
-    const [statutTarget, setStatutTarget] = useState<{ cheque: ChequeRow; statut: 'Rejeté' } | null>(null);
+    const [statutTarget, setStatutTarget] = useState<{ cheque: ChequeRow; statut: 'Rejeté' | 'Déposé' } | null>(null);
     const [statutError, setStatutError] = useState<string | undefined>(undefined);
     const [statutProcessing, setStatutProcessing] = useState(false);
     // After a chèque is marked Rejeté, offer to open the refund form —
@@ -171,6 +173,11 @@ export default function ChequesIndex({
     const [validationProcessing, setValidationProcessing] = useState(false);
     // Suppression (super-admin) : le serveur refuse un chèque qui a financé
     // un encaissement, et l'erreur s'affiche dans le dialogue.
+    // Annulation du chèque (comptable) : statut « Annulé », motif obligatoire.
+    const [annulTarget, setAnnulTarget] = useState<ChequeRow | null>(null);
+    const [annulMotif, setAnnulMotif] = useState('');
+    const [annulError, setAnnulError] = useState<string | undefined>(undefined);
+    const [annulProcessing, setAnnulProcessing] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<ChequeRow | null>(null);
     const [deleteError, setDeleteError] = useState<string | undefined>(undefined);
     const [deleteProcessing, setDeleteProcessing] = useState(false);
@@ -264,7 +271,39 @@ export default function ChequesIndex({
         }
     }
 
-    function confirmStatut(cheque: ChequeRow, statut: 'Rejeté') {
+    function openAnnuler(cheque: ChequeRow) {
+        setAnnulTarget(cheque);
+        setAnnulMotif('');
+        setAnnulError(undefined);
+    }
+
+    function closeAnnuler() {
+        setAnnulTarget(null);
+        setAnnulMotif('');
+        setAnnulError(undefined);
+        setAnnulProcessing(false);
+    }
+
+    function runAnnuler() {
+        if (!annulTarget) {
+            return;
+        }
+
+        setAnnulProcessing(true);
+        setAnnulError(undefined);
+        router.patch(
+            `/backoffice/cheques/${annulTarget.id}/annuler`,
+            { motif: annulMotif },
+            {
+                preserveScroll: true,
+                onSuccess: () => closeAnnuler(),
+                onError: (errors) => setAnnulError(Object.values(errors)[0] ?? 'Action impossible.'),
+                onFinish: () => setAnnulProcessing(false),
+            },
+        );
+    }
+
+    function confirmStatut(cheque: ChequeRow, statut: 'Rejeté' | 'Déposé') {
         setStatutTarget({ cheque, statut });
         setStatutError(undefined);
     }
@@ -489,7 +528,16 @@ export default function ChequesIndex({
         );
     }
 
-    const statutCopy: Record<'Rejeté', { title: string; message: string; icon: string; variant: 'primary' | 'danger'; confirmLabel: string; processingLabel: string }> = {
+    const statutCopy: Record<'Rejeté' | 'Déposé', { title: string; message: string; icon: string; variant: 'primary' | 'danger'; confirmLabel: string; processingLabel: string }> = {
+        // « Rejeté » posé par erreur : le chèque revient « Déposé ».
+        'Déposé': {
+            title: 'Annuler le rejet',
+            message: 'Le chèque revient à « Déposé » et attend de nouveau la décision.',
+            icon: 'ti-arrow-back-up',
+            variant: 'primary',
+            confirmLabel: 'Oui, annuler le rejet',
+            processingLabel: 'Enregistrement…',
+        },
         'Rejeté': {
             title: 'Marquer comme rejeté',
             message: 'Confirmer que ce chèque a été rejeté (impayé) par la banque ?',
@@ -680,7 +728,7 @@ export default function ChequesIndex({
                             }
                         >
                             {cheques.data.map((cheque) => (
-                                <tr key={cheque.id}>
+                                <tr key={cheque.id} className={cheque.statut === 'Annulé' ? 'text-muted' : undefined}>
                                     <td>
                                         <div className="d-flex align-items-center gap-2">
                                             <code>{cheque.numeroCheque}</code>
@@ -707,8 +755,14 @@ export default function ChequesIndex({
                                             '-'
                                         )}
                                     </td>
-                                    <td>{Number(cheque.montant).toFixed(2)} DH</td>
-                                    <td className="fw-medium">{Number(cheque.reste).toFixed(2)} DH</td>
+                                    {/* Annulé : le montant reste lisible mais barré — ce
+                                        n'est plus de l'argent en main. */}
+                                    <td className={cheque.statut === 'Annulé' ? 'text-muted text-decoration-line-through' : undefined}>
+                                        {Number(cheque.montant).toFixed(2)} DH
+                                    </td>
+                                    <td className={`fw-medium${cheque.statut === 'Annulé' ? ' text-muted text-decoration-line-through' : ''}`}>
+                                        {Number(cheque.reste).toFixed(2)} DH
+                                    </td>
                                     <td>{cheque.banque ?? '-'}</td>
                                     <td>{typeLabel(cheque.type)}</td>
                                     <td>{cheque.dateEcheance ?? '-'}</td>
@@ -737,7 +791,7 @@ export default function ChequesIndex({
                                     </td>
                                     <td className="text-end">
                                         <RowActions>
-                                            {canUpdate && (
+                                            {canUpdate && cheque.statut !== 'Annulé' && (
                                                 <RowActionItem icon="ti-edit" onClick={() => openEdit(cheque)}>
                                                     Modifier
                                                 </RowActionItem>
@@ -798,6 +852,23 @@ export default function ChequesIndex({
                                                             Marquer comme restitué
                                                         </RowActionItem>
                                                     )}
+                                                </>
+                                            )}
+                                            {/* « Rejeté » cliqué par erreur → retour à « Déposé ».
+                                                `rejetAnnulable` vient du serveur. */}
+                                            {canValidateDeposit && cheque.statut === 'Rejeté' && cheque.rejetAnnulable && (
+                                                <RowActionItem icon="ti-arrow-back-up" onClick={() => confirmStatut(cheque, 'Déposé')}>
+                                                    Annuler le rejet
+                                                </RowActionItem>
+                                            )}
+                                            {/* Annuler le CHÈQUE (comptable). L'action reste visible
+                                                même quand le serveur refuserait : le dialogue dit pourquoi. */}
+                                            {canCancel && cheque.statut !== 'Annulé' && (
+                                                <>
+                                                    <RowActionDivider />
+                                                    <RowActionItem icon="ti-ban" danger onClick={() => openAnnuler(cheque)}>
+                                                        Annuler le chèque
+                                                    </RowActionItem>
                                                 </>
                                             )}
                                             {canDelete && (
@@ -997,6 +1068,35 @@ export default function ChequesIndex({
                     setStatutError(undefined);
                 }}
             />
+
+            <ConfirmDialog
+                show={annulTarget !== null}
+                title="Annuler le chèque"
+                recordLabel={
+                    annulTarget
+                        ? `${annulTarget.numeroCheque} - ${Number(annulTarget.montant).toFixed(2)} MAD`
+                          + (annulTarget.proprietaire ? ` - ${annulTarget.proprietaire}` : '')
+                        : ''
+                }
+                message={annulTarget?.annulationBlocker ?? 'Le chèque reste listé avec le statut « Annulé ».'}
+                icon="ti-ban"
+                confirmLabel="Annuler le chèque"
+                processingLabel="Enregistrement…"
+                error={annulError}
+                processing={annulProcessing}
+                onConfirm={runAnnuler}
+                onCancel={closeAnnuler}
+                confirmDisabled={Boolean(annulTarget?.annulationBlocker) || annulMotif.trim() === ''}
+            >
+                {!annulTarget?.annulationBlocker && (
+                    <TextareaField
+                        id="chq-motif-annulation"
+                        label="Motif (obligatoire)"
+                        value={annulMotif}
+                        onChange={(e) => setAnnulMotif(e.target.value)}
+                    />
+                )}
+            </ConfirmDialog>
 
             <ConfirmDialog
                 show={deleteTarget !== null}
@@ -1391,6 +1491,14 @@ export default function ChequesIndex({
                                 </div>
                             )}
                         </div>
+                        {/* La note porte les motifs ([ANNULÉ], [RESTITUÉ]) : c'est ici
+                            qu'on lit pourquoi un chèque a été annulé, et par qui. */}
+                        {detailsCheque.note && (
+                            <div>
+                                <div className="text-muted small mb-1">Note</div>
+                                <div className="text-normal-case" style={{ whiteSpace: 'pre-line' }}>{detailsCheque.note}</div>
+                            </div>
+                        )}
                     </div>
                 )}
             </Modal>

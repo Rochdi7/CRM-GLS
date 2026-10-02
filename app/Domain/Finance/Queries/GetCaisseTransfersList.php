@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Domain\Finance\Queries;
 
+use App\Domain\Finance\Support\VentilationCentre;
 use App\Models\Caisse;
 use App\Models\CaisseTransfer;
 use App\Models\User;
-use App\Domain\Finance\Support\VentilationCentre;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
 use App\Support\Access\DormantTill;
@@ -106,14 +106,14 @@ final class GetCaisseTransfersList
                 'validatedBy' => $t->validatedBy?->nomComplet(),
                 'note' => $t->note,
                 'isPending' => $t->statut === CaisseTransfer::STATUT_EN_ATTENTE,
-            // RECIPIENT-ONLY validation: the row is actionable only for the
-            // employee whose OWN till is the destination (and never for the
-            // requester). Computed here from the same facts the policy and
-            // ValiderTransfertCaisse use, so the button and the server can
-            // never disagree. UI convenience only - the policy still gates.
-            'canValidate' => $t->statut === CaisseTransfer::STATUT_EN_ATTENTE
-                && in_array($t->caisse_destination_id, $myCaisseIds, true)
-                && $t->requested_by !== $myEmployeeId,
+                // RECIPIENT-ONLY validation: the row is actionable only for the
+                // employee whose OWN till is the destination (and never for the
+                // requester). Computed here from the same facts the policy and
+                // ValiderTransfertCaisse use, so the button and the server can
+                // never disagree. UI convenience only - the policy still gates.
+                'canValidate' => $t->statut === CaisseTransfer::STATUT_EN_ATTENTE
+                    && in_array($t->caisse_destination_id, $myCaisseIds, true)
+                    && $t->requested_by !== $myEmployeeId,
                 // Cancelling is normally the two parties' call. The
                 // maintainer may clear ANY pending transfer (07/09/2026 — an
                 // abandoned request is a live hazard and otherwise needed
@@ -124,6 +124,12 @@ final class GetCaisseTransfersList
                     && ($t->requested_by === $myEmployeeId
                         || in_array($t->caisse_destination_id, $myCaisseIds, true)
                         || HiddenAccount::isMaintainer()),
+                // Changing the recipient is the REQUESTER's correction (or
+                // the maintainer's repair), pending only — the same facts
+                // ChangerDestinataireTransfert checks under lock. UI
+                // convenience only.
+                'canChangeDestinataire' => $t->statut === CaisseTransfer::STATUT_EN_ATTENTE
+                    && ($t->requested_by === $myEmployeeId || HiddenAccount::isMaintainer()),
                 // Drives the mandatory reason field: cancelling somebody
                 // else's transfer must say why.
                 'cancelNeedsMotif' => $t->statut === CaisseTransfer::STATUT_EN_ATTENTE
