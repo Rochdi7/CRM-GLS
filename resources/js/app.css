@@ -4723,3 +4723,198 @@ html[data-theme='dark'] .modal-body {
         transform: none !important;
     }
 }
+
+/* --- Tableau de bord : widgets (04/10/2026) -------------------------------
+ * La passe couleur couvrait les cartes génériques, mais les widgets du
+ * tableau de bord (Groupes à venir, calendrier, agenda, graphiques) gardaient
+ * leurs gris d'origine — ils se lisaient comme d'un autre écran. Mêmes
+ * accents, aucun markup modifié : les icônes de méta sont ciblées par leur
+ * classe `ti-*`. */
+.gls-dash-card > .card-header {
+    background: linear-gradient(135deg, rgba(var(--gls-brand-rgb), 0.06), rgba(124, 92, 252, 0.04));
+}
+.gls-dash-section-title h5 {
+    position: relative;
+    padding-inline-start: 12px;
+    color: var(--gls-thead-text);
+}
+.gls-dash-section-title h5::before {
+    content: '';
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0.15em;
+    bottom: 0.15em;
+    width: 4px;
+    border-radius: 4px;
+    background: linear-gradient(180deg, var(--gls-brand), var(--gls-violet));
+}
+.gls-cal-nav:not(:disabled):hover,
+.gls-cal-nav:not(:disabled):focus-visible {
+    background-color: rgba(var(--gls-brand-rgb), 0.1) !important;
+    border-color: rgba(var(--gls-brand-rgb), 0.35) !important;
+    color: var(--gls-brand) !important;
+}
+
+/* Groupes à venir */
+.gls-upcoming-icon {
+    background-image: linear-gradient(135deg, var(--gls-brand), var(--gls-violet));
+    color: #fff;
+    box-shadow: 0 6px 14px rgba(var(--gls-brand-rgb), 0.3);
+}
+.gls-upcoming-tile {
+    position: relative;
+    overflow: hidden;
+    border-color: var(--gls-surface-line);
+    border-radius: 12px;
+    padding-top: 18px;
+    background-image: radial-gradient(circle at 100% 0%, rgba(var(--gls-brand-rgb), 0.08), transparent 55%);
+    box-shadow: var(--gls-shadow-card);
+    transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+.gls-upcoming-tile::before {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--gls-brand), var(--gls-violet) 55%, var(--gls-teal));
+}
+.gls-upcoming-tile:hover,
+.gls-upcoming-tile:focus-visible {
+    border-color: rgba(var(--gls-brand-rgb), 0.35);
+    box-shadow: 0 10px 24px rgba(var(--gls-brand-rgb), 0.14);
+    transform: translateY(-2px);
+}
+.gls-upcoming-name {
+    color: var(--gls-thead-text);
+}
+.gls-upcoming-tile:hover .gls-upcoming-name {
+    color: var(--gls-brand);
+}
+.gls-upcoming-meta i.ti-calendar-event { color: #d97706; }
+.gls-upcoming-meta i.ti-user           { color: var(--gls-violet); }
+.gls-upcoming-meta i.ti-door           { color: var(--gls-teal); }
+.gls-upcoming-slot {
+    background: rgba(var(--gls-brand-rgb), 0.08);
+    color: var(--gls-brand-deep);
+    font-weight: 500;
+}
+.gls-upcoming-fill {
+    padding-top: 10px;
+    border-top: 1px dashed var(--gls-surface-line);
+}
+.gls-upcoming-fill .fw-semibold {
+    color: var(--gls-brand);
+    font-size: 16px;
+}
+
+/* Calendrier des séances */
+.gls-seancecal {
+    border-color: var(--gls-surface-line);
+    border-radius: 10px;
+}
+.gls-seancecal-weekday {
+    background: var(--gls-thead-bg);
+    color: var(--gls-thead-text);
+    border-bottom-color: rgba(var(--gls-brand-rgb), 0.18);
+}
+.gls-seancecal-day.has-seances:hover {
+    background: rgba(var(--gls-brand-rgb), 0.06);
+}
+.gls-seancecal-day.is-today {
+    background: rgba(var(--gls-brand-rgb), 0.08);
+}
+.gls-seancecal-day.is-today .gls-seancecal-num {
+    color: var(--gls-brand);
+}
+
+/* Agenda du jour : la couleur du statut teinte aussi le fond */
+.gls-agenda-item {
+    border-color: var(--gls-surface-line);
+    border-radius: 10px;
+    transition: background-color 0.15s ease, transform 0.15s ease;
+}
+.gls-agenda-success { border-left-color: #16a34a; background: rgba(22, 163, 74, 0.04); }
+.gls-agenda-warning { border-left-color: #eab300; background: rgba(234, 179, 0, 0.05); }
+.gls-agenda-danger  { border-left-color: #e82646; background: rgba(232, 38, 70, 0.04); }
+.gls-agenda-item:hover,
+.gls-agenda-item:focus-visible {
+    background: rgba(var(--gls-brand-rgb), 0.06);
+    transform: translateX(2px);
+}
+.gls-agenda-time strong {
+    color: var(--gls-brand);
+}
+
+/* Légendes des graphiques */
+.gls-frais-legend-pill {
+    border-color: var(--gls-surface-line);
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+.gls-frais-legend-pill:hover {
+    border-color: rgba(var(--gls-brand-rgb), 0.35);
+    background: rgba(var(--gls-brand-rgb), 0.05);
+}
+
+/* Mode sombre */
+html[data-theme='dark'] .gls-dash-card > .card-header {
+    background: linear-gradient(135deg, rgba(143, 163, 255, 0.08), rgba(167, 139, 250, 0.05));
+}
+html[data-theme='dark'] .gls-dash-section-title h5::before {
+    background: linear-gradient(180deg, #8fa3ff, #a78bfa);
+}
+html[data-theme='dark'] .gls-upcoming-icon {
+    background-image: linear-gradient(135deg, #5b77f0, #8b6cfd);
+    color: #fff;
+}
+html[data-theme='dark'] .gls-upcoming-tile {
+    border-color: var(--gls-surface-line);
+    background-image: radial-gradient(circle at 100% 0%, rgba(143, 163, 255, 0.12), transparent 55%);
+}
+html[data-theme='dark'] .gls-upcoming-tile:hover {
+    border-color: rgba(143, 163, 255, 0.4);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+}
+html[data-theme='dark'] .gls-upcoming-tile:hover .gls-upcoming-name,
+html[data-theme='dark'] .gls-upcoming-fill .fw-semibold,
+html[data-theme='dark'] .gls-seancecal-day.is-today .gls-seancecal-num,
+html[data-theme='dark'] .gls-agenda-time strong {
+    color: #9fb0ff;
+}
+html[data-theme='dark'] .gls-upcoming-meta i.ti-calendar-event { color: #fbbf24; }
+html[data-theme='dark'] .gls-upcoming-meta i.ti-user           { color: #a78bfa; }
+html[data-theme='dark'] .gls-upcoming-meta i.ti-door           { color: #2dd4bf; }
+html[data-theme='dark'] .gls-upcoming-slot {
+    background: rgba(143, 163, 255, 0.14);
+    color: #c7d0ff;
+}
+html[data-theme='dark'] .gls-seancecal-day.has-seances:hover,
+html[data-theme='dark'] .gls-seancecal-day.is-today,
+html[data-theme='dark'] .gls-agenda-item:hover {
+    background: rgba(143, 163, 255, 0.1);
+}
+html[data-theme='dark'] .gls-seancecal-weekday {
+    border-bottom-color: rgba(143, 163, 255, 0.25);
+}
+html[data-theme='dark'] .gls-agenda-success { background: rgba(74, 222, 128, 0.06); }
+html[data-theme='dark'] .gls-agenda-warning { background: rgba(251, 191, 36, 0.07); }
+html[data-theme='dark'] .gls-agenda-danger  { background: rgba(251, 113, 133, 0.06); }
+html[data-theme='dark'] .gls-cal-nav:not(:disabled):hover {
+    background-color: rgba(143, 163, 255, 0.14) !important;
+    color: #9fb0ff !important;
+}
+html[data-theme='dark'] .gls-frais-legend-pill:hover {
+    border-color: rgba(143, 163, 255, 0.4);
+    background: rgba(143, 163, 255, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .gls-upcoming-tile,
+    .gls-agenda-item {
+        transition: none;
+    }
+    .gls-upcoming-tile:hover,
+    .gls-agenda-item:hover {
+        transform: none;
+    }
+}
