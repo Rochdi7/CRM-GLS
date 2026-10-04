@@ -31,6 +31,12 @@ final class LoginController extends Controller
 
         $request->session()->regenerate();
 
+        // Welcome clip, shown once by the backoffice shell. `put()`, not
+        // `flash()`: an intended/canonical redirect between here and the
+        // first Inertia render would drop a flash. Consumed by `pull()` in
+        // HandleInertiaRequests.
+        $request->session()->put('bienvenue', true);
+
         return redirect()->intended(route('backoffice.dashboard'));
     }
 }

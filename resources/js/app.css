@@ -4918,3 +4918,116 @@ html[data-theme='dark'] .gls-frais-legend-pill:hover {
         transform: none;
     }
 }
+
+/* --- Vidéo de bienvenue (WelcomeVideo.tsx) — une fois, après la connexion -- */
+.gls-welcome {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(11, 18, 51, 0.55);
+    backdrop-filter: blur(3px);
+    cursor: pointer;
+    animation: gls-welcome-in 0.3s ease both;
+}
+.gls-welcome.is-leaving {
+    animation: gls-welcome-out 0.3s ease both;
+}
+.gls-welcome-box {
+    position: relative;
+    width: min(420px, 100%);
+    padding: 10px 10px 14px;
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 24px 60px rgba(16, 24, 40, 0.35);
+    text-align: center;
+    animation: gls-welcome-pop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+.gls-welcome-video {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 12px;
+    object-fit: cover;
+    background: #f4f6fb;
+}
+.gls-welcome-text {
+    margin: 12px 0 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--gls-thead-text);
+}
+.gls-welcome-close {
+    position: absolute;
+    top: -12px;
+    inset-inline-end: -12px;
+    width: 32px;
+    height: 32px;
+    border: 0;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--gls-brand);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(var(--gls-brand-rgb), 0.35);
+}
+@keyframes gls-welcome-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes gls-welcome-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes gls-welcome-pop { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+html[data-theme='dark'] .gls-welcome-box {
+    background: #17132b;
+}
+@media (prefers-reduced-motion: reduce) {
+    .gls-welcome,
+    .gls-welcome.is-leaving,
+    .gls-welcome-box {
+        animation: none;
+    }
+}
+
+/* --- « Une nouvelle vie pour votre CRM » (NouveauDesign.tsx) -------------- */
+.gls-nouveau-design {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+    padding: 16px 20px;
+    border: 1px solid rgba(var(--gls-brand-rgb), 0.18);
+    border-radius: 12px;
+    background: linear-gradient(120deg, rgba(var(--gls-brand-rgb), 0.08), rgba(124, 92, 252, 0.07) 55%, rgba(15, 163, 177, 0.06));
+    box-shadow: var(--gls-shadow-card);
+    color: #3b4563;
+}
+.gls-nouveau-design-icon {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    color: #fff;
+    background-image: linear-gradient(135deg, var(--gls-brand), var(--gls-violet) 60%, var(--gls-teal));
+    box-shadow: 0 6px 14px rgba(var(--gls-brand-rgb), 0.3);
+}
+.gls-nouveau-design-title {
+    margin-bottom: 4px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--gls-thead-text);
+}
+@media (max-width: 575.98px) {
+    .gls-nouveau-design {
+        flex-wrap: wrap;
+    }
+}
+html[data-theme='dark'] .gls-nouveau-design {
+    border-color: rgba(143, 163, 255, 0.22);
+    background: linear-gradient(120deg, rgba(143, 163, 255, 0.1), rgba(167, 139, 250, 0.08) 55%, rgba(45, 212, 191, 0.06));
+    color: #c9cde0;
+}

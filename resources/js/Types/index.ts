@@ -67,6 +67,8 @@ export interface FlashMessages {
      * it never reappears on a later reload of the list.
      */
     nouvelleInscription?: NouvelleInscription | null;
+    /** True on the first render after a login — plays the welcome clip once (pulled server-side). */
+    bienvenue?: boolean;
 }
 
 export interface SharedProps {

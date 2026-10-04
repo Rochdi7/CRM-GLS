@@ -6,6 +6,7 @@ import Footer from '@/Components/Theme/Footer';
 import MobileSidebarOverlay from '@/Components/Theme/MobileSidebarOverlay';
 import PageHeader from '@/Components/Theme/PageHeader';
 import ToastContainer from '@/Components/Feedback/ToastContainer';
+import WelcomeVideo from '@/Components/Feedback/WelcomeVideo';
 import AnneeClotureeBanner from '@/Components/Context/AnneeClotureeBanner';
 import type { Breadcrumb, SharedProps } from '@/Types';
 
@@ -69,6 +70,8 @@ export default function BackofficeLayout({ title, breadcrumbs = [], actions, chi
             <MobileSidebarOverlay visible={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
 
             <ToastContainer flash={flash} />
+
+            <WelcomeVideo show={flash.bienvenue === true} name={auth.user?.name ?? null} />
 
             <div className="page-wrapper">
                 <div className="content">

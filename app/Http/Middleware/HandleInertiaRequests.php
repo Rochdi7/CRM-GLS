@@ -133,6 +133,9 @@ final class HandleInertiaRequests extends Middleware
                 // prompt must not reappear on the next search/pagination
                 // reload of the same page.
                 'nouvelleInscription' => fn () => $request->session()->pull('nouvelleInscription'),
+                // Set by LoginController@store: play the welcome clip once.
+                // `pull()` — it must not replay on the next reload.
+                'bienvenue' => fn () => (bool) $request->session()->pull('bienvenue', false),
             ],
             'locale' => app()->getLocale(),
         ];

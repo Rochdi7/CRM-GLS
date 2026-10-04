@@ -44,6 +44,23 @@ final class AuthTest extends TestCase
         $this->assertAuthenticatedAs($user);
     }
 
+    public function test_the_welcome_clip_plays_once_after_login(): void
+    {
+        $user = User::factory()->create();
+
+        $this->post(route('backoffice.login.store'), [
+            'login' => $user->email,
+            'password' => 'password',
+        ])->assertSessionHas('bienvenue', true);
+
+        $this->get(route('backoffice.dashboard'))
+            ->assertInertia(fn (Assert $page) => $page->where('flash.bienvenue', true));
+
+        // Pulled on the first render: a reload never replays it.
+        $this->get(route('backoffice.dashboard'))
+            ->assertInertia(fn (Assert $page) => $page->where('flash.bienvenue', false));
+    }
+
     public function test_users_can_login_with_their_username(): void
     {
         $user = User::factory()->create(['username' => 'j.dupont']);
