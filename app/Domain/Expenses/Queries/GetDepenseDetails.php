@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Expenses\Queries;
 
+use App\Domain\Expenses\Support\ModificationsDepense;
 use App\Models\Activity;
 use App\Models\Depense;
 use Illuminate\Support\Facades\Gate;
@@ -28,6 +29,8 @@ final class GetDepenseDetails
             ? array_values(array_filter(array_map('trim', explode(',', $depense->mots_cles))))
             : [];
 
+        $modifieLe = ModificationsDepense::dernieres([$depense->id])[$depense->id] ?? null;
+
         return [
             'id' => $depense->id,
             'reference' => $depense->reference,
@@ -49,12 +52,10 @@ final class GetDepenseDetails
             // apart from `dateDepense` (the freely backdatable business
             // date). Super-admin only, gated by the caller.
             'createdAt' => $depense->created_at?->format('d/m/Y H:i'),
-            'updatedAt' => $depense->updated_at?->format('d/m/Y H:i'),
-            // abs() for the same reason as GetDepensesList — Carbon 3's
-            // diffInSeconds() is signed.
-            'wasEdited' => $depense->created_at !== null
-                && $depense->updated_at !== null
-                && abs($depense->updated_at->diffInSeconds($depense->created_at)) > 1,
+            // Last REAL edit, from the journal — same rule as GetDepensesList
+            // (approval/refusal moves `updated_at` but is not an edit).
+            'updatedAt' => $modifieLe?->format('d/m/Y H:i'),
+            'wasEdited' => $modifieLe !== null,
             'statut' => $depense->statut,
             'isAnnulee' => $depense->isAnnulee(),
             // The compensating credit that cancelled this dépense, read from

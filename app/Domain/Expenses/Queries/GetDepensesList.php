@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Expenses\Queries;
 
+use App\Domain\Expenses\Support\ModificationsDepense;
 use App\Domain\Finance\Support\VentilationCentre;
 use App\Models\Depense;
 use App\Models\Group;
@@ -157,6 +158,12 @@ final class GetDepensesList
             })
             ->withQueryString();
 
+        // Real edits only — approving/refusing is not an edit (see
+        // ModificationsDepense). One journal query for the whole page.
+        $modifications = ModificationsDepense::dernieres(
+            $depenses->getCollection()->map(fn (Depense $d): int => $d->id)->all(),
+        );
+
         $depenses->through(fn (Depense $d): array => [
             'id' => $d->id,
             'reference' => $d->reference,
@@ -208,18 +215,11 @@ final class GetDepensesList
             // only (DepenseController passes `canViewOperationDates`); the
             // two differing is exactly what an auditor looks for.
             'createdAt' => $d->created_at?->format('d/m/Y H:i'),
-            'updatedAt' => $d->updated_at?->format('d/m/Y H:i'),
-            // Cheap client-side flag so the column can show "modifiée le …"
-            // only when it really was edited after creation. Second-level
-            // compare: created_at/updated_at are written microseconds apart
-            // on insert, so === on the formatted minute would be fragile.
-            // ⚠ abs(): Carbon 3's diffInSeconds() is SIGNED, so the raw
-            // value flips with argument order and a plain `> 1` silently
-            // never fires. The 1s floor ignores the microseconds between
-            // created_at and updated_at on insert.
-            'wasEdited' => $d->created_at !== null
-                && $d->updated_at !== null
-                && abs($d->updated_at->diffInSeconds($d->created_at)) > 1,
+            // Last REAL edit, from the journal — never `updated_at`, which
+            // also moves on approval and badged every approved row
+            // « modifiée » at the minute it was validated.
+            'updatedAt' => isset($modifications[$d->id]) ? $modifications[$d->id]->format('d/m/Y H:i') : null,
+            'wasEdited' => isset($modifications[$d->id]),
             'showUrl' => route('backoffice.depenses.show', $d),
         ]);
 

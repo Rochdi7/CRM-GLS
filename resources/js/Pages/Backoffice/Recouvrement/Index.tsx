@@ -193,6 +193,7 @@ export default function RecouvrementIndex({
                                 <tr>
                                     <th>{t('Reference')}</th>
                                     <th>{t('Student')}</th>
+                                    <th>{t('Group')}</th>
                                     <th>{t('Status')}</th>
                                     <th>{t('Phone')}</th>
                                     <th>{t('Fee')}</th>
@@ -222,6 +223,7 @@ export default function RecouvrementIndex({
                                             row.studentNom ?? '-'
                                         )}
                                     </td>
+                                    <td>{row.groupe ?? '-'}</td>
                                     <td>
                                         <StatusBadge label={row.statut} variant={row.statut === 'Non payé' ? 'danger' : 'warning'} />
                                     </td>

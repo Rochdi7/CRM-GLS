@@ -141,7 +141,7 @@ final class DepenseOperationTrailTest extends TestCase
                 $row = $this->firstDepenseRow($page);
 
                 $this->assertSame($depense->created_at->format('d/m/Y H:i'), $row['createdAt']);
-                $this->assertSame($depense->updated_at->format('d/m/Y H:i'), $row['updatedAt']);
+                $this->assertNull($row['updatedAt']);
                 // Never touched since creation.
                 $this->assertFalse($row['wasEdited']);
             });
@@ -187,6 +187,57 @@ final class DepenseOperationTrailTest extends TestCase
             });
     }
 
+    public function test_approving_or_refusing_is_not_flagged_as_an_edit(): void
+    {
+        // Reported 02/10/2026: every approved dépense showed « modifiée »
+        // at its approval time, because approval moves `updated_at`.
+        $admin = $this->superAdmin();
+        $approuvee = $this->makeDepense($admin);
+        $refusee = $this->makeDepense($admin);
+        $approuvee->update(['statut' => Depense::STATUT_EN_ATTENTE]);
+        $refusee->update(['statut' => Depense::STATUT_EN_ATTENTE]);
+
+        $this->travel(10)->minutes();
+        $approuvee->update(['statut' => Depense::STATUT_APPROUVEE, 'approved_by' => $admin->employee->id, 'approved_at' => now()]);
+        $refusee->update(['statut' => Depense::STATUT_REFUSEE, 'approved_by' => $admin->employee->id, 'approved_at' => now(), 'motif_refus' => 'Doublon']);
+
+        $this->actingAs($admin)
+            ->get(route('backoffice.depenses.index', ['tab' => 'validation']))
+            ->assertOk()
+            ->assertInertia(function (Assert $page): void {
+                foreach ($page->toArray()['props']['depenses']['data'] as $row) {
+                    $this->assertFalse($row['wasEdited'], "{$row['reference']} was only decided, never edited.");
+                    $this->assertNull($row['updatedAt']);
+                }
+            });
+
+        $this->actingAs($admin)
+            ->get(route('backoffice.depenses.show', $approuvee))
+            ->assertInertia(fn (Assert $page) => $page->where('depense.wasEdited', false));
+    }
+
+    public function test_an_edit_after_approval_shows_the_edit_time_not_the_approval_time(): void
+    {
+        $admin = $this->superAdmin();
+        $depense = $this->makeDepense($admin);
+
+        $this->travel(10)->minutes();
+        $editedAt = now()->format('d/m/Y H:i');
+        $depense->update(['description' => 'Toner corrigé']);
+
+        $this->travel(2)->hours();
+        $depense->update(['statut' => Depense::STATUT_APPROUVEE, 'approved_by' => $admin->employee->id, 'approved_at' => now()]);
+
+        $this->actingAs($admin)
+            ->get(route('backoffice.depenses.index'))
+            ->assertOk()
+            ->assertInertia(function (Assert $page) use ($editedAt): void {
+                $row = $this->firstDepenseRow($page);
+                $this->assertTrue($row['wasEdited']);
+                $this->assertSame($editedAt, $row['updatedAt']);
+            });
+    }
+
     // ---------------------------------------------------------------
     // The detail page (the "eye")
     // ---------------------------------------------------------------
@@ -219,7 +270,7 @@ final class DepenseOperationTrailTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->where('canAudit', true)
                 ->where('depense.createdAt', $depense->created_at->format('d/m/Y H:i'))
-                ->where('depense.updatedAt', $depense->updated_at->format('d/m/Y H:i'))
+                ->where('depense.updatedAt', null)
                 ->where('depense.wasEdited', false)
                 // The other detail fields the « Détails » modal shows.
                 ->where('depense.methodePaiement', 'Espèces')
