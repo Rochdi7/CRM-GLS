@@ -1268,6 +1268,18 @@ the database layer. Non-negotiable invariants already enforced in code:
   (`inscriptionsActives` vient du serveur) : un avertissement qui laisse croire
   que les dossiers partent fait renoncer à une suppression légitime. Tests :
   `tests/Feature/Backoffice/Groups/GroupDeleteTest.php`.
+- **⚠ Une inscription dont TOUT l'argent a été remboursé se SUPPRIME**
+  (04/10/2026, `Registrations\Actions\SupprimerInscription`). Avant, le
+  moindre paiement bloquait la suppression, même rendu en entier. Désormais,
+  si CHAQUE paiement de ses frais est intégralement remboursé (remboursements
+  NON annulés ≥ montant), ces paiements sont DÉTACHÉS du frais
+  (`inscription_fee_id` → NULL, via `save()`, journalisé) et restent sur la
+  fiche de l'étudiant avec leur remboursement — avances à reste 0,00. Aucun
+  `montant`, `caisse_id`, `caisses.solde` ni aucune ligne `remboursements`
+  ne bouge. Toujours refusé (→ « Annuler ») : paiement non ou partiellement
+  remboursé, ligne d'application d'avance, paiement ayant financé des
+  applications. Contrôle sous verrou dans la transaction. Tests :
+  `tests/Feature/Backoffice/Inscriptions/InscriptionDeleteRembourseeTest.php`.
 - **⚠ Un groupe qui passe TERMINAL clôture ses inscriptions** (09/09/2026).
   « Fin de formation » comme « Annulée » déclenchent
   `Groups\Actions\CloturerInscriptionsGroupe`, dans la MÊME transaction que

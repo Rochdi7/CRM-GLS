@@ -8,6 +8,7 @@ use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Domain\Attendance\Queries\GetAbsencesEtudiant;
 use App\Domain\Registrations\Actions\AnnulerInscription;
 use App\Domain\Registrations\Actions\AssignerLivresInscription;
+use App\Domain\Registrations\Actions\SupprimerInscription;
 use App\Domain\Registrations\Actions\BasculerVisibiliteFraisInscription;
 use App\Domain\Registrations\Actions\ChangerGroupeInscription;
 use App\Domain\Registrations\Actions\MettreAJourFraisInscription;
@@ -933,53 +934,27 @@ final class InscriptionController extends Controller
     }
 
     /**
-     * Fees with payments are blocked by the DB restrict FK on
-     * encaissements.inscription_fee_id — the cascade from
-     * inscription_fees.inscription_id fails, surfacing as a
-     * QueryException. This is the SAME mechanism as
-     * InscriptionsIndex::delete() (a try/catch around the raw delete, not
-     * a pre-count guard) — preserved exactly, not "upgraded" (see audit
-     * doc §4.8 for why a pre-count guard would be a subtle behavior
-     * change, not just a refactor). The delete is wrapped in its own
-     * DB::transaction() so PostgreSQL uses a savepoint: without it, the
-     * constraint violation aborts the whole request-scoped transaction
-     * (RefreshDatabase's outer transaction in tests, or the connection's
-     * implicit transaction in production), leaving the catch block
+     * Fees still carrying a payment are also blocked by the DB restrict FK
+     * on encaissements.inscription_fee_id — the cascade from
+     * inscription_fees.inscription_id fails, surfacing as a QueryException.
+     * SupprimerInscription runs inside its own DB::transaction() so
+     * PostgreSQL uses a savepoint: without it, the constraint violation
+     * aborts the whole request-scoped transaction, leaving the catch block
      * running against a connection Postgres refuses further queries on.
-     * This same fix is worth carrying back to the Livewire component if
-     * it is ever revisited — it has the identical latent gap.
      */
-    public function destroy(Request $request, Inscription $inscription, AssignerLivresInscription $assignerLivres): RedirectResponse
+    public function destroy(Request $request, Inscription $inscription, SupprimerInscription $supprimer): RedirectResponse
     {
         $this->authorize('delete', $inscription);
 
-        // ⚠ Explicit money guard. Since 31/08/2026 EVERY role may delete an
-        // inscription (PermissionRegistry::superAdminOnly()), so the rule
-        // that makes that safe must be stated here and not left to a caught
-        // FK violation: a registration that received ANY money is never
-        // deleted — it is cancelled, with a reason, keeping its history.
-        // The try/catch below stays as the second line of defence (the DB
-        // restrict on encaissements.inscription_fee_id), because a payment
-        // may land between this check and the delete.
-        $aDesPaiements = Encaissement::query()
-            ->whereIn('inscription_fee_id', $inscription->fees()->select('id'))
-            ->exists();
-
-        if ($aDesPaiements) {
-            throw ValidationException::withMessages([
-                'delete' => __('This registration has payments and cannot be deleted.'),
-            ]);
-        }
-
+        // ⚠ Money guard lives in SupprimerInscription (04/10/2026): since
+        // 31/08/2026 EVERY role may delete an inscription, so a registration
+        // that still KEEPS money is refused there (cancel it instead); one
+        // whose every payment was fully refunded is deleted and those
+        // payments stay on the student's file with their refund. The
+        // try/catch stays as the second line of defence (the DB restrict on
+        // encaissements.inscription_fee_id).
         try {
-            DB::transaction(function () use ($inscription, $assignerLivres, $request): void {
-                // Books handed out with this registration go back to the
-                // shelf FIRST (one « Entrée » movement each) — the FK
-                // cascade alone deleted the assignment and left the stock
-                // one short forever (audit DB-02).
-                $assignerLivres->handle($inscription, [], $request->user()?->employee);
-                $inscription->delete();
-            });
+            $supprimer->handle($inscription, $request->user()?->employee);
         } catch (QueryException) {
             throw ValidationException::withMessages([
                 'delete' => __('This registration has payments and cannot be deleted.'),

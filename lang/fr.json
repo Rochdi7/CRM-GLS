@@ -1015,6 +1015,7 @@
     "This registration is no longer active - record the money as an advance instead.": "Cette inscription n'est plus active - enregistrez le montant en avance.",
     "This registration has no fee lines.": "Cette inscription n'a aucune ligne de frais.",
     "This registration has payments and cannot be deleted.": "Cette inscription a des paiements et ne peut pas être supprimée.",
+    "This registration has payments that were not fully refunded and cannot be deleted. Cancel it instead.": "Cette inscription porte des paiements qui n'ont pas été intégralement remboursés : elle ne peut pas être supprimée. Utilisez « Annuler » pour la clôturer.",
     "This role is protected and cannot be deleted.": "Ce rôle est protégé et ne peut pas être supprimé.",
     "This role is protected.": "Ce rôle est protégé.",
     "This role is still assigned to users and cannot be deleted.": "Ce rôle est encore attribué à des utilisateurs et ne peut pas être supprimé.",
