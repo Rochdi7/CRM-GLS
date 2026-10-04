@@ -8,7 +8,6 @@ import SeancesCalendar, { isoDate } from '@/Components/Dashboard/SeancesCalendar
 import StatsGrid from '@/Components/Dashboard/StatsGrid';
 import EspaceEnseignant from '@/Components/Dashboard/EspaceEnseignant';
 import GroupesAVenir from '@/Components/Dashboard/GroupesAVenir';
-import NouveauDesign from '@/Components/Dashboard/NouveauDesign';
 import { t } from '@/Lib/i18n';
 import type { DashboardPageProps, NouvellesInscriptionsDuree, SharedProps } from '@/Types';
 
@@ -194,8 +193,6 @@ export default function DashboardIndex({ porteeEnseignant, stats, annualFrais, a
                     </div>
                 </div>
             </div>
-
-            <NouveauDesign />
 
             {/* Espace enseignant — NULL pour tout compte qui n'est pas un prof
                 (gate serveur : permission + fiche employé Enseignant). */}

@@ -16,12 +16,12 @@ interface GuestLayoutProps extends PropsWithChildren {
  */
 export default function GuestLayout({ title, children }: GuestLayoutProps) {
     return (
-        <div className="account-page">
+        <div className="account-page gls-auth">
             <Head title={title} />
             <div className="container">
                 <div className="row justify-content-center">
                     <div className="col-md-5 mx-auto">
-                        <div className="d-flex flex-column justify-content-between vh-100">
+                        <div className="d-flex flex-column justify-content-between min-vh-100">
                             <div className="mx-auto p-4 text-center">
                                 {/*
                                  * One light logo only, sized like the theme's auth
@@ -39,12 +39,12 @@ export default function GuestLayout({ title, children }: GuestLayoutProps) {
                                 />
                             </div>
 
-                            <div className="card">
-                                <div className="card-body p-4">{children}</div>
+                            <div className="card gls-auth-card">
+                                <div className="card-body p-4 p-sm-5">{children}</div>
                             </div>
 
                             <div className="p-4 text-center">
-                                <p className="mb-0">
+                                <p className="mb-0 gls-auth-footer">
                                     {t('Copyright')} &copy; {new Date().getFullYear()} - GLS CRM
                                 </p>
                             </div>

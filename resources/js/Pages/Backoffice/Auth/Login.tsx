@@ -1,5 +1,5 @@
 import { useForm, usePage } from '@inertiajs/react';
-import type { FormEvent } from 'react';
+import { useState, type FormEvent, type KeyboardEvent } from 'react';
 import GuestLayout from '@/Layouts/GuestLayout';
 import FormField from '@/Components/Forms/FormField';
 import PasswordField from '@/Components/Forms/PasswordField';
@@ -27,6 +27,13 @@ export default function Login() {
         password: '',
         remember: false,
     });
+    // A refused password is most often Caps Lock: say so before the attempt
+    // counts against the 5-try rate limit.
+    const [capsLock, setCapsLock] = useState(false);
+
+    function trackCapsLock(event: KeyboardEvent<HTMLInputElement>) {
+        setCapsLock(event.getModifierState('CapsLock'));
+    }
 
     function submit(event: FormEvent) {
         event.preventDefault();
@@ -38,9 +45,14 @@ export default function Login() {
 
     return (
         <GuestLayout title="Connexion">
-            <div className="mb-4">
-                <h2 className="mb-2">Bienvenue</h2>
-                <p className="mb-0">Veuillez saisir vos identifiants pour vous connecter</p>
+            <div className="gls-auth-head">
+                <span className="gls-auth-head-icon" aria-hidden="true">
+                    <i className="ti ti-lock-open" />
+                </span>
+                <div>
+                    <h2 className="gls-auth-title">Bienvenue</h2>
+                    <p className="mb-0">Veuillez saisir vos identifiants pour vous connecter</p>
+                </div>
             </div>
 
             <AuthStatus status={flash.status} />
@@ -66,7 +78,17 @@ export default function Login() {
                     error={errors.password}
                     required
                     autoComplete="current-password"
+                    onKeyDown={trackCapsLock}
+                    onKeyUp={trackCapsLock}
+                    onBlur={() => setCapsLock(false)}
                 />
+
+                {capsLock && (
+                    <p className="gls-auth-caps" role="status">
+                        <i className="ti ti-alert-triangle me-1" />
+                        La touche Verr. Maj est activée
+                    </p>
+                )}
 
                 <div className="form-wrap form-wrap-checkbox mb-3">
                     <div className="d-flex align-items-center">
@@ -90,8 +112,8 @@ export default function Login() {
                     </div>
                 </div>
 
-                <div className="mb-3">
-                    <SubmitButton processing={processing} processingLabel="Connexion…">
+                <div className="mb-1">
+                    <SubmitButton className="btn btn-primary w-100 gls-auth-submit" processing={processing} processingLabel="Connexion…">
                         Se connecter
                     </SubmitButton>
                 </div>
