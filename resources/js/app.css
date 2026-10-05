@@ -4511,11 +4511,6 @@ html:not([data-sidebar]) .sidebar .sidebar-menu > ul > li[class*='gls-nav-accent
 
 html:not([data-sidebar]) .sidebar .sidebar-menu > ul > li[class*='gls-nav-accent-'] ul li.active a {
     background: rgba(var(--gls-nav-rgb), 0.12);
-    box-shadow: inset 3px 0 0 var(--gls-nav);
-}
-
-html:not([data-sidebar])[dir='rtl'] .sidebar .sidebar-menu > ul > li[class*='gls-nav-accent-'] ul li.active a {
-    box-shadow: inset -3px 0 0 var(--gls-nav);
 }
 
 html:not([data-sidebar]) .sidebar .sidebar-menu > ul > li[class*='gls-nav-accent-'] ul li.active a i {

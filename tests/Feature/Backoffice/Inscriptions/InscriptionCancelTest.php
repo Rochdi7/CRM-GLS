@@ -92,7 +92,8 @@ final class InscriptionCancelTest extends TestCase
         $this->post(route('backoffice.inscriptions.cancel', $inscription), [
             'motif_annulation' => 'Non-paiement',
             'date_fin' => '2026-03-01',
-        ])->assertRedirect(route('backoffice.inscriptions.index'));
+        ])->assertRedirect(route('backoffice.inscriptions.index'))
+            ->assertSessionHas('annulationVideo', true);
 
         $fresh = $inscription->fresh();
         $this->assertSame(Inscription::STATUT_ANNULEE, $fresh->statut);

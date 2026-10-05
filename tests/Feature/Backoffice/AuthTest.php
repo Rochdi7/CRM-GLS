@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Backoffice;
 
+use App\Models\Employee;
+use App\Models\Etablissement;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -44,9 +46,55 @@ final class AuthTest extends TestCase
         $this->assertAuthenticatedAs($user);
     }
 
-    public function test_the_welcome_clip_plays_once_after_login(): void
+    /** A user whose employee works in the given centres (first = primary). */
+    private function userWorkingIn(Etablissement ...$centres): User
     {
         $user = User::factory()->create();
+
+        $employee = Employee::factory()->create([
+            'user_id' => $user->id,
+            'etablissement_id' => $centres[0]->id,
+        ]);
+        $employee->syncEtablissements(array_map(fn ($c) => $c->id, $centres));
+
+        return $user->fresh();
+    }
+
+    public function test_the_welcome_clip_is_not_played_outside_casablanca_and_kenitra(): void
+    {
+        $user = $this->userWorkingIn(Etablissement::factory()->create(['ville' => 'Rabat']));
+
+        $this->post(route('backoffice.login.store'), [
+            'login' => $user->email,
+            'password' => 'password',
+        ])->assertSessionMissing('bienvenue');
+
+        // No employee at all: no clip either.
+        $this->post(route('backoffice.logout'));
+        $other = User::factory()->create();
+
+        $this->post(route('backoffice.login.store'), [
+            'login' => $other->email,
+            'password' => 'password',
+        ])->assertSessionMissing('bienvenue');
+    }
+
+    public function test_the_welcome_clip_plays_for_a_casablanca_secondary_centre(): void
+    {
+        $user = $this->userWorkingIn(
+            Etablissement::factory()->create(['ville' => 'Rabat']),
+            Etablissement::factory()->create(['ville' => 'Casablanca']),
+        );
+
+        $this->post(route('backoffice.login.store'), [
+            'login' => $user->email,
+            'password' => 'password',
+        ])->assertSessionHas('bienvenue', true);
+    }
+
+    public function test_the_welcome_clip_plays_once_after_login(): void
+    {
+        $user = $this->userWorkingIn(Etablissement::factory()->create(['ville' => 'Kénitra']));
 
         $this->post(route('backoffice.login.store'), [
             'login' => $user->email,

@@ -136,6 +136,9 @@ final class HandleInertiaRequests extends Middleware
                 // Set by LoginController@store: play the welcome clip once.
                 // `pull()` — it must not replay on the next reload.
                 'bienvenue' => fn () => (bool) $request->session()->pull('bienvenue', false),
+                // Set by InscriptionController@cancel: play the cancellation
+                // clip once, same one-render-only rule.
+                'annulationVideo' => fn () => (bool) $request->session()->pull('annulationVideo', false),
             ],
             'locale' => app()->getLocale(),
         ];
