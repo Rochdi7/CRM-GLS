@@ -574,6 +574,7 @@ production ne défait AUCUNE décision prise depuis l'application :
 | Corrigé la capacité d'une salle, le montant d'un frais | ✅ seule une valeur restée à zéro est comblée |
 | Détaché un frais d'un centre qui ne le facture pas | ✅ `attacherCentres()` attache sans `sync()` |
 | Saisi une note sur une fiche employé | ✅ `GlsStaffSeeder` n'efface que son ancien texte généré |
+| Accordé ou retiré une permission à un rôle sur l'écran Rôles | ✅ `RolesAndPermissionsSeeder` fusionne avec le preset enregistré au run précédent (05/10/2026) — seules les permissions que le CODE a ajoutées/retirées depuis bougent ; `ROLES_SEED_RESET=1` force le retour au preset |
 
 Avant le correctif, un re-seed remettait le compte du directeur sur la valeur
 d'`ADMIN_PASSWORD` du `.env` du serveur (et le repassait en

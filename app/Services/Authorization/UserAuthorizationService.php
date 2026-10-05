@@ -39,7 +39,7 @@ final class UserAuthorizationService
         }
 
         $this->guardRoleNames($roleNames);
-        $this->guardPermissionNames($directPermissions);
+        $this->guardPermissionNames($actor, $target, $directPermissions);
         $this->guardSuperAdminRules($actor, $target, $roleNames);
 
         if ($directPermissions !== [] && ! $actor->can('users.assign-permissions')) {
@@ -116,11 +116,40 @@ final class UserAuthorizationService
     }
 
     /**
+     * May this actor hand out a `superAdminOnly()` ability as a DIRECT
+     * permission? Only a super-admin: those abilities (deletes, expense
+     * approval, system settings…) are kept off every role on purpose (§16),
+     * and "delegated by hand to one user" is a super-admin's decision. A
+     * director holding `users.assign-permissions` must not be able to grant
+     * a colleague `expenses.approve` or `payments.delete` that no role —
+     * his own included — may carry. One of the `hasRole()` uses CLAUDE.md
+     * §16 allows (super-admin invariants of this service).
+     */
+    public function canGrantReservedPermissions(User $actor): bool
+    {
+        return $actor->hasRole(Role::SUPER_ADMIN);
+    }
+
+    /**
      * @param  list<string>  $permissions
      */
-    private function guardPermissionNames(array $permissions): void
+    private function guardPermissionNames(User $actor, User $target, array $permissions): void
     {
+        $reserved = PermissionRegistry::superAdminOnly();
+        // A reserved permission the target ALREADY holds was granted by a
+        // super-admin: a later edit by a director may keep (or drop) it,
+        // only a NEW reserved grant needs the super-admin.
+        $alreadyHeld = $target->permissions()->pluck('name')->all();
+
         foreach ($permissions as $name) {
+            if (in_array($name, $reserved, true)
+                && ! in_array($name, $alreadyHeld, true)
+                && ! $this->canGrantReservedPermissions($actor)) {
+                throw ValidationException::withMessages([
+                    'permissions' => __('The permission :name is reserved to the super-admin: only a super administrator can grant it directly.', ['name' => $name]),
+                ]);
+            }
+
             // « Tous les centres » is super-admin only (Gate::before) — the
             // ability can never be handed to anyone, in any way.
             if ($name === PermissionRegistry::GLOBAL_CENTER_ACCESS) {
