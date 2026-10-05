@@ -98,6 +98,7 @@ final class GetStudentDetails
             // et c'est là que vivent ses présences et ses anciens dossiers.
             'historiqueTransfert' => $this->historiqueTransfert($student),
             'paiementsTransferes' => $this->paiementsTransferes($student),
+            'inscriptionsSupprimees' => $this->inscriptionsSupprimees($student),
             'photoUrl' => $student->avatarUrl(),
             'parent' => ($student->parent_nom || $student->parent_telephone || $student->parent_relation || $student->parent_cin)
                 ? [
@@ -120,6 +121,47 @@ final class GetStudentDetails
                 'caisse' => $encaissement->caisse?->nom,
             ])->values()->all(),
         ];
+    }
+
+    /**
+     * Les dossiers SUPPRIMÉS de cet étudiant (05/10/2026). La ligne
+     * `inscriptions` n'existe plus : tout vient de l'entrée de journal
+     * figée par SupprimerInscription (append-only), jamais d'un recalcul —
+     * groupe, année, paiements détachés et remboursements tels qu'ils
+     * étaient au moment de la suppression. Les paiements eux-mêmes restent
+     * listés dans « Paiements » (student_id inchangé). Une seule requête.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function inscriptionsSupprimees(Student $student): array
+    {
+        return Activity::query()
+            ->where('subject_type', Inscription::class)
+            ->whereIn('event', ['inscription_deleted', 'deleted_with_refunded_payments'])
+            ->where('properties->etudiant_id', (string) $student->id)
+            ->latest('id')
+            ->get()
+            ->map(function (Activity $a): array {
+                $p = $a->properties;
+
+                return [
+                    'reference' => $p['inscription_reference'] ?? null,
+                    'groupe' => $p['groupe'] ?? null,
+                    'anneeScolaire' => $p['annee_scolaire'] ?? null,
+                    'statut' => $p['statut'] ?? null,
+                    'supprimeeLe' => $a->created_at?->format('d/m/Y H:i'),
+                    'supprimeePar' => $a->causer_label,
+                    'paiements' => collect($p['paiements_detaches'] ?? [])->map(fn (array $d): array => [
+                        'reference' => $d['reference'] ?? null,
+                        'montant' => $d['montant'] ?? '0.00',
+                        'frais' => $d['frais'] ?? null,
+                        'rembourse' => $d['rembourse'] ?? null,
+                        'remboursements' => $d['remboursements'] ?? [],
+                    ])->values()->all(),
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     /**

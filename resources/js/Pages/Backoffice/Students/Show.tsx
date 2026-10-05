@@ -317,6 +317,63 @@ export default function StudentShow({ student, absences }: StudentShowProps) {
                         </Card>
                     ))}
 
+                    {student.inscriptionsSupprimees.length > 0 && (
+                        <Card
+                            title="Inscriptions supprimées"
+                            tools={<span className="badge badge-soft-danger">{student.inscriptionsSupprimees.length}</span>}
+                        >
+                            <p className="text-muted fs-13 mb-3">
+                                Ces dossiers ont été supprimés après remboursement. Leurs paiements restent sur cette fiche,
+                                avec leur remboursement. Consultation seule.
+                            </p>
+                            <RelatedRecordsTable
+                                isEmpty={false}
+                                emptyTitle="Aucune inscription supprimée"
+                                emptyIcon="ti ti-clipboard-x"
+                                head={
+                                    <tr>
+                                        <th>Référence</th>
+                                        <th>Groupe</th>
+                                        <th>Année</th>
+                                        <th>Paiements</th>
+                                        <th>Supprimée le</th>
+                                    </tr>
+                                }
+                            >
+                                {student.inscriptionsSupprimees.map((insc, index) => (
+                                    <tr key={`${insc.reference ?? 'ins'}-${index}`}>
+                                        <td>
+                                            <code>{insc.reference ?? '-'}</code>
+                                        </td>
+                                        <td>{insc.groupe ?? '-'}</td>
+                                        <td>{insc.anneeScolaire ?? '-'}</td>
+                                        <td>
+                                            {insc.paiements.length === 0
+                                                ? '-'
+                                                : insc.paiements.map((p, i) => (
+                                                      <div key={`${p.reference ?? 'p'}-${i}`} className="fs-13">
+                                                          <code>{p.reference}</code> {Number(p.montant).toFixed(2)} MAD
+                                                          {p.frais ? ` (${p.frais})` : ''}
+                                                          {p.remboursements.length > 0 && (
+                                                              <span className="text-danger">
+                                                                  {' '}
+                                                                  remboursé {Number(p.rembourse ?? 0).toFixed(2)} MAD —{' '}
+                                                                  {p.remboursements.join(', ')}
+                                                              </span>
+                                                          )}
+                                                      </div>
+                                                  ))}
+                                        </td>
+                                        <td>
+                                            {insc.supprimeeLe ?? '-'}
+                                            {insc.supprimeePar && <div className="text-muted fs-13">{insc.supprimeePar}</div>}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </RelatedRecordsTable>
+                        </Card>
+                    )}
+
                     {student.paiementsTransferes && (
                         <Card
                             title={`Paiements transférés vers ${student.paiementsTransferes.centre ?? 'le nouveau centre'}`}

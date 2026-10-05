@@ -157,11 +157,11 @@ export default function MesSeances({ seances, filters, groupOptions, today }: Me
                             <div className="row">
                                 {day.rows.map((seance) => (
                                     <div className="col-xxl-4 col-md-6 d-flex" key={seance.id}>
-                                        <div className={`card flex-fill${day.date === today ? ' border-primary' : ''}`}>
+                                        <div className={`card flex-fill gls-tile${day.date === today ? ' border-primary' : ''}`}>
                                             <div className="card-body d-flex flex-column">
                                                 <div className="d-flex align-items-start justify-content-between gap-2 mb-3">
                                                     <div className="d-flex align-items-center overflow-hidden">
-                                                        <span className="avatar avatar-lg rounded bg-primary-transparent text-primary me-2 flex-shrink-0 d-inline-flex flex-column align-items-center justify-content-center">
+                                                        <span className="avatar avatar-lg rounded bg-primary-transparent text-primary me-2 flex-shrink-0 d-inline-flex flex-column align-items-center justify-content-center gls-tile-icon">
                                                             <i className="ti ti-clock fs-18" />
                                                         </span>
                                                         <div className="overflow-hidden">

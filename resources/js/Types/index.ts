@@ -384,6 +384,22 @@ export interface StudentDetails {
         total: string;
         lignes: Array<{ reference: string; montant: string; methode: string; date: string | null; caisse: string | null; type: string }>;
     } | null;
+    /** Dossiers supprimés, lus dans le journal (append-only) — la ligne inscriptions n'existe plus. */
+    inscriptionsSupprimees: Array<{
+        reference: string | null;
+        groupe: string | null;
+        anneeScolaire: string | null;
+        statut: string | null;
+        supprimeeLe: string | null;
+        supprimeePar: string | null;
+        paiements: Array<{
+            reference: string | null;
+            montant: string;
+            frais: string | null;
+            rembourse: string | null;
+            remboursements: string[];
+        }>;
+    }>;
     photoUrl: string | null;
     parent: {
         relation: string | null;

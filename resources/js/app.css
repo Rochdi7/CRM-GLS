@@ -2605,7 +2605,6 @@ html[data-theme='dark'] .card-body .border-top p {
     gap: 12px;
     padding: 10px 12px;
     border: 1px solid #e9edf4;
-    border-left-width: 4px;
     border-radius: 8px;
     color: inherit;
     transition: background-color 0.15s ease;
@@ -2615,9 +2614,6 @@ html[data-theme='dark'] .card-body .border-top p {
     background: #f8f9fb;
     color: inherit;
 }
-.gls-agenda-success { border-left-color: #2e9d7e; }
-.gls-agenda-warning { border-left-color: #eab300; }
-.gls-agenda-danger  { border-left-color: #ef6879; }
 .gls-agenda-time {
     display: flex;
     flex-direction: column;
@@ -4766,18 +4762,9 @@ html[data-theme='dark'] .modal-body {
     overflow: hidden;
     border-color: var(--gls-surface-line);
     border-radius: 12px;
-    padding-top: 18px;
     background-image: radial-gradient(circle at 100% 0%, rgba(var(--gls-brand-rgb), 0.08), transparent 55%);
     box-shadow: var(--gls-shadow-card);
     transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
-}
-.gls-upcoming-tile::before {
-    content: '';
-    position: absolute;
-    inset-inline: 0;
-    top: 0;
-    height: 4px;
-    background: linear-gradient(90deg, var(--gls-brand), var(--gls-violet) 55%, var(--gls-teal));
 }
 .gls-upcoming-tile:hover,
 .gls-upcoming-tile:focus-visible {
@@ -4828,15 +4815,15 @@ html[data-theme='dark'] .modal-body {
     color: var(--gls-brand);
 }
 
-/* Agenda du jour : la couleur du statut teinte aussi le fond */
+/* Agenda du jour : la couleur du statut teinte le fond (pas de bordure gauche épaisse) */
 .gls-agenda-item {
-    border-color: var(--gls-surface-line);
+    border: 1px solid var(--gls-surface-line);
     border-radius: 10px;
     transition: background-color 0.15s ease, transform 0.15s ease;
 }
-.gls-agenda-success { border-left-color: #16a34a; background: rgba(22, 163, 74, 0.04); }
-.gls-agenda-warning { border-left-color: #eab300; background: rgba(234, 179, 0, 0.05); }
-.gls-agenda-danger  { border-left-color: #e82646; background: rgba(232, 38, 70, 0.04); }
+.gls-agenda-success { background: rgba(22, 163, 74, 0.04); }
+.gls-agenda-warning { background: rgba(234, 179, 0, 0.05); }
+.gls-agenda-danger  { background: rgba(232, 38, 70, 0.04); }
 .gls-agenda-item:hover,
 .gls-agenda-item:focus-visible {
     background: rgba(var(--gls-brand-rgb), 0.06);
@@ -5093,5 +5080,98 @@ html[data-theme='dark'] .gls-welcome-box {
     .gls-auth::after {
         width: 260px;
         height: 260px;
+    }
+}
+
+/* --- Mobile : sélecteur de période du graphique « Nouvelles inscriptions » -
+ * Sept boutons sur une ligne (~395 px) dépassaient un écran de 390 px : la
+ * page entière s'élargissait et laissait une bande blanche à droite. Sur
+ * téléphone la rangée devient une bande défilante, comme les actions
+ * rapides du bandeau. */
+@media (max-width: 575.98px) {
+    .gls-duree-bar {
+        width: 100%;
+        min-width: 0;
+    }
+    .gls-duree-group {
+        display: flex;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+    }
+    .gls-duree-group::-webkit-scrollbar {
+        display: none;
+    }
+    .gls-duree-group > .btn {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+}
+
+/* --- Écrans enseignant : même langage que « Groupes à venir » --------------
+ * MesGroupes / MesSeances / MesEtudiants et l'espace enseignant du tableau
+ * de bord restaient des cartes blanches nues. Couleurs, ombre et survol
+ * seulement : aucune largeur, aucun point de rupture touché, le rendu
+ * mobile garde exactement sa grille. */
+.gls-tile {
+    border-color: var(--gls-surface-line);
+    background-image: radial-gradient(circle at 100% 0%, rgba(var(--gls-brand-rgb), 0.07), transparent 50%);
+    transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+.gls-tile:hover {
+    border-color: rgba(var(--gls-brand-rgb), 0.3);
+    box-shadow: 0 10px 24px rgba(var(--gls-brand-rgb), 0.12);
+    transform: translateY(-2px);
+}
+.gls-tile.border-primary {
+    border-color: rgba(var(--gls-brand-rgb), 0.55) !important;
+    box-shadow: 0 0 0 1px rgba(var(--gls-brand-rgb), 0.25), var(--gls-shadow-card);
+}
+.gls-tile > .card-header {
+    background: transparent;
+}
+.gls-tile .gls-tile-icon {
+    background-image: linear-gradient(135deg, var(--gls-brand), var(--gls-violet)) !important;
+    color: #fff !important;
+    box-shadow: 0 6px 14px rgba(var(--gls-brand-rgb), 0.28);
+}
+.gls-tile .gls-tile-stats {
+    background: rgba(var(--gls-brand-rgb), 0.06) !important;
+    border: 1px solid rgba(var(--gls-brand-rgb), 0.1);
+}
+.gls-ens-kpi-icon {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: #fff;
+    background-image: linear-gradient(135deg, rgba(var(--gls-stat-rgb), 0.75), var(--gls-stat));
+    box-shadow: 0 4px 10px rgba(var(--gls-stat-rgb), 0.3);
+}
+html[data-theme='dark'] .gls-tile {
+    background-image: radial-gradient(circle at 100% 0%, rgba(143, 163, 255, 0.1), transparent 50%);
+}
+html[data-theme='dark'] .gls-tile:hover {
+    border-color: rgba(143, 163, 255, 0.35);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
+}
+html[data-theme='dark'] .gls-tile .gls-tile-icon {
+    background-image: linear-gradient(135deg, #5b77f0, #8b6cfd) !important;
+}
+html[data-theme='dark'] .gls-tile .gls-tile-stats {
+    background: rgba(143, 163, 255, 0.08) !important;
+    border-color: rgba(143, 163, 255, 0.14);
+}
+@media (hover: none), (prefers-reduced-motion: reduce) {
+    .gls-tile,
+    .gls-tile:hover {
+        transform: none;
+        transition: none;
     }
 }

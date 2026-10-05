@@ -80,7 +80,7 @@ export default function MesEtudiants({ students, filters, groupOptions }: MesEtu
                 <div className={`row${isLoading ? ' opacity-50' : ''}`}>
                     {students.data.map((student) => (
                         <div className="col-xxl-3 col-xl-4 col-md-6 d-flex" key={student.id}>
-                            <div className="card flex-fill">
+                            <div className="card flex-fill gls-tile">
                                 <div className="card-body d-flex flex-column">
                                     <div className="d-flex align-items-center mb-3">
                                         <span className="avatar avatar-xl rounded-circle bg-primary-transparent me-3 flex-shrink-0 d-inline-flex align-items-center justify-content-center overflow-hidden">
