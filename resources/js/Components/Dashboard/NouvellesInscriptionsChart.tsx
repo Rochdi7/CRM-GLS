@@ -177,11 +177,11 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                     <h4 className="card-title mb-1">{t('New registrations')}</h4>
                     <p className="text-muted mb-0">{data.periode}</p>
                 </div>
-                <div className="d-flex align-items-center flex-wrap gap-2">
+                <div className="d-flex align-items-center flex-wrap gap-2 gls-duree-bar">
                     <span className="badge badge-soft-primary fs-13">
                         {t('Total')} : {data.total.toLocaleString('fr-FR')}
                     </span>
-                    <div className="btn-group btn-group-sm" role="group" aria-label={t('Duration')}>
+                    <div className="btn-group btn-group-sm gls-duree-group" role="group" aria-label={t('Duration')}>
                         {DUREES.map((d) => (
                             <button
                                 key={d.value}

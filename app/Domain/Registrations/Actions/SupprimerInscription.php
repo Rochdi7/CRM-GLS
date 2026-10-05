@@ -68,11 +68,19 @@ final class SupprimerInscription
             $detaches = [];
 
             foreach ($encaissements as $encaissement) {
+                $remboursements = Remboursement::query()
+                    ->where('encaissement_id', $encaissement->id)
+                    ->nonAnnules()
+                    ->get(['reference', 'montant', 'date_remboursement']);
+
                 $detaches[] = [
                     'reference' => $encaissement->reference,
                     'encaissement_id' => $encaissement->id,
                     'montant' => number_format((float) $encaissement->montant, 2, '.', ''),
+                    'date_paiement' => $encaissement->date_paiement?->toDateString(),
                     'frais' => $encaissement->fee?->nom,
+                    'rembourse' => number_format((float) $remboursements->sum('montant'), 2, '.', ''),
+                    'remboursements' => $remboursements->pluck('reference')->all(),
                 ];
 
                 $encaissement->inscription_fee_id = null;
@@ -85,21 +93,35 @@ final class SupprimerInscription
             // (audit DB-02).
             $this->assignerLivres->handle($inscription, [], $agent);
 
-            if ($detaches !== []) {
-                activity('inscription')
-                    ->performedOn($inscription)
-                    ->event('deleted_with_refunded_payments')
-                    ->withProperties([
-                        'inscription_reference' => $inscription->reference,
-                        'etudiant_id' => $inscription->student_id,
-                        'paiements_detaches' => $detaches,
-                    ])
-                    ->log(sprintf(
-                        'Inscription %s supprimée : %d paiement(s) intégralement remboursé(s) conservé(s) sur la fiche de l\'étudiant',
+            // Le dossier disparaît de la table, mais pas de l'HISTORIQUE de
+            // l'étudiant : cette entrée (append-only) fige tout ce que la
+            // fiche affiche ensuite sous « Inscriptions supprimées » — une
+            // fois la ligne effacée, c'est la seule trace du groupe, de
+            // l'année et du lien entre ces paiements et ce dossier.
+            $inscription->loadMissing(['group:id,nom', 'anneeScolaire:id,nom']);
+
+            activity('inscription')
+                ->performedOn($inscription)
+                ->event('inscription_deleted')
+                ->withProperties([
+                    'inscription_reference' => $inscription->reference,
+                    'etudiant_id' => (string) $inscription->student_id,
+                    'groupe' => $inscription->group?->nom,
+                    'annee_scolaire' => $inscription->anneeScolaire?->nom,
+                    'date_inscription' => $inscription->date_inscription?->toDateString(),
+                    'statut' => $inscription->statut,
+                    'montant_total' => $inscription->montant_total !== null
+                        ? number_format((float) $inscription->montant_total, 2, '.', '')
+                        : null,
+                    'paiements_detaches' => $detaches,
+                ])
+                ->log($detaches === []
+                    ? sprintf('Inscription %s supprimée', $inscription->reference)
+                    : sprintf(
+                        'Inscription %s supprimée : %d paiement(s) intégralement remboursé(s) conservé(s) sur la fiche de l'étudiant',
                         $inscription->reference,
                         count($detaches),
                     ));
-            }
 
             $inscription->delete();
         });

@@ -38,6 +38,10 @@ export default function EspaceEnseignant({ data, onMoisChange, loading }: Props)
         return d === null ? '-' : new Date(d + 'T00:00:00').toLocaleDateString('fr-FR');
     }
 
+    function fmtMontant(n: number): string {
+        return n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
     function moisVoisin(delta: number): string {
         const [y, m] = data.mois.split('-').map(Number);
         const d = new Date(y, m - 1 + delta, 1);
@@ -56,26 +60,41 @@ export default function EspaceEnseignant({ data, onMoisChange, loading }: Props)
             {/* ── Cumul ─────────────────────────────────────────────── */}
             <div className="row g-3 mb-3">
                 <div className="col-6 col-md-4">
-                    <Card>
-                        <div className="text-muted fs-12 text-uppercase mb-1">{t('Received this year')}</div>
-                        <div className="fs-24 fw-bold text-success">{data.cumul.approuve.toFixed(2)} MAD</div>
+                    <Card className="h-100 gls-stat-card gls-stat-success gls-ens-kpi">
+                        <div className="d-flex align-items-center gap-2 mb-2">
+                            <span className="gls-ens-kpi-icon" aria-hidden="true">
+                                <i className="ti ti-cash" />
+                            </span>
+                            <span className="text-muted fs-12 text-uppercase">{t('Received this year')}</span>
+                        </div>
+                        <div className="fs-24 fw-bold text-success">{fmtMontant(data.cumul.approuve)} MAD</div>
                         <small className="text-muted">
                             {t(':count payment(s)', { count: String(data.cumul.nombre) })}
                         </small>
                     </Card>
                 </div>
                 <div className="col-6 col-md-4">
-                    <Card>
-                        <div className="text-muted fs-12 text-uppercase mb-1">{t('Pending approval')}</div>
+                    <Card className="h-100 gls-stat-card gls-stat-warning gls-ens-kpi">
+                        <div className="d-flex align-items-center gap-2 mb-2">
+                            <span className="gls-ens-kpi-icon" aria-hidden="true">
+                                <i className="ti ti-hourglass" />
+                            </span>
+                            <span className="text-muted fs-12 text-uppercase">{t('Pending approval')}</span>
+                        </div>
                         <div className={`fs-24 fw-bold ${data.cumul.enAttente > 0 ? 'text-warning' : 'text-muted'}`}>
-                            {data.cumul.enAttente.toFixed(2)} MAD
+                            {fmtMontant(data.cumul.enAttente)} MAD
                         </div>
                         <small className="text-muted">{t('Not received yet')}</small>
                     </Card>
                 </div>
                 <div className="col-12 col-md-4">
-                    <Card>
-                        <div className="text-muted fs-12 text-uppercase mb-1">{t('Pay mode')}</div>
+                    <Card className="h-100 gls-stat-card gls-stat-info gls-ens-kpi">
+                        <div className="d-flex align-items-center gap-2 mb-2">
+                            <span className="gls-ens-kpi-icon" aria-hidden="true">
+                                <i className="ti ti-settings-dollar" />
+                            </span>
+                            <span className="text-muted fs-12 text-uppercase">{t('Pay mode')}</span>
+                        </div>
                         <div className="fs-20 fw-bold">
                             {data.enseignant.mode === 'horaire' && t('Per hour')}
                             {data.enseignant.mode === 'gls' && t('GLS system')}
@@ -229,7 +248,7 @@ export default function EspaceEnseignant({ data, onMoisChange, loading }: Props)
                                             p.statut === 'Refusée' || p.statut === 'Annulée' ? 'text-decoration-line-through' : ''
                                         }`}
                                     >
-                                        {p.montant.toFixed(2)} MAD
+                                        {fmtMontant(p.montant)} MAD
                                     </td>
                                     <td>
                                         <StatusBadge label={libelleStatut(p.statut)} variant={variantStatut(p.statut)} />

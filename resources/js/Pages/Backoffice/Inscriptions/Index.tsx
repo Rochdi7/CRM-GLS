@@ -2046,10 +2046,9 @@ export default function InscriptionsIndex({
                                                                         type="number"
                                                                         step="0.01"
                                                                         min="0"
-                                                                        readOnly
-                                                                        tabIndex={-1}
-                                                                        className={`form-control form-control-sm bg-light${montantError ? ' is-invalid' : ''}`}
+                                                                        className={`form-control form-control-sm${montantError ? ' is-invalid' : ''}`}
                                                                         value={line.montantInitial}
+                                                                        onChange={(event) => setLine(index, 'montantInitial', event.target.value)}
                                                                     />
                                                                 </td>
                                                                 {renderSemaineCells(
@@ -2262,11 +2261,11 @@ export default function InscriptionsIndex({
                                                                         type="number"
                                                                         step="0.01"
                                                                         min="0"
-                                                                        readOnly
-                                                                        tabIndex={-1}
                                                                         disabled={!canManageFees}
-                                                                        className={`form-control form-control-sm bg-light${montantError ? ' is-invalid' : ''}`}
+                                                                        className={`form-control form-control-sm${montantError ? ' is-invalid' : ''}`}
                                                                         value={line.montantInitial}
+                                                                        onChange={(event) => setEditingLine(index, 'montantInitial', event.target.value)}
+                                                                        onBlur={commitEditingLine}
                                                                     />
                                                                 </td>
                                                                 {renderSemaineCells(

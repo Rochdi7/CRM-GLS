@@ -123,10 +123,10 @@ export default function MesGroupes({ groups, statutCounts, filters }: MesGroupes
                 <div className={`row${isLoading ? ' opacity-50' : ''}`}>
                     {groups.data.map((group) => (
                         <div className="col-xxl-4 col-md-6 d-flex" key={group.id}>
-                            <div className="card flex-fill">
+                            <div className="card flex-fill gls-tile">
                                 <div className="card-header d-flex align-items-start justify-content-between gap-2">
                                     <div className="d-flex align-items-center overflow-hidden">
-                                        <span className="avatar avatar-lg rounded bg-primary-transparent text-primary me-2 flex-shrink-0 d-inline-flex align-items-center justify-content-center">
+                                        <span className="avatar avatar-lg rounded bg-primary-transparent text-primary me-2 flex-shrink-0 d-inline-flex align-items-center justify-content-center gls-tile-icon">
                                             <i className="ti ti-users-group fs-24" />
                                         </span>
                                         <div className="overflow-hidden">
@@ -138,7 +138,7 @@ export default function MesGroupes({ groups, statutCounts, filters }: MesGroupes
                                 </div>
 
                                 <div className="card-body d-flex flex-column">
-                                    <div className="d-flex align-items-center justify-content-between bg-light-300 rounded p-2 mb-3">
+                                    <div className="d-flex align-items-center justify-content-between bg-light-300 rounded p-2 mb-3 gls-tile-stats">
                                         <div className="text-center flex-fill">
                                             <h4 className="mb-0 text-success">{group.inscriptionsActivesCount}</h4>
                                             <span className="fs-13 text-muted">{t('Active students')}</span>
