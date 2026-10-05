@@ -118,7 +118,7 @@ final class SupprimerInscription
                 ->log($detaches === []
                     ? sprintf('Inscription %s supprimée', $inscription->reference)
                     : sprintf(
-                        'Inscription %s supprimée : %d paiement(s) intégralement remboursé(s) conservé(s) sur la fiche de l'étudiant',
+                        'Inscription %s supprimée : %d paiement(s) intégralement remboursé(s) conservé(s) sur la fiche de l\'étudiant',
                         $inscription->reference,
                         count($detaches),
                     ));

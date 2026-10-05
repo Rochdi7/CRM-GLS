@@ -1278,7 +1278,12 @@ the database layer. Non-negotiable invariants already enforced in code:
   `montant`, `caisse_id`, `caisses.solde` ni aucune ligne `remboursements`
   ne bouge. Toujours refusé (→ « Annuler ») : paiement non ou partiellement
   remboursé, ligne d'application d'avance, paiement ayant financé des
-  applications. Contrôle sous verrou dans la transaction. Tests :
+  applications. Contrôle sous verrou dans la transaction. **Le dossier
+  supprimé reste dans l'HISTORIQUE de l'étudiant** (05/10/2026) : chaque
+  suppression écrit une entrée `inscription_deleted` (groupe, année,
+  paiements détachés + leurs remboursements, figés à l'écriture) que
+  `GetStudentDetails::inscriptionsSupprimees()` relit pour la carte
+  « Inscriptions supprimées » de la fiche — jamais recalculé. Tests :
   `tests/Feature/Backoffice/Inscriptions/InscriptionDeleteRembourseeTest.php`.
 - **⚠ Un groupe qui passe TERMINAL clôture ses inscriptions** (09/09/2026).
   « Fin de formation » comme « Annulée » déclenchent
