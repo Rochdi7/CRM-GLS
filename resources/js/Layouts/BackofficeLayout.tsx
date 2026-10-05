@@ -7,6 +7,7 @@ import MobileSidebarOverlay from '@/Components/Theme/MobileSidebarOverlay';
 import PageHeader from '@/Components/Theme/PageHeader';
 import ToastContainer from '@/Components/Feedback/ToastContainer';
 import WelcomeVideo from '@/Components/Feedback/WelcomeVideo';
+import { t } from '@/Lib/i18n';
 import AnneeClotureeBanner from '@/Components/Context/AnneeClotureeBanner';
 import type { Breadcrumb, SharedProps } from '@/Types';
 
@@ -71,7 +72,17 @@ export default function BackofficeLayout({ title, breadcrumbs = [], actions, chi
 
             <ToastContainer flash={flash} />
 
-            <WelcomeVideo show={flash.bienvenue === true} name={auth.user?.name ?? null} />
+            <WelcomeVideo
+                show={flash.bienvenue === true}
+                src="/videos/bienvenue-gls.mp4"
+                text={auth.user?.name ? t('Welcome :name to GLS CRM', { name: auth.user.name }) : t('Welcome to GLS CRM')}
+            />
+
+            <WelcomeVideo
+                show={flash.annulationVideo === true}
+                src="/videos/inscription-annulee.mp4"
+                text={t('Registration cancelled.')}
+            />
 
             <div className="page-wrapper">
                 <div className="content">

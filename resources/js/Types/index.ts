@@ -69,6 +69,8 @@ export interface FlashMessages {
     nouvelleInscription?: NouvelleInscription | null;
     /** True on the first render after a login — plays the welcome clip once (pulled server-side). */
     bienvenue?: boolean;
+    /** True on the first render after an inscription was cancelled — plays the cancellation clip once. */
+    annulationVideo?: boolean;
 }
 
 export interface SharedProps {

@@ -929,6 +929,10 @@ final class InscriptionController extends Controller
             $data['note'] ?? null,
         );
 
+        // Plays the « inscription annulée » clip once, every centre
+        // (pulled in HandleInertiaRequests).
+        $request->session()->put('annulationVideo', true);
+
         return $this->backToListPreservingFilters($request, 'backoffice.inscriptions.index')
             ->with('success', __('Registration cancelled.'));
     }
