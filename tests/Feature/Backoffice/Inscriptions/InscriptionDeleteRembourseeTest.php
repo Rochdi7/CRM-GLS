@@ -130,6 +130,25 @@ final class InscriptionDeleteRembourseeTest extends TestCase
         $this->assertSame($soldeAvant, (float) $this->caisse->fresh()->solde, 'Aucune caisse ne bouge.');
     }
 
+    public function test_the_deleted_registration_stays_in_the_students_history_with_its_payment_and_refund(): void
+    {
+        $remboursement = $this->rembourser(1200);
+
+        $this->delete(route('backoffice.inscriptions.destroy', $this->inscription))
+            ->assertSessionHasNoErrors();
+
+        $this->get(route('backoffice.students.show', $this->inscription->student_id))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('student.inscriptionsSupprimees', 1)
+                ->where('student.inscriptionsSupprimees.0.reference', 'INS-RMB')
+                ->where('student.inscriptionsSupprimees.0.anneeScolaire', '2026/2027')
+                ->where('student.inscriptionsSupprimees.0.paiements.0.reference', 'ENC-RMB')
+                ->where('student.inscriptionsSupprimees.0.paiements.0.rembourse', '1200.00')
+                ->where('student.inscriptionsSupprimees.0.paiements.0.remboursements.0', $remboursement->reference)
+                ->where('student.paiements.0.reference', 'ENC-RMB'));
+    }
+
     public function test_a_registration_without_payment_is_deleted_and_an_unlinked_refund_stays_on_the_student(): void
     {
         // No payment on the registration at all — only a refund of the
