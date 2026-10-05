@@ -741,7 +741,12 @@ the database layer. Non-negotiable invariants already enforced in code:
   account). In every path the default only fills a vacuum: `Autre` ⇒ no
   role, and a user holding ANY role is never touched — `categorie` never
   drives access at runtime (§16); changing access remains the Autorisations
-  screen's job. Pass `user_id` explicitly to skip credential creation.
+  screen's job. **Because of that, `EmployeeController@update` flashes a
+  `warning` when the catégorie changed and the login still holds another
+  role** (05/10/2026: an employee re-titled « Comptable » kept `teacher`
+  for weeks, and the Comptable ROLE was edited in vain trying to reach
+  him) — it names the role kept and points to Autorisations, and still
+  touches no role. Pass `user_id` explicitly to skip credential creation.
   No public registration ever.
 - **`niveau` / `categorie` / all `statut` fields are plain VARCHARs** validated
   against model constants (`Student::NIVEAUX`, `Employee::CATEGORIES`,
@@ -1810,6 +1815,18 @@ keeps the primary column stable when an edit merely adds a center. Enforcing
   test dérive son compte de là — French labels, role matrix). New module ⇒
   add permissions THERE, re-run `db:seed --class=RolesAndPermissionsSeeder`
   (idempotent), protect routes, add allowed+denied tests.
+  **⚠ The seeder MERGES a preset role, it never overwrites it** (05/10/2026
+  — the CEO had widened « Comptable » to 61 permissions on the Rôles
+  screen; the old `syncPermissions($preset)` would have reset it to 41 at
+  the next `db:seed`, silently). It records the preset it applied in
+  `AppSettings::ROLE_PRESETS_APPLIED` and, on the next run, applies only
+  what the CODE changed since (added → granted, removed → revoked) while a
+  permission the admin granted or revoked by hand keeps its live value;
+  `superAdminOnly()` abilities are stripped whatever their source. A
+  fresh role, or `ROLES_SEED_RESET=1` on the command line, takes the
+  preset as is. A seeder garnit — it never undoes an admin's decision
+  (§12 « Seeders — production only »). Tests:
+  `tests/Feature/Backoffice/Authorization/RolesSeederKeepsHandEditsTest.php`.
 - **One role per job title**: the 13 roles in `PermissionRegistry::roles()`
   mirror `Employee::CATEGORIES` one-for-one (except `Autre`, deliberately
   unmapped ⇒ no access). The names line up so granting is obvious, but
@@ -2023,7 +2040,17 @@ keeps the primary column stable when an edit merely adds a center. Enforcing
   new `*.delete` added to `grouped()` later is locked down automatically.
   Never "fix" a 403 on a delete by editing a preset: either the caller
   should be a super-admin, or the permission is deliberately delegated by
-  hand to one user on the Autorisations screen. Same filter also reserves
+  hand to one user on the Autorisations screen — **and that delegation is
+  a SUPER-ADMIN's act** (05/10/2026): `UserAuthorizationService` refuses a
+  reserved ability as a NEW direct permission from any other actor, even
+  one holding `users.assign-permissions` (a director could otherwise hand
+  a colleague `expenses.approve` or `payments.delete`, which no role may
+  carry), and the Autorisations picker draws them locked « Réservé au
+  super-admin » (`lockedPermissions`) exactly like the Rôles form. A
+  reserved permission the target ALREADY holds may be kept or dropped by
+  a later non-super-admin edit. Tests:
+  `tests/Feature/Backoffice/Authorization/ReservedDirectPermissionsTest.php`.
+  Same filter also reserves
   `expenses.approve`, `system-settings.*`, `banks.*`,
   `cancellation-reasons.*` and `cash-accounts.*`. `groups.archive` is NOT a
   delete (it snapshots to `groups_historique`) and stays with operational

@@ -1040,4 +1040,65 @@ final class EmployeesInertiaCrudTest extends TestCase
             DB::table('activity_log')->where('event', 'solde_movement')->count(),
         );
     }
+
+    /**
+     * 05/10/2026: an employee re-titled « Comptable » kept the `teacher`
+     * role for weeks — a job title never changes access (§16), and nothing
+     * said so. The update now flashes a warning naming the role kept, and
+     * still touches no role.
+     */
+    public function test_changing_the_job_title_of_an_employee_who_holds_a_role_warns_and_keeps_the_role(): void
+    {
+        $this->actingAs($this->userWith('employees.view', 'employees.update'));
+
+        $login = User::factory()->create();
+        $login->assignRole('teacher');
+        $emp = Employee::factory()->create([
+            'user_id' => $login->id,
+            'categorie' => Employee::CATEGORIE_ENSEIGNANT,
+        ]);
+
+        $response = $this->put(route('backoffice.employees.update', $emp), [
+            'nom' => $emp->nom,
+            'prenom' => $emp->prenom,
+            'sexe' => $emp->sexe,
+            'categorie' => Employee::CATEGORIE_COMPTABLE,
+            'statut' => Employee::STATUT_ACTIF,
+            'etablissement_ids' => $this->someCenterIds(),
+        ])->assertRedirect(route('backoffice.employees.index'));
+
+        $warning = (string) session('warning');
+        $this->assertStringContainsString('Autorisations', $warning);
+        $this->assertStringContainsString('Enseignant', $warning);
+        $this->assertStringContainsString(Employee::CATEGORIE_COMPTABLE, $warning);
+
+        $this->assertSame(['teacher'], $login->fresh()->roles->pluck('name')->all());
+        $this->assertSame(Employee::CATEGORIE_COMPTABLE, $emp->fresh()->categorie);
+    }
+
+    public function test_changing_the_job_title_of_a_role_less_login_fills_the_role_without_a_warning(): void
+    {
+        $this->actingAs($this->userWith('employees.view', 'employees.update'));
+
+        $login = User::factory()->create();
+        $emp = Employee::factory()->create([
+            'user_id' => $login->id,
+            'categorie' => Employee::CATEGORIE_AUTRE,
+        ]);
+        $this->assertSame([], $login->fresh()->roles->pluck('name')->all());
+
+        $this->put(route('backoffice.employees.update', $emp), [
+            'nom' => $emp->nom,
+            'prenom' => $emp->prenom,
+            'sexe' => $emp->sexe,
+            'categorie' => Employee::CATEGORIE_COMPTABLE,
+            'statut' => Employee::STATUT_ACTIF,
+            'etablissement_ids' => $this->someCenterIds(),
+        ])->assertRedirect(route('backoffice.employees.index'));
+
+        // The role was filled, so no « change the role » warning (the till
+        // warning may still fire — the payload moved the primary centre).
+        $this->assertStringNotContainsString('Autorisations', (string) session('warning'));
+        $this->assertSame(['accountant'], $login->fresh()->roles->pluck('name')->all());
+    }
 }

@@ -29,11 +29,20 @@ use Inertia\Response;
  */
 final class UserAuthorizationController extends Controller
 {
-    public function edit(User $user): Response
+    public function edit(User $user, UserAuthorizationService $service): Response
     {
         $this->authorize('manageAuthorization', $user);
 
         $user->load(['roles', 'permissions']);
+
+        // superAdminOnly() abilities can be handed out directly ONLY by a
+        // super-admin (UserAuthorizationService::guardPermissionNames). For
+        // anyone else the picker shows them locked, « Réservé au
+        // super-admin », exactly as the Rôles form does — minus the ones the
+        // target already holds, which a later edit may keep.
+        $lockedPermissions = $service->canGrantReservedPermissions(auth()->user())
+            ? []
+            : array_values(array_diff(PermissionRegistry::superAdminOnly(), $user->permissions->pluck('name')->all()));
 
         return Inertia::render('Backoffice/Users/Authorization', [
             'targetUser' => [
@@ -58,6 +67,7 @@ final class UserAuthorizationController extends Controller
             'totalPermissions' => count(PermissionRegistry::names()),
             'isSuperAdmin' => $user->hasRole(Role::SUPER_ADMIN),
             'canAssignDirect' => auth()->user()->can('users.assign-permissions'),
+            'lockedPermissions' => $lockedPermissions,
         ]);
     }
 

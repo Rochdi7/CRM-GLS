@@ -24,11 +24,17 @@ export default function UsersAuthorization({
     groups,
     totalPermissions,
     canAssignDirect,
+    lockedPermissions = [],
 }: UsersAuthorizationPageProps) {
     const form = useForm<SyncUserAuthorizationForm>({
         roles: initialSelectedRoles,
         directPermissions: initialDirectPermissions,
     });
+
+    // superAdminOnly() abilities this actor may not hand out directly — the
+    // server refuses them (UserAuthorizationService), the picker draws them
+    // locked. Never part of the payload.
+    const locked = useMemo(() => new Set(lockedPermissions), [lockedPermissions]);
 
     const [advancedOpen, setAdvancedOpen] = useState(initialDirectPermissions.length > 0);
 
@@ -75,7 +81,7 @@ export default function UsersAuthorization({
     }
 
     function toggleGroup(group: string, on: boolean) {
-        const names = Object.keys(groups[group] ?? {});
+        const names = Object.keys(groups[group] ?? {}).filter((name) => !locked.has(name));
 
         form.setData(
             'directPermissions',
@@ -384,6 +390,7 @@ export default function UsersAuthorization({
                                                         permissions={permissions}
                                                         directPermissions={directPermissions}
                                                         viaRoles={viaRoles}
+                                                        locked={locked}
                                                         onToggleGroup={toggleGroup}
                                                         onTogglePermission={toggleDirectPermission}
                                                     />
@@ -408,6 +415,8 @@ interface DirectPermissionGroupProps {
     permissions: Record<string, string>;
     directPermissions: string[];
     viaRoles: Set<string>;
+    /** Reserved to the super-admin — this actor cannot grant them (server refuses). */
+    locked: Set<string>;
     onToggleGroup: (group: string, on: boolean) => void;
     onTogglePermission: (name: string, checked: boolean) => void;
 }
@@ -426,6 +435,7 @@ function DirectPermissionGroup({
     permissions,
     directPermissions,
     viaRoles,
+    locked,
     onToggleGroup,
     onTogglePermission,
 }: DirectPermissionGroupProps) {
@@ -457,28 +467,39 @@ function DirectPermissionGroup({
             {open && (
                 <div id={collapseId} className="px-3 pb-3">
                     <div className="row">
-                        {Object.entries(permissions).map(([permission, label]) => (
-                            <div className="col-md-6" key={permission}>
-                                <div className="form-check mb-2">
-                                    <input
-                                        className="form-check-input"
-                                        type="checkbox"
-                                        id={`direct-${permission}`}
-                                        checked={directPermissions.includes(permission)}
-                                        onChange={(event) => onTogglePermission(permission, event.target.checked)}
-                                    />
-                                    <label className="form-check-label" htmlFor={`direct-${permission}`}>
-                                        {label}
-                                        {viaRoles.has(permission) && (
-                                            <i
-                                                className="ti ti-info-circle text-info ms-1"
-                                                title="Déjà accordée par un rôle"
-                                            />
-                                        )}
-                                    </label>
+                        {Object.entries(permissions).map(([permission, label]) => {
+                            const isLocked = locked.has(permission);
+
+                            return (
+                                <div className="col-md-6" key={permission}>
+                                    <div
+                                        className={`form-check mb-2${isLocked ? ' opacity-50' : ''}`}
+                                        title={isLocked ? 'Réservé au super-admin' : undefined}
+                                    >
+                                        <input
+                                            className="form-check-input"
+                                            type="checkbox"
+                                            id={`direct-${permission}`}
+                                            checked={!isLocked && directPermissions.includes(permission)}
+                                            disabled={isLocked}
+                                            onChange={(event) => onTogglePermission(permission, event.target.checked)}
+                                        />
+                                        <label className="form-check-label" htmlFor={`direct-${permission}`}>
+                                            {label}
+                                            {isLocked && (
+                                                <span className="badge badge-soft-secondary ms-2">Réservé au super-admin</span>
+                                            )}
+                                            {!isLocked && viaRoles.has(permission) && (
+                                                <i
+                                                    className="ti ti-info-circle text-info ms-1"
+                                                    title="Déjà accordée par un rôle"
+                                                />
+                                            )}
+                                        </label>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             )}

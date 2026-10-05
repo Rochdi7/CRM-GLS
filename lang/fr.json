@@ -1256,6 +1256,8 @@
     "Group :name was permanently deleted. Its :count registration(s) were kept and cancelled, with the group name saved in their notes.": "Le groupe :name a été supprimé définitivement. Ses :count inscription(s) ont été conservées et annulées, le nom du groupe étant enregistré dans leur note.",
     "Group \":name\" was permanently deleted on :date. This registration was kept and cancelled.": "Le groupe « :name » a été supprimé définitivement le :date. Cette inscription a été conservée et annulée.",
     "The employee's till stays attached to :centre (balance: :solde DH). A profile edit never moves money.": "La caisse de l'employé reste rattachée à :centre (solde : :solde DH). La modification du profil ne déplace jamais d'argent.",
+    "The job title is now « :categorie » but the login keeps its role « :roles ». A job title never changes access: change the role on the Authorizations screen.": "Le poste est désormais « :categorie » mais le compte garde son rôle « :roles ». Un poste ne change jamais les accès : modifiez le rôle sur l'écran Autorisations.",
+    "The permission :name is reserved to the super-admin: only a super administrator can grant it directly.": "La permission :name est réservée au super-admin : seul un super administrateur peut l'attribuer directement.",
     "its current centre": "son centre actuel",
     "This payment is not attached to any fee.": "Ce paiement n'est rattaché à aucun frais.",
     "Payment detached from its fee - the amount is available as an advance again.": "Paiement détaché de son frais - le montant est de nouveau disponible en avance.",

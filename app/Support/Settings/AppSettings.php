@@ -22,6 +22,15 @@ final class AppSettings
     /** Dépenses go through a super-admin approval instead of debiting instantly. */
     public const EXPENSE_APPROVAL = 'expenses.approval_required';
 
+    /**
+     * `options` bag: the permission preset RolesAndPermissionsSeeder last
+     * applied, per role name — `['accountant' => ['dashboard.view', …], …]`.
+     * Read only by that seeder, so a re-seed can tell a permission the CODE
+     * added/removed since from one an ADMIN granted/revoked on the Rôles
+     * screen, and apply the former without undoing the latter.
+     */
+    public const ROLE_PRESETS_APPLIED = 'roles.presets_applied';
+
     private const CACHE_KEY = 'app_settings.all';
 
     private const OPTIONS_CACHE_KEY = 'app_settings.options';

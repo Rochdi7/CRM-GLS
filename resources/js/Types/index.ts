@@ -1248,6 +1248,12 @@ export interface UsersAuthorizationPageProps {
     totalPermissions: number;
     isSuperAdmin: boolean;
     canAssignDirect: boolean;
+    /**
+     * superAdminOnly() abilities the ACTOR may not hand out directly (only a
+     * super-admin can) — drawn locked, « Réservé au super-admin », like the
+     * Rôles form. Empty for a super-admin actor.
+     */
+    lockedPermissions: string[];
     [key: string]: unknown;
 }
 

@@ -134,6 +134,21 @@ It covers two families:
    01/09/2026, §5c) — and `centers.access-all`, so that « Centres affectés »
    on the employee form stays the one authority on center reach (§5b).
 
+**Delegating one of them by hand is a super-admin's act** (05/10/2026).
+The Autorisations screen can grant any of these as a DIRECT permission to
+one user — but only when the actor is a super-admin.
+`UserAuthorizationService::guardPermissionNames()` refuses a reserved
+ability as a NEW direct grant from anyone else (a director holding
+`users.assign-permissions` could otherwise hand a colleague
+`expenses.approve` or `payments.delete`, which no role, his own included,
+may carry), and the picker draws them locked « Réservé au super-admin »
+(`lockedPermissions` prop) exactly like the Rôles form. A reserved
+permission the target ALREADY holds — delegated earlier by a super-admin —
+may be kept or dropped by a later non-super-admin edit. `centers.access-all`
+is refused for everyone, super-admin included (it is answered by
+`Gate::before`, never stored). Tests:
+`tests/Feature/Backoffice/Authorization/ReservedDirectPermissionsTest.php`.
+
 ⚠ **`employees.create` is not in `superAdminOnly()` and does not need to be** —
 it was simply removed from every preset on 30/08/2026, because hiring mints a
 login (`EmployeeObserver`) and, for « Responsable de système », a super-admin.
@@ -372,6 +387,19 @@ C:\php84\php.exe artisan auth:assign-super-admin admin@gls.test      # explicit,
 
 The seeder never touches users. Local dev: `admin@gls.test` has been granted
 super-admin via the command.
+
+**Re-running it on a live database keeps what the admin changed on the
+Rôles screen** (05/10/2026). Each run records the preset it applied per
+role in `AppSettings::ROLE_PRESETS_APPLIED` and, next time, three-way
+merges: a permission the CODE added to the preset since is granted, one
+the code removed is revoked, and everything else keeps its live value —
+a hand grant survives, a hand revoke stays revoked. `superAdminOnly()`
+abilities are stripped from every role whatever their source. The seeder
+prints what it kept, added and removed. A database seeded before this
+tracking existed (no record) keeps its hand grants and receives the whole
+preset once. `ROLES_SEED_RESET=1 php artisan db:seed --class=…` forces
+every preset back to the code (never put that in `.env`). Tests:
+`tests/Feature/Backoffice/Authorization/RolesSeederKeepsHandEditsTest.php`.
 
 ## 7. Protecting things
 

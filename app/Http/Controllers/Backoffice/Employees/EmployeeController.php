@@ -16,6 +16,7 @@ use App\Models\Employee;
 use App\Models\Etablissement;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
+use App\Support\Authorization\PermissionRegistry;
 use App\Support\Phone\Countries;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -149,6 +150,7 @@ final class EmployeeController extends Controller
         $data = $request->validated();
         $payload = $this->buildPayload($data, $request, $employee);
         $ancienCentrePrincipal = (int) $employee->etablissement_id;
+        $ancienneCategorie = (string) $employee->categorie;
 
         DB::transaction(function () use ($employee, $payload, $data, $request): void {
             $employee->update($payload);
@@ -176,6 +178,7 @@ final class EmployeeController extends Controller
 
         $redirect = $this->backToListPreservingFilters($request, 'backoffice.employees.index')
             ->with('success', __('Employee updated.'));
+        $warnings = [];
 
         // A profile edit NEVER moves a caisse (production-safety rule,
         // 01/09/2026): when the primary centre changed and the employee's
@@ -188,10 +191,35 @@ final class EmployeeController extends Controller
         if ((int) $employee->etablissement_id !== $ancienCentrePrincipal
             && $till !== null
             && (int) $till->etablissement_id !== (int) $employee->etablissement_id) {
-            $redirect->with('warning', __("The employee's till stays attached to :centre (balance: :solde DH). A profile edit never moves money.", [
+            $warnings[] = __("The employee's till stays attached to :centre (balance: :solde DH). A profile edit never moves money.", [
                 'centre' => $till->etablissement?->nom_centre ?? __('its current centre'),
                 'solde' => number_format((float) $till->solde, 2, ',', ' '),
-            ]));
+            ]);
+        }
+
+        // A job title NEVER changes access (§16): EmployeeObserver only fills
+        // a role-less login. When the catégorie changed and the login still
+        // holds another role, say so — on 05/10/2026 an employee re-titled
+        // « Comptable » kept the `teacher` role for weeks, and the Comptable
+        // role was edited on the Rôles screen in vain trying to reach him.
+        $user = $employee->user;
+        $expectedRole = PermissionRegistry::defaultRoleFor((string) $employee->categorie);
+        $heldRoles = $user?->roles()->pluck('name')->all() ?? [];
+
+        if ($ancienneCategorie !== (string) $employee->categorie
+            && $user !== null
+            && $expectedRole !== null
+            && $heldRoles !== []
+            && ! in_array($expectedRole, $heldRoles, true)) {
+            $labels = PermissionRegistry::roles();
+            $warnings[] = __('The job title is now « :categorie » but the login keeps its role « :roles ». A job title never changes access: change the role on the Authorizations screen.', [
+                'categorie' => (string) $employee->categorie,
+                'roles' => implode(', ', array_map(static fn (string $r): string => $labels[$r] ?? $r, $heldRoles)),
+            ]);
+        }
+
+        if ($warnings !== []) {
+            $redirect->with('warning', implode(' ', $warnings));
         }
 
         return $redirect;
