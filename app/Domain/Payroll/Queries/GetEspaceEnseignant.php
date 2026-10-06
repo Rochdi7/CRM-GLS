@@ -180,6 +180,8 @@ final class GetEspaceEnseignant
             'periodeFin' => $d->periode_fin?->toDateString(),
             'groupNom' => $d->group?->nom,
             'montant' => (float) $d->montant,
+            // Cotisation CNSS retenue sur ce paiement (null = aucune).
+            'cnssMontant' => $d->cnss_montant === null ? null : (float) $d->cnss_montant,
             'statut' => $d->statut,
             'description' => $d->description,
             // Vrai quand le prof n'est pas ÉCRIT sur la ligne : rattaché par

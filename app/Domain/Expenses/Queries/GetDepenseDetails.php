@@ -35,6 +35,8 @@ final class GetDepenseDetails
             'id' => $depense->id,
             'reference' => $depense->reference,
             'montant' => number_format((float) $depense->montant, 2, '.', ''),
+            // « Paiement prof » only — CNSS withheld on this payment (null = none).
+            'cnssMontant' => $depense->cnss_montant === null ? null : number_format((float) $depense->cnss_montant, 2, '.', ''),
             'typeDepense' => $depense->typeDepense?->nom,
             'dateDepense' => $depense->date_depense?->format('d/m/Y'),
             // « Paiement prof » only — null on every ordinary dépense.

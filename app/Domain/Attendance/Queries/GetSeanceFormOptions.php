@@ -58,7 +58,8 @@ final class GetSeanceFormOptions
      * all — the matrix was only ever hidden by its own filter.
      *
      * Same centre/année scope as groups(); a closed group carries its statut
-     * in the label, so the reader knows the file is over.
+     * in the label, so the reader knows the file is over, and is listed AFTER
+     * every open group (Annulée, then Fin de formation).
      *
      * @return list<array{value: int, label: string}>
      */
@@ -69,6 +70,12 @@ final class GetSeanceFormOptions
             ->tap(fn ($q) => PorteeEnseignant::scopeGroupes($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
+            // Open groups first, then « Annulée », then « Fin de formation »:
+            // the screen is mostly used on running groups, closed ones follow.
+            ->orderByRaw('CASE statut WHEN ? THEN 1 WHEN ? THEN 2 ELSE 0 END', [
+                Group::STATUT_ANNULEE,
+                Group::STATUT_FIN_FORMATION,
+            ])
             ->orderBy('nom')
             ->get(['id', 'nom', 'niveau', 'statut'])
             ->map(fn (Group $group): array => [

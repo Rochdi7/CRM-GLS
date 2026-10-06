@@ -249,6 +249,13 @@ export default function EspaceEnseignant({ data, onMoisChange, loading }: Props)
                                         }`}
                                     >
                                         {fmtMontant(p.montant)} MAD
+                                        {/* Net versé : la cotisation retenue est dite, sinon
+                                            le montant paraît bas sans raison. */}
+                                        {p.cnssMontant !== null && (
+                                            <div className="fs-12 text-muted fw-normal text-normal-case">
+                                                {t('CNSS :montant withheld', { montant: fmtMontant(p.cnssMontant) })}
+                                            </div>
+                                        )}
                                     </td>
                                     <td>
                                         <StatusBadge label={libelleStatut(p.statut)} variant={variantStatut(p.statut)} />

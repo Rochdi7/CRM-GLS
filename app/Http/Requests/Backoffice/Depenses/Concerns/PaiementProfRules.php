@@ -73,6 +73,11 @@ trait PaiementProfRules
                         ->where('categorie', \App\Models\Employee::CATEGORIE_ENSEIGNANT),
                 ]
                 : ['prohibited'],
+            // Cotisation CNSS retenue (06/10/2026) — une case à cocher du
+            // modal « Paiement prof ». Le serveur en déduit le montant retenu
+            // (`CotisationCnss::MONTANT`, jamais saisi par le client) ; sans
+            // objet sur une dépense ordinaire, donc refusée.
+            'cnss' => $isProf ? ['nullable', 'boolean'] : ['prohibited'],
             // Supplier invoice reference — dépenses only.
             'reference_facture' => $isProf
                 ? ['prohibited']

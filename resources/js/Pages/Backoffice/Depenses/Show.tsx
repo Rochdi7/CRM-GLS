@@ -102,6 +102,14 @@ export default function DepenseShow({ depense, canAudit }: DepenseShowProps) {
                                     value={`${depense.periodeDebut} → ${depense.periodeFin}`}
                                 />
                             )}
+                            {/* CNSS withheld on a paiement prof — `montant`
+                                above is the net that left the till. */}
+                            {depense.cnssMontant !== null && (
+                                <DetailRow
+                                    label="Cotisation CNSS retenue"
+                                    value={`${Number(depense.cnssMontant).toFixed(2)} MAD`}
+                                />
+                            )}
                             <DetailRow label="Caisse" value={depense.caisse} />
                             <DetailRow label="Centre" value={depense.centre} />
                             <DetailRow label="Enregistré par" value={depense.agent} />

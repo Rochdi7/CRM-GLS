@@ -241,6 +241,8 @@ export interface EspaceEnseignantPaiement {
     statut: string;
     description: string | null;
     /** Ligne antérieure à `depenses.enseignant_id` : rattachée par le groupe, pas certifiée. */
+    /** Cotisation CNSS retenue sur ce paiement — `null` = aucune. */
+    cnssMontant: number | null;
     enseignantDeduit: boolean;
 }
 
@@ -669,6 +671,8 @@ export interface DepenseDetails {
     id: number;
     reference: string;
     montant: MoneyDisplay;
+    /** « Paiement prof » only — CNSS withheld on this payment (`null` = none). */
+    cnssMontant: MoneyDisplay | null;
     typeDepense: string | null;
     dateDepense: string | null;
     /** « Paiement prof » only — the teaching period the payment covers. */
@@ -2535,6 +2539,11 @@ export interface DepenseRow {
     /** « Paiement prof » only — the teacher paid, frozen on the row. */
     enseignant: string | null;
     montant: MoneyDisplay;
+    /**
+     * « Paiement prof » only — the CNSS contribution WITHHELD on this
+     * payment (`null` = none). `montant` is the net paid out.
+     */
+    cnssMontant: MoneyDisplay | null;
     methodePaiement: string | null;
     dateDepense: string | null;
     /** « Paiement prof » only — the teaching period the payment covers. */
@@ -2727,6 +2736,8 @@ export interface DepensesPageProps {
     calculGroupOptions: SelectOption[];
     /** Barème : présences minimales => semaines payées (11 => 4, 7 => 2, 5 => 1). */
     paliersPaie: Record<string, number>;
+    /** Cotisation CNSS retenue sur un paiement prof quand la case est cochée (serveur, jamais recopiée). */
+    cnssMontant: number;
     /**
      * La fenêtre de l'année active est-elle LEVÉE ? Décidé au serveur, jamais
      * redérivé des champs date : après un effacement explicite ceux-ci
@@ -2945,6 +2956,8 @@ export interface PaiementProfPageProps {
     groupOptions: SelectOption[];
     /** Barème : présences minimales => semaines payées (11 => 4, 7 => 2, 5 => 1). */
     paliersPaie: Record<string, number>;
+    /** Cotisation CNSS retenue sur un paiement prof quand la case est cochée (serveur, jamais recopiée). */
+    cnssMontant: number;
     modes: PaiementProfMode[];
     paiementProfTypeId: number | null;
     canCreateDepense: boolean;

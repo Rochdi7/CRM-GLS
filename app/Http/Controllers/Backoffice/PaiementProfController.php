@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Backoffice;
 use App\Domain\Expenses\Queries\GetDepensesList;
 use App\Domain\Payroll\Actions\CalculerPaiementProfParPaliers;
 use App\Domain\Payroll\Queries\GetPaiementProfCalcul;
+use App\Domain\Payroll\Support\CotisationCnss;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Controllers\Backoffice\Concerns\ResolvesPaiementProfCalcul;
 use App\Http\Controllers\Controller;
@@ -52,6 +53,8 @@ final class PaiementProfController extends Controller
             'filters' => $filters,
             'groupOptions' => fn (): array => $query->groupOptions($user),
             'paliersPaie' => CalculerPaiementProfParPaliers::PALIERS,
+            // Cotisation CNSS retenue — la constante, jamais recopiée en React.
+            'cnssMontant' => CotisationCnss::MONTANT,
             'modes' => Employee::MODES_PAIEMENT_PROF,
             'paiementProfTypeId' => fn (): ?int => TypeDepense::query()
                 ->where('nom', TypeDepense::SYSTEM_PAIEMENT_PROF)

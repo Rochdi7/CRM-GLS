@@ -15,6 +15,7 @@ use App\Domain\Expenses\Queries\GetDepenseDetails;
 use App\Domain\Expenses\Queries\GetDepensesList;
 use App\Domain\Finance\Queries\GetRemboursementsList;
 use App\Domain\Payroll\Actions\CalculerPaiementProfParPaliers;
+use App\Domain\Payroll\Support\CotisationCnss;
 use App\Domain\Payroll\Queries\GetPaiementProfCalcul;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
@@ -203,6 +204,9 @@ final class DepenseController extends Controller
             'calculPaiementProfFilters' => $calculFilters,
             'calculGroupOptions' => fn (): array => $canCalculer ? $getPaiementProfCalcul->groupOptions($user) : [],
             'paliersPaie' => CalculerPaiementProfParPaliers::PALIERS,
+            // Cotisation CNSS retenue sur un paiement prof — UNE constante,
+            // servie ici pour que ni le calcul ni le modal ne la recopient.
+            'cnssMontant' => CotisationCnss::MONTANT,
             // The Validation tab's own rows and totals — over BOTH kinds, so
             // the badge and the « En attente » figure report the real amount
             // held across the tills, not just the Dépenses tab's share.
@@ -574,7 +578,7 @@ final class DepenseController extends Controller
             $this->assertPaiementProfGroupInContext($request, Group::findOrFail((int) $request->validated('group_id')));
         }
 
-        $payload = collect($request->validated())->except(['justificatifs', 'montant'])->all();
+        $payload = collect($request->validated())->except(['justificatifs', 'montant', 'cnss'])->all();
 
         // The form echoes the stored amount on every edit; only a DIFFERENT
         // value is a correction, and that one is super-admin only
@@ -589,6 +593,28 @@ final class DepenseController extends Controller
             ]);
         }
 
+        // Cotisation CNSS (06/10/2026) : la case du modal « Paiement prof ».
+        // Cocher ou décocher APRÈS coup est une correction de MONTANT — le net
+        // versé change de 1 700 DH — donc le même droit que ci-dessus, et un
+        // refus plutôt qu'un drapeau posé en silence sur un montant inchangé
+        // (la ligne dirait « CNSS retenue » sans que rien n'ait été retenu).
+        // Une ligne déjà retenue GARDE son montant stocké (la constante a pu
+        // bouger depuis) ; une ligne nouvellement cochée prend la constante.
+        if ($request->isPaiementProf() && $request->has('cnss')) {
+            $cnssCoche = $request->boolean('cnss');
+            $cnssChange = $cnssCoche !== $depense->cnssDeduite();
+
+            if ($cnssChange && ! $request->user()->can('expenses.update-amount')) {
+                throw ValidationException::withMessages([
+                    'cnss' => __('Only a super-admin can change the CNSS deduction of a recorded payment: it changes the amount paid.'),
+                ]);
+            }
+
+            $payload['cnss_montant'] = $cnssCoche
+                ? ($depense->cnss_montant === null ? CotisationCnss::MONTANT : (float) $depense->cnss_montant)
+                : null;
+        }
+
         // Switching a « Paiement prof » back to an ordinary type sends none
         // of the prof-only fields, and `prohibited` only rejects fields that
         // ARE sent — so without this the row would keep a stale group_id and
@@ -598,6 +624,7 @@ final class DepenseController extends Controller
             $payload['group_id'] = null;
             $payload['periode_debut'] = null;
             $payload['periode_fin'] = null;
+            $payload['cnss_montant'] = null;
         }
 
         // caisse_id is absent from $payload by construction and montant is

@@ -208,6 +208,7 @@ final class AuditValueResolver
         'seance_id' => 'Séance',
         'employee_id' => 'Employé',
         'enseignant_id' => 'Enseignant',
+        'cnss_montant' => 'Cotisation CNSS retenue',
         'agent_id' => 'Agent',
         'approved_by' => 'Approuvé par',
         'approved_at' => 'Date de décision',

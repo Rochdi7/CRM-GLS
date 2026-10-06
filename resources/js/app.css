@@ -1852,6 +1852,12 @@ html[data-theme='dark'] .gls-payment-matrix > :not(caption) > * > * {
 .gls-absence-matrix .gls-absence-vide {
     background-color: #c8ccd0;
 }
+/* Séance held BEFORE the student joined the group (GetAbsencesParGroupe
+   `avantArrivee`): black, so a late arrival never reads as missed marks.
+   Same fill as the export (ExporterMatriceAbsences). */
+.gls-absence-matrix .gls-absence-avant-arrivee {
+    background-color: #212529;
+}
 /* A séance with NO roll-call at all: the whole column (header included) goes
    grey, darker than the per-cell « non pointé » grey above so the two never
    read as the same thing — one is « this séance was never saisie », the other

@@ -18,6 +18,7 @@ import FormField from '@/Components/Forms/FormField';
 import TextareaField from '@/Components/Forms/TextareaField';
 import TagsInput from '@/Components/Forms/TagsInput';
 import FormActions from '@/Components/Forms/FormActions';
+import CheckboxField from '@/Components/Forms/CheckboxField';
 import CalculPaiementProf, {
     type PaiementProfCalculParams,
     type PaiementProfPrefill,
@@ -39,6 +40,11 @@ interface DepenseFormState {
     date_depense: string;
     periode_debut: string;
     periode_fin: string;
+    /**
+     * « Paiement prof » only — cotisation CNSS retenue. `montant` est alors
+     * le NET versé ; cocher/décocher l'ajuste de la retenue (`cnssMontant`).
+     */
+    cnss: boolean;
     reference_facture: string;
     description: string;
     mots_cles: string;
@@ -120,6 +126,7 @@ function emptyDepenseForm(): DepenseFormState {
         date_depense: new Date().toISOString().slice(0, 10),
         periode_debut: '',
         periode_fin: '',
+        cnss: false,
         reference_facture: '',
         description: '',
         mots_cles: '',
@@ -196,6 +203,7 @@ export default function DepensesIndex({
     calculPaiementProfFilters,
     calculGroupOptions,
     paliersPaie,
+    cnssMontant,
 }: DepensesPageProps) {
     const isLoading = useInertiaLoading();
     // The Types de dépenses tab links to its own page — UI-gate it like the
@@ -357,6 +365,9 @@ export default function DepensesIndex({
             group_id: prefill.groupId,
             enseignant_id: prefill.enseignantId,
             montant: prefill.montant,
+            // Déjà retenue sur `montant` par le calcul : la case s'ouvre
+            // cochée pour le dire, sans rien déduire une seconde fois.
+            cnss: prefill.cnss,
             periode_debut: prefill.periodeDebut,
             periode_fin: prefill.periodeFin,
             description: prefill.description,
@@ -541,6 +552,7 @@ export default function DepensesIndex({
             date_depense: row.dateDepense ?? '',
             periode_debut: row.periodeDebut ?? '',
             periode_fin: row.periodeFin ?? '',
+            cnss: row.cnssMontant !== null,
             reference_facture: row.referenceFacture ?? '',
             description: row.description ?? '',
             mots_cles: row.motsCles ?? '',
@@ -557,6 +569,28 @@ export default function DepensesIndex({
         && canUpdateDepenseMontant
         && !editingDepense.isRefusee
         && !editingDepense.isAnnulee;
+
+    // La retenue CNSS est une correction de MONTANT (le net versé change) :
+    // sur une ligne enregistrée elle suit exactement le droit du montant.
+    // Le serveur refuse de toute façon un drapeau changé sans ce droit.
+    const cnssEditable = editingDepense === null || montantEditable;
+    // La retenue d'une ligne déjà cochée est celle STOCKÉE sur la ligne (la
+    // constante a pu bouger depuis) ; une nouvelle retenue prend la constante.
+    const retenueCnss = editingDepense?.cnssMontant != null ? Number(editingDepense.cnssMontant) : cnssMontant;
+
+    /**
+     * Cocher retient la cotisation sur le montant saisi, décocher la rend —
+     * le champ Montant reste le NET versé, ce que la caisse débite.
+     */
+    function toggleCnss(checked: boolean) {
+        const saisi = Number(depenseForm.data.montant);
+        const base = depenseForm.data.montant !== '' && Number.isFinite(saisi) ? saisi : null;
+        const ajuste = base === null
+            ? depenseForm.data.montant
+            : (checked ? Math.max(0, base - retenueCnss) : base + retenueCnss).toFixed(2);
+
+        depenseForm.setData({ ...depenseForm.data, cnss: checked, montant: ajuste });
+    }
 
     function closeDepenseModal() {
         setShowDepenseModal(false);
@@ -577,12 +611,13 @@ export default function DepensesIndex({
      * ordinary dépense or a supplier invoice ref for a paiement prof.
      */
     function depensePayload(data: DepenseFormState): Record<string, unknown> {
-        const { group_id, enseignant_id, periode_debut, periode_fin, reference_facture, ...rest } = data;
+        const { group_id, enseignant_id, periode_debut, periode_fin, cnss, reference_facture, ...rest } = data;
 
         // `enseignant_id` est PROHIBÉ sur une dépense ordinaire (PaiementProfRules) :
-        // il ne part qu'en mode prof, et seulement s'il est renseigné.
+        // il ne part qu'en mode prof, et seulement s'il est renseigné. `cnss`
+        // de même — une dépense ordinaire ne retient aucune cotisation.
         return profMode
-            ? { ...rest, group_id, periode_debut, periode_fin, ...(enseignant_id !== '' ? { enseignant_id } : {}) }
+            ? { ...rest, group_id, periode_debut, periode_fin, cnss, ...(enseignant_id !== '' ? { enseignant_id } : {}) }
             : { ...rest, reference_facture };
     }
 
@@ -672,6 +707,7 @@ export default function DepensesIndex({
                 return id !== null && id !== '' ? Number(id) : '';
             })(),
             montant: params.get('prefill_montant') ?? '',
+            cnss: params.get('prefill_cnss') === '1',
             periode_debut: params.get('prefill_periode_debut') ?? '',
             periode_fin: params.get('prefill_periode_fin') ?? '',
             description: params.get('prefill_description') ?? '',
@@ -1085,6 +1121,7 @@ export default function DepensesIndex({
                         filters={calculPaiementProfFilters}
                         groupOptions={calculGroupOptions}
                         paliersPaie={paliersPaie}
+                        cnssMontant={cnssMontant}
                         canCreateDepense
                         onNavigate={naviguerCalcul}
                         onEnregistrer={enregistrerDepuisCalcul}
@@ -1176,6 +1213,15 @@ export default function DepensesIndex({
                                         {!centerLocked && <td>{row.etablissement ?? '-'}</td>}
                                         <td className={`text-end fw-medium${row.isAnnulee ? ' text-muted text-decoration-line-through' : ''}`}>
                                             {Number(row.montant).toFixed(2)} MAD
+                                            {/* Net versé — la cotisation retenue se lit
+                                                en dessous, sinon le montant paraît bas
+                                                sans raison. */}
+                                            {row.cnssMontant !== null && (
+                                                <div className="fs-12 text-muted fw-normal text-normal-case">
+                                                    <i className="ti ti-building-bank me-1" />
+                                                    {t('CNSS :montant withheld', { montant: Number(row.cnssMontant).toFixed(2) })}
+                                                </div>
+                                            )}
                                         </td>
                                         {approvalEnabled && (
                                             <td>
@@ -1562,6 +1608,14 @@ export default function DepensesIndex({
                                 />
                             </div>
                         )}
+                        {detailsRow.cnssMontant !== null && (
+                            <div className="col-md-6">
+                                <DetailLine
+                                    label={t('CNSS contribution withheld')}
+                                    value={`${Number(detailsRow.cnssMontant).toFixed(2)} MAD`}
+                                />
+                            </div>
+                        )}
                         <div className="col-md-6"><DetailLine label="Ajouté par" value={detailsRow.agent} /></div>
 
                         {/* The operation trail — the reason this modal is
@@ -1821,6 +1875,36 @@ export default function DepensesIndex({
                                         onChange={(e) => depenseForm.setData('periode_fin', e.target.value)}
                                         error={depenseForm.errors.periode_fin}
                                     />
+                                </div>
+                                {/* Cotisation CNSS — ici AUSSI, pas seulement au
+                                    calcul : l'employé qui l'a oubliée là-bas la
+                                    coche ici, et le Montant devient le net. */}
+                                <div className="col-md-4">
+                                    <div className="mb-3">
+                                        <label className="form-label d-block">{t('CNSS contribution withheld')}</label>
+                                        <CheckboxField
+                                            id="d-cnss"
+                                            label={t('CNSS contribution withheld (:montant MAD)', { montant: retenueCnss.toFixed(2) })}
+                                            checked={depenseForm.data.cnss}
+                                            disabled={!cnssEditable}
+                                            onChange={(e) => toggleCnss(e.target.checked)}
+                                        />
+                                        {depenseForm.errors.cnss && (
+                                            <div className="text-danger fs-12">{depenseForm.errors.cnss}</div>
+                                        )}
+                                        {depenseForm.data.cnss && cnssEditable && (
+                                            <div className="text-muted fs-12">
+                                                {t('The amount above is the net paid out, :montant MAD of CNSS already withheld.', {
+                                                    montant: retenueCnss.toFixed(2),
+                                                })}
+                                            </div>
+                                        )}
+                                        {!cnssEditable && (
+                                            <div className="text-muted fs-12">
+                                                {t('Changing the CNSS deduction corrects the amount paid: super-admin only.')}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </>
                         ) : (

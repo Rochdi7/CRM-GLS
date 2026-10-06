@@ -70,7 +70,10 @@ function erreurPeriode(debut: string, fin: string): string | null {
 export interface PaiementProfPrefill {
     groupId: number;
     enseignantId: number;
+    /** Le NET à verser — cotisation CNSS déjà retenue quand `cnss` est vrai. */
     montant: string;
+    /** Cotisation CNSS cochée au calcul : le modal s'ouvre coché. */
+    cnss: boolean;
     periodeDebut: string;
     periodeFin: string;
     description: string;
@@ -82,6 +85,8 @@ interface CalculPaiementProfProps {
     filters: PaiementProfFilters;
     groupOptions: SelectOption[];
     paliersPaie: Record<string, number>;
+    /** Cotisation CNSS retenue quand la case est cochée — servie par le serveur, jamais recopiée ici. */
+    cnssMontant: number;
     canCreateDepense: boolean;
     /**
      * (Re)charger le calcul : l'hôte met les paramètres dans SA propre URL
@@ -134,6 +139,7 @@ export default function CalculPaiementProf({
     calcul,
     filters,
     groupOptions,
+    cnssMontant,
     canCreateDepense,
     onNavigate,
     onEnregistrer,
@@ -142,6 +148,15 @@ export default function CalculPaiementProf({
 }: CalculPaiementProfProps) {
     // Ajustements manuels — état LOCAL, jamais persisté.
     const [ajustements, setAjustements] = useState<Record<number, string>>({});
+    // Cotisation CNSS retenue (06/10/2026) — décochée par défaut, et remise à
+    // zéro dès que le calcul change de prof / groupe / période : une retenue
+    // qui survivrait au calcul suivant serait appliquée sans que personne
+    // l'ait décidée pour CE paiement. Le total affiché, la dépense
+    // pré-remplie et la case du modal la portent tous les trois.
+    const [cnss, setCnss] = useState(false);
+    useEffect(() => {
+        setCnss(false);
+    }, [calcul?.group.id, calcul?.enseignant.id, calcul?.periode.debut, calcul?.periode.fin]);
     // Base « Détails paiement » (Système GLS seulement) — décochée par défaut :
     // le calcul par séances reste la référence, celui-ci est un contrôle.
     const [parPaiements, setParPaiements] = useState(false);
@@ -335,9 +350,13 @@ export default function CalculPaiementProf({
         }, 0);
     }, [calcul, ajustements, estHoraire]);
 
+    // Le total BRUT suit la base choisie par la case « par les paiements ».
+    const totalBrut = baseePaiements && verification !== null ? verification.total : totalSeances;
     // Le total AFFICHÉ — et celui que « Enregistrer la dépense » pré-remplit —
-    // suit la base choisie par la case à cocher.
-    const totalAffiche = baseePaiements && verification !== null ? verification.total : totalSeances;
+    // est le NET : la cotisation CNSS est retenue dessus quand elle est
+    // cochée, jamais au-delà du brut (une paie ne se doit pas).
+    const retenueCnss = cnss ? Math.min(cnssMontant, totalBrut) : 0;
+    const totalAffiche = Math.round((totalBrut - retenueCnss) * 100) / 100;
 
     const nombreAjustements = useMemo(
         () => Object.values(ajustements).filter((v) => v !== undefined && v !== '').length,
@@ -407,6 +426,7 @@ export default function CalculPaiementProf({
             // dépense, jamais redéduit du groupe (23/09/2026).
             enseignantId: calcul.enseignant.id,
             montant: totalAffiche.toFixed(2),
+            cnss,
             periodeDebut: calcul.periode.debut,
             periodeFin: calcul.periode.fin,
             // Pas de « Paiement prof » en tête : la colonne Type le dit déjà.
@@ -823,6 +843,21 @@ export default function CalculPaiementProf({
                             <Card className="w-100 h-100">
                                 <div className="text-muted fs-12 text-uppercase mb-1">{t('Total payment')}</div>
                                 <div className="fs-24 fw-bold text-success">{totalAffiche.toFixed(2)} MAD</div>
+                                {cnss && totalBrut >= cnssMontant && (
+                                    <small className="text-info d-block">
+                                        <i className="ti ti-building-bank me-1" />
+                                        {t('CNSS :montant MAD withheld · gross :brut MAD', {
+                                            montant: cnssMontant.toFixed(2),
+                                            brut: totalBrut.toFixed(2),
+                                        })}
+                                    </small>
+                                )}
+                                {cnss && totalBrut < cnssMontant && (
+                                    <small className="text-danger d-block">
+                                        <i className="ti ti-alert-triangle me-1" />
+                                        {t('The CNSS contribution exceeds the computed amount: nothing is paid out.')}
+                                    </small>
+                                )}
                                 {baseePaiements && (
                                     <small className="text-info">
                                         <i className="ti ti-receipt me-1" />
@@ -889,6 +924,30 @@ export default function CalculPaiementProf({
                                 </div>
                             </>
                         )}
+                    </div>
+
+                    {/* ── Cotisation CNSS ─────────────────────────────────
+                        Retenue FIXE sur le net versé. La case est ici ET dans
+                        le modal « Paiement prof » : l'oublier au calcul ne
+                        doit pas obliger à tout refaire. */}
+                    <div className="card mb-3">
+                        <div className="card-body py-2 d-flex flex-wrap align-items-center gap-3">
+                            <div className="form-check form-switch mb-0">
+                                <input
+                                    id="pp-cnss"
+                                    type="checkbox"
+                                    className="form-check-input"
+                                    checked={cnss}
+                                    onChange={(event) => setCnss(event.target.checked)}
+                                />
+                                <label htmlFor="pp-cnss" className="form-check-label fw-semibold">
+                                    {t('CNSS contribution withheld (:montant MAD)', { montant: cnssMontant.toFixed(2) })}
+                                </label>
+                            </div>
+                            <span className="text-muted fs-13">
+                                {t('Deducted from the total payment and carried over to the expense.')}
+                            </span>
+                        </div>
                     </div>
 
                     {/* ── Contrôle par les Détails paiement (Système GLS) ── */}
