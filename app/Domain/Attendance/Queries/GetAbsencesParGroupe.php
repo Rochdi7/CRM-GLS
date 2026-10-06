@@ -96,6 +96,8 @@ final class GetAbsencesParGroupe
         // every séance of the window.
         $seancesSaisies = $presences->pluck('seance_id')->unique()->flip();
 
+        $built['students'] = $this->marquerAvantArrivee($groupId, $built['students'], $seances, $seancesSaisies);
+
         return [
             'seances' => $seances
                 ->values()
@@ -245,6 +247,8 @@ final class GetAbsencesParGroupe
                     'presents' => $presents,
                     'absents' => $absents,
                     'cells' => (object) $cells,
+                    // Filled by marquerAvantArrivee() once the séances are known.
+                    'avantArrivee' => [],
                 ];
             })
             ->all();
@@ -252,6 +256,55 @@ final class GetAbsencesParGroupe
         $totals['etudiants'] = count($students);
 
         return ['students' => $students, 'totals' => $totals];
+    }
+
+    /**
+     * « Avant arrivée » (06/10/2026): a student often joins a group after its
+     * start (after 15 séances, mid-month…). The séances held before they
+     * arrived are not missing marks — the student was simply not on the roll
+     * yet — so they are painted BLACK on the page and in the export, apart
+     * from the light grey « non pointé » cell that means a real oversight.
+     *
+     * Arrival = the date of the student's FIRST presence line in this group,
+     * looked up over ALL its séances (not only the window), so narrowing the
+     * dates never turns an old gap into a pre-arrival one. A cell is avant
+     * arrivée when the séance was saisie, the student carries no mark on it
+     * and it is dated before that arrival; a student never called at all has
+     * not arrived yet, so every unmarked saisie séance is avant arrivée.
+     *
+     * Served as a list of séance ids per student (`avantArrivee`) so the page
+     * and ExporterMatriceAbsences read one decision instead of re-deriving it.
+     *
+     * @param  list<array<string, mixed>>  $students
+     * @param  Collection<int, Seance>  $seances
+     * @param  Collection<int|string, int>  $seancesSaisies
+     * @return list<array<string, mixed>>
+     */
+    private function marquerAvantArrivee(int $groupId, array $students, Collection $seances, Collection $seancesSaisies): array
+    {
+        $arrivees = Presence::query()
+            ->join('seances', 'seances.id', '=', 'presences.seance_id')
+            ->where('seances.group_id', $groupId)
+            ->whereIn('presences.student_id', array_column($students, 'id'))
+            ->groupBy('presences.student_id')
+            ->selectRaw('presences.student_id, MIN(seances.date_seance) AS arrivee')
+            ->pluck('arrivee', 'student_id')
+            ->map(fn ($date): string => substr((string) $date, 0, 10));
+
+        return array_map(function (array $student) use ($arrivees, $seances, $seancesSaisies): array {
+            $arrivee = $arrivees->get($student['id']);
+            $cells = (array) $student['cells'];
+
+            $student['avantArrivee'] = $seances
+                ->filter(fn (Seance $seance): bool => $seancesSaisies->has($seance->id)
+                    && ! isset($cells[(string) $seance->id])
+                    && ($arrivee === null || $seance->date_seance->toDateString() < $arrivee))
+                ->pluck('id')
+                ->values()
+                ->all();
+
+            return $student;
+        }, $students);
     }
 
     /**

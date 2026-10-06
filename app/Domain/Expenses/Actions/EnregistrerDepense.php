@@ -10,6 +10,7 @@ use App\Models\Employee;
 use App\Models\Group;
 use App\Domain\Finance\Support\CaisseLedger;
 use App\Domain\Finance\Support\GardeSoldeCaisse;
+use App\Domain\Payroll\Support\CotisationCnss;
 use App\Services\Context\CurrentContext;
 use App\Support\Settings\AppSettings;
 use Illuminate\Support\Facades\DB;
@@ -78,6 +79,15 @@ final class EnregistrerDepense
                 $enseignantId = Group::query()->whereKey($data['group_id'])->value('enseignant_id');
             }
 
+            // Cotisation CNSS retenue (06/10/2026) : la case cochée devient
+            // le montant retenu, pris dans la constante — jamais du client.
+            // `montant` est déjà le NET (le calcul et le modal l'ont réduit) :
+            // c'est lui que la caisse débite, la retenue n'est qu'une mention.
+            $cnssMontant = filter_var($data['cnss'] ?? false, FILTER_VALIDATE_BOOLEAN)
+                ? CotisationCnss::MONTANT
+                : null;
+            unset($data['cnss']);
+
             if (! $requiresApproval) {
                 // Checked BEFORE the row exists: a refused expense must leave
                 // no trace at all (no DEP- reference burnt, no Approuvée row
@@ -97,6 +107,7 @@ final class EnregistrerDepense
                 ...$data,
                 'etablissement_id' => $etablissementId,
                 'enseignant_id' => $enseignantId,
+                'cnss_montant' => $cnssMontant,
                 'reference' => ReferenceGenerator::make('DEP', 'depenses'),
                 'agent_id' => $agent->id,
                 'statut' => $requiresApproval

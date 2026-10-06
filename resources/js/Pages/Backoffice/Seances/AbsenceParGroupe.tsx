@@ -40,6 +40,8 @@ interface MatriceStudent {
     absents: number;
     /** Keyed by seance id (string), only the séances this student was marked on. */
     cells: Record<string, MatriceCell>;
+    /** Séance ids held before the student joined the group — painted black. */
+    avantArrivee: number[];
 }
 
 interface AbsenceParGroupeProps {
@@ -70,6 +72,9 @@ function formatDate(date: string): string {
  * none, and a séance nobody pointed says so — that is what its grey column
  * means.
  */
+/** Seance::STATUT_ANNULEE — its cells carry an X so the cancellation reads at a glance. */
+const SEANCE_ANNULEE = 'Annulée';
+
 function seanceTitle(seance: MatriceSeance): string {
     const quand =
         seance.heureDebut && seance.heureFin
@@ -77,6 +82,10 @@ function seanceTitle(seance: MatriceSeance): string {
             : seance.heureDebut
               ? `${formatDate(seance.date)} à ${seance.heureDebut}`
               : formatDate(seance.date);
+
+    if (seance.statut === SEANCE_ANNULEE) {
+        return `${quand} - séance annulée`;
+    }
 
     return seance.saisie ? quand : `${quand} - absence non saisie`;
 }
@@ -270,7 +279,11 @@ export default function AbsenceParGroupe({
                                         {matrice.seances.map((seance) => (
                                             <th
                                                 key={seance.id}
-                                                className={`text-center${seance.saisie ? '' : ' gls-absence-non-saisie'}`}
+                                                className={`text-center${
+                                                    seance.saisie && seance.statut !== SEANCE_ANNULEE
+                                                        ? ''
+                                                        : ' gls-absence-non-saisie'
+                                                }`}
                                                 title={seanceTitle(seance)}
                                             >
                                                 {seance.numero}
@@ -311,6 +324,8 @@ export default function AbsenceParGroupe({
                                             </td>
                                             {matrice.seances.map((seance) => {
                                                 const cell = student.cells[String(seance.id)];
+                                                const avantArrivee =
+                                                    !cell && (student.avantArrivee ?? []).includes(seance.id);
 
                                                 // A séance nobody pointed greys
                                                 // its WHOLE column (header
@@ -319,6 +334,20 @@ export default function AbsenceParGroupe({
                                                 // column of blanks that each
                                                 // look like an individual
                                                 // oversight.
+                                                // A cancelled séance: X in every
+                                                // cell, whatever was marked.
+                                                if (seance.statut === SEANCE_ANNULEE) {
+                                                    return (
+                                                        <td
+                                                            key={seance.id}
+                                                            className="text-center gls-absence-cell gls-absence-non-saisie"
+                                                            title={seanceTitle(seance)}
+                                                        >
+                                                            X
+                                                        </td>
+                                                    );
+                                                }
+
                                                 return (
                                                     <td
                                                         key={seance.id}
@@ -329,7 +358,9 @@ export default function AbsenceParGroupe({
                                                                   ? cell.lettre === 'P'
                                                                       ? ' gls-absence-present'
                                                                       : ' gls-absence-absent'
-                                                                  : ' gls-absence-vide'
+                                                                  : avantArrivee
+                                                                    ? ' gls-absence-avant-arrivee'
+                                                                    : ' gls-absence-vide'
                                                         }`}
                                                         title={
                                                             !seance.saisie
@@ -338,7 +369,9 @@ export default function AbsenceParGroupe({
                                                                   ? `${formatDate(seance.date)} - ${cell.statut}${
                                                                         cell.note ? ` (${cell.note})` : ''
                                                                     }`
-                                                                  : `${formatDate(seance.date)} - non pointé`
+                                                                  : avantArrivee
+                                                                    ? `${formatDate(seance.date)} - pas encore dans le groupe`
+                                                                    : `${formatDate(seance.date)} - non pointé`
                                                         }
                                                     >
                                                         {seance.saisie ? (cell?.lettre ?? '') : ''}

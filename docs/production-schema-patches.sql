@@ -543,3 +543,16 @@ CREATE INDEX IF NOT EXISTS cheques_restitution_encaissement_id_idx ON cheques (r
 -- complet. Ajoutée dans create_inscription_fees_table ; à appliquer à la main.
 ALTER TABLE inscription_fees ADD COLUMN IF NOT EXISTS semaines jsonb NULL;
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 06/10/2026 — Cotisation CNSS retenue sur un « Paiement prof » :
+-- `depenses.cnss_montant` (NULL = aucune retenue ; `montant` reste le NET
+-- versé, seule valeur débitée de la caisse). Montant fixe :
+-- `Domain\Payroll\Support\CotisationCnss::MONTANT` (1 700,00 MAD).
+--
+-- ⚠ RIEN À FAIRE À LA MAIN : la migration additive
+-- `2026_10_06_100000_add_cnss_montant_to_depenses_table.php` est jouée par
+-- le `php artisan migrate --force` du déploiement. SQL conservé pour mémoire
+-- (idempotent). Aucun solde de caisse ne bouge.
+ALTER TABLE depenses ADD COLUMN IF NOT EXISTS cnss_montant numeric(12,2) NULL;
+-- ---------------------------------------------------------------------------

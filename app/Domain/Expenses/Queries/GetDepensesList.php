@@ -186,6 +186,9 @@ final class GetDepensesList
             // at creation (`depenses.enseignant_id`), never re-derived.
             'enseignant' => $d->enseignant?->nomComplet(),
             'montant' => number_format((float) $d->montant, 2, '.', ''),
+            // « Paiement prof » only — the CNSS contribution WITHHELD on this
+            // payment (null = none). `montant` above is the net paid out.
+            'cnssMontant' => $d->cnss_montant === null ? null : number_format((float) $d->cnss_montant, 2, '.', ''),
             'methodePaiement' => $d->methode_paiement,
             'dateDepense' => $d->date_depense?->toDateString(),
             // « Paiement prof » only — the teaching period the payment

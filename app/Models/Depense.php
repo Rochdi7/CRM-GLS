@@ -56,6 +56,7 @@ class Depense extends Model implements HasMedia
 
     protected $fillable = [
         'reference', 'type_depense_id', 'caisse_id', 'etablissement_id', 'group_id', 'enseignant_id', 'montant',
+        'cnss_montant',
         'methode_paiement', 'date_depense', 'periode_debut', 'periode_fin',
         'reference_facture',
         'description', 'mots_cles', 'note', 'agent_id',
@@ -76,11 +77,22 @@ class Depense extends Model implements HasMedia
     {
         return [
             'montant' => 'decimal:2',
+            'cnss_montant' => 'decimal:2',
             'date_depense' => 'date',
             'periode_debut' => 'date',
             'periode_fin' => 'date',
             'approved_at' => 'datetime',
         ];
+    }
+
+    /**
+     * « Paiement prof » only — a CNSS contribution was RETAINED on this
+     * payment (`Domain\Payroll\Support\CotisationCnss`). `montant` is the
+     * net actually paid out; `cnss_montant` says what was withheld.
+     */
+    public function cnssDeduite(): bool
+    {
+        return $this->cnss_montant !== null;
     }
 
     /** Awaiting a super-admin decision — no money has moved yet. */

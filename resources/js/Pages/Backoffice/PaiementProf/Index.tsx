@@ -41,6 +41,7 @@ export default function PaiementProfIndex({
     filters,
     groupOptions,
     paliersPaie,
+    cnssMontant,
     paiementProfTypeId,
     canCreateDepense,
     paiementsProf,
@@ -74,6 +75,9 @@ export default function PaiementProfIndex({
             prefill_periode_debut: prefill.periodeDebut,
             prefill_periode_fin: prefill.periodeFin,
             prefill_description: prefill.description,
+            // Cotisation CNSS cochée au calcul : le modal s'ouvre coché, le
+            // montant transmis est déjà le net.
+            ...(prefill.cnss ? { prefill_cnss: '1' } : {}),
             prefill_retour: `?${retour.toString()}`,
             ...(paiementProfTypeId !== null ? { prefill_type_depense_id: String(paiementProfTypeId) } : {}),
         });
@@ -88,6 +92,7 @@ export default function PaiementProfIndex({
                 filters={filters}
                 groupOptions={groupOptions}
                 paliersPaie={paliersPaie}
+                cnssMontant={cnssMontant}
                 canCreateDepense={canCreateDepense}
                 onNavigate={naviguer}
                 onEnregistrer={enregistrer}

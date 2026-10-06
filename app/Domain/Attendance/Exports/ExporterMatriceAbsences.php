@@ -6,6 +6,7 @@ namespace App\Domain\Attendance\Exports;
 
 use App\Domain\Attendance\Queries\GetAbsencesParGroupe;
 use App\Models\Group;
+use App\Models\Seance;
 use OpenSpout\Common\Entity\Cell;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Common\Entity\Style\Border;
@@ -87,6 +88,17 @@ final class ExporterMatriceAbsences
             ->withBackgroundColor('A6A6A6')
             ->withBorder($this->border());
 
+        // Black = séance held before the student joined the group (served by
+        // GetAbsencesParGroupe as `avantArrivee`), same as the page.
+        $avantArrivee = (new Style())
+            ->withBackgroundColor('212529')
+            ->withBorder($this->border());
+
+        $annulee = (new Style())
+            ->withFontBold(true)
+            ->withBackgroundColor('9AA1A9')
+            ->withBorder($this->border());
+
         // Name cells carry the row's statut colour, same split as the page
         // and « Détails paiement »: grey once the enrollment moved on, red
         // for a cancellation.
@@ -147,6 +159,7 @@ final class ExporterMatriceAbsences
             $marks = (array) $student['cells'];
             $statut = (string) $student['inscriptionStatut'];
             $actif = (bool) $student['actif'];
+            $avant = array_flip($student['avantArrivee'] ?? []);
 
             $cells = [
                 Cell::fromValue(
@@ -160,10 +173,17 @@ final class ExporterMatriceAbsences
             // nobody pointed is grey for EVERY student, like its greyed
             // column on the page.
             foreach ($matrice['seances'] as $seance) {
-                $mark = ($seance['saisie'] ?? true) ? ($marks[(string) $seance['id']] ?? null) : null;
+                // A cancelled séance: X in every cell, like the page.
+                if (($seance['statut'] ?? null) === Seance::STATUT_ANNULEE) {
+                    $cells[] = Cell::fromValue('X', $annulee);
+
+                    continue;
+                }
+
+                $mark =($seance['saisie'] ?? true) ? ($marks[(string) $seance['id']] ?? null) : null;
 
                 $cells[] = $mark === null
-                    ? Cell::fromValue('', $vide)
+                    ? Cell::fromValue('', isset($avant[$seance['id']]) ? $avantArrivee : $vide)
                     : Cell::fromValue(
                         (string) $mark['lettre'],
                         $mark['lettre'] === GetAbsencesParGroupe::CELL_PRESENT ? $present : $absent,

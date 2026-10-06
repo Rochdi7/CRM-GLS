@@ -177,6 +177,74 @@ final class AbsenceParGroupeTest extends TestCase
     }
 
     /**
+     * A student who joined the group late: the saisie séances BEFORE their
+     * first presence are « avant arrivée » (painted black), while an unmarked
+     * séance AFTER their arrival stays an ordinary gap. Arrival is read over
+     * all the group's séances, so a narrowed window does not move it.
+     */
+    public function test_seances_before_a_late_arrival_are_flagged_avant_arrivee(): void
+    {
+        $alice = $this->enrollStudent('Alice');
+        $bob = $this->enrollStudent('Bob');
+
+        $s1 = $this->makeSeance('2026-03-02');
+        $s2 = $this->makeSeance('2026-03-04');
+        $s3 = $this->makeSeance('2026-03-06');
+        $s4 = $this->makeSeance('2026-03-09');
+
+        foreach ([$s1, $s2, $s3, $s4] as $seance) {
+            Presence::create(['seance_id' => $seance->id, 'student_id' => $alice->id, 'statut' => Presence::STATUT_PRESENT]);
+        }
+
+        // Bob joins on s3 and is then forgotten on s4.
+        Presence::create(['seance_id' => $s3->id, 'student_id' => $bob->id, 'statut' => Presence::STATUT_PRESENT]);
+
+        $user = $this->userWith('attendance.view');
+
+        $this->actingAs($user)
+            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $this->group->id, 'dateFrom' => '', 'dateTo' => '']))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('matrice.students.0.prenom', 'Alice')
+                ->where('matrice.students.0.avantArrivee', [])
+                ->where('matrice.students.1.prenom', 'Bob')
+                ->where('matrice.students.1.avantArrivee', [$s1->id, $s2->id])
+            );
+
+        // Window starting after s3: s4 stays a plain gap, never pre-arrival.
+        $this->actingAs($user)
+            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $this->group->id, 'dateFrom' => '2026-03-05', 'dateTo' => '']))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('matrice.students.1.avantArrivee', [])
+            );
+    }
+
+    /** A cancelled séance writes an X in every student's cell of the export. */
+    public function test_export_marks_a_cancelled_seance_with_an_x(): void
+    {
+        $alice = $this->enrollStudent('Alice');
+        $s1 = $this->makeSeance('2026-03-02');
+        $this->makeSeance('2026-03-04', Seance::STATUT_ANNULEE);
+        Presence::create(['seance_id' => $s1->id, 'student_id' => $alice->id, 'statut' => Presence::STATUT_PRESENT]);
+
+        $response = $this->actingAs($this->userWith('attendance.view'))
+            ->get(route('backoffice.seances.absence-par-groupe.export', ['groupFilter' => $this->group->id, 'dateFrom' => '', 'dateTo' => '']));
+
+        $response->assertOk();
+
+        $path = tempnam(sys_get_temp_dir(), 'abs').'.xlsx';
+        file_put_contents($path, $response->streamedContent());
+        $zip = new \ZipArchive();
+        $zip->open($path);
+        $strings = (string) $zip->getFromName('xl/sharedStrings.xml').(string) $zip->getFromName('xl/worksheets/sheet1.xml');
+        $zip->close();
+        @unlink($path);
+
+        $this->assertMatchesRegularExpression('/>X</', $strings);
+    }
+
+    /**
      * Row order mirrors « Détails paiement »
      * (GetGroupPaymentMatrix::STATUT_ORDRE): the statut block wins, then the
      * full name inside it. Reading the same group on the two screens must
