@@ -944,9 +944,6 @@ export default function CalculPaiementProf({
                                     {t('CNSS contribution withheld (:montant MAD)', { montant: cnssMontant.toFixed(2) })}
                                 </label>
                             </div>
-                            <span className="text-muted fs-13">
-                                {t('Deducted from the total payment and carried over to the expense.')}
-                            </span>
                         </div>
                     </div>
 
