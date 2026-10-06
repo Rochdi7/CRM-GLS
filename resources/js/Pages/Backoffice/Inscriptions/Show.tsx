@@ -7,6 +7,7 @@ import RelatedRecordsTable from '@/Components/Details/RelatedRecordsTable';
 import LocalPagination from '@/Components/Tables/LocalPagination';
 import AbsencesPanel from '@/Components/Attendance/AbsencesPanel';
 import type { AbsencesEtudiant, InscriptionDetails } from '@/Types';
+import { enCapitales } from '@/Lib/nom';
 
 interface InscriptionShowProps {
     absences: AbsencesEtudiant;
@@ -85,7 +86,7 @@ export default function InscriptionShow({ inscription, absences }: InscriptionSh
             {tab === 'absences' && (
                 <AbsencesPanel
                     data={absences}
-                    scope={`Absences de ${inscription.student ?? "l'étudiant"} dans le groupe ${inscription.groupe ?? '-'} (séances de ce dossier uniquement).`}
+                    scope={`Absences de ${inscription.student ? enCapitales(inscription.student) : "l'étudiant"} dans le groupe ${inscription.groupe ?? '-'} (séances de ce dossier uniquement).`}
                 />
             )}
 
@@ -101,7 +102,7 @@ export default function InscriptionShow({ inscription, absences }: InscriptionSh
                                     label="Étudiant"
                                     value={
                                         inscription.studentShowUrl ? (
-                                            <a href={inscription.studentShowUrl}>
+                                            <a href={inscription.studentShowUrl} className="text-uppercase">
                                                 {inscription.student} <i className="ti ti-external-link fs-14" />
                                             </a>
                                         ) : (

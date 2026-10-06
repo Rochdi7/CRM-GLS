@@ -12,6 +12,7 @@ import SelectField from '@/Components/Forms/SelectField';
 import FormActions from '@/Components/Forms/FormActions';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { t } from '@/Lib/i18n';
+import { enCapitales } from '@/Lib/nom';
 
 /**
  * « Fusion de fiches & réaffectation des paiements » — écran de réparation
@@ -324,7 +325,7 @@ export default function StudentMerge({ filters, candidats, dossier, tabCounts }:
             {dossier && (
                 <>
                     <Card
-                        title={`${t('Registrations of')} ${dossier.etudiant.prenom} ${dossier.etudiant.nom} (${dossier.etudiant.reference})`}
+                        title={`${t('Registrations of')} ${enCapitales(`${dossier.etudiant.prenom} ${dossier.etudiant.nom}`)} (${dossier.etudiant.reference})`}
                     >
                         {dossier.inscriptions.length === 0 ? (
                             <EmptyState
@@ -476,7 +477,7 @@ export default function StudentMerge({ filters, candidats, dossier, tabCounts }:
                                     <div className="fw-semibold mb-2">{titre}</div>
                                     {fiche ? (
                                         <>
-                                            <div>
+                                            <div className="text-uppercase">
                                                 {fiche.prenom} {fiche.nom}
                                             </div>
                                             <div className="text-muted text-normal-case">

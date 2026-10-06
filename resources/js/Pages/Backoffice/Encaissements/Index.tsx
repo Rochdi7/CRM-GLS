@@ -1140,6 +1140,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                             <SelectField
                                 id="enc-f-student"
                                 options={studentOptions}
+                                uppercase
                                 placeholder="Choisir un étudiant"
                                 value={filters.studentFilter}
                                 onChange={(event) => reload({ studentFilter: event.target.value })}
@@ -1698,6 +1699,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                 id="e-student"
                                 label="Étudiant"
                                 options={studentOptions}
+                                uppercase
                                 placeholder="Sélectionner un étudiant"
                                 required
                                 value={createForm.data.student_id}
@@ -1914,7 +1916,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                 <input
                                     id="e-edit-student"
                                     type="text"
-                                    className="form-control"
+                                    className="form-control text-uppercase"
                                     value={[editingRow.studentRef, editingRow.student].filter(Boolean).join(' | ') || '-'}
                                     disabled
                                 />
@@ -2187,6 +2189,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                 id="av-student"
                                 label="Étudiant"
                                 options={studentOptions}
+                                uppercase
                                 placeholder="Sélectionner un étudiant"
                                 required
                                 value={avanceForm.data.student_id}
@@ -2444,7 +2447,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                         )}
                         <div className="d-flex justify-content-between mb-2">
                             <span className="text-muted">Étudiant</span>
-                            <span className="fw-medium">{prolongerTarget.student ?? '-'}</span>
+                            <span className="fw-medium text-uppercase">{prolongerTarget.student ?? '-'}</span>
                         </div>
                         <div className="d-flex justify-content-between mb-2">
                             <span className="text-muted">Montant restant</span>
@@ -2505,10 +2508,10 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                         <form id="transfer-fee-form" onSubmit={submitTransfer}>
                             <div className="alert alert-warning">
                                 <strong>{Number(transferTarget.montant).toFixed(2)} MAD</strong> quittent le
-                                frais « {transferTarget.feeNom} » de <strong>{transferTarget.student}</strong>{' '}
+                                frais « {transferTarget.feeNom} » de <strong className="text-uppercase">{transferTarget.student}</strong>{' '}
                                 pour solder celui de l'étudiant choisi ci-dessous.
                                 <div className="fs-13 mt-2 mb-0">
-                                    Aucune caisse ne bouge. Le dossier de {transferTarget.student} reste ouvert,
+                                    Aucune caisse ne bouge. Le dossier de <span className="text-uppercase">{transferTarget.student}</span> reste ouvert,
                                     son frais redevient dû.
                                 </div>
                             </div>
@@ -2524,6 +2527,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, caisse
                                         id="tf-student"
                                         label="Étudiant bénéficiaire"
                                         options={studentOptions.filter((o) => o.value !== transferTarget.studentId)}
+                                        uppercase
                                         placeholder="Sélectionner un étudiant"
                                         required
                                         value={transferForm.data.student_id}

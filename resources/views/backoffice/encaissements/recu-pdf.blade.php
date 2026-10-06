@@ -130,7 +130,7 @@
         </tr>
         <tr>
             <td class="row-fr">Prénom et nom</td>
-            <td class="row-val">{{ $encaissement->student?->nomComplet() ?? '-' }}</td>
+            <td class="row-val">{{ mb_strtoupper($encaissement->student?->nomComplet() ?? '-') }}</td>
             <td class="row-ar">اسم و نسب التلميذ(ة)</td>
         </tr>
         <tr>

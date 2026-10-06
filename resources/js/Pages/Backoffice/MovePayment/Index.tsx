@@ -196,7 +196,7 @@ export default function MovePaymentIndex({ filters, diagnostic }: MovePaymentPag
                                     <div className="d-flex flex-wrap align-items-center justify-content-center gap-3 text-center">
                                         <div>
                                             <div className="text-muted fs-12">{t('Current student')}</div>
-                                            <div className="fw-bold">{d.source.etudiant ?? '-'}</div>
+                                            <div className="fw-bold text-uppercase">{d.source.etudiant ?? '-'}</div>
                                             <div className="fs-12 text-muted">{d.source.inscription ?? t('Advance (no fee)')}</div>
                                         </div>
                                         <div className="px-2">
@@ -205,7 +205,7 @@ export default function MovePaymentIndex({ filters, diagnostic }: MovePaymentPag
                                         </div>
                                         <div>
                                             <div className="text-muted fs-12">{t('Target registration')}</div>
-                                            <div className="fw-bold">{d.cible.etudiant ?? '-'}</div>
+                                            <div className="fw-bold text-uppercase">{d.cible.etudiant ?? '-'}</div>
                                             <div className="fs-12 text-muted">
                                                 {d.cible.reference}
                                                 {d.mode === 'frais' && d.fraisDetecte ? ` · ${d.fraisDetecte.nom}` : ''}

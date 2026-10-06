@@ -7,6 +7,7 @@ import { statutVariant } from '@/Lib/inscriptionStatut';
 import { useState } from 'react';
 import AbsencesPanel, { presenceVariant } from '@/Components/Attendance/AbsencesPanel';
 import type { AbsencesEtudiant, StudentDetails } from '@/Types';
+import { enCapitales } from '@/Lib/nom';
 
 interface StudentShowProps {
     student: StudentDetails;
@@ -44,11 +45,11 @@ export default function StudentShow({ student, absences }: StudentShowProps) {
 
     return (
         <BackofficeLayout
-            title={student.nomComplet}
+            title={enCapitales(student.nomComplet)}
             breadcrumbs={[
                 { label: 'Tableau de bord', href: '/backoffice/dashboard' },
                 { label: 'Étudiants', href: '/backoffice/students' },
-                { label: student.nomComplet },
+                { label: enCapitales(student.nomComplet) },
             ]}
         >
             {student.statut === 'Transféré' && (
@@ -112,7 +113,7 @@ export default function StudentShow({ student, absences }: StudentShowProps) {
             {tab === 'absences' && (
                 <AbsencesPanel
                     data={absences}
-                    scope={`Absences de ${student.nomComplet} à ${student.centre ?? 'son centre'} uniquement, tous groupes de ce centre.${
+                    scope={`Absences de ${enCapitales(student.nomComplet)} à ${student.centre ?? 'son centre'} uniquement, tous groupes de ce centre.${
                         student.historiqueTransfert.length > 0
                             ? " Celles du centre précédent ne sont pas comptées ici : elles sont dans l'onglet Historique."
                             : ''
@@ -225,7 +226,7 @@ export default function StudentShow({ student, absences }: StudentShowProps) {
                                     <span className="fs-24 fw-bold text-primary">{student.prenom.charAt(0).toUpperCase()}</span>
                                 )}
                             </span>
-                            <h5 className="mb-1">{student.nomComplet}</h5>
+                            <h5 className="mb-1 text-uppercase">{student.nomComplet}</h5>
                             <p className="text-muted mb-2">
                                 <code>{student.reference}</code>
                             </p>

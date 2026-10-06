@@ -16,6 +16,7 @@ import StatusBadge from '@/Components/Details/StatusBadge';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { useFilterReset } from '@/Hooks/useFilterReset';
 import type { SelectOption, StudentTransferRow, StudentTransfersPageProps } from '@/Types';
+import { enCapitales } from '@/Lib/nom';
 
 type Decision = { kind: 'validate' | 'refuse' | 'cancel'; row: StudentTransferRow };
 
@@ -296,7 +297,7 @@ export default function StudentTransfersIndex({ transfers, filters, perPageOptio
                 <ConfirmDialog
                     show
                     title={dialog.title}
-                    recordLabel={`${decision.row.student.nomComplet} (${decision.row.reference})`}
+                    recordLabel={`${enCapitales(decision.row.student.nomComplet)} (${decision.row.reference})`}
                     message={dialog.message}
                     error={error}
                     processing={processing}

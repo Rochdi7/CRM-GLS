@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { enCapitales } from '@/Lib/nom';
 import type {
     GroupPaymentCell,
     GroupPaymentColumn,
@@ -456,7 +457,7 @@ function MatrixBody({
             } catch (e) {
                 failedIds.add(feeId);
                 failures.push(
-                    `${entry.column.nom} — ${entry.row.student ?? entry.row.reference} : ${
+                    `${entry.column.nom} — ${entry.row.student ? enCapitales(entry.row.student) : entry.row.reference} : ${
                         e instanceof Error ? e.message : 'refusé'
                     }`,
                 );

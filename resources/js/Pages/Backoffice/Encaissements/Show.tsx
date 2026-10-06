@@ -79,7 +79,7 @@ export default function EncaissementShow({ encaissement, canDetach = false }: En
                         <div className="d-flex justify-content-between mb-2">
                             <span className="text-muted">Étudiant</span>
                             {encaissement.studentShowUrl ? (
-                                <a href={encaissement.studentShowUrl} className="fw-medium">
+                                <a href={encaissement.studentShowUrl} className="fw-medium text-uppercase">
                                     {encaissement.student}
                                 </a>
                             ) : (

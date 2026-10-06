@@ -666,6 +666,15 @@ the database layer. Non-negotiable invariants already enforced in code:
   `filterTypeOptions` (« Paiement prof » stripped) so the type can only be
   chosen from the modal that also collects its required fields. Tests:
   `tests/Feature/Backoffice/Finance/PaiementProfModalTest.php`.
+  **Cotisation CNSS** (06/10/2026, `Payroll\Support\CotisationCnss::MONTANT`
+  = 1 700 MAD, servie aux pages en `cnssMontant`, jamais recopiée) : une
+  case sur le calcul ET dans le modal « Paiement prof » retient ce montant
+  sur le total ; `montant` stocké est le NET (seule valeur débitée), et
+  `depenses.cnss_montant` garde ce qui a été retenu (NULL = rien). Le
+  serveur ne lit que la case (`cnss`, prohibée sur une dépense ordinaire).
+  Changer la case sur une ligne enregistrée change le net versé : même
+  droit que le montant (`expenses.update-amount`), refus 422 sinon. Tests :
+  `tests/Feature/Backoffice/Finance/PaiementProfCnssTest.php`.
 - **Application-wide switches live in `app_settings`** (key/value), always read
   and written through `App\Support\Settings\AppSettings` — never queried
   directly, so the forever-cache stays coherent and every change is audited

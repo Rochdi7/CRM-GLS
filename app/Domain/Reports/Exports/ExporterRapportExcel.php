@@ -121,6 +121,13 @@ final class ExporterRapportExcel
             foreach ($colonnes as $colonne) {
                 $valeur = $ligne[$colonne['key']] ?? '';
 
+                // Le nom de l'étudiant sort en CAPITALES, comme dans le PDF et
+                // à l'écran — transformation d'affichage, la requête rend la
+                // casse stockée.
+                if ($colonne['key'] === 'etudiant' && is_string($valeur)) {
+                    $valeur = mb_strtoupper($valeur);
+                }
+
                 // Les nombres restent des nombres (le N° doit se trier comme
                 // un nombre) ; tout le reste part en chaîne — un téléphone
                 // « 212705674602 » écrit en numérique repartirait en notation
