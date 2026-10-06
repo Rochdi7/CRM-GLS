@@ -154,7 +154,8 @@ final class PaiementProfCnssTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Backoffice/Depenses/Index')
-                ->where('cnssMontant', CotisationCnss::MONTANT)
+                // JSON carries 1700.0 as the integer 1700.
+                ->where('cnssMontant', fn ($v): bool => (float) $v === CotisationCnss::MONTANT)
                 ->where('paiementsProf.data.0.cnssMontant', '1700.00')
                 ->where('paiementsProf.data.0.montant', '2500.00'));
     }

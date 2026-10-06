@@ -269,8 +269,11 @@ final class GetAbsencesParGroupe
      * looked up over ALL its séances (not only the window), so narrowing the
      * dates never turns an old gap into a pre-arrival one. A cell is avant
      * arrivée when the séance was saisie, the student carries no mark on it
-     * and it is dated before that arrival; a student never called at all has
-     * not arrived yet, so every unmarked saisie séance is avant arrivée.
+     * and it is dated before that arrival. An ACTIVE student never called at
+     * all has not arrived yet, so every unmarked saisie séance is avant
+     * arrivée; a CLOSED one never called keeps plain grey gaps (never came).
+     * Cancelled séances are never avant arrivée — the page and the export
+     * draw their X instead.
      *
      * Served as a list of séance ids per student (`avantArrivee`) so the page
      * and ExporterMatriceAbsences read one decision instead of re-deriving it.
@@ -295,8 +298,19 @@ final class GetAbsencesParGroupe
             $arrivee = $arrivees->get($student['id']);
             $cells = (array) $student['cells'];
 
+            // Never called AND the inscription is closed (Annulée,
+            // Changement…): the student did not « arrive later », they never
+            // came and the file is over — painting the whole row black read as
+            // a late arrival. Plain gaps instead.
+            if ($arrivee === null && ! $student['actif']) {
+                $student['avantArrivee'] = [];
+
+                return $student;
+            }
+
             $student['avantArrivee'] = $seances
                 ->filter(fn (Seance $seance): bool => $seancesSaisies->has($seance->id)
+                    && $seance->statut !== Seance::STATUT_ANNULEE
                     && ! isset($cells[(string) $seance->id])
                     && ($arrivee === null || $seance->date_seance->toDateString() < $arrivee))
                 ->pluck('id')

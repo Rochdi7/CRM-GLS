@@ -220,6 +220,32 @@ final class AbsenceParGroupeTest extends TestCase
             );
     }
 
+    /**
+     * Never called: an ACTIVE student has not arrived yet (black), a CLOSED
+     * one simply never came (plain gaps). A cancelled séance is never black.
+     */
+    public function test_never_called_is_black_only_for_an_active_inscription(): void
+    {
+        $alice = $this->enrollStudent('Alice');
+        $this->enrollStudent('Bob');
+        $this->enrollStudent('Carl', Inscription::STATUT_ANNULEE);
+
+        $s1 = $this->makeSeance('2026-03-02');
+        $annulee = $this->makeSeance('2026-03-04', Seance::STATUT_ANNULEE);
+        Presence::create(['seance_id' => $s1->id, 'student_id' => $alice->id, 'statut' => Presence::STATUT_PRESENT]);
+        Presence::create(['seance_id' => $annulee->id, 'student_id' => $alice->id, 'statut' => Presence::STATUT_PRESENT]);
+
+        $this->actingAs($this->userWith('attendance.view'))
+            ->get(route('backoffice.seances.absence-par-groupe', ['groupFilter' => $this->group->id, 'dateFrom' => '', 'dateTo' => '']))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('matrice.students.1.prenom', 'Bob')
+                ->where('matrice.students.1.avantArrivee', [$s1->id])
+                ->where('matrice.students.2.prenom', 'Carl')
+                ->where('matrice.students.2.avantArrivee', [])
+            );
+    }
+
     /** A cancelled séance writes an X in every student's cell of the export. */
     public function test_export_marks_a_cancelled_seance_with_an_x(): void
     {

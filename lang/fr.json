@@ -1704,7 +1704,6 @@
     "Required: it is what will explain, later, why expired money could be applied.": "Obligatoire : c'est ce qui expliquera, plus tard, pourquoi de l'argent expiré a pu être appliqué.",
     "This advance expired on :date (14-day limit exceeded).": "Cette avance a expiré le :date (délai de 14 jours dépassé).",
     "CNSS contribution withheld (:montant MAD)": "Cotisation CNSS retenue (:montant MAD)",
-    "Deducted from the total payment and carried over to the expense.": "Déduite du total du paiement et reportée sur la dépense.",
     "CNSS :montant MAD withheld · gross :brut MAD": "CNSS :montant MAD retenue · brut :brut MAD",
     "The CNSS contribution exceeds the computed amount: nothing is paid out.": "La cotisation CNSS dépasse le montant calculé : rien n'est versé.",
     "CNSS :montant withheld": "CNSS :montant retenue",
