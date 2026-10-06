@@ -1989,6 +1989,7 @@ export default function DepensesIndex({
                                 id="r-beneficiaire"
                                 label="Bénéficiaire"
                                 options={studentOptions}
+                                uppercase
                                 placeholder="Sélectionner un étudiant"
                                 required
                                 disabled={!!editingRemboursement}

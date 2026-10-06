@@ -55,7 +55,7 @@
                     <tr>
                         <td style="padding: 32px;">
                             <p style="margin: 0 0 16px; font-size: 15px; color: #111827;">
-                                Bonjour {{ $encaissement->student?->nomComplet() ?? '' }},
+                                Bonjour {{ mb_strtoupper($encaissement->student?->nomComplet() ?? '') }},
                             </p>
                             <p style="margin: 0 0 24px; font-size: 15px; line-height: 1.6; color: #374151;">
                                 Veuillez trouver ci-joint votre reçu de paiement au format PDF.

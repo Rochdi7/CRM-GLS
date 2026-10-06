@@ -286,7 +286,7 @@
                     </div>
                     <div class="row-line">
                         <span class="fr">Prénom et nom</span>
-                        <span class="val">{{ $encaissement->student?->nomComplet() ?? '-' }}</span>
+                        <span class="val">{{ mb_strtoupper($encaissement->student?->nomComplet() ?? '-') }}</span>
                         <span class="ar">اسم و نسب التلميذ(ة)</span>
                     </div>
                     <div class="row-line">

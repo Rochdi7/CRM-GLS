@@ -17,6 +17,12 @@ interface SelectFieldProps {
     onChange?: ChangeEventHandler<HTMLSelectElement>;
     /** Hide the dropdown search box (defaults to shown). */
     searchable?: boolean;
+    /**
+     * Render option labels in CAPITALS (display-only CSS transform, like the
+     * tables) — for people's names (étudiants). The search box and the
+     * disabled-reason hint keep their casing; the value is never touched.
+     */
+    uppercase?: boolean;
 }
 
 /** Accent/case-insensitive normalisation so "eleve" matches "Élève". */
@@ -54,7 +60,9 @@ export default function SelectField({
     value = '',
     onChange,
     searchable = true,
+    uppercase = false,
 }: SelectFieldProps) {
+    const caps = uppercase ? 'text-uppercase' : undefined;
     const [open, setOpen] = useState(false);
     const [highlight, setHighlight] = useState(0);
     const [query, setQuery] = useState('');
@@ -232,7 +240,7 @@ export default function SelectField({
                                 }
                             }}
                         >
-                            <span className="select2-selection__rendered">
+                            <span className={`select2-selection__rendered${caps ? ` ${caps}` : ''}`}>
                                 {selected ? (
                                     selected.icon ? (
                                         <span className="d-inline-flex align-items-center gap-2">
@@ -243,7 +251,7 @@ export default function SelectField({
                                         selected.shortLabel ?? selected.label
                                     )
                                 ) : (
-                                    <span className="select2-selection__placeholder">{placeholder ?? t('Choose…')}</span>
+                                    <span className="select2-selection__placeholder" style={caps ? { textTransform: 'none' } : undefined}>{placeholder ?? t('Choose…')}</span>
                                 )}
                             </span>
                             <span className="select2-selection__arrow" role="presentation">
@@ -355,12 +363,12 @@ export default function SelectField({
                                         >
                                             <span className="d-flex align-items-center justify-content-between gap-2">
                                                 {option.icon ? (
-                                                    <span className="d-inline-flex align-items-center gap-2">
+                                                    <span className={`d-inline-flex align-items-center gap-2${caps ? ` ${caps}` : ''}`}>
                                                         {option.icon}
                                                         {option.label}
                                                     </span>
                                                 ) : (
-                                                    <span>{option.label}</span>
+                                                    <span className={caps}>{option.label}</span>
                                                 )}
                                                 {option.disabled && option.disabledReason && (
                                                     <small className="text-muted flex-shrink-0">{option.disabledReason}</small>

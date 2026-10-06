@@ -25,6 +25,7 @@ import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { useFilterReset } from '@/Hooks/useFilterReset';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import type { GroupeCibleTransfert, SelectOption, StudentRow, StudentsPageProps } from '@/Types';
+import { enCapitales } from '@/Lib/nom';
 
 /**
  * Ce qui empêche la suppression, servi par
@@ -425,6 +426,7 @@ export default function StudentsIndex({
                             <SelectField
                                 id="stu-f-student"
                                 options={studentFilterOptions}
+                                uppercase
                                 placeholder="Choisir un étudiant"
                                 value={filters.studentFilter}
                                 onChange={(event) => reload({ studentFilter: event.target.value })}
@@ -978,7 +980,7 @@ export default function StudentsIndex({
                 <form onSubmit={submitTransfer}>
                     <div className="alert alert-info fs-13" role="alert">
                         <i className="ti ti-info-circle me-1" />
-                        Validation par le backoffice. <strong>{transferTarget?.nomComplet}</strong> sera inscrit(e)
+                        Validation par le backoffice. <strong className="text-uppercase">{transferTarget?.nomComplet}</strong> sera inscrit(e)
                         dans le nouveau groupe avec ses paiements.
                     </div>
                     {transferForm.errors.student_id && (
@@ -1036,7 +1038,7 @@ export default function StudentsIndex({
             <ConfirmDialog
                 show={deleteTarget !== null}
                 title="Supprimer l'étudiant"
-                recordLabel={deleteTarget?.nomComplet ?? ''}
+                recordLabel={enCapitales(deleteTarget?.nomComplet)}
                 message="Voulez-vous vraiment supprimer cet étudiant ?"
                 error={deleteError}
                 processing={deleteProcessing}

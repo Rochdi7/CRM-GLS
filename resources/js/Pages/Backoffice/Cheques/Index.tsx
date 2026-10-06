@@ -18,6 +18,7 @@ import FormActions from '@/Components/Forms/FormActions';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { useFilterReset } from '@/Hooks/useFilterReset';
+import { enCapitales } from '@/Lib/nom';
 import type { ChequeRow, ChequesPageProps, PaiementRemplacantOption, SelectOption } from '@/Types';
 
 interface ChequeFormState {
@@ -924,6 +925,7 @@ export default function ChequesIndex({
                                     label="Propriétaire"
                                     required
                                     options={studentOptions}
+                                    uppercase
                                     placeholder="Choisir un étudiant"
                                     value={form.data.student_id}
                                     onChange={(event) =>
@@ -937,6 +939,7 @@ export default function ChequesIndex({
                                     label="Propriétaire"
                                     required
                                     options={parentOptions}
+                                    uppercase
                                     placeholder="Choisir un parent"
                                     value={form.data.proprietaire_nom}
                                     onChange={(event) => form.setData('proprietaire_nom', event.target.value)}
@@ -1075,7 +1078,7 @@ export default function ChequesIndex({
                 recordLabel={
                     annulTarget
                         ? `${annulTarget.numeroCheque} - ${Number(annulTarget.montant).toFixed(2)} MAD`
-                          + (annulTarget.proprietaire ? ` - ${annulTarget.proprietaire}` : '')
+                          + (annulTarget.proprietaire ? ` - ${enCapitales(annulTarget.proprietaire)}` : '')
                         : ''
                 }
                 message={annulTarget?.annulationBlocker ?? 'Le chèque reste listé avec le statut « Annulé ».'}
@@ -1158,7 +1161,7 @@ export default function ChequesIndex({
                 recordLabel={
                     garantieTarget
                         ? `${garantieTarget.numeroCheque} - ${Number(garantieTarget.montant).toFixed(2)} MAD`
-                          + (garantieTarget.proprietaire ? ` - ${garantieTarget.proprietaire}` : '')
+                          + (garantieTarget.proprietaire ? ` - ${enCapitales(garantieTarget.proprietaire)}` : '')
                         : ''
                 }
                 message="Choisissez le paiement qui remplace la garantie."
@@ -1236,7 +1239,7 @@ export default function ChequesIndex({
                         <div className="row">
                             <div className="col-md-6 mb-3">
                                 <div className="text-muted small mb-1">Propriétaire</div>
-                                <div className="fw-medium">{remiseTarget.proprietaire ?? '-'}</div>
+                                <div className="fw-medium text-uppercase">{remiseTarget.proprietaire ?? '-'}</div>
                             </div>
                             <div className="col-md-6 mb-3">
                                 <div className="text-muted small mb-1">Banque</div>
@@ -1328,7 +1331,7 @@ export default function ChequesIndex({
                         <div className="col-md-6 mb-3">
                             <div className="text-muted small mb-1">Chèque</div>
                             <div className="fw-medium">
-                                <code>{validationTarget.numeroCheque}</code> - {validationTarget.proprietaire ?? '-'}
+                                <code>{validationTarget.numeroCheque}</code> - <span className="text-uppercase">{validationTarget.proprietaire ?? '-'}</span>
                             </div>
                         </div>
                         <div className="col-md-6 mb-3">
@@ -1429,7 +1432,7 @@ export default function ChequesIndex({
                         <div>
                             <div className="text-muted small mb-1">Chèque</div>
                             <div className="fw-medium">
-                                <code>{detailsCheque.numeroCheque}</code> - {detailsCheque.proprietaire ?? '-'}
+                                <code>{detailsCheque.numeroCheque}</code> - <span className="text-uppercase">{detailsCheque.proprietaire ?? '-'}</span>
                             </div>
                         </div>
                         <div>

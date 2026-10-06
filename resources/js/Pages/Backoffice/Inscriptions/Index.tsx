@@ -3,6 +3,7 @@ import { pageWindow } from '@/Components/Tables/Pagination';
 import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAutoOpenCreate } from '@/Hooks/useAutoOpenCreate';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
+import { enCapitales } from '@/Lib/nom';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DataTable from '@/Components/Tables/DataTable';
@@ -1526,6 +1527,7 @@ export default function InscriptionsIndex({
                             <SelectField
                                 id="ins-f-student"
                                 options={studentOptions}
+                                uppercase
                                 placeholder="Choisir un étudiant"
                                 value={filters.studentFilter}
                                 onChange={(event) => reload({ studentFilter: event.target.value })}
@@ -1741,6 +1743,7 @@ export default function InscriptionsIndex({
                                     label="Étudiant"
                                     required
                                     options={studentOptions}
+                                    uppercase
                                     placeholder="Choisir…"
                                     value={form.data.student_id}
                                     onChange={(event) => form.setData('student_id', event.target.value ? Number(event.target.value) : '')}
@@ -2824,7 +2827,7 @@ export default function InscriptionsIndex({
                         <input
                             id="ins-paiement-student"
                             type="text"
-                            className="form-control"
+                            className="form-control text-uppercase"
                             value={paiementTarget?.student ?? '-'}
                             disabled
                         />
@@ -3083,7 +3086,7 @@ export default function InscriptionsIndex({
                             </div>
                             <div className="col-md-6">
                                 <label className="form-label">Étudiant</label>
-                                <input type="text" className="form-control" value={cancelTarget.student ?? ''} disabled readOnly />
+                                <input type="text" className="form-control text-uppercase" value={cancelTarget.student ?? ''} disabled readOnly />
                             </div>
 
                             <div className="col-md-6">
@@ -3185,7 +3188,7 @@ export default function InscriptionsIndex({
 
             <Modal
                 show={changeGroupTarget !== null}
-                title={`Changement de groupe : ${changeGroupTarget?.student ?? ''}`}
+                title={`Changement de groupe : ${enCapitales(changeGroupTarget?.student)}`}
                 onClose={closeChangeGroup}
                 processing={changeGroupForm.processing}
                 size="lg"
@@ -3400,7 +3403,7 @@ export default function InscriptionsIndex({
 
             <Modal
                 show={modifyGroupTarget !== null}
-                title={`Modification du groupe : ${modifyGroupTarget?.student ?? ''}`}
+                title={`Modification du groupe : ${enCapitales(modifyGroupTarget?.student)}`}
                 onClose={closeModifyGroup}
                 processing={modifyGroupForm.processing}
             >
