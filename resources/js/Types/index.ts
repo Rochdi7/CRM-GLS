@@ -1920,6 +1920,8 @@ export interface InscriptionsPageProps {
     canCreatePayment: boolean;
     /** Encaissement::METHODES — the payment modal's per-row méthode dropdown. */
     methodesPaiement: string[];
+    /** `payments.update-date` — date de l'opération d'une demande de virement (super-admin). */
+    canUpdatePaymentDate?: boolean;
     [key: string]: unknown;
 }
 
@@ -2808,6 +2810,12 @@ export interface DepensesPageProps {
     calculPaiementProf: PaiementProfCalcul | null;
     /** Les paramètres du calcul tels que le serveur les a lus (`pp*` dans l'URL). */
     calculPaiementProfFilters: PaiementProfFilters;
+    /**
+     * « Modifier le calcul » (07/10/2026) — le paiement prof EN ATTENTE que
+     * l'enregistrement du calcul met à jour au lieu d'en créer un nouveau.
+     * Servi seulement si DepensePolicy@recalculer l'autorise.
+     */
+    recalculDepense: DepenseRow | null;
     calculGroupOptions: SelectOption[];
     /** Barème : présences minimales => semaines payées (11 => 4, 7 => 2, 5 => 1). */
     paliersPaie: Record<string, number>;

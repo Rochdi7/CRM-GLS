@@ -61,6 +61,34 @@ final class DepensePolicy extends ResourcePolicy
     }
 
     /**
+     * « Modifier le calcul » d'un paiement prof EN ATTENTE (07/10/2026) :
+     * refaire le calcul et en reporter le résultat (montant, CNSS, période,
+     * enseignant) sur la MÊME dépense. Ouvert à qui peut la modifier ET à
+     * l'employé qui l'a saisie — une demande en attente n'a débité aucune
+     * caisse, la corriger ne déplace pas d'argent. Exige le calcul
+     * (`prof-payments.calculate`). Exclu du bypass super-admin
+     * (NO_SUPER_ADMIN_BYPASS) : une dépense décidée ne se recalcule pour
+     * personne.
+     */
+    public function recalculer(User $user, Depense $depense): bool
+    {
+        if (! $depense->estRecalculable() || ! $user->can('prof-payments.calculate')) {
+            return false;
+        }
+
+        if ($this->update($user, $depense)) {
+            return true;
+        }
+
+        $employeeId = $user->employee?->id;
+
+        return $employeeId !== null
+            && (int) $depense->agent_id === (int) $employeeId
+            && $user->can('expenses.create')
+            && $this->withinCenter($user, $depense);
+    }
+
+    /**
      * A refused or cancelled expense is closed history — nothing about it may
      * be edited. (An approved one stays editable exactly as before: its money
      * already moved, and UpdateDepenseRequest structurally excludes
