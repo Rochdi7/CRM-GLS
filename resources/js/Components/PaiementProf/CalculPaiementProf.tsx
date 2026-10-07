@@ -113,6 +113,15 @@ interface CalculPaiementProfProps {
      * « Modifier » ; seul « Enregistrer la dépense » reste.
      */
     verrouille?: boolean;
+    /**
+     * APERÇU en lecture seule (fiche d'une dépense « Paiement prof »,
+     * 07/10/2026) : aucune action, aucun ajustement, case CNSS figée sur la
+     * valeur de la dépense. On voit d'où vient le montant ; le modifier
+     * passe par « Modifier le calcul ».
+     */
+    lectureSeule?: boolean;
+    /** État initial de la case CNSS — celui de la dépense affichée. */
+    cnssInitial?: boolean;
 }
 
 /**
@@ -152,6 +161,8 @@ export default function CalculPaiementProf({
     openRequest = 0,
     embedded = false,
     verrouille = false,
+    lectureSeule = false,
+    cnssInitial = false,
 }: CalculPaiementProfProps) {
     // Ajustements manuels — état LOCAL, jamais persisté.
     const [ajustements, setAjustements] = useState<Record<number, string>>({});
@@ -160,9 +171,10 @@ export default function CalculPaiementProf({
     // qui survivrait au calcul suivant serait appliquée sans que personne
     // l'ait décidée pour CE paiement. Le total affiché, la dépense
     // pré-remplie et la case du modal la portent tous les trois.
-    const [cnss, setCnss] = useState(false);
+    const [cnss, setCnss] = useState(cnssInitial);
     useEffect(() => {
-        setCnss(false);
+        setCnss(cnssInitial);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [calcul?.group.id, calcul?.enseignant.id, calcul?.periode.debut, calcul?.periode.fin]);
     // Base « Détails paiement » (Système GLS seulement) — décochée par défaut :
     // le calcul par séances reste la référence, celui-ci est un contrôle.
@@ -455,6 +467,8 @@ export default function CalculPaiementProf({
         <>
             <style>{`
                 .pp-wrap { overflow: auto; max-height: 70vh; }
+                .pp-wrap.pp-compact { max-height: 60vh; }
+                .pp-wrap.pp-compact td, .pp-wrap.pp-compact th { font-size: 12px; }
                 .pp-wrap table { margin: 0; border-collapse: separate; border-spacing: 0; white-space: nowrap; }
                 .pp-wrap thead th {
                     position: sticky; top: 0; z-index: 10;
@@ -519,7 +533,7 @@ export default function CalculPaiementProf({
                         </span>
                     )}
                 </div>
-                {!verrouille && (
+                {!verrouille && !lectureSeule && (
                 <div className="d-flex gap-2">
                     {calcul !== null && (
                         <button type="button" className="btn btn-outline-secondary" onClick={onReset}>
@@ -947,6 +961,7 @@ export default function CalculPaiementProf({
                                     type="checkbox"
                                     className="form-check-input"
                                     checked={cnss}
+                                    disabled={lectureSeule}
                                     onChange={(event) => setCnss(event.target.checked)}
                                 />
                                 <label htmlFor="pp-cnss" className="form-check-label fw-semibold">
@@ -1011,8 +1026,8 @@ export default function CalculPaiementProf({
                             tools={
                                 <div className="d-flex align-items-center gap-2">
                                     <span className="badge badge-soft-warning">
-                                        <i className="ti ti-file-pencil me-1" />
-                                        {t('Draft')}
+                                        <i className={`ti ${lectureSeule ? 'ti-eye' : 'ti-file-pencil'} me-1`} />
+                                        {lectureSeule ? t('Preview') : t('Draft')}
                                     </span>
                                     {canCreateDepense && totalAffiche > 0 && (
                                         <button type="button" className="btn btn-primary btn-sm" onClick={creerDepense}>
@@ -1046,8 +1061,8 @@ export default function CalculPaiementProf({
                             tools={
                                 <div className="d-flex align-items-center gap-2">
                                     <span className="badge badge-soft-warning">
-                                        <i className="ti ti-file-pencil me-1" />
-                                        {t('Draft')}
+                                        <i className={`ti ${lectureSeule ? 'ti-eye' : 'ti-file-pencil'} me-1`} />
+                                        {lectureSeule ? t('Preview') : t('Draft')}
                                     </span>
                                     {canCreateDepense && totalAffiche > 0 && (
                                         <button type="button" className="btn btn-primary btn-sm" onClick={creerDepense}>
@@ -1133,8 +1148,8 @@ export default function CalculPaiementProf({
                                     total affiché se lit sinon comme une paie
                                     déjà actée. */}
                                 <span className="badge badge-soft-warning">
-                                    <i className="ti ti-file-pencil me-1" />
-                                    {t('Draft')}
+                                    <i className={`ti ${lectureSeule ? 'ti-eye' : 'ti-file-pencil'} me-1`} />
+                                    {lectureSeule ? t('Preview') : t('Draft')}
                                 </span>
                                 {canCreateDepense && totalAffiche > 0 && (
                                     <button type="button" className="btn btn-primary btn-sm" onClick={creerDepense}>
@@ -1145,7 +1160,7 @@ export default function CalculPaiementProf({
                             </div>
                         }
                     >
-                        <div className="pp-wrap">
+                        <div className={`pp-wrap${lectureSeule ? ' pp-compact' : ''}`}>
                             <table className="table table-sm mb-0">
                                 <thead>
                                     <tr>
@@ -1179,7 +1194,7 @@ export default function CalculPaiementProf({
                                         {/* Montant CALCULÉ (présences × part de séance),
                                             puis la correction manuelle à côté : on voit
                                             d'où l'on part avant de déroger. */}
-                                        <th className="pp-sem pp-sem-first">{t('Adjustment')}</th>
+                                        {!lectureSeule && <th className="pp-sem pp-sem-first">{t('Adjustment')}</th>}
                                         <th className="pp-total">{t('Total')}</th>
                                     </tr>
                                 </thead>
@@ -1254,6 +1269,7 @@ export default function CalculPaiementProf({
                                                 {/* Montant calculé — et COMMENT il l'a été :
                                                     « 18 × 22.73 » rend le chiffre
                                                     vérifiable sans quitter la ligne. */}
+                                                {!lectureSeule && (
                                                 <td className="pp-sem pp-sem-first">
                                                     <input
                                                         type="number"
@@ -1294,6 +1310,7 @@ export default function CalculPaiementProf({
                                                         </button>
                                                     )}
                                                 </td>
+                                                )}
 
                                                 <td
                                                     className={`pp-total ${effectif > 0 ? '' : 'text-muted'}`}
@@ -1342,7 +1359,7 @@ export default function CalculPaiementProf({
                                         {calcul.datesDeCours.map((date) => (
                                             <td key={date} className={`pp-jour${classeSemaine(date)}`} />
                                         ))}
-                                        <td className="pp-sem pp-sem-first" />
+                                        {!lectureSeule && <td className="pp-sem pp-sem-first" />}
                                         <td className="pp-total">{totalAffiche.toFixed(2)} MAD</td>
                                     </tr>
                                 </tfoot>

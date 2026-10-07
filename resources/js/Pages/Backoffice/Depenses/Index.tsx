@@ -1165,21 +1165,6 @@ export default function DepensesIndex({
                 cette permission, le bouton ouvre le modal vide comme avant. */}
             {tab === 'paiements-prof' && canViewDepenses && paiementsProf && (
                 <>
-                {canCalculerPaiementProf && recalculCible !== null && (
-                    <div className="alert alert-warning d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <span>
-                            <i className="ti ti-calculator me-1" />
-                            {t('Recalculating :reference (pending): « Record the expense » will update this payment instead of creating a new one.', { reference: recalculCible.reference })}
-                        </span>
-                        <button
-                            type="button"
-                            className="btn btn-sm btn-outline-secondary"
-                            onClick={() => setRecalculCible(null)}
-                        >
-                            {t('Cancel the recalculation')}
-                        </button>
-                    </div>
-                )}
                 {canCalculerPaiementProf && (
                     <CalculPaiementProf
                         embedded
@@ -1195,6 +1180,9 @@ export default function DepensesIndex({
                         openRequest={calculOpenRequest}
                     />
                 )}
+                {/* Un calcul affiché occupe l'onglet : la liste des paiements
+                    déjà enregistrés revient dès qu'il est effacé. */}
+                {calculPaiementProf === null && (
                 <Card
                     title="Paiements prof"
                     bodyClassName="p-0 py-3"
@@ -1332,7 +1320,9 @@ export default function DepensesIndex({
                                         </td>
                                         <td>
                                             <RowActions view={row.showUrl}>
-                                                {!row.isRefusee && !row.isAnnulee && (
+                                                {/* Paiement prof : modifiable EN ATTENTE seulement
+                                                    (DepensePolicy@update le refuse ensuite). */}
+                                                {row.isEnAttente && (
                                                     <RowActionItem icon="ti-edit" onClick={() => openEditDepense(row)}>
                                                         Modifier
                                                     </RowActionItem>
@@ -1361,6 +1351,7 @@ export default function DepensesIndex({
                         </>
                     )}
                 </Card>
+                )}
                 </>
             )}
 
@@ -1614,7 +1605,8 @@ export default function DepensesIndex({
                                                 <RowActionItem icon="ti-eye" onClick={() => setDetailsRow(row)}>
                                                     Détails
                                                 </RowActionItem>
-                                                {!row.isRefusee && (
+                                                {!row.isRefusee
+                                                    && !(row.typeDepenseId === paiementProfTypeId && !row.isEnAttente) && (
                                                     <RowActionItem icon="ti-edit" onClick={() => openEditDepense(row)}>
                                                         Modifier
                                                     </RowActionItem>

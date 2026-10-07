@@ -3,8 +3,10 @@ import Card from '@/Components/Shared/Card';
 import DetailRow from '@/Components/Details/DetailRow';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DocumentLink from '@/Components/Media/DocumentLink';
+import { useState } from 'react';
+import CalculPaiementProf from '@/Components/PaiementProf/CalculPaiementProf';
 import { t } from '@/Lib/i18n';
-import type { DepenseDetails } from '@/Types';
+import type { DepenseDetails, PaiementProfCalcul } from '@/Types';
 
 interface DepenseShowProps {
     depense: DepenseDetails;
@@ -20,6 +22,14 @@ interface DepenseShowProps {
      * `null` sinon. Confort d'affichage : le serveur revérifie à l'écriture.
      */
     recalculUrl: string | null;
+    /**
+     * Aperçu du calcul (lecture seule), refait depuis les appels ACTUELS du
+     * groupe sur la période payée — `null` hors paiement prof ou sans
+     * `prof-payments.calculate`.
+     */
+    calculApercu: PaiementProfCalcul | null;
+    paliersPaie: Record<string, number>;
+    cnssMontant: number;
 }
 
 /**
@@ -28,7 +38,11 @@ interface DepenseShowProps {
  * (an expense is never deleted). Receipt URLs come only from the
  * already-authorized Spatie Media URL, never a filesystem path.
  */
-export default function DepenseShow({ depense, canAudit, recalculUrl }: DepenseShowProps) {
+export default function DepenseShow({ depense, canAudit, recalculUrl, calculApercu, paliersPaie, cnssMontant }: DepenseShowProps) {
+    // Deux onglets quand la dépense a un calcul à montrer : la fiche, et le
+    // détail du calcul (lecture seule).
+    const [tab, setTab] = useState<'details' | 'calcul'>('details');
+
     return (
         <BackofficeLayout
             title={depense.reference}
@@ -56,6 +70,35 @@ export default function DepenseShow({ depense, canAudit, recalculUrl }: DepenseS
                 ) : undefined
             }
         >
+            {calculApercu !== null && (
+                <ul className="nav nav-tabs p-0 border-bottom rounded-0 mb-4" role="tablist">
+                    <li className="nav-item" role="presentation">
+                        <button
+                            type="button"
+                            className={`nav-link d-inline-flex align-items-center${tab === 'details' ? ' active' : ''}`}
+                            aria-current={tab === 'details' ? 'page' : undefined}
+                            onClick={() => setTab('details')}
+                        >
+                            <i className="ti ti-receipt me-2" aria-hidden="true" />
+                            {t('Details')}
+                        </button>
+                    </li>
+                    <li className="nav-item" role="presentation">
+                        <button
+                            type="button"
+                            className={`nav-link d-inline-flex align-items-center${tab === 'calcul' ? ' active' : ''}`}
+                            aria-current={tab === 'calcul' ? 'page' : undefined}
+                            onClick={() => setTab('calcul')}
+                        >
+                            <i className="ti ti-calculator me-2" aria-hidden="true" />
+                            {t('Calculation details')}
+                        </button>
+                    </li>
+                </ul>
+            )}
+
+            {tab === 'details' && (
+            <>
             {/* Correction comptable — a cancelled dépense keeps its row (money
                 records are append-only); the compensating credit that put
                 the money back is shown here, read from the caisse journal. */}
@@ -195,6 +238,30 @@ export default function DepenseShow({ depense, canAudit, recalculUrl }: DepenseS
                     </Card>
                 </div>
             </div>
+
+            </>
+            )}
+
+            {/* Détail du calcul — LECTURE SEULE : ni ajustement, ni
+                enregistrement. Le modifier passe par « Modifier le calcul »
+                (paiement en attente uniquement). */}
+            {tab === 'calcul' && calculApercu !== null && (
+                <div>
+                    <CalculPaiementProf
+                        embedded
+                        lectureSeule
+                        cnssInitial={depense.cnssMontant !== null}
+                        calcul={calculApercu}
+                        filters={{ groupFilter: '', enseignantFilter: '', debut: '', fin: '', heures: '', dureeSeance: '' }}
+                        groupOptions={[]}
+                        paliersPaie={paliersPaie}
+                        cnssMontant={depense.cnssMontant !== null ? Number(depense.cnssMontant) : cnssMontant}
+                        canCreateDepense={false}
+                        onNavigate={() => undefined}
+                        onEnregistrer={() => undefined}
+                    />
+                </div>
+            )}
         </BackofficeLayout>
     );
 }

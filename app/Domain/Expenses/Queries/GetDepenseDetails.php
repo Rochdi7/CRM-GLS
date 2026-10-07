@@ -73,9 +73,10 @@ final class GetDepenseDetails
             'description' => $depense->description,
             'motsCles' => $motsCles,
             'note' => $depense->note,
-            // Matches the Blade's own @can('update', $depense) gate around the
-            // "Back to list" link — read-only visibility check, no edit action.
-            'canViewList' => Gate::allows('update', $depense),
+            // « Retour à la liste » — visibilité de la LISTE, pas droit de
+            // modifier : un paiement prof approuvé n'est plus modifiable
+            // (DepensePolicy@update, 07/10/2026) mais reste listé.
+            'canViewList' => Gate::allows('expenses.view'),
             'receipts' => $depense->getMedia('justificatifs')->map(fn ($media): array => [
                 'name' => $media->file_name,
                 'url' => $media->getUrl(),

@@ -101,6 +101,14 @@ final class DepensePolicy extends ResourcePolicy
             return false;
         }
 
+        // Un « Paiement prof » ne se modifie QUE tant qu'il est EN ATTENTE
+        // (07/10/2026) : une fois approuvé, la paie est actée et l'argent
+        // est sorti de la caisse — plus personne ne la retouche, super-admin
+        // compris (`update` est exclu du bypass, NO_SUPER_ADMIN_BYPASS).
+        if ($model instanceof Depense && ! $model->isEnAttente() && $model->estPaiementProf()) {
+            return false;
+        }
+
         return parent::update($user, $model);
     }
 }
