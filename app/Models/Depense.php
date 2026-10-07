@@ -111,7 +111,13 @@ class Depense extends Model implements HasMedia
     {
         return $this->isEnAttente()
             && $this->group_id !== null
-            && TypeDepense::query()->whereKey($this->type_depense_id)->value('nom') === TypeDepense::SYSTEM_PAIEMENT_PROF;
+            && $this->estPaiementProf();
+    }
+
+    /** Dépense du type système « Paiement prof ». */
+    public function estPaiementProf(): bool
+    {
+        return TypeDepense::query()->whereKey($this->type_depense_id)->value('nom') === TypeDepense::SYSTEM_PAIEMENT_PROF;
     }
 
     /** Approved: the till was debited when the decision was taken. */

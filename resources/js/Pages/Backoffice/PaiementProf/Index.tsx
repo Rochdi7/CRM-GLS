@@ -101,7 +101,7 @@ export default function PaiementProfIndex({
             {/* ── Paiements déjà enregistrés ─────────────────────────────
                 Un calcul n'est pas un paiement : ces lignes sont les
                 dépenses « Paiement prof » réellement saisies. */}
-            {paiementsProf !== null && (
+            {paiementsProf !== null && calcul === null && (
                 <Card title={t('Recorded teacher payments')} className="mt-3">
                     <p className="fw-medium mb-3">
                         {t('Total amount')} : {Number(paiementsProf.montantTotal).toFixed(2)} MAD

@@ -322,6 +322,37 @@ final class DepenseController extends Controller
     /**
      * @return array<string, mixed>|null
      */
+    private function calculApercu(Request $request, Depense $depense, GetPaiementProfCalcul $getPaiementProfCalcul): ?array
+    {
+        if (! $request->user()->can('prof-payments.calculate')
+            || $depense->group_id === null
+            || $depense->periode_debut === null
+            || $depense->periode_fin === null
+        ) {
+            return null;
+        }
+
+        $group = Group::query()->with('enseignant')->find($depense->group_id);
+        $enseignantId = $depense->enseignant_id ?? $group?->enseignant_id;
+        $enseignant = $enseignantId === null ? null : \App\Models\Employee::query()->find($enseignantId);
+
+        if ($group === null || $enseignant === null) {
+            return null;
+        }
+
+        $periode = \App\Domain\Payroll\Support\MoisDeGroupe::resoudre(
+            $group,
+            null,
+            $depense->periode_debut->toDateString(),
+            $depense->periode_fin->toDateString(),
+        );
+
+        return $periode === null ? null : $getPaiementProfCalcul(group: $group, enseignant: $enseignant, mois: $periode);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
     private function recalculDepense(Request $request, GetDepensesList $getDepensesList): ?array
     {
         $id = (int) $request->integer('ppEdit');
@@ -563,7 +594,7 @@ final class DepenseController extends Controller
         return $employee;
     }
 
-    public function show(Request $request, Depense $depense, GetDepenseDetails $getDepenseDetails): Response
+    public function show(Request $request, Depense $depense, GetDepenseDetails $getDepenseDetails, GetPaiementProfCalcul $getPaiementProfCalcul): Response
     {
         $this->authorize('view', $depense);
 
@@ -595,6 +626,15 @@ final class DepenseController extends Controller
                     'ppEdit' => $depense->id,
                 ], fn ($v): bool => $v !== null && $v !== ''))
                 : null,
+            // Aperçu du calcul (LECTURE SEULE) — refait depuis les appels
+            // ACTUELS du groupe sur la période payée : on voit d'où vient le
+            // montant sans pouvoir le retoucher ici (« Modifier le calcul »
+            // pour cela). Réservé à qui peut calculer une paie : la grille
+            // expose les présences des étudiants. Closure : rien n'est
+            // calculé si la page ne le demande pas (§17).
+            'calculApercu' => fn (): ?array => $this->calculApercu($request, $depense, $getPaiementProfCalcul),
+            'paliersPaie' => CalculerPaiementProfParPaliers::PALIERS,
+            'cnssMontant' => CotisationCnss::MONTANT,
         ]);
     }
 

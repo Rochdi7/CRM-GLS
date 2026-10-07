@@ -137,6 +137,29 @@ final class PaiementProfRecalculTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page->where('recalculDepense.id', $depense->id));
     }
 
+    public function test_the_show_page_previews_the_calculation_only_to_who_may_calculate(): void
+    {
+        $enseignant = Employee::factory()->create([
+            'etablissement_id' => $this->centre->id,
+            'categorie' => Employee::CATEGORIE_ENSEIGNANT,
+        ]);
+        $this->group->update(['enseignant_id' => $enseignant->id]);
+
+        $user = $this->frontOffice();
+        $depense = $this->createdBy($user);
+
+        $this->actingAs($user)->get(route('backoffice.depenses.show', $depense))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('calculApercu.group.id', $this->group->id)
+                ->where('calculApercu.enseignant.id', $enseignant->id));
+
+        // Sans `prof-payments.calculate` : la grille (présences des
+        // étudiants) n'est pas servie.
+        $viewer = $this->actor(['expenses.view', 'expenses.update']);
+        $this->actingAs($viewer)->get(route('backoffice.depenses.show', $depense))
+            ->assertInertia(fn (Assert $page) => $page->where('calculApercu', null));
+    }
+
     public function test_another_front_office_employee_cannot_recalculate_it(): void
     {
         $depense = $this->createdBy($this->frontOffice());
@@ -164,7 +187,7 @@ final class PaiementProfRecalculTest extends TestCase
         $depense->forceFill(['statut' => Depense::STATUT_APPROUVEE])->saveQuietly();
 
         $manager = $this->actor(['expenses.view', 'expenses.create', 'expenses.update', 'prof-payments.calculate']);
-        $this->recalculer($manager, $depense)->assertSessionHasErrors('montant');
+        $this->recalculer($manager, $depense)->assertForbidden();
         $this->assertSame('2500.00', $depense->fresh()->montant);
 
         $superAdmin = User::factory()->create();
@@ -174,6 +197,27 @@ final class PaiementProfRecalculTest extends TestCase
         $this->assertFalse($superAdmin->fresh()->can('recalculer', $depense->fresh()));
         $this->actingAs($superAdmin->fresh())->get(route('backoffice.depenses.show', $depense))
             ->assertInertia(fn (Assert $page) => $page->where('recalculUrl', null));
+    }
+
+    public function test_an_approved_teacher_payment_is_not_editable_by_anyone(): void
+    {
+        $depense = $this->createdBy($this->frontOffice());
+        $depense->forceFill(['statut' => Depense::STATUT_APPROUVEE])->saveQuietly();
+
+        $manager = $this->actor(['expenses.view', 'expenses.update']);
+        $superAdmin = User::factory()->create();
+        $superAdmin->assignRole('super-admin');
+        Employee::factory()->create(['user_id' => $superAdmin->id, 'etablissement_id' => $this->centre->id]);
+
+        foreach ([$manager, $superAdmin->fresh()] as $user) {
+            $this->assertFalse($user->can('update', $depense->fresh()));
+            $this->actingAs($user)->post(route('backoffice.depenses.update', $depense), $this->payload([
+                '_method' => 'put',
+                'description' => 'Retouché après approbation',
+            ]))->assertForbidden();
+        }
+
+        $this->assertSame('Heures de septembre', $depense->fresh()->description);
     }
 
     public function test_a_super_admin_can_recalculate_a_pending_payment(): void
