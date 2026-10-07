@@ -74,6 +74,11 @@ class AppServiceProvider extends ServiceProvider
         // pour les autres (09/09/2026). La policy laisse passer une depense
         // approuvee ou en attente exactement comme avant.
         'update' => [Depense::class],
+        // « Modifier le calcul » d'un paiement prof : EN ATTENTE seulement
+        // (DepensePolicy@recalculer). Sans cette exclusion le super-admin
+        // recalculerait une depense deja approuvee hors de
+        // CorrigerMontantDepense... via un chemin qui se croit sans argent.
+        'recalculer' => [Depense::class],
     ];
 
     /**

@@ -202,6 +202,12 @@ final class DepenseController extends Controller
             'canCalculerPaiementProf' => $canCalculer,
             'calculPaiementProf' => $calcul,
             'calculPaiementProfFilters' => $calculFilters,
+            // « Modifier le calcul » (07/10/2026) — la dépense EN ATTENTE que
+            // l'enregistrement du calcul met à jour au lieu d'en créer une
+            // nouvelle. `ppEdit` vient du navigateur : la policy
+            // (recalculer) et la garde de contexte se rejouent ici, et un id
+            // refusé retombe simplement sur une saisie ordinaire.
+            'recalculDepense' => $canCalculer ? $this->recalculDepense($request, $getDepensesList) : null,
             'calculGroupOptions' => fn (): array => $canCalculer ? $getPaiementProfCalcul->groupOptions($user) : [],
             'paliersPaie' => CalculerPaiementProfParPaliers::PALIERS,
             // Cotisation CNSS retenue sur un paiement prof — UNE constante,
@@ -311,6 +317,35 @@ final class DepenseController extends Controller
                 'perPage' => $perPage,
             ],
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function recalculDepense(Request $request, GetDepensesList $getDepensesList): ?array
+    {
+        $id = (int) $request->integer('ppEdit');
+
+        if ($id <= 0) {
+            return null;
+        }
+
+        $depense = Depense::query()
+            ->with(['typeDepense', 'agent', 'approvedBy', 'caisse.etablissement', 'group.etablissement', 'etablissement', 'enseignant'])
+            ->withCount('media')
+            ->find($id);
+
+        if ($depense === null || ! $request->user()->can('recalculer', $depense)) {
+            return null;
+        }
+
+        try {
+            $this->assertDepenseInContext($request, $depense);
+        } catch (ValidationException|\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
+            return null;
+        }
+
+        return $getDepensesList->ligne($depense);
     }
 
     public function store(StoreDepenseRequest $request, EnregistrerDepense $action): RedirectResponse
@@ -544,6 +579,22 @@ final class DepenseController extends Controller
         return Inertia::render('Backoffice/Depenses/Show', [
             'depense' => $details,
             'canAudit' => $canAudit,
+            // « Modifier le calcul » — paiement prof EN ATTENTE seulement
+            // (DepensePolicy@recalculer). Rouvre le calcul dans l'onglet
+            // Paiements prof avec les paramètres de la dépense ; `ppEdit`
+            // dit à l'onglet que l'enregistrement MET À JOUR cette ligne.
+            'recalculUrl' => $request->user()->can('recalculer', $depense)
+                ? route('backoffice.depenses.index', array_filter([
+                    'tab' => 'paiements-prof',
+                    'ppGroup' => $depense->group_id,
+                    // L'enseignant figé sur la ligne ; une saisie à la main
+                    // a pu l'omettre — repli sur le prof du groupe.
+                    'ppEnseignant' => $depense->enseignant_id ?? $depense->group?->enseignant_id,
+                    'ppDebut' => $depense->periode_debut?->toDateString(),
+                    'ppFin' => $depense->periode_fin?->toDateString(),
+                    'ppEdit' => $depense->id,
+                ], fn ($v): bool => $v !== null && $v !== ''))
+                : null,
         ]);
     }
 
@@ -570,7 +621,16 @@ final class DepenseController extends Controller
 
     public function update(UpdateDepenseRequest $request, Depense $depense, CorrigerMontantDepense $corrigerMontant): RedirectResponse
     {
-        $this->authorize('update', $depense);
+        // « Modifier le calcul » (07/10/2026) : un paiement prof EN ATTENTE
+        // se recalcule — par qui peut le modifier ET par l'employé qui l'a
+        // saisi. Rien n'a été débité, donc le nouveau montant ne bouge
+        // aucune caisse (CorrigerMontantDepense, branche « en attente »).
+        // La ligne doit RESTER un paiement prof : le type soumis le dit.
+        $recalcul = $request->isPaiementProf() && $request->user()->can('recalculer', $depense);
+
+        if (! $recalcul) {
+            $this->authorize('update', $depense);
+        }
         $this->assertDepenseInContext($request, $depense);
         $this->assertContextAnneeOuverte('type_depense_id');
 
@@ -587,7 +647,7 @@ final class DepenseController extends Controller
         $montantChange = $nouveauMontant !== null
             && abs(round((float) $nouveauMontant, 2) - round((float) $depense->montant, 2)) >= 0.005;
 
-        if ($montantChange && ! $request->user()->can('expenses.update-amount')) {
+        if ($montantChange && ! $recalcul && ! $request->user()->can('expenses.update-amount')) {
             throw ValidationException::withMessages([
                 'montant' => __('Only a super-admin can change the amount of an expense.'),
             ]);
@@ -604,7 +664,7 @@ final class DepenseController extends Controller
             $cnssCoche = $request->boolean('cnss');
             $cnssChange = $cnssCoche !== $depense->cnssDeduite();
 
-            if ($cnssChange && ! $request->user()->can('expenses.update-amount')) {
+            if ($cnssChange && ! $recalcul && ! $request->user()->can('expenses.update-amount')) {
                 throw ValidationException::withMessages([
                     'cnss' => __('Only a super-admin can change the CNSS deduction of a recorded payment: it changes the amount paid.'),
                 ]);

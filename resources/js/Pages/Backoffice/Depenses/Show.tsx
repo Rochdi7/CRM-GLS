@@ -3,6 +3,7 @@ import Card from '@/Components/Shared/Card';
 import DetailRow from '@/Components/Details/DetailRow';
 import EmptyState from '@/Components/Shared/EmptyState';
 import DocumentLink from '@/Components/Media/DocumentLink';
+import { t } from '@/Lib/i18n';
 import type { DepenseDetails } from '@/Types';
 
 interface DepenseShowProps {
@@ -12,6 +13,13 @@ interface DepenseShowProps {
      * trail; when false the server already omitted those fields entirely.
      */
     canAudit: boolean;
+    /**
+     * « Modifier le calcul » — lien vers le calcul de ce paiement prof dans
+     * l'onglet Paiements prof. Servi seulement pour un paiement prof EN
+     * ATTENTE que l'utilisateur peut recalculer (DepensePolicy@recalculer) ;
+     * `null` sinon. Confort d'affichage : le serveur revérifie à l'écriture.
+     */
+    recalculUrl: string | null;
 }
 
 /**
@@ -20,7 +28,7 @@ interface DepenseShowProps {
  * (an expense is never deleted). Receipt URLs come only from the
  * already-authorized Spatie Media URL, never a filesystem path.
  */
-export default function DepenseShow({ depense, canAudit }: DepenseShowProps) {
+export default function DepenseShow({ depense, canAudit, recalculUrl }: DepenseShowProps) {
     return (
         <BackofficeLayout
             title={depense.reference}
@@ -30,11 +38,21 @@ export default function DepenseShow({ depense, canAudit }: DepenseShowProps) {
                 { label: depense.reference },
             ]}
             actions={
-                depense.canViewList ? (
-                    <a href="/backoffice/depenses" className="btn btn-light d-flex align-items-center">
-                        <i className="ti ti-arrow-left me-2" />
-                        Retour à la liste
-                    </a>
+                recalculUrl !== null || depense.canViewList ? (
+                    <div className="d-flex align-items-center gap-2 flex-wrap">
+                        {recalculUrl !== null && (
+                            <a href={recalculUrl} className="btn btn-primary d-flex align-items-center">
+                                <i className="ti ti-calculator me-2" />
+                                {t('Modify the calculation')}
+                            </a>
+                        )}
+                        {depense.canViewList && (
+                            <a href="/backoffice/depenses" className="btn btn-light d-flex align-items-center">
+                                <i className="ti ti-arrow-left me-2" />
+                                Retour à la liste
+                            </a>
+                        )}
+                    </div>
                 ) : undefined
             }
         >

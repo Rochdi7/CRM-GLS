@@ -164,7 +164,28 @@ final class GetDepensesList
             $depenses->getCollection()->map(fn (Depense $d): int => $d->id)->all(),
         );
 
-        $depenses->through(fn (Depense $d): array => [
+        $depenses->through(fn (Depense $d): array => $this->ligne($d, $modifications));
+
+        return [
+            'data' => $depenses,
+            'montantTotal' => number_format((float) $montantTotal, 2, '.', ''),
+            'montantEnAttente' => number_format((float) $montantEnAttente, 2, '.', ''),
+            'enAttenteCount' => $enAttenteCount,
+        ];
+    }
+
+    /**
+     * Une ligne de liste — partagée avec « Modifier le calcul »
+     * (DepenseController@index, `recalculDepense`) pour que le modal
+     * d'édition reçoive EXACTEMENT la forme qu'il reçoit depuis la liste.
+     * Relations attendues chargées (voir le `with()` de __invoke).
+     *
+     * @param  array<int, mixed>  $modifications
+     * @return array<string, mixed>
+     */
+    public function ligne(Depense $d, array $modifications = []): array
+    {
+        return [
             'id' => $d->id,
             'reference' => $d->reference,
             'typeDepense' => $d->typeDepense?->nom,
@@ -224,13 +245,6 @@ final class GetDepensesList
             'updatedAt' => isset($modifications[$d->id]) ? $modifications[$d->id]->format('d/m/Y H:i') : null,
             'wasEdited' => isset($modifications[$d->id]),
             'showUrl' => route('backoffice.depenses.show', $d),
-        ]);
-
-        return [
-            'data' => $depenses,
-            'montantTotal' => number_format((float) $montantTotal, 2, '.', ''),
-            'montantEnAttente' => number_format((float) $montantEnAttente, 2, '.', ''),
-            'enAttenteCount' => $enAttenteCount,
         ];
     }
 

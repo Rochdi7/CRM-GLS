@@ -122,7 +122,15 @@ final class VirementController extends Controller
 
         $action->handle($data, $request->file('justificatif'), $agent, $etablissementId);
 
-        return $this->backToListPreservingFilters($request, 'backoffice.encaissements.index')
+        // Le modal de demande est partagé par les pages Paiements et
+        // Inscriptions (07/10/2026) : on revient sur celle d'où il a été
+        // ouvert. `retour` est une CLÉ d'une liste blanche, jamais une URL
+        // fournie par le client (§5).
+        $liste = $request->string('retour')->toString() === 'inscriptions'
+            ? 'backoffice.inscriptions.index'
+            : 'backoffice.encaissements.index';
+
+        return $this->backToListPreservingFilters($request, $liste)
             ->with('success', __('Bank transfer declared: it now awaits the accountant verification.'));
     }
 

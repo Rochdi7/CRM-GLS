@@ -201,6 +201,7 @@ export default function DepensesIndex({
     canCalculerPaiementProf,
     calculPaiementProf,
     calculPaiementProfFilters,
+    recalculDepense,
     calculGroupOptions,
     paliersPaie,
     cnssMontant,
@@ -234,6 +235,13 @@ export default function DepensesIndex({
     // « Ajouter un paiement prof » ouvre le modal de CALCUL du composant
     // embarqué : chaque incrément est une demande d'ouverture.
     const [calculOpenRequest, setCalculOpenRequest] = useState(0);
+    /**
+     * « Modifier le calcul » depuis la fiche d'un paiement prof EN ATTENTE :
+     * la dépense que « Enregistrer la dépense » met à JOUR au lieu d'en
+     * créer une nouvelle. Servie par le serveur (policy rejouée) ; `null`
+     * pour un calcul ordinaire.
+     */
+    const [recalculCible, setRecalculCible] = useState<DepenseRow | null>(recalculDepense);
 
     /**
      * Les paramètres du calcul en cours, sous leurs noms d'URL (`pp*`) —
@@ -248,6 +256,8 @@ export default function DepensesIndex({
         }
 
         return {
+            // Le recalcul en cours survit aux rechargements du calcul.
+            ...(recalculCible !== null ? { ppEdit: String(recalculCible.id) } : {}),
             ...(params.groupFilter !== '' ? { ppGroup: params.groupFilter } : {}),
             ...(params.enseignantFilter !== '' ? { ppEnseignant: params.enseignantFilter } : {}),
             ...(params.debut !== '' ? { ppDebut: params.debut } : {}),
@@ -329,6 +339,11 @@ export default function DepensesIndex({
      * ne touche pas aux filtres, et réciproquement).
      */
     function naviguerCalcul(params: PaiementProfCalculParams | null) {
+        // « Effacer » le calcul abandonne aussi le recalcul.
+        if (params === null) {
+            setRecalculCible(null);
+        }
+
         const carried = dateFilterEngaged && filters.dateFrom === '' && filters.dateTo === ''
             ? { ...filters, dateFrom: '-', dateTo: '-' }
             : filters;
@@ -354,6 +369,28 @@ export default function DepensesIndex({
         // onglet avec les mêmes paramètres.
         const retour = new URLSearchParams({ tab: 'paiements-prof', ...calculQuery(prefill.retour) });
         setRetourCalcul(`/backoffice/depenses?${retour.toString()}`);
+
+        // Recalcul : le modal d'ÉDITION de la dépense en attente s'ouvre,
+        // avec le résultat du calcul à la place des anciennes valeurs —
+        // la soumission la met à jour (PUT), elle n'en crée pas une autre.
+        if (recalculCible !== null) {
+            openEditDepense(recalculCible);
+            // Le groupe du calcul peut appartenir à une année passée : la
+            // case doit suivre, sinon le select s'affiche vide.
+            setGroupesAnneesPrecedentes(groupsAnneesPrecedentes.some((g) => g.id === prefill.groupId));
+            depenseForm.setData({
+                ...depenseFormFromRow(recalculCible),
+                group_id: prefill.groupId,
+                enseignant_id: prefill.enseignantId,
+                montant: prefill.montant,
+                cnss: prefill.cnss,
+                periode_debut: prefill.periodeDebut,
+                periode_fin: prefill.periodeFin,
+                description: prefill.description,
+            });
+
+            return;
+        }
 
         setEditingDepense(null);
         setProfMode(true);
@@ -544,7 +581,13 @@ export default function DepensesIndex({
             && groupsAnneesPrecedentes.some((g) => g.id === row.groupId),
         );
         depenseForm.clearErrors();
-        depenseForm.setData({
+        depenseForm.setData(depenseFormFromRow(row));
+        setShowDepenseModal(true);
+    }
+
+    function depenseFormFromRow(row: DepenseRow): DepenseFormState {
+        return {
+            ...emptyDepenseForm(),
             type_depense_id: row.typeDepenseId ?? '',
             group_id: row.groupId ?? '',
             montant: row.montant,
@@ -558,15 +601,18 @@ export default function DepensesIndex({
             mots_cles: row.motsCles ?? '',
             note: row.note ?? '',
             justificatifs: [],
-        });
-        setShowDepenseModal(true);
+        };
     }
 
     // Super-admin only (`expenses.update-amount`): the edit modal shows an
     // amount INPUT instead of the read-only figure. A refused/cancelled
     // expense is never editable at all (DepensePolicy@update).
+    // « Modifier le calcul » : le paiement prof EN ATTENTE recalculé prend
+    // le nouveau montant (rien n'a été débité) — le serveur l'accepte via
+    // DepensePolicy@recalculer, pas via `expenses.update-amount`.
+    const enRecalcul = editingDepense !== null && recalculCible !== null && editingDepense.id === recalculCible.id;
     const montantEditable = editingDepense !== null
-        && canUpdateDepenseMontant
+        && (canUpdateDepenseMontant || enRecalcul)
         && !editingDepense.isRefusee
         && !editingDepense.isAnnulee;
 
@@ -629,7 +675,12 @@ export default function DepensesIndex({
             depenseForm.post(`/backoffice/depenses/${editingDepense.id}`, {
                 forceFormData: true,
                 preserveScroll: true,
-                onSuccess: () => closeDepenseModal(),
+                onSuccess: () => {
+                    if (enRecalcul) {
+                        setRecalculCible(null);
+                    }
+                    closeDepenseModal();
+                },
                 // Reset the transform so a later create on this shared form
                 // doesn't POST with a stale _method=put (Phase 12 UX fix).
                 onFinish: () => depenseForm.transform((data) => data),
@@ -1114,6 +1165,21 @@ export default function DepensesIndex({
                 cette permission, le bouton ouvre le modal vide comme avant. */}
             {tab === 'paiements-prof' && canViewDepenses && paiementsProf && (
                 <>
+                {canCalculerPaiementProf && recalculCible !== null && (
+                    <div className="alert alert-warning d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <span>
+                            <i className="ti ti-calculator me-1" />
+                            {t('Recalculating :reference (pending): « Record the expense » will update this payment instead of creating a new one.', { reference: recalculCible.reference })}
+                        </span>
+                        <button
+                            type="button"
+                            className="btn btn-sm btn-outline-secondary"
+                            onClick={() => setRecalculCible(null)}
+                        >
+                            {t('Cancel the recalculation')}
+                        </button>
+                    </div>
+                )}
                 {canCalculerPaiementProf && (
                     <CalculPaiementProf
                         embedded
@@ -1125,6 +1191,7 @@ export default function DepensesIndex({
                         canCreateDepense
                         onNavigate={naviguerCalcul}
                         onEnregistrer={enregistrerDepuisCalcul}
+                        verrouille={recalculCible !== null}
                         openRequest={calculOpenRequest}
                     />
                 )}
@@ -1689,12 +1756,12 @@ export default function DepensesIndex({
                 footer={<FormActions form="depense-form" onCancel={closeDepenseModal} processing={depenseForm.processing} />}
             >
                 <form id="depense-form" onSubmit={submitDepense}>
-                    {editingDepense && (
+                    {/* Rien à signaler sur une dépense EN ATTENTE dont le
+                        montant est modifiable : aucun argent n'a bougé. */}
+                    {editingDepense && !(montantEditable && editingDepense.isEnAttente) && (
                         <div className="alert alert-warning">
                             {montantEditable
-                                ? editingDepense.isEnAttente
-                                    ? 'La caisse ne peut pas être modifiée. Le montant est corrigeable : la dépense est en attente, rien n\'a encore été débité.'
-                                    : 'La caisse ne peut pas être modifiée. Corriger le montant débite (ou recrédite) la caisse de la différence.'
+                                ? 'La caisse ne peut pas être modifiée. Corriger le montant débite (ou recrédite) la caisse de la différence.'
                                 : 'Le montant et la caisse ne peuvent pas être modifiés après création.'}
                         </div>
                     )}

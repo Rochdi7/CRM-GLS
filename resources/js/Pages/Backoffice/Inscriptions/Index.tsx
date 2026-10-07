@@ -24,6 +24,7 @@ import MultiSelectField from '@/Components/Forms/MultiSelectField';
 import TextareaField from '@/Components/Forms/TextareaField';
 import PhoneField from '@/Components/Forms/PhoneField';
 import FormActions from '@/Components/Forms/FormActions';
+import DemandeVirementModal, { METHODE_VIREMENT, virementCouvreLaLigne } from '@/Components/Payments/DemandeVirementModal';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import { statutVariant } from '@/Lib/inscriptionStatut';
 import type {
@@ -291,6 +292,7 @@ export default function InscriptionsIndex({
     motifsAnnulation,
     canCreatePayment,
     methodesPaiement,
+    canUpdatePaymentDate,
 }: InscriptionsPageProps) {
     const isLoading = useInertiaLoading();
     const [showModal, setShowModal] = useState(false);
@@ -377,6 +379,9 @@ export default function InscriptionsIndex({
     });
 
     const methodePaiementOptions: SelectOption[] = (methodesPaiement ?? []).map((m) => ({ value: m, label: m }));
+    // Ligne dont la méthode « Virement » vient d'être choisie : le modal de
+    // DEMANDE de virement (partagé avec la page Paiements) s'ouvre dessus.
+    const [virementTarget, setVirementTarget] = useState<{ index: number; line: PaymentLine } | null>(null);
 
     function openPaiement(inscription: InscriptionRow): void {
         setPaiementPrompt(null);
@@ -409,7 +414,9 @@ export default function InscriptionsIndex({
                         virementEnAttente: fee.virementEnAttente ?? '0.00',
                         dateEcheance: fee.dateEcheance,
                         montant: '',
-                        methode: METHODE_ESPECES,
+                        // Tout le reste déjà déclaré par virement : la ligne
+                        // attend le comptable, elle s'affiche « Virement ».
+                        methode: Number(fee.virementEnAttente ?? 0) >= Number(fee.reste) ? METHODE_VIREMENT : METHODE_ESPECES,
                         datePaiement: today,
                         chequeId: '',
                     })),
@@ -441,6 +448,35 @@ export default function InscriptionsIndex({
             ...previous,
             payment_lines: previous.payment_lines.map((line, i) => (i === index ? { ...line, ...patch } : line)),
         }));
+    }
+
+    function openVirement(index: number, line: PaymentLine): void {
+        setPaiementLine(index, { methode: METHODE_VIREMENT });
+        setVirementTarget({ index, line });
+    }
+
+    function closeVirement(): void {
+        if (virementTarget) {
+            // Demande abandonnée : la ligne revient à sa méthode d'avant.
+            setPaiementLine(virementTarget.index, {
+                methode: virementCouvreLaLigne(virementTarget.line) ? METHODE_VIREMENT : METHODE_ESPECES,
+            });
+        }
+        setVirementTarget(null);
+    }
+
+    /** Rien n'est encaissé : la part déclarée passe « en attente » sur la ligne. */
+    function virementDeclare(montant: number): void {
+        const target = virementTarget;
+        setVirementTarget(null);
+        if (target) {
+            const enAttente = Number(target.line.virementEnAttente ?? 0) + montant;
+            setPaiementLine(target.index, {
+                montant: '',
+                methode: enAttente >= Number(target.line.reste) ? METHODE_VIREMENT : METHODE_ESPECES,
+                virementEnAttente: enAttente.toFixed(2),
+            });
+        }
     }
 
     function submitPaiement(event: FormEvent): void {
@@ -2904,6 +2940,7 @@ export default function InscriptionsIndex({
                                                 const dateError = rowErrors[`payment_lines.${index}.date_paiement`];
                                                 const chequeError = rowErrors[`payment_lines.${index}.cheque_id`];
                                                 const isCheque = line.methode === METHODE_CHEQUE;
+                                                const aVerifier = virementCouvreLaLigne(line);
 
                                                 return (
                                                     <Fragment key={line.feeId}>
@@ -2927,23 +2964,40 @@ export default function InscriptionsIndex({
                                                                             setPaiementLine(index, { montant: event.target.value })
                                                                         }
                                                                         aria-invalid={montantError ? true : undefined}
+                                                                        disabled={aVerifier}
+                                                                        title={aVerifier ? 'Tout le reste est déjà déclaré par virement' : undefined}
                                                                     />
                                                                     <span className="input-group-text">DH</span>
                                                                 </div>
                                                                 {montantError && <div className="text-danger fs-12 mt-1">{montantError}</div>}
                                                             </td>
                                                             <td>
-                                                                <SelectField
-                                                                    id={`ins-pl-methode-${index}`}
-                                                                    options={methodePaiementOptions}
-                                                                    value={line.methode}
-                                                                    onChange={(event) =>
-                                                                        setPaiementLine(index, {
-                                                                            methode: event.target.value,
-                                                                            chequeId: event.target.value === METHODE_CHEQUE ? line.chequeId : '',
-                                                                        })
-                                                                    }
-                                                                />
+                                                                {aVerifier ? (
+                                                                    /* Le comptable n'a pas encore tranché : rien ne
+                                                                       se paie plus sur cette ligne. */
+                                                                    <span className="badge badge-soft-info text-normal-case d-inline-flex align-items-center py-2">
+                                                                        <i className="ti ti-building-bank me-1" aria-hidden="true" />
+                                                                        Virement · à vérifier
+                                                                    </span>
+                                                                ) : (
+                                                                    <SelectField
+                                                                        id={`ins-pl-methode-${index}`}
+                                                                        options={methodePaiementOptions}
+                                                                        value={line.methode}
+                                                                        onChange={(event) => {
+                                                                            // « Virement » n'encaisse pas la ligne : il
+                                                                            // ouvre la DEMANDE vérifiée par le comptable.
+                                                                            if (event.target.value === METHODE_VIREMENT) {
+                                                                                openVirement(index, line);
+                                                                                return;
+                                                                            }
+                                                                            setPaiementLine(index, {
+                                                                                methode: event.target.value,
+                                                                                chequeId: event.target.value === METHODE_CHEQUE ? line.chequeId : '',
+                                                                            });
+                                                                        }}
+                                                                    />
+                                                                )}
                                                             </td>
                                                             <td>
                                                                 <DateField
@@ -3021,6 +3075,18 @@ export default function InscriptionsIndex({
                     />
                 </form>
             </Modal>
+
+            <DemandeVirementModal
+                line={virementTarget?.line ?? null}
+                studentId={paiementForm.data.student_id}
+                inscriptionId={paiementForm.data.inscription_id}
+                studentLabel={paiementTarget?.student ?? ''}
+                inscriptionLabel={paiementTarget ? [paiementTarget.reference, paiementTarget.groupe].filter(Boolean).join(' - ') : ''}
+                canUpdateDate={canUpdatePaymentDate ?? false}
+                retour="inscriptions"
+                onCancel={closeVirement}
+                onDeclared={virementDeclare}
+            />
 
             <ConfirmDialog
                 show={deleteTarget !== null}

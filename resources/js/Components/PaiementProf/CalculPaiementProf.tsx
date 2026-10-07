@@ -107,6 +107,12 @@ interface CalculPaiementProfProps {
      * la liste des paiements enregistrés est juste en dessous.
      */
     embedded?: boolean;
+    /**
+     * « Modifier le calcul » d'un paiement prof EN ATTENTE (07/10/2026) :
+     * le calcul est celui de la dépense recalculée — ni « Effacer » ni
+     * « Modifier » ; seul « Enregistrer la dépense » reste.
+     */
+    verrouille?: boolean;
 }
 
 /**
@@ -145,6 +151,7 @@ export default function CalculPaiementProf({
     onEnregistrer,
     openRequest = 0,
     embedded = false,
+    verrouille = false,
 }: CalculPaiementProfProps) {
     // Ajustements manuels — état LOCAL, jamais persisté.
     const [ajustements, setAjustements] = useState<Record<number, string>>({});
@@ -512,6 +519,7 @@ export default function CalculPaiementProf({
                         </span>
                     )}
                 </div>
+                {!verrouille && (
                 <div className="d-flex gap-2">
                     {calcul !== null && (
                         <button type="button" className="btn btn-outline-secondary" onClick={onReset}>
@@ -524,6 +532,7 @@ export default function CalculPaiementProf({
                         {calcul === null ? t('New calculation') : t('Change')}
                     </button>
                 </div>
+                )}
             </div>
             )}
 

@@ -101,6 +101,19 @@ class Depense extends Model implements HasMedia
         return $this->statut === self::STATUT_EN_ATTENTE;
     }
 
+    /**
+     * « Paiement prof » EN ATTENTE, rattaché à un groupe : son calcul peut
+     * être refait (« Modifier le calcul », 07/10/2026). Rien n'a encore été
+     * débité, donc changer le montant ne bouge aucune caisse — l'approbation
+     * débitera le nouveau montant. Une fois décidé, il n'est plus recalculable.
+     */
+    public function estRecalculable(): bool
+    {
+        return $this->isEnAttente()
+            && $this->group_id !== null
+            && TypeDepense::query()->whereKey($this->type_depense_id)->value('nom') === TypeDepense::SYSTEM_PAIEMENT_PROF;
+    }
+
     /** Approved: the till was debited when the decision was taken. */
     public function isApprouvee(): bool
     {

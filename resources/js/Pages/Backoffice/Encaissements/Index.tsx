@@ -1,5 +1,5 @@
 import { router, useForm } from '@inertiajs/react';
-import { Fragment, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAutoOpenCreate } from '@/Hooks/useAutoOpenCreate';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
@@ -19,6 +19,7 @@ import DateField from '@/Components/Forms/DateField';
 import FormField from '@/Components/Forms/FormField';
 import TextareaField from '@/Components/Forms/TextareaField';
 import FormActions from '@/Components/Forms/FormActions';
+import DemandeVirementModal, { virementCouvreLaLigne } from '@/Components/Payments/DemandeVirementModal';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { t } from '@/Lib/i18n';
 import { statutColor } from '@/Lib/inscriptionStatut';
@@ -154,39 +155,6 @@ const SOLDE_OPTIONS: SelectOption[] = [
     { value: 'tous', label: 'Toutes' },
 ];
 
-/**
- * Demande de VIREMENT (07/10/2026). Choisir « Virement » sur une ligne de
- * frais n'encaisse rien : ça ouvre un modal qui DÉCLARE le virement — nom du
- * payeur, référence bancaire, justificatif — pour que le comptable le
- * vérifie sur le relevé puis le valide. L'encaissement naît à ce moment-là,
- * daté de `date_operation` : le jour où l'étudiant s'est présenté.
- */
-interface VirementFormState {
-    student_id: number | '';
-    inscription_id: number | '';
-    fee_id: number | '';
-    montant: string;
-    nom_payeur: string;
-    reference_virement: string;
-    date_operation: string;
-    note: string;
-    justificatif: File | null;
-}
-
-function emptyVirementForm(): VirementFormState {
-    return {
-        student_id: '',
-        inscription_id: '',
-        fee_id: '',
-        montant: '',
-        nom_payeur: '',
-        reference_virement: '',
-        date_operation: new Date().toISOString().slice(0, 10),
-        note: '',
-        justificatif: null,
-    };
-}
-
 function emptyAvanceForm(): AvanceFormState {
     return {
         student_id: '',
@@ -259,7 +227,6 @@ export default function EncaissementsIndex({ encaissements, montantTotal, vireme
     // empilés partageraient la touche Échap), et retrouve ses lignes
     // intactes à la fermeture.
     const [virementTarget, setVirementTarget] = useState<{ index: number; line: PaymentLine } | null>(null);
-    const virementForm = useForm<VirementFormState>(emptyVirementForm());
     const [emailTarget, setEmailTarget] = useState<EncaissementRow | null>(null);
     // Why the WhatsApp send could not happen (no reachable number, or an
     // APP_URL the student's phone cannot open) — the server owns that
@@ -1032,41 +999,11 @@ export default function EncaissementsIndex({ encaissements, montantTotal, vireme
 
     function openVirement(index: number, line: PaymentLine) {
         setLine(index, { methode: 'Virement' });
-        virementForm.clearErrors();
-        virementForm.setData({
-            student_id: createForm.data.student_id,
-            inscription_id: createForm.data.inscription_id,
-            fee_id: line.feeId,
-            // Pré-rempli avec ce que la ligne porte déjà, sinon ce qu'il
-            // reste à payer MOINS les virements déjà déclarés dessus.
-            montant: line.montant !== '' ? line.montant : virementResteDeclarable(line).toFixed(2),
-            nom_payeur: '',
-            reference_virement: '',
-            date_operation: (can?.updateDate ? line.datePaiement : '') || new Date().toISOString().slice(0, 10),
-            note: '',
-            justificatif: null,
-        });
         setVirementTarget({ index, line });
     }
 
-    /** Reste dû du frais moins les virements déjà en attente — le plafond que DemanderVirement applique. */
-    function virementResteDeclarable(line: PaymentLine): number {
-        return Math.max(0, Number(line.reste) - Number(line.virementEnAttente ?? 0));
-    }
-
-    /**
-     * Tout le reste de la ligne est déjà déclaré par virement : elle attend
-     * le comptable, rien ne se paie plus dessus — la ligne le MONTRE
-     * (méthode « Virement » verrouillée, badge « à vérifier », saisie
-     * grisée) au lieu de retomber sur « Espèces » comme si rien n'avait été
-     * fait (signalé le 07/10/2026).
-     */
-    function virementCouvreLaLigne(line: PaymentLine): boolean {
-        return Number(line.virementEnAttente ?? 0) > 0 && virementResteDeclarable(line) <= 0;
-    }
-
-    function closeVirement(annule = true) {
-        if (annule && virementTarget) {
+    function closeVirement() {
+        if (virementTarget) {
             // Demande abandonnée : la ligne revient à sa méthode d'avant
             // — « Virement » si elle était déjà entièrement déclarée.
             setLine(virementTarget.index, {
@@ -1074,34 +1011,25 @@ export default function EncaissementsIndex({ encaissements, montantTotal, vireme
             });
         }
         setVirementTarget(null);
-        virementForm.reset();
-        virementForm.clearErrors();
     }
 
-    function submitVirement(event: FormEvent) {
-        event.preventDefault();
-        virementForm.post('/backoffice/virements', {
-            preserveScroll: true,
-            forceFormData: true,
-            onSuccess: () => {
-                const target = virementTarget;
-                closeVirement(false);
-                // Le reste de la ligne n'a pas bougé (rien n'est encaissé),
-                // mais la part déclarée est maintenant « en attente » : la
-                // ligne le dit, et le plafond d'une seconde demande baisse.
-                // Entièrement déclarée ⇒ elle reste « Virement » (à
-                // vérifier) ; sinon le reliquat se paie par un autre moyen.
-                if (target) {
-                    const enAttente = Number(target.line.virementEnAttente ?? 0) + Number(virementForm.data.montant || 0);
-                    const couvre = enAttente >= Number(target.line.reste);
-                    setLine(target.index, {
-                        montant: '',
-                        methode: couvre ? 'Virement' : 'Espèces',
-                        virementEnAttente: enAttente.toFixed(2),
-                    });
-                }
-            },
-        });
+    /**
+     * Le reste de la ligne n'a pas bougé (rien n'est encaissé), mais la part
+     * déclarée est maintenant « en attente » : la ligne le dit, et le plafond
+     * d'une seconde demande baisse. Entièrement déclarée ⇒ elle reste
+     * « Virement » (à vérifier) ; sinon le reliquat se paie autrement.
+     */
+    function virementDeclare(montant: number) {
+        const target = virementTarget;
+        setVirementTarget(null);
+        if (target) {
+            const enAttente = Number(target.line.virementEnAttente ?? 0) + montant;
+            setLine(target.index, {
+                montant: '',
+                methode: enAttente >= Number(target.line.reste) ? 'Virement' : 'Espèces',
+                virementEnAttente: enAttente.toFixed(2),
+            });
+        }
     }
 
     function submitCreate(event: FormEvent) {
@@ -2071,159 +1999,16 @@ export default function EncaissementsIndex({ encaissements, montantTotal, vireme
                 déclare (payeur, référence bancaire, justificatif), le
                 comptable vérifie sur le relevé puis valide ; l'encaissement
                 naît alors, daté du jour de l'opération. */}
-            <Modal
-                show={virementTarget !== null}
-                title="Déclarer un virement"
-                onClose={closeVirement}
-                processing={virementForm.processing}
-                size="lg"
-                footer={
-                    <FormActions
-                        form="virement-form"
-                        onCancel={closeVirement}
-                        processing={virementForm.processing}
-                        submitLabel="Envoyer la demande"
-                        processingLabel="Envoi…"
-                    />
-                }
-            >
-                {virementTarget && (
-                    <form id="virement-form" onSubmit={submitVirement}>
-                        <div className="row">
-                            <div className="col-md-6 mb-3">
-                                <div className="text-muted small mb-1">Étudiant</div>
-                                <div className="fw-medium text-uppercase">
-                                    {studentOptions.find((s) => s.value === createForm.data.student_id)?.label ?? '-'}
-                                </div>
-                            </div>
-                            <div className="col-md-6 mb-3">
-                                <div className="text-muted small mb-1">Inscription</div>
-                                <div className="fw-medium">
-                                    {inscriptionOptions.find((i) => i.value === createForm.data.inscription_id)?.label ?? '-'}
-                                </div>
-                            </div>
-                            <div className="col-md-6 mb-3">
-                                <div className="text-muted small mb-1">Frais réglé</div>
-                                <div className="fw-medium text-uppercase">
-                                    {virementTarget.line.nom}
-                                    {virementTarget.line.dateEcheance && (
-                                        <span className="text-muted fw-normal text-normal-case ms-2">
-                                            (échéance {virementTarget.line.dateEcheance})
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-                            <div className="col-md-6 mb-3">
-                                <div className="text-muted small mb-1">Reste à payer</div>
-                                <div className="fw-medium">
-                                    {Number(virementTarget.line.reste).toFixed(2)} MAD
-                                    {Number(virementTarget.line.virementEnAttente ?? 0) > 0 && (
-                                        <span className="text-warning fw-normal text-normal-case ms-2 fs-12">
-                                            dont {Number(virementTarget.line.virementEnAttente).toFixed(2)} MAD déjà déclarés par virement
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                        <div className="row">
-                            <div className="col-md-6">
-                                <FormField
-                                    id="vir-montant"
-                                    label="Montant du virement (MAD)"
-                                    type="number"
-                                    step="0.01"
-                                    min="0.01"
-                                    max={virementResteDeclarable(virementTarget.line)}
-                                    required
-                                    value={virementForm.data.montant}
-                                    onChange={(e) => virementForm.setData('montant', e.target.value)}
-                                    error={virementForm.errors.montant}
-                                />
-                            </div>
-                            <div className="col-md-6">
-                                {/*
-                                  * Aujourd'hui par défaut ; seul le super-admin
-                                  * (`payments.update-date`) la modifie.
-                                  * VirementController@store force la date du
-                                  * jour pour tous les autres.
-                                  */}
-                                <DateField
-                                    id="vir-date-operation"
-                                    label="Date de l'opération"
-                                    required
-                                    disabled={!(can?.updateDate ?? false)}
-                                    value={virementForm.data.date_operation}
-                                    onChange={(e) => virementForm.setData('date_operation', e.target.value)}
-                                    error={virementForm.errors.date_operation}
-                                />
-                            </div>
-                            <div className="col-md-6">
-                                <FormField
-                                    id="vir-nom-payeur"
-                                    label="Nom du payeur"
-                                    required
-                                    maxLength={150}
-                                    placeholder="Tel qu'il figure sur l'ordre de virement"
-                                    value={virementForm.data.nom_payeur}
-                                    onChange={(e) => virementForm.setData('nom_payeur', e.target.value)}
-                                    error={virementForm.errors.nom_payeur}
-                                />
-                            </div>
-                            <div className="col-md-6">
-                                <FormField
-                                    id="vir-reference"
-                                    label="Référence du virement"
-                                    required
-                                    maxLength={100}
-                                    placeholder="Référence bancaire de l'opération"
-                                    value={virementForm.data.reference_virement}
-                                    onChange={(e) => virementForm.setData('reference_virement', e.target.value)}
-                                    error={virementForm.errors.reference_virement}
-                                />
-                            </div>
-                            <div className="col-12 mb-3">
-                                <label className="form-label" htmlFor="vir-justificatif">
-                                    Justificatif du virement<span className="text-danger ms-1">*</span>
-                                </label>
-                                <input
-                                    id="vir-justificatif"
-                                    type="file"
-                                    accept=".jpg,.jpeg,.png,.webp,.pdf"
-                                    required
-                                    className={`form-control${virementForm.errors.justificatif ? ' is-invalid' : ''}`}
-                                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                                        virementForm.setData('justificatif', event.target.files?.[0] ?? null)
-                                    }
-                                />
-                                {virementForm.errors.justificatif && (
-                                    <div className="invalid-feedback d-block">{virementForm.errors.justificatif}</div>
-                                )}
-                                <div className="form-text text-normal-case">Capture ou scan de l'ordre de virement (image ou PDF, 5 Mo max).</div>
-                            </div>
-                            <div className="col-12">
-                                <TextareaField
-                                    id="vir-note"
-                                    label="Note"
-                                    rows={2}
-                                    value={virementForm.data.note}
-                                    onChange={(e) => virementForm.setData('note', e.target.value)}
-                                    error={virementForm.errors.note}
-                                />
-                            </div>
-                        </div>
-                        {(virementForm.errors.fee_id || virementForm.errors.inscription_id || virementForm.errors.student_id) && (
-                            <div className="alert alert-danger text-normal-case mb-3">
-                                {virementForm.errors.fee_id ?? virementForm.errors.inscription_id ?? virementForm.errors.student_id}
-                            </div>
-                        )}
-                        <div className="alert alert-info text-normal-case mb-0">
-                            <i className="ti ti-info-circle me-1" aria-hidden="true" />
-                            Rien n'est encaissé maintenant : le comptable vérifie le virement sur le relevé bancaire,
-                            puis le valide. Le paiement sera alors enregistré à la date de l'opération ci-dessus.
-                        </div>
-                    </form>
-                )}
-            </Modal>
+            <DemandeVirementModal
+                line={virementTarget?.line ?? null}
+                studentId={createForm.data.student_id}
+                inscriptionId={createForm.data.inscription_id}
+                studentLabel={String(studentOptions.find((o) => o.value === createForm.data.student_id)?.label ?? '')}
+                inscriptionLabel={String(inscriptionOptions.find((o) => o.value === createForm.data.inscription_id)?.label ?? '')}
+                canUpdateDate={can?.updateDate ?? false}
+                onCancel={closeVirement}
+                onDeclared={virementDeclare}
+            />
 
             {/* Edit modal — wimschool-style layout: read-only context fields
                 (étudiant / frais / montant total / reste à payer / montant de

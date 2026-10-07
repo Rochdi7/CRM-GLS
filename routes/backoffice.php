@@ -803,8 +803,12 @@ Route::prefix('backoffice')
             Route::get('depenses', [DepenseController::class, 'index'])->name('depenses.index');
             Route::post('depenses', [DepenseController::class, 'store'])
                 ->middleware('permission:expenses.create')->name('depenses.store');
+            // `expenses.create` aussi : l'employé qui a saisi un paiement prof
+            // EN ATTENTE peut en refaire le calcul (« Modifier le calcul »,
+            // 07/10/2026). Le contrôleur tranche : policy `update`, sinon
+            // `recalculer` (sa propre demande, rien encore débité).
             Route::put('depenses/{depense}', [DepenseController::class, 'update'])
-                ->middleware('permission:expenses.update')->name('depenses.update');
+                ->middleware('permission:expenses.update|expenses.create')->name('depenses.update');
             // Approval flow (Paramètres → Système « Validation des dépenses »).
             // Approving is what debits the till — a pending dépense has moved
             // no money at all. Refusing keeps the row (audit trail), never

@@ -185,6 +185,46 @@ final class VirementDemandeTest extends TestCase
         $this->assertSame('1000.00', $fees[0]['virementEnAttente']);
     }
 
+    /**
+     * Toute l'équipe guichet déclare un virement — assistante administrative
+     * et consultant compris ; seule la VALIDATION reste au comptable et au
+     * super-admin (07/10/2026).
+     */
+    public function test_every_front_office_role_can_declare_but_not_validate_a_transfer(): void
+    {
+        foreach (['administrative-assistant', 'consultant'] as $role) {
+            $user = User::factory()->create();
+            $user->assignRole($role);
+            Employee::factory()->create(['user_id' => $user->id, 'etablissement_id' => $this->centre->id]);
+            $user = $user->fresh();
+            [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1500);
+
+            $this->declarer($user, $student, $inscription, $fee)->assertSessionHasNoErrors()->assertRedirect();
+            $this->assertFalse($user->can('virements.validate'), $role);
+        }
+
+        $this->assertSame(2, Virement::query()->where('statut', Virement::STATUT_EN_ATTENTE)->count());
+    }
+
+    /**
+     * Le modal de demande est aussi ouvert depuis la page Inscriptions (son
+     * modal « Ajouter un paiement » offre désormais « Virement ») : la
+     * demande y ramène, au lieu de jeter le guichet sur la page Paiements.
+     */
+    public function test_a_transfer_declared_from_the_inscriptions_page_returns_there(): void
+    {
+        $guichet = $this->userWith('payments.view', 'payments.create', 'registrations.view');
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1500);
+
+        $this->declarer($guichet, $student, $inscription, $fee, ['retour' => 'inscriptions'])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('backoffice.inscriptions.index'));
+
+        // Toute autre valeur retombe sur la page Paiements — jamais une URL du client.
+        $this->declarer($guichet, $student, $inscription, $fee, ['retour' => 'https://evil.example', 'montant' => '100'])
+            ->assertRedirect(route('backoffice.encaissements.index'));
+    }
+
     public function test_only_the_super_admin_chooses_the_operation_date(): void
     {
         [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1500);
