@@ -12,6 +12,7 @@ use App\Http\Controllers\Backoffice\BanqueController;
 use App\Http\Controllers\Backoffice\CaisseController;
 use App\Http\Controllers\Backoffice\CaisseTransferController;
 use App\Http\Controllers\Backoffice\ChequeController;
+use App\Http\Controllers\Backoffice\VirementController;
 use App\Http\Controllers\Backoffice\ContextController;
 use App\Http\Controllers\Backoffice\CreneauController;
 use App\Http\Controllers\Backoffice\DashboardController;
@@ -775,6 +776,23 @@ Route::prefix('backoffice')
             // Feeds the "Payer avec un chèque" dropdown in the payment form.
             Route::get('students/{student}/cheques', [ChequeController::class, 'studentCheques'])
                 ->name('students.cheques');
+
+            // Virements (07/10/2026) — un virement bancaire n'est plus
+            // encaissé directement : le guichet le DÉCLARE depuis le modal
+            // « Enregistrer un paiement » (méthode « Virement » → modal de
+            // demande : payeur, référence bancaire, justificatif), et le
+            // COMPTABLE le vérifie. Déclarer et lire = les permissions du
+            // paiement qu'il deviendra ; décider = `virements.validate`
+            // (preset comptable + bypass super-admin). L'encaissement naît
+            // à la validation (ValiderVirement), daté du jour de la demande.
+            Route::get('virements', [VirementController::class, 'index'])
+                ->middleware('permission:payments.view')->name('virements.index');
+            Route::post('virements', [VirementController::class, 'store'])
+                ->middleware('permission:payments.create')->name('virements.store');
+            Route::patch('virements/{virement}/valider', [VirementController::class, 'valider'])
+                ->middleware('permission:virements.validate')->name('virements.valider');
+            Route::patch('virements/{virement}/refuser', [VirementController::class, 'refuser'])
+                ->middleware('permission:virements.validate')->name('virements.refuser');
 
             // Gestion des dépenses — ONE Inertia page hosting dépenses +
             // remboursements as client-side React tabs (Types de dépenses

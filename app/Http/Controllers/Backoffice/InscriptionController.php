@@ -123,7 +123,10 @@ final class InscriptionController extends Controller
             // PAYMENT permission, not a registrations one. UI convenience
             // only — EncaissementController@store re-authorizes.
             'canCreatePayment' => $request->user()->can('payments.create'),
-            'methodesPaiement' => Encaissement::METHODES,
+            // Sans « Virement » (07/10/2026) : un virement se DÉCLARE depuis
+            // la page Encaissements (demande vérifiée par le comptable), il
+            // ne s'encaisse plus directement — le serveur refuse la ligne.
+            'methodesPaiement' => Encaissement::METHODES_ENCAISSEMENT_DIRECT,
             // Cancellation reasons for the "Annuler l'inscription" form.
             // A closure so a partial reload that doesn't ask for it skips the
             // query (CLAUDE.md §17 performance rules). « Changement de

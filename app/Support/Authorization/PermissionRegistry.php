@@ -416,6 +416,17 @@ final class PermissionRegistry
                 // leur lien est détaché (SupprimerCheque).
                 'cheques.delete' => 'Supprimer un chèque (super-admin)',
             ],
+            'Virements' => [
+                // Un virement bancaire est DÉCLARÉ par le guichet (modal
+                // « Enregistrer un paiement », méthode « Virement » —
+                // `payments.create`, aucune permission propre) puis VÉRIFIÉ
+                // par le comptable (07/10/2026) : valider crée
+                // l'encaissement et crédite le compte « Virement » du centre,
+                // refuser conserve la ligne avec son motif. Même forme que
+                // `cheques.validate-deposit` : celui qui a déclaré le
+                // virement ne le valide jamais (ValiderVirement le refuse).
+                'virements.validate' => 'Valider ou refuser une demande de virement (comptable)',
+            ],
             'Transferts de caisse' => [
                 'cash-transfers.view' => 'Consulter les transferts de caisse',
                 'cash-transfers.create' => 'Demander un transfert de caisse',
@@ -1047,6 +1058,10 @@ final class PermissionRegistry
                 // accepte ou les rejette (30/09/2026).
                 'cheques.validate-deposit',
                 'cheques.cancel',
+                // Vérifie les virements déclarés par le guichet sur le relevé
+                // bancaire, puis les valide (l'encaissement naît alors) ou
+                // les refuse (07/10/2026).
+                'virements.validate',
                 'cash-transfers.create', 'cash-transfers.update',
                 // Le comptable tient une caisse : il doit pouvoir accepter
                 // un transfert entrant vers SA propre caisse (regle

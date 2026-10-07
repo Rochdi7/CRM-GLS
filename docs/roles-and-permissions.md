@@ -300,7 +300,7 @@ Super-admins see everything via `Gate::before` regardless.
 | `financial-director` | `$operations` + `$managementEdits` + caisses, types de dépenses, `cash-transfers.validate`, audit. |
 | `pedagogical-director` | `$operations` + `$managementEdits` + salles/frais, `employees.view`, audit. |
 | `hr-manager` | `$operations` + `$managementEdits` + employés (view+update), `users.view`, audit. |
-| `accountant` | `$financeReadOnly` + toutes les écritures financières (create+update) — inchangé le 30/08/2026, sa fiche de poste correspondait déjà. |
+| `accountant` | `$financeReadOnly` + toutes les écritures financières (create+update) — inchangé le 30/08/2026, sa fiche de poste correspondait déjà. Depuis le 07/10/2026 il porte aussi `virements.validate` : il vérifie sur le relevé bancaire les virements déclarés par le guichet et les valide (l'encaissement naît alors) ou les refuse. |
 | `quality-director` | Read-only across every module, incl. `audit-logs.view`. Changes nothing. |
 | `consultant` | `$operations` exactly. |
 | `administrative-assistant` | `$operations` exactly — identical to `consultant` (asserted by a test). |

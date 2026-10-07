@@ -38,6 +38,7 @@ use App\Models\Student;
 use App\Models\StudentTransfer;
 use App\Models\TypeDepense;
 use App\Models\User;
+use App\Models\Virement;
 use App\Support\Access\HiddenAccount;
 
 /**
@@ -85,7 +86,7 @@ final class AuditLogRegistry
      */
     private const FINANCE = [
         'encaissement', 'depense', 'remboursement', 'caisse_transfer',
-        'cheque', 'caisse', 'inscription_fee',
+        'cheque', 'virement', 'caisse', 'inscription_fee',
     ];
 
     /**
@@ -102,6 +103,7 @@ final class AuditLogRegistry
             Remboursement::class => ['remboursement', 'Remboursement'],
             CaisseTransfer::class => ['caisse_transfer', 'Transfert de caisse'],
             Cheque::class => ['cheque', 'Chèque'],
+            Virement::class => ['virement', 'Virement'],
             Caisse::class => ['caisse', 'Caisse'],
             InscriptionFee::class => ['inscription_fee', "Frais d'inscription"],
 

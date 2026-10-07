@@ -47,6 +47,20 @@ class Encaissement extends Model
         self::METHODE_VIREMENT,
     ];
 
+    /**
+     * Méthodes qu'un paiement de frais peut encaisser DIRECTEMENT depuis le
+     * modal « Enregistrer un paiement » (07/10/2026). « Virement » n'en fait
+     * plus partie : il est DÉCLARÉ (Virement, demande en attente) puis
+     * vérifié par le comptable, et l'encaissement naît à la validation
+     * (ValiderVirement) — avec la méthode « Virement », qui reste donc une
+     * valeur légitime de la colonne.
+     */
+    public const METHODES_ENCAISSEMENT_DIRECT = [
+        self::METHODE_ESPECES,
+        self::METHODE_TPE,
+        self::METHODE_CHEQUE,
+    ];
+
     protected $fillable = [
         'reference', 'legacy_ref', 'legacy_source', 'etablissement_id', 'student_id', 'inscription_fee_id', 'applied_from_encaissement_id', 'cheque_id', 'montant', 'methode',
         'date_paiement', 'avance_expire_le', 'caisse_id', 'agent_id',

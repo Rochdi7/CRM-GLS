@@ -71,7 +71,12 @@ final class StoreEncaissementRequest extends FormRequest
             $isCheque = ($line['methode'] ?? null) === Encaissement::METHODE_CHEQUE;
 
             $rules["payment_lines.{$i}.montant"] = ['required', 'numeric', 'min:0.01', "max:{$reste}"];
-            $rules["payment_lines.{$i}.methode"] = ['required', Rule::in(Encaissement::METHODES)];
+            // ⚠ « Virement » n'est plus encaissé ici (07/10/2026) : la
+            // méthode ouvre le modal de DEMANDE de virement, vérifiée par le
+            // comptable (VirementController@store). Une ligne qui la soumet
+            // quand même est refusée — sinon l'argent entrerait avant d'être
+            // vérifié, ce que le flux de demande existe pour empêcher.
+            $rules["payment_lines.{$i}.methode"] = ['required', Rule::in(Encaissement::METHODES_ENCAISSEMENT_DIRECT)];
             $rules["payment_lines.{$i}.date_paiement"] = ['required', 'date'];
             $rules["payment_lines.{$i}.cheque_id"] = [$isCheque ? 'required' : 'nullable', 'exists:cheques,id'];
         }
@@ -84,6 +89,7 @@ final class StoreEncaissementRequest extends FormRequest
         return [
             'payment_lines.*.montant.max' => __('The amount cannot exceed the remaining balance of this fee.'),
             'payment_lines.*.cheque_id.required' => __('Select a recorded cheque to pay with.'),
+            'payment_lines.*.methode.in' => __('A bank transfer is declared as a request and verified by the accountant: it cannot be recorded directly.'),
         ];
     }
 }
