@@ -2287,6 +2287,12 @@ export interface EncaissementsPageProps {
     encaissements: PaginatedData<EncaissementRow>;
     /** Sum of `montant` over every row matching the current filters/tab (not just the page shown). */
     montantTotal: MoneyDisplay;
+    /**
+     * Virements déclarés et pas encore vérifiés (07/10/2026) — de l'argent
+     * annoncé, PAS encaissé : il n'entre dans `montantTotal` qu'à la
+     * validation par le comptable. Portée centre, hors filtres.
+     */
+    virementsEnAttente: VirementsEnAttente;
     caisses: FinanceOption[];
     students: FinanceOption[];
     /** Groups of the active centre + année — the « Groupe » filter's options. */
@@ -2476,6 +2482,13 @@ export interface UnpaidFee {
     montantInitial: MoneyDisplay;
     paye: MoneyDisplay;
     reste: MoneyDisplay;
+    /**
+     * Virements DÉCLARÉS sur ce frais et pas encore vérifiés par le
+     * comptable (07/10/2026). Ils ne réduisent pas `reste` (rien n'est
+     * encaissé avant la validation) ; affiché pour que le même virement ne
+     * soit pas déclaré deux fois — le serveur plafonne de toute façon.
+     */
+    virementEnAttente: MoneyDisplay;
     statut: string;
     dateEcheance: string | null;
 }
@@ -2511,12 +2524,74 @@ export interface PaymentLine {
     nom: string;
     montantInitial: string;
     reste: string;
+    /** Virements déclarés sur ce frais, en attente du comptable (voir UnpaidFee). */
+    virementEnAttente: string;
     dateEcheance: string | null;
     montant: string;
     methode: string;
     datePaiement: string;
     /** Tracked chèque (Chèques module) this row pays with, when methode = Chèque — required, no manual entry fallback. */
     chequeId: number | '';
+}
+
+/** Boîte de réception des virements à vérifier (portée centre, hors filtres). */
+export interface VirementsEnAttente {
+    count: number;
+    montant: MoneyDisplay;
+}
+
+/** One row of the Virements list — mirrors GetVirementsList's ->through() mapping exactly. */
+export interface VirementRow {
+    id: number;
+    reference: string;
+    dateOperation: string | null;
+    demandeLe: string | null;
+    studentId: number;
+    studentNom: string | null;
+    studentReference: string | null;
+    telephone: string | null;
+    inscriptionId: number;
+    inscriptionReference: string | null;
+    groupeNom: string | null;
+    feeNom: string | null;
+    feeEcheance: string | null;
+    montant: MoneyDisplay;
+    nomPayeur: string;
+    referenceVirement: string;
+    justificatifUrl: string | null;
+    note: string;
+    statut: string;
+    motifRefus: string | null;
+    demandeParNom: string | null;
+    decideParNom: string | null;
+    decideLe: string | null;
+    encaissementId: number | null;
+    encaissementReference: string | null;
+    /** The signed-in employee declared this transfer — they cannot validate it (two-person control). */
+    autoValidation: boolean;
+    /** Why ValiderVirement would refuse (hidden fee, closed dossier, remaining due too small) — null when validable. */
+    validationBlocker: string | null;
+}
+
+export interface VirementsFilters {
+    search: string;
+    statutFilter: string;
+    dateFrom: string;
+    dateTo: string;
+    perPage: number;
+}
+
+export interface VirementsPageProps {
+    virements: PaginatedData<VirementRow>;
+    /** Sum of `montant` over every row matching the current filters (not just the page shown). */
+    montantTotal: MoneyDisplay;
+    enAttente: VirementsEnAttente;
+    filters: VirementsFilters;
+    perPageOptions: number[];
+    statuts: string[];
+    /** Valider / refuser une demande (comptable, `virements.validate`). */
+    canValidate: boolean;
+    [key: string]: unknown;
 }
 
 /** One row of the Depenses list — mirrors GetDepensesList's ->through() mapping exactly. */

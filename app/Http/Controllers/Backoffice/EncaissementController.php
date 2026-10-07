@@ -24,6 +24,7 @@ use App\Domain\Payments\Queries\GetEncaissementDetails;
 use App\Domain\Payments\Queries\GetEncaissementsList;
 use App\Domain\Payments\Queries\GetInscriptionPayments;
 use App\Domain\Payments\Queries\GetInscriptionUnpaidFees;
+use App\Domain\Payments\Queries\GetVirementsList;
 use App\Domain\Settings\Queries\GetBanquesList;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
@@ -84,6 +85,7 @@ final class EncaissementController extends Controller
         Request $request,
         GetEncaissementsList $getEncaissementsList,
         GetBanquesList $getBanquesList,
+        GetVirementsList $getVirementsList,
     ): Response|RedirectResponse {
         // The today-default date window applies ONLY to a bare first visit
         // (no query string at all — the sidebar link), as ONE redirect to the
@@ -193,6 +195,13 @@ final class EncaissementController extends Controller
         return Inertia::render('Backoffice/Encaissements/Index', [
             'encaissements' => $encaissementsList['data'],
             'montantTotal' => $encaissementsList['montantTotal'],
+            // Virements DÉCLARÉS et pas encore vérifiés par le comptable
+            // (07/10/2026) : de l'argent annoncé, PAS encaissé — il n'entre
+            // dans « Montant total » qu'à la validation, qui crée le vrai
+            // encaissement. Affiché à côté du total, compté à part, portée
+            // centre sans les filtres de la page (c'est une boîte de
+            // réception, pas un sous-total de la recherche courante).
+            'virementsEnAttente' => $getVirementsList->enAttente($request->user()),
             // Closures: the page reloads on every search/filter/page change
             // with `only: ['encaissements', 'filters']`, so these option
             // lists (every student of the centre!) are computed on the first

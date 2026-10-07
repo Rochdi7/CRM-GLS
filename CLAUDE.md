@@ -1117,6 +1117,43 @@ the database layer. Non-negotiable invariants already enforced in code:
   garantie reste en main. Tests :
   `tests/Feature/Backoffice/Finance/ChequeRemiseBanqueTest.php`,
   `RestitutionChequeGarantieTest.php`, `ChequesInertiaCrudTest.php`.
+- **⚠ Un VIREMENT se DÉCLARE, il ne s'encaisse plus directement**
+  (07/10/2026, table `virements`, `Payments\Actions\{Demander,Valider,
+  Refuser}Virement`, page « Virements » `/backoffice/virements`). Choisir
+  « Virement » sur une ligne du modal « Enregistrer un paiement » n'encaisse
+  rien : ça ouvre un modal de DEMANDE — étudiant et frais pré-remplis, nom du
+  payeur, référence bancaire, justificatif OBLIGATOIRE (média `justificatif`),
+  date de l'opération — et la demande naît « En attente de vérification ».
+  `StoreEncaissementRequest` REFUSE une ligne soumise avec cette méthode
+  (`Encaissement::METHODES_ENCAISSEMENT_DIRECT`), et le modal de paiement de
+  la page Inscriptions ne l'offre plus. Le COMPTABLE (`virements.validate`,
+  preset `accountant` + bypass super-admin ; même forme que
+  `cheques.validate-deposit`) vérifie sur le relevé puis VALIDE ou REFUSE
+  (motif obligatoire, ligne conservée). Cinq bornes : (1) **une demande ne
+  bouge JAMAIS `caisses.solde`** — l'argent n'entre que par l'encaissement
+  que `ValiderVirement` crée via `EnregistrerEncaissement`, sur le compte
+  « Virement » du centre de la DEMANDE (jamais du contexte du comptable) ;
+  (2) **l'encaissement est daté de `date_operation`** — le jour où
+  l'étudiant s'est présenté avec sa preuve ; c'est AUJOURD'HUI, champ grisé,
+  et seul le titulaire de `payments.update-date` (super-admin) la choisit —
+  `VirementController@store` force le jour même pour tous les autres — et
+  porte en `agent_id`
+  l'employé qui l'a reçu, pas celui qui a cliqué ; (3) **celui qui a
+  déclaré ne valide jamais sa propre demande** (contrôle à deux personnes,
+  refusé dans l'action sous verrou) ; (4) la validation rejoue sous verrou
+  les gardes d'un encaissement — frais non masqué, inscription Active, reste
+  dû suffisant — et REFUSE en nommant la raison (`ValiderVirement::blocage`,
+  portée à l'écran par `GetVirementsList` en `validationBlocker`, jamais
+  redérivée) ; une demande plafonne au reste dû MOINS les virements déjà en
+  attente sur le frais (`DemanderVirement::resteDisponible`) ; (5) **la page
+  des paiements compte l'argent en attente À PART** : « Virements en attente
+  de vérification » à côté de « Montant total » (`virementsEnAttente`, portée
+  centre, hors filtres, dans `RELOAD_ONLY`), qui n'entre dans le total qu'à
+  la validation. Une demande en attente ne se cache jamais derrière la
+  fenêtre de l'année (boîte de réception, comme les transferts). L'avance par
+  virement (`storeAvance`) et la requalification de méthode restent des
+  chemins directs, inchangés. Tests :
+  `tests/Feature/Backoffice/Finance/VirementDemandeTest.php`.
 - **⚠ Le cascade « inscription » LISTE tous les dossiers, et DIT lesquels ne
   se paient pas** (17/09/2026, `GetEncaissementsList::studentInscriptions`).
   Il ne renvoyait que les `Active` : la caissière voyait UN dossier sans

@@ -406,6 +406,7 @@ export default function InscriptionsIndex({
                         nom: fee.nom,
                         montantInitial: fee.montantInitial,
                         reste: fee.reste,
+                        virementEnAttente: fee.virementEnAttente ?? '0.00',
                         dateEcheance: fee.dateEcheance,
                         montant: '',
                         methode: METHODE_ESPECES,

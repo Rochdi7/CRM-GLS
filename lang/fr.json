@@ -1710,5 +1710,20 @@
     "CNSS contribution withheld": "Cotisation CNSS retenue",
     "The amount above is the net paid out, :montant MAD of CNSS already withheld.": "Le montant ci-dessus est le net versé, cotisation CNSS de :montant MAD déjà retenue.",
     "Changing the CNSS deduction corrects the amount paid: super-admin only.": "Modifier la retenue CNSS corrige le montant versé : réservé au super-admin.",
-    "Only a super-admin can change the CNSS deduction of a recorded payment: it changes the amount paid.": "Seul un super-admin peut modifier la retenue CNSS d'un paiement enregistré : cela change le montant versé."
+    "Only a super-admin can change the CNSS deduction of a recorded payment: it changes the amount paid.": "Seul un super-admin peut modifier la retenue CNSS d'un paiement enregistré : cela change le montant versé.",
+    "A bank transfer is declared as a request and verified by the accountant: it cannot be recorded directly.": "Un virement se déclare par une demande vérifiée par le comptable : il ne peut pas être encaissé directement.",
+    "The amount cannot exceed the remaining balance of this fee (:reste MAD, pending transfers deducted).": "Le montant ne peut pas dépasser le reste à payer de ce frais (:reste MAD, virements en attente déduits).",
+    "This bank transfer request has already been processed.": "Cette demande de virement a déjà été traitée.",
+    "The employee who declared the bank transfer cannot validate it.": "L'employé qui a déclaré le virement ne peut pas le valider.",
+    "The fee this transfer was declared for no longer exists.": "Le frais pour lequel ce virement a été déclaré n'existe plus.",
+    "The fee only has :reste MAD left to pay: the declared amount exceeds it.": "Il ne reste que :reste MAD à payer sur ce frais : le montant déclaré le dépasse.",
+    "Bank transfer declared: it now awaits the accountant verification.": "Virement déclaré : il attend maintenant la vérification du comptable.",
+    "Bank transfer validated: the payment is now recorded.": "Virement validé : le paiement est maintenant enregistré.",
+    "Bank transfer refused.": "Virement refusé.",
+    "This bank transfer belongs to another centre than the active one.": "Ce virement appartient à un autre centre que le centre actif.",
+    "payer name": "nom du payeur",
+    "bank transfer reference": "référence du virement",
+    "operation date": "date de l'opération",
+    "transfer proof": "justificatif du virement",
+    "fee": "frais"
 }
