@@ -34,6 +34,15 @@ interface Candidat {
     centre: string | null;
     inscriptionsCount: number;
     encaissementsCount: number;
+    /** Aucune inscription, aucun paiement, rien : la fusion la SUPPRIME. */
+    estVide: boolean;
+}
+
+interface PaireVide {
+    vide: Candidat;
+    garde: Candidat;
+    /** Autres fiches du même nom avec inscriptions — à vérifier avant. */
+    autresJumeaux: number;
 }
 
 interface FraisLigne {
@@ -89,6 +98,7 @@ interface Props {
     filters: { search: string; etudiant_id: number | null };
     candidats: Candidat[];
     dossier: Dossier | null;
+    fichesVides?: { total: number; paires: PaireVide[] };
     tabCounts?: Record<string, number>;
 }
 
@@ -111,7 +121,17 @@ const statutBadge = (statut: string) => {
     }
 };
 
-export default function StudentMerge({ filters, candidats, dossier, tabCounts }: Props) {
+/** Badge « Fiche vide » — c'est elle qui disparaît à la fusion. */
+const BadgeVide = () => (
+    <span
+        className="badge badge-soft-danger ms-2"
+        title={t('No registration, no payment: this record is deleted when merged.')}
+    >
+        {t('Empty record')}
+    </span>
+);
+
+export default function StudentMerge({ filters, candidats, dossier, fichesVides, tabCounts }: Props) {
     const loading = useInertiaLoading();
     const [showMerge, setShowMerge] = useState(false);
     const [movePayment, setMovePayment] = useState<PaiementLigne | null>(null);
@@ -120,6 +140,8 @@ export default function StudentMerge({ filters, candidats, dossier, tabCounts }:
     // celles-ci se nourrissaient de `candidats`, donc elles etaient vides tant
     // qu'aucune recherche n'avait ete lancee (signale le 05/09/2026).
     const [selection, setSelection] = useState<number[]>([]);
+    // Les deux fiches de la modale : celles cochees, ou une paire detectee.
+    const [fichesModale, setFichesModale] = useState<Candidat[]>([]);
 
     const reload = (next: Partial<Props['filters']>) => {
         router.get(
@@ -158,21 +180,22 @@ export default function StudentMerge({ filters, candidats, dossier, tabCounts }:
     };
 
     const selectionnes = candidats.filter((c) => selection.includes(c.id));
-    // La fiche CONSERVEE est celle qui porte le plus d'historique : c'est
-    // toujours celle-la qu'on veut garder, et cela evite a l'operateur de
-    // choisir le mauvais sens de fusion. Il peut inverser dans la modale.
-    const [gardeDefaut, doublonDefaut] = [...selectionnes].sort(
-        (a, b) =>
-            b.inscriptionsCount + b.encaissementsCount -
-            (a.inscriptionsCount + a.encaissementsCount),
-    );
-
     // Resolues depuis le formulaire (et non depuis la selection) pour que le
     // bouton « Inverser » se reflete tout de suite dans le recapitulatif.
-    const garde = candidats.find((c) => String(c.id) === mergeForm.data.garde_id);
-    const doublon = candidats.find((c) => String(c.id) === mergeForm.data.doublon_id);
+    const garde = fichesModale.find((c) => String(c.id) === mergeForm.data.garde_id);
+    const doublon = fichesModale.find((c) => String(c.id) === mergeForm.data.doublon_id);
 
-    const openMerge = () => {
+    const openMerge = (fiches: Candidat[]) => {
+        // La fiche CONSERVEE est celle qui porte le plus d'historique, et une
+        // fiche VIDE passe toujours cote doublon : c'est elle qui disparait.
+        // L'operateur peut inverser dans la modale.
+        const [gardeDefaut, doublonDefaut] = [...fiches].sort(
+            (a, b) =>
+                Number(a.estVide) - Number(b.estVide) ||
+                b.inscriptionsCount + b.encaissementsCount -
+                    (a.inscriptionsCount + a.encaissementsCount),
+        );
+        setFichesModale(fiches);
         mergeForm.clearErrors();
         mergeForm.setData({
             garde_id: gardeDefaut ? String(gardeDefaut.id) : '',
@@ -280,6 +303,7 @@ export default function StudentMerge({ filters, candidats, dossier, tabCounts }:
                                         </td>
                                         <td>
                                             {c.prenom} {c.nom}
+                                            {c.estVide && <BadgeVide />}
                                         </td>
                                         <td className="text-normal-case">{c.telephone ?? '-'}</td>
                                         <td>{c.dateNaissance ?? '-'}</td>
@@ -314,13 +338,87 @@ export default function StudentMerge({ filters, candidats, dossier, tabCounts }:
                         className="btn btn-warning"
                         disabled={selection.length !== 2}
                         title={selection.length !== 2 ? t('Tick exactly two records.') : undefined}
-                        onClick={openMerge}
+                        onClick={() => openMerge(selectionnes)}
                     >
                         <i className="ti ti-arrow-merge me-1" aria-hidden="true" />
                         {t('Merge two records')}
                     </button>
                 </div>
             </Card>
+
+            {fichesVides && fichesVides.paires.length > 0 && (
+                <Card title={`${t('Empty duplicate records detected')} (${fichesVides.total})`}>
+                    <p className="text-muted">
+                        {t(
+                            'Each record below has no registration, no payment and no attendance, while another record with the same name carries registrations. Check the phone and birth date, then merge: the empty record is deleted and the other one is kept unchanged.',
+                        )}
+                    </p>
+                    <div className={`table-responsive${loading ? ' opacity-50' : ''}`}>
+                        <table className="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>{t('Empty record (deleted)')}</th>
+                                    <th className="text-normal-case">{t('Phone')}</th>
+                                    <th>{t('Birth date')}</th>
+                                    <th>{t('Record to KEEP')}</th>
+                                    <th className="text-normal-case">{t('Phone')}</th>
+                                    <th>{t('Birth date')}</th>
+                                    <th className="text-center">{t('Registrations')}</th>
+                                    <th className="text-end">{t('Action')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {fichesVides.paires.map(({ vide, garde: g, autresJumeaux }) => (
+                                    <tr key={vide.id}>
+                                        <td>
+                                            {vide.prenom} {vide.nom}
+                                            <div className="text-muted fs-13 text-normal-case">
+                                                {vide.reference}
+                                                {vide.legacyRef ? ` (${vide.legacyRef})` : ''} · {vide.centre ?? '-'}
+                                            </div>
+                                        </td>
+                                        <td className="text-normal-case">{vide.telephone ?? '-'}</td>
+                                        <td>{vide.dateNaissance ?? '-'}</td>
+                                        <td>
+                                            {g.prenom} {g.nom}
+                                            <div className="text-muted fs-13 text-normal-case">
+                                                {g.reference}
+                                                {g.legacyRef ? ` (${g.legacyRef})` : ''} · {g.centre ?? '-'}
+                                            </div>
+                                            {autresJumeaux > 0 && (
+                                                <span className="badge badge-soft-warning">
+                                                    +{autresJumeaux} {t('other record(s) with this name')}
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="text-normal-case">{g.telephone ?? '-'}</td>
+                                        <td>{g.dateNaissance ?? '-'}</td>
+                                        <td className="text-center">{g.inscriptionsCount}</td>
+                                        <td className="text-end">
+                                            <button
+                                                type="button"
+                                                className="btn btn-sm btn-warning"
+                                                onClick={() => openMerge([g, vide])}
+                                            >
+                                                <i className="ti ti-arrow-merge me-1" aria-hidden="true" />
+                                                {t('Merge')}
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    {fichesVides.total > fichesVides.paires.length && (
+                        <div className="text-muted">
+                            {t('Only the first :count are listed - merge them to see the next ones.').replace(
+                                ':count',
+                                String(fichesVides.paires.length),
+                            )}
+                        </div>
+                    )}
+                </Card>
+            )}
 
             {dossier && (
                 <>
@@ -464,6 +562,20 @@ export default function StudentMerge({ filters, candidats, dossier, tabCounts }:
                         )}
                     </p>
 
+                    {doublon?.estVide && (
+                        <div className="alert alert-info" role="alert">
+                            <i className="ti ti-trash me-1" aria-hidden="true" />
+                            {t(
+                                'The duplicate is an empty record (no registration, no payment, nothing): it will be DELETED instead of renamed. Its documents move to the record you keep.',
+                            )}
+                        </div>
+                    )}
+                    {garde?.estVide && !doublon?.estVide && (
+                        <div className="alert alert-warning" role="alert">
+                            {t('The record you keep is empty: you probably want to swap the direction.')}
+                        </div>
+                    )}
+
                     {/* Les deux fiches viennent des cases cochees : la modale
                         n'a plus de liste deroulante a remplir, donc elle ne
                         peut plus s'ouvrir vide. */}
@@ -479,6 +591,7 @@ export default function StudentMerge({ filters, candidats, dossier, tabCounts }:
                                         <>
                                             <div className="text-uppercase">
                                                 {fiche.prenom} {fiche.nom}
+                                                {fiche.estVide && <BadgeVide />}
                                             </div>
                                             <div className="text-muted text-normal-case">
                                                 {fiche.reference}

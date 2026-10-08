@@ -443,27 +443,40 @@ final class VirementDemandeTest extends TestCase
         $this->assertFalse(Role::findByName('director')->hasPermissionTo('virements.validate'));
     }
 
+    public function test_the_virements_page_is_reserved_to_the_accountant(): void
+    {
+        $guichet = $this->userWith('payments.view', 'payments.create');
+
+        // Le guichet déclare depuis le modal de paiement, mais la page et ses
+        // onglets sont la boîte de travail du comptable (08/10/2026).
+        $this->actingInCentre($guichet)->get(route('backoffice.virements.index'))->assertForbidden();
+        $this->actingInCentre($guichet)
+            ->get(route('backoffice.virements.index', ['statutFilter' => Virement::STATUT_EN_ATTENTE]))
+            ->assertForbidden();
+    }
+
     public function test_the_virements_page_opens_on_pending_requests(): void
     {
         $guichet = $this->userWith('payments.view', 'payments.create');
+        $comptable = $this->userWith('payments.view', 'virements.validate');
         [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
         $this->declarer($guichet, $student, $inscription, $fee)->assertSessionHasNoErrors();
 
-        $this->actingInCentre($guichet)
+        $this->actingInCentre($comptable)
             ->get(route('backoffice.virements.index'))
             ->assertRedirect(route('backoffice.virements.index', ['statutFilter' => Virement::STATUT_EN_ATTENTE]));
 
-        $props = $this->actingInCentre($guichet)
+        $props = $this->actingInCentre($comptable)
             ->get(route('backoffice.virements.index', ['statutFilter' => Virement::STATUT_EN_ATTENTE]))
             ->assertOk()
             ->viewData('page')['props'];
-        $this->assertSame('Backoffice/Virements/Index', $this->actingInCentre($guichet)
+        $this->assertSame('Backoffice/Virements/Index', $this->actingInCentre($comptable)
             ->get(route('backoffice.virements.index', ['statutFilter' => Virement::STATUT_EN_ATTENTE]))
             ->viewData('page')['component']);
         $this->assertCount(1, $props['virements']['data']);
         $this->assertSame('1000.00', $props['montantTotal']);
         $this->assertSame(1, $props['enAttente']['count']);
-        $this->assertFalse($props['canValidate']);
+        $this->assertTrue($props['canValidate']);
         $this->assertSame($student->nomComplet(), $props['virements']['data'][0]['studentNom']);
         $this->assertSame('Frais de Novembre', $props['virements']['data'][0]['feeNom']);
         $this->assertNotNull($props['virements']['data'][0]['justificatifUrl']);

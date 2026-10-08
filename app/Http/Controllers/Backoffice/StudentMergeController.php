@@ -59,6 +59,9 @@ final class StudentMergeController extends Controller
             'filters' => ['search' => $search, 'etudiant_id' => $etudiantId],
             'tabCounts' => fn () => $transfers->tabCounts($request->user()),
             'candidats' => $candidats($search),
+            // Fiches vides ayant un jumeau du même nom avec inscriptions —
+            // closure : la recherche (only: ['candidats']) ne la recalcule pas.
+            'fichesVides' => fn () => $candidats->fichesVides(),
             // Le dossier complet n'est chargé qu'une fois une fiche choisie —
             // closure, donc un rechargement partiel (only: ['candidats'])
             // pendant la recherche ne le recalcule pas (§ Performance rules).
@@ -70,7 +73,8 @@ final class StudentMergeController extends Controller
 
     /**
      * Fusionne la fiche doublon dans la fiche gardée. Seul `student_id`
-     * est réécrit sur les six tables liées — voir FusionnerEtudiants.
+     * est réécrit sur les tables liées — voir FusionnerEtudiants. Une fiche
+     * doublon VIDE est supprimée au lieu d'être renommée.
      */
     public function merge(FusionnerEtudiantsRequest $request, FusionnerEtudiants $action): RedirectResponse
     {
@@ -87,10 +91,15 @@ final class StudentMergeController extends Controller
 
         return redirect()
             ->route('backoffice.students.merge.index', ['etudiant_id' => $resultat['garde']->getKey()])
-            ->with('success', __(':count record(s) moved onto :reference.', [
-                'count' => $lignes,
-                'reference' => $resultat['garde']->reference,
-            ]));
+            ->with('success', $resultat['supprime']
+                ? __('Empty record :empty deleted - :reference kept.', [
+                    'empty' => $resultat['doublon']->reference,
+                    'reference' => $resultat['garde']->reference,
+                ])
+                : __(':count record(s) moved onto :reference.', [
+                    'count' => $lignes,
+                    'reference' => $resultat['garde']->reference,
+                ]));
     }
 
     /**

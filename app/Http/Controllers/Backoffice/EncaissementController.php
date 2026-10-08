@@ -243,6 +243,9 @@ final class EncaissementController extends Controller
                 // edit modal disables the Date field without it. UI
                 // convenience only: update() drops the field server-side.
                 'updateDate' => $request->user()?->can('payments.update-date') ?? false,
+                // Onglet / lien « Virements » : comptable + super-admin
+                // (08/10/2026) — la page elle-même l'exige aussi.
+                'viewVirements' => $request->user()?->can('virements.validate') ?? false,
                 // Requalifier la méthode déplace l'argent entre la caisse
                 // physique et le compte de méthode du centre : rôles de
                 // direction + super-admin (01/09/2026). Confort d'interface
