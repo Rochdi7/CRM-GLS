@@ -785,8 +785,12 @@ Route::prefix('backoffice')
             // paiement qu'il deviendra ; décider = `virements.validate`
             // (preset comptable + bypass super-admin). L'encaissement naît
             // à la validation (ValiderVirement), daté du jour de la demande.
+            // La PAGE (onglets « Virements à vérifier » / « Tous les
+            // virements ») est la boîte de travail du comptable : comptable
+            // + super-admin seulement (08/10/2026). Le guichet déclare depuis
+            // le modal de paiement et n'y a pas accès.
             Route::get('virements', [VirementController::class, 'index'])
-                ->middleware('permission:payments.view')->name('virements.index');
+                ->middleware('permission:virements.validate')->name('virements.index');
             Route::post('virements', [VirementController::class, 'store'])
                 ->middleware('permission:payments.create')->name('virements.store');
             Route::patch('virements/{virement}/valider', [VirementController::class, 'valider'])

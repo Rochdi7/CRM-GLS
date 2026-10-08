@@ -6,6 +6,8 @@ namespace Tests\Feature\Backoffice\Students;
 
 use App\Domain\Payments\Actions\DeplacerEncaissementVersFrais;
 use App\Domain\Students\Actions\FusionnerEtudiants;
+use App\Domain\Students\Queries\GetFusionCandidates;
+use App\Domain\Students\Support\FicheEtudiantVide;
 use App\Models\AnneeScolaire;
 use App\Models\Caisse;
 use App\Models\Employee;
@@ -137,16 +139,80 @@ final class StudentMergeTest extends TestCase
         $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $fee->fresh()->statut);
     }
 
-    public function test_the_duplicate_is_kept_but_renamed_never_deleted(): void
+    public function test_a_duplicate_that_carried_rows_is_kept_but_renamed_never_deleted(): void
     {
         $garde = $this->student('ABOUTAJEDDINE', 'MOHAMMED');
         $doublon = $this->student('ABOUTAJEDDINE', 'MOHAMED');
+        $this->paiement($doublon, 300);
 
-        app(FusionnerEtudiants::class)->handle($garde, $doublon);
+        $resultat = app(FusionnerEtudiants::class)->handle($garde, $doublon);
+
+        $this->assertFalse($resultat['supprime']);
 
         $this->assertDatabaseHas('students', ['id' => $doublon->id]);
         $this->assertStringEndsWith(FusionnerEtudiants::SUFFIXE_DOUBLON, $doublon->fresh()->nom);
         $this->assertSame('ABOUTAJEDDINE', $garde->fresh()->nom);
+    }
+
+    public function test_an_empty_duplicate_is_deleted_and_the_kept_record_is_untouched(): void
+    {
+        $garde = $this->student('BENALI', 'SARA');
+        $this->inscription($garde);
+        $vide = $this->student('BENALI', 'SARA');
+
+        $resultat = app(FusionnerEtudiants::class)->handle($garde, $vide);
+
+        $this->assertTrue($resultat['supprime']);
+        $this->assertDatabaseMissing('students', ['id' => $vide->id]);
+        $this->assertSame('BENALI', $garde->fresh()->nom);
+        $this->assertSame(1, $garde->inscriptions()->count());
+
+        // L'identité de la fiche supprimée survit dans le journal.
+        $this->assertDatabaseHas('activity_log', [
+            'event' => 'students_merged',
+            'subject_id' => $garde->id,
+        ]);
+    }
+
+    public function test_a_duplicate_with_payments_but_no_registration_is_not_empty(): void
+    {
+        $garde = $this->student('BENALI', 'SARA');
+        $this->inscription($garde);
+        $avance = $this->student('BENALI', 'SARA');
+        $this->paiement($avance, 200);
+
+        $this->assertFalse(FicheEtudiantVide::estVide($avance));
+
+        $resultat = app(FusionnerEtudiants::class)->handle($garde, $avance);
+
+        // Elle portait de l'argent : renommée, jamais supprimée.
+        $this->assertFalse($resultat['supprime']);
+        $this->assertDatabaseHas('students', ['id' => $avance->id]);
+    }
+
+    public function test_empty_records_with_a_registered_twin_are_detected(): void
+    {
+        $garde = $this->student('El Amrani', 'Youssef');
+        $this->inscription($garde);
+        $vide = $this->student('EL AMRANI ', 'youssef');
+
+        // Bruit : une fiche vide sans jumeau inscrit, et un homonyme qui
+        // porte un paiement (donc pas vide).
+        $this->student('SANS', 'JUMEAU');
+        $avecPaiement = $this->student('El Amrani', 'Youssef');
+        $this->paiement($avecPaiement, 100);
+
+        $resultat = app(GetFusionCandidates::class)->fichesVides();
+
+        $this->assertSame(1, $resultat['total']);
+        $this->assertSame($vide->id, $resultat['paires'][0]['vide']['id']);
+        $this->assertSame($garde->id, $resultat['paires'][0]['garde']['id']);
+
+        // La recherche marque la fiche vide.
+        $lignes = app(GetFusionCandidates::class)('amrani')->keyBy('id');
+        $this->assertTrue($lignes[$vide->id]['estVide']);
+        $this->assertFalse($lignes[$garde->id]['estVide']);
+        $this->assertFalse($lignes[$avecPaiement->id]['estVide']);
     }
 
     public function test_a_refund_follows_the_kept_record(): void
@@ -186,6 +252,8 @@ final class StudentMergeTest extends TestCase
     {
         $garde = $this->student('ABOUTAJEDDINE', 'MOHAMMED');
         $doublon = $this->student('ABOUTAJEDDINE', 'MOHAMED');
+        // Une ligne à déplacer : sinon la fiche vide serait supprimée.
+        $this->paiement($doublon, 300);
 
         app(FusionnerEtudiants::class)->handle($garde, $doublon);
 

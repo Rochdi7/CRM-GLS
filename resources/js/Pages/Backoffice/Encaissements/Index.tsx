@@ -1150,15 +1150,17 @@ export default function EncaissementsIndex({ encaissements, montantTotal, vireme
                 </li>
                 {/* Virements déclarés par le guichet, vérifiés par le comptable
                     (07/10/2026) — même convention de lien de page que Chèques. */}
-                <li className="nav-item" role="presentation">
-                    <a href="/backoffice/virements" className="nav-link d-inline-flex align-items-center">
-                        <i className="ti ti-transfer-in me-2" aria-hidden="true" />
-                        Virements
-                        {virementsEnAttente && virementsEnAttente.count > 0 && (
-                            <span className="badge bg-warning text-dark ms-2">{virementsEnAttente.count}</span>
-                        )}
-                    </a>
-                </li>
+                {can?.viewVirements && (
+                    <li className="nav-item" role="presentation">
+                        <a href="/backoffice/virements" className="nav-link d-inline-flex align-items-center">
+                            <i className="ti ti-transfer-in me-2" aria-hidden="true" />
+                            Virements
+                            {virementsEnAttente && virementsEnAttente.count > 0 && (
+                                <span className="badge bg-warning text-dark ms-2">{virementsEnAttente.count}</span>
+                            )}
+                        </a>
+                    </li>
+                )}
             </ul>
 
             <Card
@@ -1343,15 +1345,23 @@ export default function EncaissementsIndex({ encaissements, montantTotal, vireme
                             mène à la page où on le vérifie. Portée centre, hors
                             filtres (une boîte de réception). */}
                         {filters.view !== 'avance' && virementsEnAttente && virementsEnAttente.count > 0 && (
-                            <a
-                                href="/backoffice/virements"
-                                className="fw-medium mb-0 text-warning text-normal-case d-inline-flex align-items-center"
-                                title="Voir les virements à vérifier"
-                            >
-                                <i className="ti ti-building-bank me-1" aria-hidden="true" />
-                                Virements en attente de vérification : {Number(virementsEnAttente.montant).toFixed(2)} MAD
-                                <span className="badge bg-warning text-dark ms-2">{virementsEnAttente.count}</span>
-                            </a>
+                            can?.viewVirements ? (
+                                <a
+                                    href="/backoffice/virements"
+                                    className="fw-medium mb-0 text-warning text-normal-case d-inline-flex align-items-center"
+                                    title="Voir les virements à vérifier"
+                                >
+                                    <i className="ti ti-building-bank me-1" aria-hidden="true" />
+                                    Virements en attente de vérification : {Number(virementsEnAttente.montant).toFixed(2)} MAD
+                                    <span className="badge bg-warning text-dark ms-2">{virementsEnAttente.count}</span>
+                                </a>
+                            ) : (
+                                <span className="fw-medium mb-0 text-warning text-normal-case d-inline-flex align-items-center">
+                                    <i className="ti ti-building-bank me-1" aria-hidden="true" />
+                                    Virements en attente de vérification : {Number(virementsEnAttente.montant).toFixed(2)} MAD
+                                    <span className="badge bg-warning text-dark ms-2">{virementsEnAttente.count}</span>
+                                </span>
+                            )
                         )}
                     </div>
 

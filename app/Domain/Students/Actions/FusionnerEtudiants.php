@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Students\Actions;
 
+use App\Domain\Students\Support\FicheEtudiantVide;
 use App\Models\Cheque;
 use App\Models\Encaissement;
 use App\Models\Inscription;
@@ -11,6 +12,7 @@ use App\Models\InscriptionHistorique;
 use App\Models\Presence;
 use App\Models\Remboursement;
 use App\Models\Student;
+use App\Models\Virement;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -29,10 +31,13 @@ use Illuminate\Validation\ValidationException;
  * `inscription_fee_id` et `caisses.solde` restent tels quels. Une fusion
  * ne déplace pas d'argent, elle recolle deux moitiés d'un même dossier.
  *
- * La fiche vidée n'est JAMAIS supprimée (piste d'audit, `legacy_ref`
- * unique par centre, CLAUDE.md §11) : elle est renommée
- * « … (doublon fusionné) » pour sortir des recherches et des listes
- * déroulantes.
+ * La fiche vidée n'est pas supprimée quand elle portait quelque chose
+ * (piste d'audit, `legacy_ref` unique par centre, CLAUDE.md §11) : elle est
+ * renommée « … (doublon fusionné) » pour sortir des recherches et des listes
+ * déroulantes. EXCEPTION (08/10/2026) : une fiche qui était VIDE avant la
+ * fusion (FicheEtudiantVide — aucune inscription, aucun paiement, rien) n'a
+ * aucun historique à préserver ; elle est SUPPRIMÉE, ses médias passent sur
+ * la fiche gardée et l'entrée de journal garde son identité.
  *
  * Réservée au super-admin (`students.merge`, cf.
  * PermissionRegistry::superAdminOnly()) : recoller deux dossiers réunit
@@ -41,7 +46,7 @@ use Illuminate\Validation\ValidationException;
 final class FusionnerEtudiants
 {
     /**
-     * Les six FK vers `students`. Une table oubliée ici laisse des lignes
+     * Les FK vers `students` qui suivent la personne. Une table oubliée ici laisse des lignes
      * orphelines sur la fiche vidée — le remboursement porte
      * `beneficiaire_id`, pas `student_id` (piège vérifié en base).
      *
@@ -54,12 +59,16 @@ final class FusionnerEtudiants
         [Presence::class, 'student_id'],
         [InscriptionHistorique::class, 'student_id'],
         [Remboursement::class, 'beneficiaire_id'],
+        // Demande de virement (07/10/2026) : comme un paiement, elle suit la
+        // personne. Oubliée, elle bloquait la suppression d'une fiche vide
+        // et restait orpheline sur une fiche « (doublon fusionné) ».
+        [Virement::class, 'student_id'],
     ];
 
     public const string SUFFIXE_DOUBLON = ' (doublon fusionné)';
 
     /**
-     * @return array{garde: Student, doublon: Student, lignes: array<string, int>}
+     * @return array{garde: Student, doublon: Student, lignes: array<string, int>, supprime: bool}
      */
     public function handle(Student $garde, Student $doublon): array
     {
@@ -88,6 +97,20 @@ final class FusionnerEtudiants
                 ]);
             }
 
+            // Une moitié de transfert entre centres n'est pas un doublon : la
+            // copie et l'original se pointent l'un l'autre et doivent rester
+            // deux fiches (TransfertEtudiantCentreTest).
+            if ($doublon->transfere_vers_student_id !== null || $doublon->transfere_depuis_student_id !== null
+                || $doublon->transferts()->exists()) {
+                throw ValidationException::withMessages([
+                    'doublon_id' => __('This record is part of a centre transfer and cannot be merged.'),
+                ]);
+            }
+
+            // Décidé AVANT de déplacer quoi que ce soit : après la boucle,
+            // toute fiche fusionnée est vide.
+            $etaitVide = FicheEtudiantVide::estVide($doublon);
+
             $lignes = [];
 
             foreach (self::RELATIONS as [$modele, $colonne]) {
@@ -109,23 +132,66 @@ final class FusionnerEtudiants
             }
 
             $ancienNom = $doublon->nom;
+            $identite = [
+                'garde_id' => $garde->getKey(),
+                'garde_reference' => $garde->reference,
+                'doublon_id' => $doublon->getKey(),
+                'doublon_reference' => $doublon->reference,
+                'doublon_nom' => $ancienNom.' '.$doublon->prenom,
+                'doublon_legacy_ref' => $doublon->legacy_ref,
+                'doublon_telephone' => $doublon->telephone,
+                'doublon_centre_id' => $doublon->etablissement_id,
+            ];
+
+            if ($etaitVide) {
+                $medias = $this->recupererMedias($garde, $doublon);
+                $doublon->delete();
+
+                activity('student')
+                    ->performedOn($garde)
+                    ->event('students_merged')
+                    ->withProperties($identite + ['lignes' => [], 'fiche_vide_supprimee' => true, 'medias' => $medias])
+                    ->log("Fiche vide {$doublon->reference} supprimée (fusionnée dans {$garde->reference})");
+
+                return ['garde' => $garde, 'doublon' => $doublon, 'lignes' => [], 'supprime' => true];
+            }
+
             $doublon->update(['nom' => $doublon->nom.self::SUFFIXE_DOUBLON]);
 
             activity('student')
                 ->performedOn($garde)
                 ->event('students_merged')
-                ->withProperties([
-                    'garde_id' => $garde->getKey(),
-                    'garde_reference' => $garde->reference,
-                    'doublon_id' => $doublon->getKey(),
-                    'doublon_reference' => $doublon->reference,
-                    'doublon_nom' => $ancienNom.' '.$doublon->prenom,
-                    'doublon_legacy_ref' => $doublon->legacy_ref,
-                    'lignes' => $lignes,
-                ])
+                ->withProperties($identite + ['lignes' => $lignes])
                 ->log("Fiche {$doublon->reference} fusionnée dans {$garde->reference}");
 
-            return ['garde' => $garde, 'doublon' => $doublon, 'lignes' => $lignes];
+            return ['garde' => $garde, 'doublon' => $doublon, 'lignes' => $lignes, 'supprime' => false];
         });
+    }
+
+    /**
+     * Les documents de la fiche vide passent sur la fiche gardée ; sa photo
+     * seulement si la fiche gardée n'en a pas (collection `photo` à fichier
+     * unique : la déplacer remplacerait la bonne). Sans cela, supprimer la
+     * fiche effacerait ses fichiers avec elle.
+     *
+     * @return list<string> noms des fichiers récupérés
+     */
+    private function recupererMedias(Student $garde, Student $doublon): array
+    {
+        $recuperes = [];
+
+        foreach ($doublon->getMedia('documents') as $media) {
+            $media->move($garde, 'documents');
+            $recuperes[] = $media->file_name;
+        }
+
+        $photo = $doublon->getFirstMedia('photo');
+
+        if ($photo !== null && ! $garde->hasMedia('photo')) {
+            $photo->move($garde, 'photo');
+            $recuperes[] = $photo->file_name;
+        }
+
+        return $recuperes;
     }
 }

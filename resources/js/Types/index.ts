@@ -2328,6 +2328,8 @@ export interface EncaissementsPageProps {
     can?: {
         delete: boolean;
         updateDate?: boolean;
+        /** Onglet « Virements » : comptable + super-admin (`virements.validate`). */
+        viewVirements?: boolean;
         updateMethode?: boolean;
         updateAmount?: boolean;
         /** Direction + super-admin — dessine « Transférer vers un autre étudiant ». */
@@ -2456,6 +2458,8 @@ export interface ChequesPageProps {
     canDelete: boolean;
     /** Accepter / rejeter une remise à la banque (comptable, `cheques.validate-deposit`). */
     canValidateDeposit: boolean;
+    /** Onglet « Virements » : comptable + super-admin (`virements.validate`). */
+    canViewVirements: boolean;
     /** Annuler un chèque — statut « Annulé » (comptable, `cheques.cancel`). */
     canCancel: boolean;
     /** Remises « Déposé » en attente du comptable (portée centre, hors filtres). */

@@ -132,6 +132,7 @@ export default function ChequesIndex({
     canDeposit,
     canDelete,
     canValidateDeposit,
+    canViewVirements,
     canCancel,
     remisesEnAttente,
     chequeMimes,
@@ -589,12 +590,14 @@ export default function ChequesIndex({
                         Chèques
                     </button>
                 </li>
-                <li className="nav-item" role="presentation">
-                    <a href="/backoffice/virements" className="nav-link d-inline-flex align-items-center">
-                        <i className="ti ti-transfer-in me-2" aria-hidden="true" />
-                        Virements
-                    </a>
-                </li>
+                {canViewVirements && (
+                    <li className="nav-item" role="presentation">
+                        <a href="/backoffice/virements" className="nav-link d-inline-flex align-items-center">
+                            <i className="ti ti-transfer-in me-2" aria-hidden="true" />
+                            Virements
+                        </a>
+                    </li>
+                )}
                 {canValidateDeposit && (
                     <li className="nav-item" role="presentation">
                         <button
