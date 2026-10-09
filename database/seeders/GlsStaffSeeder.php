@@ -81,13 +81,11 @@ final class GlsStaffSeeder extends Seeder
         // aussi le compte créé par AdminUserSeeder (même adresse).
         'rafik@glszentrum.com',
         // Rochdi Karouali — Responsable de système, le développeur du
-        // système. ⚠ Compte MASQUÉ de l'interface depuis le 07/09/2026
-        // (HiddenAccount::STAFF_EMAIL) : on a longtemps cru que ce compte
-        // « métier » et le compte technique gmail appartenaient à deux
-        // personnes, d'où deux ROCHDI KAROUALI côte à côte sur « Caisse
-        // globale ». Les deux sont à lui, donc les deux sont filtrés.
-        // La ligne reste SEMÉE (sa caisse et son historique d'audit y
-        // pendent) — seul l'affichage la retire.
+        // système. Compte ORDINAIRE et VISIBLE (HiddenAccount::STAFF_EMAIL),
+        // comme celui du CEO : masqué du 07/09 au 09/10/2026, il est
+        // redevenu visible parce qu'il travaille dans les centres et reçoit
+        // des transferts de caisse. Seul le compte technique gmail
+        // (HiddenAccount::EMAIL) reste masqué.
         'rochdi.karouali@glszentrum.com',
     ];
 

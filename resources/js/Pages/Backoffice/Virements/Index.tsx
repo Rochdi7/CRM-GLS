@@ -228,24 +228,13 @@ export default function VirementsIndex({ virements, montantTotal, enAttente, fil
                 <li className="nav-item" role="presentation">
                     <button
                         type="button"
-                        className={`nav-link d-inline-flex align-items-center${ongletAVerifier ? ' active' : ''}`}
-                        aria-current={ongletAVerifier ? 'page' : undefined}
+                        className="nav-link d-inline-flex align-items-center active"
+                        aria-current="page"
                         onClick={() => !ongletAVerifier && reload({ statutFilter: STATUT_EN_ATTENTE })}
                     >
                         <i className="ti ti-checks me-2" aria-hidden="true" />
                         Virements à vérifier
                         {enAttente.count > 0 && <span className="badge bg-warning text-dark ms-2">{enAttente.count}</span>}
-                    </button>
-                </li>
-                <li className="nav-item" role="presentation">
-                    <button
-                        type="button"
-                        className={`nav-link d-inline-flex align-items-center${ongletAVerifier ? '' : ' active'}`}
-                        aria-current={ongletAVerifier ? undefined : 'page'}
-                        onClick={() => ongletAVerifier && reload({ statutFilter: '' })}
-                    >
-                        <i className="ti ti-transfer-in me-2" aria-hidden="true" />
-                        Tous les virements
                     </button>
                 </li>
             </ul>

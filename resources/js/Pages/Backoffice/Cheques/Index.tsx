@@ -134,7 +134,6 @@ export default function ChequesIndex({
     canValidateDeposit,
     canViewVirements,
     canCancel,
-    remisesEnAttente,
     chequeMimes,
     chequeMaxKb,
 }: ChequesPageProps) {
@@ -192,9 +191,6 @@ export default function ChequesIndex({
     const typeOptions: SelectOption[] = types.map((t) => ({ value: t, label: typeLabel(t) }));
     const acceptMedia = chequeMimes.map((m) => `.${m}`).join(',');
 
-    // Onglet « Remises à valider » (comptable + super-admin) = le filtre
-    // statut « Déposé ». Le serveur fait la vraie garde.
-    const ongletValidation = canValidateDeposit && filters.statutFilter === 'Déposé';
     const statutFilterOptions: SelectOption[] = statuts.map((s) => ({ value: s, label: s }));
     const banqueOptions: SelectOption[] = banques.map((b) => ({ value: b, label: b }));
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.nom }));
@@ -582,9 +578,8 @@ export default function ChequesIndex({
                 <li className="nav-item" role="presentation">
                     <button
                         type="button"
-                        className={`nav-link d-inline-flex align-items-center${ongletValidation ? '' : ' active'}`}
-                        aria-current={ongletValidation ? undefined : 'page'}
-                        onClick={() => ongletValidation && reload({ statutFilter: '' })}
+                        className="nav-link d-inline-flex align-items-center active"
+                        aria-current="page"
                     >
                         <i className="ti ti-building-bank me-2" aria-hidden="true" />
                         Chèques
@@ -598,25 +593,9 @@ export default function ChequesIndex({
                         </a>
                     </li>
                 )}
-                {canValidateDeposit && (
-                    <li className="nav-item" role="presentation">
-                        <button
-                            type="button"
-                            className={`nav-link d-inline-flex align-items-center${ongletValidation ? ' active' : ''}`}
-                            aria-current={ongletValidation ? 'page' : undefined}
-                            onClick={() => !ongletValidation && reload({ statutFilter: 'Déposé' })}
-                        >
-                            <i className="ti ti-checks me-2" aria-hidden="true" />
-                            Remises à valider
-                            {remisesEnAttente > 0 && (
-                                <span className="badge bg-warning text-dark ms-2">{remisesEnAttente}</span>
-                            )}
-                        </button>
-                    </li>
-                )}
             </ul>
 
-            <Card title={ongletValidation ? 'Remises à valider' : 'Chèques'} bodyClassName="p-0 py-3">
+            <Card title="Chèques" bodyClassName="p-0 py-3">
                 <div className="px-3 pt-2">
                     <TableToolbar onReset={filterReset.reset} resetActive={filterReset.active}>
                         <div style={{ width: 160 }}>

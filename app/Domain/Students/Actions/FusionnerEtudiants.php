@@ -113,6 +113,11 @@ final class FusionnerEtudiants
 
             $lignes = [];
 
+            // Avant le déplacement en masse : une séance où les DEUX fiches
+            // ont été appelées violerait l'index unique (seance_id,
+            // student_id) — production 08/10/2026, GLS-59456CE2.
+            $conflitsPresence = $this->resoudreConflitsPresence($garde, $doublon);
+
             foreach (self::RELATIONS as [$modele, $colonne]) {
                 $n = $modele::query()->where($colonne, $doublon->getKey())->count();
 
@@ -161,11 +166,76 @@ final class FusionnerEtudiants
             activity('student')
                 ->performedOn($garde)
                 ->event('students_merged')
-                ->withProperties($identite + ['lignes' => $lignes])
+                ->withProperties($identite + ['lignes' => $lignes, 'conflits_presence' => $conflitsPresence])
                 ->log("Fiche {$doublon->reference} fusionnée dans {$garde->reference}");
 
             return ['garde' => $garde, 'doublon' => $doublon, 'lignes' => $lignes, 'supprime' => false];
         });
+    }
+
+    /**
+     * Ordre de préférence quand les deux fiches ont été appelées sur la même
+     * séance : c'est la même personne, donc si l'un des deux noms a été
+     * coché « Présent », elle ÉTAIT là — l'« Absent » de l'autre nom décrit
+     * seulement la fiche en double, pas la personne.
+     */
+    private const array RANG_PRESENCE = [
+        Presence::STATUT_PRESENT => 4,
+        Presence::STATUT_RETARD => 3,
+        Presence::STATUT_JUSTIFIE => 2,
+        Presence::STATUT_ABSENT => 1,
+    ];
+
+    /**
+     * Une seule ligne d'appel par séance après la fusion. La ligne de la
+     * fiche gardée reste ; elle reprend le statut (et la note) du doublon
+     * quand celui-ci est plus favorable. La ligne du doublon est ensuite
+     * supprimée via Eloquent, donc journalisée par Auditable.
+     *
+     * @return list<array{seance_id: int, garde: string, doublon: string, retenu: string}>
+     */
+    private function resoudreConflitsPresence(Student $garde, Student $doublon): array
+    {
+        $gardees = Presence::query()
+            ->where('student_id', $garde->getKey())
+            ->whereIn('seance_id', Presence::query()->select('seance_id')->where('student_id', $doublon->getKey()))
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('seance_id');
+
+        if ($gardees->isEmpty()) {
+            return [];
+        }
+
+        $doublons = Presence::query()
+            ->where('student_id', $doublon->getKey())
+            ->whereIn('seance_id', $gardees->keys())
+            ->lockForUpdate()
+            ->get();
+
+        $conflits = [];
+
+        foreach ($doublons as $ligneDoublon) {
+            $ligneGarde = $gardees->get($ligneDoublon->seance_id);
+            $avant = (string) $ligneGarde->statut;
+
+            if ((self::RANG_PRESENCE[$ligneDoublon->statut] ?? 0) > (self::RANG_PRESENCE[$avant] ?? 0)) {
+                $ligneGarde->statut = $ligneDoublon->statut;
+                $ligneGarde->note = $ligneGarde->note ?: $ligneDoublon->note;
+                $ligneGarde->save();
+            }
+
+            $conflits[] = [
+                'seance_id' => (int) $ligneDoublon->seance_id,
+                'garde' => $avant,
+                'doublon' => (string) $ligneDoublon->statut,
+                'retenu' => (string) $ligneGarde->statut,
+            ];
+
+            $ligneDoublon->delete();
+        }
+
+        return $conflits;
     }
 
     /**

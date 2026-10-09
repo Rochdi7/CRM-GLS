@@ -231,4 +231,73 @@ final class PaiementProfRecalculTest extends TestCase
         $this->recalculer($superAdmin->fresh(), $depense)->assertSessionDoesntHaveErrors();
         $this->assertSame('3100.00', $depense->fresh()->montant);
     }
+
+    /**
+     * Les ajustements manuels du calcul sont ENREGISTRÉS avec la dépense
+     * (08/10/2026) : « Modifier le calcul » rouvre le calcul tel qu'il a été
+     * laissé, pas le calcul brut — l'opérateur retapait chaque correction.
+     */
+    public function test_manual_adjustments_are_saved_and_served_back_to_the_recalculation(): void
+    {
+        $user = $this->frontOffice();
+
+        $this->actingAs($user)
+            ->post(route('backoffice.depenses.store'), $this->payload([
+                'calcul_ajustements' => ['12' => '500', '34' => '250.5', '56' => ''],
+            ]))
+            ->assertSessionDoesntHaveErrors();
+
+        $depense = Depense::query()->latest('id')->firstOrFail();
+        // Clés entières, montants arrondis, ligne vide ignorée.
+        // jsonb rend 500 pour 500.0 : comparaison en valeur, pas en type.
+        $this->assertEquals([12 => 500, 34 => 250.5], $depense->calcul_ajustements);
+
+        $this->actingAs($user)
+            ->get(route('backoffice.depenses.index', ['tab' => 'paiements-prof', 'ppEdit' => $depense->id]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('recalculDepense.calculAjustements', ['12' => '500.00', '34' => '250.50']));
+
+        $this->actingAs($user)->get(route('backoffice.depenses.show', $depense))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('depense.calculAjustements', ['12' => '500.00', '34' => '250.50']));
+    }
+
+    public function test_recalculating_replaces_the_adjustments_and_an_empty_value_clears_them(): void
+    {
+        $user = $this->frontOffice();
+        $depense = $this->createdBy($user);
+        $depense->forceFill(['calcul_ajustements' => [12 => 500.0]])->saveQuietly();
+
+        // Absents de la requête ⇒ inchangés.
+        $this->recalculer($user, $depense)->assertSessionDoesntHaveErrors();
+        $this->assertEquals([12 => 500], $depense->fresh()->calcul_ajustements);
+
+        $this->actingAs($user)->post(route('backoffice.depenses.update', $depense), $this->payload([
+            '_method' => 'put', 'montant' => '3000', 'calcul_ajustements' => ['78' => '100'],
+        ]))->assertSessionDoesntHaveErrors();
+        $this->assertEquals([78 => 100], $depense->fresh()->calcul_ajustements);
+
+        // Le modal envoie une chaîne vide quand plus rien n'est ajusté.
+        $this->actingAs($user)->post(route('backoffice.depenses.update', $depense), $this->payload([
+            '_method' => 'put', 'montant' => '2500', 'calcul_ajustements' => '',
+        ]))->assertSessionDoesntHaveErrors();
+        $this->assertNull($depense->fresh()->calcul_ajustements);
+    }
+
+    public function test_adjustments_are_refused_on_an_ordinary_expense(): void
+    {
+        $user = $this->frontOffice();
+        $ordinaire = TypeDepense::create(['nom' => 'Fournitures', 'statut' => TypeDepense::STATUT_ACTIF]);
+
+        $this->actingAs($user)
+            ->post(route('backoffice.depenses.store'), [
+                'type_depense_id' => $ordinaire->id,
+                'montant' => '100',
+                'methode_paiement' => 'Espèces',
+                'date_depense' => '2025-09-30',
+                'description' => 'Papier',
+                'calcul_ajustements' => ['12' => '500'],
+            ])
+            ->assertSessionHasErrors('calcul_ajustements');
+    }
 }

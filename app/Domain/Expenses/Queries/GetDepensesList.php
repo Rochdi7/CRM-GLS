@@ -210,6 +210,10 @@ final class GetDepensesList
             // « Paiement prof » only — the CNSS contribution WITHHELD on this
             // payment (null = none). `montant` above is the net paid out.
             'cnssMontant' => $d->cnss_montant === null ? null : number_format((float) $d->cnss_montant, 2, '.', ''),
+            // « Paiement prof » only — the manual adjustments of the
+            // calculation (`student_id => montant`), stored so « Modifier le
+            // calcul » reopens the calcul as it was left (08/10/2026).
+            'calculAjustements' => self::ajustementsAffiches($d),
             'methodePaiement' => $d->methode_paiement,
             'dateDepense' => $d->date_depense?->toDateString(),
             // « Paiement prof » only — the teaching period the payment
@@ -402,5 +406,23 @@ final class GetDepensesList
         }
 
         $query->where(fn ($q) => $q->whereNull('etablissement_id')->orWhere('etablissement_id', $id));
+    }
+    /**
+     * @return array<string, string>|null  student_id => "500.00"
+     */
+    public static function ajustementsAffiches(Depense $d): ?array
+    {
+        $ajustements = Depense::normaliserAjustements($d->calcul_ajustements);
+
+        if ($ajustements === null) {
+            return null;
+        }
+
+        $affiches = [];
+        foreach ($ajustements as $studentId => $montant) {
+            $affiches[(string) $studentId] = number_format($montant, 2, '.', '');
+        }
+
+        return $affiches;
     }
 }

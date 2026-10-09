@@ -107,10 +107,10 @@ final class HiddenAccountPageSweepTest extends TestCase
 
     public function test_no_backoffice_screen_names_the_hidden_accounts(): void
     {
-        // Both hidden logins, each with the auto-provisioned till, plus a
-        // real namesake-free control so an empty page cannot pass vacuously.
+        // The hidden login with its auto-provisioned till, plus a real
+        // namesake-free control so an empty page cannot pass vacuously.
+        // (STAFF_EMAIL is an ordinary visible account since 09/10/2026.)
         $this->makeStaff(HiddenAccount::EMAIL, self::NEEDLE);
-        $this->makeStaff(HiddenAccount::STAFF_EMAIL, self::NEEDLE);
 
         $ceo = $this->makeStaff('rafik@glszentrum.com', 'Rafik');
         $ceo->user->assignRole(Role::SUPER_ADMIN);

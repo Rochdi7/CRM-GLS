@@ -556,3 +556,17 @@ ALTER TABLE inscription_fees ADD COLUMN IF NOT EXISTS semaines jsonb NULL;
 -- (idempotent). Aucun solde de caisse ne bouge.
 ALTER TABLE depenses ADD COLUMN IF NOT EXISTS cnss_montant numeric(12,2) NULL;
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 08/10/2026 — Ajustements manuels du calcul d'un « Paiement prof » :
+-- `depenses.calcul_ajustements` jsonb (`student_id => montant imposé`,
+-- NULL = aucun). Stockés pour que « Modifier le calcul » rouvre le calcul
+-- tel que l'opérateur l'avait laissé, et non le calcul brut. `montant` reste
+-- le NET versé, seule valeur débitée.
+--
+-- ⚠ RIEN À FAIRE À LA MAIN : la migration additive
+-- `2026_10_08_100000_add_calcul_ajustements_to_depenses_table.php` est jouée
+-- par le `php artisan migrate --force` du déploiement. SQL conservé pour
+-- mémoire (idempotent). Aucun solde de caisse ne bouge.
+ALTER TABLE depenses ADD COLUMN IF NOT EXISTS calcul_ajustements jsonb NULL;
+-- ---------------------------------------------------------------------------

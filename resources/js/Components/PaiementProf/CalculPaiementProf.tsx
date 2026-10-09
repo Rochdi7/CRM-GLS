@@ -77,6 +77,12 @@ export interface PaiementProfPrefill {
     periodeDebut: string;
     periodeFin: string;
     description: string;
+    /**
+     * Les ajustements MANUELS laissés sur le calcul (`student_id => montant`,
+     * lignes modifiées seulement) — enregistrés avec la dépense pour que
+     * « Modifier le calcul » les retrouve (08/10/2026).
+     */
+    ajustements: Record<string, string>;
     retour: PaiementProfCalculParams;
 }
 
@@ -122,6 +128,12 @@ interface CalculPaiementProfProps {
     lectureSeule?: boolean;
     /** État initial de la case CNSS — celui de la dépense affichée. */
     cnssInitial?: boolean;
+    /**
+     * Ajustements manuels ENREGISTRÉS avec la dépense affichée / recalculée
+     * (`student_id => montant`) : le calcul rouvre tel que l'opérateur
+     * l'avait laissé, jamais le calcul brut (08/10/2026).
+     */
+    ajustementsInitiaux?: Record<string, string> | null;
 }
 
 /**
@@ -163,9 +175,18 @@ export default function CalculPaiementProf({
     verrouille = false,
     lectureSeule = false,
     cnssInitial = false,
+    ajustementsInitiaux = null,
 }: CalculPaiementProfProps) {
-    // Ajustements manuels — état LOCAL, jamais persisté.
-    const [ajustements, setAjustements] = useState<Record<number, string>>({});
+    // Ajustements manuels — état LOCAL pendant la saisie, ENREGISTRÉS avec
+    // la dépense à « Enregistrer la dépense » (prefill.ajustements) et
+    // rechargés depuis `ajustementsInitiaux` quand une dépense est rouverte
+    // ou aperçue — sans quoi « Modifier le calcul » rouvrait le calcul brut
+    // (08/10/2026).
+    const [ajustements, setAjustements] = useState<Record<number, string>>(() => ajustementsInitiaux ?? {});
+    useEffect(() => {
+        setAjustements(ajustementsInitiaux ?? {});
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [calcul?.group.id, calcul?.enseignant.id, calcul?.periode.debut, calcul?.periode.fin]);
     // Cotisation CNSS retenue (06/10/2026) — décochée par défaut, et remise à
     // zéro dès que le calcul change de prof / groupe / période : une retenue
     // qui survivrait au calcul suivant serait appliquée sans que personne
@@ -451,6 +472,16 @@ export default function CalculPaiementProf({
             // Pas de « Paiement prof » en tête : la colonne Type le dit déjà.
             // Séparateur « - » simple, jamais le tiret cadratin.
             description: [calcul.enseignant.nom, calcul.group.nom, calcul.periode.libelle].join(' - '),
+            // Les lignes AJUSTÉES à la main, et elles seules — enregistrées
+            // avec la dépense pour que « Modifier le calcul » les retrouve.
+            // Une saisie vide ou non numérique n'est pas un ajustement.
+            ajustements: estHoraire
+                ? {}
+                : Object.fromEntries(
+                      Object.entries(ajustements)
+                          .filter(([, v]) => v !== undefined && v !== '' && Number.isFinite(Number(v)))
+                          .map(([k, v]) => [k, Number(v).toFixed(2)]),
+                  ),
             // De quoi ROUVRIR ce calcul à l'identique depuis le modal de
             // dépense : relu avant de signer, le détail doit rester à un clic.
             retour: {

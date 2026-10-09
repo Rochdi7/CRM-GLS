@@ -16,7 +16,9 @@ use App\Models\Etablissement;
 use App\Models\Group;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
+use App\Models\Presence;
 use App\Models\Remboursement;
+use App\Models\Seance;
 use App\Models\Student;
 use App\Models\User;
 use App\Support\Authorization\PermissionRegistry;
@@ -137,6 +139,46 @@ final class StudentMergeTest extends TestCase
         // Le frais n'a pas été touché non plus (la fusion ne réaffecte rien).
         $this->assertNull($paiement->inscription_fee_id);
         $this->assertSame(InscriptionFee::STATUT_NON_PAYE, $fee->fresh()->statut);
+    }
+
+    public function test_attendance_on_the_same_seance_is_merged_into_one_row(): void
+    {
+        // Production 08/10/2026 (GLS-59456CE2) : les deux fiches avaient été
+        // appelées sur la même séance, l'UPDATE en masse violait l'index
+        // unique (seance_id, student_id) et la fusion échouait entièrement.
+        $garde = $this->student('ZERROUK', 'FATIMA EZZAHRA');
+        $doublon = $this->student('ZERROUK', 'FATIMA EZZAHRA');
+        $inscription = $this->inscription($garde);
+
+        $seance = fn (string $date): Seance => Seance::create([
+            'group_id' => $inscription->group_id,
+            'date_seance' => $date,
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+            'statut' => Seance::STATUT_EFFECTUEE,
+        ]);
+
+        $commune1 = $seance('2026-09-20');
+        $commune2 = $seance('2026-09-21');
+        $propre = $seance('2026-09-22');
+
+        // Séance 1 : absent sous le bon nom, présent sous le doublon ⇒ présent.
+        Presence::create(['seance_id' => $commune1->id, 'student_id' => $garde->id, 'statut' => Presence::STATUT_ABSENT]);
+        Presence::create(['seance_id' => $commune1->id, 'student_id' => $doublon->id, 'statut' => Presence::STATUT_PRESENT]);
+        // Séance 2 : présent sous le bon nom, absent sous le doublon ⇒ reste présent.
+        Presence::create(['seance_id' => $commune2->id, 'student_id' => $garde->id, 'statut' => Presence::STATUT_PRESENT]);
+        Presence::create(['seance_id' => $commune2->id, 'student_id' => $doublon->id, 'statut' => Presence::STATUT_ABSENT]);
+        // Séance 3 : seul le doublon a été appelé ⇒ la ligne suit la personne.
+        Presence::create(['seance_id' => $propre->id, 'student_id' => $doublon->id, 'statut' => Presence::STATUT_ABSENT]);
+
+        $resultat = app(FusionnerEtudiants::class)->handle($garde, $doublon);
+
+        $this->assertFalse($resultat['supprime']);
+        $this->assertSame(0, Presence::where('student_id', $doublon->id)->count());
+        $this->assertSame(3, Presence::where('student_id', $garde->id)->count());
+        $this->assertSame(Presence::STATUT_PRESENT, Presence::where(['seance_id' => $commune1->id, 'student_id' => $garde->id])->value('statut'));
+        $this->assertSame(Presence::STATUT_PRESENT, Presence::where(['seance_id' => $commune2->id, 'student_id' => $garde->id])->value('statut'));
+        $this->assertSame(Presence::STATUT_ABSENT, Presence::where(['seance_id' => $propre->id, 'student_id' => $garde->id])->value('statut'));
     }
 
     public function test_a_duplicate_that_carried_rows_is_kept_but_renamed_never_deleted(): void

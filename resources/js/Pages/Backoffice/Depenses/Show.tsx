@@ -251,6 +251,7 @@ export default function DepenseShow({ depense, canAudit, recalculUrl, calculAper
                         embedded
                         lectureSeule
                         cnssInitial={depense.cnssMontant !== null}
+                        ajustementsInitiaux={depense.calculAjustements}
                         calcul={calculApercu}
                         filters={{ groupFilter: '', enseignantFilter: '', debut: '', fin: '', heures: '', dureeSeance: '' }}
                         groupOptions={[]}

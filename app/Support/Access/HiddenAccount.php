@@ -46,14 +46,16 @@ use Illuminate\Support\Facades\Auth;
  * `isHidden()` answers "is one of the hidden logins", and only ever grants
  * an account access to its OWN records. Never key `hides()` on `emails()`.
  *
- * TWO logins belong to him and both are hidden (`self::emails()`): the
- * technical account `EMAIL` and the GLS-domain staff account `STAFF_EMAIL`,
- * once seeded as a real « Responsable de système ». Every DISPLAY filter
- * matches the LIST; `EMAIL` alone stays the audit-journal identity
+ * ONE login is hidden (`self::emails()`): the technical account `EMAIL`.
+ * The GLS-domain account `STAFF_EMAIL` (« Responsable de système »,
+ * EMP-004) was hidden from 07/09/2026 to 09/10/2026 and is now an ORDINARY,
+ * visible staff account — like the CEO's — because he really works in the
+ * centres and receives cash transfers (a hidden till could not be picked as
+ * a transfer destination). `EMAIL` is also the audit-journal identity
  * (`AuditLogRegistry::DEVELOPER_EMAIL` aliases it) and the address
- * `MaintainerUserSeeder` provisions — never widen that constant instead.
+ * `MaintainerUserSeeder` provisions.
  *
- * ⚠ Both accounts hold `super-admin`. Hiding them is display-only, so GLS
+ * ⚠ The hidden account holds `super-admin`. Hiding them is display-only, so GLS
  * keeps at least one VISIBLE super-admin of its own (the CEO,
  * rafik@glszentrum.com) — never hide the last visible one, or the
  * Autorisations screen shows nobody who can grant anything.
@@ -70,14 +72,13 @@ final class HiddenAccount
     public const EMAIL = 'rochdi.karouali1234@gmail.com';
 
     /**
-     * The GLS-domain login of the same person.
+     * The GLS-domain login of the same person — an ORDINARY, VISIBLE staff
+     * account (« Responsable de système », EMP-004), NOT in `emails()`.
      *
-     * Historically this was seeded as ordinary staff (« Responsable de
-     * système », EMP-004) on the assumption that the maintainer's technical
-     * account and his staff account were two different people. They are not:
-     * both belong to the developer of the system, so both are filtered from
-     * the interface (decided 07/09/2026, after « Caisse globale » listed two
-     * ROCHDI KAROUALI tills side by side).
+     * Hidden from 07/09/2026 until 09/10/2026, when the owner decided it is
+     * a normal account like the CEO's: he works in the centres and receives
+     * cash transfers. Kept as a constant because it is the canonical
+     * example of "a staff login that is NOT the maintenance identity".
      *
      * ⚠ It is deliberately NOT `EMAIL`. That constant is the maintainer's
      * identity for the AUDIT JOURNAL (`AuditLogRegistry::DEVELOPER_EMAIL`
@@ -98,7 +99,7 @@ final class HiddenAccount
      */
     public static function emails(): array
     {
-        return [self::EMAIL, self::STAFF_EMAIL];
+        return [self::EMAIL];
     }
 
     /**

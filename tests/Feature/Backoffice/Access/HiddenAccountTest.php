@@ -160,36 +160,39 @@ final class HiddenAccountTest extends TestCase
     }
 
     /**
-     * The maintainer's SECOND login — the GLS-domain account once seeded as
-     * an ordinary « Responsable de système » (EMP-004).
-     *
-     * Reported 07/09/2026: « Caisse globale » showed two ROCHDI KAROUALI
-     * tills side by side. Only the technical gmail account was filtered; the
-     * staff account was assumed to be a different person. Both belong to the
-     * developer, so both are hidden — while `AuditLogRegistry::DEVELOPER_EMAIL`
-     * deliberately keeps naming the technical account alone.
+     * The GLS-domain login (`STAFF_EMAIL`) is an ORDINARY, visible account
+     * since 09/10/2026 — like the CEO's. Only the technical gmail account
+     * stays hidden. He works in the centres and receives cash transfers.
      */
-    public function test_the_maintainers_gls_domain_account_is_hidden_too(): void
+    public function test_the_gls_domain_staff_account_is_visible_like_any_staff(): void
     {
-        $dev = $this->staff(HiddenAccount::STAFF_EMAIL);
+        $dev = $this->maintainer();
+        $staff = $this->staff(HiddenAccount::STAFF_EMAIL);
         $ceo = $this->staff('rafik@glszentrum.com');
 
         $devTill = Caisse::where('responsable_employee_id', $dev->id)->firstOrFail();
+        $staffTill = Caisse::where('responsable_employee_id', $staff->id)->firstOrFail();
 
         $this->actingAs($ceo->user);
+        app(CurrentContext::class)->setEtablissement($this->centre->id);
 
         $caisses = Caisse::query();
         HiddenAccount::hideCaisses($caisses);
+        $this->assertContains($staffTill->id, $caisses->pluck('id'));
         $this->assertNotContains($devTill->id, $caisses->pluck('id'));
 
         $users = User::query();
         HiddenAccount::hideUsers($users);
+        $this->assertContains($staff->user_id, $users->pluck('id'));
         $this->assertNotContains($dev->user_id, $users->pluck('id'));
 
-        $this->assertFalse(
-            Employee::whereKey($dev->id)->exists(),
-            'The global scope must hide the staff account exactly like the technical one.',
-        );
+        $this->assertTrue(Employee::whereKey($staff->id)->exists());
+        $this->assertFalse(Employee::whereKey($dev->id)->exists());
+
+        $transferOptions = app(\App\Domain\Finance\Queries\GetCaisseTransfersList::class)
+            ->caisseOptions($ceo->user)->pluck('id');
+        $this->assertContains($staffTill->id, $transferOptions);
+        $this->assertNotContains($devTill->id, $transferOptions);
     }
 
     public function test_the_audit_journal_identity_stays_the_technical_account_alone(): void
@@ -200,7 +203,7 @@ final class HiddenAccountTest extends TestCase
             HiddenAccount::EMAIL,
             \App\Support\Audit\AuditLogRegistry::DEVELOPER_EMAIL,
         );
-        $this->assertContains(HiddenAccount::STAFF_EMAIL, HiddenAccount::emails());
+        $this->assertSame([HiddenAccount::EMAIL], HiddenAccount::emails());
     }
 
     public function test_the_maintainer_still_sees_himself(): void
@@ -335,24 +338,20 @@ final class HiddenAccountTest extends TestCase
 
         $this->assertTrue(
             HiddenAccount::hides(),
-            'A hidden account that is not the maintenance identity still has the filter applied.',
+            'A login that is not the maintenance identity has the filter applied.',
         );
+        $this->assertFalse(HiddenAccount::isHidden($staff->user));
 
         $query = Caisse::query();
         HiddenAccount::hideCaisses($query);
         $visible = $query->pluck('id');
 
         $this->assertNotContains($devTill->id, $visible);
-        $this->assertNotContains(
-            $staffTill->id,
-            $visible,
-            'It does not even see its OWN till in a list - hiding is display-wide.',
-        );
+        $this->assertContains($staffTill->id, $visible);
 
         $options = app(\App\Domain\Payments\Queries\GetEncaissementsList::class)
             ->caisseOptions($staff->user)->pluck('id');
         $this->assertNotContains($devTill->id, $options);
-        $this->assertNotContains($staffTill->id, $options);
     }
 
     /**

@@ -45,6 +45,13 @@ interface DepenseFormState {
      * le NET versé ; cocher/décocher l'ajuste de la retenue (`cnssMontant`).
      */
     cnss: boolean;
+    /**
+     * « Paiement prof » only — les ajustements manuels du calcul
+     * (`student_id => montant`), ENREGISTRÉS avec la dépense pour que
+     * « Modifier le calcul » rouvre le calcul tel qu'il a été laissé
+     * (08/10/2026). Vide ⇒ aucun.
+     */
+    calcul_ajustements: Record<string, string>;
     reference_facture: string;
     description: string;
     mots_cles: string;
@@ -127,6 +134,7 @@ function emptyDepenseForm(): DepenseFormState {
         periode_debut: '',
         periode_fin: '',
         cnss: false,
+        calcul_ajustements: {},
         reference_facture: '',
         description: '',
         mots_cles: '',
@@ -384,6 +392,7 @@ export default function DepensesIndex({
                 enseignant_id: prefill.enseignantId,
                 montant: prefill.montant,
                 cnss: prefill.cnss,
+                calcul_ajustements: prefill.ajustements,
                 periode_debut: prefill.periodeDebut,
                 periode_fin: prefill.periodeFin,
                 description: prefill.description,
@@ -405,6 +414,7 @@ export default function DepensesIndex({
             // Déjà retenue sur `montant` par le calcul : la case s'ouvre
             // cochée pour le dire, sans rien déduire une seconde fois.
             cnss: prefill.cnss,
+            calcul_ajustements: prefill.ajustements,
             periode_debut: prefill.periodeDebut,
             periode_fin: prefill.periodeFin,
             description: prefill.description,
@@ -596,6 +606,7 @@ export default function DepensesIndex({
             periode_debut: row.periodeDebut ?? '',
             periode_fin: row.periodeFin ?? '',
             cnss: row.cnssMontant !== null,
+            calcul_ajustements: row.calculAjustements ?? {},
             reference_facture: row.referenceFacture ?? '',
             description: row.description ?? '',
             mots_cles: row.motsCles ?? '',
@@ -657,13 +668,24 @@ export default function DepensesIndex({
      * ordinary dépense or a supplier invoice ref for a paiement prof.
      */
     function depensePayload(data: DepenseFormState): Record<string, unknown> {
-        const { group_id, enseignant_id, periode_debut, periode_fin, cnss, reference_facture, ...rest } = data;
+        const { group_id, enseignant_id, periode_debut, periode_fin, cnss, calcul_ajustements, reference_facture, ...rest } = data;
 
         // `enseignant_id` est PROHIBÉ sur une dépense ordinaire (PaiementProfRules) :
         // il ne part qu'en mode prof, et seulement s'il est renseigné. `cnss`
         // de même — une dépense ordinaire ne retient aucune cotisation.
+        // `calcul_ajustements` part TOUJOURS en mode prof : un objet vide ne
+        // traverse pas FormData, donc une chaîne vide dit explicitement au
+        // serveur « plus aucun ajustement » (sinon les anciens survivraient).
         return profMode
-            ? { ...rest, group_id, periode_debut, periode_fin, cnss, ...(enseignant_id !== '' ? { enseignant_id } : {}) }
+            ? {
+                  ...rest,
+                  group_id,
+                  periode_debut,
+                  periode_fin,
+                  cnss,
+                  calcul_ajustements: Object.keys(calcul_ajustements).length > 0 ? calcul_ajustements : '',
+                  ...(enseignant_id !== '' ? { enseignant_id } : {}),
+              }
             : { ...rest, reference_facture };
     }
 
@@ -759,6 +781,24 @@ export default function DepensesIndex({
             })(),
             montant: params.get('prefill_montant') ?? '',
             cnss: params.get('prefill_cnss') === '1',
+            calcul_ajustements: (() => {
+                // Ajustements manuels du calcul (JSON) — ignorés s'ils sont
+                // illisibles : le montant transmis les porte déjà.
+                try {
+                    const brut = params.get('prefill_ajustements');
+                    const lu = brut === null ? null : (JSON.parse(brut) as unknown);
+
+                    return lu !== null && typeof lu === 'object' && !Array.isArray(lu)
+                        ? Object.fromEntries(
+                              Object.entries(lu as Record<string, unknown>)
+                                  .filter(([, v]) => typeof v === 'string' || typeof v === 'number')
+                                  .map(([k, v]) => [k, String(v)]),
+                          )
+                        : {};
+                } catch {
+                    return {};
+                }
+            })(),
             periode_debut: params.get('prefill_periode_debut') ?? '',
             periode_fin: params.get('prefill_periode_fin') ?? '',
             description: params.get('prefill_description') ?? '',
@@ -1177,6 +1217,11 @@ export default function DepensesIndex({
                         onNavigate={naviguerCalcul}
                         onEnregistrer={enregistrerDepuisCalcul}
                         verrouille={recalculCible !== null}
+                        // « Modifier le calcul » rouvre le calcul AVEC les
+                        // ajustements enregistrés sur la dépense, et la case
+                        // CNSS telle qu'elle était — jamais le calcul brut.
+                        cnssInitial={recalculCible !== null && recalculCible.cnssMontant !== null}
+                        ajustementsInitiaux={recalculCible?.calculAjustements ?? null}
                         openRequest={calculOpenRequest}
                     />
                 )}

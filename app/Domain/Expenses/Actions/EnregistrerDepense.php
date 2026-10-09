@@ -88,6 +88,10 @@ final class EnregistrerDepense
                 : null;
             unset($data['cnss']);
 
+            // Ajustements manuels du calcul (08/10/2026) — normalisés ici,
+            // jamais stockés tels que reçus : NULL dès qu'il n'y a rien.
+            $data['calcul_ajustements'] = Depense::normaliserAjustements($data['calcul_ajustements'] ?? null);
+
             if (! $requiresApproval) {
                 // Checked BEFORE the row exists: a refused expense must leave
                 // no trace at all (no DEP- reference burnt, no Approuvée row

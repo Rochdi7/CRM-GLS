@@ -673,6 +673,8 @@ export interface DepenseDetails {
     montant: MoneyDisplay;
     /** « Paiement prof » only — CNSS withheld on this payment (`null` = none). */
     cnssMontant: MoneyDisplay | null;
+    /** « Paiement prof » only — manual adjustments of the calcul (`student_id => montant`). */
+    calculAjustements: Record<string, string> | null;
     typeDepense: string | null;
     dateDepense: string | null;
     /** « Paiement prof » only — the teaching period the payment covers. */
@@ -2625,6 +2627,12 @@ export interface DepenseRow {
      * payment (`null` = none). `montant` is the net paid out.
      */
     cnssMontant: MoneyDisplay | null;
+    /**
+     * « Paiement prof » only — the manual adjustments of the calculation
+     * (`student_id => montant`), stored so « Modifier le calcul » reopens
+     * the calcul as it was left, never the raw one (08/10/2026).
+     */
+    calculAjustements: Record<string, string> | null;
     methodePaiement: string | null;
     dateDepense: string | null;
     /** « Paiement prof » only — the teaching period the payment covers. */

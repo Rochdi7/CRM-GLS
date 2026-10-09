@@ -85,8 +85,13 @@ final class DepenseController extends Controller
         // le calcul PROPOSE, la dépense reste une soumission ordinaire.
         $canCalculer = $user->can('prof-payments.calculate') && $user->can('expenses.view');
         $calculKeys = ['groupFilter' => 'ppGroup', 'enseignantFilter' => 'ppEnseignant', 'mois' => 'ppMois', 'debut' => 'ppDebut', 'fin' => 'ppFin', 'heures' => 'ppHeures'];
+        // « Modifier le calcul » : la dépense en attente recalculée est
+        // résolue AVANT le calcul, pour que ses ajustements manuels
+        // enregistrés soient rejoués dessus (08/10/2026) — l'opérateur
+        // retrouve le calcul tel qu'il l'avait laissé, pas le calcul brut.
+        $recalculDepense = $canCalculer ? $this->recalculDepense($request, $getDepensesList) : null;
         ['calcul' => $calcul, 'filters' => $calculFilters] = $canCalculer
-            ? $this->resolvePaiementProfCalcul($request, $getPaiementProfCalcul, $calculKeys)
+            ? $this->resolvePaiementProfCalcul($request, $getPaiementProfCalcul, $calculKeys, $recalculDepense['calculAjustements'] ?? null)
             : ['calcul' => null, 'filters' => ['groupFilter' => '', 'enseignantFilter' => '', 'debut' => '', 'fin' => '', 'heures' => '', 'dureeSeance' => '']];
 
         // The operation trail (créée le / modifiée le) and the « Validation
@@ -207,7 +212,7 @@ final class DepenseController extends Controller
             // nouvelle. `ppEdit` vient du navigateur : la policy
             // (recalculer) et la garde de contexte se rejouent ici, et un id
             // refusé retombe simplement sur une saisie ordinaire.
-            'recalculDepense' => $canCalculer ? $this->recalculDepense($request, $getDepensesList) : null,
+            'recalculDepense' => $recalculDepense,
             'calculGroupOptions' => fn (): array => $canCalculer ? $getPaiementProfCalcul->groupOptions($user) : [],
             'paliersPaie' => CalculerPaiementProfParPaliers::PALIERS,
             // Cotisation CNSS retenue sur un paiement prof — UNE constante,
@@ -347,7 +352,14 @@ final class DepenseController extends Controller
             $depense->periode_fin->toDateString(),
         );
 
-        return $periode === null ? null : $getPaiementProfCalcul(group: $group, enseignant: $enseignant, mois: $periode);
+        return $periode === null ? null : $getPaiementProfCalcul(
+            group: $group,
+            enseignant: $enseignant,
+            mois: $periode,
+            // Les ajustements manuels enregistrés avec la dépense : l'aperçu
+            // montre le calcul tel qu'il a été accepté (08/10/2026).
+            ajustements: Depense::normaliserAjustements($depense->calcul_ajustements) ?? [],
+        );
     }
 
     /**
@@ -715,6 +727,14 @@ final class DepenseController extends Controller
                 : null;
         }
 
+        // Ajustements manuels du calcul (08/10/2026) : le modal les renvoie
+        // à CHAQUE édition d'un paiement prof — ceux de la ligne, ou ceux du
+        // calcul refait — et une chaîne vide efface tout. Absents de la
+        // requête ⇒ inchangés.
+        if ($request->isPaiementProf() && $request->has('calcul_ajustements')) {
+            $payload['calcul_ajustements'] = Depense::normaliserAjustements($request->input('calcul_ajustements'));
+        }
+
         // Switching a « Paiement prof » back to an ordinary type sends none
         // of the prof-only fields, and `prohibited` only rejects fields that
         // ARE sent — so without this the row would keep a stale group_id and
@@ -725,6 +745,7 @@ final class DepenseController extends Controller
             $payload['periode_debut'] = null;
             $payload['periode_fin'] = null;
             $payload['cnss_montant'] = null;
+            $payload['calcul_ajustements'] = null;
         }
 
         // caisse_id is absent from $payload by construction and montant is
