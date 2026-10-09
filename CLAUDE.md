@@ -818,17 +818,21 @@ the database layer. Non-negotiable invariants already enforced in code:
     the matching funnel in the read model (never in the React component):
     `HiddenAccount::hideEmployees()` (usually automatic —
     `Employee` is `#[ScopedBy(HiddenAccountScope::class)]`),
-    `hideUsers($query, $table)`, `hideCaisses()`. Two hidden logins exist and
-    both come from `HiddenAccount::emails()` — the technical
-    `EMAIL` and the GLS-domain `STAFF_EMAIL` (both are the developer;
-    established 07/09/2026 after « Caisse globale » listed two ROCHDI
-    KAROUALI tills). Never match one address by hand: filter through
-    `emails()` so a third address is one constant, not a repo-wide sweep.
+    `hideUsers($query, $table)`, `hideCaisses()`. **ONE hidden login** comes from
+    `HiddenAccount::emails()` — the technical `EMAIL`
+    (rochdi.karouali1234@gmail.com). The GLS-domain `STAFF_EMAIL`
+    (rochdi.karouali@glszentrum.com, « Responsable de système ») was hidden
+    07/09 → 09/10/2026 and is now an ORDINARY VISIBLE account like the
+    CEO's (owner's decision: he works in the centres and receives cash
+    transfers — a hidden till could not be picked as a transfer
+    destination). Never re-add it to `emails()`. Never match one address by
+    hand: filter through `emails()` so another address is one constant,
+    not a repo-wide sweep.
     `AuditLogRegistry::DEVELOPER_EMAIL` deliberately stays `EMAIL` ALONE —
     the « Inclure le compte technique » toggle must keep meaning one account.
     Three things this rule never becomes: a write-time skip (the journal
-    records both accounts in full — see the bullet above), an authorization
-    bypass (both hold `super-admin` and `Gate::before` treats them normally,
+    records it in full — see the bullet above), an authorization
+    bypass (it holds `super-admin` and `Gate::before` treats it normally,
     cash-transfer validation included), or a filter applied to GLS's own
     business records. Hiding is display-only, so at least one super-admin
     must stay VISIBLE (the CEO) or the Autorisations screen shows nobody who

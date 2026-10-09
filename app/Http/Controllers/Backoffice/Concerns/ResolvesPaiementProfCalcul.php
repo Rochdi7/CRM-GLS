@@ -32,8 +32,9 @@ trait ResolvesPaiementProfCalcul
      * @param  array<string, string>  $keys  nom du paramètre de requête pour
      *                                       chacune des 4 clés `groupFilter`,
      *                                       `enseignantFilter`, `mois`, `heures`.
+     * @param  array<int|string, float|string>|null  $ajustements  student_id => montant imposé
      */
-    private function resolvePaiementProfCalcul(Request $request, GetPaiementProfCalcul $query, array $keys = []): array
+    private function resolvePaiementProfCalcul(Request $request, GetPaiementProfCalcul $query, array $keys = [], ?array $ajustements = null): array
     {
         $keys = [
             'groupFilter' => 'groupFilter',
@@ -80,6 +81,9 @@ trait ResolvesPaiementProfCalcul
                 enseignant: $enseignant,
                 mois: $periode,
                 heures: $heuresFilter !== '' ? (float) $heuresFilter : null,
+                // Ajustements manuels enregistrés sur la dépense recalculée
+                // (08/10/2026) — `student_id => montant`, déjà normalisés.
+                ajustements: $ajustements === null ? [] : array_map('floatval', $ajustements),
             );
         }
 

@@ -78,6 +78,13 @@ trait PaiementProfRules
             // (`CotisationCnss::MONTANT`, jamais saisi par le client) ; sans
             // objet sur une dépense ordinaire, donc refusée.
             'cnss' => $isProf ? ['nullable', 'boolean'] : ['prohibited'],
+            // Ajustements manuels du calcul (08/10/2026) — `student_id =>
+            // montant imposé`, tels que laissés dans « Calcul paiement prof ».
+            // Stockés pour que « Modifier le calcul » les retrouve ; une
+            // chaîne vide efface tout (le modal l'envoie quand plus rien
+            // n'est ajusté). Sans objet sur une dépense ordinaire.
+            'calcul_ajustements' => $isProf ? ['nullable', 'array'] : ['prohibited'],
+            'calcul_ajustements.*' => $isProf ? ['nullable', 'numeric', 'min:0'] : [],
             // Supplier invoice reference — dépenses only.
             'reference_facture' => $isProf
                 ? ['prohibited']

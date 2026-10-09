@@ -56,7 +56,7 @@ class Depense extends Model implements HasMedia
 
     protected $fillable = [
         'reference', 'type_depense_id', 'caisse_id', 'etablissement_id', 'group_id', 'enseignant_id', 'montant',
-        'cnss_montant',
+        'cnss_montant', 'calcul_ajustements',
         'methode_paiement', 'date_depense', 'periode_debut', 'periode_fin',
         'reference_facture',
         'description', 'mots_cles', 'note', 'agent_id',
@@ -78,6 +78,7 @@ class Depense extends Model implements HasMedia
         return [
             'montant' => 'decimal:2',
             'cnss_montant' => 'decimal:2',
+            'calcul_ajustements' => 'array',
             'date_depense' => 'date',
             'periode_debut' => 'date',
             'periode_fin' => 'date',
@@ -93,6 +94,36 @@ class Depense extends Model implements HasMedia
     public function cnssDeduite(): bool
     {
         return $this->cnss_montant !== null;
+    }
+
+    /**
+     * Ajustements MANUELS du calcul d'un « Paiement prof » (08/10/2026) :
+     * `student_id => montant imposé`, tels que saisis dans « Calcul paiement
+     * prof ». Stockés pour que « Modifier le calcul » ROUVRE le calcul tel
+     * que l'opérateur l'avait laissé, et non le calcul brut. Une seule
+     * normalisation, partagée par la création et par la mise à jour : clés
+     * entières, montants arrondis, et NULL dès qu'il n'y a rien à garder
+     * (une ligne vide ou non numérique est ignorée, jamais stockée).
+     *
+     * @return array<int, float>|null
+     */
+    public static function normaliserAjustements(mixed $ajustements): ?array
+    {
+        if (! is_array($ajustements)) {
+            return null;
+        }
+
+        $propres = [];
+
+        foreach ($ajustements as $studentId => $montant) {
+            if (! is_numeric($studentId) || $montant === null || $montant === '' || ! is_numeric($montant)) {
+                continue;
+            }
+
+            $propres[(int) $studentId] = round((float) $montant, 2);
+        }
+
+        return $propres === [] ? null : $propres;
     }
 
     /** Awaiting a super-admin decision — no money has moved yet. */

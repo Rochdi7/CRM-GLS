@@ -78,6 +78,11 @@ export default function PaiementProfIndex({
             // Cotisation CNSS cochée au calcul : le modal s'ouvre coché, le
             // montant transmis est déjà le net.
             ...(prefill.cnss ? { prefill_cnss: '1' } : {}),
+            // Ajustements manuels du calcul, enregistrés avec la dépense
+            // (08/10/2026) — même contrat que l'onglet embarqué.
+            ...(Object.keys(prefill.ajustements).length > 0
+                ? { prefill_ajustements: JSON.stringify(prefill.ajustements) }
+                : {}),
             prefill_retour: `?${retour.toString()}`,
             ...(paiementProfTypeId !== null ? { prefill_type_depense_id: String(paiementProfTypeId) } : {}),
         });

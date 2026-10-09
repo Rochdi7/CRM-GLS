@@ -812,6 +812,16 @@ final class GetEncaissementsList
         return Student::query()
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
+            // Les étudiants qui ont une inscription ACTIVE (dans l'année
+            // active) d'abord : ce sont les seuls dont un frais se paie
+            // (`payable`, studentInscriptions()). Les autres restent listés
+            // — une avance se saisit pour n'importe quel étudiant du centre.
+            ->orderByRaw(
+                'case when exists (select 1 from inscriptions i where i.student_id = students.id and i.statut = ?'
+                .($this->context->anneeScolaireId() ? ' and i.annee_scolaire_id = ?' : '')
+                .') then 0 else 1 end',
+                array_values(array_filter([Inscription::STATUT_ACTIVE, $this->context->anneeScolaireId()])),
+            )
             ->orderBy('nom')
             ->orderBy('prenom')
             // Only the three columns the option needs — this list is every
