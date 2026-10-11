@@ -1382,6 +1382,8 @@ export interface StudentRow {
     transfereVers: StudentTransferLink | null;
     /** Copie créée par un transfert : la fiche d'origine (présences, historique). */
     transfereDepuis: StudentTransferLink | null;
+    /** Livres remis sur l'une de ses inscriptions (tous statuts), du plus ancien au plus récent. */
+    livres: Array<{ nom: string; groupe: string | null; date: string | null }>;
 }
 
 /** Onglet « Absences » (fiche étudiant / fiche inscription) — GetAbsencesEtudiant. */
@@ -1437,6 +1439,8 @@ export interface StudentsFilters {
     telephoneFilter: string;
     /** État d'inscription — '' (tous) | 'active' | 'cancelled' | 'none'. */
     inscriptionFilter: string;
+    /** Livre remis — '' (tous) | 'avec' | 'sans'. */
+    livreFilter: string;
     perPage: number;
 }
 

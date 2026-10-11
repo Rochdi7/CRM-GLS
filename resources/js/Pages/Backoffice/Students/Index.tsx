@@ -169,6 +169,10 @@ export default function StudentsIndex({
         { value: 'cancelled', label: 'Inscription annulée ou archivée' },
         { value: 'none', label: 'Sans inscription' },
     ];
+    const livreFilterOptions: SelectOption[] = [
+        { value: 'avec', label: 'Avec livre' },
+        { value: 'sans', label: 'Sans livre' },
+    ];
 
     const showsDomaine = niveauxAvecDomaine.includes(form.data.niveau);
     const showsExamen = form.data.niveau === niveauStudium;
@@ -468,6 +472,18 @@ export default function StudentsIndex({
                             />
                         </div>
                         <div style={{ width: 180 }}>
+                            <label className="form-label" htmlFor="stu-f-livre">
+                                Livre
+                            </label>
+                            <SelectField
+                                id="stu-f-livre"
+                                options={livreFilterOptions}
+                                placeholder="Tous"
+                                value={filters.livreFilter}
+                                onChange={(event) => reload({ livreFilter: event.target.value })}
+                            />
+                        </div>
+                        <div style={{ width: 180 }}>
                             <label className="form-label" htmlFor="stu-f-niveau">
                                 Intéressé par
                             </label>
@@ -525,6 +541,7 @@ export default function StudentsIndex({
                                         </a>
                                     </th>
                                     {!centerLocked && <th>Centre</th>}
+                                    <th>Livre</th>
                                     <th>Téléphone</th>
                                     <th>WhatsApp</th>
                                     <th className="text-end">Action</th>
@@ -593,6 +610,24 @@ export default function StudentsIndex({
                                     </td>
                                     <td>{student.age ?? '-'}</td>
                                     {!centerLocked && <td>{student.etablissement ?? '-'}</td>}
+                                    <td>
+                                        {student.livres.length === 0 ? (
+                                            <span className="badge badge-soft-secondary">Sans livre</span>
+                                        ) : (
+                                            student.livres.map((livre, index) => (
+                                                <span
+                                                    key={index}
+                                                    className="badge badge-soft-success me-1 mb-1"
+                                                    title={[livre.groupe, livre.date ? `remis le ${livre.date}` : null]
+                                                        .filter(Boolean)
+                                                        .join(' — ')}
+                                                >
+                                                    <i className="ti ti-book me-1" />
+                                                    {livre.nom}
+                                                </span>
+                                            ))
+                                        )}
+                                    </td>
                                     <td>{student.telephone ?? '-'}</td>
                                     <td>{student.whatsapp ?? '-'}</td>
                                     <td className="text-end">
