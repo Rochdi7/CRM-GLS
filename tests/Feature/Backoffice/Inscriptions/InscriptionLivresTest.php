@@ -309,4 +309,50 @@ final class InscriptionLivresTest extends TestCase
 
         $this->assertSame(40, $book->fresh()->quantite);
     }
+
+    // --- Liste des étudiants : livre remis ou non ------------------------------
+
+    /**
+     * La liste Étudiants dit qui a reçu un livre (colonne « Livre ») et filtre
+     * « Avec livre » / « Sans livre » — y compris un livre remis sur une
+     * inscription ANNULÉE : il a bien été remis.
+     */
+    public function test_the_students_list_shows_and_filters_who_has_a_book(): void
+    {
+        $group = $this->makeGroup();
+        $group->update(['nom' => 'HERR DRISS 19H']);
+        $book = $this->makeBook('Daf Kompakt neu A1');
+        [$avec, $inscription] = $this->enrolledStudent($group);
+        [$sans] = $this->enrolledStudent($group);
+        [$annule, $inscriptionAnnulee] = $this->enrolledStudent($group);
+        $inscriptionAnnulee->update(['statut' => Inscription::STATUT_ANNULEE]);
+        $inscription->livres()->create(['stock_article_id' => $book->id]);
+        $inscriptionAnnulee->livres()->create(['stock_article_id' => $book->id]);
+
+        $user = $this->userWith('students.view');
+
+        $this->actingAs($user)
+            ->get(route('backoffice.students.index', ['studentFilter' => (string) $avec->id]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('students.data.0.livres', 1)
+                ->where('students.data.0.livres.0.nom', 'Daf Kompakt neu A1')
+                ->where('students.data.0.livres.0.groupe', 'HERR DRISS 19H')
+            );
+
+        $this->actingAs($user)
+            ->get(route('backoffice.students.index', ['livreFilter' => 'avec']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('filters.livreFilter', 'avec')
+                ->where('students.data', fn ($rows) => collect($rows)->pluck('id')->sort()->values()->all()
+                    === collect([$avec->id, $annule->id])->sort()->values()->all())
+            );
+
+        $this->actingAs($user)
+            ->get(route('backoffice.students.index', ['livreFilter' => 'sans']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('students.data', 1)
+                ->where('students.data.0.id', $sans->id)
+                ->has('students.data.0.livres', 0)
+            );
+    }
 }

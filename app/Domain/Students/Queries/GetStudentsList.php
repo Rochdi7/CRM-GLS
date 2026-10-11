@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Students\Queries;
 
 use App\Models\Inscription;
+use App\Models\InscriptionLivre;
 use App\Models\Student;
 use App\Models\User;
 use App\Domain\Groups\Support\PorteeEnseignant;
@@ -44,6 +45,7 @@ final class GetStudentsList
         string $telephoneFilter = '',
         string $inscriptionFilter = '',
         string $groupeFilter = '',
+        string $livreFilter = '',
     ): LengthAwarePaginator {
         if (! in_array($perPage, self::PER_PAGE_OPTIONS, true)) {
             $perPage = self::DEFAULT_PER_PAGE;
@@ -107,6 +109,11 @@ final class GetStudentsList
                 fn ($i) => $i->whereIn('statut', [Inscription::STATUT_ANNULEE, Inscription::STATUT_ARCHIVEE]),
             ))
             ->when($inscriptionFilter === 'none', fn ($q) => $q->whereDoesntHave('inscriptions'))
+            // Livre remis : au moins un livre attribué sur l'une de ses
+            // inscriptions, quel que soit le statut du dossier — un livre remis
+            // à une inscription annulée a bien été remis.
+            ->when($livreFilter === 'avec', fn ($q) => $q->whereHas('inscriptions.livres'))
+            ->when($livreFilter === 'sans', fn ($q) => $q->whereDoesntHave('inscriptions.livres'))
             ->when($niveauFilter !== '', fn ($q) => $q->where('niveau', $niveauFilter))
             ->when($sexeFilter !== '', fn ($q) => $q->where('sexe', $sexeFilter))
             ->when($etablissementFilter !== '', fn ($q) => $q->where('etablissement_id', (int) $etablissementFilter))
@@ -141,6 +148,22 @@ final class GetStudentsList
                     ->all(),
             ]);
         }
+
+        // Livres remis, chargés EN LOT pour la page (une requête, jamais une
+        // par ligne) : titre + groupe du dossier qui l'a reçu.
+        $livres = InscriptionLivre::query()
+            ->join('inscriptions', 'inscriptions.id', '=', 'inscription_livres.inscription_id')
+            ->join('stock_articles', 'stock_articles.id', '=', 'inscription_livres.stock_article_id')
+            ->leftJoin('groups', 'groups.id', '=', 'inscriptions.group_id')
+            ->whereIn('inscriptions.student_id', $students->getCollection()->pluck('id'))
+            ->orderBy('inscription_livres.created_at')
+            ->get([
+                'inscriptions.student_id',
+                'stock_articles.nom as livre',
+                'groups.nom as groupe',
+                'inscription_livres.created_at',
+            ])
+            ->groupBy('student_id');
 
         $students->through(fn (Student $student): array => [
             'id' => $student->id,
@@ -185,6 +208,14 @@ final class GetStudentsList
             'note' => $student->note,
             'photoUrl' => $student->getFirstMediaUrl('photo') ?: null,
             'photoThumbUrl' => $student->getFirstMediaUrl('photo', 'thumb') ?: $student->avatarUrl(),
+            'livres' => ($livres->get($student->id) ?? collect())
+                ->map(fn ($l): array => [
+                    'nom' => $l->livre,
+                    'groupe' => $l->groupe,
+                    'date' => $l->created_at?->format('d/m/Y'),
+                ])
+                ->values()
+                ->all(),
         ]);
 
         return $students;

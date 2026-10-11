@@ -59,6 +59,7 @@ final class StudentController extends Controller
         $studentFilter = (string) $request->string('studentFilter');
         $telephoneFilter = (string) $request->string('telephoneFilter');
         $inscriptionFilter = (string) $request->string('inscriptionFilter');
+        $livreFilter = (string) $request->string('livreFilter');
         $perPage = (int) $request->integer('perPage', GetStudentsList::DEFAULT_PER_PAGE);
 
         // Portée enseignant : sa propre vue en cartes (consultation seule) —
@@ -90,6 +91,8 @@ final class StudentController extends Controller
                 $studentFilter,
                 $telephoneFilter,
                 $inscriptionFilter,
+                '',
+                in_array($livreFilter, ['avec', 'sans'], true) ? $livreFilter : '',
             ),
             'filters' => [
                 'search' => $search,
@@ -101,6 +104,7 @@ final class StudentController extends Controller
                 'studentFilter' => $studentFilter,
                 'telephoneFilter' => $telephoneFilter,
                 'inscriptionFilter' => $inscriptionFilter,
+                'livreFilter' => in_array($livreFilter, ['avec', 'sans'], true) ? $livreFilter : '',
                 'perPage' => in_array($perPage, GetStudentsList::PER_PAGE_OPTIONS, true)
                     ? $perPage
                     : GetStudentsList::DEFAULT_PER_PAGE,
