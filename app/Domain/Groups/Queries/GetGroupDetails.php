@@ -32,7 +32,7 @@ final class GetGroupDetails
     {
         $group->loadMissing([
             'enseignant', 'salle', 'etablissement', 'anneeScolaire', 'frais',
-            'inscriptions.student', 'enseignants.enseignant',
+            'inscriptions.student', 'inscriptions.livres.stockArticle:id,nom', 'enseignants.enseignant',
         ]);
 
         $isFinished = $group->statut === Group::STATUT_FIN_FORMATION;
@@ -123,6 +123,11 @@ final class GetGroupDetails
                 'dateDebut' => $inscription->date_debut?->format('d/m/Y'),
                 'dateFin' => $inscription->date_fin?->format('d/m/Y'),
                 'statut' => $inscription->statut,
+                // Livres remis sur CE dossier (chargés en lot avec le groupe).
+                'livres' => $inscription->livres->map(fn ($livre): array => [
+                    'nom' => $livre->stockArticle?->nom,
+                    'date' => $livre->created_at?->format('d/m/Y'),
+                ])->values()->all(),
             ])->values()->all(),
         ];
     }

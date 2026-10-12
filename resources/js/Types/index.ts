@@ -454,6 +454,8 @@ export interface GroupInscriptionRow {
     dateDebut: string | null;
     dateFin: string | null;
     statut: string;
+    /** Livres remis sur ce dossier. */
+    livres: Array<{ nom: string | null; date: string | null }>;
 }
 
 export interface GroupDetails {
