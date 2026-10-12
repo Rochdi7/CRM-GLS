@@ -392,6 +392,7 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                                     <th>Date d'inscription</th>
                                     <th>Date de début</th>
                                     <th>Date de fin</th>
+                                    <th>Livre</th>
                                     <th className="text-end">Action</th>
                                 </tr>
                             }
@@ -415,6 +416,22 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                                     <td>{insc.date ?? '-'}</td>
                                     <td>{insc.dateDebut ?? '-'}</td>
                                     <td>{insc.dateFin ?? '-'}</td>
+                                    <td>
+                                        {insc.livres.length === 0 ? (
+                                            <span className="badge badge-soft-secondary">Sans livre</span>
+                                        ) : (
+                                            insc.livres.map((livre, index) => (
+                                                <span
+                                                    key={index}
+                                                    className="badge badge-soft-success me-1 mb-1"
+                                                    title={livre.date ? `Remis le ${livre.date}` : undefined}
+                                                >
+                                                    <i className="ti ti-book me-1" />
+                                                    {livre.nom ?? '-'}
+                                                </span>
+                                            ))
+                                        )}
+                                    </td>
                                     <td className="text-end">
                                         {insc.studentShowUrl && (
                                             <a

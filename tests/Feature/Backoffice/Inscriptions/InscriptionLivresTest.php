@@ -355,4 +355,26 @@ final class InscriptionLivresTest extends TestCase
                 ->has('students.data.0.livres', 0)
             );
     }
+
+    /** La fiche groupe, onglet Étudiants, dit pour chaque dossier s'il a reçu son livre. */
+    public function test_the_group_page_shows_the_book_of_each_registration(): void
+    {
+        $group = $this->makeGroup();
+        $book = $this->makeBook('Daf Kompakt neu A1');
+        [, $avec] = $this->enrolledStudent($group);
+        [, $sans] = $this->enrolledStudent($group);
+        $avec->livres()->create(['stock_article_id' => $book->id]);
+
+        $this->actingAs($this->userWith('groups.view'))
+            ->get(route('backoffice.groups.show', $group))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('group.inscriptions', function ($rows) use ($avec, $sans) {
+                    $rows = collect($rows)->keyBy('reference');
+
+                    return $rows[$avec->reference]['livres'][0]['nom'] === 'Daf Kompakt neu A1'
+                        && $rows[$sans->reference]['livres'] === [];
+                })
+            );
+    }
 }
