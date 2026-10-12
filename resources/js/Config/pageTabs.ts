@@ -41,6 +41,13 @@ export const STUDENTS_TABS: PageTabDef[] = [
         permissions: ['student-transfers.view'],
     },
     {
+        // Remise d'un livre en masse à un groupe (12/10/2026).
+        label: t('Books'),
+        href: '/backoffice/students/livres',
+        icon: 'ti ti-book',
+        permissions: ['registrations.manage-fees'],
+    },
+    {
         label: t('Merge records'),
         href: '/backoffice/students/fusion',
         icon: 'ti ti-arrow-merge',

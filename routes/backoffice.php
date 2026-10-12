@@ -50,6 +50,7 @@ use App\Http\Controllers\Backoffice\SettingController;
 use App\Http\Controllers\Backoffice\StockController;
 use App\Http\Controllers\Backoffice\StockTypeController;
 use App\Http\Controllers\Backoffice\StudentController;
+use App\Http\Controllers\Backoffice\StudentLivresController;
 use App\Http\Controllers\Backoffice\StudentMergeController;
 use App\Http\Controllers\Backoffice\StudentTransferController;
 use App\Http\Controllers\Backoffice\SystemSettingController;
@@ -208,6 +209,13 @@ Route::prefix('backoffice')
                 ->middleware('permission:students.merge')->name('students.merge.store');
             Route::post('students/fusion/deplacer-paiement', [StudentMergeController::class, 'movePayment'])
                 ->middleware('permission:payments.move-fee')->name('students.merge.move-payment');
+
+            // Onglet « Livres » (12/10/2026) : remise d'un livre en masse à un
+            // groupe. ⚠ Avant students/{student}, même raison que la fusion.
+            Route::get('students/livres', [StudentLivresController::class, 'index'])
+                ->middleware('permission:registrations.manage-fees')->name('students.livres.index');
+            Route::post('students/livres', [StudentLivresController::class, 'store'])
+                ->middleware('permission:registrations.manage-fees')->name('students.livres.store');
 
             Route::get('students', [StudentController::class, 'index'])
                 ->middleware('permission:students.view|groups.view-own')->name('students.index');
