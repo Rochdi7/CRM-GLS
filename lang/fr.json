@@ -960,6 +960,7 @@
     "The method of an advance allocation cannot be changed - change it on the advance itself.": "La méthode d'une application d'avance ne peut pas être modifiée - modifiez-la sur l'avance elle-même.",
     "A payment linked to a tracked cheque keeps its method - the Cheques module owns that lifecycle.": "Un paiement lié à un chèque suivi conserve sa méthode - son cycle de vie appartient au module Chèques.",
     "A refunded payment cannot be requalified: the refund already moved this money out.": "Un paiement remboursé ne peut pas être requalifié : le remboursement a déjà fait sortir cet argent.",
+    "A recorded payment can only be requalified to Cash or TPE.": "Un paiement enregistré ne peut être requalifié qu'en Espèces ou TPE.",
     "The response is not a streamed response.": "La réponse n'est pas une réponse diffusée.",
     "The response is not a view.": "La réponse n'est pas une vue.",
     "The selected till is invalid.": "La caisse sélectionnée est invalide.",

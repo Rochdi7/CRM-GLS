@@ -24,6 +24,15 @@ function cochables(paiements: PaiementTransferable[]): number[] {
     return paiements.filter((p) => p.blocage === null).map((p) => p.id);
 }
 
+/**
+ * Les lignes affichées — sans les applications d'avance : elles ne sont pas
+ * de l'argent reçu (déjà compté sur leur avance) et partent d'office avec
+ * elle côté serveur, donc les montrer n'apprenait rien à l'opérateur.
+ */
+function visibles(paiements: PaiementTransferable[]): PaiementTransferable[] {
+    return paiements.filter((p) => p.type !== 'application');
+}
+
 interface FraisGroupe {
     feeId: number;
     nom: string;
@@ -160,10 +169,9 @@ export default function TransferPaymentPicker({ tree, loading, selected, onChang
     /** Un frais : la case, puis ses paiements en dessous (ils partent avec lui). */
     const renderFrais = (f: FraisGroupe, key: string) => {
         const ids = cochables(f.paiements);
-        const checked = f.paiements.some((p) => p.blocage === null || p.type === 'application')
-            && f.paiements.filter((p) => p.blocage === null || p.type === 'application').every(isChecked);
+        const checked = ids.length > 0 && ids.every((id) => selectedSet.has(id));
         const inputId = `${idPrefix}-${key}-f${f.feeId}`;
-        const total = f.paiements.filter((p) => p.type !== 'application').reduce((s, p) => s + (parseFloat(p.montant) || 0), 0);
+        const total = f.paiements.reduce((s, p) => s + (parseFloat(p.montant) || 0), 0);
 
         return (
             <tbody key={key}>
@@ -219,7 +227,7 @@ export default function TransferPaymentPicker({ tree, loading, selected, onChang
                 )}
                 <div className="table-responsive">
                     <table className="table table-sm mb-0 align-middle">
-                        {parFrais(ins.paiements).map((f) => renderFrais(f, key))}
+                        {parFrais(visibles(ins.paiements)).map((f) => renderFrais(f, key))}
                     </table>
                 </div>
             </div>

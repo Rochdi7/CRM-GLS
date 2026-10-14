@@ -61,6 +61,20 @@ class Encaissement extends Model
         self::METHODE_CHEQUE,
     ];
 
+    /**
+     * Méthodes VERS lesquelles « Modifier l'encaissement » peut requalifier
+     * un paiement (14/10/2026, RequalifierMethodeEncaissement). Chèque et
+     * Virement en sont retirés : passer une ligne en « Chèque » la posait
+     * sur le compte Chèque du centre sans chèque suivi rattaché à
+     * l'étudiant, et passer en « Virement » sautait la vérification du
+     * comptable (ValiderVirement). Ces deux méthodes ont leur propre
+     * parcours ; la requalification ne range l'argent qu'en Espèces ou TPE.
+     */
+    public const METHODES_REQUALIFICATION = [
+        self::METHODE_ESPECES,
+        self::METHODE_TPE,
+    ];
+
     protected $fillable = [
         'reference', 'legacy_ref', 'legacy_source', 'etablissement_id', 'student_id', 'inscription_fee_id', 'applied_from_encaissement_id', 'cheque_id', 'montant', 'methode',
         'date_paiement', 'avance_expire_le', 'caisse_id', 'agent_id',
