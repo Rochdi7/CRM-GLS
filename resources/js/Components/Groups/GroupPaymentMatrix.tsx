@@ -56,6 +56,9 @@ const ROW_FILL: Record<string, string | undefined> = {
     Active: undefined,
     Changement: 'rgb(170, 170, 170)',
     Annulée: 'rgb(246, 45, 81)',
+    // Transferred to another centre (ValiderTransfertEtudiant): orange so the
+    // old centre's grid tells it apart from a grey « Changement » at a glance.
+    Transférée: 'rgb(253, 126, 20)',
 };
 
 const ABSENT_FILL = 'rgb(170, 170, 170)';
@@ -126,6 +129,7 @@ const STATUT_TITRE: Record<string, { titre: string; verbe: string }> = {
     Changement: { titre: 'Archivé', verbe: 'Archivé' },
     Archivée: { titre: 'Archivé', verbe: 'Archivé' },
     Expirée: { titre: 'Expiré', verbe: 'Expiré' },
+    Transférée: { titre: 'Transféré', verbe: 'Transféré' },
 };
 
 /**
