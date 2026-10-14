@@ -211,6 +211,9 @@ final class EncaissementController extends Controller
             'groups' => fn () => $getEncaissementsList->groupOptions($request->user()),
             'frais' => fn () => $getEncaissementsList->fraisOptions(),
             'methodes' => Encaissement::METHODES,
+            // Cibles autorisées par « Modifier l'encaissement »
+            // (RequalifierMethodeEncaissement les revérifie).
+            'methodesRequalification' => Encaissement::METHODES_REQUALIFICATION,
             // The signed-in user's own till: the filter's default on a bare
             // visit AND what « Réinitialiser les filtres » restores it to, so
             // the button agrees with what the page opens on (§5).

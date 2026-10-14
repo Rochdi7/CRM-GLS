@@ -2356,6 +2356,8 @@ export interface EncaissementsPageProps {
     /** The whole frais catalog (inactive included) — the « Frais » filter's options. */
     frais: FinanceOption[];
     methodes: string[];
+    /** Methods « Modifier l'encaissement » may requalify a payment TO (Espèces / TPE). */
+    methodesRequalification?: string[];
     /** Active bank names from the catalog (Paramètres → Banques) — the Chèque form's dropdown source. */
     banques: string[];
     /**

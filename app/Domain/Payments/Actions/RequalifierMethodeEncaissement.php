@@ -84,6 +84,15 @@ final class RequalifierMethodeEncaissement
 
             $this->guard($locked);
 
+            if (! in_array($methode, Encaissement::METHODES_REQUALIFICATION, true)) {
+                // Chèque → compte Chèque du centre sans chèque suivi de
+                // l'étudiant ; Virement → validé sans le comptable. Les deux
+                // ont leur propre parcours (14/10/2026).
+                throw ValidationException::withMessages([
+                    'methode' => __('A recorded payment can only be requalified to Cash or TPE.'),
+                ]);
+            }
+
             $ancienne = $locked->caisse;
 
             if ($ancienne === null) {

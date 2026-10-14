@@ -180,7 +180,7 @@ function emptyAvanceForm(): AvanceFormState {
  * directly under that row; numéro/banque/échéance are always read off that
  * Cheque record server-side (EncaissementController@store).
  */
-export default function EncaissementsIndex({ encaissements, montantTotal, virementsEnAttente, caisses, students, groups, frais, methodes, banques, defaultCaisseId, filters, can }: EncaissementsPageProps) {
+export default function EncaissementsIndex({ encaissements, montantTotal, virementsEnAttente, caisses, students, groups, frais, methodes, methodesRequalification, banques, defaultCaisseId, filters, can }: EncaissementsPageProps) {
     const isLoading = useInertiaLoading();
     const [deleteTarget, setDeleteTarget] = useState<EncaissementRow | null>(null);
     // Outrepassement explicite du seul refus de suppression qui puisse être
@@ -1082,6 +1082,16 @@ export default function EncaissementsIndex({ encaissements, montantTotal, vireme
     // ne redérive pas la règle (CLAUDE.md §11).
     const canEditMethode =
         (can?.updateMethode ?? false) && (editingRow?.methodeRequalifiable ?? false);
+    // Cibles de requalification : Espèces / TPE seulement (14/10/2026). Chèque
+    // et Virement restent affichés mais désactivés — la valeur stockée reste
+    // sélectionnable pour que le modal la renvoie telle quelle.
+    const editMethodeOptions: SelectOption[] = methodes.map((m) => {
+        const allowed = (methodesRequalification ?? methodes).includes(m) || m === editingRow?.methode;
+
+        return allowed
+            ? { value: m, label: m }
+            : { value: m, label: m, disabled: true, disabledReason: 'Non modifiable' };
+    });
     // Super-admin uniquement, et seulement sur une ligne que
     // CorrigerMontantEncaissement accepterait. Confort d'interface : le vrai
     // verrou est EncaissementController@update.
@@ -2165,7 +2175,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, vireme
                                 <SelectField
                                     id="e-edit-methode"
                                     label="Méthode de paiement"
-                                    options={methodeOptions}
+                                    options={editMethodeOptions}
                                     required
                                     disabled={!canEditMethode}
                                     value={editForm.data.methode}

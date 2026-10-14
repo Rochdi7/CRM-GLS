@@ -2244,7 +2244,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
         $till->update(['solde' => 800]);
 
         $this->put(route('backoffice.encaissements.update', $encaissement), [
-            'methode' => 'Virement',
+            'methode' => 'TPE',
             'date_paiement' => '2025-09-20',
         ])->assertSessionDoesntHaveErrors();
 
@@ -2265,7 +2265,7 @@ final class EncaissementsInertiaCrudTest extends TestCase
         foreach ($entries as $entry) {
             $this->assertSame($this->centre->id, $entry->properties['etablissement_id']);
             $this->assertSame('Espèces', $entry->properties['methode_avant']);
-            $this->assertSame('Virement', $entry->properties['methode_apres']);
+            $this->assertSame('TPE', $entry->properties['methode_apres']);
         }
     }
 
@@ -2340,6 +2340,43 @@ final class EncaissementsInertiaCrudTest extends TestCase
             ])->assertSessionHasErrors('methode');
 
         $this->assertSame('Espèces', $encaissement->fresh()->methode);
+    }
+
+    /**
+     * 14/10/2026 — la requalification ne range l'argent qu'en Espèces ou
+     * TPE. « Chèque » le posait sur le compte Chèque du centre sans chèque
+     * suivi de l'étudiant ; « Virement » sautait la validation du comptable.
+     * Rien ne bouge : ni la ligne, ni la caisse.
+     */
+    public function test_a_payment_cannot_be_requalified_to_cheque_or_virement(): void
+    {
+        $user = $this->userWith('payments.view', 'payments.create', 'payments.update', 'payments.update-method');
+        $this->actingAs($user);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(900);
+        $till = $user->employee->till()->first();
+
+        $encaissement = Encaissement::create([
+            'reference' => 'ENC-REQ-CV', 'student_id' => $student->id, 'inscription_fee_id' => $fee->id,
+            'etablissement_id' => $this->centre->id,
+            'caisse_id' => $till->id, 'agent_id' => $user->employee->id,
+            'montant' => 900, 'methode' => 'Espèces', 'date_paiement' => '2025-09-20',
+        ]);
+        $till->update(['solde' => 900]);
+
+        foreach (['Chèque', 'Virement'] as $methode) {
+            $this->from(route('backoffice.encaissements.index'))
+                ->put(route('backoffice.encaissements.update', $encaissement), [
+                    'methode' => $methode,
+                    'date_paiement' => '2025-09-20',
+                    'numero_cheque' => 'CHQ-1',
+                    'banque' => 'Attijariwafa Bank',
+                ])->assertSessionHasErrors('methode');
+
+            $fresh = $encaissement->fresh();
+            $this->assertSame('Espèces', $fresh->methode);
+            $this->assertSame($till->id, $fresh->caisse_id);
+            $this->assertSame(900.0, round((float) $till->fresh()->solde, 2));
+        }
     }
 
     /**
