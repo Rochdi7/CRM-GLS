@@ -80,8 +80,14 @@ export default function BackofficeLayout({ title, breadcrumbs = [], actions, chi
 
             <WelcomeVideo
                 show={flash.annulationVideo === true}
-                src="/videos/inscription-annulee.mp4"
+                src="/videos/inscription-annulation.mp4"
                 text={t('Registration cancelled.')}
+            />
+
+            <WelcomeVideo
+                show={flash.inscriptionVideo === true}
+                src="/videos/inscription-creee.mp4"
+                text={t('Registration created.')}
             />
 
             <div className="page-wrapper">
