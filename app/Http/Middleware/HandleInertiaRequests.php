@@ -139,6 +139,9 @@ final class HandleInertiaRequests extends Middleware
                 // Set by InscriptionController@cancel: play the cancellation
                 // clip once, same one-render-only rule.
                 'annulationVideo' => fn () => (bool) $request->session()->pull('annulationVideo', false),
+                // Set by InscriptionController@store: play the new-inscription
+                // clip once, same one-render-only rule.
+                'inscriptionVideo' => fn () => (bool) $request->session()->pull('inscriptionVideo', false),
             ],
             'locale' => app()->getLocale(),
         ];

@@ -679,6 +679,10 @@ final class InscriptionController extends Controller
         // `pull()`-style single render (HandleInertiaRequests), exactly like
         // newEmployeeCredentials: the prompt is a one-time notice, not a
         // state that should reappear on the next search/pagination reload.
+        // Plays the « inscription créée » clip once, every centre
+        // (pulled in HandleInertiaRequests).
+        $request->session()->put('inscriptionVideo', true);
+
         return $this->backToListPreservingFilters($request, 'backoffice.inscriptions.index')
             ->with('success', __('Registration created.'))
             ->with('nouvelleInscription', $created === null ? null : [

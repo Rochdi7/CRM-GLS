@@ -107,7 +107,8 @@ final class InscriptionPaiementPromptTest extends TestCase
             'fee_lines' => [
                 ['frais_id' => null, 'nom' => "Frais d'inscription", 'montant_initial' => '300'],
             ],
-        ])->assertRedirect(route('backoffice.inscriptions.index'));
+        ])->assertRedirect(route('backoffice.inscriptions.index'))
+            ->assertSessionHas('inscriptionVideo', true);
 
         $inscription = Inscription::where('student_id', $student->id)->firstOrFail();
 

@@ -71,6 +71,8 @@ export interface FlashMessages {
     bienvenue?: boolean;
     /** True on the first render after an inscription was cancelled — plays the cancellation clip once. */
     annulationVideo?: boolean;
+    /** True on the first render after an inscription was created — plays the new-inscription clip once. */
+    inscriptionVideo?: boolean;
 }
 
 export interface SharedProps {
