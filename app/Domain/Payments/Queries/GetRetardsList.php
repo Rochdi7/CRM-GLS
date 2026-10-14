@@ -17,7 +17,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 /**
  * Read-model for "Gestion des recouvrements" (gls-crm-schema.md §9/§11 —
  * InscriptionFee.montant vs its Encaissement rows). A fee is "en retard"
- * when its date_echeance is in the past AND its reste-à-payer is still > 0
+ * when its date_echeance is today or in the past AND its reste-à-payer is still > 0
  * (fully unpaid or partially paid both count) AND its inscription is still
  * Active — a closed dossier owes nothing, see CLAUDE.md §11. Both list tabs
  * ("Retards selon la durée" and "Retards selon les critères") share this one
@@ -82,7 +82,10 @@ final class GetRetardsList
             ->avecPayeNet()
             ->whereNull('masque_le')
             ->whereNotNull('date_echeance')
-            ->where('date_echeance', '<', $today)
+            // Échéance AUJOURD'HUI comprise (14/10/2026) : le front office
+            // appelle l'étudiant le jour même, en rappel. Propre à cet écran —
+            // RetardPaiementEtudiant (fiche d'appel, paiement prof) garde « < ».
+            ->where('date_echeance', '<=', $today)
             ->whereHas('inscription', function (Builder $q) use ($user): void {
                 // Only a LIVE dossier is chased for money. An inscription
                 // Annulée / Changement / Expirée / Archivée is closed: its
@@ -167,7 +170,10 @@ final class GetRetardsList
             ->avecPayeNet()
             ->whereNull('masque_le')
             ->whereNotNull('date_echeance')
-            ->where('date_echeance', '<', $today)
+            // Échéance AUJOURD'HUI comprise (14/10/2026) : le front office
+            // appelle l'étudiant le jour même, en rappel. Propre à cet écran —
+            // RetardPaiementEtudiant (fiche d'appel, paiement prof) garde « < ».
+            ->where('date_echeance', '<=', $today)
             ->whereHas('inscription', function (Builder $q) use ($user): void {
                 // Only a LIVE dossier is chased for money. An inscription
                 // Annulée / Changement / Expirée / Archivée is closed: its

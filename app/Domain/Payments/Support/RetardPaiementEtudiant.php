@@ -17,6 +17,12 @@ use Illuminate\Support\Collection;
  * est passée, son reste à payer est > 0, et son inscription est encore
  * `Active` — un dossier clos ne doit rien.
  *
+ * Seule différence assumée (14/10/2026) : « Gestion des recouvrements »
+ * liste AUSSI l'échéance du jour (`<=`), pour que le front office appelle
+ * en rappel le jour même. Ici l'échéance reste strictement passée (`<`) :
+ * cette règle pilote le badge de la fiche d'appel ET le calcul du paiement
+ * prof, qui ne doivent pas changer.
+ *
  * Utilisé par la fiche de présence (`GetSeanceDetails`) pour signaler, au
  * moment de l'appel, l'étudiant à renvoyer vers l'administration. Le calcul
  * est fait EN LOT pour toute la liste d'étudiants — jamais une requête par

@@ -251,9 +251,13 @@ export default function RecouvrementIndex({
                                     <td>{row.frais ?? '-'}</td>
                                     <td>{row.dateEcheance ?? '-'}</td>
                                     <td>
-                                        <span className="badge badge-soft-danger">
-                                            {row.retardJours} {t('days')}
-                                        </span>
+                                        {row.retardJours === 0 ? (
+                                            <span className="badge badge-soft-warning">{t('Due today')}</span>
+                                        ) : (
+                                            <span className="badge badge-soft-danger">
+                                                {row.retardJours} {t('days')}
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="fw-medium">{row.resteAPayer} DH</td>
                                 </tr>

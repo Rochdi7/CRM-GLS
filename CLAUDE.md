@@ -1457,10 +1457,33 @@ the database layer. Non-negotiable invariants already enforced in code:
   bouge et ses encaissements la suivent — et ses lignes impayées sont
   masquées (`MASQUE_ORIGINE_TRANSFERT`) ; (3) un nouveau dossier Actif est
   ouvert pour la copie dans le groupe cible avec le catalogue du groupe MOINS
-  les frais déjà payés et déplacés ; (4) l'argent SUIT la personne : les
-  avances et les encaissements posés sur une ligne déplacée, plus les
-  chèques, passent sous le `student_id` de la copie. **AUCUN montant ne
-  bouge** : `montant`, `caisse_id`, `date_paiement`, `agent_id` et surtout
+  les frais déjà payés et déplacés ; (4) l'argent SUIT la personne — **SELON
+  CE QUI A ÉTÉ COCHÉ** (14/10/2026, `student_transfers.encaissement_ids`) :
+  le modal de demande liste TOUS les paiements de l'étudiant, par année puis
+  par inscription (`GetPaiementsTransferables`, composant
+  `Components/Students/TransferPaymentPicker.tsx`, réutilisé en lecture
+  seule dans le dialogue de validation), une case par paiement, pré-cochées
+  = avances + dossiers Actifs (l'ancien comportement ; NULL en base = cette
+  sélection, aucun backfill). **Une seule règle,
+  `Domain\Students\Support\SelectionPaiementsTransfert`**, partagée par le
+  modal, la demande (un id hors règle refuse la demande ENTIÈRE en nommant
+  la ligne) et la validation (rejouée SOUS VERROU — un remboursement saisi
+  entre-temps refuse) : une AVANCE se coche seule et passe sous le
+  `student_id` de la copie ; un PAIEMENT se coche AVEC SON FRAIS — la ligne
+  de frais est DÉPLACÉE entière sur le nouveau dossier, ses paiements avec
+  elle, quel que soit le statut du dossier d'origine (un dossier clos garde
+  son statut, seule la ligne change de dossier) ; une sélection qui ne
+  couvre pas tout un frais est REFUSÉE en nommant le frais. **Un paiement
+  reste un paiement : il n'est JAMAIS converti en avance à ré-appliquer au
+  nouveau centre** (décision du propriétaire, 14/10/2026 — la première
+  version le faisait pour une sélection partielle ou un dossier clos ;
+  retirée, ne pas la réintroduire). Un frais non coché reste au centre
+  source, jamais masqué tant qu'il porte un dirham. Une ligne d'APPLICATION
+  ne se coche jamais seule : elle suit son avance. Jamais cochables, et l'écran le DIT : entièrement
+  remboursé, chèque rejeté (`ChequeOrigine`). Les chèques de l'étudiant
+  suivent toujours. Tests :
+  `tests/Feature/Backoffice/Students/TransfertEtudiantSelectionPaiementsTest.php`.
+  **AUCUN montant ne bouge** : `montant`, `caisse_id`, `date_paiement`, `agent_id` et surtout
   `encaissements.etablissement_id` (le stamp de ventilation) sont inchangés,
   `caisses.solde` n'est ni lu ni écrit — le cash reste physiquement dans la
   caisse du centre source, et la ventilation, le journal et le ledger

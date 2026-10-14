@@ -9,7 +9,9 @@ use App\Domain\Students\Actions\DemanderTransfertEtudiant;
 use App\Domain\Students\Actions\RefuserTransfertEtudiant;
 use App\Domain\Students\Actions\ValiderTransfertEtudiant;
 use App\Domain\Students\Queries\GetGroupesCiblesTransfert;
+use App\Domain\Students\Queries\GetPaiementsTransferables;
 use App\Domain\Students\Queries\GetStudentTransfersList;
+use App\Domain\Students\Support\SelectionPaiementsTransfert;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Http\Controllers\Controller;
@@ -75,6 +77,35 @@ final class StudentTransferController extends Controller
         return response()->json($getGroupes($etablissement->id)->all());
     }
 
+    /**
+     * Les paiements de l'étudiant, année → inscription → lignes, avec
+     * ce que chacune peut faire (14/10/2026) — alimente les cases à cocher
+     * du modal de demande. Portée centre par `StudentPolicy@view` : on ne
+     * liste pas l'argent d'un étudiant qu'on ne voit pas.
+     */
+    public function paiements(Student $student, GetPaiementsTransferables $getPaiements): JsonResponse
+    {
+        $this->authorize('create', StudentTransfer::class);
+        $this->authorize('view', $student);
+
+        return response()->json($getPaiements($student));
+    }
+
+    /**
+     * Le même arbre, restreint aux paiements COCHÉS d'une demande — ce que
+     * le super-admin relit avant de valider.
+     */
+    public function paiementsDemande(StudentTransfer $student_transfer, GetPaiementsTransferables $getPaiements): JsonResponse
+    {
+        $this->authorize('view', $student_transfer);
+
+        $student = $student_transfer->student()->firstOrFail();
+        $ids = $student_transfer->encaissement_ids
+            ?? SelectionPaiementsTransfert::defautIds(SelectionPaiementsTransfert::lignes($student));
+
+        return response()->json($getPaiements($student, $ids));
+    }
+
     public function store(StoreStudentTransferRequest $request, DemanderTransfertEtudiant $action): RedirectResponse
     {
         $this->authorize('create', StudentTransfer::class);
@@ -101,6 +132,7 @@ final class StudentTransferController extends Controller
             (int) $data['group_cible_id'],
             (string) $data['motif'],
             $requester,
+            array_key_exists('encaissement_ids', $data) ? array_map('intval', $data['encaissement_ids']) : null,
         );
 
         return $this->backToListPreservingFilters($request, 'backoffice.students.index')

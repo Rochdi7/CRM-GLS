@@ -22,6 +22,8 @@ interface ConfirmDialogProps {
     processingLabel?: string;
     /** Keeps the confirm button disabled until the dialog's own field is filled. */
     confirmDisabled?: boolean;
+    /** Dialog width — `lg` when the confirmation shows a list the user must read (e.g. the payments a transfer moves). */
+    size?: 'default' | 'lg';
     /**
      * Optional extra input rendered between the message and the buttons —
      * for confirmations that need one field (e.g. a refusal motive). Keep it
@@ -56,10 +58,11 @@ export default function ConfirmDialog({
     confirmLabel,
     processingLabel,
     confirmDisabled = false,
+    size = 'default',
     children,
 }: ConfirmDialogProps) {
     return (
-        <Modal show={show} title={title} onClose={onCancel} processing={processing} hideHeader>
+        <Modal show={show} title={title} onClose={onCancel} processing={processing} size={size} hideHeader>
             <div className="text-center">
                 <span className="delete-icon">
                     <i className={`ti ${icon}`} aria-hidden="true" />

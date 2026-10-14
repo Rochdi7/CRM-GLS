@@ -29,6 +29,12 @@ final class StoreStudentTransferRequest extends FormRequest
             'etablissement_cible_id' => ['required', 'integer', 'exists:etablissements,id'],
             'group_cible_id' => ['required', 'integer', 'exists:groups,id'],
             'motif' => ['required', 'string', 'max:1000'],
+            // Les paiements cochés (14/10/2026). Présent mais VIDE = rien ne
+            // part ; absent = sélection par défaut. L'appartenance à
+            // l'étudiant et le droit de partir sont décidés par
+            // SelectionPaiementsTransfert, jamais ici.
+            'encaissement_ids' => ['sometimes', 'array'],
+            'encaissement_ids.*' => ['integer', 'distinct'],
         ];
     }
 
@@ -42,6 +48,7 @@ final class StoreStudentTransferRequest extends FormRequest
             'etablissement_cible_id' => __('target center'),
             'group_cible_id' => __('target group'),
             'motif' => __('reason'),
+            'encaissement_ids' => __('payments to transfer'),
         ];
     }
 }

@@ -24,7 +24,8 @@ import { splitPhone } from '@/Data/countries';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { useFilterReset } from '@/Hooks/useFilterReset';
 import StatusBadge from '@/Components/Details/StatusBadge';
-import type { GroupeCibleTransfert, SelectOption, StudentRow, StudentsPageProps } from '@/Types';
+import TransferPaymentPicker from '@/Components/Students/TransferPaymentPicker';
+import type { GroupeCibleTransfert, PaiementsTransferables, SelectOption, StudentRow, StudentsPageProps } from '@/Types';
 import { enCapitales } from '@/Lib/nom';
 
 /**
@@ -78,6 +79,8 @@ interface TransferFormState {
     etablissement_cible_id: number | '';
     group_cible_id: number | '';
     motif: string;
+    /** Paiements cochés (14/10/2026) — pré-remplis avec `defautIds` du serveur. */
+    encaissement_ids: number[];
 }
 
 function emptyForm(defaultCountry: string, contextCenterId: number | null): StudentFormState {
@@ -136,11 +139,14 @@ export default function StudentsIndex({
     const [transferTarget, setTransferTarget] = useState<StudentRow | null>(null);
     const [transferGroups, setTransferGroups] = useState<GroupeCibleTransfert[]>([]);
     const [transferGroupsLoading, setTransferGroupsLoading] = useState(false);
+    const [transferPayments, setTransferPayments] = useState<PaiementsTransferables | null>(null);
+    const [transferPaymentsLoading, setTransferPaymentsLoading] = useState(false);
     const transferForm = useForm<TransferFormState>({
         student_id: '',
         etablissement_cible_id: '',
         group_cible_id: '',
         motif: '',
+        encaissement_ids: [],
     });
     const [showModal, setShowModal] = useState(false);
     const [editingStudent, setEditingStudent] = useState<StudentRow | null>(null);
@@ -191,16 +197,33 @@ export default function StudentsIndex({
         reload({ ageSort: filters.ageSort === 'asc' ? 'desc' : 'asc' });
     }
 
-    function openTransfer(student: StudentRow) {
+    async function openTransfer(student: StudentRow) {
         transferForm.clearErrors();
-        transferForm.setData({ student_id: student.id, etablissement_cible_id: '', group_cible_id: '', motif: '' });
+        transferForm.setData({ student_id: student.id, etablissement_cible_id: '', group_cible_id: '', motif: '', encaissement_ids: [] });
         setTransferGroups([]);
+        setTransferPayments(null);
         setTransferTarget(student);
+        setTransferPaymentsLoading(true);
+        try {
+            const response = await fetch(`/backoffice/student-transfers/paiements/${student.id}`, {
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            });
+            const tree = response.ok ? ((await response.json()) as PaiementsTransferables) : null;
+            setTransferPayments(tree);
+            // La sélection par défaut vient du serveur : avances + dossiers actifs.
+            transferForm.setData((data) => ({ ...data, encaissement_ids: tree ? [...tree.defautIds] : [] }));
+        } catch {
+            setTransferPayments(null);
+        } finally {
+            setTransferPaymentsLoading(false);
+        }
     }
 
     function closeTransfer() {
         setTransferTarget(null);
         setTransferGroups([]);
+        setTransferPayments(null);
         transferForm.reset();
         transferForm.clearErrors();
     }
@@ -639,7 +662,7 @@ export default function StudentsIndex({
                                                     </RowActionItem>
                                                 )}
                                                 {permissions.transfer && student.statut !== 'Transféré' && (
-                                                    <RowActionItem icon="ti-arrows-exchange" onClick={() => openTransfer(student)}>
+                                                    <RowActionItem icon="ti-arrows-exchange" onClick={() => void openTransfer(student)}>
                                                         Demander un transfert
                                                     </RowActionItem>
                                                 )}
@@ -1011,12 +1034,13 @@ export default function StudentsIndex({
                 title="Demander un transfert vers un autre centre"
                 onClose={closeTransfer}
                 processing={transferForm.processing}
+                size="lg"
             >
                 <form onSubmit={submitTransfer}>
                     <div className="alert alert-info fs-13" role="alert">
                         <i className="ti ti-info-circle me-1" />
                         Validation par le backoffice. <strong className="text-uppercase">{transferTarget?.nomComplet}</strong> sera inscrit(e)
-                        dans le nouveau groupe avec ses paiements.
+                        dans le nouveau groupe avec les paiements cochés ci-dessous ; le reste demeure sur la fiche d'origine.
                     </div>
                     {transferForm.errors.student_id && (
                         <div className="alert alert-danger fs-13" role="alert">
@@ -1054,6 +1078,25 @@ export default function StudentsIndex({
                         disabled={transferForm.data.etablissement_cible_id === '' || transferGroupsLoading}
                         required
                     />
+
+                    <div className="mb-3">
+                        <label className="form-label d-flex align-items-center gap-2">
+                            <i className="ti ti-cash" />
+                            Paiements à emporter
+                            <span className="text-muted fw-normal fs-12">par année et par inscription</span>
+                        </label>
+                        <TransferPaymentPicker
+                            tree={transferPayments}
+                            loading={transferPaymentsLoading}
+                            selected={transferForm.data.encaissement_ids}
+                            onChange={(ids) => transferForm.setData('encaissement_ids', ids)}
+                            idPrefix="tr-pay"
+                        />
+                        {transferForm.errors.encaissement_ids && (
+                            <div className="text-danger fs-12 mt-1">{transferForm.errors.encaissement_ids}</div>
+                        )}
+                    </div>
+
                     <TextareaField
                         id="tr-motif"
                         label="Motif du transfert"
