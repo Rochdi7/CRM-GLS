@@ -15,7 +15,8 @@ import SelectField from '@/Components/Forms/SelectField';
 import StatusBadge from '@/Components/Details/StatusBadge';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { useFilterReset } from '@/Hooks/useFilterReset';
-import type { SelectOption, StudentTransferRow, StudentTransfersPageProps } from '@/Types';
+import TransferPaymentPicker from '@/Components/Students/TransferPaymentPicker';
+import type { PaiementsTransferables, SelectOption, StudentTransferRow, StudentTransfersPageProps } from '@/Types';
 import { enCapitales } from '@/Lib/nom';
 
 type Decision = { kind: 'validate' | 'refuse' | 'cancel'; row: StudentTransferRow };
@@ -42,6 +43,8 @@ export default function StudentTransfersIndex({ transfers, filters, perPageOptio
     const [motif, setMotif] = useState('');
     const [error, setError] = useState<string | undefined>(undefined);
     const [processing, setProcessing] = useState(false);
+    const [payments, setPayments] = useState<PaiementsTransferables | null>(null);
+    const [paymentsLoading, setPaymentsLoading] = useState(false);
 
     const statutOptions: SelectOption[] = statuts.map((s) => ({ value: s, label: s }));
     const perPageSelectOptions: SelectOption[] = perPageOptions.map((n) => ({ value: n, label: `${n}` }));
@@ -56,17 +59,43 @@ export default function StudentTransfersIndex({ transfers, filters, perPageOptio
 
     const filterReset = useFilterReset(filters, reload, { perPage: filters.perPage });
 
-    function open(kind: Decision['kind'], row: StudentTransferRow) {
+    async function open(kind: Decision['kind'], row: StudentTransferRow) {
         setDecision({ kind, row });
         setMotif('');
         setError(undefined);
+        setPayments(null);
+        if (kind !== 'validate') {
+            return;
+        }
+        // Ce que la demande a coché, relu du serveur : le décideur voit
+        // exactement l'argent qui va partir avant de confirmer.
+        setPaymentsLoading(true);
+        try {
+            const response = await fetch(`/backoffice/student-transfers/${row.id}/paiements`, {
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            });
+            setPayments(response.ok ? ((await response.json()) as PaiementsTransferables) : null);
+        } catch {
+            setPayments(null);
+        } finally {
+            setPaymentsLoading(false);
+        }
     }
 
     function close() {
         setDecision(null);
         setMotif('');
         setError(undefined);
+        setPayments(null);
     }
+
+    /** Tout ce que l'arbre relu contient est, par construction, ce qui part. */
+    const paymentIds = payments
+        ? [...payments.avances, ...payments.annees.flatMap((a) => a.inscriptions.flatMap((i) => i.paiements))]
+              .filter((p) => p.type !== 'application')
+              .map((p) => p.id)
+        : [];
 
     function submit() {
         if (!decision) {
@@ -91,7 +120,7 @@ export default function StudentTransfersIndex({ transfers, filters, perPageOptio
         ? {
               validate: {
                   title: 'Valider le transfert',
-                  message: `Copier la fiche à ${decision.row.centreCible ?? '—'}, l'inscrire au groupe « ${decision.row.groupeCible?.nom ?? '—'} » et y emporter tous ses paiements ? Les dossiers du centre de départ passeront « Transférée », ses présences y resteront.`,
+                  message: `Copier la fiche à ${decision.row.centreCible ?? '—'}, l'inscrire au groupe « ${decision.row.groupeCible?.nom ?? '—'} » et y emporter les paiements ci-dessous ? Les dossiers du centre de départ passeront « Transférée », ses présences y resteront.`,
                   confirmLabel: 'Oui, valider le transfert',
                   processingLabel: 'Validation...',
                   icon: 'ti-arrows-exchange',
@@ -249,9 +278,14 @@ export default function StudentTransfersIndex({ transfers, filters, perPageOptio
                                     </td>
                                     <td>
                                         <StatusBadge label={row.statut} variant={statutVariant(row.statut)} dot />
-                                        {row.montantTransfere !== null && (
+                                        {row.montantTransfere !== null ? (
                                             <div className="fs-12 text-muted mt-1">{row.montantTransfere} DH emportés</div>
-                                        )}
+                                        ) : row.paiementsSelectionnes ? (
+                                            <div className="fs-12 text-muted mt-1 text-normal-case">
+                                                {row.paiementsSelectionnes.count} paiement{row.paiementsSelectionnes.count > 1 ? 's' : ''} ·{' '}
+                                                {row.paiementsSelectionnes.montant} DH à emporter
+                                            </div>
+                                        ) : null}
                                     </td>
                                     <td className="text-normal-case" style={{ maxWidth: 220, whiteSpace: 'normal' }}>
                                         {row.decidePar ? (
@@ -268,17 +302,17 @@ export default function StudentTransfersIndex({ transfers, filters, perPageOptio
                                         {(row.canDecide || row.canCancel) && (
                                             <RowActions>
                                                 {row.canDecide && (
-                                                    <RowActionItem icon="ti-check" onClick={() => open('validate', row)}>
+                                                    <RowActionItem icon="ti-check" onClick={() => void open('validate', row)}>
                                                         Valider le transfert
                                                     </RowActionItem>
                                                 )}
                                                 {row.canDecide && (
-                                                    <RowActionItem icon="ti-x" danger onClick={() => open('refuse', row)}>
+                                                    <RowActionItem icon="ti-x" danger onClick={() => void open('refuse', row)}>
                                                         Refuser
                                                     </RowActionItem>
                                                 )}
                                                 {row.canCancel && (
-                                                    <RowActionItem icon="ti-trash" danger onClick={() => open('cancel', row)}>
+                                                    <RowActionItem icon="ti-trash" danger onClick={() => void open('cancel', row)}>
                                                         Annuler la demande
                                                     </RowActionItem>
                                                 )}
@@ -307,7 +341,18 @@ export default function StudentTransfersIndex({ transfers, filters, perPageOptio
                     processingLabel={dialog.processingLabel}
                     onConfirm={submit}
                     onCancel={close}
+                    size={decision.kind === 'validate' ? 'lg' : 'default'}
+                    confirmDisabled={decision.kind === 'validate' && paymentsLoading}
                 >
+                    {decision.kind === 'validate' && (
+                        <div className="text-start">
+                            <div className="fw-semibold mb-2 fs-13">
+                                <i className="ti ti-cash me-1" />
+                                Paiements emportés
+                            </div>
+                            <TransferPaymentPicker tree={payments} loading={paymentsLoading} selected={paymentIds} readOnly idPrefix="tre-pay" />
+                        </div>
+                    )}
                     {decision.kind !== 'validate' && (
                         <div className="text-start mb-3">
                             <label className="form-label" htmlFor="tre-motif">

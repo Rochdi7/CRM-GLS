@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Domain\Students\Queries;
 
+use App\Models\Encaissement;
 use App\Models\StudentTransfer;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
 use App\Services\Context\CurrentContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 
 /**
  * Liste des demandes de transfert d'étudiants (25/09/2026).
@@ -69,6 +71,8 @@ final class GetStudentTransfersList
             ->paginate($perPage)
             ->withQueryString();
 
+        $selections = $this->selections($transfers->getCollection());
+
         $transfers->through(fn (StudentTransfer $t): array => [
             'id' => $t->id,
             'reference' => $t->reference,
@@ -96,6 +100,9 @@ final class GetStudentTransfersList
             'motif' => $t->motif,
             'motifDecision' => $t->motif_decision,
             'montantTransfere' => $t->montant_transfere === null ? null : number_format((float) $t->montant_transfere, 2, '.', ''),
+            // Ce que la demande a COCHÉ (14/10/2026) ; null = demande
+            // antérieure à la colonne (sélection par défaut à la validation).
+            'paiementsSelectionnes' => $selections[$t->id] ?? null,
             'demandePar' => $t->requestedBy?->nomComplet(),
             'demandeLe' => $t->created_at?->format('d/m/Y H:i'),
             'decidePar' => $t->decidedBy?->name,
@@ -134,6 +141,35 @@ final class GetStudentTransfersList
         }
 
         return ['/backoffice/student-transfers' => $this->enAttenteCount($user)];
+    }
+
+    /**
+     * Nombre et montant des paiements cochés par demande — UNE requête pour
+     * toute la page (§17), lignes d'application exclues du montant (elles
+     * reposent une avance déjà comptée).
+     *
+     * @param  Collection<int, StudentTransfer>  $transfers
+     * @return array<int, array{count: int, montant: string}>
+     */
+    private function selections(Collection $transfers): array
+    {
+        $parTransfert = $transfers
+            ->filter(fn (StudentTransfer $t): bool => is_array($t->encaissement_ids))
+            ->mapWithKeys(fn (StudentTransfer $t): array => [$t->id => array_map('intval', $t->encaissement_ids)]);
+
+        $ids = $parTransfert->flatten()->unique()->values()->all();
+
+        $montants = $ids === []
+            ? collect()
+            : Encaissement::query()
+                ->whereIn('id', $ids)
+                ->whereNull('applied_from_encaissement_id')
+                ->pluck('montant', 'id');
+
+        return $parTransfert->map(fn (array $ids): array => [
+            'count' => count($ids),
+            'montant' => number_format(round(collect($ids)->sum(fn (int $id): float => (float) ($montants[$id] ?? 0)), 2), 2, '.', ''),
+        ])->all();
     }
 
     /** Portée centre (centres affectés + centre actif), partagée par la liste et le compteur. */

@@ -140,6 +140,28 @@ final class RecouvrementInscriptionActiveTest extends TestCase
     }
 
     /**
+     * A fee falling due TODAY is listed (14/10/2026): the front office calls
+     * the student the same day, as a reminder. It lands in the « 1 jour »
+     * bucket with 0 days late. Tomorrow's échéance is still not chased.
+     */
+    public function test_a_fee_due_today_is_listed_and_tomorrows_is_not(): void
+    {
+        $user = $this->collectionsUser();
+
+        $today = $this->overdueFee(Inscription::STATUT_ACTIVE, 1000, 0);
+        $tomorrow = $this->overdueFee(Inscription::STATUT_ACTIVE, 2000, -1);
+
+        $props = $this->recouvrementProps($user);
+        $rows = collect($props['retards']['data'])->keyBy('id');
+
+        $this->assertTrue($rows->has($today->id), 'A fee due today must be listed.');
+        $this->assertSame(0, $rows[$today->id]['retardJours']);
+        $this->assertFalse($rows->has($tomorrow->id), 'A fee due tomorrow is not yet chased.');
+        $this->assertSame('1000.00', $props['montantTotal']);
+        $this->assertSame(1, $props['bucketCounts']['1j']);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function recouvrementProps(User $user): array

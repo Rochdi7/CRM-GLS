@@ -43,6 +43,7 @@ class StudentTransfer extends Model
         'etablissement_source_id', 'etablissement_cible_id',
         'group_cible_id', 'nouvelle_inscription_id',
         'statut', 'motif', 'motif_decision', 'montant_transfere',
+        'encaissement_ids',
         'requested_by', 'decided_by', 'decided_at',
     ];
 
@@ -55,6 +56,10 @@ class StudentTransfer extends Model
     {
         return [
             'montant_transfere' => 'decimal:2',
+            // Paiements cochés à la demande (14/10/2026) ; NULL = demande
+            // antérieure à la colonne ⇒ sélection par défaut
+            // (SelectionPaiementsTransfert::defautIds).
+            'encaissement_ids' => 'array',
             'decided_at' => 'datetime',
         ];
     }

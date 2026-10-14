@@ -1263,6 +1263,7 @@
     "Payment detached from its fee - the amount is available as an advance again.": "Paiement détaché de son frais - le montant est de nouveau disponible en avance.",
     "Merge students & reassign payments": "Fusion de fiches & réaffectation des paiements",
     "Merge records": "Fusion de fiches",
+    "Due today": "Échéance aujourd'hui",
     ":count book(s) « :book » assigned.": ":count livre(s) « :book » attribué(s).",
     ":count student(s) already had this book and were skipped.": ":count étudiant(s) avaient déjà ce livre et ont été ignorés.",
     "Assign books": "Attribution des livres",
@@ -1763,5 +1764,12 @@
     "bank transfer reference": "référence du virement",
     "operation date": "date de l'opération",
     "transfer proof": "justificatif du virement",
-    "fee": "frais"
+    "fee": "frais",
+    "One of the selected payments does not belong to this student.": "L'un des paiements cochés n'appartient pas à cet étudiant.",
+    "Payment :reference cannot be transferred: :reason": "Le paiement :reference ne peut pas être transféré : :reason.",
+    "The payments of fee \":frais\" move together: check all of them or none.": "Les paiements du frais « :frais » partent ensemble : cochez-les tous ou aucun.",
+    "follows its advance": "suit son avance",
+    "fully refunded": "entièrement remboursé",
+    "funded by a rejected cheque": "financé par un chèque rejeté",
+    "payments to transfer": "paiements à transférer"
 }

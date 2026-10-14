@@ -1490,6 +1490,8 @@ export interface StudentTransferRow {
     motif: string;
     motifDecision: string | null;
     montantTransfere: string | null;
+    /** Paiements cochés à la demande ; null = demande antérieure à la case à cocher. */
+    paiementsSelectionnes: { count: number; montant: string } | null;
     demandePar: string | null;
     demandeLe: string | null;
     decidePar: string | null;
@@ -1512,6 +1514,48 @@ export interface StudentTransfersPageProps {
     statuts: string[];
     permissions: { validate: boolean };
     [key: string]: unknown;
+}
+
+/**
+ * Un paiement de l'étudiant tel que `GetPaiementsTransferables` le qualifie
+ * (14/10/2026). `blocage` non null ⇒ non cochable, et `blocageLabel` dit
+ * pourquoi ; `suitAvanceId` ⇒ ligne d'application, cochée avec son avance.
+ */
+export interface PaiementTransferable {
+    id: number;
+    reference: string;
+    date: string | null;
+    montant: string;
+    rembourse: string;
+    methode: string;
+    caisse: string | null;
+    frais: string | null;
+    /** La ligne de frais : l'unité de choix d'un paiement (un frais part entier, jamais à moitié). */
+    feeId: number | null;
+    type: 'avance' | 'paiement' | 'application';
+    blocage: 'application' | 'rembourse' | 'cheque_rejete' | null;
+    blocageLabel: string | null;
+    suitAvanceId: number | null;
+}
+
+export interface InscriptionPaiementsTransferables {
+    id: number | null;
+    reference: string | null;
+    statut: string | null;
+    active: boolean;
+    groupe: string | null;
+    niveau: string | null;
+    dateInscription: string | null;
+    paiements: PaiementTransferable[];
+}
+
+/** L'arbre année → inscription → paiements servi par student-transfers.paiements. */
+export interface PaiementsTransferables {
+    avances: PaiementTransferable[];
+    annees: Array<{ annee: string | null; inscriptions: InscriptionPaiementsTransferables[] }>;
+    /** La sélection pré-cochée (avances + dossiers Actifs). */
+    defautIds: number[];
+    total: string;
 }
 
 /** Un groupe ouvert du centre cible, servi par student-transfers.groupes-cibles. */

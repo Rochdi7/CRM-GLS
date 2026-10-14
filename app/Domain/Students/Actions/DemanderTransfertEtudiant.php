@@ -6,6 +6,7 @@ namespace App\Domain\Students\Actions;
 
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Domain\Students\Support\GardeEtudiantTransfere;
+use App\Domain\Students\Support\SelectionPaiementsTransfert;
 use App\Models\Employee;
 use App\Models\Group;
 use App\Models\Student;
@@ -19,8 +20,10 @@ use Illuminate\Validation\ValidationException;
  * Rien ne bouge ici : ni la fiche, ni un dossier, ni un dirham. La demande
  * enregistre QUI part, VERS OÙ, dans QUEL GROUPE (obligatoire — un
  * transfert sans affectation laisserait l'étudiant sans dossier à
- * l'arrivée) et POURQUOI. La décision appartient au super-admin
- * (ValiderTransfertEtudiant / RefuserTransfertEtudiant).
+ * l'arrivée), QUELS PAIEMENTS partent (cochés dans le modal, 14/10/2026 —
+ * `SelectionPaiementsTransfert` décide ce qui est cochable) et POURQUOI. La
+ * décision appartient au super-admin (ValiderTransfertEtudiant /
+ * RefuserTransfertEtudiant).
  *
  * Toutes les vérifications tournent sous verrou dans une transaction : deux
  * demandes simultanées pour la même fiche (double-clic, deux onglets) se
@@ -28,9 +31,12 @@ use Illuminate\Validation\ValidationException;
  */
 final class DemanderTransfertEtudiant
 {
-    public function handle(Student $student, int $etablissementCibleId, int $groupCibleId, string $motif, Employee $requestedBy): StudentTransfer
+    /**
+     * @param  ?list<int>  $encaissementIds  paiements cochés (14/10/2026) ; null = sélection par défaut
+     */
+    public function handle(Student $student, int $etablissementCibleId, int $groupCibleId, string $motif, Employee $requestedBy, ?array $encaissementIds = null): StudentTransfer
     {
-        return DB::transaction(function () use ($student, $etablissementCibleId, $groupCibleId, $motif, $requestedBy): StudentTransfer {
+        return DB::transaction(function () use ($student, $etablissementCibleId, $groupCibleId, $motif, $requestedBy, $encaissementIds): StudentTransfer {
             $student = Student::query()->whereKey($student->getKey())->lockForUpdate()->firstOrFail();
 
             GardeEtudiantTransfere::assertNonTransfere($student);
@@ -58,6 +64,10 @@ final class DemanderTransfertEtudiant
                 ]);
             }
 
+            // Un id hors règle refuse la demande ENTIÈRE en nommant la ligne ;
+            // la validation rejouera le même plan sous verrou.
+            $plan = SelectionPaiementsTransfert::plan($student, $encaissementIds);
+
             return StudentTransfer::create([
                 'reference' => ReferenceGenerator::make('TRE', 'student_transfers'),
                 'student_id' => $student->id,
@@ -66,6 +76,7 @@ final class DemanderTransfertEtudiant
                 'group_cible_id' => $groupCibleId,
                 'statut' => StudentTransfer::STATUT_EN_ATTENTE,
                 'motif' => trim($motif),
+                'encaissement_ids' => $plan['ids'],
                 'requested_by' => $requestedBy->id,
             ]);
         });

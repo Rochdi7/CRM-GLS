@@ -242,6 +242,12 @@ Route::prefix('backoffice')
                 ->middleware('permission:student-transfers.view')->name('student-transfers.index');
             Route::get('student-transfers/groupes-cibles/{etablissement}', [StudentTransferController::class, 'groupesCibles'])
                 ->middleware('permission:student-transfers.create')->name('student-transfers.groupes-cibles');
+            // Paiements à cocher (14/10/2026) : ceux de l'étudiant pour la
+            // demande, ceux d'une demande pour la décision.
+            Route::get('student-transfers/paiements/{student}', [StudentTransferController::class, 'paiements'])
+                ->middleware('permission:student-transfers.create')->name('student-transfers.paiements');
+            Route::get('student-transfers/{student_transfer}/paiements', [StudentTransferController::class, 'paiementsDemande'])
+                ->middleware('permission:student-transfers.view')->name('student-transfers.paiements-demande');
             Route::post('student-transfers', [StudentTransferController::class, 'store'])
                 ->middleware('permission:student-transfers.create')->name('student-transfers.store');
             Route::put('student-transfers/{student_transfer}/validate', [StudentTransferController::class, 'validateAction'])

@@ -570,3 +570,17 @@ ALTER TABLE depenses ADD COLUMN IF NOT EXISTS cnss_montant numeric(12,2) NULL;
 -- mémoire (idempotent). Aucun solde de caisse ne bouge.
 ALTER TABLE depenses ADD COLUMN IF NOT EXISTS calcul_ajustements jsonb NULL;
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 14/10/2026 — Paiements COCHÉS à la demande de transfert d'un étudiant :
+-- `student_transfers.encaissement_ids` jsonb (liste d'`encaissements.id`,
+-- NULL = demande antérieure à la colonne ⇒ sélection par défaut à la
+-- validation : avances + paiements des dossiers Actifs, l'ancien
+-- comportement). Règle unique : Domain\Students\Support\SelectionPaiementsTransfert.
+--
+-- ⚠ RIEN À FAIRE À LA MAIN : la migration additive
+-- `2026_10_14_100000_add_encaissement_ids_to_student_transfers_table.php`
+-- est jouée par le `php artisan migrate --force` du déploiement. SQL
+-- conservé pour mémoire (idempotent). Aucun solde de caisse ne bouge.
+ALTER TABLE student_transfers ADD COLUMN IF NOT EXISTS encaissement_ids jsonb NULL;
+-- ---------------------------------------------------------------------------

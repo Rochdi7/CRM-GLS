@@ -6,6 +6,7 @@ namespace App\Domain\Students\Actions;
 
 use App\Domain\Registrations\Queries\GetGroupInscriptionFees;
 use App\Domain\Shared\Support\ReferenceGenerator;
+use App\Domain\Students\Support\SelectionPaiementsTransfert;
 use App\Models\Cheque;
 use App\Models\Encaissement;
 use App\Models\Group;
@@ -46,12 +47,15 @@ use Spatie\MediaLibrary\MediaCollections\Models\Media;
  *     cible, avec les frais du catalogue du groupe MOINS ceux déjà payés
  *     et déplacés (un « Frais d'inscription » réglé à Rabat ne se facture
  *     pas une seconde fois à Casablanca) ;
- *  4. l'argent SUIT la personne : tout encaissement de la fiche source qui
- *     est une avance (aucun frais) ou qui repose sur une ligne déplacée
- *     passe sous le `student_id` de la copie, comme les chèques de
- *     l'étudiant. Les paiements posés sur un dossier déjà clos avant le
- *     transfert (Annulée / Changement…) restent l'histoire du centre
- *     source.
+ *  4. l'argent SUIT la personne — SELON CE QUI A ÉTÉ COCHÉ à la demande
+ *     (14/10/2026, `student_transfers.encaissement_ids`, règle unique dans
+ *     `SelectionPaiementsTransfert::plan()`, rejouée ici SOUS VERROU) : une
+ *     avance cochée passe sous le `student_id` de la copie ; un FRAIS coché
+ *     est déplacé ENTIER sur le nouveau dossier, ses paiements avec lui —
+ *     y compris depuis un dossier déjà clos (Changement, Annulée…) : un
+ *     paiement reste un paiement, il n'est jamais converti en avance. Les
+ *     chèques de l'étudiant suivent toujours (c'est la personne qu'ils
+ *     désignent). Ce qui n'est pas coché reste l'histoire du centre source.
  *
  * ⚠ AUCUN MONTANT NE BOUGE et `caisses.solde` n'est ni lu ni écrit :
  * `montant`, `methode`, `date_paiement`, `caisse_id`, `agent_id` et
@@ -114,11 +118,16 @@ final class ValiderTransfertEtudiant
                 (int) $transfert->etablissement_cible_id,
             );
 
+            // Le plan des paiements cochés, relu sur les lignes VERROUILLÉES :
+            // un remboursement ou une application saisis depuis la demande
+            // changent la réponse, et c'est ici qu'elle compte.
+            $plan = SelectionPaiementsTransfert::plan($source, $transfert->encaissement_ids, lock: true);
+
             // 1. La copie dans le centre cible.
             $copie = $this->copierFiche($source, $transfert);
 
             // 2. Clôture des dossiers Actifs du centre source ; les lignes
-            //    payées sont collectées pour être déplacées.
+            //    de frais cochées sont collectées pour être déplacées.
             $actives = $source->inscriptions()
                 ->where('statut', Inscription::STATUT_ACTIVE)
                 ->lockForUpdate()
@@ -128,7 +137,7 @@ final class ValiderTransfertEtudiant
             $feesMasques = 0;
 
             foreach ($actives as $inscription) {
-                [$payes, $masques] = $this->partagerFrais($inscription);
+                [$payes, $masques] = $this->partagerFrais($inscription, $plan['feesEntiers']);
                 $feesDeplaces = $feesDeplaces->merge($payes);
                 $feesMasques += $masques;
 
@@ -144,6 +153,20 @@ final class ValiderTransfertEtudiant
                 ]);
             }
 
+            // Les frais cochés d'un dossier déjà CLOS partent aussi, tels
+            // quels : le dossier garde son statut et son motif, seule la
+            // ligne de frais change de dossier.
+            $dejaCollectes = $feesDeplaces->pluck('id')->map(fn ($id): int => (int) $id)->all();
+            $feesDossiersClos = InscriptionFee::query()
+                ->whereIn('id', array_diff($plan['feesEntiers'], $dejaCollectes))
+                ->lockForUpdate()
+                ->get();
+            $feesDeplaces = $feesDeplaces->merge($feesDossiersClos);
+            $inscriptionsClosesTouchees = Inscription::query()
+                ->whereIn('id', $feesDossiersClos->pluck('inscription_id')->unique()->all())
+                ->lockForUpdate()
+                ->get();
+
             // 3. Le nouveau dossier Actif dans le groupe cible.
             $nouvelle = $this->creerInscription($copie, $groupe, $transfert, $feesDeplaces, $validatedBy);
 
@@ -152,7 +175,7 @@ final class ValiderTransfertEtudiant
             // (même règle que ChangerGroupeInscription).
             $feesDeplaces->each(fn (InscriptionFee $fee) => $fee->update(['inscription_id' => $nouvelle->id]));
 
-            foreach ($actives as $inscription) {
+            foreach ($actives->merge($inscriptionsClosesTouchees) as $inscription) {
                 $inscription->update([
                     'montant_total' => $inscription->fees()->whereNull('masque_le')->sum('montant') ?: null,
                 ]);
@@ -162,8 +185,9 @@ final class ValiderTransfertEtudiant
                 'montant_total' => $nouvelle->fees()->whereNull('masque_le')->sum('montant') ?: null,
             ]);
 
-            // 4. L'argent suit la personne.
-            [$encaissementsDeplaces, $montant] = $this->deplacerArgent($source, $copie, $feesDeplaces);
+            // 4. L'argent suit la personne — ce qui a été coché.
+            $encaissementsDeplaces = $this->deplacerArgent($source, $copie, $feesDeplaces, $plan['avances']);
+            $montant = $plan['montant'];
             $chequesDeplaces = $this->deplacerCheques($source, $copie);
 
             // 5. La fiche source est close.
@@ -199,6 +223,7 @@ final class ValiderTransfertEtudiant
                     'frais_deplaces' => $feesDeplaces->pluck('id')->all(),
                     'frais_masques' => $feesMasques,
                     'encaissements_deplaces' => $encaissementsDeplaces,
+                    'encaissements_coches' => $plan['ids'],
                     'cheques_deplaces' => $chequesDeplaces,
                     'montant_transfere' => number_format($montant, 2, '.', ''),
                     'motif' => $transfert->motif,
@@ -247,25 +272,30 @@ final class ValiderTransfertEtudiant
     }
 
     /**
-     * Sépare les lignes VISIBLES d'un dossier : celles qui ont reçu de
-     * l'argent (net des remboursements — un frais entièrement remboursé
-     * n'a rien à emporter) partent avec l'étudiant ; les autres sont
-     * masquées, elles ne sont plus dues ici.
+     * Trie les lignes VISIBLES d'un dossier en trois : celles cochées
+     * ENTIÈRES partent avec l'étudiant ; celles qui gardent de l'argent
+     * (net des remboursements) RESTENT ici — un paiement non coché, ou
+     * conservé par une sélection partielle, est l'histoire de ce centre et
+     * ne se masque jamais ; celles sans un dirham sont masquées, elles ne
+     * sont plus dues ici.
      *
+     * @param  list<int>  $feesEntiers
      * @return array{0: Collection<int, InscriptionFee>, 1: int}
      */
-    private function partagerFrais(Inscription $inscription): array
+    private function partagerFrais(Inscription $inscription, array $feesEntiers): array
     {
         $fees = $inscription->fees()->whereNull('masque_le')->lockForUpdate()->get();
 
-        [$payes, $impayes] = $fees->partition(fn (InscriptionFee $fee): bool => $fee->montantPaye() > 0);
+        [$partent, $restent] = $fees->partition(fn (InscriptionFee $fee): bool => in_array((int) $fee->id, $feesEntiers, true));
+
+        $impayes = $restent->filter(fn (InscriptionFee $fee): bool => $fee->montantPaye() <= 0);
 
         $impayes->each(fn (InscriptionFee $fee) => $fee->update([
             'masque_le' => now(),
             'masque_origine' => InscriptionFee::MASQUE_ORIGINE_TRANSFERT,
         ]));
 
-        return [$payes->values(), $impayes->count()];
+        return [$partent->values(), $impayes->count()];
     }
 
     /**
@@ -318,34 +348,33 @@ final class ValiderTransfertEtudiant
     }
 
     /**
-     * Les encaissements qui suivent l'étudiant : les avances (aucun frais)
-     * et les lignes posées sur un frais déplacé — y compris les lignes
+     * Les encaissements qui suivent l'étudiant : les avances COCHÉES et les
+     * lignes posées sur un frais déplacé — y compris les lignes
      * d'application d'avance qui y reposent. Seule la colonne `student_id`
      * est réécrite, en masse comme FusionnerEtudiants ; le détail est dans
      * l'entrée de journal du transfert.
      *
      * @param  Collection<int, InscriptionFee>  $feesDeplaces
-     * @return array{0: list<int>, 1: float}  ids déplacés, argent REÇU emporté (hors lignes d'application, qui reposent une avance déjà comptée)
+     * @param  list<int>  $avances
+     * @return list<int> ids déplacés
      */
-    private function deplacerArgent(Student $source, Student $copie, Collection $feesDeplaces): array
+    private function deplacerArgent(Student $source, Student $copie, Collection $feesDeplaces, array $avances): array
     {
-        $query = Encaissement::query()
+        $rows = Encaissement::query()
             ->where('student_id', $source->id)
             ->where(fn ($q) => $q
-                ->whereNull('inscription_fee_id')
-                ->orWhereIn('inscription_fee_id', $feesDeplaces->pluck('id')->all()));
-
-        $rows = (clone $query)->lockForUpdate()->get(['id', 'montant', 'applied_from_encaissement_id']);
+                ->whereIn('id', $avances)
+                ->orWhereIn('inscription_fee_id', $feesDeplaces->pluck('id')->all()))
+            ->lockForUpdate()
+            ->get(['id']);
 
         if ($rows->isEmpty()) {
-            return [[], 0.0];
+            return [];
         }
 
         Encaissement::query()->whereIn('id', $rows->pluck('id'))->update(['student_id' => $copie->id]);
 
-        $montant = round((float) $rows->whereNull('applied_from_encaissement_id')->sum('montant'), 2);
-
-        return [$rows->pluck('id')->all(), $montant];
+        return $rows->pluck('id')->map(fn ($id): int => (int) $id)->all();
     }
 
     /**
