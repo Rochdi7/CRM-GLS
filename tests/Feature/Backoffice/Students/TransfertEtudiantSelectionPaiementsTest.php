@@ -115,8 +115,15 @@ final class TransfertEtudiantSelectionPaiementsTest extends TestCase
         $this->assertTrue($courante['active']);
         $lignes = collect($courante['paiements'])->keyBy('id');
         $this->assertNull($lignes[$paiement->id]['blocage']);
-        $this->assertSame('application', $lignes[$application->id]['blocage']);
-        $this->assertSame($avance->id, $lignes[$application->id]['suitAvanceId']);
+        // L'application est un paiement de son frais : cochable avec lui, pour son montant.
+        $this->assertSame('application', $lignes[$application->id]['type']);
+        $this->assertNull($lignes[$application->id]['blocage']);
+        $this->assertSame('100.00', $lignes[$application->id]['emporte']);
+        // L'avance n'emporte que son RESTE.
+        $this->assertSame('1000.00', $tree['avances'][0]['montant']);
+        $this->assertSame('100.00', $tree['avances'][0]['utilise']);
+        $this->assertSame('900.00', $tree['avances'][0]['reste']);
+        $this->assertSame('900.00', $tree['avances'][0]['emporte']);
 
         $passee = $tree['annees'][1]['inscriptions'][0];
         $this->assertSame(Inscription::STATUT_CHANGEMENT, $passee['statut']);
@@ -125,9 +132,9 @@ final class TransfertEtudiantSelectionPaiementsTest extends TestCase
         $this->assertSame('rembourse', $lignes[$rembourse->id]['blocage']);
         $this->assertSame('200.00', $lignes[$rembourse->id]['rembourse']);
 
-        // Pré-coché : avance + dossier Actif ; jamais le dossier clos ni le remboursé.
-        $this->assertEqualsCanonicalizing([$paiement->id, $avance->id], $tree['defautIds']);
-        // Argent reçu, hors application.
+        // Pré-coché : avance + dossier Actif (application comprise) ; jamais le dossier clos ni le remboursé.
+        $this->assertEqualsCanonicalizing([$paiement->id, $avance->id, $application->id], $tree['defautIds']);
+        // 300 + 900 (reste) + 100 (application) + 500 + 200 : chaque dirham une fois.
         $this->assertSame('2000.00', $tree['total']);
     }
 
@@ -243,21 +250,60 @@ final class TransfertEtudiantSelectionPaiementsTest extends TestCase
         $application = $this->paiement($student, $fee, 300, ['applied_from_encaissement_id' => $avance->id]);
         $autre = $this->paiement(Student::factory()->create(['etablissement_id' => $this->rabat->id]), null, 100);
 
-        // Une application ne se coche pas seule.
-        $this->demander($student, [$avance->id, $application->id])->assertSessionHasErrors('encaissement_ids');
+        // Une avance entièrement appliquée n'a rien à emporter.
+        $this->demander($student, [$avance->id])->assertSessionHasErrors('encaissement_ids');
         // Le paiement d'un autre étudiant non plus.
         $this->demander($student, [$autre->id])->assertSessionHasErrors('encaissement_ids');
         $this->assertSame(0, StudentTransfer::query()->count());
 
-        // L'avance seule passe, et son application la suit à la validation.
+        // L'application part avec son FRAIS, l'avance épuisée reste ici.
+        $this->demander($student, [$application->id])->assertSessionHasNoErrors();
+        $transfert = StudentTransfer::query()->sole();
+        $this->actingAs($this->superAdmin())->put(route('backoffice.student-transfers.validate', $transfert))->assertSessionHasNoErrors();
+        $transfert->refresh();
+        $this->assertSame($student->id, $avance->fresh()->student_id);
+        $this->assertSame($transfert->nouveau_student_id, $application->fresh()->student_id);
+        $this->assertSame($transfert->nouvelle_inscription_id, $fee->fresh()->inscription_id);
+        $this->assertSame('300.00', (string) $transfert->montant_transfere);
+    }
+
+    /**
+     * Le cas du 15/10/2026 : 1 200 DH convertis en avance en gardant 300 DH
+     * sur le frais (scission). L'écran annonçait 1 200 DH pour l'avance et
+     * traînait les 300 DH avec elle : on ne pouvait pas en laisser 300 au
+     * centre de départ et envoyer les 900.
+     */
+    public function test_a_split_advance_carries_its_remainder_and_its_applied_part_stays_with_the_fee(): void
+    {
+        $student = $this->etudiant();
+        $inscription = $this->inscription($student, $this->groupeRabat);
+        $feeOct = $this->fee($inscription, "Frais d'Octobre", 1200, InscriptionFee::STATUT_PAYE_PARTIELLEMENT);
+        $avance = $this->paiement($student, null, 1200);
+        $application = $this->paiement($student, $feeOct, 300, ['applied_from_encaissement_id' => $avance->id]);
+
+        $tree = $this->actingAs($this->guichet->user)
+            ->getJson(route('backoffice.student-transfers.paiements', $student))
+            ->assertOk()
+            ->json();
+        $this->assertSame('900.00', $tree['avances'][0]['emporte']);
+        $this->assertSame('300.00', $tree['annees'][0]['inscriptions'][0]['paiements'][0]['emporte']);
+        $this->assertSame('1200.00', $tree['total']);
+
+        // Avance seule cochée : 900 partent, les 300 appliqués restent sur le frais d'origine.
         $this->demander($student, [$avance->id])->assertSessionHasNoErrors();
         $transfert = StudentTransfer::query()->sole();
         $this->actingAs($this->superAdmin())->put(route('backoffice.student-transfers.validate', $transfert))->assertSessionHasNoErrors();
         $transfert->refresh();
+
+        $this->assertSame('900.00', (string) $transfert->montant_transfere);
         $this->assertSame($transfert->nouveau_student_id, $avance->fresh()->student_id);
-        $this->assertSame($transfert->nouveau_student_id, $application->fresh()->student_id);
-        $this->assertSame($transfert->nouvelle_inscription_id, $fee->fresh()->inscription_id);
-        $this->assertSame('300.00', (string) $transfert->montant_transfere);
+        $this->assertSame($student->id, $application->fresh()->student_id);
+        $this->assertSame($inscription->id, $feeOct->fresh()->inscription_id);
+        $this->assertNull($feeOct->fresh()->masque_le);
+        // Aucun montant n'a bougé : l'avance garde 900 de reste, où qu'elle soit.
+        $this->assertSame('1200.00', (string) $avance->fresh()->montant);
+        $this->assertSame(900.0, $avance->fresh()->montantRestant());
+        $this->assertSame('5000.00', (string) $this->caisse->fresh()->solde);
     }
 
     public function test_a_refund_between_request_and_decision_refuses_the_validation(): void

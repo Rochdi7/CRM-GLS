@@ -1769,7 +1769,7 @@
     "One of the selected payments does not belong to this student.": "L'un des paiements cochés n'appartient pas à cet étudiant.",
     "Payment :reference cannot be transferred: :reason": "Le paiement :reference ne peut pas être transféré : :reason.",
     "The payments of fee \":frais\" move together: check all of them or none.": "Les paiements du frais « :frais » partent ensemble : cochez-les tous ou aucun.",
-    "follows its advance": "suit son avance",
+    "fully used (applied or refunded)": "entièrement utilisée (appliquée ou remboursée)",
     "fully refunded": "entièrement remboursé",
     "funded by a rejected cheque": "financé par un chèque rejeté",
     "payments to transfer": "paiements à transférer"

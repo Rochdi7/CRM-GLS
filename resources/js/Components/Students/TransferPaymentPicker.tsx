@@ -19,18 +19,14 @@ function fmt(montant: string | number): string {
     return `${n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} DH`;
 }
 
-/** Les lignes qu'un clic peut cocher — jamais une application ni une ligne bloquée. */
+/** Les lignes qu'un clic peut cocher — jamais une ligne bloquée. */
 function cochables(paiements: PaiementTransferable[]): number[] {
     return paiements.filter((p) => p.blocage === null).map((p) => p.id);
 }
 
-/**
- * Les lignes affichées — sans les applications d'avance : elles ne sont pas
- * de l'argent reçu (déjà compté sur leur avance) et partent d'office avec
- * elle côté serveur, donc les montrer n'apprenait rien à l'opérateur.
- */
-function visibles(paiements: PaiementTransferable[]): PaiementTransferable[] {
-    return paiements.filter((p) => p.type !== 'application');
+/** Ce que les lignes cochées emportent (le RESTE d'une avance, le montant d'un paiement). */
+function emporte(rows: PaiementTransferable[]): number {
+    return rows.reduce((sum, p) => sum + (parseFloat(p.emporte) || 0), 0);
 }
 
 interface FraisGroupe {
@@ -54,10 +50,12 @@ function parFrais(paiements: PaiementTransferable[]): FraisGroupe[] {
 
 /**
  * Ce qu'un transfert d'étudiant emporte (14/10/2026) — année → inscription →
- * FRAIS, une case par frais (ses paiements partent avec lui, un paiement
- * reste un paiement), et une case par avance. Tout ce qui décide si une
- * ligne est cochable vient du serveur (`GetPaiementsTransferables`) : ici
- * on dessine, on coche, on additionne. Partagé par le modal de demande
+ * FRAIS, une case par frais (ses paiements partent avec lui, une application
+ * d'avance comprise : un paiement reste un paiement), et une case par avance,
+ * qui n'emporte que son RESTE (15/10/2026 — la part déjà appliquée est sur son
+ * frais et se décide là). Tout ce qui décide si une ligne est cochable, et
+ * pour combien, vient du serveur (`GetPaiementsTransferables`) : ici on
+ * dessine, on coche, on additionne. Partagé par le modal de demande
  * (cochable) et le dialogue de validation (lecture seule).
  */
 export default function TransferPaymentPicker({ tree, loading, selected, onChange, readOnly = false, idPrefix = 'tp' }: TransferPaymentPickerProps) {
@@ -71,14 +69,11 @@ export default function TransferPaymentPicker({ tree, loading, selected, onChang
 
     const allCochables = useMemo(() => cochables(allRows), [allRows]);
 
-    /** Une application est « cochée » quand son avance l'est. */
-    const isChecked = (p: PaiementTransferable): boolean =>
-        p.suitAvanceId !== null ? selectedSet.has(p.suitAvanceId) : selectedSet.has(p.id);
+    const isChecked = (p: PaiementTransferable): boolean => selectedSet.has(p.id);
 
-    const recu = (rows: PaiementTransferable[]): number =>
-        rows.filter((p) => p.type !== 'application' && isChecked(p)).reduce((sum, p) => sum + (parseFloat(p.montant) || 0), 0);
+    const recu = (rows: PaiementTransferable[]): number => emporte(rows.filter(isChecked));
 
-    const nbSelectionne = allRows.filter((p) => p.type !== 'application' && selectedSet.has(p.id)).length;
+    const nbSelectionne = allRows.filter(isChecked).length;
 
     function toggleGroup(ids: number[]) {
         if (readOnly || !onChange || ids.length === 0) return;
@@ -151,7 +146,12 @@ export default function TransferPaymentPicker({ tree, loading, selected, onChang
                     {p.caisse && <span className="text-muted"> · {p.caisse}</span>}
                 </td>
                 <td className="text-end text-nowrap">
-                    <span className={disabled ? 'text-decoration-line-through' : ''}>{fmt(p.montant)}</span>
+                    <span className={disabled ? 'text-decoration-line-through' : ''}>{fmt(p.emporte)}</span>
+                    {p.reste !== null && parseFloat(p.utilise ?? '0') > 0 && (
+                        <div className="fs-12 text-muted">
+                            reste sur {fmt(p.montant)} · {fmt(p.utilise ?? '0')} déjà appliqués
+                        </div>
+                    )}
                     {parseFloat(p.rembourse) > 0 && <div className="fs-12 text-danger">− {fmt(p.rembourse)} remboursés</div>}
                 </td>
                 <td className="text-normal-case fs-12">
@@ -171,7 +171,7 @@ export default function TransferPaymentPicker({ tree, loading, selected, onChang
         const ids = cochables(f.paiements);
         const checked = ids.length > 0 && ids.every((id) => selectedSet.has(id));
         const inputId = `${idPrefix}-${key}-f${f.feeId}`;
-        const total = f.paiements.reduce((s, p) => s + (parseFloat(p.montant) || 0), 0);
+        const total = emporte(f.paiements);
 
         return (
             <tbody key={key}>
@@ -227,7 +227,7 @@ export default function TransferPaymentPicker({ tree, loading, selected, onChang
                 )}
                 <div className="table-responsive">
                     <table className="table table-sm mb-0 align-middle">
-                        {parFrais(visibles(ins.paiements)).map((f) => renderFrais(f, key))}
+                        {parFrais(ins.paiements).map((f) => renderFrais(f, key))}
                     </table>
                 </div>
             </div>

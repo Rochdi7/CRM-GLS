@@ -28,8 +28,15 @@ use Illuminate\Validation\ValidationException;
  * refuse (CLAUDE.md §5).
  *
  * Trois sortes de lignes, deux unités de choix :
- *  - une AVANCE (aucun frais) se coche SEULE : elle part si elle est
- *    cochée — `student_id` réécrit, rien d'autre ;
+ *  - une AVANCE (aucun frais — une application RECONVERTIE, détachée de son
+ *    frais, en est une aussi) se coche SEULE et emporte son RESTE : montant
+ *    moins ce qui a déjà été appliqué à un frais, moins ce qui a été
+ *    remboursé. Avant le 15/10/2026 elle s'affichait et se comptait pour
+ *    son `montant` entier, de sorte qu'une avance de 1 200 DH dont 300 DH
+ *    avaient été posés sur un frais (scission à la conversion) annonçait
+ *    1 200 DH emportés et traînait l'application avec elle — on ne pouvait
+ *    plus garder les 300 DH au centre de départ. Une avance dont il ne reste
+ *    rien n'a rien à emporter ;
  *  - un PAIEMENT posé sur un frais se coche AVEC SON FRAIS : « un paiement
  *    reste un paiement » (décision du propriétaire, 14/10/2026 — la
  *    première version convertissait une sélection partielle en avance à
@@ -39,15 +46,16 @@ use Illuminate\Validation\ValidationException;
  *    quel que soit le statut du dossier d'origine ; une sélection qui ne
  *    couvre pas toutes les lignes mobiles d'un frais est REFUSÉE en nommant
  *    le frais — jamais exécutée à moitié ;
- *  - une ligne d'APPLICATION d'avance n'est jamais cochée seule : son argent
- *    est celui de l'avance PARENTE, elle SUIT cette avance (cochée ⇒ son
- *    frais part entier avec elle).
+ *  - une ligne d'APPLICATION d'avance est un paiement DE SON FRAIS : elle
+ *    part avec le frais, pas avec l'avance parente (dont elle est déjà
+ *    déduite). Avance et application se décident donc séparément — c'est
+ *    ce qui permet de garder la part appliquée ici et d'envoyer le reste.
  *
  * Ne partent JAMAIS, et l'écran le DIT au lieu de masquer la ligne : un
  * paiement entièrement remboursé (plus rien à emporter — il suit son frais
- * si celui-ci part, sans compter) et une ligne financée par un chèque
- * REJETÉ (cet argent n'a jamais existé — `ChequeOrigine`, la chaîne
- * `applied_from` comprise).
+ * si celui-ci part, sans compter), une avance épuisée, et une ligne
+ * financée par un chèque REJETÉ (cet argent n'a jamais existé —
+ * `ChequeOrigine`, la chaîne `applied_from` comprise).
  *
  * ⚠ Aucun montant ne bouge, `caisses.solde` n'est ni lu ni écrit : seule
  * l'AFFECTATION change (CLAUDE.md §11, bloc « transfert d'étudiant »).
@@ -62,18 +70,21 @@ final class SelectionPaiementsTransfert
 
     public const TYPE_APPLICATION = 'application';
 
-    public const BLOCAGE_APPLICATION = 'application';
-
     public const BLOCAGE_REMBOURSE = 'rembourse';
+
+    public const BLOCAGE_UTILISEE = 'utilisee';
 
     public const BLOCAGE_CHEQUE_REJETE = 'cheque_rejete';
 
     /**
      * Toutes les lignes d'encaissement de l'étudiant, qualifiées. Une
-     * requête pour les lignes, une pour le remboursé (withSum), une par
+     * requête pour les lignes, deux withSum (remboursé, appliqué), une par
      * niveau de chaîne pour le chèque d'origine — jamais une par ligne (§17).
      *
-     * @return Collection<int, array{row: Encaissement, type: string, blocage: ?string, rembourse: float, parentId: ?int}>
+     * `emporte` est ce que la ligne apporte au transfert : le RESTE d'une
+     * avance, le montant d'un paiement ou d'une application.
+     *
+     * @return Collection<int, array{row: Encaissement, type: string, blocage: ?string, rembourse: float, utilise: ?float, reste: ?float, emporte: float}>
      */
     public static function lignes(Student $student, bool $lock = false): Collection
     {
@@ -92,6 +103,7 @@ final class SelectionPaiementsTransfert
                 'caisse:id,nom',
             ])
             ->withSum(['remboursements as remboursements_total' => fn ($q) => $q->nonAnnules()], 'montant')
+            ->withSum('applications as applications_total', 'montant')
             ->where('student_id', $student->id)
             ->orderBy('date_paiement')
             ->orderBy('id')
@@ -103,15 +115,20 @@ final class SelectionPaiementsTransfert
             ->all();
 
         return $rows->map(function (Encaissement $row) use ($chequesRejetes): array {
+            $montant = round((float) $row->montant, 2);
             $rembourse = round((float) ($row->remboursements_total ?? 0), 2);
-            $type = $row->applied_from_encaissement_id !== null
-                ? self::TYPE_APPLICATION
-                : ($row->inscription_fee_id === null ? self::TYPE_AVANCE : self::TYPE_PAIEMENT);
+            $type = $row->inscription_fee_id === null
+                ? self::TYPE_AVANCE
+                : ($row->applied_from_encaissement_id !== null ? self::TYPE_APPLICATION : self::TYPE_PAIEMENT);
+
+            // Même arithmétique qu'`Encaissement::montantRestant()`, en lot.
+            $utilise = $type === self::TYPE_AVANCE ? round((float) ($row->applications_total ?? 0), 2) : null;
+            $reste = $utilise === null ? null : round(max(0.0, $montant - $utilise - $rembourse), 2);
 
             $blocage = match (true) {
-                $type === self::TYPE_APPLICATION => self::BLOCAGE_APPLICATION,
                 in_array($row->id, $chequesRejetes, true) => self::BLOCAGE_CHEQUE_REJETE,
-                $rembourse >= round((float) $row->montant, 2) => self::BLOCAGE_REMBOURSE,
+                $rembourse >= $montant => self::BLOCAGE_REMBOURSE,
+                $reste !== null && $reste <= 0 => self::BLOCAGE_UTILISEE,
                 default => null,
             };
 
@@ -120,7 +137,9 @@ final class SelectionPaiementsTransfert
                 'type' => $type,
                 'blocage' => $blocage,
                 'rembourse' => $rembourse,
-                'parentId' => $row->applied_from_encaissement_id === null ? null : (int) $row->applied_from_encaissement_id,
+                'utilise' => $utilise,
+                'reste' => $reste,
+                'emporte' => $reste ?? $montant,
             ];
         })->values();
     }
@@ -132,7 +151,7 @@ final class SelectionPaiementsTransfert
      * tant qu'on ne les coche pas. Une demande antérieure à la colonne
      * (`encaissement_ids` NULL) est validée avec cette sélection.
      *
-     * @param  Collection<int, array{row: Encaissement, type: string, blocage: ?string, rembourse: float, parentId: ?int}>  $lignes
+     * @param  Collection<int, array{row: Encaissement, type: string, blocage: ?string, rembourse: float, utilise: ?float, reste: ?float, emporte: float}>  $lignes
      * @return list<int>
      */
     public static function defautIds(Collection $lignes): array
@@ -158,7 +177,7 @@ final class SelectionPaiementsTransfert
      *   avances: list<int>,
      *   feesEntiers: list<int>,
      *   montant: float,
-     *   lignes: Collection<int, array{row: Encaissement, type: string, blocage: ?string, rembourse: float, parentId: ?int}>
+     *   lignes: Collection<int, array{row: Encaissement, type: string, blocage: ?string, rembourse: float, utilise: ?float, reste: ?float, emporte: float}>
      * }
      */
     public static function plan(Student $student, ?array $ids, bool $lock = false, string $field = 'encaissement_ids'): array
@@ -190,11 +209,7 @@ final class SelectionPaiementsTransfert
         }
 
         $choisis = array_fill_keys($ids, true);
-
-        // Les lignes qui PARTENT : les cochées + les applications dont
-        // l'avance parente est cochée.
-        $partent = $lignes->filter(fn (array $l): bool => isset($choisis[(int) $l['row']->id])
-            || ($l['parentId'] !== null && isset($choisis[$l['parentId']])));
+        $partent = $lignes->filter(fn (array $l): bool => isset($choisis[(int) $l['row']->id]));
 
         $avances = $partent
             ->filter(fn (array $l): bool => $l['type'] === self::TYPE_AVANCE)
@@ -207,11 +222,11 @@ final class SelectionPaiementsTransfert
         $surFrais = $partent->filter(fn (array $l): bool => $l['row']->inscription_fee_id !== null);
 
         foreach ($surFrais->groupBy(fn (array $l): int => (int) $l['row']->inscription_fee_id) as $feeId => $groupe) {
-            // Tout ce qui est MOBILE sur ce frais : les paiements cochables
-            // et les applications (qui suivent leur avance). Un frais part
-            // ENTIER ou pas du tout — un paiement reste un paiement.
+            // Tout ce qui est MOBILE sur ce frais : paiements et applications
+            // cochables. Un frais part ENTIER ou pas du tout — un paiement
+            // reste un paiement.
             $mobiles = $lignes->filter(fn (array $l): bool => (int) $l['row']->inscription_fee_id === $feeId
-                && ($l['blocage'] === null || $l['type'] === self::TYPE_APPLICATION));
+                && $l['blocage'] === null);
 
             if ($mobiles->count() !== $groupe->count()) {
                 throw ValidationException::withMessages([
@@ -224,15 +239,11 @@ final class SelectionPaiementsTransfert
             $feesEntiers[] = $feeId;
         }
 
-        $montant = round((float) $partent
-            ->filter(fn (array $l): bool => $l['type'] !== self::TYPE_APPLICATION)
-            ->sum(fn (array $l): float => (float) $l['row']->montant), 2);
-
         return [
             'ids' => $ids,
             'avances' => $avances,
             'feesEntiers' => array_values(array_unique($feesEntiers)),
-            'montant' => $montant,
+            'montant' => round((float) $partent->sum(fn (array $l): float => $l['emporte']), 2),
             'lignes' => $lignes,
         ];
     }
@@ -240,8 +251,8 @@ final class SelectionPaiementsTransfert
     public static function blocageLabel(?string $blocage): ?string
     {
         return match ($blocage) {
-            self::BLOCAGE_APPLICATION => __('follows its advance'),
             self::BLOCAGE_REMBOURSE => __('fully refunded'),
+            self::BLOCAGE_UTILISEE => __('fully used (applied or refunded)'),
             self::BLOCAGE_CHEQUE_REJETE => __('funded by a rejected cheque'),
             default => null,
         };
