@@ -15,14 +15,14 @@ use Illuminate\Support\Collection;
  * transfert coche, et que le dialogue de validation relit (14/10/2026).
  *
  * Chaque ligne porte son sort tel que `SelectionPaiementsTransfert` le
- * décide (`blocage`, `suitAvanceId`) — la page ne redérive rien, elle
- * dessine. Les avances n'ont ni frais, ni dossier, ni année : elles forment
- * un groupe à part en tête. `defautIds` est la sélection pré-cochée (celle
- * que le transfert emportait avant la case à cocher).
+ * décide (`blocage`, `emporte` — le RESTE d'une avance, le montant d'un
+ * paiement) — la page ne redérive rien, elle dessine. Les avances n'ont ni
+ * frais, ni dossier, ni année : elles forment un groupe à part en tête.
+ * `defautIds` est la sélection pré-cochée (celle que le transfert emportait
+ * avant la case à cocher).
  *
- * `$seulement` restreint l'arbre aux lignes d'une demande déjà déposée
- * (plus les applications qui suivent une avance cochée) — c'est ce que le
- * super-admin voit avant de valider.
+ * `$seulement` restreint l'arbre aux lignes d'une demande déjà déposée —
+ * c'est ce que le super-admin voit avant de valider.
  */
 final class GetPaiementsTransferables
 {
@@ -42,8 +42,7 @@ final class GetPaiementsTransferables
 
         if ($seulement !== null) {
             $choisis = array_fill_keys(array_map('intval', $seulement), true);
-            $lignes = $lignes->filter(fn (array $l): bool => isset($choisis[(int) $l['row']->id])
-                || ($l['parentId'] !== null && isset($choisis[$l['parentId']])))->values();
+            $lignes = $lignes->filter(fn (array $l): bool => isset($choisis[(int) $l['row']->id]))->values();
         }
 
         $format = fn (array $l): array => [
@@ -52,6 +51,9 @@ final class GetPaiementsTransferables
             'date' => $l['row']->date_paiement?->format('d/m/Y'),
             'montant' => number_format((float) $l['row']->montant, 2, '.', ''),
             'rembourse' => number_format($l['rembourse'], 2, '.', ''),
+            'utilise' => $l['utilise'] === null ? null : number_format($l['utilise'], 2, '.', ''),
+            'reste' => $l['reste'] === null ? null : number_format($l['reste'], 2, '.', ''),
+            'emporte' => number_format($l['emporte'], 2, '.', ''),
             'methode' => $l['row']->methode,
             'caisse' => $l['row']->caisse?->nom,
             'frais' => $l['row']->fee?->nom,
@@ -59,7 +61,6 @@ final class GetPaiementsTransferables
             'type' => $l['type'],
             'blocage' => $l['blocage'],
             'blocageLabel' => SelectionPaiementsTransfert::blocageLabel($l['blocage']),
-            'suitAvanceId' => $l['parentId'],
         ];
 
         [$avances, $surFrais] = $lignes->partition(fn (array $l): bool => $l['row']->inscription_fee_id === null);
@@ -110,9 +111,7 @@ final class GetPaiementsTransferables
             'avances' => $avances->map($format)->values()->all(),
             'annees' => $annees,
             'defautIds' => $defaut,
-            'total' => number_format((float) $lignes
-                ->filter(fn (array $l): bool => $l['type'] !== SelectionPaiementsTransfert::TYPE_APPLICATION)
-                ->sum(fn (array $l): float => (float) $l['row']->montant), 2, '.', ''),
+            'total' => number_format((float) $lignes->sum(fn (array $l): float => $l['emporte']), 2, '.', ''),
         ];
     }
 }

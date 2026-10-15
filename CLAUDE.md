@@ -1478,10 +1478,17 @@ the database layer. Non-negotiable invariants already enforced in code:
   nouveau centre** (décision du propriétaire, 14/10/2026 — la première
   version le faisait pour une sélection partielle ou un dossier clos ;
   retirée, ne pas la réintroduire). Un frais non coché reste au centre
-  source, jamais masqué tant qu'il porte un dirham. Une ligne d'APPLICATION
-  ne se coche jamais seule : elle suit son avance. Jamais cochables, et l'écran le DIT : entièrement
-  remboursé, chèque rejeté (`ChequeOrigine`). Les chèques de l'étudiant
-  suivent toujours. Tests :
+  source, jamais masqué tant qu'il porte un dirham. **Une avance emporte
+  son RESTE, et sa part déjà appliquée suit le FRAIS** (15/10/2026) : une
+  ligne d'APPLICATION est un paiement de son frais, cochée avec lui, jamais
+  avec l'avance parente dont elle est déduite (`emporte` = montant −
+  appliqué − remboursé pour une avance, montant sinon). Avant, l'avance
+  s'affichait et se comptait pour son `montant` entier et traînait ses
+  applications : une avance de 1 200 DH scindée (300 DH posés sur un frais)
+  annonçait 1 200 DH emportés et on ne pouvait pas garder les 300 DH au
+  centre de départ. Jamais cochables, et l'écran le DIT : entièrement
+  remboursé, avance épuisée, chèque rejeté (`ChequeOrigine`). Les chèques
+  de l'étudiant suivent toujours. Tests :
   `tests/Feature/Backoffice/Students/TransfertEtudiantSelectionPaiementsTest.php`.
   **AUCUN montant ne bouge** : `montant`, `caisse_id`, `date_paiement`, `agent_id` et surtout
   `encaissements.etablissement_id` (le stamp de ventilation) sont inchangés,

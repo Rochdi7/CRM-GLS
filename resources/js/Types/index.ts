@@ -1519,7 +1519,9 @@ export interface StudentTransfersPageProps {
 /**
  * Un paiement de l'étudiant tel que `GetPaiementsTransferables` le qualifie
  * (14/10/2026). `blocage` non null ⇒ non cochable, et `blocageLabel` dit
- * pourquoi ; `suitAvanceId` ⇒ ligne d'application, cochée avec son avance.
+ * pourquoi ; `emporte` est ce que la ligne apporte au transfert (le RESTE
+ * d'une avance — `montant` − `utilise` − `rembourse` —, le montant d'un
+ * paiement ou d'une application, qui part avec son FRAIS).
  */
 export interface PaiementTransferable {
     id: number;
@@ -1527,15 +1529,19 @@ export interface PaiementTransferable {
     date: string | null;
     montant: string;
     rembourse: string;
+    /** Avance seulement : déjà appliqué à des frais. */
+    utilise: string | null;
+    /** Avance seulement : ce qui reste à emporter. */
+    reste: string | null;
+    emporte: string;
     methode: string;
     caisse: string | null;
     frais: string | null;
     /** La ligne de frais : l'unité de choix d'un paiement (un frais part entier, jamais à moitié). */
     feeId: number | null;
     type: 'avance' | 'paiement' | 'application';
-    blocage: 'application' | 'rembourse' | 'cheque_rejete' | null;
+    blocage: 'rembourse' | 'utilisee' | 'cheque_rejete' | null;
     blocageLabel: string | null;
-    suitAvanceId: number | null;
 }
 
 export interface InscriptionPaiementsTransferables {
