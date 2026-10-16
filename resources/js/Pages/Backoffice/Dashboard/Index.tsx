@@ -21,9 +21,6 @@ interface QuickAction {
     hue: number;
 }
 
-/** « Résumé des frais annuels » masqué temporairement (22/09/2026), chiffres en cours de vérification. */
-const SHOW_ANNUAL_FRAIS: boolean = false;
-
 /**
  * Shortcuts to the screens an employee opens dozens of times a day. Each
  * one is a plain link to the module's list page (every CRUD module is a
@@ -239,9 +236,7 @@ export default function DashboardIndex({ porteeEnseignant, stats, annualFrais, a
                 </div>
             )}
 
-            {/* Masqué temporairement (22/09/2026) : chiffres du « Résumé des frais annuels »
-                en cours de vérification. Décommenter pour le réafficher. */}
-            {SHOW_ANNUAL_FRAIS && annualFrais && (
+            {annualFrais && (
                 <div className="row">
                     <div className="col-md-12">
                         <AnnualFraisChart data={annualFrais} periode={annualFraisPeriode} />
