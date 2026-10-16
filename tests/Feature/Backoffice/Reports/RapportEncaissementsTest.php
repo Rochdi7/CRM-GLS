@@ -203,7 +203,7 @@ final class RapportEncaissementsTest extends TestCase
             ->get(route('backoffice.rapports.index', $this->window()))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->where('filtresVisibles', ['methodeFilter', 'caisseFilter', 'typeFilter']));
+                ->where('filtresVisibles', ['methodeFilter', 'caisseFilter', 'typeFilter', 'fraisFilter']));
     }
 
     // ─────────────────────── Les avances (le cœur) ───────────────────────
@@ -365,6 +365,84 @@ final class RapportEncaissementsTest extends TestCase
         $reglements = $this->lignes(['typeFilter' => 'reglement']);
         $this->assertCount(1, $reglements);
         $this->assertSame('Règlement', $reglements[0]['type']);
+    }
+
+    /**
+     * Le filtre « Frais » suit la ligne du CATALOGUE (frais_id), comme la
+     * liste Encaissements : un règlement posé sur ce frais sort, un autre
+     * frais non. Une AVANCE sort pour le frais auquel son argent a été
+     * APPLIQUÉ — c'est par elle que l'argent est entré — et garde son type
+     * « Avance » ; une avance encore libre ne paie rien et disparaît.
+     */
+    public function test_the_fee_filter_follows_the_catalogue_and_reaches_applied_advances(): void
+    {
+        $salma = $this->student('Salma');
+        $inscription = $this->inscription($salma);
+        $octobre = $this->fee($inscription, 300.00, "Frais d'Octobre");
+        $novembre = $this->fee($inscription, 300.00, 'Frais de Novembre');
+        $this->reglement($salma, $octobre, 300.00);
+        $this->reglement($salma, $novembre, 300.00);
+
+        // Une avance de Loubna, appliquée sur SON frais d'Octobre.
+        $loubna = $this->student('Loubna');
+        $octobreLoubna = $this->fee($this->inscription($loubna), 300.00, "Frais d'Octobre");
+        $avance = $this->avance($loubna, 1200.00);
+        $application = Encaissement::create([
+            'reference' => 'ENC-APP'.(++self::$refSeq),
+            'student_id' => $loubna->id,
+            'inscription_fee_id' => $octobreLoubna->id,
+            'applied_from_encaissement_id' => $avance->id,
+            'caisse_id' => $this->caisse->id,
+            'agent_id' => $this->agent->id,
+            'montant' => 300.00,
+            'methode' => Encaissement::METHODE_ESPECES,
+            'date_paiement' => '2025-10-03',
+        ]);
+
+        // Une avance libre d'un troisième étudiant : rattachée à rien.
+        $this->avance($this->student('Yassine'), 500.00);
+
+        $fraisOctobre = (string) Frais::where('nom', "Frais d'Octobre")->value('id');
+        $lignes = $this->lignes(['fraisFilter' => $fraisOctobre]);
+
+        $this->assertCount(2, $lignes, "Le règlement d'Octobre et l'avance appliquée sur Octobre, rien d'autre.");
+        $this->assertEqualsCanonicalizing(['Règlement', 'Avance'], array_column($lignes, 'type'));
+        $this->assertNotContains($application->reference, array_column($lignes, 'reference'), "La ligne d'application reste exclue.");
+        $this->assertSame('1 500,00 DH', $this->montantTotal(['fraisFilter' => $fraisOctobre]));
+
+        $fraisNovembre = (string) Frais::where('nom', 'Frais de Novembre')->value('id');
+        $novembreLignes = $this->lignes(['fraisFilter' => $fraisNovembre]);
+        $this->assertCount(1, $novembreLignes);
+        $this->assertSame('Frais de Novembre', $novembreLignes[0]['frais']);
+    }
+
+    /** Le catalogue du filtre est servi par le serveur, frais inactifs compris. */
+    public function test_the_fee_filter_options_include_inactive_fees(): void
+    {
+        Frais::create(['nom' => 'Frais retiré', 'statut' => Frais::STATUT_INACTIF]);
+
+        $this->actingAs($this->userWith('reports.view'))
+            ->get(route('backoffice.rapports.index', $this->window()))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('fraisOptions', fn ($options) => collect($options)->contains('label', 'Frais retiré')));
+    }
+
+    /** Un id forgé (non numérique) retombe sur « aucun filtre » et le PDF nomme le frais filtré. */
+    public function test_the_fee_filter_is_recalled_in_the_document_header(): void
+    {
+        $salma = $this->student('Salma');
+        $fee = $this->fee($this->inscription($salma), 300.00, "Frais d'Octobre");
+        $this->reglement($salma, $fee, 300.00);
+
+        $this->actingAs($this->userWith('reports.view'))
+            ->get(route('backoffice.rapports.index', $this->window(['fraisFilter' => 'abc'])))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('filters.fraisFilter', '')->where('nombreLignes', 1));
+
+        $this->actingAs($this->userWith('reports.view'))
+            ->get(route('backoffice.rapports.excel', $this->window(['fraisFilter' => (string) $fee->frais_id])))
+            ->assertOk();
     }
 
     public function test_the_method_filter_restricts_the_document(): void
@@ -599,6 +677,7 @@ final class RapportEncaissementsTest extends TestCase
                 $filters['methodeFilter'] ?? '',
                 $filters['caisseFilter'] ?? '',
                 $filters['typeFilter'] ?? '',
+                $filters['fraisFilter'] ?? '',
             )->values()->all();
     }
 
@@ -616,6 +695,7 @@ final class RapportEncaissementsTest extends TestCase
                 $filters['methodeFilter'] ?? '',
                 $filters['caisseFilter'] ?? '',
                 $filters['typeFilter'] ?? '',
+                $filters['fraisFilter'] ?? '',
             );
     }
 }

@@ -104,7 +104,7 @@ final class RapportCatalogue
         return match ($cle) {
             GetInscriptionsReport::KEY => ['groupFilter', 'statutFilter'],
             GetStudentsReport::KEY => ['sexeFilter', 'inscriptionFilter'],
-            GetEncaissementsReport::KEY => ['methodeFilter', 'caisseFilter', 'typeFilter'],
+            GetEncaissementsReport::KEY => ['methodeFilter', 'caisseFilter', 'typeFilter', 'fraisFilter'],
             GetDepensesReport::KEY => ['typeDepenseFilter', 'statutDepenseFilter'],
             default => [],
         };

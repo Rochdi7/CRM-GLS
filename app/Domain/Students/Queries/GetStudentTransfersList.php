@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Students\Queries;
 
-use App\Models\Encaissement;
+use App\Domain\Students\Support\SelectionPaiementsTransfert;
 use App\Models\StudentTransfer;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
@@ -145,8 +145,12 @@ final class GetStudentTransfersList
 
     /**
      * Nombre et montant des paiements cochés par demande — UNE requête pour
-     * toute la page (§17), lignes d'application exclues du montant (elles
-     * reposent une avance déjà comptée).
+     * toute la page (§17). Chaque ligne compte pour ce qu'elle EMPORTE
+     * (`SelectionPaiementsTransfert::emportes()`, la règle du modal et de
+     * la validation) : une avance pour son RESTE, un paiement ou une
+     * application pour son montant. Sommer le `montant` brut comptait une
+     * avance scindée pour son entier : 1 500 DH affichés pour 1 200 DH
+     * réellement emportés (TRE-015, 16/10/2026).
      *
      * @param  Collection<int, StudentTransfer>  $transfers
      * @return array<int, array{count: int, montant: string}>
@@ -157,18 +161,11 @@ final class GetStudentTransfersList
             ->filter(fn (StudentTransfer $t): bool => is_array($t->encaissement_ids))
             ->mapWithKeys(fn (StudentTransfer $t): array => [$t->id => array_map('intval', $t->encaissement_ids)]);
 
-        $ids = $parTransfert->flatten()->unique()->values()->all();
-
-        $montants = $ids === []
-            ? collect()
-            : Encaissement::query()
-                ->whereIn('id', $ids)
-                ->whereNull('applied_from_encaissement_id')
-                ->pluck('montant', 'id');
+        $emportes = SelectionPaiementsTransfert::emportes($parTransfert->flatten()->unique()->values()->all());
 
         return $parTransfert->map(fn (array $ids): array => [
             'count' => count($ids),
-            'montant' => number_format(round(collect($ids)->sum(fn (int $id): float => (float) ($montants[$id] ?? 0)), 2), 2, '.', ''),
+            'montant' => number_format(round(collect($ids)->sum(fn (int $id): float => $emportes[$id] ?? 0.0), 2), 2, '.', ''),
         ])->all();
     }
 

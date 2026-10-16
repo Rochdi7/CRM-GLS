@@ -59,6 +59,7 @@ export default function RapportsIndex({
     methodeOptions,
     caisseOptions,
     typeOptions,
+    fraisOptions,
     typeDepenseOptions,
     statutDepenseOptions,
     nombreLignes,
@@ -139,6 +140,11 @@ export default function RapportsIndex({
             label: t('Type'),
             placeholder: t('All types'),
             options: typeOptions,
+        },
+        fraisFilter: {
+            label: t('Fee'),
+            placeholder: t('All fees'),
+            options: fraisOptions,
         },
         typeDepenseFilter: {
             label: t('Type'),
@@ -279,6 +285,7 @@ export default function RapportsIndex({
                                         methodeFilter: '',
                                         caisseFilter: '',
                                         typeFilter: '',
+                                        fraisFilter: '',
                                         typeDepenseFilter: '',
                                         statutDepenseFilter: '',
                                     })

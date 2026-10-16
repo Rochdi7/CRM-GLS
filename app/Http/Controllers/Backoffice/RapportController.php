@@ -15,6 +15,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Caisse;
 use App\Models\Depense;
 use App\Models\Encaissement;
+use App\Models\Frais;
 use App\Models\Group;
 use App\Models\Inscription;
 use App\Models\Student;
@@ -127,6 +128,7 @@ final class RapportController extends Controller
                 $filters['methodeFilter'],
                 $filters['caisseFilter'],
                 $filters['typeFilter'],
+                $filters['fraisFilter'],
             ),
             GetDepensesReport::KEY => $getDepensesReport->count(
                 $request->user(),
@@ -169,6 +171,9 @@ final class RapportController extends Controller
             // filtre n'a pas à relire le catalogue des caisses.
             'caisseOptions' => fn () => $getEncaissementsReport->caisseOptions($request->user()),
             'typeOptions' => self::TYPES_ENCAISSEMENT_LABELS,
+            // Closure : le catalogue des frais n'a pas à être relu à chaque
+            // changement de filtre.
+            'fraisOptions' => fn () => $getEncaissementsReport->fraisOptions(),
             // Closure : un rechargement partiel déclenché par un changement de
             // filtre n'a pas à relire le catalogue des types de dépense.
             'typeDepenseOptions' => fn () => $getDepensesReport->typeOptions(),
@@ -192,6 +197,7 @@ final class RapportController extends Controller
                     $filters['methodeFilter'],
                     $filters['caisseFilter'],
                     $filters['typeFilter'],
+                    $filters['fraisFilter'],
                 ),
                 // ⚠ Ce total ne compte QUE les dépenses approuvées — l'argent
                 // réellement sorti des caisses. Il est donc volontairement
@@ -292,6 +298,7 @@ final class RapportController extends Controller
                 $filters['methodeFilter'],
                 $filters['caisseFilter'],
                 $filters['typeFilter'],
+                $filters['fraisFilter'],
             );
         }
 
@@ -357,6 +364,7 @@ final class RapportController extends Controller
                 $filters['methodeFilter'],
                 $filters['caisseFilter'],
                 $filters['typeFilter'],
+                $filters['fraisFilter'],
             ),
             GetDepensesReport::KEY => $getDepensesReport(
                 $request->user(),
@@ -394,6 +402,7 @@ final class RapportController extends Controller
                     $filters['methodeFilter'],
                     $filters['caisseFilter'],
                     $filters['typeFilter'],
+                    $filters['fraisFilter'],
                 ),
             ];
         }
@@ -465,6 +474,10 @@ final class RapportController extends Controller
             $libelles['Type'] = $this->typeEncaissementLabel($filters['typeFilter']);
         }
 
+        if (in_array('fraisFilter', $visibles, true) && ($frais = $this->fraisLabel($filters['fraisFilter'])) !== null) {
+            $libelles['Frais'] = $frais;
+        }
+
         if (in_array('typeDepenseFilter', $visibles, true)
             && ($typeDepense = $this->typeDepenseLabel($filters['typeDepenseFilter'])) !== null) {
             $libelles['Type'] = $typeDepense;
@@ -522,6 +535,20 @@ final class RapportController extends Controller
         return Caisse::query()->whereKey((int) $caisseFilter)->value('nom');
     }
 
+    /**
+     * Le NOM du frais filtré, pour le rappeler en tête du document. Lu sans
+     * scoping, comme caisseLabel() : `frais` est un catalogue global, et la
+     * requête du rapport a déjà borné les lignes.
+     */
+    private function fraisLabel(string $fraisFilter): ?string
+    {
+        if ($fraisFilter === '') {
+            return null;
+        }
+
+        return Frais::query()->whereKey((int) $fraisFilter)->value('nom');
+    }
+
     /** Le libellé français d'un état d'inscription — la clé machine seule ne se lit pas. */
     private function etatInscriptionLabel(string $etat): string
     {
@@ -563,6 +590,7 @@ final class RapportController extends Controller
         $inscriptionFilter = (string) $request->string('inscriptionFilter');
         $methodeFilter = (string) $request->string('methodeFilter');
         $typeFilter = (string) $request->string('typeFilter');
+        $fraisFilter = (string) $request->string('fraisFilter');
         $statutDepenseFilter = (string) $request->string('statutDepenseFilter');
 
         return [
@@ -578,6 +606,9 @@ final class RapportController extends Controller
             'methodeFilter' => in_array($methodeFilter, Encaissement::METHODES, true) ? $methodeFilter : '',
             'caisseFilter' => (string) $request->string('caisseFilter'),
             'typeFilter' => in_array($typeFilter, GetEncaissementsReport::TYPES, true) ? $typeFilter : '',
+            // Un id du catalogue `frais` ; une valeur non numérique retombe
+            // sur « aucun filtre » plutôt que d'atteindre la requête.
+            'fraisFilter' => ctype_digit($fraisFilter) ? $fraisFilter : '',
             'typeDepenseFilter' => (string) $request->string('typeDepenseFilter'),
             // Validé contre la constante du modèle : un statut forgé retombe
             // sur « aucun filtre » plutôt que d'atteindre la requête SQL.

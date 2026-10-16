@@ -306,6 +306,37 @@ final class TransfertEtudiantSelectionPaiementsTest extends TestCase
         $this->assertSame('5000.00', (string) $this->caisse->fresh()->solde);
     }
 
+    /**
+     * TRE-015 (16/10/2026) : avance de 1 200 DH dont 300 DH appliqués, plus un
+     * frais de 300 DH cochés. La liste annonçait « 1 500 DH à emporter » (le
+     * `montant` brut des ids) quand le modal, la demande et la validation en
+     * comptaient 1 200 : la liste porte la même règle, une avance pour son
+     * RESTE.
+     */
+    public function test_the_list_counts_a_checked_advance_for_its_remainder(): void
+    {
+        $student = $this->etudiant();
+        $inscription = $this->inscription($student, $this->groupeRabat);
+        $feeInscription = $this->fee($inscription, "Frais d'inscription", 300, InscriptionFee::STATUT_PAYE);
+        $feeOct = $this->fee($inscription, "Frais d'Octobre", 1200, InscriptionFee::STATUT_PAYE_PARTIELLEMENT);
+        $paiement = $this->paiement($student, $feeInscription, 300);
+        $avance = $this->paiement($student, null, 1200);
+        $this->paiement($student, $feeOct, 300, ['applied_from_encaissement_id' => $avance->id]);
+
+        $this->demander($student, [$avance->id, $paiement->id])->assertSessionHasNoErrors();
+        $transfert = StudentTransfer::query()->sole();
+
+        $this->actingAs($this->superAdmin())
+            ->get(route('backoffice.student-transfers.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('transfers.data.0.id', $transfert->id)
+                ->where('transfers.data.0.paiementsSelectionnes', ['count' => 2, 'montant' => '1200.00']));
+
+        $this->actingAs($this->superAdmin())->put(route('backoffice.student-transfers.validate', $transfert))->assertSessionHasNoErrors();
+        $this->assertSame('1200.00', (string) $transfert->fresh()->montant_transfere);
+    }
+
     public function test_a_refund_between_request_and_decision_refuses_the_validation(): void
     {
         $student = $this->etudiant();

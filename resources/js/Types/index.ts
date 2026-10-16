@@ -3266,6 +3266,7 @@ export interface RapportFilters {
     methodeFilter: string;
     caisseFilter: string;
     typeFilter: string;
+    fraisFilter: string;
     typeDepenseFilter: string;
     statutDepenseFilter: string;
     dateFrom: string;
@@ -3281,6 +3282,7 @@ export type RapportFiltreKey =
     | 'methodeFilter'
     | 'caisseFilter'
     | 'typeFilter'
+    | 'fraisFilter'
     | 'typeDepenseFilter'
     | 'statutDepenseFilter';
 
@@ -3299,6 +3301,8 @@ export interface RapportsPageProps {
     methodeOptions: SelectOption[];
     caisseOptions: SelectOption[];
     typeOptions: SelectOption[];
+    /** Le catalogue des frais (inactifs compris), pour le relevé des encaissements. */
+    fraisOptions: SelectOption[];
     /** Le catalogue ACTIF des types de dépense (« Paiement prof » compris). */
     typeDepenseOptions: SelectOption[];
     /** Les quatre statuts de Depense::STATUTS, servis par le serveur. */

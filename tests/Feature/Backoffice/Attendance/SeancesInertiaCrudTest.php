@@ -169,6 +169,51 @@ final class SeancesInertiaCrudTest extends TestCase
             );
     }
 
+    /**
+     * « Statut » filtre sur le statut de la SÉANCE — les valeurs que la
+     * colonne Statut affiche (Prévue / Effectuée / Annulée). Une version
+     * antérieure effaçait ce filtre côté serveur et ne dessinait que le
+     * statut du groupe sous le même libellé : choisir « Active » à côté d'une
+     * colonne pleine de « Prévue » paraissait ne rien faire (16/10/2026).
+     */
+    public function test_index_and_show_filter_by_seance_statut(): void
+    {
+        $prevue = $this->makeSeance(['statut' => Seance::STATUT_PREVUE]);
+        $effectuee = $this->makeSeance(['statut' => Seance::STATUT_EFFECTUEE, 'date_seance' => '2026-01-10']);
+        $annulee = $this->makeSeance(['statut' => Seance::STATUT_ANNULEE, 'date_seance' => '2026-01-11']);
+        $user = $this->userWith('attendance.view');
+
+        foreach ([Seance::STATUT_PREVUE => $prevue, Seance::STATUT_EFFECTUEE => $effectuee, Seance::STATUT_ANNULEE => $annulee] as $statut => $seance) {
+            $this->actingAs($user)
+                ->get(route('backoffice.seances.index', ['statutFilter' => $statut]))
+                ->assertOk()
+                ->assertInertia(fn (Assert $page) => $page
+                    ->where('statuts', Seance::STATUTS)
+                    ->where('filters.statutFilter', $statut)
+                    ->has('seances.data', 1)
+                    ->where('seances.data.0.id', $seance->id)
+                );
+
+            // L'onglet « Séances » de la fiche de présence porte le MÊME filtre.
+            $this->actingAs($user)
+                ->get(route('backoffice.seances.show', [$prevue, 'statutFilter' => $statut]))
+                ->assertOk()
+                ->assertInertia(fn (Assert $page) => $page
+                    ->where('listFilters.statutFilter', $statut)
+                    ->has('seances.data', 1)
+                    ->where('seances.data.0.id', $seance->id)
+                );
+        }
+
+        // Une valeur inconnue est ignorée : la liste n'est pas filtrée.
+        $this->actingAs($user)
+            ->get(route('backoffice.seances.index', ['statutFilter' => 'Bidon']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('filters.statutFilter', '')
+                ->has('seances.data', 3)
+            );
+    }
+
     public function test_a_seance_inherits_center_and_year_from_its_group(): void
     {
         $this->actingAs($this->userWith('attendance.view', 'attendance.create'));

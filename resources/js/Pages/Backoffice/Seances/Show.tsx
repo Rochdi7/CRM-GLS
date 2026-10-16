@@ -97,6 +97,7 @@ export default function SeanceShow({
     seances,
     listFilters,
     groupOptions,
+    statuts,
     groupStatuts,
     listPermissions,
 }: SeanceShowProps) {
@@ -373,14 +374,28 @@ export default function SeanceShow({
                                     onChange={(event) => reloadList({ groupFilter: event.target.value })}
                                 />
                             </div>
-                            <div style={{ width: 190 }}>
+                            <div style={{ width: 170 }}>
                                 <label className="form-label" htmlFor="seance-list-f-statut">
                                     Statut
                                 </label>
+                                {/* Le statut de la SÉANCE — les valeurs de la colonne
+                                    Statut du tableau, pas celles du groupe. */}
                                 <SelectField
                                     id="seance-list-f-statut"
-                                    options={groupStatuts.map((statut) => ({ value: statut, label: statut }))}
+                                    options={statuts.map((statut) => ({ value: statut, label: statut }))}
                                     placeholder="Choisir un statut"
+                                    value={listFilters.statutFilter}
+                                    onChange={(event) => reloadList({ statutFilter: event.target.value })}
+                                />
+                            </div>
+                            <div style={{ width: 170 }}>
+                                <label className="form-label" htmlFor="seance-list-f-statut-groupe">
+                                    Statut du groupe
+                                </label>
+                                <SelectField
+                                    id="seance-list-f-statut-groupe"
+                                    options={groupStatuts.map((statut) => ({ value: statut, label: statut }))}
+                                    placeholder="Tous les groupes"
                                     value={listFilters.groupStatutFilter}
                                     onChange={(event) => reloadList({ groupStatutFilter: event.target.value })}
                                 />

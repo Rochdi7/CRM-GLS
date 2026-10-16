@@ -286,14 +286,28 @@ export default function SeancesIndex({
                                 onChange={(event) => reload({ groupFilter: event.target.value })}
                             />
                         </div>
-                        <div style={{ width: 190 }}>
+                        <div style={{ width: 170 }}>
                             <label className="form-label" htmlFor="seance-f-statut">
                                 Statut
                             </label>
+                            {/* Le statut de la SÉANCE — les valeurs de la colonne
+                                Statut du tableau, pas celles du groupe. */}
                             <SelectField
                                 id="seance-f-statut"
-                                options={groupStatuts.map((statut) => ({ value: statut, label: statut }))}
+                                options={statuts.map((statut) => ({ value: statut, label: statut }))}
                                 placeholder="Choisir un statut"
+                                value={filters.statutFilter}
+                                onChange={(event) => reload({ statutFilter: event.target.value })}
+                            />
+                        </div>
+                        <div style={{ width: 170 }}>
+                            <label className="form-label" htmlFor="seance-f-statut-groupe">
+                                Statut du groupe
+                            </label>
+                            <SelectField
+                                id="seance-f-statut-groupe"
+                                options={groupStatuts.map((statut) => ({ value: statut, label: statut }))}
+                                placeholder="Tous les groupes"
                                 value={filters.groupStatutFilter}
                                 onChange={(event) => reload({ groupStatutFilter: event.target.value })}
                             />
