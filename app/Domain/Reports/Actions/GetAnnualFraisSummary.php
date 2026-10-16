@@ -7,6 +7,7 @@ namespace App\Domain\Reports\Actions;
 use App\Domain\Finance\Support\VentilationCentre;
 use App\Models\Depense;
 use App\Models\Inscription;
+use App\Models\Remboursement;
 use App\Services\Context\CurrentContext;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
@@ -18,11 +19,14 @@ use Illuminate\Support\Facades\DB;
  * chart used to be a fixed calendar-year view with its own selector, which
  * split every school year across two calendar years and piled the imported
  * fees into one spike), 5 series (docs clarified 2026-08-14):
- *  - chiffreAffaire: the fees whose date_echeance falls in that month — the
- *    full InscriptionFee.montant on an « Active » inscription, but ONLY WHAT
- *    WAS PAID on a closed one (see « Un dossier clos ne doit rien » below);
- *  - collecte: Encaissement.montant received against those SAME fees
- *    (payments settling a fee due in that month, regardless of when paid);
+ *  - chiffreAffaire: the VISIBLE fees (masque_le IS NULL) whose date_echeance
+ *    falls in that month, on an « Active » inscription ONLY — the full
+ *    InscriptionFee.montant (owner's decision 16/10/2026, see
+ *    scopeFeesToContext(): a closed dossier bills nothing on this chart);
+ *  - collecte: what was PAID on those SAME fees — Encaissement.montant NET of
+ *    the non-cancelled remboursements (PAYÉ = ENCAISSÉ − REMBOURSÉ,
+ *    InscriptionFee::montantPaye(), 24/09/2026) — grouped by the fee's due
+ *    month, regardless of when the money was paid;
  *  - resteAPayer: chiffreAffaire − collecte for that month;
  *  - depenses: Depense.montant for that month (by date_depense);
  *  - encaissements: ALL Encaissement.montant received in that calendar month
@@ -84,44 +88,43 @@ final class GetAnnualFraisSummary
         [$start, $end] = $this->window();
         $range = [$start->toDateString(), $end->toDateString()];
 
-        // Chiffre d'affaire — every fee DUE in the month, whatever année its
-        // inscription is filed under (see the class docblock: a fee of a
-        // 2025/2026 group due in 09/2026 IS September 2026's billing).
-        //
-        // ⚠ A fee of a CLOSED dossier counts only for what was PAID on it;
-        // only an « Active » inscription carries a receivable (class
-        // docblock, « Un dossier clos ne doit rien »). One aggregate per fee
-        // joined in — never a per-row montantPaye() (perf note below).
-        $paye = DB::table('encaissements')
-            ->whereNotNull('inscription_fee_id')
-            ->groupBy('inscription_fee_id')
-            ->selectRaw('inscription_fee_id, SUM(montant) AS total');
-
+        // Chiffre d'affaire — every VISIBLE fee DUE in the month on an
+        // « Active » inscription, whatever année that inscription is filed
+        // under (see the class docblock: a fee of a 2025/2026 group due in
+        // 09/2026 IS September 2026's billing). The statut filter lives in
+        // scopeFeesToContext(), shared with « Collecté » so the pair moves
+        // together (reste à payer = CA − collecté).
         $chiffreAffaire = $this->byMonth(
             DB::table('inscription_fees')
-                ->join('inscriptions', 'inscriptions.id', '=', 'inscription_fees.inscription_id')
-                ->leftJoinSub($paye, 'paye', 'paye.inscription_fee_id', '=', 'inscription_fees.id')
                 ->whereNull('inscription_fees.masque_le')
                 ->whereNotNull('inscription_fees.date_echeance')
                 ->whereBetween('inscription_fees.date_echeance', $range)
                 ->tap(fn (Builder $q) => $this->scopeFeesToContext($q, 'inscription_fees', $centreId)),
             'inscription_fees.date_echeance',
-            'CASE WHEN inscriptions.statut = ? THEN inscription_fees.montant ELSE COALESCE(paye.total, 0) END',
-            [Inscription::STATUT_ACTIVE],
+            'inscription_fees.montant',
         );
 
         // Collecté — payments settling those SAME fees, grouped by the FEE's
-        // due month (not the payment month): the exact per-fee montantPaye()
-        // semantics, computed in one aggregate instead of one query per fee.
+        // due month (not the payment month), NET of refunds: the exact
+        // per-fee montantPaye() semantics (PAYÉ = ENCAISSÉ − REMBOURSÉ,
+        // 24/09/2026), computed in one aggregate instead of one query per
+        // fee. A cancelled remboursement (« [ANNULÉ] » marker,
+        // Remboursement::scopeNonAnnules) put the money back and is ignored.
+        $rembourse = DB::table('remboursements')
+            ->tap(fn (Builder $q) => (new Remboursement)->scopeNonAnnules($q))
+            ->groupBy('encaissement_id')
+            ->selectRaw('encaissement_id, SUM(montant) AS total');
+
         $collecte = $this->byMonth(
             DB::table('encaissements')
                 ->join('inscription_fees', 'inscription_fees.id', '=', 'encaissements.inscription_fee_id')
+                ->leftJoinSub($rembourse, 'rmb', 'rmb.encaissement_id', '=', 'encaissements.id')
                 ->whereNull('inscription_fees.masque_le')
                 ->whereNotNull('inscription_fees.date_echeance')
                 ->whereBetween('inscription_fees.date_echeance', $range)
                 ->tap(fn (Builder $q) => $this->scopeFeesToContext($q, 'inscription_fees', $centreId)),
             'inscription_fees.date_echeance',
-            'encaissements.montant',
+            'encaissements.montant - COALESCE(rmb.total, 0)',
         );
 
         // Dépenses — by date_depense, center via the till.
@@ -257,44 +260,28 @@ final class GetAnnualFraisSummary
      * (NULL-centre inscriptions are global). Deliberately NOT through its
      * année: the due month decides the point (class docblock).
      *
-     * Cancelled inscriptions are excluded from the billed series entirely
-     * (31/08/2026, aligned on the reference WimSchool calculation
-     * `REGISTRATION_STATUS_ID <> 10`): a fee of an « Annulée » inscription no
-     * longer counts as chiffre d'affaire (nor as collecté — reste à payer is
-     * CA − collecté, so the pair must move together). Deliberately
-     * `<> Annulée`, NOT `= Active`: « Changement » keeps the earned fees of
-     * the pre-change enrollment, and the legacy « Expirée »/« Archivée » rows
-     * are completed formations whose revenue is real. The « Encaissements »
-     * series is untouched — money received is money received, whatever became
-     * of the inscription.
+     * ⚠ ONLY AN « ACTIVE » INSCRIPTION BILLS (owner's decision, 16/10/2026).
+     * Chiffre d'affaire = the visible fees of the Active dossiers due that
+     * month, nothing else; Collecté filters on the SAME fees so that
+     * reste à payer = CA − collecté stays a difference of like terms. A
+     * closed dossier — Annulée, Changement, Expirée, Archivée, Transférée —
+     * contributes to neither series, even for the money already paid on it
+     * (that money stays in the « Encaissements » series, which counts money
+     * received whatever became of the inscription). This is the same rule as
+     * « Gestion des recouvrements » (GetRetardsList), which only chases
+     * Active dossiers.
      *
-     * ⚠ Narrowing this to `= Active` was proposed and REJECTED (21/09/2026),
-     * measured on production over 2026/2027: « Changement » carries 10 146 300
-     * DH of fees of which 3 883 250 DH are ALREADY COLLECTED — nearly twice
-     * what « Active » has collected (2 051 990 DH). Collecté filters on the
-     * same fees, so Active-only would erase that money from BOTH series while
-     * it sits in the caisse and on every finance screen: the chart would
-     * announce a smaller year than the till actually received. Two screens of
-     * the same money that contradict each other (§11). A group change closes
-     * the old enrollment and carries its paid fees over — the student studied
-     * and paid, the revenue is earned.
-     *
-     * ⚠ UN DOSSIER CLOS NE DOIT RIEN (21/09/2026). What WAS wrong with
-     * « Changement » / « Expirée » / « Archivée » is the UNPAID half: the
-     * legacy import gave every closed dossier its full monthly schedule, so
-     * the billed series was a FLAT line (Salé 572 000 DH every month from
-     * January to August, Rabat 823 000 DH) under a « Reste à payer » of
-     * ~2 M DH a month that nobody owes — the student left the group, those
-     * months were never due. The reference WimSchool chart shows the opposite
-     * for the same data: a past month reads Collecté ≈ Chiffre d'affaire
-     * (06/2026: 146 100 / 145 800, reste 300). So a closed dossier's fee
-     * counts for what was PAID on it, and only an « Active » inscription
-     * carries a receivable — the same rule as « Gestion des recouvrements »
-     * (GetRetardsList), which already refuses to chase a closed dossier. No
-     * collected dirham leaves either series (the reason Active-only was
-     * rejected); only the uncollectible receivable does. The WimSchool server
-     * formula is not in its JS bundle — this rule is inferred from its curve
-     * and from our own recouvrement rule, not copied from its SQL.
+     * History, so nobody re-litigates it blind: 31/08/2026 excluded Annulée
+     * only (WimSchool `REGISTRATION_STATUS_ID <> 10`); 21/09/2026 billed a
+     * closed dossier for what was paid on it, because the legacy import gave
+     * every closed dossier its full monthly schedule (a flat billed line
+     * under ~2 M DH/month of « reste à payer » nobody owes) and Active-only
+     * was then measured to drop 3 883 250 DH collected on « Changement »
+     * dossiers from both series. On 16/10/2026 the owner chose Active-only
+     * anyway (647 750 DH of collected money on Changement dossiers in the
+     * 2026/2027 window of the local copy at that date): a group change moves
+     * the PAID fee rows onto the new Active dossier, so on data keyed in the
+     * app the money follows; only legacy rows are affected.
      */
     private function scopeFeesToContext(Builder $query, string $feesTable, ?int $centreId): Builder
     {
@@ -302,7 +289,7 @@ final class GetAnnualFraisSummary
             $sub->selectRaw('1')
                 ->from('inscriptions')
                 ->whereColumn('inscriptions.id', "{$feesTable}.inscription_id")
-                ->where('inscriptions.statut', '!=', Inscription::STATUT_ANNULEE)
+                ->where('inscriptions.statut', Inscription::STATUT_ACTIVE)
                 ->when($centreId, fn (Builder $q) => $q->where(fn (Builder $w) => $w
                     ->whereNull('inscriptions.etablissement_id')
                     ->orWhere('inscriptions.etablissement_id', $centreId)));
