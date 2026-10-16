@@ -83,10 +83,13 @@ final class SeanceController extends Controller
             ]);
         }
 
-        // La liste d'administration filtre sur le statut du GROUPE, plus sur
-        // celui de la séance : un ?statutFilter resté dans l'URL ne doit pas
-        // restreindre la liste sans contrôle visible pour l'effacer.
-        $filters['statutFilter'] = '';
+        // Deux filtres de statut, deux contrôles visibles (16/10/2026) :
+        // « Statut » = celui de la SÉANCE (Prévue / Effectuée / Annulée, les
+        // valeurs de la colonne Statut du tableau) ; « Statut du groupe » =
+        // Active / Terminé / Annulée. Une version antérieure effaçait ici
+        // `statutFilter` et ne dessinait que le filtre de groupe sous le
+        // libellé « Statut » : à côté d'une colonne qui affiche « Prévue »,
+        // un filtre proposant « Active » semblait simplement ne pas marcher.
 
         return Inertia::render('Backoffice/Seances/Index', [
             'seances' => $getSeancesList($user, $filters, $perPage),
@@ -362,8 +365,11 @@ final class SeanceController extends Controller
             'dateTo' => (string) $request->string('dateTo'),
         ];
 
-        // Même règle que index() : l'onglet filtre sur le statut du groupe.
-        $listFilters['statutFilter'] = '';
+        // Même règle que index() : « Statut » = statut de la séance,
+        // « Statut du groupe » à part. Validés chacun contre leur domaine.
+        if (! in_array($listFilters['statutFilter'], Seance::STATUTS, true)) {
+            $listFilters['statutFilter'] = '';
+        }
 
         if (! array_key_exists($listFilters['groupStatutFilter'], GetSeancesList::GROUP_STATUTS)) {
             $listFilters['groupStatutFilter'] = '';

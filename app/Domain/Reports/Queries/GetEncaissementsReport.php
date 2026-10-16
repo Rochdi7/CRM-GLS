@@ -6,6 +6,7 @@ namespace App\Domain\Reports\Queries;
 
 use App\Models\Caisse;
 use App\Models\Encaissement;
+use App\Models\Frais;
 use App\Models\Group;
 use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
@@ -100,8 +101,9 @@ final class GetEncaissementsReport
         string $methodeFilter = '',
         string $caisseFilter = '',
         string $typeFilter = '',
+        string $fraisFilter = '',
     ): Collection {
-        $rows = $this->baseQuery($user, $dateFrom, $dateTo, $methodeFilter, $caisseFilter, $typeFilter)
+        $rows = $this->baseQuery($user, $dateFrom, $dateTo, $methodeFilter, $caisseFilter, $typeFilter, $fraisFilter)
             ->with([
                 'student:id,nom,prenom',
                 // Le frais réglé et son inscription : le nom du frais est ce
@@ -165,8 +167,9 @@ final class GetEncaissementsReport
         string $methodeFilter = '',
         string $caisseFilter = '',
         string $typeFilter = '',
+        string $fraisFilter = '',
     ): int {
-        return $this->baseQuery($user, $dateFrom, $dateTo, $methodeFilter, $caisseFilter, $typeFilter)->count();
+        return $this->baseQuery($user, $dateFrom, $dateTo, $methodeFilter, $caisseFilter, $typeFilter, $fraisFilter)->count();
     }
 
     /**
@@ -186,8 +189,9 @@ final class GetEncaissementsReport
         string $methodeFilter = '',
         string $caisseFilter = '',
         string $typeFilter = '',
+        string $fraisFilter = '',
     ): string {
-        $montant = (float) $this->baseQuery($user, $dateFrom, $dateTo, $methodeFilter, $caisseFilter, $typeFilter)
+        $montant = (float) $this->baseQuery($user, $dateFrom, $dateTo, $methodeFilter, $caisseFilter, $typeFilter, $fraisFilter)
             ->selectRaw('coalesce(sum(encaissements.montant - '.self::SQL_REMBOURSE.'), 0) as total_net', [self::motifAnnule()])
             ->value('total_net');
 
@@ -219,6 +223,26 @@ final class GetEncaissementsReport
             ->all();
     }
 
+    /**
+     * Le catalogue proposé par le filtre « Frais » — le MÊME que celui de
+     * la liste Encaissements (GetEncaissementsList::fraisOptions) : les frais
+     * INACTIFS restent listés, parce qu'un frais peut être désactivé après
+     * coup alors que les paiements qui l'ont réglé figurent toujours au
+     * relevé — une option absente ne peut jamais élargir un résultat
+     * (CLAUDE.md §5). `frais` est une table de référence globale, non scopée
+     * par centre.
+     *
+     * @return array<int, array{value: string, label: string}>
+     */
+    public function fraisOptions(): array
+    {
+        return Frais::query()
+            ->orderBy('nom')
+            ->get(['id', 'nom'])
+            ->map(fn (Frais $f): array => ['value' => (string) $f->id, 'label' => (string) $f->nom])
+            ->all();
+    }
+
     /** @return Builder<Encaissement> */
     private function baseQuery(
         User $user,
@@ -227,6 +251,7 @@ final class GetEncaissementsReport
         string $methodeFilter,
         string $caisseFilter,
         string $typeFilter,
+        string $fraisFilter = '',
     ): Builder {
         return Encaissement::query()
             // ⚠ Les lignes d'APPLICATION d'avance sont exclues — voir l'entête
@@ -266,7 +291,26 @@ final class GetEncaissementsReport
             // imprimée (inscription_fee_id), donc filtrer « Avance » sort
             // exactement les lignes que le document marque « Avance ».
             ->when($typeFilter === self::TYPE_AVANCE, fn (Builder $q) => $q->whereNull('inscription_fee_id'))
-            ->when($typeFilter === self::TYPE_REGLEMENT, fn (Builder $q) => $q->whereNotNull('inscription_fee_id'));
+            ->when($typeFilter === self::TYPE_REGLEMENT, fn (Builder $q) => $q->whereNotNull('inscription_fee_id'))
+            // Frais : la ligne du CATALOGUE (frais.id) que ce paiement règle
+            // — MÊME règle que le filtre « Frais » de GetEncaissementsList,
+            // jamais recopiée autrement. Le lien passe par
+            // inscription_fees.frais_id, pas par le libellé `nom` (copie
+            // figée à l'inscription : un frais renommé depuis échapperait au
+            // filtre). Une AVANCE n'a pas de frais ; elle est rattachée à
+            // ceux auxquels son argent a été APPLIQUÉ (lignes
+            // `applications`, elles-mêmes exclues du relevé) : c'est la ligne
+            // par laquelle l'argent de ce frais est ENTRÉ, et elle garde son
+            // type « Avance » au document. Une avance encore libre sort du
+            // résultat dès qu'un frais est demandé — elle ne paie rien pour
+            // l'instant.
+            ->when($fraisFilter !== '', fn (Builder $q) => $q->where(function ($w) use ($fraisFilter): void {
+                $fraisId = (int) $fraisFilter;
+                $w->whereHas('fee', fn ($f) => $f->where('frais_id', $fraisId))
+                    ->orWhere(fn ($a) => $a
+                        ->whereNull('inscription_fee_id')
+                        ->whereHas('applications.fee', fn ($f) => $f->where('frais_id', $fraisId)));
+            }));
     }
 
     private function formatDate(mixed $date): string

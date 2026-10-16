@@ -117,13 +117,9 @@ final class SelectionPaiementsTransfert
         return $rows->map(function (Encaissement $row) use ($chequesRejetes): array {
             $montant = round((float) $row->montant, 2);
             $rembourse = round((float) ($row->remboursements_total ?? 0), 2);
-            $type = $row->inscription_fee_id === null
-                ? self::TYPE_AVANCE
-                : ($row->applied_from_encaissement_id !== null ? self::TYPE_APPLICATION : self::TYPE_PAIEMENT);
-
-            // Même arithmétique qu'`Encaissement::montantRestant()`, en lot.
+            $type = self::typeDe($row);
             $utilise = $type === self::TYPE_AVANCE ? round((float) ($row->applications_total ?? 0), 2) : null;
-            $reste = $utilise === null ? null : round(max(0.0, $montant - $utilise - $rembourse), 2);
+            $reste = self::resteDe($row);
 
             $blocage = match (true) {
                 in_array($row->id, $chequesRejetes, true) => self::BLOCAGE_CHEQUE_REJETE,
@@ -142,6 +138,61 @@ final class SelectionPaiementsTransfert
                 'emporte' => $reste ?? $montant,
             ];
         })->values();
+    }
+
+    /**
+     * Ce que des lignes DÉJÀ COCHÉES emportent, par id — pour un écran qui
+     * relit plusieurs demandes à la fois (la liste des transferts) sans
+     * recharger l'étudiant de chacune : UNE requête pour tous les ids, la
+     * MÊME arithmétique que `lignes()`. Le 16/10/2026 la liste sommait le
+     * `montant` brut des ids cochés : une avance de 1 200 DH dont 300 DH
+     * étaient déjà appliqués s'y affichait pour 1 200 DH « à emporter »
+     * (1 500 DH avec le frais coché) quand le modal, la demande et la
+     * validation en comptaient 900 (1 200 DH).
+     *
+     * @param  list<int>  $ids
+     * @return array<int, float>
+     */
+    public static function emportes(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return Encaissement::query()
+            ->withSum(['remboursements as remboursements_total' => fn ($q) => $q->nonAnnules()], 'montant')
+            ->withSum('applications as applications_total', 'montant')
+            ->whereIn('id', $ids)
+            ->get()
+            ->mapWithKeys(fn (Encaissement $row): array => [
+                (int) $row->id => self::resteDe($row) ?? round((float) $row->montant, 2),
+            ])
+            ->all();
+    }
+
+    private static function typeDe(Encaissement $row): string
+    {
+        return $row->inscription_fee_id === null
+            ? self::TYPE_AVANCE
+            : ($row->applied_from_encaissement_id !== null ? self::TYPE_APPLICATION : self::TYPE_PAIEMENT);
+    }
+
+    /**
+     * Le RESTE d'une avance — même arithmétique qu'`Encaissement::montantRestant()`,
+     * lue sur les deux withSum de la requête ; null pour un paiement ou une
+     * application, qui emportent leur montant.
+     */
+    private static function resteDe(Encaissement $row): ?float
+    {
+        if (self::typeDe($row) !== self::TYPE_AVANCE) {
+            return null;
+        }
+
+        $montant = round((float) $row->montant, 2);
+        $utilise = round((float) ($row->applications_total ?? 0), 2);
+        $rembourse = round((float) ($row->remboursements_total ?? 0), 2);
+
+        return round(max(0.0, $montant - $utilise - $rembourse), 2);
     }
 
     /**
