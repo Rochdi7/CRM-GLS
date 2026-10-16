@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Backoffice\Finance;
 
+use App\Domain\Finance\Actions\EnregistrerRemboursement;
 use App\Domain\Finance\Actions\ValiderTransfertCaisse;
 use App\Domain\Finance\Support\CaisseLedger;
 use App\Domain\Finance\Support\CaisseResolver;
@@ -433,12 +434,13 @@ final class FinancialInvariantsAuditTest extends TestCase
         $this->assertSame('400.00', $summary['encaissements'][0]);
     }
 
-    public function test_the_annual_chart_bills_a_closed_dossier_only_for_what_was_paid(): void
+    public function test_the_annual_chart_bills_active_inscriptions_only(): void
     {
-        // Un dossier clos ne doit rien : the unpaid half of a « Changement »
-        // fee is not chiffre d'affaire (it made the billed series a flat
-        // line under millions of « reste à payer » nobody owes) — but the
-        // 400 DH actually collected stay in BOTH series.
+        // Owner's decision 16/10/2026: chiffre d'affaire = the visible fees
+        // of ACTIVE dossiers only. A « Changement » dossier bills nothing,
+        // and its collected 400 DH leave « Collecté » with it (the pair moves
+        // together) — but stay in « Encaissements », money received is money
+        // received.
         $user = $this->userWith(['payments.view', 'payments.create']);
         [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
         $this->actingAs($user);
@@ -448,10 +450,59 @@ final class FinancialInvariantsAuditTest extends TestCase
         $inscription->update(['statut' => Inscription::STATUT_CHANGEMENT]);
 
         $summary = app(GetAnnualFraisSummary::class)();
-        $this->assertSame('400.00', $summary['chiffreAffaire'][1]);
-        $this->assertSame('400.00', $summary['collecte'][1]);
+        $this->assertSame('0.00', $summary['chiffreAffaire'][1]);
+        $this->assertSame('0.00', $summary['collecte'][1]);
         $this->assertSame('0.00', $summary['resteAPayer'][1]);
         $this->assertSame('400.00', $summary['encaissements'][0]);
+    }
+
+    public function test_the_annual_chart_never_bills_a_hidden_fee(): void
+    {
+        // A masked fee line (corbeille / clôture de groupe) is no longer due:
+        // it leaves chiffre d'affaire even on an Active dossier.
+        $user = $this->userWith(['payments.view', 'payments.create']);
+        [, , $fee] = $this->enrolledStudentWithFee(1000);
+        $this->actingAs($user);
+        app(CurrentContext::class)->setEtablissement($this->centre->id);
+
+        $fee->forceFill(['masque_le' => now()])->save();
+
+        $summary = app(GetAnnualFraisSummary::class)();
+        $this->assertSame('0.00', $summary['chiffreAffaire'][1]);
+    }
+
+    public function test_the_annual_chart_collects_net_of_refunds(): void
+    {
+        // PAYÉ = ENCAISSÉ − REMBOURSÉ (24/09/2026): a refunded 300 DH is no
+        // longer collected on the fee, so reste à payer reopens by 300. A
+        // CANCELLED refund put the money back and counts for nothing.
+        $user = $this->userWith(['payments.view', 'payments.create']);
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
+        $this->actingAs($user);
+        app(CurrentContext::class)->setEtablissement($this->centre->id);
+        $this->payLine($user, $student, $inscription, $fee, '400', Encaissement::METHODE_ESPECES);
+
+        $paiement = Encaissement::query()->where('inscription_fee_id', $fee->id)->firstOrFail();
+        $agent = $user->employee;
+        $remboursement = app(EnregistrerRemboursement::class)->handle([
+            'beneficiaire_id' => $student->id,
+            'encaissement_id' => $paiement->id,
+            'caisse_id' => $paiement->caisse_id,
+            'montant' => 300,
+            'date_remboursement' => '2025-09-25',
+            'motif' => 'Trop-perçu',
+        ], $agent);
+
+        $summary = app(GetAnnualFraisSummary::class)();
+        $this->assertSame('1000.00', $summary['chiffreAffaire'][1]);
+        $this->assertSame('100.00', $summary['collecte'][1]);
+        $this->assertSame('900.00', $summary['resteAPayer'][1]);
+
+        $remboursement->forceFill(['note' => Remboursement::MARQUEUR_ANNULE.' test'])->save();
+
+        $summary = app(GetAnnualFraisSummary::class)();
+        $this->assertSame('400.00', $summary['collecte'][1]);
+        $this->assertSame('600.00', $summary['resteAPayer'][1]);
     }
 
     public function test_the_annual_chart_files_a_row_by_its_month_whatever_annee_its_inscription_carries(): void
