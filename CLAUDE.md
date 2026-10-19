@@ -1543,7 +1543,10 @@ the database layer. Non-negotiable invariants already enforced in code:
   et QUAND. Le contrôleur passe `$request->user()` ; un appel sans
   utilisateur laisse l'auteur vide, jamais deviné. Onglet « Corbeille » de la
   page Inscriptions (`/backoffice/inscriptions/corbeille`,
-  `InscriptionCorbeilleController`, `registrations.view`, barre
+  `InscriptionCorbeilleController`, permission `registrations.trash` dans
+  `superAdminOnly()` — SUPER-ADMIN SEULEMENT, décision du propriétaire le
+  19/10/2026 : l'écran dit QUI a supprimé QUOI, c'est un outil de contrôle
+  du staff ; le badge de l'onglet n'est servi qu'à lui ; barre
   `INSCRIPTIONS_TABS`) : liste, total et **compte par personne** calculés en
   SQL sur tout l'ensemble filtré (`GetInscriptionsCorbeille`), portée centre +
   année comme la liste Inscriptions, compte de maintenance exclu via

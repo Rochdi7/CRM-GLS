@@ -157,6 +157,11 @@ final class PermissionRegistry
                 // onglet « Inscriptions archivées », réactivation d'un clic.
                 // Aucun frais masqué, aucun argent déplacé.
                 'registrations.archive' => 'Archiver / réactiver une inscription (pause, retour prévu)',
+                // Corbeille des inscriptions (19/10/2026) : qui a supprimé quoi
+                // et quand, compte par personne. Réservée au super-admin
+                // (superAdminOnly() ci-dessous) — demande du propriétaire :
+                // c'est un outil de contrôle du staff, pas un écran de guichet.
+                'registrations.trash' => 'Consulter la corbeille des inscriptions (super-admin)',
             ],
             'Groupes' => [
                 'groups.view' => 'Consulter les groupes et leur historique',
@@ -711,6 +716,9 @@ final class PermissionRegistry
             // paire attribue les paiements de quelqu'un d'autre — et la
             // fiche vidée sort des recherches (05/09/2026).
             'students.merge',
+            // La corbeille des inscriptions dit QUI a supprimé QUOI : un
+            // écran de contrôle du staff, réservé au propriétaire (19/10/2026).
+            'registrations.trash',
             // Valider le transfert d'un étudiant vers un autre centre déplace
             // ses paiements — et donc du chiffre d'affaires — d'un
             // établissement à l'autre (25/09/2026). Même classe que

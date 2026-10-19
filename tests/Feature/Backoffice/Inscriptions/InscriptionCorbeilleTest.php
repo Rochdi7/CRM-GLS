@@ -57,6 +57,15 @@ final class InscriptionCorbeilleTest extends TestCase
         $this->guichet->user->givePermissionTo(['registrations.view', 'registrations.delete']);
     }
 
+    /** La corbeille est réservée au super-admin (registrations.trash ∈ superAdminOnly()). */
+    private function superAdmin(): User
+    {
+        $admin = User::factory()->create();
+        $admin->assignRole(Role::SUPER_ADMIN);
+
+        return $admin->fresh();
+    }
+
     private function inscription(?Group $group = null, string $nomEtudiant = 'BENALI'): Inscription
     {
         $group ??= $this->group;
@@ -127,7 +136,9 @@ final class InscriptionCorbeilleTest extends TestCase
         $this->actingAs($this->guichet->user)->delete(route('backoffice.inscriptions.destroy', $b))->assertSessionHasNoErrors();
         $this->actingAs($autre->user->fresh())->delete(route('backoffice.inscriptions.destroy', $c))->assertSessionHasNoErrors();
 
-        $this->actingAs($this->guichet->user)
+        $admin = $this->superAdmin();
+
+        $this->actingAs($admin)
             ->get(route('backoffice.inscriptions.corbeille'))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
@@ -146,7 +157,7 @@ final class InscriptionCorbeilleTest extends TestCase
                 ->where('tabCounts./backoffice/inscriptions/corbeille', 3));
 
         // Filtre « Supprimé par » : seules les lignes de cette personne, et le total suit.
-        $this->actingAs($this->guichet->user)
+        $this->actingAs($admin)
             ->get(route('backoffice.inscriptions.corbeille', ['auteurFilter' => (string) $autre->user->id]))
             ->assertInertia(fn (Assert $page) => $page
                 ->where('total', 1)
@@ -155,17 +166,22 @@ final class InscriptionCorbeilleTest extends TestCase
                 ->has('parAuteur', 1));
 
         // Recherche sur le nom de l'étudiant.
-        $this->actingAs($this->guichet->user)
+        $this->actingAs($admin)
             ->get(route('backoffice.inscriptions.corbeille', ['search' => 'deux']))
             ->assertInertia(fn (Assert $page) => $page
                 ->where('total', 1)
                 ->where('rows.data.0.reference', $b->reference));
 
-        // La page Inscriptions porte le badge de l'onglet.
-        $this->actingAs($this->guichet->user)
+        // La page Inscriptions porte le badge de l'onglet — pour le super-admin
+        // seulement ; le guichet ne reçoit même pas le compte.
+        $this->actingAs($admin)
             ->get(route('backoffice.inscriptions.index'))
             ->assertInertia(fn (Assert $page) => $page
                 ->where('tabCounts./backoffice/inscriptions/corbeille', 3));
+        $this->actingAs($this->guichet->user)
+            ->get(route('backoffice.inscriptions.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('tabCounts./backoffice/inscriptions/corbeille', 0));
     }
 
     public function test_the_trash_follows_the_active_centre_and_year(): void
@@ -207,10 +223,20 @@ final class InscriptionCorbeilleTest extends TestCase
                 ->where('rows.data.0.reference', $vieux->reference));
     }
 
-    public function test_the_trash_requires_registrations_view(): void
+    public function test_the_trash_is_super_admin_only(): void
     {
         $this->actingAs(User::factory()->create())
             ->get(route('backoffice.inscriptions.corbeille'))
             ->assertForbidden();
+
+        // registrations.view + registrations.delete ne suffisent pas : la
+        // permission est dans superAdminOnly(), aucun preset ne la porte.
+        $this->actingAs($this->guichet->user)
+            ->get(route('backoffice.inscriptions.corbeille'))
+            ->assertForbidden();
+
+        $this->actingAs($this->superAdmin())
+            ->get(route('backoffice.inscriptions.corbeille'))
+            ->assertOk();
     }
 }
