@@ -25,6 +25,8 @@ final class DashboardNouvellesInscriptionsController extends Controller
             (string) $request->string('duree'),
             (string) $request->string('key'),
             max(1, $request->integer('page', 1)),
+            $request->filled('debut') ? (string) $request->string('debut') : null,
+            $request->filled('fin') ? (string) $request->string('fin') : null,
         );
 
         return response()->json($page + [

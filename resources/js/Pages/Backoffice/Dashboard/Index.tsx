@@ -102,11 +102,20 @@ export default function DashboardIndex({ porteeEnseignant, stats, annualFrais, a
         setSelectedDay((current) => (current.startsWith(month) ? current : `${month}-01`));
     }
 
-    function changeInscriptionsDuree(duree: NouvellesInscriptionsDuree) {
+    function changeInscriptionsDuree(duree: NouvellesInscriptionsDuree, debut?: string, fin?: string) {
         // Partial reload — only the chart is recomputed server-side. The
         // current calMonth rides along so the calendar keeps its month.
         const params = new URLSearchParams(window.location.search);
         params.set('inscDuree', duree);
+        // The free window travels only with « periode »; a preset drops it so
+        // the URL never carries a pair the server is not reading.
+        if (duree === 'periode' && debut && fin) {
+            params.set('inscDebut', debut);
+            params.set('inscFin', fin);
+        } else {
+            params.delete('inscDebut');
+            params.delete('inscFin');
+        }
         router.get('/backoffice/dashboard', Object.fromEntries(params), {
             preserveState: true,
             preserveScroll: true,

@@ -44,6 +44,10 @@ final class DashboardController extends Controller
         // active centre by CurrentContext, so each user only counts the
         // centres they already reach.
         $duree = (string) $request->string('inscDuree', GetNouvellesInscriptionsChart::DUREE_DEFAUT);
+        // « Période » — the free « Du » / « Au » window (19/10/2026); the
+        // action itself validates the pair and falls back to today.
+        $inscDebut = $request->filled('inscDebut') ? (string) $request->string('inscDebut') : null;
+        $inscFin = $request->filled('inscFin') ? (string) $request->string('inscFin') : null;
 
         // Every widget is a closure so Inertia partial reloads
         // (`only: ['seancesCalendar']` when paging the calendar) compute
@@ -77,7 +81,7 @@ final class DashboardController extends Controller
             'annualFrais' => fn () => $restreint ? null : $getAnnualFraisSummary(),
             'annualFraisPeriode' => fn () => $restreint ? '' : $getAnnualFraisSummary->periodeLabel(),
             'seancesCalendar' => fn () => $getSeancesCalendar($context, $calMonth, $user),
-            'nouvellesInscriptions' => fn () => $restreint ? null : $getNouvellesInscriptions($duree),
+            'nouvellesInscriptions' => fn () => $restreint ? null : $getNouvellesInscriptions($duree, $inscDebut, $inscFin),
             // « Groupes à venir » (29/09/2026) — groupes « En inscription » du
             // contexte actif. Servi à qui lit la liste des groupes
             // (`groups.view`), jamais à un prof restreint : ses groupes sont

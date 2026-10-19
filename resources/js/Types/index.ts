@@ -125,6 +125,8 @@ export interface DashboardStats {
     studentsTotal: number;
     /** Distinct students holding an Active inscription in the active année. */
     studentsActifs: number;
+    /** Fiches « Archivé » (en pause, retour prévu) — hors de studentsTotal. */
+    studentsArchives: number;
     employeesTotal: number;
     employeesActive: number;
     enseignantsTotal: number;
@@ -259,11 +261,14 @@ export interface EspaceEnseignantData {
     cumul: { approuve: number; enAttente: number; nombre: number };
 }
 
-export type NouvellesInscriptionsDuree = 'jour' | '7j' | '1m' | '3m' | '6m' | '12m' | 'annee';
+export type NouvellesInscriptionsDuree = 'jour' | '7j' | '1m' | '3m' | '6m' | '12m' | 'periode';
 
 /** GetNouvellesInscriptionsChart — new registrations only (group changes excluded). */
 export interface NouvellesInscriptionsChartData {
     duree: NouvellesInscriptionsDuree;
+    /** The free « Du » / « Au » window actually queried (yyyy-mm-dd) — null unless `duree` is 'periode'. */
+    debut: string | null;
+    fin: string | null;
     labels: string[];
     /** Server bucket key per bar — sent back to list that bar's students. */
     keys: string[];
@@ -381,6 +386,8 @@ export interface StudentDetails {
     statut: string;
     transfereVers: StudentTransferLink | null;
     transfereDepuis: StudentTransferLink | null;
+    /** Fiche « Archivé » (19/10/2026) : pourquoi, retour prévu, par qui — null sinon. */
+    archive: StudentArchiveInfo | null;
     /** Fiches d'origine (centres précédents), la plus récente d'abord — lecture seule. */
     historiqueTransfert: StudentHistoriqueCentre[];
     /** Fiche « Transféré » : les paiements partis avec l'étudiant (journal du transfert). */
@@ -1380,14 +1387,33 @@ export interface StudentRow {
     note: string | null;
     photoUrl: string | null;
     photoThumbUrl: string | null;
-    /** Statut de la fiche dans son centre : 'Actif' | 'Transféré' (Student::STATUTS). */
+    /** Statut de la fiche dans son centre : 'Actif' | 'Transféré' | 'Archivé' (Student::STATUTS). */
     statut: string;
     /** Fiche « Transféré » : la copie Active dans le centre d'arrivée. */
     transfereVers: StudentTransferLink | null;
     /** Copie créée par un transfert : la fiche d'origine (présences, historique). */
     transfereDepuis: StudentTransferLink | null;
+    /** Archivage (19/10/2026) — renseigné sur une fiche « Archivé », null sinon. */
+    archiveMotif: string | null;
+    /** dd/mm/yyyy pour l'affichage. */
+    archiveDateRetour: string | null;
+    /** yyyy-mm-dd (format backend). */
+    archiveDateRetourIso: string | null;
+    /** Serveur : la date de retour est passée et la fiche n'a pas été réactivée. */
+    archiveRetourDepasse: boolean;
+    archiveLe: string | null;
+    archivePar: string | null;
     /** Livres remis sur l'une de ses inscriptions (tous statuts), du plus ancien au plus récent. */
     livres: Array<{ nom: string; groupe: string | null; date: string | null }>;
+}
+
+/** Bloc « archivage » de la fiche étudiant (GetStudentDetails). */
+export interface StudentArchiveInfo {
+    motif: string | null;
+    dateRetour: string | null;
+    retourDepasse: boolean;
+    le: string | null;
+    par: string | null;
 }
 
 /** Onglet « Absences » (fiche étudiant / fiche inscription) — GetAbsencesEtudiant. */
@@ -1451,6 +1477,8 @@ export interface StudentsFilters {
 export interface StudentsPageProps {
     /** Badges de la barre d'onglets Étudiants (href ⇒ nombre en attente). */
     tabCounts?: Record<string, number>;
+    /** true sur /backoffice/students/archives : seules les fiches « Archivé » sont listées. */
+    archivesView: boolean;
     students: PaginatedData<StudentRow>;
     filters: StudentsFilters;
     perPageOptions: number[];
@@ -1469,8 +1497,8 @@ export interface StudentsPageProps {
     contextCenterId: number | null;
     /** Cibles d'un transfert d'étudiant — tout le réseau (closure, chargée avec la page). */
     transferCentres: Array<{ id: number; nomCentre: string }>;
-    /** UI only (§5). `view` = may open the student's detail page ; `transfer` = may request a centre transfer. */
-    permissions: CrudPermissions & { view: boolean; transfer: boolean };
+    /** UI only (§5). `view` = may open the student's detail page ; `transfer` = may request a centre transfer ; `archive` = may archive / reactivate. */
+    permissions: CrudPermissions & { view: boolean; transfer: boolean; archive: boolean };
     [key: string]: unknown;
 }
 
@@ -1858,6 +1886,12 @@ export interface InscriptionFormOption {
     label: string;
 }
 
+/** Student option of the inscription form — a « Archivé » record is listed but disabled (server refuses it, GardeEtudiantArchive). */
+export interface InscriptionStudentOption extends InscriptionFormOption {
+    statut: string;
+    archiveDateRetour: string | null;
+}
+
 /** Group option with its statut — « Modification du groupe » only offers groups still « En inscription » (server re-checks in ModifierGroupeInscription). */
 export interface InscriptionGroupOption extends InscriptionFormOption {
     statut: string;
@@ -1948,6 +1982,45 @@ export interface InscriptionsFilters {
     perPage: number;
 }
 
+// --- Corbeille des inscriptions (19/10/2026) ------------------------------
+
+/** One deleted registration — mirrors GetInscriptionsCorbeille's ->through() mapping. */
+export interface InscriptionCorbeilleRow {
+    id: number;
+    reference: string;
+    student: { id: number | null; reference: string | null; nomComplet: string };
+    groupe: string | null;
+    anneeScolaire: string | null;
+    etablissement: string | null;
+    statut: string | null;
+    dateInscription: string | null;
+    montantTotal: string | null;
+    paiementsDetaches: Array<{ reference: string | null; montant: string; frais: string | null; rembourse: string | null }>;
+    supprimePar: string | null;
+    supprimeLe: string | null;
+}
+
+export interface InscriptionsCorbeilleFilters {
+    search: string;
+    auteurFilter: string;
+    dateFrom: string;
+    dateTo: string;
+    perPage: number;
+}
+
+export interface InscriptionsCorbeillePageProps {
+    rows: PaginatedData<InscriptionCorbeilleRow>;
+    /** Total du périmètre filtré (serveur). */
+    total: number;
+    /** Combien chaque personne a supprimé dans le périmètre filtré (serveur, du plus actif au moins actif). */
+    parAuteur: Array<{ userId: number | null; label: string; count: number }>;
+    auteurOptions: Array<{ id: number; label: string }>;
+    tabCounts?: Record<string, number>;
+    filters: InscriptionsCorbeilleFilters;
+    perPageOptions: number[];
+    [key: string]: unknown;
+}
+
 export interface InscriptionsPageProps {
     inscriptions: PaginatedData<InscriptionRow>;
     filters: InscriptionsFilters;
@@ -1962,8 +2035,10 @@ export interface InscriptionsPageProps {
     niveauxAvecDomaine: string[];
     niveauStudium: string;
     defaultCountry: string;
-    students: InscriptionFormOption[];
+    students: InscriptionStudentOption[];
     groups: InscriptionGroupOption[];
+    /** Badge de l'onglet « Corbeille » (href ⇒ nombre de dossiers supprimés dans la portée). */
+    tabCounts?: Record<string, number>;
     /** Target groups for « Changement de groupe » — all reachable academic years, not just the active one. */
     changeGroupGroups: InscriptionChangeGroupOption[];
     /** Academic years present in changeGroupGroups — the modal's « Année scolaire » selector. */

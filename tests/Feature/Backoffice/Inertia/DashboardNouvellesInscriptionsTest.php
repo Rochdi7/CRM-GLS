@@ -98,10 +98,17 @@ final class DashboardNouvellesInscriptionsTest extends TestCase
         // C: a genuinely new registration, later cancelled — still new.
         $this->inscription($c, '2026-02-01', Inscription::STATUT_ANNULEE);
 
+        // The free window over the whole school year (the old « Année
+        // scolaire » button, 19/10/2026) — longer than 62 days, so one bar
+        // per month.
         $this->actingAs($this->superAdmin())
-            ->get(route('backoffice.dashboard', ['inscDuree' => 'annee']))
+            ->get(route('backoffice.dashboard', ['inscDuree' => 'periode', 'inscDebut' => '2025-09-01', 'inscFin' => '2026-08-31']))
             ->assertInertia(fn (Assert $page) => $page
-                ->where('nouvellesInscriptions.duree', 'annee')
+                ->where('nouvellesInscriptions.duree', 'periode')
+                ->where('nouvellesInscriptions.debut', '2025-09-01')
+                ->where('nouvellesInscriptions.fin', '2026-08-31')
+                ->has('nouvellesInscriptions.counts', 12)
+                ->where('nouvellesInscriptions.periode', '01/09/2025 – 31/08/2026')
                 ->where('nouvellesInscriptions.total', 3)
                 ->where('nouvellesInscriptions.labels.1', '10/2025')
                 ->where('nouvellesInscriptions.counts.1', 2)
@@ -156,7 +163,118 @@ final class DashboardNouvellesInscriptionsTest extends TestCase
         // Unknown duration falls back to today.
         $this->actingAs($this->superAdmin())
             ->get(route('backoffice.dashboard', ['inscDuree' => 'nope']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('nouvellesInscriptions.duree', 'jour')
+                ->where('nouvellesInscriptions.debut', null)
+                ->where('nouvellesInscriptions.fin', null));
+
+        // The old « annee » key is gone: it falls back to today too.
+        $this->actingAs($this->superAdmin())
+            ->get(route('backoffice.dashboard', ['inscDuree' => 'annee']))
             ->assertInertia(fn (Assert $page) => $page->where('nouvellesInscriptions.duree', 'jour'));
+    }
+
+    public function test_a_free_period_buckets_by_day_when_short_and_by_month_when_long(): void
+    {
+        $s = Student::factory()->create(['etablissement_id' => $this->centre->id]);
+        $this->inscription($s, '2026-03-14');
+        $this->inscription(Student::factory()->create(['etablissement_id' => $this->centre->id]), '2026-01-20');
+
+        // 10 days → one bar per day, inclusive of both ends.
+        $this->actingAs($this->superAdmin())
+            ->get(route('backoffice.dashboard', ['inscDuree' => 'periode', 'inscDebut' => '2026-03-10', 'inscFin' => '2026-03-19']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('nouvellesInscriptions.duree', 'periode')
+                ->has('nouvellesInscriptions.counts', 10)
+                ->where('nouvellesInscriptions.labels.0', '10/03')
+                ->where('nouvellesInscriptions.labels.4', '14/03')
+                ->where('nouvellesInscriptions.counts.4', 1)
+                ->where('nouvellesInscriptions.total', 1)
+                ->where('nouvellesInscriptions.periode', '10/03/2026 – 19/03/2026'));
+
+        // Exactly 62 days still reads by day; 63 flips to months.
+        $this->actingAs($this->superAdmin())
+            ->get(route('backoffice.dashboard', ['inscDuree' => 'periode', 'inscDebut' => '2026-01-01', 'inscFin' => '2026-03-03']))
+            ->assertInertia(fn (Assert $page) => $page->has('nouvellesInscriptions.counts', 62));
+
+        $this->actingAs($this->superAdmin())
+            ->get(route('backoffice.dashboard', ['inscDuree' => 'periode', 'inscDebut' => '2026-01-01', 'inscFin' => '2026-03-15']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('nouvellesInscriptions.counts', 3)
+                ->where('nouvellesInscriptions.labels.0', '01/2026')
+                ->where('nouvellesInscriptions.counts.0', 1)
+                ->where('nouvellesInscriptions.counts.2', 1)
+                ->where('nouvellesInscriptions.total', 2));
+
+        // A single day is a one-bar window — never the hourly view.
+        $this->actingAs($this->superAdmin())
+            ->get(route('backoffice.dashboard', ['inscDuree' => 'periode', 'inscDebut' => '2026-03-14', 'inscFin' => '2026-03-14']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('nouvellesInscriptions.counts', 1)
+                ->where('nouvellesInscriptions.counts.0', 1)
+                ->where('nouvellesInscriptions.periode', '14/03/2026 – 14/03/2026'));
+    }
+
+    public function test_a_free_period_without_a_valid_pair_falls_back_to_today(): void
+    {
+        $admin = $this->superAdmin();
+
+        foreach ([
+            ['inscDebut' => '2026-03-10'],                                   // missing end
+            ['inscFin' => '2026-03-10'],                                     // missing start
+            ['inscDebut' => '2026-03-19', 'inscFin' => '2026-03-10'],        // inverted
+            ['inscDebut' => '10/03/2026', 'inscFin' => '19/03/2026'],        // wrong format
+            ['inscDebut' => '2026-02-31', 'inscFin' => '2026-03-10'],        // not a calendar date
+        ] as $params) {
+            $this->actingAs($admin)
+                ->get(route('backoffice.dashboard', ['inscDuree' => 'periode'] + $params))
+                ->assertInertia(fn (Assert $page) => $page
+                    ->where('nouvellesInscriptions.duree', 'jour')
+                    ->where('nouvellesInscriptions.debut', null)
+                    ->where('nouvellesInscriptions.fin', null));
+        }
+    }
+
+    public function test_clicking_a_bar_of_a_free_period_lists_its_students(): void
+    {
+        $nouveau = Student::factory()->create(['etablissement_id' => $this->centre->id, 'nom' => 'Bennani']);
+        $this->inscription($nouveau, '2026-01-20');
+        $this->inscription(Student::factory()->create(['etablissement_id' => $this->centre->id]), '2026-03-14');
+
+        // Month bucket of a long window.
+        $this->actingAs($this->superAdmin())
+            ->getJson(route('backoffice.dashboard.nouvelles-inscriptions', [
+                'duree' => 'periode', 'key' => '2026-01', 'debut' => '2026-01-01', 'fin' => '2026-03-15',
+            ]))
+            ->assertOk()
+            ->assertJsonCount(1, 'students')
+            ->assertJsonPath('students.0.nom', 'Bennani')
+            ->assertJsonPath('total', 1);
+
+        // Day bucket of a short window.
+        $this->actingAs($this->superAdmin())
+            ->getJson(route('backoffice.dashboard.nouvelles-inscriptions', [
+                'duree' => 'periode', 'key' => '2026-01-20', 'debut' => '2026-01-15', 'fin' => '2026-01-25',
+            ]))
+            ->assertOk()
+            ->assertJsonCount(1, 'students')
+            ->assertJsonPath('students.0.studentId', $nouveau->id);
+
+        // A month key against a window the chart draws by day is not a bar it showed.
+        $this->actingAs($this->superAdmin())
+            ->getJson(route('backoffice.dashboard.nouvelles-inscriptions', [
+                'duree' => 'periode', 'key' => '2026-01', 'debut' => '2026-01-15', 'fin' => '2026-01-25',
+            ]))
+            ->assertOk()
+            ->assertJsonCount(0, 'students')
+            ->assertJsonPath('total', 0);
+
+        // « periode » without its dates is nothing the chart showed — empty, never « today ».
+        $this->actingAs($this->superAdmin())
+            ->getJson(route('backoffice.dashboard.nouvelles-inscriptions', ['duree' => 'periode', 'key' => '2026-01']))
+            ->assertOk()
+            ->assertJsonCount(0, 'students')
+            ->assertJsonPath('total', 0);
     }
 
     public function test_today_buckets_by_the_hour_the_row_was_keyed(): void

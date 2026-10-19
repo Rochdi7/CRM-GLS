@@ -3,6 +3,8 @@ import { pageWindow } from '@/Components/Tables/Pagination';
 import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAutoOpenCreate } from '@/Hooks/useAutoOpenCreate';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
+import PageTabs from '@/Components/Navigation/PageTabs';
+import { INSCRIPTIONS_TABS } from '@/Config/pageTabs';
 import { enCapitales } from '@/Lib/nom';
 import Card from '@/Components/Shared/Card';
 import EmptyState from '@/Components/Shared/EmptyState';
@@ -293,6 +295,7 @@ export default function InscriptionsIndex({
     canCreatePayment,
     methodesPaiement,
     canUpdatePaymentDate,
+    tabCounts,
 }: InscriptionsPageProps) {
     const isLoading = useInertiaLoading();
     const [showModal, setShowModal] = useState(false);
@@ -629,6 +632,20 @@ export default function InscriptionsIndex({
     const pendingFeesSave = useRef<InscriptionFeeLine[] | null>(null);
 
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.label }));
+    // Formulaire seulement : une fiche « Archivé » reste LISTÉE mais
+    // désactivée avec la raison — le serveur la refuse (GardeEtudiantArchive).
+    // Le FILTRE garde toutes les fiches : on filtre aussi les dossiers d'un
+    // étudiant archivé.
+    const studentFormOptions: SelectOption[] = students.map((s) =>
+        s.statut === 'Archivé'
+            ? {
+                  value: s.id,
+                  label: s.label,
+                  disabled: true,
+                  disabledReason: `Archivé${s.archiveDateRetour ? ` — retour prévu le ${s.archiveDateRetour}` : ''} : réactiver d'abord`,
+              }
+            : { value: s.id, label: s.label },
+    );
     const groupOptions: SelectOption[] = groups.map((g) => ({ value: g.id, label: g.label }));
     // « Changement de groupe » target list: every reachable group of every
     // academic year, narrowed by the modal's own « Année scolaire » selector
@@ -1541,6 +1558,8 @@ export default function InscriptionsIndex({
                 </button>
             }
         >
+            <PageTabs tabs={INSCRIPTIONS_TABS} counts={tabCounts} />
+
             <Card title="Inscriptions" bodyClassName="p-0 py-3">
                 {/* Per-column filter row (reference CRM's Inscriptions filters,
                     without Offres) — replaces the dropdown + single search box. */}
@@ -1779,7 +1798,7 @@ export default function InscriptionsIndex({
                                     id="ins-student"
                                     label="Étudiant"
                                     required
-                                    options={studentOptions}
+                                    options={studentFormOptions}
                                     uppercase
                                     placeholder="Choisir…"
                                     value={form.data.student_id}

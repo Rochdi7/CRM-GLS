@@ -584,3 +584,24 @@ ALTER TABLE depenses ADD COLUMN IF NOT EXISTS calcul_ajustements jsonb NULL;
 -- conservé pour mémoire (idempotent). Aucun solde de caisse ne bouge.
 ALTER TABLE student_transfers ADD COLUMN IF NOT EXISTS encaissement_ids jsonb NULL;
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 19/10/2026 — Statut « Archivé » d'un étudiant (absence temporaire, retour
+-- prévu) : `students.archive_motif`, `archive_date_retour`, `archive_le`,
+-- `archive_par_user_id` ; et corbeille des inscriptions
+-- `inscriptions_corbeille` (append-only : ce qu'était le dossier supprimé et
+-- QUI l'a supprimé). Permission `students.archive` (presets opérationnels) —
+-- `php artisan db:seed --class=RolesAndPermissionsSeeder --force` après le
+-- déploiement.
+--
+-- ⚠ RIEN À FAIRE À LA MAIN : les migrations additives
+-- `2026_10_19_100000_add_archive_to_students_table.php` et
+-- `2026_10_19_100100_create_inscriptions_corbeille_table.php` sont jouées
+-- par le `php artisan migrate --force` du déploiement. SQL conservé pour
+-- mémoire (idempotent). Aucun solde de caisse ne bouge.
+ALTER TABLE students ADD COLUMN IF NOT EXISTS archive_motif text NULL;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS archive_date_retour date NULL;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS archive_le timestamp(0) NULL;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS archive_par_user_id bigint NULL REFERENCES users(id) ON DELETE SET NULL;
+-- inscriptions_corbeille : voir la migration create_* (CREATE TABLE IF NOT EXISTS équivalent).
+-- ---------------------------------------------------------------------------

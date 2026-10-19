@@ -10,12 +10,16 @@ use App\Domain\Attendance\Queries\GetSeanceFormOptions;
 use App\Domain\Groups\Support\PorteeEnseignant;
 use App\Domain\Settings\Queries\GetAccessibleCenterOptions;
 use App\Domain\Shared\Support\ReferenceGenerator;
+use App\Domain\Students\Actions\ArchiverEtudiant;
+use App\Domain\Students\Actions\ReactiverEtudiant;
 use App\Domain\Students\Queries\GetStudentDetails;
-use App\Domain\Students\Queries\GetStudentTransfersList;
 use App\Domain\Students\Queries\GetStudentsList;
+use App\Domain\Students\Queries\GetStudentsTabCounts;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Backoffice\Students\ArchiveStudentRequest;
 use App\Http\Requests\Backoffice\Students\StoreStudentRequest;
 use App\Http\Requests\Backoffice\Students\UpdateStudentRequest;
+use Carbon\CarbonImmutable;
 use App\Models\Etablissement;
 use App\Models\Role;
 use App\Models\Student;
@@ -44,7 +48,35 @@ final class StudentController extends Controller
         GetStudentsList $getStudentsList,
         GetAccessibleCenterOptions $accessibleCenters,
         GetSeanceFormOptions $seanceOptions,
-        GetStudentTransfersList $transfers,
+        GetStudentsTabCounts $tabCounts,
+    ): Response {
+        return $this->renderIndex($request, $getStudentsList, $accessibleCenters, $seanceOptions, $tabCounts, false);
+    }
+
+    /**
+     * Onglet « Étudiants archivés » (19/10/2026) : la MÊME page, les mêmes
+     * filtres, mais les fiches « Archivé » seulement — celles que la liste
+     * courante ne montre plus. Route à part (`students/archives`) plutôt
+     * qu'un paramètre de requête : la barre d'onglets marque l'onglet actif
+     * sur le CHEMIN, et « Étudiants » est en correspondance exacte.
+     */
+    public function archives(
+        Request $request,
+        GetStudentsList $getStudentsList,
+        GetAccessibleCenterOptions $accessibleCenters,
+        GetSeanceFormOptions $seanceOptions,
+        GetStudentsTabCounts $tabCounts,
+    ): Response {
+        return $this->renderIndex($request, $getStudentsList, $accessibleCenters, $seanceOptions, $tabCounts, true);
+    }
+
+    private function renderIndex(
+        Request $request,
+        GetStudentsList $getStudentsList,
+        GetAccessibleCenterOptions $accessibleCenters,
+        GetSeanceFormOptions $seanceOptions,
+        GetStudentsTabCounts $tabCounts,
+        bool $archives,
     ): Response {
         $this->authorize('viewAny', Student::class);
 
@@ -78,7 +110,8 @@ final class StudentController extends Controller
         }
 
         return Inertia::render('Backoffice/Students/Index', [
-            'tabCounts' => fn () => $transfers->tabCounts($request->user()),
+            'tabCounts' => fn () => $tabCounts($request->user()),
+            'archivesView' => $archives,
             'students' => $getStudentsList(
                 $request->user(),
                 $search,
@@ -93,6 +126,7 @@ final class StudentController extends Controller
                 $inscriptionFilter,
                 '',
                 in_array($livreFilter, ['avec', 'sans'], true) ? $livreFilter : '',
+                $archives,
             ),
             'filters' => [
                 'search' => $search,
@@ -153,8 +187,41 @@ final class StudentController extends Controller
                 'delete' => $request->user()->can('students.delete'),
                 'view' => $request->user()->can('students.view'),
                 'transfer' => $request->user()->can('student-transfers.create'),
+                'archive' => $request->user()->can('students.archive'),
             ],
         ]);
+    }
+
+    /**
+     * Archiver (19/10/2026) : motif + date de retour obligatoires, la fiche
+     * sort de la liste courante. Rien d'autre ne bouge (ArchiverEtudiant).
+     */
+    public function archive(ArchiveStudentRequest $request, Student $student, ArchiverEtudiant $archiver): RedirectResponse
+    {
+        $this->authorize('archive', $student);
+
+        $data = $request->validated();
+
+        $archiver->handle(
+            $student,
+            (string) $data['motif'],
+            CarbonImmutable::parse((string) $data['date_retour']),
+            $request->user(),
+        );
+
+        return $this->backToListPreservingFilters($request, 'backoffice.students.index')
+            ->with('success', __('Student archived.'));
+    }
+
+    /** L'étudiant est de retour : la fiche redevient « Actif ». */
+    public function reactivate(Request $request, Student $student, ReactiverEtudiant $reactiver): RedirectResponse
+    {
+        $this->authorize('archive', $student);
+
+        $reactiver->handle($student, $request->user());
+
+        return $this->backToListPreservingFilters($request, 'backoffice.students.archives')
+            ->with('success', __('Student reactivated.'));
     }
 
     public function show(Student $student, GetStudentDetails $getStudentDetails, GetAbsencesEtudiant $getAbsences): Response

@@ -45,6 +45,7 @@ final class GetStudentDetails
             'etablissement',
             'transfereVers.etablissement',
             'transfereDepuis.etablissement',
+            'archivePar',
             'inscriptions.group',
             'inscriptions.fees',
             'inscriptions.anneeScolaire',
@@ -91,6 +92,16 @@ final class GetStudentDetails
                 'id' => $student->transfereDepuis->id,
                 'reference' => $student->transfereDepuis->reference,
                 'centre' => $student->transfereDepuis->etablissement?->nom_centre,
+            ],
+            // Archivage (19/10/2026) : la fiche DIT pourquoi elle est en pause
+            // et quand la personne est attendue.
+            'archive' => ! $student->estArchive() ? null : [
+                'motif' => $student->archive_motif,
+                'dateRetour' => $student->archive_date_retour?->format('d/m/Y'),
+                'retourDepasse' => $student->archive_date_retour !== null
+                    && $student->archive_date_retour->lt(now()->startOfDay()),
+                'le' => $student->archive_le?->format('d/m/Y H:i'),
+                'par' => $student->archivePar?->name,
             ],
             // L'historique des centres précédents, AFFICHÉ sur la fiche
             // d'arrivée (25/09/2026) : le centre qui reçoit l'étudiant ne

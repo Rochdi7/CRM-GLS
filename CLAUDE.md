@@ -1506,6 +1506,44 @@ the database layer. Non-negotiable invariants already enforced in code:
   dropdown d'inscription ne la liste plus. Une demande refusée ou annulée
   reste lisible (jamais supprimée). Tests :
   `tests/Feature/Backoffice/Students/TransfertEtudiantCentreTest.php`.
+- **⚠ Un étudiant « Archivé » est en PAUSE, pas clos** (19/10/2026,
+  `Student::STATUT_ARCHIVE`, `Domain\Students\Actions\{Archiver,Reactiver}Etudiant`,
+  permission `students.archive` dans `$operations`). L'étudiant interrompt
+  ses cours et reviendra : la fiche prend un MOTIF + une DATE DE RETOUR
+  (obligatoires, `ArchiveStudentRequest`, retour > aujourd'hui), sort de la
+  liste courante vers l'onglet « Étudiants archivés »
+  (`/backoffice/students/archives`, même page `Students/Index` avec
+  `archivesView`, même filtres) et se réactive d'un clic. Quatre bornes :
+  (1) **rien d'autre ne bouge** — aucune inscription annulée, aucun frais
+  masqué, aucun argent déplacé ; clore un dossier reste « Annuler
+  l'inscription » ; (2) le total « Étudiants » du tableau de bord EXCLUT les
+  archivés et les compte à part (`studentsArchives`), comme la liste — un
+  écran et sa carte disent le même chiffre ; le badge de l'onglet vient de
+  `GetStudentsTabCounts` (une définition pour les quatre pages de la barre) ;
+  (3) **une nouvelle inscription sur une fiche archivée est REFUSÉE** en
+  nommant la marche à suivre (`GardeEtudiantArchive`, même forme que
+  `GardeEtudiantTransfere`), et le dropdown du formulaire la LISTE désactivée
+  avec la raison, jamais retirée ; (4) une date de retour dépassée sans
+  réactivation est badgée (`archiveRetourDepasse`, serveur). Réactiver
+  efface motif/date de la fiche — le journal (`student_archived` /
+  `student_reactivated`) garde l'historique. Tests :
+  `tests/Feature/Backoffice/Students/StudentArchiveTest.php`.
+- **⚠ Une inscription supprimée laisse une ligne dans la CORBEILLE**
+  (19/10/2026, table `inscriptions_corbeille`, modèle `InscriptionCorbeille`
+  append-only — update/delete lèvent au niveau modèle, sous toute Gate).
+  `SupprimerInscription` l'écrit dans la MÊME transaction que la suppression :
+  photographie du dossier (référence, étudiant, groupe, année, centre, statut,
+  montant, paiements détachés — noms FIGÉS, FK en SET NULL pour que la ligne
+  survive à tout) + QUI l'a supprimé (`supprime_par_user_id` + libellé figé)
+  et QUAND. Le contrôleur passe `$request->user()` ; un appel sans
+  utilisateur laisse l'auteur vide, jamais deviné. Onglet « Corbeille » de la
+  page Inscriptions (`/backoffice/inscriptions/corbeille`,
+  `InscriptionCorbeilleController`, `registrations.view`, barre
+  `INSCRIPTIONS_TABS`) : liste, total et **compte par personne** calculés en
+  SQL sur tout l'ensemble filtré (`GetInscriptionsCorbeille`), portée centre +
+  année comme la liste Inscriptions, compte de maintenance exclu via
+  `HiddenAccount::emails()`. Rien ne se restaure ni ne s'efface depuis
+  l'écran. Tests : `tests/Feature/Backoffice/Inscriptions/InscriptionCorbeilleTest.php`.
 - **Étudiants & Inscriptions CRUD** (same React modal pattern as Employees).
   Students: `backoffice.students.index` (`Backoffice\StudentController`) —
   modal with photo upload (media `photo` collection, `/media/<uuid8>/…`

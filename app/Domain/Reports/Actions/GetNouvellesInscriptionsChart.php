@@ -24,8 +24,12 @@ use Illuminate\Support\Facades\DB;
  *  - `3m`    — last 3 months, one bar per month;
  *  - `6m`    — last 6 months, one bar per month;
  *  - `12m`   — last 12 months, one bar per month;
- *  - `annee` — the active année scolaire window (top-bar switcher), one bar
- *              per month.
+ *  - `periode` — a FREE window chosen by the user (« Du » / « Au » date
+ *              pickers, 19/10/2026 — replaces the old « Année scolaire »
+ *              button: the school wanted to compare any two dates, not only
+ *              the switcher's year). One bar per day up to
+ *              PERIODE_JOURS_MAX days, one bar per month beyond. An invalid
+ *              or inverted range falls back to today, like an unknown key.
  *
  * ⚠ ONLY NEW STUDENTS (23/09/2026). The date is `inscriptions.date_inscription`,
  * but a dossier is counted only when it is the student's FIRST one — no other
@@ -54,22 +58,27 @@ use Illuminate\Support\Facades\DB;
  */
 final class GetNouvellesInscriptionsChart
 {
-    public const DUREES = ['jour', '7j', '1m', '3m', '6m', '12m', 'annee'];
+    public const DUREES = ['jour', '7j', '1m', '3m', '6m', '12m', 'periode'];
 
     public const DUREE_DEFAUT = 'jour';
+
+    /** A free window longer than this is bucketed by MONTH (two months of days still read on screen). */
+    public const PERIODE_JOURS_MAX = 62;
 
     public function __construct(private readonly CurrentContext $context) {}
 
     /**
-     * @return array{duree: string, labels: list<string>, keys: list<string>, counts: list<int>, total: int, periode: string}
+     * @return array{duree: string, debut: ?string, fin: ?string, labels: list<string>, keys: list<string>, counts: list<int>, total: int, periode: string}
      */
-    public function __invoke(string $duree): array
+    public function __invoke(string $duree, ?string $debut = null, ?string $fin = null): array
     {
-        if (! in_array($duree, self::DUREES, true)) {
-            $duree = self::DUREE_DEFAUT;
-        }
+        $duree = self::normaliser($duree, $debut, $fin);
 
-        [$start, $end, $unit] = $this->window($duree);
+        [$start, $end, $unit] = $this->window($duree, $debut, $fin);
+        // Echoed back so the pickers show the window actually queried.
+        $plage = $duree === 'periode'
+            ? ['debut' => $start->toDateString(), 'fin' => $end->toDateString()]
+            : ['debut' => null, 'fin' => null];
         $bucketSql = self::bucketSql($unit);
 
         $rows = $this->nouvellesInscriptions($start, $end)
@@ -89,6 +98,7 @@ final class GetNouvellesInscriptionsChart
 
             return [
                 'duree' => $duree,
+                ...$plage,
                 'labels' => $labels,
                 'keys' => $keys,
                 'counts' => $counts,
@@ -110,12 +120,56 @@ final class GetNouvellesInscriptionsChart
 
         return [
             'duree' => $duree,
+            ...$plage,
             'labels' => $labels,
             'keys' => $keys,
             'counts' => $counts,
             'total' => array_sum($counts),
             'periode' => $start->format('d/m/Y').' – '.$end->format('d/m/Y'),
         ];
+    }
+
+    /**
+     * The duration actually served: an unknown key, or `periode` without a
+     * valid `debut` ≤ `fin` pair (Y-m-d), falls back to the default — the
+     * chart never shows a window the user did not finish choosing.
+     */
+    public static function normaliser(string $duree, ?string $debut, ?string $fin): string
+    {
+        if (! in_array($duree, self::DUREES, true)) {
+            return self::DUREE_DEFAUT;
+        }
+
+        if ($duree === 'periode' && self::plage($debut, $fin) === null) {
+            return self::DUREE_DEFAUT;
+        }
+
+        return $duree;
+    }
+
+    /** @return array{0: Carbon, 1: Carbon}|null */
+    private static function plage(?string $debut, ?string $fin): ?array
+    {
+        if ($debut === null || $fin === null
+            || preg_match('/^\d{4}-\d{2}-\d{2}$/', $debut) !== 1
+            || preg_match('/^\d{4}-\d{2}-\d{2}$/', $fin) !== 1) {
+            return null;
+        }
+
+        $start = Carbon::createFromFormat('!Y-m-d', $debut);
+        $end = Carbon::createFromFormat('!Y-m-d', $fin);
+
+        // createFromFormat rolls « 2026-02-31 » over to March: refuse what
+        // does not read back as typed.
+        if ($start === null || $end === null || $start->format('Y-m-d') !== $debut || $end->format('Y-m-d') !== $fin) {
+            return null;
+        }
+
+        if ($start->greaterThan($end)) {
+            return null;
+        }
+
+        return [$start->startOfDay(), $end->startOfDay()];
     }
 
     /** Rows per page of the per-bar student list — a month of Marrakech is 100+ rows. */
@@ -132,16 +186,18 @@ final class GetNouvellesInscriptionsChart
      *
      * @return array{students: list<array{inscriptionId: int, studentId: int, reference: string, nom: string, prenom: string, telephone: ?string, groupe: ?string, centre: ?string, statut: string, dateInscription: string, heure: string}>, total: int, page: int, lastPage: int, perPage: int}
      */
-    public function students(string $duree, string $key, int $page = 1): array
+    public function students(string $duree, string $key, int $page = 1, ?string $debut = null, ?string $fin = null): array
     {
         $page = max(1, $page);
         $empty = ['students' => [], 'total' => 0, 'page' => $page, 'lastPage' => 1, 'perPage' => self::STUDENTS_PER_PAGE];
 
-        if (! in_array($duree, self::DUREES, true)) {
+        // Same normalisation as the bars: a `periode` without its dates is
+        // not « today », it is nothing the chart showed.
+        if (! in_array($duree, self::DUREES, true) || self::normaliser($duree, $debut, $fin) !== $duree) {
             return $empty;
         }
 
-        [$start, $end, $unit] = $this->window($duree);
+        [$start, $end, $unit] = $this->window($duree, $debut, $fin);
 
         $pattern = match ($unit) {
             'hour' => '/^([01]\d|2[0-3])$/',
@@ -241,30 +297,33 @@ final class GetNouvellesInscriptionsChart
     /**
      * @return array{0: Carbon, 1: Carbon, 2: 'hour'|'day'|'month'}
      */
-    private function window(string $duree): array
+    private static function window(string $duree, ?string $debut = null, ?string $fin = null): array
     {
         $today = now()->startOfDay();
 
         return match ($duree) {
-            'jour' => [$today, $today->copy(), 'hour'],
             '7j' => [$today->copy()->subDays(6), $today, 'day'],
             '1m' => [$today->copy()->subMonthNoOverflow()->addDay(), $today, 'day'],
             '3m' => [$today->copy()->startOfMonth()->subMonths(2), $today, 'month'],
             '6m' => [$today->copy()->startOfMonth()->subMonths(5), $today, 'month'],
             '12m' => [$today->copy()->startOfMonth()->subMonths(11), $today, 'month'],
-            default => $this->anneeWindow(),
+            'periode' => self::periodeWindow($debut, $fin),
+            default => [$today, $today->copy(), 'hour'],
         };
     }
 
-    /** @return array{0: Carbon, 1: Carbon, 2: 'month'} */
-    private function anneeWindow(): array
+    /**
+     * The user's own window — callers went through normaliser() first, so
+     * the pair is valid here. Days while the span fits on screen, months
+     * beyond (a full year of days would be 365 unreadable bars).
+     *
+     * @return array{0: Carbon, 1: Carbon, 2: 'day'|'month'}
+     */
+    private static function periodeWindow(?string $debut, ?string $fin): array
     {
-        $annee = $this->context->anneeScolaire();
+        [$start, $end] = self::plage($debut, $fin) ?? [now()->startOfDay(), now()->startOfDay()];
+        $unit = (int) $start->diffInDays($end) + 1 > self::PERIODE_JOURS_MAX ? 'month' : 'day';
 
-        if ($annee !== null) {
-            return [Carbon::parse($annee->date_debut)->startOfDay(), Carbon::parse($annee->date_fin)->startOfDay(), 'month'];
-        }
-
-        return [now()->startOfYear(), now()->endOfYear()->startOfDay(), 'month'];
+        return [$start, $end, $unit];
     }
 }
