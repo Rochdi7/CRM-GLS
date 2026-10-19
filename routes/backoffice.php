@@ -423,7 +423,7 @@ Route::prefix('backoffice')
             // par qui et quand. ⚠ Avant inscriptions/{inscription}, sinon le
             // joker capture « corbeille ».
             Route::get('inscriptions/corbeille', [InscriptionCorbeilleController::class, 'index'])
-                ->middleware('permission:registrations.view')->name('inscriptions.corbeille');
+                ->middleware('permission:registrations.trash')->name('inscriptions.corbeille');
             // Onglet « Inscriptions archivées » (19/10/2026) — même page, les
             // dossiers en pause seulement. ⚠ Avant inscriptions/{inscription}.
             Route::get('inscriptions/archivees', [InscriptionController::class, 'archivees'])

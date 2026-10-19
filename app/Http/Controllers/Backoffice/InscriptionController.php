@@ -146,7 +146,10 @@ final class InscriptionController extends Controller
             // closure : une recherche (only: [...]) ne les recalcule pas.
             'tabCounts' => fn () => [
                 '/backoffice/inscriptions/archivees' => $getInscriptionsList->archiveesCount($request->user()),
-                '/backoffice/inscriptions/corbeille' => $corbeille->tabCount($request->user()),
+                // Corbeille : super-admin seulement — pas de compte servi sinon.
+                '/backoffice/inscriptions/corbeille' => $request->user()->can('registrations.trash')
+                    ? $corbeille->tabCount($request->user())
+                    : 0,
             ],
             // UI only (§5) — dessine « Archiver » / « Réactiver » ; InscriptionPolicy@archive décide.
             'canArchive' => $request->user()->can('registrations.archive'),

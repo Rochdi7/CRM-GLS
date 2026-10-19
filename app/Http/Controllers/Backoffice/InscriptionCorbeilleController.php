@@ -6,7 +6,6 @@ namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Registrations\Queries\GetInscriptionsCorbeille;
 use App\Http\Controllers\Controller;
-use App\Models\Inscription;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -16,14 +15,15 @@ use Inertia\Response;
  * supprimés, par qui, quand, et combien par personne. Lecture seule — une
  * ligne de corbeille ne se restaure ni ne s'efface (InscriptionCorbeille
  * est append-only) ; elle est écrite par SupprimerInscription, jamais ici.
- * Même permission que la liste (`registrations.view`) : lire ce qui a été
- * supprimé est lire des inscriptions.
+ * Réservé au SUPER-ADMIN (`registrations.trash`, dans
+ * PermissionRegistry::superAdminOnly() — aucun preset ne peut la porter) :
+ * l'écran dit QUI a supprimé QUOI, c'est un outil de contrôle du staff.
  */
 final class InscriptionCorbeilleController extends Controller
 {
     public function index(Request $request, GetInscriptionsCorbeille $corbeille): Response
     {
-        $this->authorize('viewAny', Inscription::class);
+        abort_unless($request->user()?->can('registrations.trash'), 403);
 
         $user = $request->user();
         $search = (string) $request->string('search');

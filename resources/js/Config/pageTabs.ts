@@ -78,10 +78,11 @@ export const INSCRIPTIONS_TABS: PageTabDef[] = [
         permissions: ['registrations.view'],
     },
     {
+        // Super-admin seulement (registrations.trash ∈ superAdminOnly()).
         label: t('Trash'),
         href: '/backoffice/inscriptions/corbeille',
         icon: 'ti ti-trash',
-        permissions: ['registrations.view'],
+        permissions: ['registrations.trash'],
     },
 ];
 
