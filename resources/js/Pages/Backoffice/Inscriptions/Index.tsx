@@ -1619,16 +1619,6 @@ export default function InscriptionsIndex({
             <PageTabs tabs={INSCRIPTIONS_TABS} counts={tabCounts} />
 
             <Card title={archivesView ? 'Inscriptions archivées' : 'Inscriptions'} bodyClassName="p-0 py-3">
-                {archivesView && (
-                    <div className="alert alert-info mx-3 mt-2 mb-0 fs-13 d-flex align-items-start" role="alert">
-                        <i className="ti ti-archive me-2 mt-1" aria-hidden="true" />
-                        <div>
-                            Dossiers mis en pause : l&rsquo;étudiant a interrompu ce cours et doit revenir à la date indiquée.
-                            Rien d&rsquo;autre ne bouge (frais, paiements, présences) et les échéances ne sont pas réclamées
-                            pendant la pause. À son retour, « Réactiver » remet le dossier dans la liste des inscriptions.
-                        </div>
-                    </div>
-                )}
                 {/* Per-column filter row (reference CRM's Inscriptions filters,
                     without Offres) — replaces the dropdown + single search box. */}
                 <div className="px-3 pt-2">
