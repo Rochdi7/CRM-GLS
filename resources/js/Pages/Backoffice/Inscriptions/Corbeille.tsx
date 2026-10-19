@@ -161,7 +161,6 @@ export default function InscriptionsCorbeille({
                                     <th>Statut</th>
                                     <th>Inscrit le</th>
                                     <th className="text-end">Montant</th>
-                                    <th>Paiements détachés</th>
                                     <th>Supprimé par</th>
                                     <th>Supprimé le</th>
                                 </tr>
@@ -191,21 +190,6 @@ export default function InscriptionsCorbeille({
                                     <td>{row.statut ? <StatusBadge label={row.statut} variant={statutVariant(row.statut)} /> : '-'}</td>
                                     <td>{row.dateInscription ?? '-'}</td>
                                     <td className="text-end">{row.montantTotal !== null ? `${formatMontant(row.montantTotal)} MAD` : '-'}</td>
-                                    <td>
-                                        {row.paiementsDetaches.length === 0 ? (
-                                            <span className="text-muted">-</span>
-                                        ) : (
-                                            <ul className="list-unstyled mb-0 fs-12">
-                                                {row.paiementsDetaches.map((p, index) => (
-                                                    <li key={index} className="text-normal-case">
-                                                        <code>{p.reference}</code> {formatMontant(p.montant)} MAD
-                                                        {p.frais ? ` — ${p.frais}` : ''}
-                                                        {p.rembourse ? ` (remboursé ${formatMontant(p.rembourse)})` : ''}
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        )}
-                                    </td>
                                     <td className="text-normal-case">{row.supprimePar ?? <span className="text-muted">Compte inconnu</span>}</td>
                                     <td>{row.supprimeLe ?? '-'}</td>
                                 </tr>
