@@ -21,4 +21,14 @@ final class InscriptionPolicy extends ResourcePolicy
     {
         return $user->can('registrations.change-group') && $this->withinCenter($user, $inscription);
     }
+
+    /**
+     * Archiver / réactiver un dossier (19/10/2026) — `registrations.archive`,
+     * portée de centre habituelle. Un geste à part de `registrations.update` :
+     * il change ce que la liste MONTRE et ce que le recouvrement réclame.
+     */
+    public function archive(User $user, Inscription $inscription): bool
+    {
+        return $user->can('registrations.archive') && $this->withinCenter($user, $inscription);
+    }
 }

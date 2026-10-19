@@ -29,6 +29,15 @@ class Inscription extends Model
     // not offered in the UI anymore.
     public const STATUT_EXPIREE = 'Expirée';
 
+    /**
+     * « Archivée » (19/10/2026) : dossier mis en PAUSE — l'étudiant
+     * interrompt ce cours et compte revenir. Porte un motif et une date de
+     * retour (`archive_*`), s'écrit UNIQUEMENT par
+     * Domain\Registrations\Actions\ArchiverInscription (depuis `Active`) et
+     * revient `Active` par ReactiverInscription. Rien d'autre ne bouge :
+     * aucun frais masqué, aucun paiement libéré. Valeur historique de
+     * l'import legacy aussi (lignes sans motif ni date).
+     */
     public const STATUT_ARCHIVEE = 'Archivée';
 
     /**
@@ -52,6 +61,7 @@ class Inscription extends Model
         'reference', 'legacy_ref', 'legacy_source', 'student_id', 'group_id', 'etablissement_id',
         'annee_scolaire_id', 'statut', 'motif_annulation', 'date_inscription',
         'date_debut', 'date_fin', 'montant_total', 'note', 'created_by',
+        'archive_motif', 'archive_date_retour', 'archive_le', 'archive_par_user_id',
     ];
 
     /**
@@ -74,6 +84,8 @@ class Inscription extends Model
     {
         return [
             'date_inscription' => 'date',
+            'archive_date_retour' => 'date',
+            'archive_le' => 'datetime',
             'date_debut' => 'date',
             'date_fin' => 'date',
             'montant_total' => 'decimal:2',
@@ -121,5 +133,17 @@ class Inscription extends Model
     public function historique(): HasOne
     {
         return $this->hasOne(InscriptionHistorique::class);
+    }
+
+    /** Dossier en pause (STATUT_ARCHIVEE) — retour prévu à `archive_date_retour`. */
+    public function estArchivee(): bool
+    {
+        return $this->statut === self::STATUT_ARCHIVEE;
+    }
+
+    /** Qui a archivé le dossier (NULL = compte supprimé depuis, ou ligne legacy). */
+    public function archivePar(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'archive_par_user_id');
     }
 }

@@ -1506,28 +1506,33 @@ the database layer. Non-negotiable invariants already enforced in code:
   dropdown d'inscription ne la liste plus. Une demande refusée ou annulée
   reste lisible (jamais supprimée). Tests :
   `tests/Feature/Backoffice/Students/TransfertEtudiantCentreTest.php`.
-- **⚠ Un étudiant « Archivé » est en PAUSE, pas clos** (19/10/2026,
-  `Student::STATUT_ARCHIVE`, `Domain\Students\Actions\{Archiver,Reactiver}Etudiant`,
-  permission `students.archive` dans `$operations`). L'étudiant interrompt
-  ses cours et reviendra : la fiche prend un MOTIF + une DATE DE RETOUR
-  (obligatoires, `ArchiveStudentRequest`, retour > aujourd'hui), sort de la
-  liste courante vers l'onglet « Étudiants archivés »
-  (`/backoffice/students/archives`, même page `Students/Index` avec
-  `archivesView`, même filtres) et se réactive d'un clic. Quatre bornes :
-  (1) **rien d'autre ne bouge** — aucune inscription annulée, aucun frais
-  masqué, aucun argent déplacé ; clore un dossier reste « Annuler
-  l'inscription » ; (2) le total « Étudiants » du tableau de bord EXCLUT les
-  archivés et les compte à part (`studentsArchives`), comme la liste — un
-  écran et sa carte disent le même chiffre ; le badge de l'onglet vient de
-  `GetStudentsTabCounts` (une définition pour les quatre pages de la barre) ;
-  (3) **une nouvelle inscription sur une fiche archivée est REFUSÉE** en
-  nommant la marche à suivre (`GardeEtudiantArchive`, même forme que
-  `GardeEtudiantTransfere`), et le dropdown du formulaire la LISTE désactivée
-  avec la raison, jamais retirée ; (4) une date de retour dépassée sans
-  réactivation est badgée (`archiveRetourDepasse`, serveur). Réactiver
-  efface motif/date de la fiche — le journal (`student_archived` /
-  `student_reactivated`) garde l'historique. Tests :
-  `tests/Feature/Backoffice/Students/StudentArchiveTest.php`.
+- **⚠ Une inscription « Archivée » est en PAUSE, pas close** (19/10/2026,
+  `Inscription::STATUT_ARCHIVEE` redevenu sélectionnable, UNIQUEMENT via
+  `Domain\Registrations\Actions\{Archiver,Reactiver}Inscription`, permission
+  `registrations.archive` dans `$operations`). L'étudiant interrompt CE cours
+  et reviendra : le dossier prend un MOTIF + une DATE DE RETOUR (obligatoires,
+  `ArchiveInscriptionRequest`, retour > aujourd'hui), sort de la liste
+  courante vers l'onglet « Inscriptions archivées »
+  (`/backoffice/inscriptions/archivees`, même page `Inscriptions/Index` avec
+  `archivesView`, statut imposé) et se réactive d'un clic. ⚠ La version du
+  matin archivait la FICHE ÉTUDIANT (`students.archive_*`, `Student::STATUT_ARCHIVE`) ;
+  le propriétaire a tranché le soir même : c'est l'INSCRIPTION — la migration
+  `move_archive_from_students_to_inscriptions` a déplacé les colonnes, ne pas
+  réintroduire un statut d'archivage sur `students`. Quatre bornes :
+  (1) **rien d'autre ne bouge** — aucun frais masqué, aucun paiement libéré en
+  avance, aucun argent déplacé (contrairement à « Annuler l'inscription ») ;
+  le recouvrement ne poursuivant que les `Active`, les échéances ne sont pas
+  réclamées pendant la pause ; (2) seule une inscription `Active` s'archive,
+  et la réactivation rejoue la garde DB-08 (jamais deux dossiers Actifs du
+  même étudiant dans une année) ; (3) la carte « Inscriptions » du tableau de
+  bord compte les dossiers en pause À PART (`inscriptionsArchivees`) et le
+  badge de l'onglet vient de `GetInscriptionsList::archiveesCount()` — même
+  portée que la liste ; (4) une date de retour dépassée sans réactivation est
+  badgée (`archiveRetourDepasse`, serveur). Les lignes « Archivée » de
+  l'import legacy n'ont ni motif ni date : elles s'affichent « — ». Réactiver
+  efface motif/date du dossier — le journal (`inscription_archived` /
+  `inscription_reactivated`) garde l'historique. Tests :
+  `tests/Feature/Backoffice/Inscriptions/InscriptionArchiveTest.php`.
 - **⚠ Une inscription supprimée laisse une ligne dans la CORBEILLE**
   (19/10/2026, table `inscriptions_corbeille`, modèle `InscriptionCorbeille`
   append-only — update/delete lèvent au niveau modèle, sous toute Gate).

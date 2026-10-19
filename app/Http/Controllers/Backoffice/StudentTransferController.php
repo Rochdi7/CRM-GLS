@@ -11,7 +11,6 @@ use App\Domain\Students\Actions\ValiderTransfertEtudiant;
 use App\Domain\Students\Queries\GetGroupesCiblesTransfert;
 use App\Domain\Students\Queries\GetPaiementsTransferables;
 use App\Domain\Students\Queries\GetStudentTransfersList;
-use App\Domain\Students\Queries\GetStudentsTabCounts;
 use App\Domain\Students\Support\SelectionPaiementsTransfert;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
@@ -39,7 +38,7 @@ final class StudentTransferController extends Controller
 {
     use AssertsContextScope, RedirectsPreservingFilters;
 
-    public function index(Request $request, GetStudentTransfersList $getList, GetStudentsTabCounts $tabCounts): Response
+    public function index(Request $request, GetStudentTransfersList $getList): Response
     {
         $this->authorize('viewAny', StudentTransfer::class);
 
@@ -58,7 +57,7 @@ final class StudentTransferController extends Controller
             ],
             'perPageOptions' => GetStudentTransfersList::PER_PAGE_OPTIONS,
             'statuts' => StudentTransfer::STATUTS,
-            'tabCounts' => fn () => $tabCounts($request->user()),
+            'tabCounts' => fn () => $getList->tabCounts($request->user()),
             'permissions' => [
                 'validate' => $request->user()->can('student-transfers.validate'),
             ],

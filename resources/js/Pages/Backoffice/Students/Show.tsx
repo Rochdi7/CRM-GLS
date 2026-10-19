@@ -75,30 +75,6 @@ export default function StudentShow({ student, absences }: StudentShowProps) {
                 </div>
             )}
 
-            {student.archive && (
-                <div className={`alert ${student.archive.retourDepasse ? 'alert-danger' : 'alert-warning'} d-flex align-items-start`} role="alert">
-                    <i className="ti ti-archive me-2 mt-1 fs-18" aria-hidden="true" />
-                    <div>
-                        <p className="fw-semibold mb-1">
-                            Étudiant archivé — retour prévu le {student.archive.dateRetour ?? '-'}
-                            {student.archive.retourDepasse && ' (date dépassée)'}
-                        </p>
-                        <p className="mb-0 fs-13">
-                            {student.archive.motif}
-                            {student.archive.le && (
-                                <span className="text-muted">
-                                    {' '}
-                                    · archivé le {student.archive.le}
-                                    {student.archive.par ? ` par ${student.archive.par}` : ''}
-                                </span>
-                            )}
-                            . Inscriptions, présences et paiements sont inchangés ; la fiche se réactive depuis l'onglet
-                            « Étudiants archivés ».
-                        </p>
-                    </div>
-                </div>
-            )}
-
             <ul className="nav nav-tabs nav-tabs-solid nav-tabs-rounded-fill mb-3" role="tablist">
                 <li className="me-2 mb-2" role="presentation">
                     <button

@@ -92,24 +92,13 @@ class Student extends Model implements HasMedia
 
     public const STATUT_TRANSFERE = 'Transféré';
 
-    /**
-     * « Archivé » (19/10/2026) : l'étudiant a INTERROMPU ses cours mais
-     * compte revenir — un mois, un trimestre. La fiche sort de la liste
-     * courante (onglet « Étudiants archivés ») avec un MOTIF et une DATE DE
-     * RETOUR prévue, et se réactive d'un clic. Ni transfert ni suppression :
-     * inscriptions, présences et argent restent exactement où ils sont.
-     * Voir Domain\Students\Actions\{Archiver,Reactiver}Etudiant.
-     */
-    public const STATUT_ARCHIVE = 'Archivé';
-
-    public const STATUTS = [self::STATUT_ACTIF, self::STATUT_TRANSFERE, self::STATUT_ARCHIVE];
+    public const STATUTS = [self::STATUT_ACTIF, self::STATUT_TRANSFERE];
 
     protected $fillable = [
         'reference', 'legacy_ref', 'legacy_source', 'nom', 'prenom', 'sexe', 'date_naissance', 'cin',
         'telephone', 'whatsapp', 'email', 'adresse', 'niveau',
         'domaine', 'examen_type',
         'etablissement_id', 'statut', 'transfere_vers_student_id', 'transfere_depuis_student_id',
-        'archive_motif', 'archive_date_retour', 'archive_le', 'archive_par_user_id',
         'parent_nom', 'parent_relation', 'parent_sexe',
         'parent_cin', 'parent_telephone', 'parent_whatsapp', 'note',
     ];
@@ -123,8 +112,6 @@ class Student extends Model implements HasMedia
     {
         return [
             'date_naissance' => 'date',
-            'archive_date_retour' => 'date',
-            'archive_le' => 'datetime',
         ];
     }
 
@@ -205,18 +192,6 @@ class Student extends Model implements HasMedia
     public function estTransfere(): bool
     {
         return $this->statut === self::STATUT_TRANSFERE;
-    }
-
-    /** Fiche mise de côté en attendant le retour de l'étudiant (STATUT_ARCHIVE). */
-    public function estArchive(): bool
-    {
-        return $this->statut === self::STATUT_ARCHIVE;
-    }
-
-    /** Qui a archivé la fiche (NULL = compte supprimé depuis, ou fiche jamais archivée). */
-    public function archivePar(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'archive_par_user_id');
     }
 
     public function nomComplet(): string

@@ -42,9 +42,6 @@ final class GetDashboardStats
             // par le centre d'arrivée, sur sa copie (25/09/2026).
             ->where('statut', '!=', Student::STATUT_TRANSFERE)
             ->when($centreId, fn ($q) => $q->where('etablissement_id', $centreId));
-        // « Archivé » (19/10/2026) : compté À PART (`archives`), et retiré du
-        // total — la liste Étudiants ne montre plus ces fiches, l'onglet
-        // « Étudiants archivés » les porte, et la carte suit les deux.
 
         // Employees are staff — they exist regardless of academic year, so
         // they are scoped by center only (no year dimension to scope on).
@@ -137,8 +134,7 @@ final class GetDashboardStats
         // instead of one COUNT round-trip per card — the row set is scanned
         // once and every conditional total falls out of the same pass.
         $students = $studentsQuery->selectRaw(
-            'COUNT(*) FILTER (WHERE statut <> ?) AS total, COUNT(*) FILTER (WHERE statut = ?) AS archives, COUNT(*) FILTER (WHERE parent_nom IS NOT NULL AND statut <> ?) AS parents',
-            [Student::STATUT_ARCHIVE, Student::STATUT_ARCHIVE, Student::STATUT_ARCHIVE],
+            'COUNT(*) AS total, COUNT(*) FILTER (WHERE parent_nom IS NOT NULL) AS parents',
         )->toBase()->first();
 
         $employees = $employeesQuery->selectRaw(
@@ -163,8 +159,8 @@ final class GetDashboardStats
         // deliberately spans every année — the two figures answer different
         // questions and must not be made to agree.
         $inscriptions = $inscriptionsQuery->selectRaw(
-            'COUNT(*) AS total, COUNT(*) FILTER (WHERE statut = ?) AS actives, COUNT(*) FILTER (WHERE statut = ?) AS annulees, COUNT(*) FILTER (WHERE statut = ?) AS changement, COUNT(DISTINCT student_id) FILTER (WHERE statut = ?) AS etudiants_actifs',
-            [Inscription::STATUT_ACTIVE, Inscription::STATUT_ANNULEE, Inscription::STATUT_CHANGEMENT, Inscription::STATUT_ACTIVE],
+            'COUNT(*) AS total, COUNT(*) FILTER (WHERE statut = ?) AS actives, COUNT(*) FILTER (WHERE statut = ?) AS annulees, COUNT(*) FILTER (WHERE statut = ?) AS changement, COUNT(*) FILTER (WHERE statut = ?) AS archivees, COUNT(DISTINCT student_id) FILTER (WHERE statut = ?) AS etudiants_actifs',
+            [Inscription::STATUT_ACTIVE, Inscription::STATUT_ANNULEE, Inscription::STATUT_CHANGEMENT, Inscription::STATUT_ARCHIVEE, Inscription::STATUT_ACTIVE],
         )->toBase()->first();
 
         $depenses = $depensesMonthQuery->selectRaw(
@@ -174,7 +170,6 @@ final class GetDashboardStats
         return new DashboardStatsData(
             studentsTotal: (int) $students->total,
             studentsActifs: (int) $inscriptions->etudiants_actifs,
-            studentsArchives: (int) $students->archives,
             employeesTotal: (int) $employees->total,
             employeesActive: (int) $employees->actifs,
             enseignantsTotal: (int) $employees->enseignants,
@@ -191,6 +186,8 @@ final class GetDashboardStats
             inscriptionsActives: (int) $inscriptions->actives,
             inscriptionsAnnulees: (int) $inscriptions->annulees,
             inscriptionsChangement: (int) $inscriptions->changement,
+            // Dossiers en PAUSE (19/10/2026) — l'onglet « Inscriptions archivées ».
+            inscriptionsArchivees: (int) $inscriptions->archivees,
             paymentsMonth: (float) $paymentsMonth,
             depensesMonth: (float) $depenses->total,
             depensesMonthCount: (int) $depenses->nb,

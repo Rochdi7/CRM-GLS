@@ -33,14 +33,6 @@ export const STUDENTS_TABS: PageTabDef[] = [
         exact: true,
     },
     {
-        // Étudiants archivés (19/10/2026) : fiches mises en pause (retour
-        // prévu), sorties de la liste courante — même page, route à part.
-        label: t('Archived students'),
-        href: '/backoffice/students/archives',
-        icon: 'ti ti-archive',
-        permissions: ['students.view'],
-    },
-    {
         // Transferts d'étudiants entre centres (25/09/2026) : la liste des
         // demandes, à côté des fiches — c'est depuis une fiche qu'on demande.
         label: t('Student transfers'),
@@ -64,9 +56,11 @@ export const STUDENTS_TABS: PageTabDef[] = [
 ];
 
 /**
- * Inscriptions + sa corbeille (19/10/2026) : les dossiers supprimés, par qui
- * et quand. « Inscriptions » est en correspondance exacte — sinon le préfixe
- * attraperait /backoffice/inscriptions/corbeille et les deux s'allumeraient.
+ * Inscriptions + ses dossiers en pause + sa corbeille (19/10/2026).
+ * « Archivées » = inscriptions mises en pause (motif, retour prévu), sorties
+ * de la liste courante — même page, route à part. « Corbeille » = dossiers
+ * supprimés, par qui et quand. « Inscriptions » est en correspondance
+ * exacte — sinon le préfixe attraperait les deux autres chemins.
  */
 export const INSCRIPTIONS_TABS: PageTabDef[] = [
     {
@@ -76,6 +70,12 @@ export const INSCRIPTIONS_TABS: PageTabDef[] = [
         permissions: ['registrations.view'],
         matchPaths: ['/backoffice/inscriptions'],
         exact: true,
+    },
+    {
+        label: t('Archived registrations'),
+        href: '/backoffice/inscriptions/archivees',
+        icon: 'ti ti-archive',
+        permissions: ['registrations.view'],
     },
     {
         label: t('Trash'),

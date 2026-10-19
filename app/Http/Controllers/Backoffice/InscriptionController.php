@@ -7,6 +7,8 @@ namespace App\Http\Controllers\Backoffice;
 use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Domain\Attendance\Queries\GetAbsencesEtudiant;
 use App\Domain\Registrations\Actions\AnnulerInscription;
+use App\Domain\Registrations\Actions\ArchiverInscription;
+use App\Domain\Registrations\Actions\ReactiverInscription;
 use App\Domain\Registrations\Actions\AssignerLivresInscription;
 use App\Domain\Registrations\Actions\SupprimerInscription;
 use App\Domain\Registrations\Actions\BasculerVisibiliteFraisInscription;
@@ -22,6 +24,7 @@ use App\Domain\Settings\Queries\GetMotifsAnnulationList;
 use App\Domain\Shared\Support\ReferenceGenerator;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
+use App\Http\Requests\Backoffice\Inscriptions\ArchiveInscriptionRequest;
 use App\Http\Requests\Backoffice\Inscriptions\CancelInscriptionRequest;
 use App\Http\Requests\Backoffice\Inscriptions\ChangeGroupInscriptionRequest;
 use App\Http\Requests\Backoffice\Inscriptions\ModifyGroupInscriptionRequest;
@@ -32,7 +35,6 @@ use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionRequest;
 use App\Models\Encaissement;
 use App\Models\Group;
 use App\Domain\Settings\Support\FraisEcheanceResolver;
-use App\Domain\Students\Support\GardeEtudiantArchive;
 use App\Domain\Students\Support\GardeEtudiantTransfere;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
@@ -42,6 +44,7 @@ use App\Models\StockArticle;
 use App\Models\StockType;
 use App\Services\Context\CurrentContext;
 use App\Support\Phone\Countries;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -76,20 +79,50 @@ final class InscriptionController extends Controller
         GetMotifsAnnulationList $getMotifsAnnulationList,
         GetInscriptionsCorbeille $corbeille,
     ): Response {
+        return $this->renderIndex($request, $getInscriptionsList, $getInscriptionFormOptions, $getMotifsAnnulationList, $corbeille, false);
+    }
+
+    /**
+     * Onglet « Inscriptions archivées » (19/10/2026) : la MÊME page, les
+     * mêmes filtres, mais les dossiers « Archivée » seulement — ceux que la
+     * liste courante ne montre plus. Route à part plutôt qu'un paramètre :
+     * la barre d'onglets marque l'onglet actif sur le CHEMIN.
+     */
+    public function archivees(
+        Request $request,
+        GetInscriptionsList $getInscriptionsList,
+        GetInscriptionFormOptions $getInscriptionFormOptions,
+        GetMotifsAnnulationList $getMotifsAnnulationList,
+        GetInscriptionsCorbeille $corbeille,
+    ): Response {
+        return $this->renderIndex($request, $getInscriptionsList, $getInscriptionFormOptions, $getMotifsAnnulationList, $corbeille, true);
+    }
+
+    private function renderIndex(
+        Request $request,
+        GetInscriptionsList $getInscriptionsList,
+        GetInscriptionFormOptions $getInscriptionFormOptions,
+        GetMotifsAnnulationList $getMotifsAnnulationList,
+        GetInscriptionsCorbeille $corbeille,
+        bool $archives,
+    ): Response {
         $this->authorize('viewAny', Inscription::class);
 
         $search = (string) $request->string('search');
-        $statutFilter = (string) $request->string('statutFilter');
+        // Onglet « Archivées » : le statut est IMPOSÉ ; la liste courante
+        // exclut les dossiers en pause (`$archives` false ⇒ `!= Archivée`).
+        $statutFilter = $archives ? Inscription::STATUT_ARCHIVEE : (string) $request->string('statutFilter');
         $groupFilter = (string) $request->string('groupFilter');
         $referenceFilter = (string) $request->string('referenceFilter');
         $studentFilter = (string) $request->string('studentFilter');
         $perPage = (int) $request->integer('perPage', GetInscriptionsList::DEFAULT_PER_PAGE);
 
         return Inertia::render('Backoffice/Inscriptions/Index', [
-            'inscriptions' => $getInscriptionsList($request->user(), $search, $statutFilter, $groupFilter, $perPage, $referenceFilter, $studentFilter),
+            'archivesView' => $archives,
+            'inscriptions' => $getInscriptionsList($request->user(), $search, $statutFilter, $groupFilter, $perPage, $referenceFilter, $studentFilter, $archives),
             'filters' => [
                 'search' => $search,
-                'statutFilter' => $statutFilter,
+                'statutFilter' => $archives ? '' : $statutFilter,
                 'groupFilter' => $groupFilter,
                 'referenceFilter' => $referenceFilter,
                 'studentFilter' => $studentFilter,
@@ -109,9 +142,14 @@ final class InscriptionController extends Controller
             'niveauStudium' => Student::NIVEAU_STUDIUM,
             'defaultCountry' => Countries::DEFAULT,
             'students' => $getInscriptionFormOptions->students($request->user()),
-            // Badge de l'onglet « Corbeille » (19/10/2026) — closure : une
-            // recherche (only: [...]) ne le recalcule pas.
-            'tabCounts' => fn () => ['/backoffice/inscriptions/corbeille' => $corbeille->tabCount($request->user())],
+            // Badges des onglets « Archivées » et « Corbeille » (19/10/2026) —
+            // closure : une recherche (only: [...]) ne les recalcule pas.
+            'tabCounts' => fn () => [
+                '/backoffice/inscriptions/archivees' => $getInscriptionsList->archiveesCount($request->user()),
+                '/backoffice/inscriptions/corbeille' => $corbeille->tabCount($request->user()),
+            ],
+            // UI only (§5) — dessine « Archiver » / « Réactiver » ; InscriptionPolicy@archive décide.
+            'canArchive' => $request->user()->can('registrations.archive'),
             'groups' => $getInscriptionFormOptions->groups($request->user()),
             // « Changement de groupe » is the ONE flow allowed to cross
             // academic years, so it gets its own unfiltered-by-year option
@@ -561,10 +599,8 @@ final class InscriptionController extends Controller
             $student = Student::findOrFail((int) $data['student_id']);
             $this->assertStudentInContext($request, $student);
             // Une fiche « Transféré » est close ici : son dossier vit sur
-            // la copie du centre d'arrivée (GardeEtudiantTransfere). Une
-            // fiche « Archivé » se RÉACTIVE d'abord (GardeEtudiantArchive).
+            // la copie du centre d'arrivée (GardeEtudiantTransfere).
             GardeEtudiantTransfere::assertNonTransfere($student);
-            GardeEtudiantArchive::assertNonArchive($student);
         }
         $this->assertFeeLinesBelongToGroup($group, $data['fee_lines'] ?? []);
 
@@ -794,7 +830,6 @@ final class InscriptionController extends Controller
         $student = Student::findOrFail((int) $data['student_id']);
         $this->assertStudentInContext($request, $student);
         GardeEtudiantTransfere::assertNonTransfere($student);
-        GardeEtudiantArchive::assertNonArchive($student);
 
         // Once money has been received on this registration its student is
         // frozen: the payments carry that student_id, and re-pointing the
@@ -925,6 +960,40 @@ final class InscriptionController extends Controller
 
         return $this->backToListPreservingFilters($request, 'backoffice.inscriptions.index')
             ->with('success', __('Registration status updated.'));
+    }
+
+    /**
+     * Archiver (19/10/2026) : motif + date de retour obligatoires, le dossier
+     * sort de la liste courante. Rien d'autre ne bouge (ArchiverInscription).
+     */
+    public function archive(ArchiveInscriptionRequest $request, Inscription $inscription, ArchiverInscription $archiver): RedirectResponse
+    {
+        $this->authorize('archive', $inscription);
+        $this->assertInscriptionInContext($request, $inscription, 'archive');
+
+        $data = $request->validated();
+
+        $archiver->handle(
+            $inscription,
+            (string) $data['motif'],
+            CarbonImmutable::parse((string) $data['date_retour']),
+            $request->user(),
+        );
+
+        return $this->backToListPreservingFilters($request, 'backoffice.inscriptions.index')
+            ->with('success', __('Registration archived.'));
+    }
+
+    /** L'étudiant est de retour : le dossier redevient « Active ». */
+    public function reactivate(Request $request, Inscription $inscription, ReactiverInscription $reactiver): RedirectResponse
+    {
+        $this->authorize('archive', $inscription);
+        $this->assertInscriptionInContext($request, $inscription, 'archive');
+
+        $reactiver->handle($inscription, $request->user());
+
+        return $this->backToListPreservingFilters($request, 'backoffice.inscriptions.archivees')
+            ->with('success', __('Registration reactivated.'));
     }
 
     /**

@@ -605,3 +605,25 @@ ALTER TABLE students ADD COLUMN IF NOT EXISTS archive_le timestamp(0) NULL;
 ALTER TABLE students ADD COLUMN IF NOT EXISTS archive_par_user_id bigint NULL REFERENCES users(id) ON DELETE SET NULL;
 -- inscriptions_corbeille : voir la migration create_* (CREATE TABLE IF NOT EXISTS équivalent).
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 19/10/2026 (soir) — La PAUSE est celle d'une INSCRIPTION, pas d'une fiche :
+-- les quatre colonnes `archive_*` migrent de `students` vers `inscriptions`
+-- (`inscriptions.statut = 'Archivée'` redevient sélectionnable, par l'action
+-- dédiée seulement). Les colonnes `students.archive_*` du matin sont
+-- SUPPRIMÉES (jamais une ligne écrite). Permission `registrations.archive`
+-- remplace `students.archive` — re-jouer le seeder après le déploiement.
+--
+-- ⚠ RIEN À FAIRE À LA MAIN : la migration
+-- `2026_10_19_110000_move_archive_from_students_to_inscriptions_table.php`
+-- est jouée par le `php artisan migrate --force` du déploiement. SQL
+-- conservé pour mémoire (idempotent). Aucun solde de caisse ne bouge.
+ALTER TABLE inscriptions ADD COLUMN IF NOT EXISTS archive_motif text NULL;
+ALTER TABLE inscriptions ADD COLUMN IF NOT EXISTS archive_date_retour date NULL;
+ALTER TABLE inscriptions ADD COLUMN IF NOT EXISTS archive_le timestamp(0) NULL;
+ALTER TABLE inscriptions ADD COLUMN IF NOT EXISTS archive_par_user_id bigint NULL REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE students DROP COLUMN IF EXISTS archive_par_user_id;
+ALTER TABLE students DROP COLUMN IF EXISTS archive_le;
+ALTER TABLE students DROP COLUMN IF EXISTS archive_date_retour;
+ALTER TABLE students DROP COLUMN IF EXISTS archive_motif;
+-- ---------------------------------------------------------------------------
