@@ -58,6 +58,10 @@ export default function StatsGrid({ stats }: StatsGridProps) {
                             <span className="badge badge-soft-info">
                                 {t('Parents on file')} : {stats.parentsTotal.toLocaleString('fr-FR')}
                             </span>
+                            <span className="badge badge-soft-warning" title={t('Students on pause, expected back - not counted in the total')}>
+                                <i className="ti ti-archive me-1" />
+                                {t('Archived')} : {stats.studentsArchives.toLocaleString('fr-FR')}
+                            </span>
                         </>
                     }
                     href={linkIf('students.view', '/backoffice/students')}

@@ -34,6 +34,7 @@ use App\Http\Controllers\Backoffice\Import\InscriptionImportController;
 use App\Http\Controllers\Backoffice\Import\PresenceImportController;
 use App\Http\Controllers\Backoffice\Import\StudentImportController;
 use App\Http\Controllers\Backoffice\InscriptionController;
+use App\Http\Controllers\Backoffice\InscriptionCorbeilleController;
 use App\Http\Controllers\Backoffice\LegacyReconciliationController;
 use App\Http\Controllers\Backoffice\MotifAnnulationController;
 use App\Http\Controllers\Backoffice\MovePaymentController;
@@ -217,12 +218,23 @@ Route::prefix('backoffice')
             Route::post('students/livres', [StudentLivresController::class, 'store'])
                 ->middleware('permission:registrations.manage-fees')->name('students.livres.store');
 
+            // Onglet « Étudiants archivés » (19/10/2026) — même page, fiches
+            // « Archivé » seulement. ⚠ Avant students/{student}, même raison
+            // que la fusion.
+            Route::get('students/archives', [StudentController::class, 'archives'])
+                ->middleware('permission:students.view')->name('students.archives');
+
             Route::get('students', [StudentController::class, 'index'])
                 ->middleware('permission:students.view|groups.view-own')->name('students.index');
             Route::post('students', [StudentController::class, 'store'])
                 ->middleware('permission:students.create')->name('students.store');
             Route::put('students/{student}', [StudentController::class, 'update'])
                 ->middleware('permission:students.update')->name('students.update');
+            // Archiver (motif + date de retour) / réactiver — students.archive.
+            Route::post('students/{student}/archiver', [StudentController::class, 'archive'])
+                ->middleware('permission:students.archive')->name('students.archive');
+            Route::post('students/{student}/reactiver', [StudentController::class, 'reactivate'])
+                ->middleware('permission:students.archive')->name('students.reactivate');
             // ⚠ DOIT précéder students/{student} (voir le commentaire de
             // « students/fusion » plus haut) — sinon le joker capture le
             // segment et renvoie un 404 de binding.
@@ -418,6 +430,12 @@ Route::prefix('backoffice')
             // group/statut/dates/note) keep the Livewire form's own
             // create-vs-edit asymmetry; fee-line editing on an existing
             // registration is a separate action below (registrations.manage-fees).
+            // Corbeille des inscriptions (19/10/2026) : les dossiers supprimés,
+            // par qui et quand. ⚠ Avant inscriptions/{inscription}, sinon le
+            // joker capture « corbeille ».
+            Route::get('inscriptions/corbeille', [InscriptionCorbeilleController::class, 'index'])
+                ->middleware('permission:registrations.view')->name('inscriptions.corbeille');
+
             Route::get('inscriptions', [InscriptionController::class, 'index'])
                 ->middleware('permission:registrations.view')->name('inscriptions.index');
             Route::post('inscriptions', [InscriptionController::class, 'store'])

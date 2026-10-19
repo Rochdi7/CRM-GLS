@@ -46,6 +46,7 @@ final class GetStudentsList
         string $inscriptionFilter = '',
         string $groupeFilter = '',
         string $livreFilter = '',
+        bool $archives = false,
     ): LengthAwarePaginator {
         if (! in_array($perPage, self::PER_PAGE_OPTIONS, true)) {
             $perPage = self::DEFAULT_PER_PAGE;
@@ -57,7 +58,16 @@ final class GetStudentsList
 
         $students = Student::query()
             // `media` eager-loaded for the avatar column (avoids N+1).
-            ->with(['etablissement', 'media', 'transfereVers:id,reference,etablissement_id', 'transfereVers.etablissement:id,nom_centre', 'transfereDepuis:id,reference,etablissement_id', 'transfereDepuis.etablissement:id,nom_centre'])
+            ->with(['etablissement', 'media', 'archivePar:id,name', 'transfereVers:id,reference,etablissement_id', 'transfereVers.etablissement:id,nom_centre', 'transfereDepuis:id,reference,etablissement_id', 'transfereDepuis.etablissement:id,nom_centre'])
+            // « Archivé » (19/10/2026) : une fiche mise en pause sort de la
+            // liste courante et n'apparaît QUE sur l'onglet « Étudiants
+            // archivés » (`$archives`) — les deux onglets se partagent les
+            // fiches, jamais une n'est sur les deux ni sur aucun.
+            ->when(
+                $archives,
+                fn ($q) => $q->where('statut', Student::STATUT_ARCHIVE),
+                fn ($q) => $q->where('statut', '!=', Student::STATUT_ARCHIVE),
+            )
             ->when($enseignantId !== null, fn ($q) => $q->with(['inscriptions' => fn ($i) => $i
                 ->where('statut', Inscription::STATUT_ACTIVE)
                 ->whereIn('group_id', PorteeEnseignant::groupeIds((int) $enseignantId))
@@ -199,6 +209,17 @@ final class GetStudentsList
                 'reference' => $student->transfereDepuis->reference,
                 'centre' => $student->transfereDepuis->etablissement?->nom_centre,
             ],
+            // Archivage (19/10/2026) : motif, retour prévu, qui et quand.
+            // `archiveRetourDepasse` vient du serveur (la date de retour est
+            // passée et la fiche n'a pas été réactivée) — l'onglet le badge.
+            'archiveMotif' => $student->archive_motif,
+            'archiveDateRetour' => $student->archive_date_retour?->format('d/m/Y'),
+            'archiveDateRetourIso' => $student->archive_date_retour?->toDateString(),
+            'archiveRetourDepasse' => $student->estArchive()
+                && $student->archive_date_retour !== null
+                && $student->archive_date_retour->lt(now()->startOfDay()),
+            'archiveLe' => $student->archive_le?->format('d/m/Y H:i'),
+            'archivePar' => $student->archivePar?->name,
             'parentNom' => $student->parent_nom,
             'parentRelation' => $student->parent_relation,
             'parentSexe' => $student->parent_sexe,
@@ -219,6 +240,26 @@ final class GetStudentsList
         ]);
 
         return $students;
+    }
+
+    /**
+     * Nombre de fiches « Archivé » dans la portée de l'utilisateur et le
+     * centre actif — la MÊME portée que la liste, pour que le badge de
+     * l'onglet, l'onglet lui-même et la carte du tableau de bord disent le
+     * même chiffre.
+     */
+    public function archivesCount(User $user): int
+    {
+        return Student::query()
+            ->where('statut', Student::STATUT_ARCHIVE)
+            ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+            ->tap(fn ($q) => PorteeEnseignant::scopeStudents($q, $user))
+            ->tap(function ($q): void {
+                if (! $this->context->isAllCenters()) {
+                    $q->where(fn ($sub) => $sub->whereNull('etablissement_id')->orWhere('etablissement_id', $this->context->etablissementId()));
+                }
+            })
+            ->count();
     }
 
     /**

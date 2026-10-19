@@ -14,6 +14,8 @@ final class DashboardStatsData
         public readonly int $studentsTotal,
         /** Distinct students holding an Active inscription in the active année. */
         public readonly int $studentsActifs,
+        /** Fiches « Archivé » du centre (en pause, retour prévu) — hors de studentsTotal. */
+        public readonly int $studentsArchives,
         public readonly int $employeesTotal,
         public readonly int $employeesActive,
         public readonly int $enseignantsTotal,
@@ -41,11 +43,11 @@ final class DashboardStatsData
      */
     public static function enteteSeule(?string $anneeLabel, ?string $centreLabel): self
     {
-        return new self(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0, $anneeLabel, $centreLabel);
+        return new self(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0, $anneeLabel, $centreLabel);
     }
 
     /**
-     * @return array{studentsTotal: int, studentsActifs: int, employeesTotal: int, employeesActive: int,
+     * @return array{studentsTotal: int, studentsActifs: int, studentsArchives: int, employeesTotal: int, employeesActive: int,
      *     enseignantsTotal: int, parentsTotal: int, groupsTotal: int, groupsEnFormation: int, groupsEnInscription: int,
      *     groupsTermines: int, groupsAnnules: int, inscriptionsTotal: int,
      *     inscriptionsActives: int, inscriptionsAnnulees: int, inscriptionsChangement: int, paymentsMonth: string,
@@ -56,6 +58,7 @@ final class DashboardStatsData
         return [
             'studentsTotal' => $this->studentsTotal,
             'studentsActifs' => $this->studentsActifs,
+            'studentsArchives' => $this->studentsArchives,
             'employeesTotal' => $this->employeesTotal,
             'employeesActive' => $this->employeesActive,
             'enseignantsTotal' => $this->enseignantsTotal,

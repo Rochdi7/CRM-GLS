@@ -41,7 +41,16 @@ final class GetInscriptionFormOptions
             })
             ->orderBy('nom')
             ->get()
-            ->map(fn (Student $s): array => ['id' => $s->id, 'label' => "{$s->nomComplet()} ({$s->reference})"]);
+            // `statut` + `archiveDateRetour` : une fiche « Archivé » reste
+            // LISTÉE mais désactivée dans le formulaire, avec la raison —
+            // le serveur la refuse (GardeEtudiantArchive) ; la retirer la
+            // ferait passer pour une fiche inexistante (19/10/2026).
+            ->map(fn (Student $s): array => [
+                'id' => $s->id,
+                'label' => "{$s->nomComplet()} ({$s->reference})",
+                'statut' => $s->statut,
+                'archiveDateRetour' => $s->archive_date_retour?->format('d/m/Y'),
+            ]);
     }
 
     /**

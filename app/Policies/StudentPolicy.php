@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Policies;
 
 use App\Domain\Groups\Support\PorteeEnseignant;
+use App\Models\Student;
 use App\Models\User;
 use App\Policies\Concerns\ResourcePolicy;
 
@@ -36,5 +37,16 @@ final class StudentPolicy extends ResourcePolicy
     public function merge(User $user): bool
     {
         return $user->can('students.merge');
+    }
+
+    /**
+     * Archiver / réactiver une fiche (19/10/2026) — `students.archive`, avec
+     * la portée de centre habituelle. Un geste à part de `students.update` :
+     * il change ce que la liste MONTRE (et le compteur du tableau de bord),
+     * pas l'identité de la personne.
+     */
+    public function archive(User $user, Student $student): bool
+    {
+        return $user->can('students.archive') && $this->withinCenter($user, $student);
     }
 }

@@ -8,7 +8,7 @@ use App\Domain\Payments\Actions\DeplacerEncaissementVersFrais;
 use App\Domain\Payments\Queries\GetStudentPaymentPlacement;
 use App\Domain\Students\Actions\FusionnerEtudiants;
 use App\Domain\Students\Queries\GetFusionCandidates;
-use App\Domain\Students\Queries\GetStudentTransfersList;
+use App\Domain\Students\Queries\GetStudentsTabCounts;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Students\DeplacerEncaissementRequest;
 use App\Http\Requests\Backoffice\Students\FusionnerEtudiantsRequest;
@@ -48,7 +48,7 @@ use Inertia\Response;
  */
 final class StudentMergeController extends Controller
 {
-    public function index(Request $request, GetFusionCandidates $candidats, GetStudentPaymentPlacement $dossier, GetStudentTransfersList $transfers): Response
+    public function index(Request $request, GetFusionCandidates $candidats, GetStudentPaymentPlacement $dossier, GetStudentsTabCounts $tabCounts): Response
     {
         $this->authorize('merge', Student::class);
 
@@ -57,7 +57,7 @@ final class StudentMergeController extends Controller
 
         return Inertia::render('Backoffice/Students/Merge', [
             'filters' => ['search' => $search, 'etudiant_id' => $etudiantId],
-            'tabCounts' => fn () => $transfers->tabCounts($request->user()),
+            'tabCounts' => fn () => $tabCounts($request->user()),
             'candidats' => $candidats($search),
             // Fiches vides ayant un jumeau du même nom avec inscriptions —
             // closure : la recherche (only: ['candidats']) ne la recalcule pas.

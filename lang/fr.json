@@ -1772,5 +1772,16 @@
     "fully used (applied or refunded)": "entièrement utilisée (appliquée ou remboursée)",
     "fully refunded": "entièrement remboursé",
     "funded by a rejected cheque": "financé par un chèque rejeté",
-    "payments to transfer": "paiements à transférer"
+    "payments to transfer": "paiements à transférer",
+    "Archived students": "Étudiants archivés",
+    "Trash": "Corbeille",
+    "Students on pause, expected back - not counted in the total": "Étudiants en pause, retour prévu — hors du total",
+    "Student archived.": "Étudiant archivé.",
+    "Student reactivated.": "Étudiant réactivé.",
+    "A transferred student cannot be archived here - their record now lives in the destination centre.": "Un étudiant transféré ne peut pas être archivé ici : sa fiche vit désormais dans le centre d'arrivée.",
+    "This student is already archived.": "Cet étudiant est déjà archivé.",
+    "This student is not archived.": "Cet étudiant n'est pas archivé.",
+    "This student is archived (expected back on :date). Reactivate them from the « Archived students » tab first.": "Cet étudiant est archivé (retour prévu le :date). Réactivez-le d'abord depuis l'onglet « Étudiants archivés ».",
+    "Unknown account": "Compte inconnu",
+    "expected return date": "date de retour prévue"
 }

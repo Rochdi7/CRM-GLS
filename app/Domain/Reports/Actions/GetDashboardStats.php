@@ -42,6 +42,9 @@ final class GetDashboardStats
             // par le centre d'arrivée, sur sa copie (25/09/2026).
             ->where('statut', '!=', Student::STATUT_TRANSFERE)
             ->when($centreId, fn ($q) => $q->where('etablissement_id', $centreId));
+        // « Archivé » (19/10/2026) : compté À PART (`archives`), et retiré du
+        // total — la liste Étudiants ne montre plus ces fiches, l'onglet
+        // « Étudiants archivés » les porte, et la carte suit les deux.
 
         // Employees are staff — they exist regardless of academic year, so
         // they are scoped by center only (no year dimension to scope on).
@@ -134,7 +137,8 @@ final class GetDashboardStats
         // instead of one COUNT round-trip per card — the row set is scanned
         // once and every conditional total falls out of the same pass.
         $students = $studentsQuery->selectRaw(
-            'COUNT(*) AS total, COUNT(*) FILTER (WHERE parent_nom IS NOT NULL) AS parents',
+            'COUNT(*) FILTER (WHERE statut <> ?) AS total, COUNT(*) FILTER (WHERE statut = ?) AS archives, COUNT(*) FILTER (WHERE parent_nom IS NOT NULL AND statut <> ?) AS parents',
+            [Student::STATUT_ARCHIVE, Student::STATUT_ARCHIVE, Student::STATUT_ARCHIVE],
         )->toBase()->first();
 
         $employees = $employeesQuery->selectRaw(
@@ -170,6 +174,7 @@ final class GetDashboardStats
         return new DashboardStatsData(
             studentsTotal: (int) $students->total,
             studentsActifs: (int) $inscriptions->etudiants_actifs,
+            studentsArchives: (int) $students->archives,
             employeesTotal: (int) $employees->total,
             employeesActive: (int) $employees->actifs,
             enseignantsTotal: (int) $employees->enseignants,

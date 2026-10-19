@@ -15,6 +15,7 @@ use App\Domain\Registrations\Actions\MettreAJourFraisInscription;
 use App\Domain\Registrations\Actions\ModifierGroupeInscription;
 use App\Domain\Registrations\Queries\GetGroupInscriptionFees;
 use App\Domain\Registrations\Queries\GetInscriptionDetails;
+use App\Domain\Registrations\Queries\GetInscriptionsCorbeille;
 use App\Domain\Registrations\Queries\GetInscriptionFormOptions;
 use App\Domain\Registrations\Queries\GetInscriptionsList;
 use App\Domain\Settings\Queries\GetMotifsAnnulationList;
@@ -31,6 +32,7 @@ use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionRequest;
 use App\Models\Encaissement;
 use App\Models\Group;
 use App\Domain\Settings\Support\FraisEcheanceResolver;
+use App\Domain\Students\Support\GardeEtudiantArchive;
 use App\Domain\Students\Support\GardeEtudiantTransfere;
 use App\Models\Inscription;
 use App\Models\InscriptionFee;
@@ -72,6 +74,7 @@ final class InscriptionController extends Controller
         GetInscriptionsList $getInscriptionsList,
         GetInscriptionFormOptions $getInscriptionFormOptions,
         GetMotifsAnnulationList $getMotifsAnnulationList,
+        GetInscriptionsCorbeille $corbeille,
     ): Response {
         $this->authorize('viewAny', Inscription::class);
 
@@ -106,6 +109,9 @@ final class InscriptionController extends Controller
             'niveauStudium' => Student::NIVEAU_STUDIUM,
             'defaultCountry' => Countries::DEFAULT,
             'students' => $getInscriptionFormOptions->students($request->user()),
+            // Badge de l'onglet « Corbeille » (19/10/2026) — closure : une
+            // recherche (only: [...]) ne le recalcule pas.
+            'tabCounts' => fn () => ['/backoffice/inscriptions/corbeille' => $corbeille->tabCount($request->user())],
             'groups' => $getInscriptionFormOptions->groups($request->user()),
             // « Changement de groupe » is the ONE flow allowed to cross
             // academic years, so it gets its own unfiltered-by-year option
@@ -555,8 +561,10 @@ final class InscriptionController extends Controller
             $student = Student::findOrFail((int) $data['student_id']);
             $this->assertStudentInContext($request, $student);
             // Une fiche « Transféré » est close ici : son dossier vit sur
-            // la copie du centre d'arrivée (GardeEtudiantTransfere).
+            // la copie du centre d'arrivée (GardeEtudiantTransfere). Une
+            // fiche « Archivé » se RÉACTIVE d'abord (GardeEtudiantArchive).
             GardeEtudiantTransfere::assertNonTransfere($student);
+            GardeEtudiantArchive::assertNonArchive($student);
         }
         $this->assertFeeLinesBelongToGroup($group, $data['fee_lines'] ?? []);
 
@@ -786,6 +794,7 @@ final class InscriptionController extends Controller
         $student = Student::findOrFail((int) $data['student_id']);
         $this->assertStudentInContext($request, $student);
         GardeEtudiantTransfere::assertNonTransfere($student);
+        GardeEtudiantArchive::assertNonArchive($student);
 
         // Once money has been received on this registration its student is
         // frozen: the payments carry that student_id, and re-pointing the
@@ -972,7 +981,7 @@ final class InscriptionController extends Controller
         // try/catch stays as the second line of defence (the DB restrict on
         // encaissements.inscription_fee_id).
         try {
-            $supprimer->handle($inscription, $request->user()?->employee);
+            $supprimer->handle($inscription, $request->user()?->employee, $request->user());
         } catch (QueryException) {
             throw ValidationException::withMessages([
                 'delete' => __('This registration has payments and cannot be deleted.'),

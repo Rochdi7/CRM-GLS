@@ -3,11 +3,13 @@ import type { NouvelleInscriptionStudent, NouvellesInscriptionsChartData, Nouvel
 import { t } from '@/Lib/i18n';
 import { statutVariant } from '@/Lib/inscriptionStatut';
 import Modal from '@/Components/Modals/Modal';
+import DateField from '@/Components/Forms/DateField';
 import { PagerFooter } from '@/Components/Tables/Pagination';
 
 interface NouvellesInscriptionsChartProps {
     data: NouvellesInscriptionsChartData;
-    onDureeChange: (duree: NouvellesInscriptionsDuree) => void;
+    /** A preset, or 'periode' with the « Du » / « Au » pair (yyyy-mm-dd). */
+    onDureeChange: (duree: NouvellesInscriptionsDuree, debut?: string, fin?: string) => void;
     loading?: boolean;
 }
 
@@ -43,7 +45,6 @@ const DUREES: { value: NouvellesInscriptionsDuree; label: string }[] = [
     { value: '3m', label: '3 months' },
     { value: '6m', label: '6 months' },
     { value: '12m', label: '12 months' },
-    { value: 'annee', label: 'Academic year' },
 ];
 
 /**
@@ -85,9 +86,42 @@ function niceMax(max: number): number {
  * creates a row. The duration buttons re-query the server (partial reload),
  * nothing is filtered client-side. Same measured-width SVG approach as
  * AnnualFraisChart so 11px labels stay 11px on every screen.
+ *
+ * « Du » / « Au » (19/10/2026) replace the old « Année scolaire » button: a
+ * free window, sent as `periode` once BOTH dates are chosen and in order.
+ * The pickers echo what the server actually queried (`data.debut/fin`), and
+ * a preset click empties them so the bar never shows two active choices.
  */
 export default function NouvellesInscriptionsChart({ data, onDureeChange, loading = false }: NouvellesInscriptionsChartProps) {
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+    const [debut, setDebut] = useState(data.debut ?? '');
+    const [fin, setFin] = useState(data.fin ?? '');
+    const periodeActive = data.duree === 'periode';
+
+    useEffect(() => {
+        if (data.duree === 'periode') {
+            setDebut(data.debut ?? '');
+            setFin(data.fin ?? '');
+        }
+    }, [data.duree, data.debut, data.fin]);
+
+    function choosePreset(value: NouvellesInscriptionsDuree) {
+        if (value === data.duree) return;
+        setDebut('');
+        setFin('');
+        onDureeChange(value);
+    }
+
+    function choosePeriode(nextDebut: string, nextFin: string) {
+        setDebut(nextDebut);
+        setFin(nextFin);
+        // Reload only once the pair is complete and ordered — half a window
+        // is not a window, and the server would fall back to today anyway.
+        if (nextDebut && nextFin && nextDebut <= nextFin && (nextDebut !== data.debut || nextFin !== data.fin)) {
+            onDureeChange('periode', nextDebut, nextFin);
+        }
+    }
+    const periodeInverse = debut !== '' && fin !== '' && debut > fin;
     const containerRef = useRef<HTMLDivElement | null>(null);
     const [WIDTH, setWidth] = useState(FALLBACK_WIDTH);
     const [detail, setDetail] = useState<BarDetail | null>(null);
@@ -113,6 +147,10 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
         let status = 0;
         try {
             const params = new URLSearchParams({ duree: data.duree, key: data.keys[i], page: String(page) });
+            if (data.duree === 'periode' && data.debut && data.fin) {
+                params.set('debut', data.debut);
+                params.set('fin', data.fin);
+            }
             const response = await fetch(`/backoffice/dashboard/nouvelles-inscriptions?${params.toString()}`, {
                 headers: { Accept: 'application/json' },
             });
@@ -189,11 +227,36 @@ export default function NouvellesInscriptionsChart({ data, onDureeChange, loadin
                                 className={`btn ${data.duree === d.value ? 'btn-primary' : 'btn-outline-light text-body'}`}
                                 aria-pressed={data.duree === d.value}
                                 disabled={loading}
-                                onClick={() => d.value !== data.duree && onDureeChange(d.value)}
+                                onClick={() => choosePreset(d.value)}
                             >
                                 {t(d.label)}
                             </button>
                         ))}
+                    </div>
+                    <div
+                        className={`d-flex align-items-center gap-2 gls-duree-dates${periodeActive ? ' is-active' : ''}`}
+                        role="group"
+                        aria-label={t('Period')}
+                    >
+                        <span className="text-muted fs-13">{t('From')}</span>
+                        <DateField
+                            id="insc-periode-debut"
+                            value={debut}
+                            disabled={loading}
+                            panelAlign="right"
+                            onChange={(e) => choosePeriode(e.target.value, fin)}
+                        />
+                        <span className="text-muted fs-13">{t('To')}</span>
+                        <DateField
+                            id="insc-periode-fin"
+                            value={fin}
+                            disabled={loading}
+                            panelAlign="right"
+                            onChange={(e) => choosePeriode(debut, e.target.value)}
+                        />
+                        {periodeInverse && (
+                            <span className="text-danger fs-12">{t('The end date must be on or after the start date.')}</span>
+                        )}
                     </div>
                 </div>
             </div>

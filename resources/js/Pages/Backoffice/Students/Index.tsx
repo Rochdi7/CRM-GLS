@@ -134,8 +134,19 @@ export default function StudentsIndex({
     transferCentres,
     permissions,
     tabCounts,
+    archivesView,
 }: StudentsPageProps) {
     const isLoading = useInertiaLoading();
+    // Archiver (19/10/2026) : motif + date de retour obligatoires ; la fiche
+    // sort de la liste courante vers l'onglet « Étudiants archivés ».
+    const [archiveTarget, setArchiveTarget] = useState<StudentRow | null>(null);
+    const archiveForm = useForm<{ motif: string; date_retour: string }>({ motif: '', date_retour: '' });
+    const [reactivateTarget, setReactivateTarget] = useState<StudentRow | null>(null);
+    const [reactivateError, setReactivateError] = useState<string | undefined>(undefined);
+    const [reactivateProcessing, setReactivateProcessing] = useState(false);
+    const listUrl = archivesView ? '/backoffice/students/archives' : '/backoffice/students';
+    // Refus métier de l'action (fiche transférée / déjà archivée) — clé `archive`, hors des champs du formulaire.
+    const archiveFormError = (archiveForm.errors as Record<string, string | undefined>).archive;
     const [transferTarget, setTransferTarget] = useState<StudentRow | null>(null);
     const [transferGroups, setTransferGroups] = useState<GroupeCibleTransfert[]>([]);
     const [transferGroupsLoading, setTransferGroupsLoading] = useState(false);
@@ -185,13 +196,56 @@ export default function StudentsIndex({
 
     function reload(nextFilters: Partial<typeof filters>) {
         router.get(
-            '/backoffice/students',
+            listUrl,
             { ...filters, ...nextFilters, page: undefined },
             { preserveState: true, preserveScroll: true, replace: true },
         );
     }
 
     const filterReset = useFilterReset(filters, reload, { perPage: filters.perPage });
+
+    function openArchive(student: StudentRow) {
+        archiveForm.clearErrors();
+        archiveForm.setData({ motif: '', date_retour: '' });
+        setArchiveTarget(student);
+    }
+
+    function closeArchive() {
+        setArchiveTarget(null);
+        archiveForm.reset();
+        archiveForm.clearErrors();
+    }
+
+    function submitArchive(event: FormEvent) {
+        event.preventDefault();
+        if (!archiveTarget) {
+            return;
+        }
+        archiveForm.post(`/backoffice/students/${archiveTarget.id}/archiver`, {
+            preserveScroll: true,
+            onSuccess: () => closeArchive(),
+        });
+    }
+
+    function handleReactivate() {
+        if (!reactivateTarget) {
+            return;
+        }
+        setReactivateProcessing(true);
+        router.post(
+            `/backoffice/students/${reactivateTarget.id}/reactiver`,
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setReactivateTarget(null);
+                    setReactivateError(undefined);
+                },
+                onError: (errors) => setReactivateError(errors.archive ?? 'Réactivation impossible.'),
+                onFinish: () => setReactivateProcessing(false),
+            },
+        );
+    }
 
     function toggleAgeSort() {
         reload({ ageSort: filters.ageSort === 'asc' ? 'desc' : 'asc' });
@@ -416,10 +470,18 @@ export default function StudentsIndex({
 
     return (
         <BackofficeLayout
-            title="Étudiants"
-            breadcrumbs={[{ label: 'Tableau de bord', href: '/backoffice/dashboard' }, { label: 'Étudiants' }]}
+            title={archivesView ? 'Étudiants archivés' : 'Étudiants'}
+            breadcrumbs={
+                archivesView
+                    ? [
+                          { label: 'Tableau de bord', href: '/backoffice/dashboard' },
+                          { label: 'Étudiants', href: '/backoffice/students' },
+                          { label: 'Étudiants archivés' },
+                      ]
+                    : [{ label: 'Tableau de bord', href: '/backoffice/dashboard' }, { label: 'Étudiants' }]
+            }
             actions={
-                permissions.create ? (
+                permissions.create && !archivesView ? (
                     <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
                         <i className="ti ti-square-rounded-plus me-2" />
                         Ajouter un étudiant
@@ -429,7 +491,17 @@ export default function StudentsIndex({
         >
             <PageTabs tabs={STUDENTS_TABS} counts={tabCounts} />
 
-            <Card title="Étudiants" bodyClassName="p-0 py-3">
+            <Card title={archivesView ? 'Étudiants archivés' : 'Étudiants'} bodyClassName="p-0 py-3">
+                {archivesView && (
+                    <div className="alert alert-info mx-3 mt-2 mb-0 fs-13 d-flex align-items-start" role="alert">
+                        <i className="ti ti-archive me-2 mt-1" aria-hidden="true" />
+                        <div>
+                            Fiches mises en pause : l'étudiant a interrompu ses cours et doit revenir à la date indiquée.
+                            Rien d'autre ne bouge (inscriptions, présences, paiements). À son retour, « Réactiver » le
+                            remet dans la liste des étudiants.
+                        </div>
+                    </div>
+                )}
                 {/* Per-column filter row (reference CRM's Étudiants filters,
                     without Catégorie d'âge) — replaces the single search box
                     AND the "Filtrer" dropdown (Niveau/Centre moved in here). */}
@@ -537,7 +609,15 @@ export default function StudentsIndex({
 
 
                 {students.data.length === 0 ? (
-                    <EmptyState title="Aucun étudiant" message="Ajoutez votre premier étudiant pour commencer." icon="ti ti-school" />
+                    archivesView ? (
+                        <EmptyState
+                            title="Aucun étudiant archivé"
+                            message="Les fiches mises en pause (menu « ⋯ » → « Archiver » sur un étudiant) apparaîtront ici."
+                            icon="ti ti-archive"
+                        />
+                    ) : (
+                        <EmptyState title="Aucun étudiant" message="Ajoutez votre premier étudiant pour commencer." icon="ti ti-school" />
+                    )
                 ) : (
                     <>
                         <DataTable
@@ -564,6 +644,14 @@ export default function StudentsIndex({
                                         </a>
                                     </th>
                                     {!centerLocked && <th>Centre</th>}
+                                    {archivesView && (
+                                        <>
+                                            <th>Motif</th>
+                                            <th>Retour prévu</th>
+                                            <th>Archivé le</th>
+                                            <th>Par</th>
+                                        </>
+                                    )}
                                     <th>Livre</th>
                                     <th>Téléphone</th>
                                     <th>WhatsApp</th>
@@ -609,6 +697,18 @@ export default function StudentsIndex({
                                                 )}
                                             </div>
                                         )}
+                                        {student.statut === 'Archivé' && (
+                                            <div className="mt-1">
+                                                <StatusBadge
+                                                    label={student.archiveRetourDepasse ? 'Archivé — retour dépassé' : 'Archivé'}
+                                                    variant={student.archiveRetourDepasse ? 'danger' : 'warning'}
+                                                    dot
+                                                />
+                                                {student.archiveDateRetour && !archivesView && (
+                                                    <span className="ms-1 fs-12 text-muted">retour prévu le {student.archiveDateRetour}</span>
+                                                )}
+                                            </div>
+                                        )}
                                         {student.transfereDepuis && (
                                             <div className="mt-1 fs-12 text-muted">
                                                 <i className="ti ti-arrows-exchange me-1" />
@@ -633,6 +733,27 @@ export default function StudentsIndex({
                                     </td>
                                     <td>{student.age ?? '-'}</td>
                                     {!centerLocked && <td>{student.etablissement ?? '-'}</td>}
+                                    {archivesView && (
+                                        <>
+                                            <td className="text-normal-case" style={{ maxWidth: 260, whiteSpace: 'normal' }}>
+                                                {student.archiveMotif ?? '-'}
+                                            </td>
+                                            <td>
+                                                {student.archiveDateRetour ? (
+                                                    <span className={student.archiveRetourDepasse ? 'text-danger fw-semibold' : ''}>
+                                                        {student.archiveDateRetour}
+                                                        {student.archiveRetourDepasse && (
+                                                            <span className="badge badge-soft-danger ms-1">Dépassé</span>
+                                                        )}
+                                                    </span>
+                                                ) : (
+                                                    '-'
+                                                )}
+                                            </td>
+                                            <td>{student.archiveLe ?? '-'}</td>
+                                            <td>{student.archivePar ?? '-'}</td>
+                                        </>
+                                    )}
                                     <td>
                                         {student.livres.length === 0 ? (
                                             <span className="badge badge-soft-secondary">Sans livre</span>
@@ -654,14 +775,30 @@ export default function StudentsIndex({
                                     <td>{student.telephone ?? '-'}</td>
                                     <td>{student.whatsapp ?? '-'}</td>
                                     <td className="text-end">
-                                        {(permissions.update || permissions.delete || permissions.transfer) && (
+                                        {(permissions.update || permissions.delete || permissions.transfer || permissions.archive) && (
                                             <RowActions>
                                                 {permissions.update && (
                                                     <RowActionItem icon="ti-edit" onClick={() => openEdit(student)}>
                                                         Modifier
                                                     </RowActionItem>
                                                 )}
-                                                {permissions.transfer && student.statut !== 'Transféré' && (
+                                                {permissions.archive && student.statut === 'Actif' && (
+                                                    <RowActionItem icon="ti-archive" onClick={() => openArchive(student)}>
+                                                        Archiver
+                                                    </RowActionItem>
+                                                )}
+                                                {permissions.archive && student.statut === 'Archivé' && (
+                                                    <RowActionItem
+                                                        icon="ti-archive-off"
+                                                        onClick={() => {
+                                                            setReactivateError(undefined);
+                                                            setReactivateTarget(student);
+                                                        }}
+                                                    >
+                                                        Réactiver
+                                                    </RowActionItem>
+                                                )}
+                                                {permissions.transfer && student.statut === 'Actif' && (
                                                     <RowActionItem icon="ti-arrows-exchange" onClick={() => void openTransfer(student)}>
                                                         Demander un transfert
                                                     </RowActionItem>
@@ -1112,6 +1249,67 @@ export default function StudentsIndex({
                     </div>
                 </form>
             </Modal>
+
+            <Modal show={archiveTarget !== null} title="Archiver l'étudiant" onClose={closeArchive} processing={archiveForm.processing}>
+                <form onSubmit={submitArchive}>
+                    <div className="alert alert-info fs-13 d-flex align-items-start" role="alert">
+                        <i className="ti ti-archive me-2 mt-1" aria-hidden="true" />
+                        <div>
+                            <span className="fw-semibold">{enCapitales(archiveTarget?.nomComplet)}</span> interrompt ses cours et
+                            reviendra plus tard. La fiche passe dans « Étudiants archivés » jusqu'à sa réactivation ; aucune
+                            inscription ni aucun paiement n'est modifié.
+                        </div>
+                    </div>
+                    <TextareaField
+                        id="arch-motif"
+                        label="Motif"
+                        rows={3}
+                        value={archiveForm.data.motif}
+                        onChange={(event) => archiveForm.setData('motif', event.target.value)}
+                        error={archiveForm.errors.motif}
+                        maxLength={1000}
+                        placeholder="ex : voyage, examens, raisons de santé…"
+                        required
+                    />
+                    <DateField
+                        id="arch-date-retour"
+                        label="Date de retour prévue"
+                        value={archiveForm.data.date_retour}
+                        onChange={(event) => archiveForm.setData('date_retour', event.target.value)}
+                        error={archiveForm.errors.date_retour}
+                        required
+                    />
+                    {archiveFormError && <div className="alert alert-danger fs-13">{archiveFormError}</div>}
+                    <div className="d-flex justify-content-end gap-2 mt-4">
+                        <FormActions onCancel={closeArchive} processing={archiveForm.processing} submitLabel="Archiver" />
+                    </div>
+                </form>
+            </Modal>
+
+            <ConfirmDialog
+                show={reactivateTarget !== null}
+                title="Réactiver l'étudiant"
+                recordLabel={enCapitales(reactivateTarget?.nomComplet)}
+                message="L'étudiant est de retour ? Sa fiche redevient active et réapparaît dans la liste des étudiants."
+                error={reactivateError}
+                processing={reactivateProcessing}
+                icon="ti-archive-off"
+                variant="primary"
+                confirmLabel="Oui, réactiver"
+                processingLabel="Réactivation..."
+                onConfirm={handleReactivate}
+                onCancel={() => {
+                    setReactivateTarget(null);
+                    setReactivateError(undefined);
+                }}
+            >
+                {reactivateTarget?.archiveMotif && (
+                    <p className="fs-13 text-muted mb-0">
+                        Archivé le {reactivateTarget.archiveLe ?? '-'} — retour prévu le {reactivateTarget.archiveDateRetour ?? '-'} :{' '}
+                        {reactivateTarget.archiveMotif}
+                    </p>
+                )}
+            </ConfirmDialog>
 
             <ConfirmDialog
                 show={deleteTarget !== null}

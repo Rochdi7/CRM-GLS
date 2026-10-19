@@ -5084,6 +5084,23 @@ html[data-theme='dark'] .gls-welcome-box {
     }
 }
 
+/* --- « Nouvelles inscriptions » : fenêtre libre « Du » / « Au » ------------
+ * Deux DateField compacts à côté des boutons de durée (19/10/2026, à la
+ * place du bouton « Année scolaire »). Même hauteur que les .btn-sm du
+ * groupe ; le cadre passe en primaire quand c'est la période qui est
+ * affichée, comme le bouton actif. */
+.gls-duree-dates .form-control {
+    width: 118px;
+    min-height: 0;
+    height: calc(1.5em + 0.5rem + 2px);
+    padding: 0.25rem 2rem 0.25rem 0.5rem;
+    font-size: 0.8125rem;
+}
+.gls-duree-dates.is-active .form-control {
+    border-color: var(--bs-primary);
+    box-shadow: 0 0 0 1px var(--bs-primary) inset;
+}
+
 /* --- Mobile : sélecteur de période du graphique « Nouvelles inscriptions » -
  * Sept boutons sur une ligne (~395 px) dépassaient un écran de 390 px : la
  * page entière s'élargissait et laissait une bande blanche à droite. Sur
@@ -5108,6 +5125,13 @@ html[data-theme='dark'] .gls-welcome-box {
     .gls-duree-group > .btn {
         flex: 0 0 auto;
         white-space: nowrap;
+    }
+    .gls-duree-dates {
+        width: 100%;
+        flex-wrap: wrap;
+    }
+    .gls-duree-dates .form-control {
+        width: 110px;
     }
 }
 

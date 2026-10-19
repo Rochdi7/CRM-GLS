@@ -7,7 +7,9 @@ namespace App\Domain\Registrations\Actions;
 use App\Models\Employee;
 use App\Models\Encaissement;
 use App\Models\Inscription;
+use App\Models\InscriptionCorbeille;
 use App\Models\Remboursement;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -43,14 +45,22 @@ use Illuminate\Validation\ValidationException;
  * Chaque détachement passe par `save()` (journalisé par Auditable) et la
  * suppression écrit une entrée qui nomme le dossier, les paiements et leurs
  * frais — une fois l'inscription effacée, c'est la seule trace du lien.
+ *
+ * Depuis le 19/10/2026 la suppression écrit AUSSI une ligne dans
+ * `inscriptions_corbeille` (append-only), dans la même transaction : ce
+ * qu'était le dossier et QUI l'a supprimé — c'est ce que l'onglet
+ * « Corbeille » de la page Inscriptions liste et compte par personne.
+ * `$supprimePar` est le compte qui agit (le contrôleur passe
+ * `$request->user()`) ; un appel console sans utilisateur laisse l'auteur
+ * vide, jamais deviné.
  */
 final class SupprimerInscription
 {
     public function __construct(private readonly AssignerLivresInscription $assignerLivres) {}
 
-    public function handle(Inscription $inscription, ?Employee $agent): void
+    public function handle(Inscription $inscription, ?Employee $agent, ?User $supprimePar = null): void
     {
-        DB::transaction(function () use ($inscription, $agent): void {
+        DB::transaction(function () use ($inscription, $agent, $supprimePar): void {
             $encaissements = Encaissement::query()
                 ->with('fee')
                 ->whereIn('inscription_fee_id', $inscription->fees()->select('id'))
@@ -123,8 +133,49 @@ final class SupprimerInscription
                         count($detaches),
                     ));
 
+            $this->deposerDansLaCorbeille($inscription, $detaches, $supprimePar);
+
             $inscription->delete();
         });
+    }
+
+    /**
+     * La ligne de corbeille : une photographie du dossier + l'auteur, figée
+     * (les noms sont recopiés, les FK sont en SET NULL — la ligne doit
+     * survivre à la disparition du groupe, de l'année ou du compte).
+     *
+     * @param  list<array<string, mixed>>  $detaches
+     */
+    private function deposerDansLaCorbeille(Inscription $inscription, array $detaches, ?User $supprimePar): void
+    {
+        $inscription->loadMissing(['student:id,reference,nom,prenom']);
+
+        $label = null;
+        if ($supprimePar !== null) {
+            $name = trim((string) $supprimePar->name);
+            $handle = $supprimePar->username ?: $supprimePar->email;
+            $label = $name !== '' ? ($handle ? "{$name} ({$handle})" : $name) : ($handle ?: null);
+        }
+
+        InscriptionCorbeille::create([
+            'inscription_id' => $inscription->id,
+            'reference' => $inscription->reference,
+            'student_id' => $inscription->student_id,
+            'student_reference' => $inscription->student?->reference,
+            'student_nom' => $inscription->student?->nomComplet(),
+            'etablissement_id' => $inscription->etablissement_id,
+            'annee_scolaire_id' => $inscription->annee_scolaire_id,
+            'annee_nom' => $inscription->anneeScolaire?->nom,
+            'group_id' => $inscription->group_id,
+            'groupe_nom' => $inscription->group?->nom,
+            'statut' => $inscription->statut,
+            'date_inscription' => $inscription->date_inscription?->toDateString(),
+            'montant_total' => $inscription->montant_total,
+            'paiements_detaches' => $detaches === [] ? null : $detaches,
+            'supprime_par_user_id' => $supprimePar?->id,
+            'supprime_par_label' => $label !== null ? mb_substr($label, 0, 200) : null,
+            'supprime_le' => now(),
+        ]);
     }
 
     private function estIntegralementRembourse(Encaissement $encaissement): bool

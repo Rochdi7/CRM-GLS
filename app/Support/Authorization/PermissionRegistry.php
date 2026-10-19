@@ -114,6 +114,11 @@ final class PermissionRegistry
                 'students.create' => 'Créer un étudiant',
                 'students.update' => 'Modifier un étudiant',
                 'students.delete' => 'Supprimer un étudiant',
+                // Mettre une fiche en pause (19/10/2026) : l'étudiant
+                // interrompt ses cours et reviendra — motif + date de retour,
+                // onglet « Étudiants archivés », réactivation d'un clic.
+                // Aucune inscription ni aucun argent ne bouge.
+                'students.archive' => 'Archiver / réactiver un étudiant (absence temporaire)',
                 // ⚠ Recolle DEUX fiches en une : l'ancien CRM (et une double
                 // saisie au comptoir) tient la même personne deux fois, si
                 // bien que ses inscriptions sont sur une fiche et ses
@@ -889,7 +894,7 @@ final class PermissionRegistry
             // (aucun preset ne porte de `*.delete`, cf. superAdminOnly()).
             'rooms.view', 'rooms.create', 'rooms.update',
             'fees.view',
-            'students.view', 'students.create', 'students.update',
+            'students.view', 'students.create', 'students.update', 'students.archive',
             'registrations.view', 'registrations.create', 'registrations.update',
             // Delegated to every role (31/08/2026) — only a registration with
             // no payment at all can actually be deleted, see superAdminOnly().
