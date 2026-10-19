@@ -37,14 +37,19 @@ final class GetInscriptionsList
         int $perPage = self::DEFAULT_PER_PAGE,
         string $referenceFilter = '',
         string $studentFilter = '',
+        bool $archives = false,
     ): LengthAwarePaginator {
         if (! in_array($perPage, self::PER_PAGE_OPTIONS, true)) {
             $perPage = self::DEFAULT_PER_PAGE;
         }
 
         $inscriptions = Inscription::query()
-            ->with(['student', 'group'])
+            ->with(['student', 'group', 'archivePar:id,name'])
             ->withCount(['fees' => fn ($q) => $q->whereNull('masque_le')])
+            // « Archivée » (19/10/2026) : un dossier en pause sort de la liste
+            // courante et n'apparaît QUE sur l'onglet « Inscriptions
+            // archivées » (`$archives`, qui impose `statutFilter = Archivée`).
+            ->when(! $archives, fn ($q) => $q->where('statut', '!=', Inscription::STATUT_ARCHIVEE))
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(function ($q): void {
                 if (! $this->context->isAllCenters()) {
@@ -89,9 +94,38 @@ final class GetInscriptionsList
             'montantTotal' => $inscription->montant_total !== null ? number_format((float) $inscription->montant_total, 2, '.', '') : null,
             'feesCount' => $inscription->fees_count,
             'statut' => $inscription->statut,
+            // Pause (19/10/2026) : motif, retour prévu, qui et quand ; une
+            // ligne legacy « Archivée » n'en a aucun. `archiveRetourDepasse`
+            // vient du serveur (date passée, dossier pas réactivé).
+            'archiveMotif' => $inscription->archive_motif,
+            'archiveDateRetour' => $inscription->archive_date_retour?->format('d/m/Y'),
+            'archiveRetourDepasse' => $inscription->estArchivee()
+                && $inscription->archive_date_retour !== null
+                && $inscription->archive_date_retour->lt(now()->startOfDay()),
+            'archiveLe' => $inscription->archive_le?->format('d/m/Y H:i'),
+            'archivePar' => $inscription->archivePar?->name,
             'showUrl' => route('backoffice.inscriptions.show', $inscription),
         ]);
 
         return $inscriptions;
+    }
+
+    /**
+     * Nombre de dossiers « Archivée » dans la portée (centres affectés, centre
+     * actif, année active) — la MÊME que la liste, pour que le badge de
+     * l'onglet et l'onglet lui-même disent le même chiffre.
+     */
+    public function archiveesCount(User $user): int
+    {
+        return Inscription::query()
+            ->where('statut', Inscription::STATUT_ARCHIVEE)
+            ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
+            ->tap(function ($q): void {
+                if (! $this->context->isAllCenters()) {
+                    $q->where(fn ($sub) => $sub->whereNull('etablissement_id')->orWhere('etablissement_id', $this->context->etablissementId()));
+                }
+            })
+            ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
+            ->count();
     }
 }

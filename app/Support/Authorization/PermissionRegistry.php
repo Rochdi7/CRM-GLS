@@ -114,11 +114,6 @@ final class PermissionRegistry
                 'students.create' => 'Créer un étudiant',
                 'students.update' => 'Modifier un étudiant',
                 'students.delete' => 'Supprimer un étudiant',
-                // Mettre une fiche en pause (19/10/2026) : l'étudiant
-                // interrompt ses cours et reviendra — motif + date de retour,
-                // onglet « Étudiants archivés », réactivation d'un clic.
-                // Aucune inscription ni aucun argent ne bouge.
-                'students.archive' => 'Archiver / réactiver un étudiant (absence temporaire)',
                 // ⚠ Recolle DEUX fiches en une : l'ancien CRM (et une double
                 // saisie au comptoir) tient la même personne deux fois, si
                 // bien que ses inscriptions sont sur une fiche et ses
@@ -157,6 +152,11 @@ final class PermissionRegistry
                 'registrations.delete' => 'Supprimer une inscription',
                 'registrations.manage-fees' => 'Gérer les frais d\'inscription',
                 'registrations.change-group' => 'Changer le groupe d\'une inscription',
+                // Mettre un dossier en PAUSE (19/10/2026) : l'étudiant
+                // interrompt ce cours et reviendra — motif + date de retour,
+                // onglet « Inscriptions archivées », réactivation d'un clic.
+                // Aucun frais masqué, aucun argent déplacé.
+                'registrations.archive' => 'Archiver / réactiver une inscription (pause, retour prévu)',
             ],
             'Groupes' => [
                 'groups.view' => 'Consulter les groupes et leur historique',
@@ -894,12 +894,13 @@ final class PermissionRegistry
             // (aucun preset ne porte de `*.delete`, cf. superAdminOnly()).
             'rooms.view', 'rooms.create', 'rooms.update',
             'fees.view',
-            'students.view', 'students.create', 'students.update', 'students.archive',
+            'students.view', 'students.create', 'students.update',
             'registrations.view', 'registrations.create', 'registrations.update',
             // Delegated to every role (31/08/2026) — only a registration with
             // no payment at all can actually be deleted, see superAdminOnly().
             'registrations.delete',
             'registrations.manage-fees', 'registrations.change-group',
+            'registrations.archive',
             'groups.view', 'groups.create', 'groups.update', 'groups.archive',
             'groups.change-teacher',
             'attendance.view', 'attendance.create', 'attendance.update', 'attendance.mark',

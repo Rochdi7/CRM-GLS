@@ -2,18 +2,17 @@
 
 declare(strict_types=1);
 
-namespace App\Http\Requests\Backoffice\Students;
+namespace App\Http\Requests\Backoffice\Inscriptions;
 
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * Archiver un étudiant (19/10/2026) : un MOTIF et une DATE DE RETOUR
- * prévue, tous deux obligatoires — sans eux l'onglet « Étudiants
- * archivés » ne dirait ni pourquoi la personne est partie ni quand la
- * rappeler. La date est au plus tôt demain : archiver quelqu'un « de
- * retour hier » n'a pas de sens.
+ * Archiver une inscription (19/10/2026) : un MOTIF et une DATE DE RETOUR
+ * prévue, tous deux obligatoires — sans eux l'onglet « Inscriptions
+ * archivées » ne dirait ni pourquoi le dossier est en pause ni quand
+ * rappeler l'étudiant. La date est au plus tôt demain.
  */
-final class ArchiveStudentRequest extends FormRequest
+final class ArchiveInscriptionRequest extends FormRequest
 {
     public function authorize(): bool
     {

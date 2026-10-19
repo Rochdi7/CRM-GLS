@@ -14,8 +14,6 @@ final class DashboardStatsData
         public readonly int $studentsTotal,
         /** Distinct students holding an Active inscription in the active année. */
         public readonly int $studentsActifs,
-        /** Fiches « Archivé » du centre (en pause, retour prévu) — hors de studentsTotal. */
-        public readonly int $studentsArchives,
         public readonly int $employeesTotal,
         public readonly int $employeesActive,
         public readonly int $enseignantsTotal,
@@ -29,6 +27,8 @@ final class DashboardStatsData
         public readonly int $inscriptionsActives,
         public readonly int $inscriptionsAnnulees,
         public readonly int $inscriptionsChangement,
+        /** Dossiers « Archivée » (en pause, retour prévu) — onglet « Inscriptions archivées ». */
+        public readonly int $inscriptionsArchivees,
         public readonly float $paymentsMonth,
         public readonly float $depensesMonth,
         public readonly int $depensesMonthCount,
@@ -47,10 +47,10 @@ final class DashboardStatsData
     }
 
     /**
-     * @return array{studentsTotal: int, studentsActifs: int, studentsArchives: int, employeesTotal: int, employeesActive: int,
+     * @return array{studentsTotal: int, studentsActifs: int, employeesTotal: int, employeesActive: int,
      *     enseignantsTotal: int, parentsTotal: int, groupsTotal: int, groupsEnFormation: int, groupsEnInscription: int,
      *     groupsTermines: int, groupsAnnules: int, inscriptionsTotal: int,
-     *     inscriptionsActives: int, inscriptionsAnnulees: int, inscriptionsChangement: int, paymentsMonth: string,
+     *     inscriptionsActives: int, inscriptionsAnnulees: int, inscriptionsChangement: int, inscriptionsArchivees: int, paymentsMonth: string,
      *     depensesMonth: string, depensesMonthCount: int, anneeLabel: ?string, centreLabel: ?string}
      */
     public function toArray(): array
@@ -58,7 +58,6 @@ final class DashboardStatsData
         return [
             'studentsTotal' => $this->studentsTotal,
             'studentsActifs' => $this->studentsActifs,
-            'studentsArchives' => $this->studentsArchives,
             'employeesTotal' => $this->employeesTotal,
             'employeesActive' => $this->employeesActive,
             'enseignantsTotal' => $this->enseignantsTotal,
@@ -72,6 +71,7 @@ final class DashboardStatsData
             'inscriptionsActives' => $this->inscriptionsActives,
             'inscriptionsAnnulees' => $this->inscriptionsAnnulees,
             'inscriptionsChangement' => $this->inscriptionsChangement,
+            'inscriptionsArchivees' => $this->inscriptionsArchivees,
             // String, fixed 2-decimal — money is never floated to the client
             // (CLAUDE.md §17 Money rules; the source column is decimal(12,2)).
             'paymentsMonth' => number_format($this->paymentsMonth, 2, '.', ''),

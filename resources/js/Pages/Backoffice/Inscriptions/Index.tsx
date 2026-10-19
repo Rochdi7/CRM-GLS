@@ -85,6 +85,11 @@ function rowFromNouvelleInscription(nouvelle: NouvelleInscription): InscriptionR
         // A registration always starts Active (forced server-side in
         // InscriptionController@store), which is also what gates payment.
         statut: 'Active',
+        archiveMotif: null,
+        archiveDateRetour: null,
+        archiveRetourDepasse: false,
+        archiveLe: null,
+        archivePar: null,
         showUrl: `/backoffice/inscriptions/${nouvelle.id}`,
     };
 }
@@ -296,6 +301,8 @@ export default function InscriptionsIndex({
     methodesPaiement,
     canUpdatePaymentDate,
     tabCounts,
+    archivesView,
+    canArchive,
 }: InscriptionsPageProps) {
     const isLoading = useInertiaLoading();
     const [showModal, setShowModal] = useState(false);
@@ -579,6 +586,13 @@ export default function InscriptionsIndex({
         { inscription: InscriptionRow; statut: 'Active' | 'Changement' } | null
     >(null);
     const [cancelTarget, setCancelTarget] = useState<InscriptionRow | null>(null);
+    // Archiver (19/10/2026) : motif + date de retour obligatoires ; le dossier
+    // sort de la liste courante vers l'onglet « Inscriptions archivées ».
+    const [archiveTarget, setArchiveTarget] = useState<InscriptionRow | null>(null);
+    const archiveForm = useForm<{ motif: string; date_retour: string }>({ motif: '', date_retour: '' });
+    const [reactivateTarget, setReactivateTarget] = useState<InscriptionRow | null>(null);
+    const [reactivateError, setReactivateError] = useState<string | undefined>(undefined);
+    const [reactivateProcessing, setReactivateProcessing] = useState(false);
     const [statutError, setStatutError] = useState<string | undefined>(undefined);
     const [statutProcessing, setStatutProcessing] = useState(false);
 
@@ -632,20 +646,6 @@ export default function InscriptionsIndex({
     const pendingFeesSave = useRef<InscriptionFeeLine[] | null>(null);
 
     const studentOptions: SelectOption[] = students.map((s) => ({ value: s.id, label: s.label }));
-    // Formulaire seulement : une fiche « Archivé » reste LISTÉE mais
-    // désactivée avec la raison — le serveur la refuse (GardeEtudiantArchive).
-    // Le FILTRE garde toutes les fiches : on filtre aussi les dossiers d'un
-    // étudiant archivé.
-    const studentFormOptions: SelectOption[] = students.map((s) =>
-        s.statut === 'Archivé'
-            ? {
-                  value: s.id,
-                  label: s.label,
-                  disabled: true,
-                  disabledReason: `Archivé${s.archiveDateRetour ? ` — retour prévu le ${s.archiveDateRetour}` : ''} : réactiver d'abord`,
-              }
-            : { value: s.id, label: s.label },
-    );
     const groupOptions: SelectOption[] = groups.map((g) => ({ value: g.id, label: g.label }));
     // « Changement de groupe » target list: every reachable group of every
     // academic year, narrowed by the modal's own « Année scolaire » selector
@@ -709,9 +709,11 @@ export default function InscriptionsIndex({
     const showsDomaine = niveauxAvecDomaine.includes(form.data.new_niveau);
     const showsExamen = form.data.new_niveau === niveauStudium;
 
+    const listUrl = archivesView ? '/backoffice/inscriptions/archivees' : '/backoffice/inscriptions';
+
     function reload(nextFilters: Partial<typeof filters>) {
         router.get(
-            '/backoffice/inscriptions',
+            listUrl,
             { ...filters, ...nextFilters, page: undefined },
             { preserveState: true, preserveScroll: true, replace: true },
         );
@@ -1424,6 +1426,52 @@ export default function InscriptionsIndex({
         cancelForm.clearErrors();
     }
 
+    function openArchive(inscription: InscriptionRow) {
+        archiveForm.clearErrors();
+        archiveForm.setData({ motif: '', date_retour: '' });
+        setArchiveTarget(inscription);
+    }
+
+    function closeArchive() {
+        setArchiveTarget(null);
+        archiveForm.reset();
+        archiveForm.clearErrors();
+    }
+
+    function submitArchive(event: FormEvent) {
+        event.preventDefault();
+        if (!archiveTarget) {
+            return;
+        }
+        archiveForm.post(`/backoffice/inscriptions/${archiveTarget.id}/archiver`, {
+            preserveScroll: true,
+            onSuccess: () => closeArchive(),
+        });
+    }
+
+    // Refus métier de l'action (dossier pas Active / pas archivé / un autre dossier Actif) — clé `archive`.
+    const archiveFormError = (archiveForm.errors as Record<string, string | undefined>).archive;
+
+    function handleReactivate() {
+        if (!reactivateTarget) {
+            return;
+        }
+        setReactivateProcessing(true);
+        router.post(
+            `/backoffice/inscriptions/${reactivateTarget.id}/reactiver`,
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setReactivateTarget(null);
+                    setReactivateError(undefined);
+                },
+                onError: (errors) => setReactivateError(errors.archive ?? 'Réactivation impossible.'),
+                onFinish: () => setReactivateProcessing(false),
+            },
+        );
+    }
+
     function submitCancel(event: FormEvent) {
         event.preventDefault();
 
@@ -1549,18 +1597,38 @@ export default function InscriptionsIndex({
 
     return (
         <BackofficeLayout
-            title="Inscriptions"
-            breadcrumbs={[{ label: 'Tableau de bord', href: '/backoffice/dashboard' }, { label: 'Inscriptions' }]}
+            title={archivesView ? 'Inscriptions archivées' : 'Inscriptions'}
+            breadcrumbs={
+                archivesView
+                    ? [
+                          { label: 'Tableau de bord', href: '/backoffice/dashboard' },
+                          { label: 'Inscriptions', href: '/backoffice/inscriptions' },
+                          { label: 'Inscriptions archivées' },
+                      ]
+                    : [{ label: 'Tableau de bord', href: '/backoffice/dashboard' }, { label: 'Inscriptions' }]
+            }
             actions={
-                <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
-                    <i className="ti ti-square-rounded-plus me-2" />
-                    Ajouter une inscription
-                </button>
+                archivesView ? undefined : (
+                    <button type="button" className="btn btn-primary d-flex align-items-center" onClick={openCreate}>
+                        <i className="ti ti-square-rounded-plus me-2" />
+                        Ajouter une inscription
+                    </button>
+                )
             }
         >
             <PageTabs tabs={INSCRIPTIONS_TABS} counts={tabCounts} />
 
-            <Card title="Inscriptions" bodyClassName="p-0 py-3">
+            <Card title={archivesView ? 'Inscriptions archivées' : 'Inscriptions'} bodyClassName="p-0 py-3">
+                {archivesView && (
+                    <div className="alert alert-info mx-3 mt-2 mb-0 fs-13 d-flex align-items-start" role="alert">
+                        <i className="ti ti-archive me-2 mt-1" aria-hidden="true" />
+                        <div>
+                            Dossiers mis en pause : l&rsquo;étudiant a interrompu ce cours et doit revenir à la date indiquée.
+                            Rien d&rsquo;autre ne bouge (frais, paiements, présences) et les échéances ne sont pas réclamées
+                            pendant la pause. À son retour, « Réactiver » remet le dossier dans la liste des inscriptions.
+                        </div>
+                    </div>
+                )}
                 {/* Per-column filter row (reference CRM's Inscriptions filters,
                     without Offres) — replaces the dropdown + single search box. */}
                 <div className="px-3 pt-2">
@@ -1589,18 +1657,20 @@ export default function InscriptionsIndex({
                                 onChange={(event) => reload({ studentFilter: event.target.value })}
                             />
                         </div>
-                        <div style={{ width: 190 }}>
-                            <label className="form-label" htmlFor="ins-f-statut">
-                                Statut
-                            </label>
-                            <SelectField
-                                id="ins-f-statut"
-                                options={statutFilterOptions}
-                                placeholder="Tous les statuts"
-                                value={filters.statutFilter}
-                                onChange={(event) => reload({ statutFilter: event.target.value })}
-                            />
-                        </div>
+                        {!archivesView && (
+                            <div style={{ width: 190 }}>
+                                <label className="form-label" htmlFor="ins-f-statut">
+                                    Statut
+                                </label>
+                                <SelectField
+                                    id="ins-f-statut"
+                                    options={statutFilterOptions}
+                                    placeholder="Tous les statuts"
+                                    value={filters.statutFilter}
+                                    onChange={(event) => reload({ statutFilter: event.target.value })}
+                                />
+                            </div>
+                        )}
                         <div style={{ width: 240 }}>
                             <label className="form-label" htmlFor="ins-f-groupe">
                                 Groupe
@@ -1632,6 +1702,14 @@ export default function InscriptionsIndex({
                                     <th>Date de début</th>
                                     <th>Date de fin</th>
                                     <th>Statut</th>
+                                    {archivesView && (
+                                        <>
+                                            <th>Motif</th>
+                                            <th>Retour prévu</th>
+                                            <th>Archivé le</th>
+                                            <th>Par</th>
+                                        </>
+                                    )}
                                     <th className="text-end">Action</th>
                                 </tr>
                             }
@@ -1647,8 +1725,36 @@ export default function InscriptionsIndex({
                                     <td>{inscription.dateDebut ?? '-'}</td>
                                     <td>{inscription.dateFin ?? '-'}</td>
                                     <td>
-                                        <StatusBadge label={inscription.statut} variant={statutVariant(inscription.statut)} dot />
+                                        <StatusBadge
+                                            label={inscription.archiveRetourDepasse ? 'Archivée — retour dépassé' : inscription.statut}
+                                            variant={inscription.archiveRetourDepasse ? 'danger' : statutVariant(inscription.statut)}
+                                            dot
+                                        />
+                                        {inscription.statut === 'Archivée' && inscription.archiveDateRetour && !archivesView && (
+                                            <div className="fs-12 text-muted">retour prévu le {inscription.archiveDateRetour}</div>
+                                        )}
                                     </td>
+                                    {archivesView && (
+                                        <>
+                                            <td className="text-normal-case text-wrap-cell" style={{ maxWidth: 260 }}>
+                                                {inscription.archiveMotif ?? '-'}
+                                            </td>
+                                            <td>
+                                                {inscription.archiveDateRetour ? (
+                                                    <span className={inscription.archiveRetourDepasse ? 'text-danger fw-semibold' : ''}>
+                                                        {inscription.archiveDateRetour}
+                                                        {inscription.archiveRetourDepasse && (
+                                                            <span className="badge badge-soft-danger ms-1">Dépassé</span>
+                                                        )}
+                                                    </span>
+                                                ) : (
+                                                    '-'
+                                                )}
+                                            </td>
+                                            <td>{inscription.archiveLe ?? '-'}</td>
+                                            <td>{inscription.archivePar ?? '-'}</td>
+                                        </>
+                                    )}
                                     <td className="text-end">
                                         {/* Grouped into four blocks separated by
                                             dividers: edit-the-record, change its
@@ -1672,6 +1778,25 @@ export default function InscriptionsIndex({
                                             {inscription.statut === 'Active' && (
                                                 <RowActionItem icon="ti-x" danger onClick={() => openCancel(inscription)}>
                                                     Annuler
+                                                </RowActionItem>
+                                            )}
+
+                                            {/* Pause (19/10/2026) : l'étudiant interrompt et reviendra —
+                                                motif + date de retour, rien d'autre ne bouge. */}
+                                            {canArchive && inscription.statut === 'Active' && (
+                                                <RowActionItem icon="ti-archive" onClick={() => openArchive(inscription)}>
+                                                    Archiver
+                                                </RowActionItem>
+                                            )}
+                                            {canArchive && inscription.statut === 'Archivée' && (
+                                                <RowActionItem
+                                                    icon="ti-archive-off"
+                                                    onClick={() => {
+                                                        setReactivateError(undefined);
+                                                        setReactivateTarget(inscription);
+                                                    }}
+                                                >
+                                                    Réactiver
                                                 </RowActionItem>
                                             )}
 
@@ -1798,7 +1923,7 @@ export default function InscriptionsIndex({
                                     id="ins-student"
                                     label="Étudiant"
                                     required
-                                    options={studentFormOptions}
+                                    options={studentOptions}
                                     uppercase
                                     placeholder="Choisir…"
                                     value={form.data.student_id}
@@ -3146,6 +3271,79 @@ export default function InscriptionsIndex({
                     setStatutError(undefined);
                 }}
             />
+
+            <Modal show={archiveTarget !== null} title="Archiver l&rsquo;inscription" onClose={closeArchive} processing={archiveForm.processing}>
+                {archiveTarget && (
+                    <form onSubmit={submitArchive} onKeyDown={blockImplicitSubmit}>
+                        <div className="alert alert-info fs-13 d-flex align-items-start" role="alert">
+                            <i className="ti ti-archive me-2 mt-1" aria-hidden="true" />
+                            <div>
+                                <span className="fw-semibold">{enCapitales(archiveTarget.student ?? archiveTarget.reference)}</span> interrompt
+                                ce cours et reviendra plus tard. Le dossier passe dans « Inscriptions archivées » jusqu&rsquo;à sa
+                                réactivation ; aucun frais ni aucun paiement n&rsquo;est modifié.
+                            </div>
+                        </div>
+                        <div className="row g-3 mb-3">
+                            <div className="col-md-6">
+                                <label className="form-label">Référence du registre</label>
+                                <input type="text" className="form-control" value={archiveTarget.reference} disabled readOnly />
+                            </div>
+                            <div className="col-md-6">
+                                <label className="form-label">Groupe</label>
+                                <input type="text" className="form-control" value={archiveTarget.groupe ?? ''} disabled readOnly />
+                            </div>
+                        </div>
+                        <TextareaField
+                            id="arch-motif"
+                            label="Motif"
+                            rows={3}
+                            value={archiveForm.data.motif}
+                            onChange={(event) => archiveForm.setData('motif', event.target.value)}
+                            error={archiveForm.errors.motif}
+                            maxLength={1000}
+                            placeholder="ex : voyage, examens, raisons de santé…"
+                            required
+                        />
+                        <DateField
+                            id="arch-date-retour"
+                            label="Date de retour prévue"
+                            value={archiveForm.data.date_retour}
+                            onChange={(event) => archiveForm.setData('date_retour', event.target.value)}
+                            error={archiveForm.errors.date_retour}
+                            required
+                        />
+                        {archiveFormError && <div className="alert alert-danger fs-13">{archiveFormError}</div>}
+                        <div className="d-flex justify-content-end gap-2 mt-4">
+                            <FormActions onCancel={closeArchive} processing={archiveForm.processing} submitLabel="Archiver" />
+                        </div>
+                    </form>
+                )}
+            </Modal>
+
+            <ConfirmDialog
+                show={reactivateTarget !== null}
+                title="Réactiver l&rsquo;inscription"
+                recordLabel={reactivateTarget?.reference ?? ''}
+                message="L&rsquo;étudiant est de retour ? Le dossier redevient actif et réapparaît dans la liste des inscriptions."
+                error={reactivateError}
+                processing={reactivateProcessing}
+                icon="ti-archive-off"
+                variant="primary"
+                confirmLabel="Oui, réactiver"
+                processingLabel="Réactivation..."
+                onConfirm={handleReactivate}
+                onCancel={() => {
+                    setReactivateTarget(null);
+                    setReactivateError(undefined);
+                }}
+            >
+                {reactivateTarget?.archiveMotif && (
+                    <p className="fs-13 text-muted mb-0">
+                        Archivée le {reactivateTarget.archiveLe ?? '-'} — retour prévu le {reactivateTarget.archiveDateRetour ?? '-'} :{' '}
+                        {reactivateTarget.archiveMotif}
+                    </p>
+                )}
+            </ConfirmDialog>
 
             <Modal
                 show={cancelTarget !== null}

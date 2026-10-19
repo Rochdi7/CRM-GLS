@@ -7,7 +7,7 @@ namespace App\Http\Controllers\Backoffice;
 use App\Domain\Registrations\Actions\AttribuerLivreEnMasse;
 use App\Domain\Registrations\Queries\GetInscriptionFormOptions;
 use App\Domain\Registrations\Queries\GetLivresGroupe;
-use App\Domain\Students\Queries\GetStudentsTabCounts;
+use App\Domain\Students\Queries\GetStudentTransfersList;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\Students\AttribuerLivreEnMasseRequest;
@@ -32,7 +32,7 @@ final class StudentLivresController extends Controller
         Request $request,
         GetInscriptionFormOptions $options,
         GetLivresGroupe $livres,
-        GetStudentsTabCounts $tabCounts,
+        GetStudentTransfersList $transfers,
     ): Response {
         abort_unless($request->user()->can('registrations.manage-fees'), 403);
 
@@ -54,7 +54,7 @@ final class StudentLivresController extends Controller
         }
 
         return Inertia::render('Backoffice/Students/Livres', [
-            'tabCounts' => fn () => $tabCounts($request->user()),
+            'tabCounts' => fn () => $transfers->tabCounts($request->user()),
             'filters' => ['group_id' => $group?->id, 'livre_id' => $livreId, 'statut' => $statut],
             'groupOptions' => fn () => $options->groups($request->user())->values(),
             'statuts' => Inscription::STATUTS,

@@ -218,23 +218,12 @@ Route::prefix('backoffice')
             Route::post('students/livres', [StudentLivresController::class, 'store'])
                 ->middleware('permission:registrations.manage-fees')->name('students.livres.store');
 
-            // Onglet « Étudiants archivés » (19/10/2026) — même page, fiches
-            // « Archivé » seulement. ⚠ Avant students/{student}, même raison
-            // que la fusion.
-            Route::get('students/archives', [StudentController::class, 'archives'])
-                ->middleware('permission:students.view')->name('students.archives');
-
             Route::get('students', [StudentController::class, 'index'])
                 ->middleware('permission:students.view|groups.view-own')->name('students.index');
             Route::post('students', [StudentController::class, 'store'])
                 ->middleware('permission:students.create')->name('students.store');
             Route::put('students/{student}', [StudentController::class, 'update'])
                 ->middleware('permission:students.update')->name('students.update');
-            // Archiver (motif + date de retour) / réactiver — students.archive.
-            Route::post('students/{student}/archiver', [StudentController::class, 'archive'])
-                ->middleware('permission:students.archive')->name('students.archive');
-            Route::post('students/{student}/reactiver', [StudentController::class, 'reactivate'])
-                ->middleware('permission:students.archive')->name('students.reactivate');
             // ⚠ DOIT précéder students/{student} (voir le commentaire de
             // « students/fusion » plus haut) — sinon le joker capture le
             // segment et renvoie un 404 de binding.
@@ -435,6 +424,10 @@ Route::prefix('backoffice')
             // joker capture « corbeille ».
             Route::get('inscriptions/corbeille', [InscriptionCorbeilleController::class, 'index'])
                 ->middleware('permission:registrations.view')->name('inscriptions.corbeille');
+            // Onglet « Inscriptions archivées » (19/10/2026) — même page, les
+            // dossiers en pause seulement. ⚠ Avant inscriptions/{inscription}.
+            Route::get('inscriptions/archivees', [InscriptionController::class, 'archivees'])
+                ->middleware('permission:registrations.view')->name('inscriptions.archivees');
 
             Route::get('inscriptions', [InscriptionController::class, 'index'])
                 ->middleware('permission:registrations.view')->name('inscriptions.index');
@@ -452,6 +445,11 @@ Route::prefix('backoffice')
             // so it is its own endpoint rather than a value of update-statut.
             Route::post('inscriptions/{inscription}/annuler', [InscriptionController::class, 'cancel'])
                 ->middleware('permission:registrations.update')->name('inscriptions.cancel');
+            // Archiver (motif + date de retour) / réactiver — registrations.archive.
+            Route::post('inscriptions/{inscription}/archiver', [InscriptionController::class, 'archive'])
+                ->middleware('permission:registrations.archive')->name('inscriptions.archive');
+            Route::post('inscriptions/{inscription}/reactiver', [InscriptionController::class, 'reactivate'])
+                ->middleware('permission:registrations.archive')->name('inscriptions.reactivate');
             Route::delete('inscriptions/{inscription}', [InscriptionController::class, 'destroy'])
                 ->middleware('permission:registrations.delete')->name('inscriptions.destroy');
             Route::get('inscriptions/{inscription}', [InscriptionController::class, 'show'])
