@@ -365,6 +365,12 @@ Route::prefix('backoffice')
                 ->middleware('permission:attendance.view')->name('seances.absence-par-groupe');
             Route::get('seances/absence-par-groupe/export', [SeanceController::class, 'absenceParGroupeExport'])
                 ->middleware('permission:attendance.view')->name('seances.absence-par-groupe.export');
+            // « Statistiques » tab — placeholder « En cours de développement »
+            // (21/10/2026): the page only carries the tab bar and the notice,
+            // no data yet. Same attendance.view permission as its siblings,
+            // static segment above seances/{seance} for the same reason.
+            Route::get('seances/statistiques', [SeanceController::class, 'statistiques'])
+                ->middleware('permission:attendance.view')->name('seances.statistiques');
             Route::get('seances/{seance}', [SeanceController::class, 'show'])
                 ->name('seances.show');
             Route::put('seances/{seance}/presences', [SeanceController::class, 'savePresences'])

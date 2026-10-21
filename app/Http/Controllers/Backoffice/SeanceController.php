@@ -244,6 +244,19 @@ final class SeanceController extends Controller
     }
 
     /**
+     * « Statistiques » tab — placeholder only (21/10/2026): renders the tab
+     * bar with an « En cours de développement » notice. No read-model is
+     * called yet; when the real statistics land, they must follow the active
+     * context (centre + année) like every other screen.
+     */
+    public function statistiques(): Response
+    {
+        $this->authorize('viewAny', Seance::class);
+
+        return Inertia::render('Backoffice/Seances/Statistiques');
+    }
+
+    /**
      * Same matrix as a downloadable .xlsx — one column per séance, exactly
      * what the page shows for the CURRENT filters (they travel in the query
      * string), so the file can never disagree with the screen.
