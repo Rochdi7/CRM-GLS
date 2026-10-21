@@ -974,10 +974,6 @@ export default function CaissesIndex({
                 footer={<FormActions form="change-montant-form" onCancel={closeChangeMontant} processing={montantProcessing} submitLabel="Valider" />}
             >
                 <form id="change-montant-form" onSubmit={submitChangeMontant}>
-                    <div className="alert alert-info">
-                        Aucun solde ne bouge : le transfert reste en attente, et c'est le nouveau montant que le
-                        destinataire devra confirmer avoir reçu.
-                    </div>
                     {changingMontant && (
                         <div className="mb-3">
                             <div className="d-flex justify-content-between">
