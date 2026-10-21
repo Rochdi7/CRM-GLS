@@ -174,6 +174,17 @@ export default function AbsenceParGroupe({
                         Absence par groupe
                     </button>
                 </li>
+                <li className="nav-item" role="presentation">
+                    <Link
+                        href="/backoffice/seances/statistiques"
+                        className="nav-link fw-medium"
+                        role="tab"
+                        aria-selected="false"
+                    >
+                        <i className="ti ti-chart-bar me-2" />
+                        Statistiques
+                    </Link>
+                </li>
             </ul>
 
             <Card bodyClassName="p-0 py-3">
