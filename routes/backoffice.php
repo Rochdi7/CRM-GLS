@@ -907,6 +907,11 @@ Route::prefix('backoffice')
             // create only (§16). No money moves (ChangerDestinataireTransfert).
             Route::put('caisse-transfers/{caisse_transfer}/destinataire', [CaisseTransferController::class, 'changeDestination'])
                 ->middleware('permission:cash-transfers.create')->name('caisse-transfers.change-destination');
+            // Same shape for a mis-keyed AMOUNT (21/10/2026): requester-only,
+            // pending only, the request cap replayed under lock
+            // (ChangerMontantTransfert). No money moves.
+            Route::put('caisse-transfers/{caisse_transfer}/montant', [CaisseTransferController::class, 'changeMontant'])
+                ->middleware('permission:cash-transfers.create')->name('caisse-transfers.change-montant');
             Route::put('caisse-transfers/{caisse_transfer}/validate', [CaisseTransferController::class, 'validateAction'])
                 ->middleware('permission:cash-transfers.validate')->name('caisse-transfers.validate');
             Route::get('caisse-transfers/{caisse_transfer}', [CaisseTransferController::class, 'show'])

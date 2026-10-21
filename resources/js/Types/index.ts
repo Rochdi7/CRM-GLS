@@ -2165,6 +2165,8 @@ export interface CaisseTransferRow {
     cancelNeedsMotif: boolean;
     /** The requester (or the maintainer) may still change the recipient — pending rows only. */
     canChangeDestinataire: boolean;
+    /** The requester (or the maintainer) may still change the amount — pending rows only, no money moves. */
+    canChangeMontant: boolean;
     showUrl: string;
 }
 
