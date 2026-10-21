@@ -33,10 +33,17 @@ final class ReservationTransferts
     /**
      * Σ des transferts « En attente » qui SORTENT de cette caisse — tous
      * centres, ou seulement ceux imputés à `$centreId`.
+     *
+     * `$saufTransfertId` écarte UN transfert en attente du calcul : c'est ce
+     * qui permet de MODIFIER le montant d'une demande (ChangerMontantTransfert)
+     * en la contrôlant contre le plafond « comme si elle n'existait pas » —
+     * sinon son propre montant actuel se déduirait du plafond qu'on lui
+     * applique, et une demande de 1 000 DH ne pourrait jamais passer à
+     * 1 001 DH sur un tiroir qui en contient 5 000.
      */
-    public function enAttente(int $caisseId, ?int $centreId = null): float
+    public function enAttente(int $caisseId, ?int $centreId = null, ?int $saufTransfertId = null): float
     {
-        return round((float) $this->query($caisseId, $centreId)->sum('montant'), 2);
+        return round((float) $this->query($caisseId, $centreId, $saufTransfertId)->sum('montant'), 2);
     }
 
     /**
@@ -45,17 +52,18 @@ final class ReservationTransferts
      *
      * @return list<string>
      */
-    public function references(int $caisseId): array
+    public function references(int $caisseId, ?int $saufTransfertId = null): array
     {
-        return $this->query($caisseId, null)->orderBy('id')->pluck('reference')->all();
+        return $this->query($caisseId, null, $saufTransfertId)->orderBy('id')->pluck('reference')->all();
     }
 
     /** @return Builder<CaisseTransfer> */
-    private function query(int $caisseId, ?int $centreId): Builder
+    private function query(int $caisseId, ?int $centreId, ?int $saufTransfertId = null): Builder
     {
         $query = CaisseTransfer::query()
             ->where('caisse_source_id', $caisseId)
-            ->where('statut', CaisseTransfer::STATUT_EN_ATTENTE);
+            ->where('statut', CaisseTransfer::STATUT_EN_ATTENTE)
+            ->when($saufTransfertId !== null, fn ($q) => $q->whereKeyNot($saufTransfertId));
 
         if ($centreId === null) {
             return $query;

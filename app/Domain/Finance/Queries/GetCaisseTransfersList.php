@@ -130,6 +130,11 @@ final class GetCaisseTransfersList
                 // convenience only.
                 'canChangeDestinataire' => $t->statut === CaisseTransfer::STATUT_EN_ATTENTE
                     && ($t->requested_by === $myEmployeeId || HiddenAccount::isMaintainer()),
+                // Same facts for the AMOUNT (ChangerMontantTransfert): the
+                // requester's own correction, pending only. The cap itself is
+                // only known under lock, so the server names it on refusal.
+                'canChangeMontant' => $t->statut === CaisseTransfer::STATUT_EN_ATTENTE
+                    && ($t->requested_by === $myEmployeeId || HiddenAccount::isMaintainer()),
                 // Drives the mandatory reason field: cancelling somebody
                 // else's transfer must say why.
                 'cancelNeedsMotif' => $t->statut === CaisseTransfer::STATUT_EN_ATTENTE

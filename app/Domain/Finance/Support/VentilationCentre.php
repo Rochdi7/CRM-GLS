@@ -89,7 +89,7 @@ final class VentilationCentre
      * affiché dans le modal : deux calculs séparés finiraient par proposer un
      * plafond que le serveur refuse ensuite.
      */
-    public function plafondTransfert(Caisse $caisse, ?int $centreId): float
+    public function plafondTransfert(Caisse $caisse, ?int $centreId, ?int $saufTransfertId = null): float
     {
         // ⚠ Un transfert « En attente » a déjà PROMIS son montant (11/09/2026,
         // ReservationTransferts) : il sort du plafond, sinon deux demandes
@@ -97,14 +97,19 @@ final class VentilationCentre
         // validation trouve un tiroir vide. Le plafond ne dépasse JAMAIS
         // `solde − réservé` : c'est ce que le tiroir contient physiquement,
         // et une part ventilée peut le dépasser quand une autre est négative.
-        $physique = round((float) $caisse->solde - $this->reservations->enAttente($caisse->id), 2);
+        //
+        // `$saufTransfertId` : la demande dont on MODIFIE le montant
+        // (ChangerMontantTransfert) est écartée de la réserve, pour être
+        // contrôlée comme une demande neuve — son ancien montant ne doit pas
+        // se déduire du plafond qu'on applique au nouveau.
+        $physique = round((float) $caisse->solde - $this->reservations->enAttente($caisse->id, null, $saufTransfertId), 2);
 
         if ($centreId === null) {
             return $physique;
         }
 
         $partNette = fn (int $id): float => round(
-            $this->soldeDuCentre($caisse, $id) - $this->reservations->enAttente($caisse->id, $id),
+            $this->soldeDuCentre($caisse, $id) - $this->reservations->enAttente($caisse->id, $id, $saufTransfertId),
             2,
         );
 

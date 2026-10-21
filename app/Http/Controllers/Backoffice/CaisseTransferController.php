@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Backoffice;
 
 use App\Domain\Finance\Actions\ChangerDestinataireTransfert;
+use App\Domain\Finance\Actions\ChangerMontantTransfert;
 use App\Domain\Finance\Actions\DemanderTransfertCaisse;
 use App\Domain\Finance\Actions\ValiderTransfertCaisse;
 use App\Domain\Finance\Queries\GetCaisseTransferDetails;
@@ -13,6 +14,7 @@ use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Controllers\Backoffice\Concerns\RedirectsPreservingFilters;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Backoffice\CaisseTransfers\ChangerDestinataireTransfertRequest;
+use App\Http\Requests\Backoffice\CaisseTransfers\ChangerMontantTransfertRequest;
 use App\Http\Requests\Backoffice\CaisseTransfers\StoreCaisseTransferRequest;
 use App\Http\Requests\Backoffice\CaisseTransfers\UpdateCaisseTransferRequest;
 use App\Models\CaisseTransfer;
@@ -212,6 +214,42 @@ final class CaisseTransferController extends Controller
 
         return $this->backToListPreservingFilters($request, 'backoffice.caisses.index', ['tab' => 'transferts'])
             ->with('success', __('Transfer recipient changed.'));
+    }
+
+    /**
+     * Change the amount of a PENDING transfer (PUT /…/{transfer}/montant).
+     *
+     * Same shape as changeDestination(): gated by `cash-transfers.create`
+     * (the requester fixes their own request, whatever their role), decided
+     * by ChangerMontantTransfert under lock — pending only, requester or
+     * maintainer, and the request cap replayed with the row itself excluded
+     * from the reservation. No money moves.
+     */
+    public function changeMontant(
+        ChangerMontantTransfertRequest $request,
+        CaisseTransfer $caisse_transfer,
+        ChangerMontantTransfert $action,
+    ): RedirectResponse {
+        $this->authorize('view', $caisse_transfer);
+        $this->assertContextAnneeOuverte('montant');
+
+        $employee = $request->user()->employee;
+
+        if ($employee === null) {
+            throw ValidationException::withMessages([
+                'montant' => __('Your account is not linked to any employee record.'),
+            ]);
+        }
+
+        $action->handle(
+            $caisse_transfer,
+            (float) $request->validated('montant'),
+            $employee,
+            HiddenAccount::isMaintainer($request->user()),
+        );
+
+        return $this->backToListPreservingFilters($request, 'backoffice.caisses.index', ['tab' => 'transferts'])
+            ->with('success', __('Transfer amount changed.'));
     }
 
     /**

@@ -421,6 +421,15 @@ export default function CaissesIndex({
     const [destError, setDestError] = useState<string | undefined>(undefined);
     const [destProcessing, setDestProcessing] = useState(false);
 
+    // « Modifier le montant » — same shape as the recipient change
+    // (row.canChangeMontant): the requester's own correction while the
+    // transfer is still pending, any role. No money moves; the server
+    // replays the request cap under lock and names it on refusal.
+    const [changingMontant, setChangingMontant] = useState<CaisseTransferRow | null>(null);
+    const [newMontant, setNewMontant] = useState('');
+    const [montantError, setMontantError] = useState<string | undefined>(undefined);
+    const [montantProcessing, setMontantProcessing] = useState(false);
+
     // Destination choices — every accessible till EXCEPT the acting
     // employee's own (the fixed source): transferring to yourself is
     // meaningless and refused server-side anyway. The unfiltered list stays
@@ -573,6 +582,32 @@ export default function CaissesIndex({
             onSuccess: () => closeChangeDest(),
             onError: (errors) => setDestError(Object.values(errors)[0]),
             onFinish: () => setDestProcessing(false),
+        });
+    }
+
+    function openChangeMontant(row: CaisseTransferRow) {
+        setChangingMontant(row);
+        setNewMontant(row.montant);
+        setMontantError(undefined);
+    }
+
+    function closeChangeMontant() {
+        setChangingMontant(null);
+        setNewMontant('');
+        setMontantError(undefined);
+    }
+
+    function submitChangeMontant(event: FormEvent) {
+        event.preventDefault();
+        if (!changingMontant) return;
+        setMontantError(undefined);
+        setMontantProcessing(true);
+
+        router.put(`/backoffice/caisse-transfers/${changingMontant.id}/montant`, { montant: newMontant }, {
+            preserveScroll: true,
+            onSuccess: () => closeChangeMontant(),
+            onError: (errors) => setMontantError(Object.values(errors)[0]),
+            onFinish: () => setMontantProcessing(false),
         });
     }
 
@@ -794,6 +829,13 @@ export default function CaissesIndex({
                                                         Changer le destinataire
                                                     </RowActionItem>
                                                 )}
+                                                {/* Modifier le montant: same rule - the REQUESTER's
+                                                    own correction, any role, pending only. */}
+                                                {row.canChangeMontant && (
+                                                    <RowActionItem icon="ti-cash" onClick={() => openChangeMontant(row)}>
+                                                        Modifier le montant
+                                                    </RowActionItem>
+                                                )}
                                                 {/* Annuler: the two parties, plus the maintainer
                                                     for any pending row (row.canCancel). Cancelling
                                                     someone else's transfer asks for a reason in the
@@ -925,6 +967,57 @@ export default function CaissesIndex({
             </Modal>
 
             <Modal
+                show={changingMontant !== null}
+                title="Modifier le montant"
+                onClose={closeChangeMontant}
+                processing={montantProcessing}
+                footer={<FormActions form="change-montant-form" onCancel={closeChangeMontant} processing={montantProcessing} submitLabel="Valider" />}
+            >
+                <form id="change-montant-form" onSubmit={submitChangeMontant}>
+                    <div className="alert alert-info">
+                        Aucun solde ne bouge : le transfert reste en attente, et c'est le nouveau montant que le
+                        destinataire devra confirmer avoir reçu.
+                    </div>
+                    {changingMontant && (
+                        <div className="mb-3">
+                            <div className="d-flex justify-content-between">
+                                <span className="text-muted">Transfert</span>
+                                <span className="fw-medium">{changingMontant.reference}</span>
+                            </div>
+                            <div className="d-flex justify-content-between">
+                                <span className="text-muted">Destinataire</span>
+                                <span className="fw-medium">{changingMontant.destinataire ?? '-'}</span>
+                            </div>
+                            <div className="d-flex justify-content-between">
+                                <span className="text-muted">Montant actuel</span>
+                                <span className="fw-medium">{Number(changingMontant.montant).toFixed(2)} DH</span>
+                            </div>
+                        </div>
+                    )}
+                    <div className="mb-3">
+                        <label className="form-label" htmlFor="ct-new-montant">
+                            Nouveau montant<span className="text-danger ms-1">*</span>
+                        </label>
+                        <div className="input-group">
+                            <input
+                                id="ct-new-montant"
+                                type="number"
+                                step="0.01"
+                                min="0.01"
+                                required
+                                autoFocus
+                                className={`form-control${montantError ? ' is-invalid' : ''}`}
+                                value={newMontant}
+                                onChange={(e) => setNewMontant(e.target.value)}
+                            />
+                            <span className="input-group-text">DH</span>
+                        </div>
+                        {montantError && <div className="text-danger fs-12 mt-1">{montantError}</div>}
+                    </div>
+                </form>
+            </Modal>
+
+            <Modal
                 show={showTransferModal}
                 title={editingTransfer ? 'Modifier le transfert' : 'Transfert à une autre caisse'}
                 onClose={closeTransferModal}
@@ -935,7 +1028,7 @@ export default function CaissesIndex({
                 <form id="transfer-form" onSubmit={submitTransfer}>
                     <div className="alert alert-info">
                         {editingTransfer
-                            ? 'Seule la note peut être modifiée - les caisses et le montant sont figés.'
+                            ? 'Seule la note peut être modifiée ici - les caisses sont figées. Le montant se corrige depuis « Modifier le montant » tant que le transfert est en attente.'
                             : 'Les soldes ne bougent pas maintenant : un autre employé doit valider ce transfert.'}
                     </div>
                     {!editingTransfer && !myCaisse && (
