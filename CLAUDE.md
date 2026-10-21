@@ -2185,7 +2185,12 @@ keeps the primary column stable when an edit merely adds a center. Enforcing
   `tests/Feature/Backoffice/Authorization/ReservedDirectPermissionsTest.php`.
   Same filter also reserves
   `expenses.approve`, `system-settings.*`, `banks.*`,
-  `cancellation-reasons.*` and `cash-accounts.*`. `groups.archive` is NOT a
+  `cancellation-reasons.*`, `cash-accounts.*`, `registrations.trash` (la
+  corbeille des inscriptions) and `dashboard.revenue-chart` (21/10/2026 :
+  le graphique « Résumé des frais annuels » / chiffre d'affaire du tableau
+  de bord n'est CALCULÉ que pour le super-admin — `annualFrais` arrive
+  `null` aux autres, les cartes du haut restent ; décision du propriétaire,
+  le CA n'est pas une donnée de guichet). `groups.archive` is NOT a
   delete (it snapshots to `groups_historique`) and stays with operational
   roles. See `docs/roles-and-permissions.md` §5.
 - **Center scoping is part of authorization**: policies extend
