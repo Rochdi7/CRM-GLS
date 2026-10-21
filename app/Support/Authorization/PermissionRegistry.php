@@ -47,6 +47,12 @@ final class PermissionRegistry
                 // `$user->employee`, jamais d'un id du client. C'est sa seule
                 // fenêtre sur l'argent : `teacher` n'a aucun `expenses.*`.
                 'dashboard.espace-enseignant' => 'Voir son espace enseignant (groupes, séances, paiements)',
+                // Graphique « Résumé des frais annuels » (chiffre d'affaire,
+                // collecté, reste à payer, encaissements du mois) — réservé
+                // au super-admin (superAdminOnly() ci-dessous), décision du
+                // propriétaire le 21/10/2026 : le CA du centre n'est pas une
+                // donnée de guichet. Les cartes du haut restent visibles.
+                'dashboard.revenue-chart' => 'Voir le graphique du chiffre d\'affaire (super-admin)',
             ],
             'Centres' => [
                 'centers.view' => 'Consulter les centres',
@@ -719,6 +725,9 @@ final class PermissionRegistry
             // La corbeille des inscriptions dit QUI a supprimé QUOI : un
             // écran de contrôle du staff, réservé au propriétaire (19/10/2026).
             'registrations.trash',
+            // Le graphique du chiffre d'affaire du tableau de bord
+            // (21/10/2026) — le CA n'est pas une donnée de guichet.
+            'dashboard.revenue-chart',
             // Valider le transfert d'un étudiant vers un autre centre déplace
             // ses paiements — et donc du chiffre d'affaires — d'un
             // établissement à l'autre (25/09/2026). Même classe que

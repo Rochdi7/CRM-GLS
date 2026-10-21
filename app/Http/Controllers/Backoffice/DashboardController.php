@@ -70,6 +70,12 @@ final class DashboardController extends Controller
         // la donnée ne quitte pas le serveur, ce n'est pas un masquage React.
         $restreint = PorteeEnseignant::estRestreint($user);
 
+        // Graphique du chiffre d'affaire (21/10/2026) : super-admin seulement
+        // (`dashboard.revenue-chart` ∈ superAdminOnly()). Comme pour le prof
+        // restreint, la donnée n'est pas CALCULÉE pour les autres — `null`
+        // côté serveur, pas un masquage React.
+        $peutVoirChiffreAffaire = ! $restreint && (bool) $user?->can('dashboard.revenue-chart');
+
         return Inertia::render('Backoffice/Dashboard/Index', [
             'porteeEnseignant' => $restreint,
             'stats' => fn () => $restreint
@@ -78,8 +84,8 @@ final class DashboardController extends Controller
                     $context->isAllCenters() ? __('All centers') : $context->etablissement()?->nom_centre,
                 )->toArray()
                 : $getDashboardStats($context)->toArray(),
-            'annualFrais' => fn () => $restreint ? null : $getAnnualFraisSummary(),
-            'annualFraisPeriode' => fn () => $restreint ? '' : $getAnnualFraisSummary->periodeLabel(),
+            'annualFrais' => fn () => $peutVoirChiffreAffaire ? $getAnnualFraisSummary() : null,
+            'annualFraisPeriode' => fn () => $peutVoirChiffreAffaire ? $getAnnualFraisSummary->periodeLabel() : '',
             'seancesCalendar' => fn () => $getSeancesCalendar($context, $calMonth, $user),
             'nouvellesInscriptions' => fn () => $restreint ? null : $getNouvellesInscriptions($duree, $inscDebut, $inscFin),
             // « Groupes à venir » (29/09/2026) — groupes « En inscription » du
