@@ -212,7 +212,6 @@ export default function DepensesIndex({
     recalculDepense,
     calculGroupOptions,
     paliersPaie,
-    cnssMontant,
 }: DepensesPageProps) {
     const isLoading = useInertiaLoading();
     // The Types de dépenses tab links to its own page — UI-gate it like the
@@ -240,6 +239,9 @@ export default function DepensesIndex({
      * ouvert depuis un calcul — `null` pour une saisie ordinaire.
      */
     const [retourCalcul, setRetourCalcul] = useState<string | null>(null);
+    // Retenue CNSS transmise par le calcul (salaire de l'enseignant qu'il a
+    // désigné) — prime sur le prof du groupe tant que le modal est ouvert.
+    const [cnssPrefill, setCnssPrefill] = useState<number | null>(null);
     // « Ajouter un paiement prof » ouvre le modal de CALCUL du composant
     // embarqué : chaque incrément est une demande d'ouverture.
     const [calculOpenRequest, setCalculOpenRequest] = useState(0);
@@ -377,6 +379,7 @@ export default function DepensesIndex({
         // onglet avec les mêmes paramètres.
         const retour = new URLSearchParams({ tab: 'paiements-prof', ...calculQuery(prefill.retour) });
         setRetourCalcul(`/backoffice/depenses?${retour.toString()}`);
+        setCnssPrefill(prefill.cnssMontant);
 
         // Recalcul : le modal d'ÉDITION de la dépense en attente s'ouvre,
         // avec le résultat du calcul à la place des anciennes valeurs —
@@ -631,15 +634,23 @@ export default function DepensesIndex({
     // sur une ligne enregistrée elle suit exactement le droit du montant.
     // Le serveur refuse de toute façon un drapeau changé sans ce droit.
     const cnssEditable = editingDepense === null || montantEditable;
-    // La retenue d'une ligne déjà cochée est celle STOCKÉE sur la ligne (la
-    // constante a pu bouger depuis) ; une nouvelle retenue prend la constante.
-    const retenueCnss = editingDepense?.cnssMontant != null ? Number(editingDepense.cnssMontant) : cnssMontant;
+    // Retenue CNSS = SALAIRE de l'enseignant payé (21/10/2026), dans l'ordre
+    // où le serveur la résout : celle STOCKÉE sur une ligne déjà retenue (le
+    // salaire a pu bouger depuis), puis celle du calcul qui a pré-rempli le
+    // modal, puis l'enseignant de la ligne éditée, puis le prof du groupe
+    // choisi. Null => aucun salaire : case désactivée, rappel affiché.
+    const groupeCnss = [...groups, ...groupsAnneesPrecedentes]
+        .find((g) => g.id === depenseForm.data.group_id)?.cnssMontant ?? null;
+    const retenueCnss: number | null = editingDepense?.cnssMontant != null
+        ? Number(editingDepense.cnssMontant)
+        : cnssPrefill ?? (editingDepense !== null ? editingDepense.cnssMontantEnseignant : null) ?? groupeCnss;
 
     /**
      * Cocher retient la cotisation sur le montant saisi, décocher la rend —
      * le champ Montant reste le NET versé, ce que la caisse débite.
      */
     function toggleCnss(checked: boolean) {
+        if (retenueCnss === null) return;
         const saisi = Number(depenseForm.data.montant);
         const base = depenseForm.data.montant !== '' && Number.isFinite(saisi) ? saisi : null;
         const ajuste = base === null
@@ -653,6 +664,7 @@ export default function DepensesIndex({
         setShowDepenseModal(false);
         setEditingDepense(null);
         setRetourCalcul(null);
+        setCnssPrefill(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
     }
 
@@ -765,6 +777,8 @@ export default function DepensesIndex({
         setRetourCalcul(
             retour !== null && retour.startsWith('?') ? `/backoffice/paiement-prof${retour}` : null,
         );
+        const cnssPrefillBrut = params.get('prefill_cnss_montant');
+        setCnssPrefill(cnssPrefillBrut !== null && Number(cnssPrefillBrut) > 0 ? Number(cnssPrefillBrut) : null);
 
         setTab('paiements-prof');
         setProfMode(true);
@@ -1212,7 +1226,9 @@ export default function DepensesIndex({
                         filters={calculPaiementProfFilters}
                         groupOptions={calculGroupOptions}
                         paliersPaie={paliersPaie}
-                        cnssMontant={cnssMontant}
+                        // Recalcul d'un paiement déjà retenu : la retenue
+                        // STOCKÉE prime sur le salaire actuel.
+                        cnssMontant={recalculCible?.cnssMontant != null ? Number(recalculCible.cnssMontant) : undefined}
                         canCreateDepense
                         onNavigate={naviguerCalcul}
                         onEnregistrer={enregistrerDepuisCalcul}
@@ -1980,6 +1996,14 @@ export default function DepensesIndex({
                                         error={depenseForm.errors.periode_fin}
                                     />
                                 </div>
+                                {/* Doublons : le serveur refuse une seconde
+                                    période sur le même mois (DoublonPaiementProf). */}
+                                <div className="col-12">
+                                    <div className="alert alert-warning d-flex align-items-start py-2 px-3 fs-13 mb-3">
+                                        <i className="ti ti-alert-triangle me-2 mt-1" />
+                                        <span>{t('A teacher payment covers ONE month: the month of the start date (from 24/09 to 24/10 = September). A group cannot be paid twice for the same month or for overlapping dates — cancel or refuse the existing payment first.')}</span>
+                                    </div>
+                                </div>
                                 {/* Cotisation CNSS — ici AUSSI, pas seulement au
                                     calcul : l'employé qui l'a oubliée là-bas la
                                     coche ici, et le Montant devient le net. */}
@@ -1988,15 +2012,26 @@ export default function DepensesIndex({
                                         <label className="form-label d-block">{t('CNSS contribution withheld')}</label>
                                         <CheckboxField
                                             id="d-cnss"
-                                            label={t('CNSS contribution withheld (:montant MAD)', { montant: retenueCnss.toFixed(2) })}
+                                            label={retenueCnss !== null
+                                                ? t('CNSS contribution withheld (:montant MAD)', { montant: retenueCnss.toFixed(2) })
+                                                : t('CNSS contribution withheld')}
                                             checked={depenseForm.data.cnss}
-                                            disabled={!cnssEditable}
+                                            disabled={!cnssEditable || (retenueCnss === null && !depenseForm.data.cnss)}
                                             onChange={(e) => toggleCnss(e.target.checked)}
                                         />
+                                        {retenueCnss === null && depenseForm.data.group_id !== '' && (
+                                            <div className="text-warning fs-12">
+                                                <i className="ti ti-alert-triangle me-1" />
+                                                {t("No salary on this teacher's record: enter it to withhold the CNSS contribution.")}{' '}
+                                                <a href="/backoffice/employees" className="fw-semibold">
+                                                    {t('Enter the salary')} →
+                                                </a>
+                                            </div>
+                                        )}
                                         {depenseForm.errors.cnss && (
                                             <div className="text-danger fs-12">{depenseForm.errors.cnss}</div>
                                         )}
-                                        {depenseForm.data.cnss && cnssEditable && (
+                                        {depenseForm.data.cnss && cnssEditable && retenueCnss !== null && (
                                             <div className="text-muted fs-12">
                                                 {t('The amount above is the net paid out, :montant MAD of CNSS already withheld.', {
                                                     montant: retenueCnss.toFixed(2),

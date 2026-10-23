@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Backoffice\Finance;
 
-use App\Domain\Payroll\Support\CotisationCnss;
 use App\Models\AnneeScolaire;
 use App\Models\Depense;
 use App\Models\Employee;
@@ -20,8 +19,9 @@ use Tests\TestCase;
 /**
  * Cotisation CNSS retenue sur un « Paiement prof » (06/10/2026).
  *
- * Une case à cocher — au calcul ET dans le modal — retient un montant FIXE
- * (`CotisationCnss::MONTANT`) sur le net versé. La dépense STOCKE ce qui a
+ * Une case à cocher — au calcul ET dans le modal — retient le SALAIRE de
+ * l'enseignant payé (fiche employé, 21/10/2026 ; avant : 1 700 MAD fixes)
+ * sur le net versé. Sans salaire saisi, la retenue est refusée. La dépense STOCKE ce qui a
  * été retenu (`depenses.cnss_montant`) ; `montant` reste le net, seule
  * valeur que la caisse débite. Changer la retenue après coup change le net
  * versé : c'est une correction de montant, donc le même droit
@@ -41,6 +41,8 @@ final class PaiementProfCnssTest extends TestCase
     private AnneeScolaire $annee;
 
     private ?Group $group = null;
+
+    private ?Employee $prof = null;
 
     protected function setUp(): void
     {
@@ -71,11 +73,22 @@ final class PaiementProfCnssTest extends TestCase
         return $user->fresh();
     }
 
+    /** The group's teacher — salary 1 700 MAD unless a test says otherwise. */
+    private function prof(): Employee
+    {
+        return $this->prof ??= Employee::factory()->create([
+            'etablissement_id' => $this->centre->id,
+            'categorie' => Employee::CATEGORIE_ENSEIGNANT,
+            'salaire' => '1700.00',
+        ]);
+    }
+
     private function group(): Group
     {
         return $this->group ??= Group::factory()->create([
             'etablissement_id' => $this->centre->id,
             'annee_scolaire_id' => $this->annee->id,
+            'enseignant_id' => $this->prof()->id,
         ]);
     }
 
@@ -105,8 +118,8 @@ final class PaiementProfCnssTest extends TestCase
 
         $depense = Depense::where('description', 'Heures de septembre')->firstOrFail();
 
+        // The teacher's own salary is what is withheld.
         $this->assertSame('1700.00', $depense->cnss_montant);
-        $this->assertSame(CotisationCnss::MONTANT, (float) $depense->cnss_montant);
         // `montant` is what the client sent — the NET — never re-deduced here.
         $this->assertSame('2500.00', $depense->montant);
         $this->assertTrue($depense->cnssDeduite());
@@ -120,7 +133,7 @@ final class PaiementProfCnssTest extends TestCase
             ->post(route('backoffice.depenses.store'), $this->profPayload(['cnss' => '0', 'description' => 'Décoché']))
             ->assertSessionDoesntHaveErrors();
         $this->actingAs($user)
-            ->post(route('backoffice.depenses.store'), $this->profPayload(['description' => 'Absent']))
+            ->post(route('backoffice.depenses.store'), $this->profPayload(['description' => 'Absent', 'periode_debut' => '2025-10-01', 'periode_fin' => '2025-10-31', 'date_depense' => '2025-10-31']))
             ->assertSessionDoesntHaveErrors();
 
         $this->assertNull(Depense::where('description', 'Décoché')->firstOrFail()->cnss_montant);
@@ -141,7 +154,36 @@ final class PaiementProfCnssTest extends TestCase
             ->assertSessionHasErrors('cnss');
     }
 
-    public function test_the_amount_withheld_reaches_the_list_and_the_constant_reaches_the_page(): void
+    public function test_the_withholding_is_the_paid_teachers_own_salary(): void
+    {
+        $this->prof()->forceFill(['salaire' => '2350.50'])->save();
+
+        $this->actingAs($this->actor())
+            ->post(route('backoffice.depenses.store'), $this->profPayload(['cnss' => '1']))
+            ->assertSessionDoesntHaveErrors();
+
+        $this->assertSame('2350.50', Depense::where('description', 'Heures de septembre')->firstOrFail()->cnss_montant);
+    }
+
+    public function test_a_teacher_with_no_salary_cannot_have_cnss_withheld(): void
+    {
+        $this->prof()->forceFill(['salaire' => null])->save();
+        $user = $this->actor();
+
+        $this->actingAs($user)
+            ->post(route('backoffice.depenses.store'), $this->profPayload(['cnss' => '1']))
+            ->assertSessionHasErrors('cnss');
+
+        $this->prof()->forceFill(['salaire' => '0'])->save();
+
+        $this->actingAs($user)
+            ->post(route('backoffice.depenses.store'), $this->profPayload(['cnss' => '1']))
+            ->assertSessionHasErrors('cnss');
+
+        $this->assertSame(0, Depense::query()->count());
+    }
+
+    public function test_the_amount_withheld_reaches_the_list_and_the_salary_reaches_the_page(): void
     {
         $user = $this->actor();
 
@@ -154,8 +196,8 @@ final class PaiementProfCnssTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Backoffice/Depenses/Index')
-                // JSON carries 1700.0 as the integer 1700.
-                ->where('cnssMontant', fn ($v): bool => (float) $v === CotisationCnss::MONTANT)
+                // The group option carries its teacher's salary (JSON: 1700).
+                ->where('groups.0.cnssMontant', fn ($v): bool => (float) $v === 1700.0)
                 ->where('paiementsProf.data.0.cnssMontant', '1700.00')
                 ->where('paiementsProf.data.0.montant', '2500.00'));
     }

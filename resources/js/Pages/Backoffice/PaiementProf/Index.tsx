@@ -41,7 +41,6 @@ export default function PaiementProfIndex({
     filters,
     groupOptions,
     paliersPaie,
-    cnssMontant,
     paiementProfTypeId,
     canCreateDepense,
     paiementsProf,
@@ -78,6 +77,9 @@ export default function PaiementProfIndex({
             // Cotisation CNSS cochée au calcul : le modal s'ouvre coché, le
             // montant transmis est déjà le net.
             ...(prefill.cnss ? { prefill_cnss: '1' } : {}),
+            // La retenue = salaire de l'enseignant payé : le modal l'affiche
+            // et l'ajuste sans la redériver.
+            ...(prefill.cnssMontant !== null ? { prefill_cnss_montant: String(prefill.cnssMontant) } : {}),
             // Ajustements manuels du calcul, enregistrés avec la dépense
             // (08/10/2026) — même contrat que l'onglet embarqué.
             ...(Object.keys(prefill.ajustements).length > 0
@@ -97,7 +99,6 @@ export default function PaiementProfIndex({
                 filters={filters}
                 groupOptions={groupOptions}
                 paliersPaie={paliersPaie}
-                cnssMontant={cnssMontant}
                 canCreateDepense={canCreateDepense}
                 onNavigate={naviguer}
                 onEnregistrer={enregistrer}

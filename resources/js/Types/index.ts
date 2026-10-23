@@ -2048,6 +2048,8 @@ export interface InscriptionsPageProps {
 export interface FinanceOption {
     id: number;
     nom: string;
+    /** Groupes du modal « Paiement prof » : salaire du prof du groupe = retenue CNSS (null = aucun). */
+    cnssMontant?: number | null;
 }
 
 /** One row of the Caisses list — mirrors GetCaissesList's ->through() mapping exactly. */
@@ -2748,6 +2750,12 @@ export interface DepenseRow {
      */
     cnssMontant: MoneyDisplay | null;
     /**
+     * « Paiement prof » only — what ticking the CNSS box would withhold NOW:
+     * the paid teacher's salary (fallback: the group's teacher). Null = no
+     * salary on their record, the box is disabled with a reminder.
+     */
+    cnssMontantEnseignant: number | null;
+    /**
      * « Paiement prof » only — the manual adjustments of the calculation
      * (`student_id => montant`), stored so « Modifier le calcul » reopens
      * the calcul as it was left, never the raw one (08/10/2026).
@@ -2951,8 +2959,6 @@ export interface DepensesPageProps {
     calculGroupOptions: SelectOption[];
     /** Barème : présences minimales => semaines payées (11 => 4, 7 => 2, 5 => 1). */
     paliersPaie: Record<string, number>;
-    /** Cotisation CNSS retenue sur un paiement prof quand la case est cochée (serveur, jamais recopiée). */
-    cnssMontant: number;
     /**
      * La fenêtre de l'année active est-elle LEVÉE ? Décidé au serveur, jamais
      * redérivé des champs date : après un effacement explicite ceux-ci
@@ -3081,6 +3087,8 @@ export interface PaiementProfCalcul {
         mode: PaiementProfMode | '';
         taux: number;
         probleme: string | null;
+        /** Retenue CNSS = son salaire (fiche employé) ; null => aucun salaire saisi. */
+        cnssMontant: number | null;
     };
     /** « YYYY-MM » demandé. */
     mois: string;
@@ -3171,8 +3179,6 @@ export interface PaiementProfPageProps {
     groupOptions: SelectOption[];
     /** Barème : présences minimales => semaines payées (11 => 4, 7 => 2, 5 => 1). */
     paliersPaie: Record<string, number>;
-    /** Cotisation CNSS retenue sur un paiement prof quand la case est cochée (serveur, jamais recopiée). */
-    cnssMontant: number;
     modes: PaiementProfMode[];
     paiementProfTypeId: number | null;
     canCreateDepense: boolean;
@@ -3320,6 +3326,8 @@ export interface RapportOnglet {
 export interface RapportFilters {
     rapport: string;
     groupFilter: string;
+    /** « Calcul paiement prof » : l'enseignant calculé (le principal du groupe par défaut). */
+    enseignantFilter: string;
     statutFilter: string;
     sexeFilter: string;
     inscriptionFilter: string;
@@ -3336,6 +3344,7 @@ export interface RapportFilters {
 /** Clé d'un filtre propre à un rapport (la fenêtre de dates est toujours dessinée). */
 export type RapportFiltreKey =
     | 'groupFilter'
+    | 'enseignantFilter'
     | 'statutFilter'
     | 'sexeFilter'
     | 'inscriptionFilter'
@@ -3380,6 +3389,12 @@ export interface RapportsPageProps {
      * donc moins que la somme des montants listés.
      */
     montantTotal: string;
+    /** « Calcul paiement prof » : les enseignants du groupe choisi (vide sans groupe). */
+    enseignantOptions: SelectOption[];
+    /** Pourquoi rien n'est calculé (groupe manquant, période trop longue…) — '' sinon. */
+    avertissementRapport: string;
+    /** Résumé du calcul (enseignant, mode, taux…) : libellé => valeur, déjà en français. */
+    resumeRapport: Record<string, string>;
     [key: string]: unknown;
 }
 

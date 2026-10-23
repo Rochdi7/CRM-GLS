@@ -9,6 +9,7 @@ use App\Domain\Reports\Exports\RapportPdfRenderer;
 use App\Domain\Reports\Queries\GetDepensesReport;
 use App\Domain\Reports\Queries\GetEncaissementsReport;
 use App\Domain\Reports\Queries\GetInscriptionsReport;
+use App\Domain\Reports\Queries\GetPaiementProfReport;
 use App\Domain\Reports\Queries\GetStudentsReport;
 use App\Domain\Reports\Support\RapportCatalogue;
 use App\Http\Controllers\Controller;
@@ -20,6 +21,7 @@ use App\Models\Group;
 use App\Models\Inscription;
 use App\Models\Student;
 use App\Models\TypeDepense;
+use App\Models\User;
 use App\Services\Context\CurrentContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -78,12 +80,22 @@ final class RapportController extends Controller
         ['value' => GetEncaissementsReport::TYPE_AVANCE, 'label' => 'Avance'],
     ];
 
+    /**
+     * Le calcul « paiement prof » de la requête en cours, résolu UNE fois :
+     * l'aperçu en lit le compteur, le total, le résumé et les enseignants —
+     * le relancer pour chacun referait les mêmes lectures de présences.
+     *
+     * @var array<string, mixed>|null
+     */
+    private ?array $paiementProf = null;
+
     public function index(
         Request $request,
         GetInscriptionsReport $getInscriptionsReport,
         GetStudentsReport $getStudentsReport,
         GetEncaissementsReport $getEncaissementsReport,
         GetDepensesReport $getDepensesReport,
+        GetPaiementProfReport $getPaiementProfReport,
     ): Response|RedirectResponse {
         abort_unless($request->user()->can('reports.view'), 403);
 
@@ -101,6 +113,15 @@ final class RapportController extends Controller
         }
 
         $filters = $this->filters($request);
+        $paiementProf = $filters['rapport'] === GetPaiementProfReport::KEY
+            ? $this->paiementProf($request, $getPaiementProfReport, $filters)
+            : null;
+
+        // Le filtre « Enseignant » affiche l'enseignant RÉELLEMENT calculé —
+        // le principal quand rien (ou un prof d'un autre groupe) n'est choisi.
+        if ($paiementProf !== null) {
+            $filters['enseignantFilter'] = $paiementProf['enseignantId'];
+        }
 
         // L'aperçu ne rapatrie PAS les lignes : sur une longue période un
         // rapport fait des milliers de lignes, qui n'ont aucune raison de
@@ -137,10 +158,11 @@ final class RapportController extends Controller
                 $filters['typeDepenseFilter'],
                 $filters['statutDepenseFilter'],
             ),
+            GetPaiementProfReport::KEY => $getPaiementProfReport->lignes($paiementProf['calcul'])->count(),
         };
 
         return Inertia::render('Backoffice/Rapports/Index', [
-            'onglets' => RapportCatalogue::onglets(),
+            'onglets' => $this->ongletsAutorises($request->user()),
             'filters' => $filters,
             // Les filtres que la page doit dessiner pour le rapport choisi —
             // décidés par le catalogue serveur, jamais par le composant : la
@@ -184,6 +206,14 @@ final class RapportController extends Controller
                 static fn (string $s): array => ['value' => $s, 'label' => $s],
                 Depense::STATUTS,
             ),
+            // « Calcul paiement prof » : les enseignants DU groupe choisi
+            // (vide sans groupe), et la raison pour laquelle rien n'est
+            // calculé — dite par le serveur, jamais devinée par la page.
+            'enseignantOptions' => $paiementProf['enseignantOptions'] ?? [],
+            'avertissementRapport' => $paiementProf['avertissement'] ?? '',
+            'resumeRapport' => $paiementProf !== null
+                ? (object) $getPaiementProfReport->resume($paiementProf['calcul'])
+                : (object) [],
             'nombreLignes' => $lignes,
             // Le total n'est calculé QUE pour le rapport qui l'imprime : les
             // deux autres n'ont pas de colonne monétaire, et une chaîne vide
@@ -211,6 +241,9 @@ final class RapportController extends Controller
                     $filters['typeDepenseFilter'],
                     $filters['statutDepenseFilter'],
                 ),
+                // Le total PROPOSÉ par le calcul — la même valeur que l'écran
+                // « Calcul paiement prof » ; ce n'est pas un paiement.
+                GetPaiementProfReport::KEY => $getPaiementProfReport->total($paiementProf['calcul']),
                 default => '',
             },
         ]);
@@ -223,6 +256,7 @@ final class RapportController extends Controller
         GetStudentsReport $getStudentsReport,
         GetEncaissementsReport $getEncaissementsReport,
         GetDepensesReport $getDepensesReport,
+        GetPaiementProfReport $getPaiementProfReport,
         RapportPdfRenderer $renderer,
         CurrentContext $context,
     ): \Symfony\Component\HttpFoundation\Response {
@@ -230,7 +264,7 @@ final class RapportController extends Controller
 
         $filters = $this->filters($request);
         $cle = $filters['rapport'];
-        $lignes = $this->lignes($request, $getInscriptionsReport, $getStudentsReport, $getEncaissementsReport, $getDepensesReport, $filters);
+        $lignes = $this->lignes($request, $getInscriptionsReport, $getStudentsReport, $getEncaissementsReport, $getDepensesReport, $getPaiementProfReport, $filters);
 
         $pdf = $renderer->render(
             RapportCatalogue::vuePdf($cle),
@@ -247,7 +281,7 @@ final class RapportController extends Controller
                 $this->filtresAppliques($filters),
                 // Le « Total encaissé » du relevé — calculé en SQL sur tout
                 // l'ensemble filtré, jamais réadditionné par le gabarit.
-                $this->supplementsPdf($request, $getEncaissementsReport, $getDepensesReport, $filters),
+                $this->supplementsPdf($request, $getEncaissementsReport, $getDepensesReport, $getPaiementProfReport, $filters),
             ),
         );
 
@@ -268,6 +302,7 @@ final class RapportController extends Controller
         GetStudentsReport $getStudentsReport,
         GetEncaissementsReport $getEncaissementsReport,
         GetDepensesReport $getDepensesReport,
+        GetPaiementProfReport $getPaiementProfReport,
         ExporterRapportExcel $exporter,
         CurrentContext $context,
     ): StreamedResponse {
@@ -275,7 +310,7 @@ final class RapportController extends Controller
 
         $filters = $this->filters($request);
         $cle = $filters['rapport'];
-        $lignes = $this->lignes($request, $getInscriptionsReport, $getStudentsReport, $getEncaissementsReport, $getDepensesReport, $filters);
+        $lignes = $this->lignes($request, $getInscriptionsReport, $getStudentsReport, $getEncaissementsReport, $getDepensesReport, $getPaiementProfReport, $filters);
 
         // Les mêmes lignes de contexte que le PDF, dans le même ordre, et
         // construites depuis le MÊME dictionnaire : le classeur ne peut pas
@@ -316,6 +351,25 @@ final class RapportController extends Controller
             );
         }
 
+        // Le résumé du calcul (enseignant, mode, taux, séances…) puis le total
+        // PROPOSÉ — ou la raison pour laquelle rien n'est calculé : un
+        // classeur vide sans explication se lirait « rien à payer ».
+        if ($cle === GetPaiementProfReport::KEY) {
+            $paiementProf = $this->paiementProf($request, $getPaiementProfReport, $filters);
+
+            foreach ($getPaiementProfReport->resume($paiementProf['calcul']) as $libelle => $valeur) {
+                $sousTitres[] = $libelle.' : '.$valeur;
+            }
+
+            if ($paiementProf['avertissement'] !== '') {
+                $sousTitres[] = $paiementProf['avertissement'];
+            }
+
+            if ($paiementProf['calcul'] !== null) {
+                $sousTitres[] = 'Total proposé : '.$getPaiementProfReport->total($paiementProf['calcul']);
+            }
+        }
+
         return $exporter(
             RapportCatalogue::titre($cle),
             $context->etablissement(),
@@ -340,6 +394,7 @@ final class RapportController extends Controller
         GetStudentsReport $getStudentsReport,
         GetEncaissementsReport $getEncaissementsReport,
         GetDepensesReport $getDepensesReport,
+        GetPaiementProfReport $getPaiementProfReport,
         array $filters,
     ): Collection {
         return match ($filters['rapport']) {
@@ -373,7 +428,46 @@ final class RapportController extends Controller
                 $filters['typeDepenseFilter'],
                 $filters['statutDepenseFilter'],
             ),
+            GetPaiementProfReport::KEY => $getPaiementProfReport->lignes(
+                $this->paiementProf($request, $getPaiementProfReport, $filters)['calcul'],
+            ),
         };
+    }
+
+    /**
+     * Le calcul « paiement prof » demandé, résolu une seule fois par requête.
+     *
+     * @param  array<string, string>  $filters
+     * @return array{calcul: ?array<string, mixed>, enseignantId: string, enseignantOptions: list<array{value: string, label: string}>, avertissement: string}
+     */
+    private function paiementProf(Request $request, GetPaiementProfReport $report, array $filters): array
+    {
+        return $this->paiementProf ??= $report->resoudre(
+            $request->user(),
+            $filters['groupFilter'],
+            $filters['enseignantFilter'],
+            $filters['dateFrom'],
+            $filters['dateTo'],
+        );
+    }
+
+    /**
+     * Le catalogue servi à la page, sans les rapports dont la permission
+     * propre manque à l'utilisateur (RapportCatalogue::permission()) : le
+     * sélecteur ne propose pas un document que le téléchargement refuserait.
+     *
+     * @return list<array{key: string, label: string, rapports: list<array{value: string, label: string}>}>
+     */
+    private function ongletsAutorises(User $user): array
+    {
+        return array_map(static function (array $onglet) use ($user): array {
+            $onglet['rapports'] = array_values(array_filter(
+                $onglet['rapports'],
+                static fn (array $r): bool => ($p = RapportCatalogue::permission($r['value'])) === null || $user->can($p),
+            ));
+
+            return $onglet;
+        }, RapportCatalogue::onglets());
     }
 
     /**
@@ -391,8 +485,21 @@ final class RapportController extends Controller
         Request $request,
         GetEncaissementsReport $getEncaissementsReport,
         GetDepensesReport $getDepensesReport,
+        GetPaiementProfReport $getPaiementProfReport,
         array $filters,
     ): array {
+        // Le résumé du calcul, la raison d'un document vide, et le total
+        // PROPOSÉ — tous issus du MÊME calcul que les lignes.
+        if ($filters['rapport'] === GetPaiementProfReport::KEY) {
+            $paiementProf = $this->paiementProf($request, $getPaiementProfReport, $filters);
+
+            return [
+                'resume' => $getPaiementProfReport->resume($paiementProf['calcul']),
+                'avertissement' => $paiementProf['avertissement'],
+                'totalMontant' => $getPaiementProfReport->total($paiementProf['calcul']),
+            ];
+        }
+
         if ($filters['rapport'] === GetEncaissementsReport::KEY) {
             return [
                 'totalMontant' => $getEncaissementsReport->total(
@@ -593,11 +700,21 @@ final class RapportController extends Controller
         $fraisFilter = (string) $request->string('fraisFilter');
         $statutDepenseFilter = (string) $request->string('statutDepenseFilter');
 
+        // Un rapport dont la permission propre manque retombe sur le défaut,
+        // comme une clé inconnue — jamais un document que l'écran ne
+        // proposerait pas.
+        $permission = RapportCatalogue::permission($rapport);
+        $enseignantFilter = (string) $request->string('enseignantFilter');
+
         return [
             'rapport' => in_array($rapport, RapportCatalogue::clesImplementees(), true)
+                && ($permission === null || $request->user()->can($permission))
                 ? $rapport
                 : GetInscriptionsReport::KEY,
             'groupFilter' => (string) $request->string('groupFilter'),
+            // Un id d'employé ; validé contre les enseignants du groupe par
+            // GetPaiementProfReport, qui retombe sinon sur le principal.
+            'enseignantFilter' => ctype_digit($enseignantFilter) ? $enseignantFilter : '',
             'statutFilter' => in_array($statutFilter, Inscription::STATUTS, true) ? $statutFilter : '',
             'sexeFilter' => in_array($sexeFilter, Student::SEXES, true) ? $sexeFilter : '',
             'inscriptionFilter' => in_array($inscriptionFilter, GetStudentsReport::ETATS_INSCRIPTION, true)

@@ -64,6 +64,9 @@ export default function RapportsIndex({
     statutDepenseOptions,
     nombreLignes,
     montantTotal,
+    enseignantOptions,
+    avertissementRapport,
+    resumeRapport,
 }: RapportsPageProps) {
     const isLoading = useInertiaLoading();
 
@@ -110,6 +113,11 @@ export default function RapportsIndex({
             label: t('Group'),
             placeholder: t('Choose a course'),
             options: groupOptions,
+        },
+        enseignantFilter: {
+            label: t('Teacher'),
+            placeholder: t('Choose a teacher'),
+            options: enseignantOptions,
         },
         statutFilter: {
             label: t('Status'),
@@ -191,6 +199,17 @@ export default function RapportsIndex({
                 // Annulée. Un libellé générique laisserait croire que la
                 // colonne Montant du document s'y additionne.
                 total: t('Approved total'),
+            };
+        }
+
+        if (filters.rapport === 'calcul-paiement-prof') {
+            return {
+                // La raison vient du SERVEUR (groupe manquant, période trop
+                // longue, enseignant mal configuré…) : la page ne la devine pas.
+                vide: avertissementRapport !== '' ? avertissementRapport : t('No attendance for this teacher over this period.'),
+                unite: nombreLignes === 1 ? t('student') : t('students'),
+                // « Total proposé » : un calcul, pas un paiement.
+                total: t('Proposed total'),
             };
         }
 
@@ -279,6 +298,7 @@ export default function RapportsIndex({
                                     reload({
                                         rapport: onglet.rapports[0].value,
                                         groupFilter: '',
+                                        enseignantFilter: '',
                                         statutFilter: '',
                                         sexeFilter: '',
                                         inscriptionFilter: '',
@@ -339,7 +359,16 @@ export default function RapportsIndex({
                                 placeholder={definitionsFiltres[cle].placeholder}
                                 options={definitionsFiltres[cle].options}
                                 value={filters[cle]}
-                                onChange={(e) => reload({ [cle]: e.target.value })}
+                                // Changer de groupe repart du principal du
+                                // NOUVEAU groupe : l'enseignant de l'ancien
+                                // n'y enseigne peut-être pas.
+                                onChange={(e) =>
+                                    reload(
+                                        cle === 'groupFilter'
+                                            ? { groupFilter: e.target.value, enseignantFilter: '' }
+                                            : { [cle]: e.target.value },
+                                    )
+                                }
                             />
                         </div>
                     ))}
@@ -394,21 +423,37 @@ export default function RapportsIndex({
                         l'utilisateur sait ce qu'il télécharge avant de
                         cliquer, et un rapport vide se voit ici plutôt
                         que dans un PDF d'une page blanche. */}
-                    <p className="text-muted mb-3 me-3">
-                        {nombreLignes === 0 ? messages.vide : `${nombreLignes} ${messages.unite}`}
-                        {/* Le total vient du SERVEUR, calculé sur tout
-                            l'ensemble filtré — jamais additionné à partir de
-                            lignes rendues ici (la page n'en reçoit aucune).
-                            C'est le MÊME chiffre que le pied du PDF et que
-                            l'en-tête du classeur, donc l'utilisateur sait
-                            avant de cliquer ce que son document totalisera.
-                            Vide pour un rapport sans colonne monétaire. */}
-                        {montantTotal !== '' && nombreLignes > 0 && (
-                            <span className="ms-2 fw-semibold text-dark">
-                                - {messages.total} : {montantTotal}
-                            </span>
+                    <div className="mb-3 me-3">
+                        <p className="text-muted mb-0">
+                            {/* Mode horaire : aucune ligne par étudiant, mais un
+                                total — le compteur s'efface alors au profit du
+                                résumé plutôt que d'annoncer « aucun étudiant ». */}
+                            {nombreLignes === 0
+                                ? montantTotal !== '' && avertissementRapport === '' ? null : messages.vide
+                                : `${nombreLignes} ${messages.unite}`}
+                            {/* Le total vient du SERVEUR, calculé sur tout
+                                l'ensemble filtré — jamais additionné à partir de
+                                lignes rendues ici (la page n'en reçoit aucune).
+                                C'est le MÊME chiffre que le pied du PDF et que
+                                l'en-tête du classeur, donc l'utilisateur sait
+                                avant de cliquer ce que son document totalisera.
+                                Vide pour un rapport sans colonne monétaire. */}
+                            {montantTotal !== '' && (nombreLignes > 0 || avertissementRapport === '') && (
+                                <span className="ms-2 fw-semibold text-dark">
+                                    - {messages.total} : {montantTotal}
+                                </span>
+                            )}
+                        </p>
+                        {/* Le résumé du calcul servi par le serveur — le même que
+                            l'en-tête du PDF et du classeur. */}
+                        {Object.keys(resumeRapport).length > 0 && (
+                            <p className="text-muted fs-13 mb-0 mt-1">
+                                {Object.entries(resumeRapport)
+                                    .map(([libelle, valeur]) => `${libelle} : ${valeur}`)
+                                    .join(' · ')}
+                            </p>
                         )}
-                    </p>
+                    </div>
                     {/* Rouge pour le PDF, vert pour l'Excel : les couleurs des
                         deux formats eux-mêmes, ce qui permet de viser le bon
                         bouton sans lire le libellé. `btn-success` pour un

@@ -74,6 +74,8 @@ export interface PaiementProfPrefill {
     montant: string;
     /** Cotisation CNSS cochée au calcul : le modal s'ouvre coché. */
     cnss: boolean;
+    /** Retenue CNSS de cet enseignant (son salaire) ; null = aucun salaire saisi. */
+    cnssMontant: number | null;
     periodeDebut: string;
     periodeFin: string;
     description: string;
@@ -92,7 +94,11 @@ interface CalculPaiementProfProps {
     groupOptions: SelectOption[];
     paliersPaie: Record<string, number>;
     /** Cotisation CNSS retenue quand la case est cochée — servie par le serveur, jamais recopiée ici. */
-    cnssMontant: number;
+    /**
+     * Retenue CNSS IMPOSÉE (celle stockée sur un paiement déjà retenu).
+     * Absente : le salaire de l'enseignant du calcul (`calcul.enseignant.cnssMontant`).
+     */
+    cnssMontant?: number | null;
     canCreateDepense: boolean;
     /**
      * (Re)charger le calcul : l'hôte met les paramètres dans SA propre URL
@@ -395,7 +401,13 @@ export default function CalculPaiementProf({
     // Le total AFFICHÉ — et celui que « Enregistrer la dépense » pré-remplit —
     // est le NET : la cotisation CNSS est retenue dessus quand elle est
     // cochée, jamais au-delà du brut (une paie ne se doit pas).
-    const retenueCnss = cnss ? Math.min(cnssMontant, totalBrut) : 0;
+    // Retenue = le SALAIRE de l'enseignant payé (21/10/2026), servi par le
+    // serveur ; une valeur imposée (paiement déjà retenu) prime. Sans
+    // salaire sur sa fiche, rien ne peut être retenu : la case est
+    // désactivée et un rappel demande de le saisir.
+    const cnssDisponible: number | null = cnssMontant ?? calcul?.enseignant.cnssMontant ?? null;
+    const cnssActif = cnss && cnssDisponible !== null;
+    const retenueCnss = cnssActif ? Math.min(cnssDisponible, totalBrut) : 0;
     const totalAffiche = Math.round((totalBrut - retenueCnss) * 100) / 100;
 
     const nombreAjustements = useMemo(
@@ -466,7 +478,8 @@ export default function CalculPaiementProf({
             // dépense, jamais redéduit du groupe (23/09/2026).
             enseignantId: calcul.enseignant.id,
             montant: totalAffiche.toFixed(2),
-            cnss,
+            cnss: cnssActif,
+            cnssMontant: cnssDisponible,
             periodeDebut: calcul.periode.debut,
             periodeFin: calcul.periode.fin,
             // Pas de « Paiement prof » en tête : la colonne Type le dit déjà.
@@ -897,16 +910,16 @@ export default function CalculPaiementProf({
                             <Card className="w-100 h-100">
                                 <div className="text-muted fs-12 text-uppercase mb-1">{t('Total payment')}</div>
                                 <div className="fs-24 fw-bold text-success">{totalAffiche.toFixed(2)} MAD</div>
-                                {cnss && totalBrut >= cnssMontant && (
+                                {cnssActif && totalBrut >= cnssDisponible && (
                                     <small className="text-info d-block">
                                         <i className="ti ti-building-bank me-1" />
                                         {t('CNSS :montant MAD withheld · gross :brut MAD', {
-                                            montant: cnssMontant.toFixed(2),
+                                            montant: cnssDisponible.toFixed(2),
                                             brut: totalBrut.toFixed(2),
                                         })}
                                     </small>
                                 )}
-                                {cnss && totalBrut < cnssMontant && (
+                                {cnssActif && totalBrut < cnssDisponible && (
                                     <small className="text-danger d-block">
                                         <i className="ti ti-alert-triangle me-1" />
                                         {t('The CNSS contribution exceeds the computed amount: nothing is paid out.')}
@@ -991,14 +1004,28 @@ export default function CalculPaiementProf({
                                     id="pp-cnss"
                                     type="checkbox"
                                     className="form-check-input"
-                                    checked={cnss}
-                                    disabled={lectureSeule}
+                                    checked={cnssActif}
+                                    disabled={lectureSeule || cnssDisponible === null}
                                     onChange={(event) => setCnss(event.target.checked)}
                                 />
                                 <label htmlFor="pp-cnss" className="form-check-label fw-semibold">
-                                    {t('CNSS contribution withheld (:montant MAD)', { montant: cnssMontant.toFixed(2) })}
+                                    {cnssDisponible !== null
+                                        ? t('CNSS contribution withheld (:montant MAD)', { montant: cnssDisponible.toFixed(2) })
+                                        : t('CNSS contribution withheld')}
                                 </label>
                             </div>
+                            {cnssDisponible === null && !lectureSeule && (
+                                <small className="text-warning">
+                                    <i className="ti ti-alert-triangle me-1" />
+                                    {t("No salary on this teacher's record: enter it to withhold the CNSS contribution.")}{' '}
+                                    <a
+                                        href={`/backoffice/employees?search=${encodeURIComponent(calcul.enseignant.nom)}`}
+                                        className="fw-semibold"
+                                    >
+                                        {t('Enter the salary')} →
+                                    </a>
+                                </small>
+                            )}
                         </div>
                     </div>
 
