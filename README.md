@@ -21,16 +21,16 @@
 
 <br>
 
-![Modules](https://img.shields.io/badge/modules-27_backoffice_screens-0ea5e9?style=flat-square)
-![Permissions](https://img.shields.io/badge/permissions-121_across_13_roles-6366f1?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-168_files_·_1_685_cases-16a34a?style=flat-square)
-![Domain](https://img.shields.io/badge/domain-15_modules_·_44_actions-f59e0b?style=flat-square)
+![Modules](https://img.shields.io/badge/modules-30+_backoffice_screens-0ea5e9?style=flat-square)
+![Permissions](https://img.shields.io/badge/permissions-135_across_13_roles-6366f1?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-197_files_·_2_060+_cases-16a34a?style=flat-square)
+![Domain](https://img.shields.io/badge/domain-15_modules_·_68_actions-f59e0b?style=flat-square)
+![CLI](https://img.shields.io/badge/CLI-41_artisan_commands-8b5cf6?style=flat-square)
 ![Language](https://img.shields.io/badge/UI-Français_🇫🇷-64748b?style=flat-square)
-![Livewire](https://img.shields.io/badge/Livewire-fully_removed-ef4444?style=flat-square)
 
 <br>
 
-**[Modules](#-modules) · [Money invariants](#️-money-invariants-the-interesting-part) · [Architecture](#️-architecture-at-a-glance) · [Quick start](#-quick-start) · [CLI toolbox](#-cli-toolbox) · [Tests](#-tests)**
+**[Modules](#-modules) · [Money invariants](#️-money-invariants-the-interesting-part) · [Architecture](#️-architecture-at-a-glance) · [Quick start](#-quick-start) · [CLI toolbox](#-cli-toolbox) · [Tests](#-tests) · [Security](#-security--authorization-highlights)**
 
 </div>
 
@@ -38,9 +38,9 @@
 
 ## ✨ What is this?
 
-A complete **staff backoffice** for a multi-centre German-language school in Morocco: from the first phone call to the last dirham — student records, enrolments with per-group fee schedules, timetables and attendance, cash collection, teacher payroll, expenses, refunds and a fraud-resistant multi-centre till system — all in a French UI on the PreSkool admin theme.
+A complete **staff backoffice** for a multi-centre German-language school in Morocco: from the first phone call to the last dirham — student records, enrolments with per-group fee schedules, timetables and attendance, cash collection, bank transfers and cheques, teacher payroll, expenses, refunds and a fraud-resistant multi-centre till system — all in a French UI on the PreSkool admin theme.
 
-Built as a **modular monolith**: Laravel 13 + an Inertia.js / React 19 / TypeScript backoffice, business rules isolated in an `app/Domain` layer, and a strict Backoffice / Frontoffice separation (the public student portal is a future phase — today the Frontoffice serves only signed, publicly-readable receipts).
+Built as a **modular monolith**: Laravel 13 + an Inertia.js / React 19 / TypeScript backoffice, business rules isolated in an `app/Domain` layer, and a strict Backoffice / Frontoffice separation (the public student portal is a future phase — today the Frontoffice serves only signed, publicly-readable receipts on a dedicated sub-domain).
 
 > **Production status:** live on a Hostinger VPS, loaded with the real legacy data of 7 GLS branches — 23 000+ imported payments (≈ 21.8 M DH), students, groups, enrolments and attendance.
 
@@ -52,39 +52,42 @@ Built as a **modular monolith**: Laravel 13 + an Inertia.js / React 19 / TypeScr
 
 | | Module | What it does |
 |---|---|---|
-| 👨‍🎓 | **Étudiants** | Photo upload, CEFR levels **+ German tracks** (Arbeit / Studium / Ausbildung with conditional Domaine / STK–DSH fields), CIN, guardian block, duplicate **merge** tool, read-only detail page |
-| 📝 | **Inscriptions** | Inline new-student creation, fee lines with % or DH discounts in one transaction, per-line **corbeille** (hiding a paid fee releases its money as an advance), group change **across an academic year**, cancellation with a catalogued reason |
-| 👥 | **Groupes** | Catalog fees assigned per group (own amount + due date), teacher assignment history, payment **matrix** per group, archive to `groups_historique` — a group is closed, reopened or (super-admin only) deleted, and closing cascades onto its enrolments |
-| 🗓️ | **Emploi du temps** | Weekly grid per centre, `creneaux` (recurring slots) with duplicate-slot refusal, closed slots shown greyed rather than hidden, and a **“why is there no séance?”** diagnostic banner |
-| ✅ | **Séances & présences** | Day-by-day session generation (08:00 job, bounded by the group's dates), attendance sheet with **payment-arrears badges** on each student's roll-call line, session validation & cancellation |
-| 🧑‍🏫 | **Employés** | Login auto-provisioned on creation (one-time credentials + default role by job category), multi-centre assignment with an explicit **primary centre**, photo, 10 job categories |
-| 💵 | **Paiement prof** | Teacher payroll: per-employee pay configuration (hourly / GLS / win-win), months anchored on the group, rate ÷ sessions × attendance — read-only calculation feeding a « Paiement prof » expense |
+| 👨‍🎓 | **Étudiants** | Photo upload, CEFR levels **+ German tracks** (Arbeit / Studium / Ausbildung with conditional fields), CIN, guardian block, duplicate **merge** tool, read-only detail page with enrolments, payments and deleted-file history |
+| 🔁 | **Transferts d'étudiants** | Moving a student to another centre is a **request** (target centre + target group + reason) **validated by the super-admin**: the file is copied into the new centre, the chosen payments follow the person, attendance stays where it happened |
+| 📝 | **Inscriptions** | Inline new-student creation, fee lines with % or DH discounts in one transaction, per-line **corbeille** (hiding a paid fee releases its money as an advance), group change **across an academic year**, cancellation with a catalogued reason, **pause** (archive with a return date) and a super-admin **trash** tab that says who deleted what |
+| 👥 | **Groupes** | Catalog fees assigned per group (own amount + due date), teacher assignment history, payment **matrix** per group, archive to `groups_historique` — a group is closed, reopened or (super-admin only) deleted; closing cascades onto its enrolments, deleting never removes them |
+| 🗓️ | **Emploi du temps** | Weekly grid per centre, recurring slots with duplicate-slot refusal, closed slots shown greyed rather than hidden, and a **“why is there no séance?”** diagnostic banner |
+| ✅ | **Séances & présences** | Day-by-day session generation (08:00 job, bounded by the group's dates), attendance sheet with **payment-arrears badges** on each roll-call line, session validation & cancellation |
+| 🧑‍🏫 | **Employés** | Login auto-provisioned on creation (one-time credentials + default role by job category), multi-centre assignment with an explicit **primary centre**, salary, photo, 10 job categories |
+| 🍎 | **Espace enseignant** | A teacher sees **only their own** groups, students, sessions and timetable — card views without a single amount — and their own « Paiement prof » lines |
+| 💵 | **Paiement prof** | Teacher payroll: per-employee pay configuration (hourly / tiered), months anchored on the group, attendance tiers, **CNSS withholding** (fixed part + salary), one payment per group per month — a read-only calculation feeding a « Paiement prof » expense |
 
 ### 💰 Money
 
 | | Module | What it does |
 |---|---|---|
-| 💳 | **Encaissements** | Fee-line settlement (full / partial), 4 payment methods, **advances** (received but unallocated money) with apply / convert / **split**, payment-method requalification, fee transfer to another student, printable & **WhatsApp-shareable receipt** |
+| 💳 | **Encaissements** | Fee-line settlement (full / partial), cash / TPE / cheque, **advances** (received but unallocated money) with apply / convert / **split**, 14-day application window, payment-method requalification, fee transfer to another student, printable & **WhatsApp-shareable receipt** |
+| 🏧 | **Virements** | A bank transfer is **declared**, not cashed: payer, bank reference, proof upload → verified and validated by the **accountant** against the statement; money enters the centre's Virement account only at validation, pending amounts are counted apart |
+| 🧿 | **Chèques** | Mandatory photo at entry, then a **two-step bank journey**: deposit (date + receipt) → accepted or rejected by the accountant; guarantee cheques never go to the bank and are returned against the replacing payment; no step moves a till |
 | 🧾 | **Dépenses** | Two forms in one table: ordinary expenses (invoice ref, receipts upload) and « Paiement prof »; optional **approval workflow**, per-centre balance guard, cancellation by compensating entry (never a delete) |
-| ↩️ | **Remboursements** | Refunds bounded by the till balance; choosing *which* till is debited is a director-only right; a refund of a rejected-cheque payment reverses the cheque account, not the drawer |
+| ↩️ | **Remboursements** | Refunds bounded by the till balance; choosing *which* till is debited is a director-only right; a refund of a rejected-cheque payment reverses the cheque account, not the drawer; a refund makes the fee due again |
 | 🏦 | **Caisses** | *Ma caisse*, unified transactions **journal**, per-centre ventilation on every screen, **two-step till transfers** (validated by the recipient — super-admins do **not** bypass), pending transfers **reserve** their amount, method accounts (TPE / Chèque / Virement) per centre |
-| 🧿 | **Chèques** | Bank journey: En possession → Déposé → Encaissé / Rejeté, guarantee-cheque restitution, `cheques.deposit` open to every role (no money moves) while rewriting a cheque stays with management |
-| ⏰ | **Recouvrement** | Overdue-fee mirror with duration buckets — it chases **only `Active` enrolments**, so closed files are never billed |
+| ⏰ | **Recouvrement** | Overdue-fee mirror with duration buckets — it chases **only `Active` enrolments**, so closed or paused files are never billed |
 | 📅 | **Échéances en masse** | Applies one due date to many fee lines of a group at once; out-of-scope or hidden lines refuse the **whole batch** |
 
 ### 📊 Operations & administration
 
 | | Module | What it does |
 |---|---|---|
-| 📈 | **Tableau de bord** | Context-aware stat cards + an **annual fees chart** (billed vs collected, filed by month, closed files counted only for what was paid) |
-| 📄 | **Rapports** | Catalogued reports (enrolments, students, payments statement, expenses) rendered to **PDF (mPDF)** and streaming **Excel (OpenSpout)**; a new report = one catalogue entry + one Domain query + one Blade view |
+| 📈 | **Tableau de bord** | Context-aware stat cards, teacher calendar, and an **annual fees chart** (billed vs collected net of refunds, filed by month, Active files only) reserved to the super-admin |
+| 📄 | **Rapports** | Catalogued reports — enrolments, students, payments statement, expenses, **teacher pay calculation** — rendered to **PDF (mPDF)** and streaming **Excel (OpenSpout)**; a new report = one catalogue entry + one Domain query + one Blade view |
 | 📦 | **Stock** | Per-centre book & material inventory with in/out movements; the physical stock belongs to the marketing manager alone |
-| 📥 | **Import** | Legacy-CRM importer (students, inscriptions, encaissements, présences, or a combined run) with batch/row tracking, per-centre dedupe and a verification pass |
+| 📥 | **Import** | Legacy-CRM importer (students, inscriptions, encaissements, présences, or a combined run) with batch/row tracking, per-centre dedupe, a verification pass and a reconciliation screen |
 | 🏢 | **Multi-centres** | Top-bar context switcher (academic year + centre) that governs **everything** read *and* written; « Tous les centres » is super-admin only |
-| 🔐 | **Rôles & permissions** | **121** `module.action` permissions across **13** roles mirroring the job titles, centre-scoped policies, super-admin safety rails, per-user authorization screen |
-| 📜 | **Journal d'audit** | Append-only activity journal (`/9wiwid`) — every model change, plus IP, user-agent, route and a frozen causer label; ids resolved to names at **read** time |
+| 🔐 | **Rôles & permissions** | **135** `module.action` permissions across **13** roles mirroring the job titles, centre-scoped policies, super-admin safety rails, per-user authorization screen — the seeder **merges** presets and never undoes a hand edit |
+| 📜 | **Journal d'audit** | Append-only activity journal — every model change, plus IP, user-agent, route and a frozen causer label; ids resolved to names at **read** time |
 | ⚙️ | **Paramètres** | Centres, academic years (with a no-gap / no-overlap calendar guard), rooms, fee catalog, banks, cancellation reasons, expense & stock types, system switches |
-| 🛠️ | **Maintenance** | Maintainer-identity-only tools: a button-driven **database browser/editor** and payment-reconciliation utilities — off the sidebar, but protected by permission, not by absence |
+| 🛠️ | **Maintenance** | Maintainer-identity-only tools: a button-driven **database browser/editor** and a **payment-relocation** screen for files keyed under the wrong name — off the sidebar, but protected by permission, not by absence |
 
 ---
 
@@ -95,7 +98,7 @@ The finance layer is designed so that **fraud leaves a trail and mistakes cannot
 <table>
 <tr><td width="34%">💸 <b>One transaction</b></td><td>Every money movement runs through a Domain action in a single DB transaction — <code>caisses.solde</code> is application-maintained and never touched by a raw update</td></tr>
 <tr><td>🧾 <b>Append-only</b></td><td>Money records are <b>never deleted or re-amounted</b> — corrections are compensating entries; there are no destroy routes to begin with</td></tr>
-<tr><td>🤝 <b>Two-person control</b></td><td>Till transfers are request → validation <b>by the recipient</b>; self-validation is refused and <code>Gate::before</code> explicitly excludes it from the super-admin bypass</td></tr>
+<tr><td>🤝 <b>Two-person control</b></td><td>Till transfers are validated <b>by the recipient</b>, bank transfers and cheque deposits by the <b>accountant</b>, student transfers by the <b>super-admin</b> — and whoever declared never validates their own request</td></tr>
 <tr><td>🔒 <b>Locked reads</b></td><td>Every “read a balance, then write” check runs <i>inside</i> the transaction on a <code>lockForUpdate()</code> row — a guard evaluated before it is a double-spend</td></tr>
 <tr><td>🔢 <b>System references</b></td><td><code>ETU-</code> <code>INS-</code> <code>ENC-</code> <code>DEP-</code> <code>RMB-</code> <code>TRF-</code>… are generated, never typed</td></tr>
 <tr><td>📜 <b>Full audit</b></td><td>Fraud-relevant models log every column (spatie/activitylog), and the journal model itself throws on update and delete</td></tr>
@@ -136,7 +139,8 @@ Decided **only** by `Domain\Finance\Support\CaisseResolver` — never re-derived
 | Operation | Account debited / credited |
 |---|---|
 | Payment, **Espèces** | the cashier's own physical till |
-| Payment, **TPE / Chèque / Virement** | the **active centre's** account for that method (the physical till never moves) |
+| Payment, **TPE / Chèque** | the **active centre's** account for that method (the physical till never moves) |
+| **Virement** | the centre's Virement account, credited only when the accountant **validates** the declaration |
 | **Expense, refund** | **always** the acting employee's physical till, whatever the method says |
 | **Transfer** | cash accounts only — a method account is refused |
 
@@ -148,15 +152,17 @@ An **avance** is money received but not yet allocated to a fee (`inscription_fee
 
 - **An application row inherits `caisse_id`, `agent_id`, `date_paiement` and `methode` from the avance** — never from the employee clicking, never from today. Stamping today would rewrite when GLS was paid.
 - **Application rows are excluded from every “money received” total** (journal, cash accounts, reports). Counting them double-counts the same dirham — measured at 2.3 M DH on the real database.
-- **A payment can be SPLIT when converting to an avance** (« À libérer »): part stays on the original fee, the rest becomes an avance. This is *composed* from the two existing primitives — detach, then re-apply the kept part — so no amount is edited and no new money row is created. Typical case: a student studies two weeks in group A, moves to group B; 700 DH stays on A, 700 DH follows them to B.
+- **A payment can be SPLIT when converting to an avance** (« À libérer »): part stays on the original fee, the rest becomes an avance. This is *composed* from the two existing primitives — detach, then re-apply the kept part — so no amount is edited and no new money row is created.
+- **An avance is applicable for 14 days**, then it stays listed, counted and refundable but needs a super-admin to apply or extend it; converting a payment into an avance has no age limit.
 - **The chain can be several levels deep** (applied → reconverted → re-applied). Always read it through `ResoudreAllocationsAvance`, never one hop.
 - **The cheque behind an avance is read through the chain** (`Domain\Payments\Support\ChequeOrigine`) — an application row carries no `cheque_id` of its own, so testing `$row->cheque_id` directly misses a rejected cheque and lets non-existent money be applied or refunded from the till.
 - **Receiving and allocating are not the same gesture**: a *payment* requires an `Active` enrolment (new money must never reopen a closed debt), while *applying an advance* is allowed on any status — the money is already in the till and only its allocation is being decided.
+- **Paid = received − refunded.** One definition (`InscriptionFee::montantPaye()` / `avecPayeNet()`) feeds every list, matrix, report and status; a refund reopens the fee, cancelling the refund settles it again.
 
 ### 🎯 The rule behind the rules
 
 > **Two screens must never show two different truths about the same dirham.**
-> When a number looks wrong, fix the single shared definition — don't add a second calculation next to it. And when a read-model needs to know whether an action will be accepted, it must **carry that action's own rule** (`applicable`, `splittable`, `methodeRequalifiable`, `transferableAutreEtudiant`…) rather than re-deriving one, or the screen will offer what the server refuses. Options the server would reject are **shown and disabled with the reason**, never hidden.
+> When a number looks wrong, fix the single shared definition — don't add a second calculation next to it. And when a read-model needs to know whether an action will be accepted, it must **carry that action's own rule** (`applicable`, `splittable`, `methodeRequalifiable`, `validationBlocker`…) rather than re-deriving one, or the screen will offer what the server refuses. Options the server would reject are **shown and disabled with the reason**, never hidden.
 
 ---
 
@@ -174,9 +180,9 @@ routes/backoffice.php ── auth + permission middleware
 
 | Layer | Rule |
 |---|---|
-| **Frontend** | Inertia + React on **every** backoffice screen — no Livewire, no Alpine, no jQuery plugin anywhere (fully removed, Phase 11) |
-| **Lists** | Server-side pagination / search / sort / filter, always — never a client-side dataset; PostgreSQL `ILIKE` for every user-facing search |
-| **Dropdowns** | Native `<select>` via `Components/Forms/SelectField.tsx` — no Select2, no jQuery bridge |
+| **Frontend** | Inertia + React on **every** backoffice screen — no Livewire, no Alpine, no jQuery plugin anywhere |
+| **Lists** | Server-side pagination / search / sort / filter, always — never a client-side dataset; PostgreSQL `ILIKE` for every user-facing search; header totals are SQL sums over the filtered set |
+| **Dropdowns** | Native `<select>` via `Components/Forms/SelectField.tsx` — options the server would refuse are disabled with their reason, never removed |
 | **Modals** | React state only (`Components/Modals/Modal.tsx`) — the Bootstrap markup is reused, its JavaScript is not |
 | **Filters** | Never reset as a side effect; cleared only by the explicit « Réinitialiser les filtres » button, and mutations redirect **preserving the query string** |
 | **Authorization** | Server-side: `permission:` middleware + policies. Props like `CrudPermissions` only hide affordances |
@@ -184,7 +190,7 @@ routes/backoffice.php ── auth + permission middleware
 | **Context** | The top-bar year + centre switcher governs every read **and** every write (`AssertsContextScope`) |
 | **i18n** | French first: every visible string goes through `__()` / `t()` against the same `lang/fr.json` dictionary on both sides |
 | **Uploads** | spatie/medialibrary on a dedicated disk, served from `/media/<uuid8>/…` |
-| **Database** | PostgreSQL only — no SQLite, no MySQL, no driver branches; `jsonb` over `json`; explicit indexes on FK columns |
+| **Database** | PostgreSQL only — no SQLite, no MySQL, no driver branches; `jsonb` over `json`; explicit indexes on FK columns; schema lives in `create_*` migrations, production patches are idempotent SQL |
 
 📚 Deep dives live in [`docs/`](docs/) — architecture, [roles & permissions](docs/roles-and-permissions.md), [audit journal](docs/audit-journal.md), [VPS deployment](docs/vps-deployment.md), [legacy import CLI](docs/legacy-import-cli.md) — dated audits and measurements in [`docs/rapports/`](docs/rapports/), and the full DB rationale in [`gls-crm-schema.md`](gls-crm-schema.md). **[`CLAUDE.md`](CLAUDE.md) is the binding rule set for any contributor, human or AI.**
 
@@ -259,7 +265,7 @@ C:\php84\php.exe artisan serve
 
 | Seeder | Creates |
 |---|---|
-| `RolesAndPermissionsSeeder` | the 121 permissions and 13 role presets |
+| `RolesAndPermissionsSeeder` | the 135 permissions and 13 role presets — **merged** into existing roles, hand edits survive |
 | `ReferentialDataSeeder` | 7 GLS branches, rooms, academic years |
 | `AdminUserSeeder` | the super-admin account (password written **only on creation**) |
 | `TypeDepense` · `StockType` · `BookStock` · `Frais` · `Banque` · `MotifAnnulation` | the locked catalogs (books at quantity **0** — real stock enters by a movement) |
@@ -273,7 +279,7 @@ Local login defaults to `ADMIN_EMAIL` / `ADMIN_PASSWORD` (`rafik@glszentrum.com`
 
 ## 🧰 CLI toolbox
 
-Roughly 40 purpose-built commands live in `app/Console/Commands`. The ones you actually reach for:
+41 purpose-built commands live in `app/Console/Commands`. The ones you actually reach for:
 
 | Command | Does |
 |---|---|
@@ -282,12 +288,15 @@ Roughly 40 purpose-built commands live in `app/Console/Commands`. The ones you a
 | `import:verifier` | Read-only verification of an import against the source export |
 | `caisse:verifier-coherence` | **Read-only auditor**: mis-routed rows, duplicate accounts, tills per employee, balance vs journaled movements (`--strict`) |
 | `caisse:recalculer-soldes` | Re-homes historical non-cash *payments* left in a till (dry-run by default, `--apply`) |
+| `finance:auditer` | Cross-table financial invariant audit |
 | `depenses:annuler-doublon` | Cancels a duplicated expense by compensating entry — refuses unless every proof matches |
+| `frais:recalculer-statuts-rembourses` | Re-derives fee statuses net of refunds (dry-run by default) |
+| `etudiants:fusionner-doublons` | Merges duplicate student records, keeping one row per attendance |
 | `groupes:supprimer-creneaux-doubles` | Removes duplicate timetable slots, keeping the oldest (dry-run by default) |
-| `inscriptions:liberer-paiements-frais-masques` | Releases money stuck on fee lines hidden before the fix |
+| `inscriptions:liberer-paiements-frais-masques` | Releases money stuck on hidden fee lines |
 | `auth:assign-super-admin` | First super-admin assignment |
 | `auth:sync-default-roles` | Idempotent repair of role-less logins after a restore |
-| `seances:generer` | The 08:00 day-by-day session generator |
+| `seances:generate` | The 08:00 day-by-day session generator |
 
 > 🚨 Every destructive command **dry-runs by default** and needs `--apply`. Read the dry-run output before touching production, and run `caisse:verifier-coherence` before *and* after anything that moves money.
 
@@ -296,10 +305,10 @@ Roughly 40 purpose-built commands live in `app/Console/Commands`. The ones you a
 ## 🧪 Tests
 
 ```bash
-php artisan test          # 168 test files, ~1 685 cases
+php artisan test          # 197 test files, 2 060+ cases
 ```
 
-Feature tests cover every module: allowed **and** denied (403) paths, centre scoping, context write guards, money invariants (balances move exactly once, self-validation refused, no expense beyond its centre's share), advance chains, Inertia page/modal flows, seeder idempotence and upload rules.
+Feature tests cover every module: allowed **and** denied (403) paths, centre scoping, context write guards, money invariants (balances move exactly once, self-validation refused, no expense beyond its centre's share), advance chains, cheque and bank-transfer journeys, student transfers, Inertia page/modal flows, seeder idempotence, query-count ceilings and upload rules.
 
 Tests run against a real PostgreSQL database, `gls_crm_test` (`phpunit.xml`), kept separate from the dev database `gls_crm`. **Never point PHPUnit at `gls_crm`** — `RefreshDatabase` and any destructive seeder must only ever run against `gls_crm_test`.
 
@@ -319,11 +328,12 @@ php artisan route:list     # routes named correctly
 ## 🔐 Security & authorization highlights
 
 - **13 roles, one per job title** — permissions are checked, role names never are (only three deliberate `hasRole()` sites exist).
-- **Only super-admins delete.** `PermissionRegistry::superAdminOnly()` *filters* every preset, so writing a `*.delete` into one has no effect — and a future `*.delete` is locked down automatically.
-- **Some abilities exclude even the super-admin bypass** (`NO_SUPER_ADMIN_BYPASS`): validating a transfer into someone else's till, cancelling an expense, editing a closed group. Two-person control must survive the most privileged account.
-- **Two maintenance tools are gated by identity, not permission** — the database browser and closed-group correction answer to a single maintainer account, decided *above* `Gate::before`.
-- **The maintainer accounts are hidden from every list, dropdown and total — never from recording.** Hiding is a display filter; the journal writes their entries in full, with a toggle to show them again.
-- **The audit journal is append-only at the model level**, below every gate, and its only route is `index`/`show`.
+- **Only super-admins delete.** `PermissionRegistry::superAdminOnly()` *filters* every preset, so writing a `*.delete` into one has no effect — and a future `*.delete` is locked down automatically. Granting a reserved ability directly to a user is itself a super-admin's act.
+- **Some abilities exclude even the super-admin bypass** (`NO_SUPER_ADMIN_BYPASS`): validating a transfer into someone else's till, cancelling or editing a decided expense, editing a closed group. Two-person control must survive the most privileged account.
+- **Two maintenance tools are gated by identity, not permission** — the database browser and the payment-relocation screen answer to a single maintainer account, decided *above* `Gate::before`.
+- **The maintainer account is hidden from every list, dropdown and total — never from recording.** Hiding is a display filter; the journal writes its entries in full, with a toggle to show them again.
+- **A physical front-desk gesture gets its own permission** (`cheques.deposit`, `student-transfers.create`, bulk due dates…) held by every role, while rewriting a money document stays with management.
+- **The audit journal is append-only at the model level**, below every gate, and its only route is `index`.
 - `migrate:fresh` / `migrate:refresh` / `db:wipe` are **refused in production** by `DB::prohibitDestructiveCommands()`, and `deploy.sh` snapshots the database before every deploy.
 
 ---
