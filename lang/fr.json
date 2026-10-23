@@ -1775,6 +1775,8 @@
     "The CNSS contribution exceeds the computed amount: nothing is paid out.": "La cotisation CNSS dépasse le montant calculé : rien n'est versé.",
     "CNSS :montant withheld": "CNSS :montant retenue",
     "CNSS contribution withheld": "Cotisation CNSS retenue",
+    "Gross": "Brut",
+    "Net paid": "Net versé",
     "The amount above is the net paid out, :montant MAD of CNSS already withheld.": "Le montant ci-dessus est le net versé, cotisation CNSS de :montant MAD déjà retenue.",
     "Changing the CNSS deduction corrects the amount paid: super-admin only.": "Modifier la retenue CNSS corrige le montant versé : réservé au super-admin.",
     "Only a super-admin can change the CNSS deduction of a recorded payment: it changes the amount paid.": "Seul un super-admin peut modifier la retenue CNSS d'un paiement enregistré : cela change le montant versé.",
