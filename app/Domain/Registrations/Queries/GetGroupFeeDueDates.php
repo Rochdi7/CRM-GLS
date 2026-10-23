@@ -122,9 +122,9 @@ final class GetGroupFeeDueDates
     }
 
     /**
-     * The fees ACTUALLY carried by that group's inscriptions — not the whole
-     * catalog. Offering a fee no student of the group holds would open an
-     * empty table with nothing on screen explaining why.
+     * The whole active catalog plus any inactive fee still carried by a
+     * visible line of that group's inscriptions. A fee no student holds opens
+     * the page's explicit empty state, which says why the table is empty.
      *
      * @return array<int, array{value:int,label:string}>
      */
@@ -147,12 +147,13 @@ final class GetGroupFeeDueDates
             ->pluck('frais_id')
             ->all();
 
-        if ($ids === []) {
-            return [];
-        }
-
+        // Every ACTIVE catalog fee is offered too, carried or not (23/10/2026):
+        // a fee the group bills but no visible line holds — « Frais d'Octobre »
+        // hidden on 5 inscriptions and never created on 32 — vanished from the
+        // dropdown, and the operator could not even see that it was missing.
+        // Selecting one opens the page's explicit « no visible line » state.
         return Frais::query()
-            ->whereIn('id', $ids)
+            ->where(fn ($q) => $q->whereIn('id', $ids)->orWhere('statut', Frais::STATUT_ACTIF))
             ->orderBy('nom')
             ->get(['id', 'nom'])
             ->map(fn (Frais $f): array => ['value' => $f->id, 'label' => (string) $f->nom])
