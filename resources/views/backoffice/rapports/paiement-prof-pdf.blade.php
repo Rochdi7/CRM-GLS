@@ -90,11 +90,9 @@
         @endforeach
     </div>
 
-    @if ($detail)
-        <div class="note">Détail du calcul refait à partir des appels saisis, sur la période payée - le montant versé est celui de la dépense enregistrée.</div>
-    @else
+    @unless ($detail)
         <div class="note">Paiements prof enregistrés - seuls les paiements approuvés entrent dans le total.</div>
-    @endif
+    @endunless
 
     @if ($lignes->isEmpty())
         @if ($detail && $avertissement === '')
