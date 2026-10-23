@@ -328,11 +328,15 @@ final class GetPaiementProfReport
                     ->whereHas('group', fn (Builder $g) => $g->where('enseignant_id', (int) $enseignantFilter)))));
     }
 
-    /** Même lecture que l'écran : 4 semaines = le mois complet. */
+    /**
+     * Même lecture que l'écran : 4 semaines = le mois complet. Rien payé
+     * s'imprime « 0 », jamais « - » qu'on lirait comme une donnée manquante
+     * (23/10/2026), dans le PDF comme dans le classeur.
+     */
     private static function palier(int $semaines): string
     {
         return match ($semaines) {
-            0 => '-',
+            0 => '0',
             1 => '1 semaine',
             4 => 'Mois complet',
             default => "{$semaines} semaines",

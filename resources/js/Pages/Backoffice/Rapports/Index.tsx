@@ -69,7 +69,6 @@ export default function RapportsIndex({
     paiementOptions,
     paiementProfDetail,
     avertissementRapport,
-    resumeRapport,
 }: RapportsPageProps) {
     const isLoading = useInertiaLoading();
 
@@ -473,15 +472,10 @@ export default function RapportsIndex({
                                 </span>
                             )}
                         </p>
-                        {/* Le résumé du calcul servi par le serveur — le même que
-                            l'en-tête du PDF et du classeur. */}
-                        {Object.keys(resumeRapport).length > 0 && (
-                            <p className="text-muted fs-13 mb-0 mt-1">
-                                {Object.entries(resumeRapport)
-                                    .map(([libelle, valeur]) => `${libelle} : ${valeur}`)
-                                    .join(' · ')}
-                            </p>
-                        )}
+                        {/* Le résumé du paiement n'est plus répété ici
+                            (23/10/2026) : il figure en tête du PDF et du
+                            classeur, l'écran n'affiche que le compteur et le
+                            total. */}
                     </div>
                     {/* Rouge pour le PDF, vert pour l'Excel : les couleurs des
                         deux formats eux-mêmes, ce qui permet de viser le bon
