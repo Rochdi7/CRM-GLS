@@ -3137,6 +3137,8 @@ export interface PaiementProfEnseignantOption {
     mode: PaiementProfMode | '';
     taux: number;
     probleme: string | null;
+    /** Période déjà payée (DoublonPaiementProf) — message de refus, sinon null. */
+    dejaPaye: string | null;
 }
 
 /** Réponse de `paiement-prof/groupes/{group}/options`. */
@@ -3326,8 +3328,10 @@ export interface RapportOnglet {
 export interface RapportFilters {
     rapport: string;
     groupFilter: string;
-    /** « Calcul paiement prof » : l'enseignant calculé (le principal du groupe par défaut). */
+    /** « Calcul paiement prof » : l'enseignant payé (vide = tous). */
     enseignantFilter: string;
+    /** « Calcul paiement prof » : le paiement détaillé (vide = la liste des paiements). */
+    paiementFilter: string;
     statutFilter: string;
     sexeFilter: string;
     inscriptionFilter: string;
@@ -3345,6 +3349,7 @@ export interface RapportFilters {
 export type RapportFiltreKey =
     | 'groupFilter'
     | 'enseignantFilter'
+    | 'paiementFilter'
     | 'statutFilter'
     | 'sexeFilter'
     | 'inscriptionFilter'
@@ -3363,6 +3368,8 @@ export interface RapportsPageProps {
      * décidés par RapportCatalogue::filtres() côté serveur.
      */
     filtresVisibles: RapportFiltreKey[];
+    /** La fenêtre Du / Au est-elle appliquée par ce rapport (RapportCatalogue::fenetreDates()) ? */
+    fenetreDatesVisible: boolean;
     groupOptions: SelectOption[];
     statutOptions: SelectOption[];
     sexeOptions: SelectOption[];
@@ -3389,8 +3396,12 @@ export interface RapportsPageProps {
      * donc moins que la somme des montants listés.
      */
     montantTotal: string;
-    /** « Calcul paiement prof » : les enseignants du groupe choisi (vide sans groupe). */
+    /** « Calcul paiement prof » : les enseignants qui ont un paiement (dans le groupe choisi, s'il y en a un). */
     enseignantOptions: SelectOption[];
+    /** « Calcul paiement prof » : les paiements qui passent les filtres Groupe / Enseignant. */
+    paiementOptions: SelectOption[];
+    /** « Calcul paiement prof » : true = le document détaille UN paiement (lignes par étudiant), false = il liste les paiements. */
+    paiementProfDetail: boolean;
     /** Pourquoi rien n'est calculé (groupe manquant, période trop longue…) — '' sinon. */
     avertissementRapport: string;
     /** Résumé du calcul (enseignant, mode, taux…) : libellé => valeur, déjà en français. */

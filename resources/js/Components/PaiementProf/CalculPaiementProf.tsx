@@ -352,6 +352,10 @@ export default function CalculPaiementProf({
         periodeInvalide === null &&
         enseignantChoisi !== null &&
         enseignantChoisi.probleme === null &&
+        // Période déjà payée à ce prof : le serveur refuserait la dépense
+        // (DoublonPaiementProf) — on bloque dès le calcul.
+        enseignantChoisi.dejaPaye === null &&
+        !chargement &&
         (enseignantChoisi.mode !== 'horaire' || (saisie.heures !== '' && Number(saisie.heures) > 0));
 
     function lancerCalcul() {
@@ -722,6 +726,13 @@ export default function CalculPaiementProf({
                                         </span>
                                     )}
                                 </div>
+
+                                {enseignantChoisi !== null && enseignantChoisi.dejaPaye !== null && !chargement && (
+                                    <div className="alert alert-danger d-flex align-items-start gap-2">
+                                        <i className="ti ti-alert-triangle mt-1" />
+                                        <span>{enseignantChoisi.dejaPaye}</span>
+                                    </div>
+                                )}
 
                                 {enseignantChoisi !== null && (
                                     <div className="alert alert-light border">

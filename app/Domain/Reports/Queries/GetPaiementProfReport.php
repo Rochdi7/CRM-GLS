@@ -4,100 +4,154 @@ declare(strict_types=1);
 
 namespace App\Domain\Reports\Queries;
 
+use App\Domain\Finance\Support\VentilationCentre;
 use App\Domain\Payroll\Queries\GetPaiementProfCalcul;
 use App\Domain\Payroll\Support\MoisDeGroupe;
+use App\Models\Depense;
 use App\Models\Employee;
 use App\Models\Group;
+use App\Models\TypeDepense;
 use App\Models\User;
+use App\Services\Authorization\CenterAccessService;
+use App\Services\Context\CurrentContext;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 /**
- * « Calcul paiement prof » — rapport imprimable (PDF / Excel) du calcul que
- * propose l'écran « Calcul paiement prof », pour UN groupe, UN enseignant et
- * UNE période (la fenêtre de dates du rapport).
+ * « Calcul paiement prof » — rapport imprimable (PDF / Excel) des paiements
+ * prof ENREGISTRÉS (dépenses « Paiement prof »), refondu le 23/10/2026.
  *
- * ⚠ Ce rapport ne CALCULE rien lui-même : il appelle `GetPaiementProfCalcul`,
- * la seule définition de la paie (paliers de présences, mode et taux lus sur
- * la fiche de l'employé, séances de CET enseignant seulement). Recopier la
- * règle ici ferait imprimer un montant que l'écran ne propose pas.
+ * Avant, le rapport refaisait un calcul libre pour un groupe + un enseignant
+ * + une fenêtre de dates — l'utilisateur devait retaper la période d'un
+ * paiement déjà saisi. Désormais trois filtres, tous optionnels, sans fenêtre
+ * de dates :
+ *  - **Groupe** : vide = tous les groupes du centre/année actifs ;
+ *  - **Enseignant** : vide = tous ; seul = tous ses paiements, tous groupes ;
+ *  - **Paiement** : la liste des paiements prof qui passent les deux filtres
+ *    précédents. Vide = le document LISTE ces paiements (une ligne par
+ *    paiement, total approuvé) ; choisi = le document DÉTAILLE ce paiement
+ *    (résumé + une ligne par étudiant), tel que l'écran l'a calculé.
  *
- * ⚠ Rien n'est écrit, aucune caisse n'est touchée : un calcul n'est pas un
- * paiement (le paiement reste une dépense « Paiement prof »).
+ * ⚠ Le détail ne CALCULE rien de neuf : il appelle `GetPaiementProfCalcul`,
+ * la seule définition de la paie, sur la période, l'enseignant et les
+ * ajustements STOCKÉS sur la ligne — le même aperçu que la fiche de la
+ * dépense (`DepenseController::calculApercu`). Le montant imprimé en pied est
+ * celui de la ligne (le NET versé, après CNSS), jamais une valeur recalculée.
  *
- * Trois bornes :
- *  - le groupe doit être un de ceux que le rapport propose (centres affectés
- *    + contexte actif, MÊME liste que le filtre « Groupe ») — un id forgé ne
- *    sort aucune ligne ;
- *  - l'enseignant est choisi parmi ceux du groupe ; vide ou étranger au
- *    groupe, c'est celui qui a donné le plus de séances sur la période
- *    (même pré-sélection que le modal de l'écran) ;
- *  - une période illisible ou de plus de `MoisDeGroupe::DUREE_MAX_JOURS`
- *    jours ne calcule rien, et le rapport DIT pourquoi (`avertissement`)
- *    plutôt que d'imprimer un document vide sans explication.
+ * Portée : la MÊME règle de ventilation que la liste Dépenses
+ * (`VentilationCentre::scopeDepensesAuCentre`, centres affectés + centre
+ * actif) et l'ANNÉE active via le groupe du paiement — un paiement prof porte
+ * toujours un groupe. Un id de groupe, d'enseignant ou de paiement hors de
+ * cette portée ne sort aucune ligne. Rien n'est écrit, aucune caisse n'est
+ * touchée.
  */
 final class GetPaiementProfReport
 {
     public const KEY = 'calcul-paiement-prof';
 
+    /** Statuts listés — les paiements VIVANTS, comme DoublonPaiementProf. */
+    private const STATUTS = [Depense::STATUT_EN_ATTENTE, Depense::STATUT_APPROUVEE];
+
     public function __construct(
         private readonly GetPaiementProfCalcul $calcul,
-        private readonly GetInscriptionsReport $inscriptions,
+        private readonly CenterAccessService $centerAccess,
+        private readonly CurrentContext $context,
+        private readonly VentilationCentre $ventilation,
     ) {}
 
     /**
-     * Le calcul complet (tel que le rend GetPaiementProfCalcul), plus ce que
-     * le document imprime autour : l'enseignant retenu, les enseignants
-     * proposés et la raison pour laquelle rien n'est calculé.
+     * Tout ce que l'aperçu, le PDF et le classeur lisent, résolu UNE fois :
+     * le mode (liste ou détail), les lignes, les options des deux dropdowns,
+     * le résumé, le total et la raison d'un document vide.
      *
-     * @return array{calcul: ?array<string, mixed>, enseignantId: string, enseignantOptions: list<array{value: string, label: string}>, avertissement: string}
+     * @return array{detail: bool, lignes: Collection<int, array<string, mixed>>, enseignantOptions: list<array{value: string, label: string}>, paiementOptions: list<array{value: string, label: string}>, resume: array<string, string>, total: string, avertissement: string}
      */
-    public function resoudre(User $user, string $groupFilter, string $enseignantFilter, string $dateFrom, string $dateTo): array
+    public function resoudre(User $user, string $groupFilter, string $enseignantFilter, string $paiementFilter): array
     {
-        $vide = ['calcul' => null, 'enseignantId' => '', 'enseignantOptions' => [], 'avertissement' => ''];
+        $base = [
+            'enseignantOptions' => $this->enseignantOptions($user, $groupFilter),
+            'paiementOptions' => $this->paiementOptions($user, $groupFilter, $enseignantFilter),
+        ];
 
-        if ($groupFilter === '') {
-            return [...$vide, 'avertissement' => __('Choose a group to compute the teacher payment.')];
-        }
-
-        // La MÊME liste que le filtre « Groupe » : centres affectés + centre
-        // et année actifs. Un groupe hors de cette liste n'est pas imprimé.
-        $proposes = array_column($this->inscriptions->groupOptions($user), 'value');
-        $group = in_array($groupFilter, $proposes, true)
-            ? Group::query()->find((int) $groupFilter)
+        $paiement = $paiementFilter !== ''
+            ? $this->baseQuery($user, $groupFilter, $enseignantFilter)->whereKey((int) $paiementFilter)
+                ->with(['group.enseignant', 'enseignant'])->first()
             : null;
 
-        if ($group === null) {
-            return [...$vide, 'avertissement' => __('Choose a group to compute the teacher payment.')];
+        if ($paiement !== null) {
+            return [...$base, ...$this->detail($paiement)];
         }
 
-        $periode = MoisDeGroupe::periode($group, $dateFrom, $dateTo);
-        $options = $this->calcul->optionsPourGroupe($group, null, $dateFrom ?: null, $dateTo ?: null);
+        $lignes = $this->liste($user, $groupFilter, $enseignantFilter);
 
-        $enseignantOptions = array_map(
-            static fn (array $e): array => ['value' => (string) $e['value'], 'label' => (string) $e['label']],
-            $options['enseignants'],
-        );
-        $ids = array_column($enseignantOptions, 'value');
+        return [
+            ...$base,
+            'detail' => false,
+            'lignes' => $lignes,
+            'resume' => [],
+            // ⚠ « Argent sorti » = Approuvée seulement (§11) : les lignes En
+            // attente sont IMPRIMÉES mais pas totalisées, et le libellé le dit.
+            'total' => self::dh((float) $this->baseQuery($user, $groupFilter, $enseignantFilter)
+                ->where('statut', Depense::STATUT_APPROUVEE)->sum('montant')),
+            'avertissement' => $lignes->isEmpty() ? __('No teacher payment matches these filters.') : '',
+        ];
+    }
 
-        $enseignantId = in_array($enseignantFilter, $ids, true)
-            ? $enseignantFilter
-            : (string) ($options['enseignantParDefaut'] ?? '');
+    /**
+     * Le mode LISTE : une ligne par paiement, du plus récent au plus ancien.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function liste(User $user, string $groupFilter, string $enseignantFilter): Collection
+    {
+        return $this->baseQuery($user, $groupFilter, $enseignantFilter)
+            ->with(['group:id,nom,enseignant_id', 'group.enseignant:id,nom,prenom', 'enseignant:id,nom,prenom'])
+            ->orderByDesc('periode_debut')->orderByDesc('id')
+            ->get()
+            ->values()
+            ->map(fn (Depense $d, int $i): array => [
+                'numero' => $i + 1,
+                'reference' => (string) $d->reference,
+                'groupe' => (string) ($d->group?->nom ?? '-'),
+                'enseignant' => (string) (($d->enseignant ?? $d->group?->enseignant)?->nomComplet() ?? '-'),
+                'periode' => $d->periode_debut?->format('d/m/Y').' → '.$d->periode_fin?->format('d/m/Y'),
+                'montant' => self::dh((float) $d->montant),
+                'cnss' => $d->cnss_montant === null ? '-' : self::dh((float) $d->cnss_montant),
+                'statut' => (string) $d->statut,
+                'date' => $d->date_depense?->format('d/m/Y') ?? '-',
+            ]);
+    }
 
-        $base = ['calcul' => null, 'enseignantId' => $enseignantId, 'enseignantOptions' => $enseignantOptions];
+    /**
+     * Le mode DÉTAIL : le calcul du paiement choisi, refait depuis les appels
+     * sur la période STOCKÉE, avec les ajustements stockés.
+     *
+     * @return array{detail: bool, lignes: Collection<int, array<string, mixed>>, resume: array<string, string>, total: string, avertissement: string}
+     */
+    private function detail(Depense $paiement): array
+    {
+        $group = $paiement->group;
+        $enseignant = $paiement->enseignant ?? $group?->enseignant;
+        $vide = ['detail' => true, 'lignes' => collect(), 'resume' => $this->resumePaiement($paiement), 'total' => self::dh((float) $paiement->montant)];
+
+        if ($group === null || $enseignant === null || $paiement->periode_debut === null || $paiement->periode_fin === null) {
+            return [...$vide, 'avertissement' => __('This payment carries no group, teacher or period: nothing to detail.')];
+        }
+
+        $periode = MoisDeGroupe::resoudre($group, null, $paiement->periode_debut->toDateString(), $paiement->periode_fin->toDateString());
 
         if ($periode === null) {
-            return [...$base, 'avertissement' => __('Choose a start date and an end date, :days days at most.', [
+            return [...$vide, 'avertissement' => __('Choose a start date and an end date, :days days at most.', [
                 'days' => MoisDeGroupe::DUREE_MAX_JOURS,
             ])];
         }
 
-        $enseignant = $enseignantId !== '' ? Employee::query()->find((int) $enseignantId) : null;
-
-        if ($enseignant === null) {
-            return [...$base, 'avertissement' => __('No teacher is assigned to this group.')];
-        }
-
-        $calcul = ($this->calcul)(group: $group, enseignant: $enseignant, mois: $periode);
+        $calcul = ($this->calcul)(
+            group: $group,
+            enseignant: $enseignant,
+            mois: $periode,
+            ajustements: Depense::normaliserAjustements($paiement->calcul_ajustements) ?? [],
+        );
 
         $avertissement = match (true) {
             $calcul['enseignant']['probleme'] !== null => (string) $calcul['enseignant']['probleme'],
@@ -105,20 +159,25 @@ final class GetPaiementProfReport
             default => '',
         };
 
-        return [...$base, 'calcul' => $calcul, 'avertissement' => $avertissement];
+        return [
+            'detail' => true,
+            'lignes' => $this->lignesCalcul($calcul),
+            'resume' => [...$this->resumePaiement($paiement), ...$this->resumeCalcul($calcul)],
+            'total' => self::dh((float) $paiement->montant),
+            'avertissement' => $avertissement,
+        ];
     }
 
     /**
-     * Les lignes du document — une par étudiant, dans l'ordre du calcul
-     * (dossiers actifs d'abord). Vide en mode horaire : la paie y est
-     * `taux × heures`, sans détail par étudiant.
+     * Les lignes du détail — une par étudiant, dans l'ordre du calcul. Vide
+     * en mode horaire : la paie y est `taux × heures`, sans détail.
      *
-     * @param  array<string, mixed>|null  $calcul
+     * @param  array<string, mixed>  $calcul
      * @return Collection<int, array<string, mixed>>
      */
-    public function lignes(?array $calcul): Collection
+    private function lignesCalcul(array $calcul): Collection
     {
-        if ($calcul === null || $calcul['enseignant']['mode'] === Employee::MODE_PAIEMENT_HORAIRE) {
+        if ($calcul['enseignant']['mode'] === Employee::MODE_PAIEMENT_HORAIRE) {
             return collect();
         }
 
@@ -135,38 +194,48 @@ final class GetPaiementProfReport
         ]);
     }
 
-    /**
-     * Le résumé du calcul imprimé en tête du document (et du classeur) :
-     * libellé => valeur, dans l'ordre de lecture.
-     *
-     * @param  array<string, mixed>|null  $calcul
-     * @return array<string, string>
-     */
-    public function resume(?array $calcul): array
+    /** Ce que la LIGNE stocke : référence, période, net versé, CNSS, statut. */
+    private function resumePaiement(Depense $paiement): array
     {
-        if ($calcul === null) {
-            return [];
+        $resume = [
+            'Paiement' => (string) $paiement->reference,
+            'Enseignant' => (string) (($paiement->enseignant ?? $paiement->group?->enseignant)?->nomComplet() ?? '-'),
+            'Période payée' => $paiement->periode_debut?->format('d/m/Y').' → '.$paiement->periode_fin?->format('d/m/Y'),
+            'Statut' => (string) $paiement->statut,
+        ];
+
+        if ($paiement->cnss_montant !== null) {
+            $resume['Cotisation CNSS retenue'] = self::dh((float) $paiement->cnss_montant);
+            $resume['Montant brut'] = self::dh((float) $paiement->montant + (float) $paiement->cnss_montant);
         }
 
-        $mode = (string) $calcul['enseignant']['mode'];
-        $horaire = $mode === Employee::MODE_PAIEMENT_HORAIRE;
+        return $resume;
+    }
 
-        // Le groupe n'y figure pas : il est déjà rappelé par les filtres
-        // appliqués (RapportController::filtresAppliques()).
+    /**
+     * Ce que le CALCUL dit : mode, taux, séances — ce qui permet de refaire
+     * le total à la main.
+     *
+     * @param  array<string, mixed>  $calcul
+     * @return array<string, string>
+     */
+    private function resumeCalcul(array $calcul): array
+    {
+        $mode = (string) $calcul['enseignant']['mode'];
         $resume = [
-            'Enseignant' => (string) $calcul['enseignant']['nom'],
             'Mode de paie' => self::mode($mode),
-            'Période de paie' => (string) $calcul['periode']['libelle'],
             'Séances effectuées' => (string) $calcul['nombreSeances'],
         ];
 
-        if ($horaire) {
+        if ($mode === Employee::MODE_PAIEMENT_HORAIRE) {
             $resume['Taux horaire'] = self::dh((float) $calcul['enseignant']['taux']);
             $resume['Heures retenues'] = number_format((float) ($calcul['heuresSaisies'] ?? 0), 2, ',', ' ').' h';
         } else {
             $resume['Montant par étudiant'] = self::dh((float) $calcul['montantParEtudiant']);
             $resume['Étudiants rémunérateurs'] = (string) $calcul['etudiantsRemunerateurs'];
         }
+
+        $resume['Total calculé'] = self::dh((float) $calcul['total']);
 
         if ((int) $calcul['seancesSansEnseignant'] > 0) {
             $resume['Séances sans enseignant (non comptées)'] = (string) $calcul['seancesSansEnseignant'];
@@ -175,10 +244,88 @@ final class GetPaiementProfReport
         return $resume;
     }
 
-    /** Le total proposé, formaté comme les autres rapports. Vide sans calcul. */
-    public function total(?array $calcul): string
+    /**
+     * Les enseignants qui ont au moins un paiement dans la portée (et dans le
+     * groupe choisi, s'il y en a un) — jamais ceux d'un autre centre.
+     *
+     * @return list<array{value: string, label: string}>
+     */
+    private function enseignantOptions(User $user, string $groupFilter): array
     {
-        return $calcul === null ? '' : self::dh((float) $calcul['total']);
+        $ids = $this->baseQuery($user, $groupFilter, '')
+            ->with(['group:id,enseignant_id'])
+            ->get(['id', 'enseignant_id', 'group_id'])
+            ->map(fn (Depense $d) => $d->enseignant_id ?? $d->group?->enseignant_id)
+            ->filter()->unique()->values()->all();
+
+        return Employee::query()
+            ->whereIn('id', $ids)
+            ->orderBy('nom')->orderBy('prenom')
+            ->get(['id', 'nom', 'prenom'])
+            ->map(fn (Employee $e): array => ['value' => (string) $e->id, 'label' => $e->nomComplet()])
+            ->all();
+    }
+
+    /**
+     * Les paiements qui passent les filtres Groupe / Enseignant — ce que le
+     * dropdown « Paiement » propose, du plus récent au plus ancien.
+     *
+     * @return list<array{value: string, label: string}>
+     */
+    private function paiementOptions(User $user, string $groupFilter, string $enseignantFilter): array
+    {
+        return $this->baseQuery($user, $groupFilter, $enseignantFilter)
+            ->with(['group:id,nom'])
+            ->orderByDesc('periode_debut')->orderByDesc('id')
+            ->get(['id', 'reference', 'group_id', 'periode_debut', 'periode_fin', 'montant', 'statut'])
+            ->map(fn (Depense $d): array => [
+                'value' => (string) $d->id,
+                'label' => sprintf(
+                    '%s · %s · %s → %s · %s',
+                    $d->reference,
+                    $d->group?->nom ?? '-',
+                    $d->periode_debut?->format('d/m/Y'),
+                    $d->periode_fin?->format('d/m/Y'),
+                    self::dh((float) $d->montant),
+                ),
+            ])
+            ->all();
+    }
+
+    /**
+     * Les paiements prof de la portée : centres affectés + centre actif (par
+     * ventilation), année active via le groupe. Pas de filtre HiddenAccount :
+     * une dépense est un enregistrement de GLS, comme sur la liste Dépenses.
+     *
+     * @return Builder<Depense>
+     */
+    private function baseQuery(User $user, string $groupFilter, string $enseignantFilter): Builder
+    {
+        return Depense::query()
+            ->whereHas('typeDepense', fn (Builder $q) => $q->where('nom', TypeDepense::SYSTEM_PAIEMENT_PROF))
+            ->whereIn('statut', self::STATUTS)
+            ->whereNotNull('group_id')
+            ->tap(function (Builder $q) use ($user): void {
+                if (! $this->centerAccess->hasGlobalAccess($user)) {
+                    $this->ventilation->scopeDepensesAuxCentres($q, $this->centerAccess->accessibleCenterIds($user), true);
+                }
+            })
+            ->when(
+                $this->context->etablissementId() !== null,
+                fn (Builder $q) => $this->ventilation->scopeDepensesAuCentre($q, (int) $this->context->etablissementId(), true),
+            )
+            ->when(
+                $this->context->anneeScolaireId(),
+                fn (Builder $q, $y) => $q->whereHas('group', fn (Builder $g) => $g->where('annee_scolaire_id', $y)),
+            )
+            ->when($groupFilter !== '', fn (Builder $q) => $q->where('group_id', (int) $groupFilter))
+            // L'enseignant PAYÉ : celui de la ligne, sinon le prof du groupe
+            // (lignes antérieures à la colonne) — même repli que la liste.
+            ->when($enseignantFilter !== '', fn (Builder $q) => $q->where(fn (Builder $w) => $w
+                ->where('enseignant_id', (int) $enseignantFilter)
+                ->orWhere(fn (Builder $x) => $x
+                    ->whereNull('enseignant_id')
+                    ->whereHas('group', fn (Builder $g) => $g->where('enseignant_id', (int) $enseignantFilter)))));
     }
 
     /** Même lecture que l'écran : 4 semaines = le mois complet. */

@@ -559,7 +559,39 @@ final class PaiementProfEcranTest extends TestCase
             ->assertJsonPath('fenetre.fin', '2025-10-06')
             ->assertJsonPath('enseignantParDefaut', $this->prof->id)
             ->assertJsonPath('enseignants.0.mode', Employee::MODE_PAIEMENT_GLS)
-            ->assertJsonPath('seancesSansEnseignant', 0);
+            ->assertJsonPath('seancesSansEnseignant', 0)
+            ->assertJsonPath('enseignants.0.dejaPaye', null);
+    }
+
+    #[Test]
+    public function the_group_options_flag_a_period_already_paid_to_that_teacher(): void
+    {
+        // Signalé le 23/10/2026 : le modal laissait calculer une période déjà
+        // payée (DEP-176) ; seul l'enregistrement refusait, trop tard.
+        $type = TypeDepense::create([
+            'nom' => TypeDepense::SYSTEM_PAIEMENT_PROF, 'is_system' => true, 'statut' => TypeDepense::STATUT_ACTIF,
+        ]);
+        $agent = Employee::factory()->create(['etablissement_id' => $this->centre->id]);
+        Depense::query()->create([
+            'reference' => 'DEP-001',
+            'type_depense_id' => $type->id,
+            'caisse_id' => $agent->till()->first()->id,
+            'group_id' => $this->group->id,
+            'enseignant_id' => $this->prof->id,
+            'montant' => '9000.00',
+            'statut' => Depense::STATUT_APPROUVEE,
+            'date_depense' => '2025-10-15',
+            'periode_debut' => '2025-09-14',
+            'periode_fin' => '2025-10-13',
+            'description' => 'Paiement prof',
+            'agent_id' => $agent->id,
+        ]);
+
+        $response = $this->actingAs($this->user('prof-payments.calculate'))
+            ->getJson("/backoffice/paiement-prof/groupes/{$this->group->id}/options?debut=2025-09-14&fin=2025-10-13")
+            ->assertOk();
+
+        $this->assertStringContainsString('DEP-001', (string) $response->json('enseignants.0.dejaPaye'));
     }
 
     /*

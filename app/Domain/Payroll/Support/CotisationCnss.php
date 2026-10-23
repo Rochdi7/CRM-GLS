@@ -11,11 +11,9 @@ use App\Models\Group;
  * Cotisation CNSS d'un enseignant — retenue sur son « Paiement prof » quand
  * il est déclaré (06/10/2026).
  *
- * ⚠ Depuis le 21/10/2026 le montant retenu est le SALAIRE de l'enseignant
- * payé (`employees.salaire`, champ « Salaire » de sa fiche Employé), et non
- * plus un montant fixe de 1 700 MAD. Un enseignant sans salaire (NULL ou
- * 0) ne peut pas avoir de retenue : la case est désactivée à l'écran avec
- * un rappel de saisir le salaire, et le serveur refuse la case cochée.
+ * ⚠ Depuis le 23/10/2026 le montant retenu est 1 700 MAD FIXES + le SALAIRE
+ * de l'enseignant payé (`employees.salaire`, champ « Salaire » de sa fiche
+ * Employé). Sans salaire (NULL ou 0), seuls les 1 700 MAD sont retenus.
  *
  * L'employé qui saisit le paiement coche « Cotisation CNSS » : le total
  * proposé par le calcul baisse de ce montant, et la dépense enregistrée
@@ -33,16 +31,18 @@ use App\Models\Group;
  */
 final class CotisationCnss
 {
-    /** Montant retenu pour cet enseignant — son salaire, null s'il n'en a pas. */
-    public static function montantPour(?Employee $enseignant): ?float
+    /** Part fixe de la cotisation, retenue dès que la case est cochée. */
+    public const FIXE = 1700.0;
+
+    /**
+     * Montant retenu pour cet enseignant = 1 700 MAD fixes + son salaire
+     * (23/10/2026). Sans salaire saisi, seuls les 1 700 MAD sont retenus.
+     */
+    public static function montantPour(?Employee $enseignant): float
     {
-        $salaire = $enseignant?->salaire;
+        $salaire = (float) ($enseignant?->salaire ?? 0);
 
-        if ($salaire === null || (float) $salaire <= 0) {
-            return null;
-        }
-
-        return round((float) $salaire, 2);
+        return round(self::FIXE + max($salaire, 0.0), 2);
     }
 
     /**
