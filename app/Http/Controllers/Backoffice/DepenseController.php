@@ -215,9 +215,6 @@ final class DepenseController extends Controller
             'recalculDepense' => $recalculDepense,
             'calculGroupOptions' => fn (): array => $canCalculer ? $getPaiementProfCalcul->groupOptions($user) : [],
             'paliersPaie' => CalculerPaiementProfParPaliers::PALIERS,
-            // Cotisation CNSS retenue sur un paiement prof — UNE constante,
-            // servie ici pour que ni le calcul ni le modal ne la recopient.
-            'cnssMontant' => CotisationCnss::MONTANT,
             // The Validation tab's own rows and totals — over BOTH kinds, so
             // the badge and the « En attente » figure report the real amount
             // held across the tills, not just the Dépenses tab's share.
@@ -646,7 +643,12 @@ final class DepenseController extends Controller
             // calculé si la page ne le demande pas (§17).
             'calculApercu' => fn (): ?array => $this->calculApercu($request, $depense, $getPaiementProfCalcul),
             'paliersPaie' => CalculerPaiementProfParPaliers::PALIERS,
-            'cnssMontant' => CotisationCnss::MONTANT,
+            // Retenue CNSS = salaire de l'enseignant payé (21/10/2026) — celle
+            // STOCKÉE sur la ligne si elle a été retenue, sinon le salaire
+            // actuel, pour l'aperçu du calcul.
+            'cnssMontant' => $depense->cnss_montant !== null
+                ? (float) $depense->cnss_montant
+                : CotisationCnss::montantPour(CotisationCnss::enseignantDuPaiement($depense->enseignant_id, $depense->group_id)),
         ]);
     }
 
@@ -710,8 +712,9 @@ final class DepenseController extends Controller
         // versé change de 1 700 DH — donc le même droit que ci-dessus, et un
         // refus plutôt qu'un drapeau posé en silence sur un montant inchangé
         // (la ligne dirait « CNSS retenue » sans que rien n'ait été retenu).
-        // Une ligne déjà retenue GARDE son montant stocké (la constante a pu
-        // bouger depuis) ; une ligne nouvellement cochée prend la constante.
+        // Une ligne déjà retenue GARDE son montant stocké (le salaire a pu
+        // bouger depuis) ; une ligne nouvellement cochée prend le SALAIRE de
+        // l'enseignant payé (21/10/2026) — refus nommé s'il n'en a pas.
         if ($request->isPaiementProf() && $request->has('cnss')) {
             $cnssCoche = $request->boolean('cnss');
             $cnssChange = $cnssCoche !== $depense->cnssDeduite();
@@ -722,9 +725,25 @@ final class DepenseController extends Controller
                 ]);
             }
 
-            $payload['cnss_montant'] = $cnssCoche
-                ? ($depense->cnss_montant === null ? CotisationCnss::MONTANT : (float) $depense->cnss_montant)
-                : null;
+            $retenue = null;
+            if ($cnssCoche) {
+                $enseignantId = $request->validated('enseignant_id') ?? $depense->enseignant_id;
+                $groupId = $request->validated('group_id') ?? $depense->group_id;
+                $retenue = $depense->cnss_montant !== null
+                    ? (float) $depense->cnss_montant
+                    : CotisationCnss::montantPour(CotisationCnss::enseignantDuPaiement(
+                        $enseignantId === null ? null : (int) $enseignantId,
+                        $groupId === null ? null : (int) $groupId,
+                    ));
+
+                if ($retenue === null) {
+                    throw ValidationException::withMessages([
+                        'cnss' => __('Enter the teacher\'s salary on their employee record to withhold the CNSS contribution.'),
+                    ]);
+                }
+            }
+
+            $payload['cnss_montant'] = $retenue;
         }
 
         // Ajustements manuels du calcul (08/10/2026) : le modal les renvoie

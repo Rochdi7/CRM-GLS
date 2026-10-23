@@ -43,6 +43,49 @@ trait PaiementProfRules
     }
 
     /**
+     * Un groupe ne se paie qu'une fois par période (21/10/2026) — voir
+     * DoublonPaiementProf. Refus porté sur `periode_debut`, nommant la ligne
+     * qui occupe déjà le mois.
+     *
+     * @return array<int, \Closure>
+     */
+    public function after(): array
+    {
+        return [
+            function (\Illuminate\Validation\Validator $validator): void {
+                if (! $this->isPaiementProf()
+                    || $validator->errors()->hasAny(['group_id', 'periode_debut', 'periode_fin', 'enseignant_id'])) {
+                    return;
+                }
+
+                $groupId = (int) $this->input('group_id');
+                $current = $this->route('depense');
+                $current = $current instanceof \App\Models\Depense ? $current : null;
+
+                // Même résolution qu'EnregistrerDepense : l'enseignant saisi,
+                // sinon celui déjà sur la ligne, sinon le prof du groupe.
+                $enseignantId = $this->input('enseignant_id') ?: $current?->enseignant_id
+                    ?: \App\Models\Group::query()->whereKey($groupId)->value('enseignant_id');
+
+                $existante = \App\Domain\Expenses\Support\DoublonPaiementProf::trouver(
+                    $groupId,
+                    $enseignantId === null ? null : (int) $enseignantId,
+                    (string) $this->input('periode_debut'),
+                    (string) $this->input('periode_fin'),
+                    $current?->id,
+                );
+
+                if ($existante !== null) {
+                    $validator->errors()->add(
+                        'periode_debut',
+                        \App\Domain\Expenses\Support\DoublonPaiementProf::message($existante),
+                    );
+                }
+            },
+        ];
+    }
+
+    /**
      * Fields whose rules differ between the two modals.
      *
      * @return array<string, mixed>
@@ -75,7 +118,8 @@ trait PaiementProfRules
                 : ['prohibited'],
             // Cotisation CNSS retenue (06/10/2026) — une case à cocher du
             // modal « Paiement prof ». Le serveur en déduit le montant retenu
-            // (`CotisationCnss::MONTANT`, jamais saisi par le client) ; sans
+            // (le salaire de l'enseignant, `CotisationCnss::montantPour`,
+            // jamais saisi par le client) ; sans
             // objet sur une dépense ordinaire, donc refusée.
             'cnss' => $isProf ? ['nullable', 'boolean'] : ['prohibited'],
             // Ajustements manuels du calcul (08/10/2026) — `student_id =>

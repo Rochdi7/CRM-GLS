@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Payroll\Queries;
 
+use App\Domain\Payroll\Support\CotisationCnss;
 use App\Domain\Attendance\Queries\GetAbsencesParGroupe;
 use App\Domain\Payments\Support\RetardPaiementEtudiant;
 use App\Domain\Payroll\Actions\CalculerPaiementProfHoraire;
@@ -204,6 +205,9 @@ final class GetPaiementProfCalcul
                 'mode' => $config->mode,
                 'taux' => $config->taux,
                 'probleme' => $config->probleme,
+                // Retenue CNSS = son salaire (21/10/2026, CotisationCnss) ;
+                // null => aucun salaire sur sa fiche, la case est désactivée.
+                'cnssMontant' => CotisationCnss::montantPour($enseignant),
             ],
             'mois' => $mois,
             'periode' => [

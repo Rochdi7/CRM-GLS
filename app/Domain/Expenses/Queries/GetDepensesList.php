@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Expenses\Queries;
 
+use App\Domain\Payroll\Support\CotisationCnss;
 use App\Domain\Expenses\Support\ModificationsDepense;
 use App\Domain\Finance\Support\VentilationCentre;
 use App\Models\Depense;
@@ -145,7 +146,7 @@ final class GetDepensesList
             ->with([
                 'typeDepense', 'agent', 'approvedBy',
                 'caisse.etablissement', 'group.etablissement', 'etablissement',
-                'enseignant',
+                'enseignant', 'group.enseignant',
             ])
             ->withCount('media')
             ->latest()
@@ -210,6 +211,13 @@ final class GetDepensesList
             // « Paiement prof » only — the CNSS contribution WITHHELD on this
             // payment (null = none). `montant` above is the net paid out.
             'cnssMontant' => $d->cnss_montant === null ? null : number_format((float) $d->cnss_montant, 2, '.', ''),
+            // Ce que cocher la case retiendrait MAINTENANT sur cette ligne :
+            // le salaire de l'enseignant payé (repli : prof du groupe), la
+            // même résolution que DepenseController@update. Null => pas de
+            // salaire, la case est désactivée avec un rappel.
+            'cnssMontantEnseignant' => $d->group_id !== null
+                ? CotisationCnss::montantPour($d->enseignant ?? $d->group?->enseignant)
+                : null,
             // « Paiement prof » only — the manual adjustments of the
             // calculation (`student_id => montant`), stored so « Modifier le
             // calcul » reopens the calcul as it was left (08/10/2026).
@@ -264,9 +272,16 @@ final class GetDepensesList
             // GetRetardsList::groupOptions) — without it the "Paiement prof"
             // form offers groups from every past year.
             ->when($this->context->anneeScolaireId(), fn ($q, $y) => $q->where('annee_scolaire_id', $y))
+            ->with('enseignant')
             ->orderBy('nom')
             ->get()
-            ->map(fn (Group $g): array => ['id' => $g->id, 'nom' => $g->nom]);
+            ->map(fn (Group $g): array => [
+                'id' => $g->id,
+                'nom' => $g->nom,
+                // Retenue CNSS d'une saisie à la main : le salaire du prof du
+                // groupe, celui que le serveur retiendra (CotisationCnss).
+                'cnssMontant' => CotisationCnss::montantPour($g->enseignant),
+            ]);
     }
 
     /**
@@ -302,7 +317,7 @@ final class GetDepensesList
         }
 
         return Group::query()
-            ->with('anneeScolaire')
+            ->with(['anneeScolaire', 'enseignant'])
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
             ->where('annee_scolaire_id', '!=', $anneeActive)
@@ -315,6 +330,7 @@ final class GetDepensesList
                 'nom' => $g->anneeScolaire !== null
                     ? $g->nom.' - '.$g->anneeScolaire->nom
                     : $g->nom,
+                'cnssMontant' => CotisationCnss::montantPour($g->enseignant),
             ]);
     }
 

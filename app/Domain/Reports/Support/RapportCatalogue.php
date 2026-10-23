@@ -7,6 +7,7 @@ namespace App\Domain\Reports\Support;
 use App\Domain\Reports\Queries\GetDepensesReport;
 use App\Domain\Reports\Queries\GetEncaissementsReport;
 use App\Domain\Reports\Queries\GetInscriptionsReport;
+use App\Domain\Reports\Queries\GetPaiementProfReport;
 use App\Domain\Reports\Queries\GetStudentsReport;
 
 /**
@@ -73,7 +74,16 @@ final class RapportCatalogue
                 ],
             ],
             ['key' => 'vie-scolaire', 'label' => 'Vie scolaire', 'rapports' => []],
-            ['key' => 'employes', 'label' => 'Employés', 'rapports' => []],
+            [
+                'key' => 'employes',
+                'label' => 'Employés',
+                'rapports' => [
+                    [
+                        'value' => GetPaiementProfReport::KEY,
+                        'label' => 'Calcul paiement prof',
+                    ],
+                ],
+            ],
         ];
     }
 
@@ -85,7 +95,24 @@ final class RapportCatalogue
             GetStudentsReport::KEY,
             GetEncaissementsReport::KEY,
             GetDepensesReport::KEY,
+            GetPaiementProfReport::KEY,
         ];
+    }
+
+    /**
+     * La permission que CE rapport exige EN PLUS de `reports.view`, ou null.
+     *
+     * `reports.view` est tenu par tous les rôles ; le calcul de la paie d'un
+     * enseignant, lui, est réservé à `prof-payments.calculate` (direction) —
+     * imprimer ce calcul n'en est pas une porte dérobée. Le contrôleur retire
+     * le rapport du catalogue servi et refuse son téléchargement sans elle.
+     */
+    public static function permission(string $cle): ?string
+    {
+        return match ($cle) {
+            GetPaiementProfReport::KEY => 'prof-payments.calculate',
+            default => null,
+        };
     }
 
     /**
@@ -106,6 +133,7 @@ final class RapportCatalogue
             GetStudentsReport::KEY => ['sexeFilter', 'inscriptionFilter'],
             GetEncaissementsReport::KEY => ['methodeFilter', 'caisseFilter', 'typeFilter', 'fraisFilter'],
             GetDepensesReport::KEY => ['typeDepenseFilter', 'statutDepenseFilter'],
+            GetPaiementProfReport::KEY => ['groupFilter', 'enseignantFilter'],
             default => [],
         };
     }
@@ -118,6 +146,7 @@ final class RapportCatalogue
             GetStudentsReport::KEY => 'Liste des étudiants',
             GetEncaissementsReport::KEY => 'Relevé des Encaissements',
             GetDepensesReport::KEY => 'Liste des Dépenses',
+            GetPaiementProfReport::KEY => 'Calcul paiement prof',
             default => 'Rapport',
         };
     }
@@ -130,6 +159,7 @@ final class RapportCatalogue
             GetStudentsReport::KEY => 'backoffice.rapports.etudiants-pdf',
             GetEncaissementsReport::KEY => 'backoffice.rapports.encaissements-pdf',
             GetDepensesReport::KEY => 'backoffice.rapports.depenses-pdf',
+            GetPaiementProfReport::KEY => 'backoffice.rapports.paiement-prof-pdf',
             default => throw new \InvalidArgumentException("Rapport inconnu : {$cle}"),
         };
     }
@@ -201,6 +231,18 @@ final class RapportCatalogue
                 ['key' => 'date', 'label' => 'Date', 'width' => 12.0],
                 ['key' => 'operateur', 'label' => 'Opérateur', 'width' => 20.0],
             ],
+            // Le détail qui justifie chaque montant : un montant de paie que
+            // l'on ne peut pas refaire ligne par ligne n'est pas vérifiable
+            // par celui qui le signe.
+            GetPaiementProfReport::KEY => [
+                ['key' => 'numero', 'label' => "N° d'ordre", 'width' => 9.0],
+                ['key' => 'etudiant', 'label' => 'Étudiant', 'width' => 32.0],
+                ['key' => 'statut', 'label' => "Statut d'inscription", 'width' => 18.0],
+                ['key' => 'presences', 'label' => 'Présences', 'width' => 11.0],
+                ['key' => 'absences', 'label' => 'Absences', 'width' => 11.0],
+                ['key' => 'palier', 'label' => 'Palier payé', 'width' => 16.0],
+                ['key' => 'montant', 'label' => 'Montant', 'width' => 14.0],
+            ],
             default => throw new \InvalidArgumentException("Rapport inconnu : {$cle}"),
         };
     }
@@ -217,6 +259,7 @@ final class RapportCatalogue
             GetStudentsReport::KEY => 'liste-etudiants',
             GetEncaissementsReport::KEY => 'releve-encaissements',
             GetDepensesReport::KEY => 'liste-depenses',
+            GetPaiementProfReport::KEY => 'calcul-paiement-prof',
             default => 'rapport',
         };
 

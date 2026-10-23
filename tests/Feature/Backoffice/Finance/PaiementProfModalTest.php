@@ -235,4 +235,74 @@ final class PaiementProfModalTest extends TestCase
             ])
             ->assertSessionHasErrors(['periode_debut', 'periode_fin']);
     }
+    /** Un groupe ne se paie qu'une fois par mois imputé (21/10/2026). */
+    public function test_a_second_payment_on_the_same_month_is_refused(): void
+    {
+        $user = $this->actor();
+
+        $this->actingAs($user)
+            ->post(route('backoffice.depenses.store'), $this->profPayload([
+                'periode_debut' => '2025-09-24', 'periode_fin' => '2025-10-24',
+            ]))
+            ->assertSessionDoesntHaveErrors();
+
+        // 01/09 → 15/09 : ne chevauche pas, mais c'est le même mois (septembre).
+        $this->actingAs($user)
+            ->post(route('backoffice.depenses.store'), $this->profPayload([
+                'periode_debut' => '2025-09-01', 'periode_fin' => '2025-09-15',
+                'description' => 'Doublon',
+            ]))
+            ->assertSessionHasErrors('periode_debut');
+
+        // 01/10 → 31/10 : chevauche le 24/09 → 24/10.
+        $this->actingAs($user)
+            ->post(route('backoffice.depenses.store'), $this->profPayload([
+                'periode_debut' => '2025-10-01', 'periode_fin' => '2025-10-31',
+                'description' => 'Doublon',
+            ]))
+            ->assertSessionHasErrors('periode_debut');
+
+        $this->assertSame(0, Depense::where('description', 'Doublon')->count());
+
+        // 25/10 → 24/11 : mois suivant, sans chevauchement — accepté.
+        $this->actingAs($user)
+            ->post(route('backoffice.depenses.store'), $this->profPayload([
+                'periode_debut' => '2025-10-25', 'periode_fin' => '2025-11-24',
+                'description' => 'Octobre',
+            ]))
+            ->assertSessionDoesntHaveErrors();
+    }
+
+    public function test_a_refused_payment_frees_its_month(): void
+    {
+        $user = $this->actor();
+
+        $this->actingAs($user)
+            ->post(route('backoffice.depenses.store'), $this->profPayload())
+            ->assertSessionDoesntHaveErrors();
+
+        Depense::where('description', 'Heures de septembre')
+            ->update(['statut' => Depense::STATUT_REFUSEE]);
+
+        $this->actingAs($user)
+            ->post(route('backoffice.depenses.store'), $this->profPayload(['description' => 'Ressaisie']))
+            ->assertSessionDoesntHaveErrors();
+    }
+
+    public function test_editing_a_payment_does_not_collide_with_itself(): void
+    {
+        $user = $this->actor();
+
+        $this->actingAs($user)
+            ->post(route('backoffice.depenses.store'), $this->profPayload())
+            ->assertSessionDoesntHaveErrors();
+
+        $depense = Depense::where('description', 'Heures de septembre')->firstOrFail();
+
+        $this->actingAs($user)
+            ->put(route('backoffice.depenses.update', $depense), $this->profPayload([
+                'description' => 'Heures de septembre (corrigé)',
+            ]))
+            ->assertSessionDoesntHaveErrors();
+    }
 }
