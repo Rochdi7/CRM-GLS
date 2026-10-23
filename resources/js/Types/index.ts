@@ -3087,8 +3087,10 @@ export interface PaiementProfCalcul {
         mode: PaiementProfMode | '';
         taux: number;
         probleme: string | null;
-        /** Retenue CNSS = son salaire (fiche employé) ; null => aucun salaire saisi. */
+        /** Retenue totale = 1 700 MAD fixes + son salaire (fiche employé). */
         cnssMontant: number | null;
+        /** La part FIXE de la retenue (CotisationCnss::FIXE) — le reste est le salaire. */
+        cnssFixe: number;
     };
     /** « YYYY-MM » demandé. */
     mois: string;

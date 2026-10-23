@@ -411,6 +411,11 @@ export default function CalculPaiementProf({
     // désactivée et un rappel demande de le saisir.
     const cnssDisponible: number | null = cnssMontant ?? calcul?.enseignant.cnssMontant ?? null;
     const cnssActif = cnss && cnssDisponible !== null;
+    // Les DEUX composantes de la retenue, affichées séparément pour qu'on ne
+    // lise pas 5 200 MAD comme « tout est CNSS » : la part fixe vient du
+    // serveur (CotisationCnss::FIXE), le salaire est le reste.
+    const cnssFixe = Math.min(calcul?.enseignant.cnssFixe ?? 0, cnssDisponible ?? 0);
+    const cnssSalaire = cnssDisponible !== null ? Math.max(0, cnssDisponible - cnssFixe) : 0;
     const retenueCnss = cnssActif ? Math.min(cnssDisponible, totalBrut) : 0;
     const totalAffiche = Math.round((totalBrut - retenueCnss) * 100) / 100;
 
@@ -922,13 +927,26 @@ export default function CalculPaiementProf({
                                 <div className="text-muted fs-12 text-uppercase mb-1">{t('Total payment')}</div>
                                 <div className="fs-24 fw-bold text-success">{totalAffiche.toFixed(2)} MAD</div>
                                 {cnssActif && totalBrut >= cnssDisponible && (
-                                    <small className="text-info d-block">
-                                        <i className="ti ti-building-bank me-1" />
-                                        {t('CNSS :montant MAD withheld · gross :brut MAD', {
-                                            montant: cnssDisponible.toFixed(2),
-                                            brut: totalBrut.toFixed(2),
-                                        })}
-                                    </small>
+                                    <div className="fs-13 mt-1">
+                                        <div className="d-flex justify-content-between text-muted">
+                                            <span>{t('Gross')}</span>
+                                            <span>{totalBrut.toFixed(2)} MAD</span>
+                                        </div>
+                                        <div className="d-flex justify-content-between text-info">
+                                            <span><i className="ti ti-building-bank me-1" />{t('CNSS')}</span>
+                                            <span>− {cnssFixe.toFixed(2)} MAD</span>
+                                        </div>
+                                        {cnssSalaire > 0 && (
+                                            <div className="d-flex justify-content-between text-info">
+                                                <span><i className="ti ti-wallet me-1" />{t('Salary')}</span>
+                                                <span>− {cnssSalaire.toFixed(2)} MAD</span>
+                                            </div>
+                                        )}
+                                        <div className="d-flex justify-content-between fw-semibold border-top mt-1 pt-1">
+                                            <span>{t('Net paid')}</span>
+                                            <span>{totalAffiche.toFixed(2)} MAD</span>
+                                        </div>
+                                    </div>
                                 )}
                                 {cnssActif && totalBrut < cnssDisponible && (
                                     <small className="text-danger d-block">
@@ -1020,11 +1038,28 @@ export default function CalculPaiementProf({
                                     onChange={(event) => setCnss(event.target.checked)}
                                 />
                                 <label htmlFor="pp-cnss" className="form-check-label fw-semibold">
-                                    {cnssDisponible !== null
-                                        ? t('CNSS contribution withheld (:montant MAD)', { montant: cnssDisponible.toFixed(2) })
-                                        : t('CNSS contribution withheld')}
+                                    {t('CNSS contribution withheld')}
                                 </label>
                             </div>
+                            {/* La retenue en DEUX parts : la cotisation fixe et
+                                le salaire de la fiche employé, puis leur somme. */}
+                            {cnssDisponible !== null && (
+                                <span className="d-flex flex-wrap align-items-center gap-2 fs-14">
+                                    <span className="badge badge-soft-info">
+                                        {t('CNSS')} {cnssFixe.toFixed(2)} MAD
+                                    </span>
+                                    {cnssSalaire > 0 && (
+                                        <>
+                                            <span className="text-muted">+</span>
+                                            <span className="badge badge-soft-warning">
+                                                {t('Salary')} {cnssSalaire.toFixed(2)} MAD
+                                            </span>
+                                        </>
+                                    )}
+                                    <span className="text-muted">=</span>
+                                    <span className="fw-semibold">{cnssDisponible.toFixed(2)} MAD</span>
+                                </span>
+                            )}
                             {cnssDisponible === null && !lectureSeule && (
                                 <small className="text-warning">
                                     <i className="ti ti-alert-triangle me-1" />

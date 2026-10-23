@@ -215,9 +215,11 @@ final class GetPaiementProfCalcul
                 'mode' => $config->mode,
                 'taux' => $config->taux,
                 'probleme' => $config->probleme,
-                // Retenue CNSS = son salaire (21/10/2026, CotisationCnss) ;
-                // null => aucun salaire sur sa fiche, la case est désactivée.
+                // Retenue CNSS = 1 700 MAD fixes + son salaire (23/10/2026,
+                // CotisationCnss). La part fixe est servie à part pour que
+                // l'écran montre les DEUX composantes, pas une seule somme.
                 'cnssMontant' => CotisationCnss::montantPour($enseignant),
+                'cnssFixe' => CotisationCnss::FIXE,
             ],
             'mois' => $mois,
             'periode' => [
