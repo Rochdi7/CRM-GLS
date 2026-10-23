@@ -202,7 +202,11 @@ export default function EcheancesEnMasseIndex({
                         icon="ti ti-calendar-event"
                     />
                 ) : lignes.length === 0 ? (
-                    <EmptyState title={t('No fee line found for this group and fee')} icon="ti ti-alert-circle" />
+                    <EmptyState
+                        title={t('No fee line found for this group and fee')}
+                        message={t('No registration of this group carries a visible line of this fee: it was never added to them, or it is hidden (fee removed from the group).')}
+                        icon="ti ti-alert-circle"
+                    />
                 ) : (
                     <>
                         {/* Le compteur de selection vit sous les filtres : il

@@ -1393,6 +1393,7 @@
     "Select every line sharing this due date": "Sélectionner toutes les lignes portant cette échéance",
     "Choose a group and a fee to list its due dates": "Choisissez un groupe et un frais pour afficher leurs échéances",
     "No fee line found for this group and fee": "Aucune ligne de frais pour ce groupe et ce frais",
+    "No registration of this group carries a visible line of this fee: it was never added to them, or it is hidden (fee removed from the group).": "Aucune inscription de ce groupe ne porte une ligne visible de ce frais : il ne leur a jamais été ajouté, ou il est masqué (frais retiré du groupe).",
     "lines": "lignes",
     "due date": "date d'échéance",
     "Select at least one line to update.": "Sélectionnez au moins une ligne à modifier.",

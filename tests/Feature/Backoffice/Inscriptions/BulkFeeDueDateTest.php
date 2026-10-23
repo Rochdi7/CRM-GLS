@@ -260,16 +260,22 @@ final class BulkFeeDueDateTest extends TestCase
             ->assertSessionHasErrors('date_echeance');
     }
 
-    public function test_the_fee_dropdown_only_offers_fees_the_group_actually_carries(): void
+    public function test_the_fee_dropdown_offers_the_whole_active_catalog(): void
     {
         $this->feeFor();
-        // Un frais du catalogue qu'AUCUNE inscription du groupe ne porte : il
-        // ouvrirait un tableau vide sans rien expliquer à l'écran.
-        Frais::create(['nom' => 'Frais jamais utilisé', 'montant_defaut' => 500, 'statut' => Frais::STATUT_ACTIF]);
+        // Un frais actif qu'AUCUNE ligne visible ne porte (cas réel : « Frais
+        // d'Octobre » masqué sur 5 inscriptions, absent des 32 autres) : il
+        // reste proposé, sinon l'opérateur ne voit même pas qu'il manque.
+        $absent = Frais::create(['nom' => 'Frais d\'Octobre', 'montant_defaut' => 1300, 'statut' => Frais::STATUT_ACTIF]);
+        // Un frais INACTIF que personne ne porte n'a rien à faire là.
+        Frais::create(['nom' => 'Frais archivé', 'montant_defaut' => 500, 'statut' => Frais::STATUT_INACTIF]);
 
         $this->actingAs($this->userWith('fee-due-dates.bulk-update'))
-            ->get(route('backoffice.bulk-echeance.index', ['groupFilter' => $this->group->id]))
+            ->get(route('backoffice.bulk-echeance.index', ['groupFilter' => $this->group->id, 'fraisFilter' => $absent->id]))
             ->assertOk()
-            ->assertInertia(fn ($page) => $page->has('fraisOptions', 1));
+            ->assertInertia(fn ($page) => $page
+                ->has('fraisOptions', 2)
+                ->where('filters.fraisFilter', (string) $absent->id)
+                ->has('lignes', 0));
     }
 }
