@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Payroll\Queries;
 
+use App\Domain\Expenses\Support\DoublonPaiementProf;
 use App\Domain\Payroll\Support\CotisationCnss;
 use App\Domain\Attendance\Queries\GetAbsencesParGroupe;
 use App\Domain\Payments\Support\RetardPaiementEtudiant;
@@ -150,6 +151,15 @@ final class GetPaiementProfCalcul
                     'mode' => $config->mode,
                     'taux' => $config->taux,
                     'probleme' => $config->probleme,
+                    // Période déjà payée à ce prof pour ce groupe (même règle
+                    // que le refus à l'enregistrement, DoublonPaiementProf) :
+                    // le modal bloque « Calculer » et nomme la ligne.
+                    'dejaPaye' => ($existante = DoublonPaiementProf::trouver(
+                        $group->id,
+                        $e->id,
+                        $fenetre->debut->toDateString(),
+                        $fenetre->fin->toDateString(),
+                    )) !== null ? DoublonPaiementProf::message($existante) : null,
                 ];
             })->values()->all(),
             'enseignantParDefaut' => $principal !== null ? (int) $principal : ($group->enseignant_id ?? null),

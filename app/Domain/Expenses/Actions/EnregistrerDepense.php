@@ -14,7 +14,6 @@ use App\Domain\Payroll\Support\CotisationCnss;
 use App\Services\Context\CurrentContext;
 use App\Support\Settings\AppSettings;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 
 /**
  * Records an expense in ONE transaction.
@@ -81,22 +80,15 @@ final class EnregistrerDepense
             }
 
             // Cotisation CNSS retenue (06/10/2026) : la case cochée devient
-            // le montant retenu = le SALAIRE de l'enseignant payé (21/10/2026),
-            // lu sur sa fiche — jamais du client. `montant` est déjà le NET
-            // (le calcul et le modal l'ont réduit) : c'est lui que la caisse
-            // débite, la retenue n'est qu'une mention. Un enseignant sans
-            // salaire ne peut rien retenir : refus nommé, jamais 0 en silence.
+            // le montant retenu = 1 700 MAD + le SALAIRE de l'enseignant payé
+            // (23/10/2026), lu sur sa fiche — jamais du client. `montant` est
+            // déjà le NET (le calcul et le modal l'ont réduit) : c'est lui que
+            // la caisse débite, la retenue n'est qu'une mention.
             $cnssMontant = null;
             if (filter_var($data['cnss'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
                 $cnssMontant = CotisationCnss::montantPour(
                     CotisationCnss::enseignantDuPaiement($enseignantId === null ? null : (int) $enseignantId, null),
                 );
-
-                if ($cnssMontant === null) {
-                    throw ValidationException::withMessages([
-                        'cnss' => __('Enter the teacher\'s salary on their employee record to withhold the CNSS contribution.'),
-                    ]);
-                }
             }
             unset($data['cnss']);
 

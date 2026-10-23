@@ -599,11 +599,18 @@ export default function DepensesIndex({
     }
 
     function depenseFormFromRow(row: DepenseRow): DepenseFormState {
+        // Paiement EN ATTENTE déjà retenu : la retenue suit le montant
+        // ACTUEL (1 700 + salaire, comme le serveur), donc le net s'ajuste
+        // de l'écart avec l'ancienne retenue stockée.
+        const ecartCnss = row.isEnAttente && row.cnssMontant !== null && row.cnssMontantEnseignant !== null
+            ? Number(row.cnssMontantEnseignant) - Number(row.cnssMontant)
+            : 0;
+
         return {
             ...emptyDepenseForm(),
             type_depense_id: row.typeDepenseId ?? '',
             group_id: row.groupId ?? '',
-            montant: row.montant,
+            montant: ecartCnss === 0 ? row.montant : Math.max(0, Number(row.montant) - ecartCnss).toFixed(2),
             methode_paiement: row.methodePaiement ?? '',
             date_depense: row.dateDepense ?? '',
             periode_debut: row.periodeDebut ?? '',
@@ -641,7 +648,8 @@ export default function DepensesIndex({
     // choisi. Null => aucun salaire : case désactivée, rappel affiché.
     const groupeCnss = [...groups, ...groupsAnneesPrecedentes]
         .find((g) => g.id === depenseForm.data.group_id)?.cnssMontant ?? null;
-    const retenueCnss: number | null = editingDepense?.cnssMontant != null
+    // Un paiement EN ATTENTE reprend le montant ACTUEL (1 700 + salaire).
+    const retenueCnss: number | null = editingDepense?.cnssMontant != null && !editingDepense.isEnAttente
         ? Number(editingDepense.cnssMontant)
         : cnssPrefill ?? (editingDepense !== null ? editingDepense.cnssMontantEnseignant : null) ?? groupeCnss;
 
@@ -1226,9 +1234,9 @@ export default function DepensesIndex({
                         filters={calculPaiementProfFilters}
                         groupOptions={calculGroupOptions}
                         paliersPaie={paliersPaie}
-                        // Recalcul d'un paiement déjà retenu : la retenue
-                        // STOCKÉE prime sur le salaire actuel.
-                        cnssMontant={recalculCible?.cnssMontant != null ? Number(recalculCible.cnssMontant) : undefined}
+                        // Recalcul d'un paiement EN ATTENTE : la retenue
+                        // ACTUELLE (1 700 + salaire) servie par le calcul,
+                        // jamais l'ancienne stockée.
                         canCreateDepense
                         onNavigate={naviguerCalcul}
                         onEnregistrer={enregistrerDepuisCalcul}

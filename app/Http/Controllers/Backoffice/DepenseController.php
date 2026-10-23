@@ -646,7 +646,7 @@ final class DepenseController extends Controller
             // Retenue CNSS = salaire de l'enseignant payé (21/10/2026) — celle
             // STOCKÉE sur la ligne si elle a été retenue, sinon le salaire
             // actuel, pour l'aperçu du calcul.
-            'cnssMontant' => $depense->cnss_montant !== null
+            'cnssMontant' => $depense->cnss_montant !== null && ! $depense->isEnAttente()
                 ? (float) $depense->cnss_montant
                 : CotisationCnss::montantPour(CotisationCnss::enseignantDuPaiement($depense->enseignant_id, $depense->group_id)),
         ]);
@@ -729,7 +729,9 @@ final class DepenseController extends Controller
             if ($cnssCoche) {
                 $enseignantId = $request->validated('enseignant_id') ?? $depense->enseignant_id;
                 $groupId = $request->validated('group_id') ?? $depense->group_id;
-                $retenue = $depense->cnss_montant !== null
+                // Un paiement EN ATTENTE (rien débité) reprend le montant
+                // ACTUEL — 1 700 + salaire —, jamais l'ancien stocké.
+                $retenue = $depense->cnss_montant !== null && ! $depense->isEnAttente()
                     ? (float) $depense->cnss_montant
                     : CotisationCnss::montantPour(CotisationCnss::enseignantDuPaiement(
                         $enseignantId === null ? null : (int) $enseignantId,

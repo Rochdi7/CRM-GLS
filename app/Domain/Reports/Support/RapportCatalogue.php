@@ -133,9 +133,20 @@ final class RapportCatalogue
             GetStudentsReport::KEY => ['sexeFilter', 'inscriptionFilter'],
             GetEncaissementsReport::KEY => ['methodeFilter', 'caisseFilter', 'typeFilter', 'fraisFilter'],
             GetDepensesReport::KEY => ['typeDepenseFilter', 'statutDepenseFilter'],
-            GetPaiementProfReport::KEY => ['groupFilter', 'enseignantFilter'],
+            GetPaiementProfReport::KEY => ['groupFilter', 'enseignantFilter', 'paiementFilter'],
             default => [],
         };
+    }
+
+    /**
+     * Ce rapport applique-t-il la fenêtre de dates Du / Au ? « Calcul paiement
+     * prof » ne la dessine pas (23/10/2026) : il liste des paiements
+     * ENREGISTRÉS, et la période de chacun est celle stockée sur la ligne —
+     * une fenêtre que la requête n'applique pas serait un filtre inerte.
+     */
+    public static function fenetreDates(string $cle): bool
+    {
+        return $cle !== GetPaiementProfReport::KEY;
     }
 
     /** Le titre imprimé en tête du PDF et du classeur. */
@@ -169,9 +180,13 @@ final class RapportCatalogue
      * colonnes du PDF, sinon le classeur et le document ne se liraient pas
      * pareil. `key` désigne une clé des lignes rendues par la requête Domain.
      *
+     * « Calcul paiement prof » a DEUX formes (23/10/2026) : la LISTE des
+     * paiements (aucun paiement choisi) et le DÉTAIL d'un paiement — les
+     * colonnes suivent `$detail`, décidé par la requête Domain.
+     *
      * @return list<array{key: string, label: string, width?: float}>
      */
-    public static function colonnesExcel(string $cle): array
+    public static function colonnesExcel(string $cle, bool $detail = false): array
     {
         return match ($cle) {
             GetInscriptionsReport::KEY => [
@@ -234,7 +249,7 @@ final class RapportCatalogue
             // Le détail qui justifie chaque montant : un montant de paie que
             // l'on ne peut pas refaire ligne par ligne n'est pas vérifiable
             // par celui qui le signe.
-            GetPaiementProfReport::KEY => [
+            GetPaiementProfReport::KEY => $detail ? [
                 ['key' => 'numero', 'label' => "N° d'ordre", 'width' => 9.0],
                 ['key' => 'etudiant', 'label' => 'Étudiant', 'width' => 32.0],
                 ['key' => 'statut', 'label' => "Statut d'inscription", 'width' => 18.0],
@@ -242,6 +257,16 @@ final class RapportCatalogue
                 ['key' => 'absences', 'label' => 'Absences', 'width' => 11.0],
                 ['key' => 'palier', 'label' => 'Palier payé', 'width' => 16.0],
                 ['key' => 'montant', 'label' => 'Montant', 'width' => 14.0],
+            ] : [
+                ['key' => 'numero', 'label' => "N° d'ordre", 'width' => 9.0],
+                ['key' => 'reference', 'label' => 'Réf', 'width' => 12.0],
+                ['key' => 'groupe', 'label' => 'Groupe', 'width' => 24.0],
+                ['key' => 'enseignant', 'label' => 'Enseignant', 'width' => 26.0],
+                ['key' => 'periode', 'label' => 'Période payée', 'width' => 24.0],
+                ['key' => 'montant', 'label' => 'Montant versé', 'width' => 15.0],
+                ['key' => 'cnss', 'label' => 'CNSS retenue', 'width' => 14.0],
+                ['key' => 'statut', 'label' => 'Statut', 'width' => 12.0],
+                ['key' => 'date', 'label' => 'Date', 'width' => 12.0],
             ],
             default => throw new \InvalidArgumentException("Rapport inconnu : {$cle}"),
         };

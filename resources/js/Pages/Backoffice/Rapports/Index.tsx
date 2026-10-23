@@ -52,6 +52,7 @@ export default function RapportsIndex({
     onglets,
     filters,
     filtresVisibles,
+    fenetreDatesVisible,
     groupOptions,
     statutOptions,
     sexeOptions,
@@ -65,6 +66,8 @@ export default function RapportsIndex({
     nombreLignes,
     montantTotal,
     enseignantOptions,
+    paiementOptions,
+    paiementProfDetail,
     avertissementRapport,
     resumeRapport,
 }: RapportsPageProps) {
@@ -116,8 +119,15 @@ export default function RapportsIndex({
         },
         enseignantFilter: {
             label: t('Teacher'),
-            placeholder: t('Choose a teacher'),
+            placeholder: filters.rapport === 'calcul-paiement-prof' ? t('All teachers') : t('Choose a teacher'),
             options: enseignantOptions,
+        },
+        // « Calcul paiement prof » : vide = la LISTE des paiements qui
+        // passent Groupe / Enseignant ; un paiement choisi = son DÉTAIL.
+        paiementFilter: {
+            label: t('Payment'),
+            placeholder: t('All payments'),
+            options: paiementOptions,
         },
         statutFilter: {
             label: t('Status'),
@@ -203,14 +213,21 @@ export default function RapportsIndex({
         }
 
         if (filters.rapport === 'calcul-paiement-prof') {
-            return {
-                // La raison vient du SERVEUR (groupe manquant, période trop
-                // longue, enseignant mal configuré…) : la page ne la devine pas.
-                vide: avertissementRapport !== '' ? avertissementRapport : t('No attendance for this teacher over this period.'),
-                unite: nombreLignes === 1 ? t('student') : t('students'),
-                // « Total proposé » : un calcul, pas un paiement.
-                total: t('Proposed total'),
-            };
+            // Deux formes, décidées par le SERVEUR : la liste des paiements
+            // (total approuvé) ou le détail d'un paiement (lignes par
+            // étudiant, montant versé). La raison d'un document vide vient
+            // aussi du serveur : la page ne la devine pas.
+            return paiementProfDetail
+                ? {
+                    vide: avertissementRapport !== '' ? avertissementRapport : t('No attendance for this teacher over this period.'),
+                    unite: nombreLignes === 1 ? t('student') : t('students'),
+                    total: t('Amount paid'),
+                }
+                : {
+                    vide: avertissementRapport !== '' ? avertissementRapport : t('No teacher payment matches these filters.'),
+                    unite: nombreLignes === 1 ? t('payment') : t('payments'),
+                    total: t('Approved total'),
+                };
         }
 
         return {
@@ -299,6 +316,7 @@ export default function RapportsIndex({
                                         rapport: onglet.rapports[0].value,
                                         groupFilter: '',
                                         enseignantFilter: '',
+                                        paiementFilter: '',
                                         statutFilter: '',
                                         sexeFilter: '',
                                         inscriptionFilter: '',
@@ -359,19 +377,27 @@ export default function RapportsIndex({
                                 placeholder={definitionsFiltres[cle].placeholder}
                                 options={definitionsFiltres[cle].options}
                                 value={filters[cle]}
-                                // Changer de groupe repart du principal du
-                                // NOUVEAU groupe : l'enseignant de l'ancien
-                                // n'y enseigne peut-être pas.
+                                // Les filtres sont en CASCADE : changer de
+                                // groupe vide l'enseignant et le paiement
+                                // (ceux de l'ancien groupe n'y sont peut-être
+                                // pas), changer d'enseignant vide le paiement.
                                 onChange={(e) =>
                                     reload(
                                         cle === 'groupFilter'
-                                            ? { groupFilter: e.target.value, enseignantFilter: '' }
-                                            : { [cle]: e.target.value },
+                                            ? { groupFilter: e.target.value, enseignantFilter: '', paiementFilter: '' }
+                                            : cle === 'enseignantFilter'
+                                              ? { enseignantFilter: e.target.value, paiementFilter: '' }
+                                              : { [cle]: e.target.value },
                                     )
                                 }
                             />
                         </div>
                     ))}
+                    {/* La fenêtre Du / Au n'est dessinée que pour les rapports
+                        qui l'appliquent (RapportCatalogue::fenetreDates()) :
+                        « Calcul paiement prof » liste des paiements dont la
+                        période est STOCKÉE sur chaque ligne. */}
+                    {fenetreDatesVisible && (
                     <div className="col-6 col-md-3 col-xl-2">
                         <DateField
                             id="dateFrom"
@@ -380,6 +406,8 @@ export default function RapportsIndex({
                             onChange={(e) => reload({ dateFrom: e.target.value })}
                         />
                     </div>
+                    )}
+                    {fenetreDatesVisible && (
                     <div className="col-6 col-md-3 col-xl-2">
                         <DateField
                             id="dateTo"
@@ -389,6 +417,7 @@ export default function RapportsIndex({
                             panelAlign="right"
                         />
                     </div>
+                    )}
                     {/* `d-grid` en dessous de xl étire le bouton sur toute la
                         largeur (il est alors seul sur sa ligne, comme les
                         champs) ; `d-xl-block` le rend à sa taille naturelle dès

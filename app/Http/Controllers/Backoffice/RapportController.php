@@ -15,6 +15,7 @@ use App\Domain\Reports\Support\RapportCatalogue;
 use App\Http\Controllers\Controller;
 use App\Models\Caisse;
 use App\Models\Depense;
+use App\Models\Employee;
 use App\Models\Encaissement;
 use App\Models\Frais;
 use App\Models\Group;
@@ -85,9 +86,14 @@ final class RapportController extends Controller
      * l'aperçu en lit le compteur, le total, le résumé et les enseignants —
      * le relancer pour chacun referait les mêmes lectures de présences.
      *
-     * @var array<string, mixed>|null
+     * ⚠ Mémo KEYÉ par les filtres, pas un simple `??=` : Laravel garde
+     * l'instance du contrôleur sur la Route, et dans la suite de tests (comme
+     * sous Octane) deux requêtes successives partagent cette instance — la
+     * seconde relisait le rapport de la première (23/10/2026).
+     *
+     * @var array<string, array<string, mixed>>
      */
-    private ?array $paiementProf = null;
+    private array $paiementProf = [];
 
     public function index(
         Request $request,
@@ -116,12 +122,6 @@ final class RapportController extends Controller
         $paiementProf = $filters['rapport'] === GetPaiementProfReport::KEY
             ? $this->paiementProf($request, $getPaiementProfReport, $filters)
             : null;
-
-        // Le filtre « Enseignant » affiche l'enseignant RÉELLEMENT calculé —
-        // le principal quand rien (ou un prof d'un autre groupe) n'est choisi.
-        if ($paiementProf !== null) {
-            $filters['enseignantFilter'] = $paiementProf['enseignantId'];
-        }
 
         // L'aperçu ne rapatrie PAS les lignes : sur une longue période un
         // rapport fait des milliers de lignes, qui n'ont aucune raison de
@@ -158,7 +158,7 @@ final class RapportController extends Controller
                 $filters['typeDepenseFilter'],
                 $filters['statutDepenseFilter'],
             ),
-            GetPaiementProfReport::KEY => $getPaiementProfReport->lignes($paiementProf['calcul'])->count(),
+            GetPaiementProfReport::KEY => $paiementProf['lignes']->count(),
         };
 
         return Inertia::render('Backoffice/Rapports/Index', [
@@ -170,6 +170,9 @@ final class RapportController extends Controller
             // n'applique pas (un filtre inerte trompe l'utilisateur, qui croit
             // avoir restreint son document).
             'filtresVisibles' => RapportCatalogue::filtres($filters['rapport']),
+            // La fenêtre Du / Au n'est dessinée que pour les rapports qui
+            // l'appliquent (RapportCatalogue::fenetreDates()).
+            'fenetreDatesVisible' => RapportCatalogue::fenetreDates($filters['rapport']),
             // Closure : un rechargement partiel (only: [...]) déclenché par un
             // changement de filtre n'a pas à reconstruire le catalogue des
             // groupes (CLAUDE.md §17 « Heavy page props are closures »).
@@ -206,14 +209,16 @@ final class RapportController extends Controller
                 static fn (string $s): array => ['value' => $s, 'label' => $s],
                 Depense::STATUTS,
             ),
-            // « Calcul paiement prof » : les enseignants DU groupe choisi
-            // (vide sans groupe), et la raison pour laquelle rien n'est
-            // calculé — dite par le serveur, jamais devinée par la page.
+            // « Calcul paiement prof » : les enseignants qui ont un paiement
+            // (dans le groupe choisi, s'il y en a un), les paiements qui
+            // passent les deux filtres, si le document DÉTAILLE un paiement
+            // ou LISTE les paiements, et la raison d'un document vide — dits
+            // par le serveur, jamais devinés par la page.
             'enseignantOptions' => $paiementProf['enseignantOptions'] ?? [],
+            'paiementOptions' => $paiementProf['paiementOptions'] ?? [],
+            'paiementProfDetail' => $paiementProf['detail'] ?? false,
             'avertissementRapport' => $paiementProf['avertissement'] ?? '',
-            'resumeRapport' => $paiementProf !== null
-                ? (object) $getPaiementProfReport->resume($paiementProf['calcul'])
-                : (object) [],
+            'resumeRapport' => (object) ($paiementProf['resume'] ?? []),
             'nombreLignes' => $lignes,
             // Le total n'est calculé QUE pour le rapport qui l'imprime : les
             // deux autres n'ont pas de colonne monétaire, et une chaîne vide
@@ -241,9 +246,9 @@ final class RapportController extends Controller
                     $filters['typeDepenseFilter'],
                     $filters['statutDepenseFilter'],
                 ),
-                // Le total PROPOSÉ par le calcul — la même valeur que l'écran
-                // « Calcul paiement prof » ; ce n'est pas un paiement.
-                GetPaiementProfReport::KEY => $getPaiementProfReport->total($paiementProf['calcul']),
+                // Liste : le total APPROUVÉ des paiements listés ; détail : le
+                // montant VERSÉ du paiement (le net stocké sur la ligne).
+                GetPaiementProfReport::KEY => $paiementProf['total'],
                 default => '',
             },
         ]);
@@ -315,7 +320,9 @@ final class RapportController extends Controller
         // Les mêmes lignes de contexte que le PDF, dans le même ordre, et
         // construites depuis le MÊME dictionnaire : le classeur ne peut pas
         // rappeler un périmètre différent de celui du document.
-        $sousTitres = ['Période : Du '.$this->formatDate($filters['dateFrom']).' au '.$this->formatDate($filters['dateTo'])];
+        $sousTitres = RapportCatalogue::fenetreDates($cle)
+            ? ['Période : Du '.$this->formatDate($filters['dateFrom']).' au '.$this->formatDate($filters['dateTo'])]
+            : [];
 
         foreach ($this->filtresAppliques($filters) as $libelle => $valeur) {
             $sousTitres[] = $libelle.' : '.$valeur;
@@ -351,13 +358,15 @@ final class RapportController extends Controller
             );
         }
 
-        // Le résumé du calcul (enseignant, mode, taux, séances…) puis le total
-        // PROPOSÉ — ou la raison pour laquelle rien n'est calculé : un
-        // classeur vide sans explication se lirait « rien à payer ».
+        // Le résumé du paiement détaillé (référence, période, mode, taux,
+        // séances…) puis son montant versé — ou, en liste, le total approuvé
+        // — ou la raison d'un classeur vide, qui se lirait sinon « rien payé ».
+        $detail = false;
         if ($cle === GetPaiementProfReport::KEY) {
             $paiementProf = $this->paiementProf($request, $getPaiementProfReport, $filters);
+            $detail = $paiementProf['detail'];
 
-            foreach ($getPaiementProfReport->resume($paiementProf['calcul']) as $libelle => $valeur) {
+            foreach ($paiementProf['resume'] as $libelle => $valeur) {
                 $sousTitres[] = $libelle.' : '.$valeur;
             }
 
@@ -365,8 +374,8 @@ final class RapportController extends Controller
                 $sousTitres[] = $paiementProf['avertissement'];
             }
 
-            if ($paiementProf['calcul'] !== null) {
-                $sousTitres[] = 'Total proposé : '.$getPaiementProfReport->total($paiementProf['calcul']);
+            if ($paiementProf['lignes']->isNotEmpty() || $detail) {
+                $sousTitres[] = ($detail ? 'Montant versé : ' : 'Total approuvé : ').$paiementProf['total'];
             }
         }
 
@@ -374,7 +383,7 @@ final class RapportController extends Controller
             RapportCatalogue::titre($cle),
             $context->etablissement(),
             $lignes,
-            RapportCatalogue::colonnesExcel($cle),
+            RapportCatalogue::colonnesExcel($cle, $detail),
             $sousTitres,
             RapportCatalogue::filename($cle, 'xlsx', $filters['dateFrom'], $filters['dateTo']),
         );
@@ -428,26 +437,25 @@ final class RapportController extends Controller
                 $filters['typeDepenseFilter'],
                 $filters['statutDepenseFilter'],
             ),
-            GetPaiementProfReport::KEY => $getPaiementProfReport->lignes(
-                $this->paiementProf($request, $getPaiementProfReport, $filters)['calcul'],
-            ),
+            GetPaiementProfReport::KEY => $this->paiementProf($request, $getPaiementProfReport, $filters)['lignes'],
         };
     }
 
     /**
-     * Le calcul « paiement prof » demandé, résolu une seule fois par requête.
+     * Le rapport « paiement prof » demandé, résolu une seule fois par requête.
      *
      * @param  array<string, string>  $filters
-     * @return array{calcul: ?array<string, mixed>, enseignantId: string, enseignantOptions: list<array{value: string, label: string}>, avertissement: string}
+     * @return array<string, mixed>
      */
     private function paiementProf(Request $request, GetPaiementProfReport $report, array $filters): array
     {
-        return $this->paiementProf ??= $report->resoudre(
+        $cle = $request->user()->getAuthIdentifier().'|'.$filters['groupFilter'].'|'.$filters['enseignantFilter'].'|'.$filters['paiementFilter'];
+
+        return $this->paiementProf[$cle] ??= $report->resoudre(
             $request->user(),
             $filters['groupFilter'],
             $filters['enseignantFilter'],
-            $filters['dateFrom'],
-            $filters['dateTo'],
+            $filters['paiementFilter'],
         );
     }
 
@@ -488,15 +496,17 @@ final class RapportController extends Controller
         GetPaiementProfReport $getPaiementProfReport,
         array $filters,
     ): array {
-        // Le résumé du calcul, la raison d'un document vide, et le total
-        // PROPOSÉ — tous issus du MÊME calcul que les lignes.
+        // Le résumé, la raison d'un document vide, la forme (liste ou détail)
+        // et le total — tous issus de la MÊME résolution que les lignes.
         if ($filters['rapport'] === GetPaiementProfReport::KEY) {
             $paiementProf = $this->paiementProf($request, $getPaiementProfReport, $filters);
 
             return [
-                'resume' => $getPaiementProfReport->resume($paiementProf['calcul']),
+                'resume' => $paiementProf['resume'],
                 'avertissement' => $paiementProf['avertissement'],
-                'totalMontant' => $getPaiementProfReport->total($paiementProf['calcul']),
+                'detail' => $paiementProf['detail'],
+                'fenetreDates' => false,
+                'totalMontant' => $paiementProf['total'],
             ];
         }
 
@@ -555,6 +565,11 @@ final class RapportController extends Controller
 
         if (in_array('groupFilter', $visibles, true) && ($groupe = $this->groupLabel($filters['groupFilter'])) !== null) {
             $libelles['Groupe'] = $groupe;
+        }
+
+        if (in_array('enseignantFilter', $visibles, true) && $filters['enseignantFilter'] !== ''
+            && ($enseignant = Employee::query()->find((int) $filters['enseignantFilter'])) !== null) {
+            $libelles['Enseignant'] = $enseignant->nomComplet();
         }
 
         if (in_array('statutFilter', $visibles, true) && $filters['statutFilter'] !== '') {
@@ -705,6 +720,7 @@ final class RapportController extends Controller
         // proposerait pas.
         $permission = RapportCatalogue::permission($rapport);
         $enseignantFilter = (string) $request->string('enseignantFilter');
+        $paiementFilter = (string) $request->string('paiementFilter');
 
         return [
             'rapport' => in_array($rapport, RapportCatalogue::clesImplementees(), true)
@@ -712,9 +728,10 @@ final class RapportController extends Controller
                 ? $rapport
                 : GetInscriptionsReport::KEY,
             'groupFilter' => (string) $request->string('groupFilter'),
-            // Un id d'employé ; validé contre les enseignants du groupe par
-            // GetPaiementProfReport, qui retombe sinon sur le principal.
+            // Des ids ; un id hors de la portée du rapport ne sort aucune
+            // ligne (GetPaiementProfReport borne tout à sa requête de base).
             'enseignantFilter' => ctype_digit($enseignantFilter) ? $enseignantFilter : '',
+            'paiementFilter' => ctype_digit($paiementFilter) ? $paiementFilter : '',
             'statutFilter' => in_array($statutFilter, Inscription::STATUTS, true) ? $statutFilter : '',
             'sexeFilter' => in_array($sexeFilter, Student::SEXES, true) ? $sexeFilter : '',
             'inscriptionFilter' => in_array($inscriptionFilter, GetStudentsReport::ETATS_INSCRIPTION, true)

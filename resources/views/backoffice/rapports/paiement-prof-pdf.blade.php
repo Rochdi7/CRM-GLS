@@ -10,13 +10,18 @@
     PAS ici : ce sont RapportPdfRenderer::entetePage() / ::pied(), répétés sur
     CHAQUE page.
 
-    ⚠ Ce document imprime un CALCUL, pas un paiement : rien n'a été écrit ni
-    débité. Les montants viennent de GetPaiementProfCalcul (paliers de
-    présences, mode et taux de la fiche employé) - le gabarit n'additionne
-    rien, le total du bas est celui du calcul.
+    DEUX formes, décidées par le serveur ($detail, GetPaiementProfReport,
+    23/10/2026) :
+     - $detail = false : la LISTE des paiements prof enregistrés qui passent
+       les filtres (une ligne par paiement) ; le pied est le total APPROUVÉ ;
+     - $detail = true : le DÉTAIL d'un paiement — le calcul refait depuis les
+       appels sur la période STOCKÉE (une ligne par étudiant) ; le pied est
+       le montant VERSÉ, celui de la ligne. Mode horaire : aucune ligne par
+       étudiant (la paie y est taux × heures), le résumé et le montant
+       suffisent.
 
-    Mode horaire : aucune ligne par étudiant (la paie y est taux × heures) -
-    le résumé et le total suffisent.
+    Le gabarit n'additionne rien : les totaux viennent du serveur. Rien n'a
+    été écrit ni débité par ce document.
 
     Construit en tableaux, jamais en flexbox : mPDF ne le supporte pas.
 --}}
@@ -74,32 +79,36 @@
     <div class="titre">{{ $titre }}</div>
 
     <div class="filtres">
-        <div>Période : Du {{ $periodeDebut }} au {{ $periodeFin }}</div>
         @foreach ($filtresAppliques as $libelle => $valeur)
             <div>{{ $libelle }} : {{ $valeur }}</div>
         @endforeach
-        {{-- Le résumé du calcul : enseignant, mode, taux, séances… - ce qui
-             permet de refaire le total à la main. --}}
+        {{-- Le résumé du paiement détaillé : référence, période, CNSS, mode,
+             taux, séances… - ce qui permet de refaire le montant à la main.
+             Vide en liste. --}}
         @foreach ($resume as $libelle => $valeur)
             <div>{{ $libelle }} : {{ $valeur }}</div>
         @endforeach
     </div>
 
-    <div class="note">Calcul proposé à partir des appels saisis - ce document n'est pas un paiement.</div>
+    @if ($detail)
+        <div class="note">Détail du calcul refait à partir des appels saisis, sur la période payée - le montant versé est celui de la dépense enregistrée.</div>
+    @else
+        <div class="note">Paiements prof enregistrés - seuls les paiements approuvés entrent dans le total.</div>
+    @endif
 
     @if ($lignes->isEmpty())
-        @if ($avertissement !== '')
-            <div class="vide">{{ $avertissement }}</div>
-        @elseif ($totalMontant !== '')
-            {{-- Mode horaire : pas de détail par étudiant, le total seul. --}}
+        @if ($detail && $avertissement === '')
+            {{-- Mode horaire : pas de détail par étudiant, le montant seul. --}}
             <table class="rapport" style="width:40%;">
                 <tr>
-                    <td style="text-align:right;background:{{ $couleurFond }};font-weight:bold;">Total proposé</td>
+                    <td style="text-align:right;background:{{ $couleurFond }};font-weight:bold;">Montant versé</td>
                     <td class="num" style="background:{{ $couleurFond }};font-weight:bold;">{{ $totalMontant }}</td>
                 </tr>
             </table>
+        @elseif ($avertissement !== '')
+            <div class="vide">{{ $avertissement }}</div>
         @else
-            <div class="vide">Aucun calcul pour ces filtres.</div>
+            <div class="vide">Aucun paiement pour ces filtres.</div>
         @endif
     @else
         {{-- Tableau volontairement laissé OUVERT (voir l'entête du fichier). --}}
@@ -107,6 +116,7 @@
             <thead>
                 {{-- ⚠ La somme de ces largeurs DOIT faire exactement 100 %
                      (sinon le tableau déborde et rogne le logo). --}}
+                @if ($detail)
                 <tr repeat_header="1">
                     <th style="width:7%;" class="nowrap">N°&nbsp;d'ordre</th>
                     <th style="width:33%;">Étudiant</th>
@@ -116,6 +126,19 @@
                     <th style="width:12%;">Palier payé</th>
                     <th style="width:13%;">Montant</th>
                 </tr>
+                @else
+                <tr repeat_header="1">
+                    <th style="width:5%;" class="nowrap">N°</th>
+                    <th style="width:9%;">Réf</th>
+                    <th style="width:18%;">Groupe</th>
+                    <th style="width:18%;">Enseignant</th>
+                    <th style="width:16%;">Période payée</th>
+                    <th style="width:11%;">Montant versé</th>
+                    <th style="width:9%;">CNSS</th>
+                    <th style="width:7%;">Statut</th>
+                    <th style="width:7%;">Date</th>
+                </tr>
+                @endif
             </thead>
             <tbody>
     @endif
@@ -123,6 +146,7 @@
 
 @if ($section === 'lignes')
                 @foreach ($lignes as $ligne)
+                    @if ($detail)
                     <tr @if ((int) $ligne['numero'] % 2 === 0) style="background:#f4f4f4;" @endif>
                         <td>{{ $ligne['numero'] }}</td>
                         <td class="txt">{{ mb_strtoupper($ligne['etudiant']) }}</td>
@@ -132,6 +156,19 @@
                         <td>{{ $ligne['palier'] }}</td>
                         <td class="num">{{ $ligne['montant'] }}</td>
                     </tr>
+                    @else
+                    <tr @if ((int) $ligne['numero'] % 2 === 0) style="background:#f4f4f4;" @endif>
+                        <td>{{ $ligne['numero'] }}</td>
+                        <td>{{ $ligne['reference'] }}</td>
+                        <td class="txt">{{ mb_strtoupper($ligne['groupe']) }}</td>
+                        <td class="txt">{{ mb_strtoupper($ligne['enseignant']) }}</td>
+                        <td>{{ $ligne['periode'] }}</td>
+                        <td class="num">{{ $ligne['montant'] }}</td>
+                        <td class="num">{{ $ligne['cnss'] }}</td>
+                        <td>{{ $ligne['statut'] }}</td>
+                        <td>{{ $ligne['date'] }}</td>
+                    </tr>
+                    @endif
                 @endforeach
 @endif
 
@@ -140,10 +177,18 @@
             {{-- ⚠ Dernière ligne du <tbody>, JAMAIS un <tfoot> : mPDF rejoue
                  l'en-tête de PAGE en posant un pied de tableau, ce qui dessine
                  le LOGO DEUX FOIS. --}}
+            @if ($detail)
             <tr>
-                <td colspan="6" style="text-align:right;background:{{ $couleurFond }};font-weight:bold;">Total proposé</td>
+                <td colspan="6" style="text-align:right;background:{{ $couleurFond }};font-weight:bold;">Montant versé</td>
                 <td class="num" style="background:{{ $couleurFond }};font-weight:bold;">{{ $totalMontant }}</td>
             </tr>
+            @else
+            <tr>
+                <td colspan="5" style="text-align:right;background:{{ $couleurFond }};font-weight:bold;">Total approuvé</td>
+                <td class="num" style="background:{{ $couleurFond }};font-weight:bold;">{{ $totalMontant }}</td>
+                <td colspan="3" style="background:{{ $couleurFond }};"></td>
+            </tr>
+            @endif
             </tbody>
         </table>
     @endif
