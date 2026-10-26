@@ -443,14 +443,40 @@ final class VirementDemandeTest extends TestCase
         $this->assertFalse(Role::findByName('director')->hasPermissionTo('virements.validate'));
     }
 
-    public function test_the_virements_page_is_reserved_to_the_accountant(): void
+    public function test_the_front_office_reads_the_virements_page_of_its_centre_without_actions(): void
     {
         $guichet = $this->userWith('payments.view', 'payments.create');
+        $comptable = $this->userWith('payments.view', 'virements.validate');
+        [$student, $inscription, $fee] = $this->enrolledStudentWithFee(1000);
+        $this->declarer($guichet, $student, $inscription, $fee)->assertSessionHasNoErrors();
+        $virement = Virement::query()->sole();
+        $this->actingInCentre($comptable)
+            ->patch(route('backoffice.virements.refuser', $virement), ['motif' => 'Absent du relevé'])
+            ->assertSessionHasNoErrors();
 
-        // Le guichet déclare depuis le modal de paiement, mais la page et ses
-        // onglets sont la boîte de travail du comptable (08/10/2026).
-        $this->actingInCentre($guichet)->get(route('backoffice.virements.index'))->assertForbidden();
-        $this->actingInCentre($guichet)
+        // Une demande d'un AUTRE centre ne lui est jamais montrée.
+        $ailleurs = $virement->replicate();
+        $ailleurs->reference = 'VIR-AUTRE';
+        $ailleurs->etablissement_id = Etablissement::factory()->create()->id;
+        $ailleurs->save();
+
+        // Lecture ouverte à `payments.view` (26/10/2026) : le guichet voit ses
+        // demandes refusées avec leur motif, sans pouvoir décider.
+        $props = $this->actingInCentre($guichet)
+            ->get(route('backoffice.virements.index', ['statutFilter' => Virement::STATUT_REFUSE]))
+            ->assertOk()
+            ->viewData('page')['props'];
+        $this->assertFalse($props['canValidate']);
+        $this->assertCount(1, $props['virements']['data']);
+        $this->assertSame($virement->id, $props['virements']['data'][0]['id']);
+        $this->assertSame('Absent du relevé', $props['virements']['data'][0]['motifRefus']);
+
+        // Les décisions restent fermées.
+        $this->actingInCentre($guichet)->patch(route('backoffice.virements.valider', $ailleurs))->assertForbidden();
+
+        // Sans `payments.view`, la page reste fermée.
+        $sansDroit = $this->userWith('students.view');
+        $this->actingInCentre($sansDroit)
             ->get(route('backoffice.virements.index', ['statutFilter' => Virement::STATUT_EN_ATTENTE]))
             ->assertForbidden();
     }

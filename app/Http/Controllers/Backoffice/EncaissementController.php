@@ -248,7 +248,7 @@ final class EncaissementController extends Controller
                 'updateDate' => $request->user()?->can('payments.update-date') ?? false,
                 // Onglet / lien « Virements » : comptable + super-admin
                 // (08/10/2026) — la page elle-même l'exige aussi.
-                'viewVirements' => $request->user()?->can('virements.validate') ?? false,
+                'viewVirements' => $request->user()?->can('payments.view') ?? false,
                 // Requalifier la méthode déplace l'argent entre la caisse
                 // physique et le compte de méthode du centre : rôles de
                 // direction + super-admin (01/09/2026). Confort d'interface

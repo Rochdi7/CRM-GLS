@@ -1172,7 +1172,10 @@ the database layer. Non-negotiable invariants already enforced in code:
   la validation. Une demande en attente ne se cache jamais derrière la
   fenêtre de l'année (boîte de réception, comme les transferts). L'avance par
   virement (`storeAvance`) et la requalification de méthode restent des
-  chemins directs, inchangés. Tests :
+  chemins directs, inchangés. **La page « Virements » se LIT avec
+  `payments.view`** (26/10/2026) : le guichet y suit les demandes de SON
+  centre (en attente, validées, refusées + motif), sans aucune action —
+  valider/refuser restent `virements.validate`. Tests :
   `tests/Feature/Backoffice/Finance/VirementDemandeTest.php`.
 - **⚠ Le cascade « inscription » LISTE tous les dossiers, et DIT lesquels ne
   se paient pas** (17/09/2026, `GetEncaissementsList::studentInscriptions`).
