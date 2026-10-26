@@ -2452,7 +2452,7 @@ export interface EncaissementsPageProps {
     can?: {
         delete: boolean;
         updateDate?: boolean;
-        /** Onglet « Virements » : comptable + super-admin (`virements.validate`). */
+        /** Onglet « Virements » (lecture) : `payments.view` — les actions restent `virements.validate`. */
         viewVirements?: boolean;
         updateMethode?: boolean;
         updateAmount?: boolean;
@@ -2582,7 +2582,7 @@ export interface ChequesPageProps {
     canDelete: boolean;
     /** Accepter / rejeter une remise à la banque (comptable, `cheques.validate-deposit`). */
     canValidateDeposit: boolean;
-    /** Onglet « Virements » : comptable + super-admin (`virements.validate`). */
+    /** Onglet « Virements » (lecture) : `payments.view` — les actions restent `virements.validate`. */
     canViewVirements: boolean;
     /** Annuler un chèque — statut « Annulé » (comptable, `cheques.cancel`). */
     canCancel: boolean;

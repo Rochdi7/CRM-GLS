@@ -125,7 +125,7 @@ final class ChequeController extends Controller
             // Accepter / rejeter une remise à la banque — le comptable.
             'canValidateDeposit' => $request->user()->can('cheques.validate-deposit'),
             // Onglet « Virements » : comptable + super-admin (08/10/2026).
-            'canViewVirements' => $request->user()->can('virements.validate'),
+            'canViewVirements' => $request->user()->can('payments.view'),
             'canCancel' => $request->user()->can('cheques.cancel'),
             'remisesEnAttente' => $chequesList['remisesEnAttente'],
             'chequeMimes' => Cheque::MEDIA_MIMES,

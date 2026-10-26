@@ -39,10 +39,12 @@ final class VirementController extends Controller
 
     public function index(Request $request, GetVirementsList $getVirementsList): Response|RedirectResponse
     {
+        // Lecture = `payments.view` (26/10/2026) : tout rôle qui voit les
+        // paiements suit les demandes de SON centre (portée centres affectés
+        // + centre actif, GetVirementsList), refusées comprises. Les actions
+        // restent `virements.validate` (valider()/refuser() + policy) ;
+        // `canValidate` ne fait que les dessiner.
         $this->authorize('viewAny', Virement::class);
-        // La page est la boîte de travail du comptable (08/10/2026) : la
-        // route le filtre déjà, le contrôleur le revérifie.
-        abort_unless($request->user()->can('virements.validate'), 403);
 
         // Première visite nue : la page ouvre sur ce qu'il reste à VÉRIFIER,
         // via UNE redirection vers l'URL canonique qui porte le filtre
