@@ -232,8 +232,8 @@ export default function VirementsIndex({ virements, montantTotal, enAttente, fil
                         aria-current="page"
                         onClick={() => !ongletAVerifier && reload({ statutFilter: STATUT_EN_ATTENTE })}
                     >
-                        <i className="ti ti-checks me-2" aria-hidden="true" />
-                        Virements à vérifier
+                        <i className="ti ti-transfer-in me-2" aria-hidden="true" />
+                        Virements
                         {enAttente.count > 0 && <span className="badge bg-warning text-dark ms-2">{enAttente.count}</span>}
                     </button>
                 </li>
