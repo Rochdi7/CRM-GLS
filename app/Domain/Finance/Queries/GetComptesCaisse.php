@@ -11,6 +11,7 @@ use App\Models\Encaissement;
 use App\Models\Remboursement;
 use App\Domain\Finance\Support\VentilationCentre;
 use App\Services\Context\CurrentContext;
+use App\Support\Access\CaissePrivee;
 use App\Support\Access\DormantTill;
 use App\Support\Access\HiddenAccount;
 use Illuminate\Database\Eloquent\Builder;
@@ -143,6 +144,9 @@ final class GetComptesCaisse
             // Same rule as GetCaissesList: the maintainer's auto-provisioned
             // till is hidden along with the account (HiddenAccount).
             ->tap(fn ($q) => HiddenAccount::hideCaisses($q))
+            // A PRIVATE till (the CEO's) is listed for its owner alone
+            // (CaissePrivee) — the signed-in viewer, same as « Caisse globale ».
+            ->tap(fn ($q) => CaissePrivee::hide($q))
             // An empty till belonging to a teacher or a departed employee is
             // noise — one that still holds money is never hidden (DormantTill).
             ->tap(fn ($q) => DormantTill::hide($q))
