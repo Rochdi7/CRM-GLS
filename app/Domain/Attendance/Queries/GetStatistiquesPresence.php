@@ -11,8 +11,8 @@ use App\Models\User;
  * two charts of ONE group over a date window, optionally narrowed to one of
  * its students —
  *
- *  - « Statistiques de présence » : présences / absences per séance DATE;
- *  - « Suivi de la présence »     : présences / absences per STUDENT.
+ *  - « Évolution de la présence » : présences / absences per séance DATE;
+ *  - « Bilan par étudiant »       : présences / absences per STUDENT.
  *
  * Both are DERIVED from the « Absence par groupe » matrix
  * (GetAbsencesParGroupe) rather than re-querying: the group scoping (centre
