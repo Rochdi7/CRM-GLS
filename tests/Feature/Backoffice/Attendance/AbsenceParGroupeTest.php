@@ -429,6 +429,27 @@ final class AbsenceParGroupeTest extends TestCase
             });
     }
 
+    /** A group still « En inscription » has no classes yet — not offered. */
+    public function test_groups_en_inscription_are_not_offered_in_the_group_dropdown(): void
+    {
+        $enInscription = Group::factory()->create([
+            'statut' => Group::STATUT_EN_INSCRIPTION,
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        foreach (['backoffice.seances.absence-par-groupe', 'backoffice.seances.statistiques'] as $route) {
+            $this->actingAs($this->userWith('attendance.view'))
+                ->get(route($route, ['dateFrom' => '', 'dateTo' => '']))
+                ->assertOk()
+                ->assertInertia(function (Assert $page) use ($enInscription): void {
+                    $values = array_column($page->toArray()['props']['groupOptions'], 'value');
+                    $this->assertNotContains($enInscription->id, $values);
+                    $this->assertContains($this->group->id, $values);
+                });
+        }
+    }
+
     /**
      * The matrix of a closed group must actually build — the dropdown would be
      * a lie otherwise. The group's séances and students are unaffected by its

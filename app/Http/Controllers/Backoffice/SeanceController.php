@@ -237,8 +237,9 @@ final class SeanceController extends Controller
             // allGroups(), not groups(): reading a finished group's attendance
             // is exactly when one consults this matrix, so « Fin de formation »
             // and « Annulée » belong in the dropdown here — unlike the séance
-            // modal, which may only schedule into a live group.
-            'groupOptions' => $formOptions->allGroups($user),
+            // modal, which may only schedule into a live group. « En
+            // inscription » is left out: its classes have not started.
+            'groupOptions' => $formOptions->allGroups($user, sansEnInscription: true),
             'statuts' => Seance::STATUTS,
             'presenceStatuts' => Presence::STATUTS_SAISISSABLES,
         ]);
@@ -293,8 +294,8 @@ final class SeanceController extends Controller
             'filters' => $filters,
             'defaultDates' => $defaultDates,
             // Same dropdown as « Absence par groupe »: a finished group's
-            // attendance is still worth charting.
-            'groupOptions' => $formOptions->allGroups($user),
+            // attendance is still worth charting; « En inscription » has none.
+            'groupOptions' => $formOptions->allGroups($user, sansEnInscription: true),
         ]);
     }
 

@@ -61,11 +61,16 @@ final class GetSeanceFormOptions
      * in the label, so the reader knows the file is over, and is listed AFTER
      * every open group (Annulée, then Fin de formation).
      *
-     * @return list<array{value: int, label: string}>
+     * `$sansEnInscription` (27/10/2026) drops the « En inscription » groups:
+     * the attendance READING screens (Absence par groupe, Statistiques) have
+     * nothing to show for a group whose classes have not started.
+     *
+     * @return list<array{value: int, label: string, statut: string}>
      */
-    public function allGroups(User $user): array
+    public function allGroups(User $user, bool $sansEnInscription = false): array
     {
         return Group::query()
+            ->when($sansEnInscription, fn ($q) => $q->where('statut', '!=', Group::STATUT_EN_INSCRIPTION))
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             ->tap(fn ($q) => PorteeEnseignant::scopeGroupes($q, $user))
             ->tap(fn ($q) => $this->scopeToActiveCenter($q))
