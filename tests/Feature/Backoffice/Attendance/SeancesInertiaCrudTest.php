@@ -110,6 +110,40 @@ final class SeancesInertiaCrudTest extends TestCase
             );
     }
 
+    /**
+     * The list's Groupe FILTER offers closed groups (with their statut, so the
+     * page tints Annulée red and Fin de formation orange); the modal's group
+     * list stays schedulable groups only.
+     */
+    public function test_the_group_filter_offers_closed_groups_but_the_modal_does_not(): void
+    {
+        $annule = Group::factory()->create([
+            'statut' => Group::STATUT_ANNULEE,
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+        $termine = Group::factory()->create([
+            'statut' => Group::STATUT_FIN_FORMATION,
+            'etablissement_id' => $this->centre->id,
+            'annee_scolaire_id' => $this->annee->id,
+        ]);
+
+        $this->actingAs($this->userWith('attendance.view'))
+            ->get(route('backoffice.seances.index'))
+            ->assertOk()
+            ->assertInertia(function (Assert $page) use ($annule, $termine): void {
+                $props = $page->toArray()['props'];
+                $filtre = array_column($props['filterGroupOptions'], 'statut', 'value');
+                $this->assertSame(Group::STATUT_ANNULEE, $filtre[$annule->id]);
+                $this->assertSame(Group::STATUT_FIN_FORMATION, $filtre[$termine->id]);
+                $this->assertArrayHasKey($this->group->id, $filtre);
+
+                $modal = array_column($props['groupOptions'], 'value');
+                $this->assertNotContains($annule->id, $modal);
+                $this->assertNotContains($termine->id, $modal);
+            });
+    }
+
     public function test_index_lists_prevue_seances_before_the_others_whatever_their_date(): void
     {
         $effectueeRecent = $this->makeSeance(['date_seance' => '2026-03-20', 'statut' => Seance::STATUT_EFFECTUEE]);

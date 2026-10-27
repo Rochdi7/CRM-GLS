@@ -100,7 +100,11 @@ final class SeanceController extends Controller
                     : GetSeancesList::DEFAULT_PER_PAGE,
             ],
             'perPageOptions' => GetSeancesList::PER_PAGE_OPTIONS,
+            // The modal schedules into a live group only (groups()); the list
+            // FILTER reads every group's séances, closed ones included, and
+            // the page tints them (Annulée red, Fin de formation orange).
             'groupOptions' => $formOptions->groups($user),
+            'filterGroupOptions' => $formOptions->allGroups($user),
             'enseignants' => $formOptions->enseignants($user),
             'statuts' => Seance::STATUTS,
             'groupStatuts' => array_keys(GetSeancesList::GROUP_STATUTS),
