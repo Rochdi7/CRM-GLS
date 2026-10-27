@@ -240,7 +240,9 @@ export default function SelectField({
                                 }
                             }}
                         >
-                            <span className={`select2-selection__rendered${caps ? ` ${caps}` : ''}`}>
+                            <span
+                                className={`select2-selection__rendered${caps ? ` ${caps}` : ''}${selected?.tone ? ` gls-select2-tone--${selected.tone}` : ''}`}
+                            >
                                 {selected ? (
                                     selected.icon ? (
                                         <span className="d-inline-flex align-items-center gap-2">
@@ -346,7 +348,7 @@ export default function SelectField({
                                     {shown.map((option, index) => (
                                         <li
                                             key={option.value}
-                                            className={`select2-results__option${index === highlight && !option.disabled ? ' select2-results__option--highlighted' : ''}${option.disabled ? ' select2-results__option--disabled' : ''}`}
+                                            className={`select2-results__option${index === highlight && !option.disabled ? ' select2-results__option--highlighted' : ''}${option.disabled ? ' select2-results__option--disabled' : ''}${option.tone ? ` gls-select2-option--${option.tone}` : ''}`}
                                             role="option"
                                             aria-selected={selected ? String(option.value) === String(selected.value) : false}
                                             aria-disabled={option.disabled ? true : undefined}

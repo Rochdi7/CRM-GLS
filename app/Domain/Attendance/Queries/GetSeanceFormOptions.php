@@ -83,6 +83,9 @@ final class GetSeanceFormOptions
                 'label' => in_array($group->statut, Group::STATUTS_HISTORIQUE, true)
                     ? "{$group->nom} ({$group->niveau}) - {$group->statut}"
                     : "{$group->nom} ({$group->niveau})",
+                // Lets the page tint a closed group's row (Annulée red,
+                // Fin de formation orange — Lib/groupStatut.ts).
+                'statut' => $group->statut,
             ])
             ->all();
     }
