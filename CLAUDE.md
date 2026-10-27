@@ -854,6 +854,22 @@ the database layer. Non-negotiable invariants already enforced in code:
     must stay VISIBLE (the CEO) or the Autorisations screen shows nobody who
     can grant anything. Verify a new screen with a query as the CEO, not by
     reading the code.
+  - **⚠ La caisse du CEO est PRIVÉE sur « Caisse globale » et « Comptes de
+    caisse »** (27/10/2026, `App\Support\Access\CaissePrivee`) : la caisse
+    personnelle de Mohammed Rafik (`CaissePrivee::EMAILS`, adresse de LOGIN
+    via `responsable.user.email` — jamais un nom, jamais un rôle) n'est
+    listée que pour SON titulaire — et, à la différence de tous les autres
+    filtres d'affichage, PERSONNE d'autre n'est exempté : ni le compte
+    technique `HiddenAccount::EMAIL`, ni `HiddenAccount::STAFF_EMAIL`
+    (décision du propriétaire). Sur ces deux onglets, la caisse du compte
+    technique (`CaissePrivee::EMAILS_MASQUEES_POUR_TOUS`) n'est listée pour
+    PERSONNE, lui compris ; `STAFF_EMAIL` reste une caisse ordinaire visible. Filtre d'AFFICHAGE posé au funnel des
+    deux read-models (`GetCaisseGlobale`, `GetComptesCaisse`), donc les
+    cartes et totaux au-dessus des listes la retirent aussi (un total se
+    calcule sur les lignes qu'il chapeaute, §11). Rien ne change côté
+    argent : solde, ledger, ventilation, journal, et elle reste une
+    destination de transfert valide. Tests :
+    `tests/Feature/Backoffice/Finance/CaissePriveeTest.php`.
   - **The journal is append-only.** `App\Models\Activity` throws on update
     and delete (model level, below every Gate — so it holds even for a
     super-admin), and `backoffice.audit-logs.index` is the ONLY route:

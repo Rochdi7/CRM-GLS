@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\Authorization\CenterAccessService;
 use App\Domain\Finance\Support\VentilationCentre;
 use App\Services\Context\CurrentContext;
+use App\Support\Access\CaissePrivee;
 use App\Support\Access\DormantTill;
 use App\Support\Access\HiddenAccount;
 
@@ -118,6 +119,9 @@ final class GetCaisseGlobale
         $caisses = Caisse::query()
             ->with(['etablissement', 'responsable'])
             ->tap(fn ($q) => HiddenAccount::hideCaisses($q))
+            // A PRIVATE till (the CEO's) is listed for its owner alone — at
+            // the funnel, so the cards above drop it too (CaissePrivee).
+            ->tap(fn ($q) => CaissePrivee::hide($q, $user))
             ->tap(fn ($q) => DormantTill::hide($q))
             ->tap(fn ($q) => $this->centerAccess->scopeAccessibleCenters($q, $user))
             // ⚠ Même règle que « Comptes de caisse » : une caisse appartient
