@@ -125,7 +125,7 @@ function TooltipRows({ presents, absents }: { presents: number; absents: number 
 }
 
 /**
- * « Statistiques de présence » — présences / absences per séance date, one
+ * « Évolution de la présence » — présences / absences per séance date, one
  * line per series with a marker on every date and a shared crosshair tooltip.
  */
 export function PresenceParDateChart({ data }: { data: PresenceParDate[] }) {
@@ -154,7 +154,7 @@ export function PresenceParDateChart({ data }: { data: PresenceParDate[] }) {
                     height={height}
                     viewBox={`0 0 ${width} ${height}`}
                     role="img"
-                    aria-label="Statistiques de présence par date"
+                    aria-label="Évolution de la présence par date"
                     style={{ display: 'block', maxWidth: '100%' }}
                     onMouseLeave={() => setHoverIndex(null)}
                 >
@@ -253,7 +253,7 @@ function shortName(nom: string): string {
 }
 
 /**
- * « Suivi de la présence » — présences / absences per student, two bars side
+ * « Bilan par étudiant » — présences / absences per student, two bars side
  * by side per student with the value above each. A large group keeps a
  * readable bar width and scrolls horizontally INSIDE the card, never the page.
  */
@@ -285,7 +285,7 @@ export function PresenceParEtudiantChart({ data }: { data: PresenceParEtudiant[]
                         height={height}
                         viewBox={`0 0 ${width} ${height}`}
                         role="img"
-                        aria-label="Suivi de la présence par étudiant"
+                        aria-label="Bilan de la présence par étudiant"
                         style={{ display: 'block' }}
                         onMouseLeave={() => setHoverIndex(null)}
                     >

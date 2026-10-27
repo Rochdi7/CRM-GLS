@@ -37,15 +37,15 @@ interface StatistiquesProps {
 }
 
 const VUES: { key: Vue; label: string; icon: string }[] = [
-    { key: 'presence', label: 'Statistiques de présence', icon: 'ti ti-chart-line' },
-    { key: 'suivi', label: 'Suivi de la présence', icon: 'ti ti-chart-bar' },
+    { key: 'presence', label: 'Évolution de la présence', icon: 'ti ti-chart-line' },
+    { key: 'suivi', label: 'Bilan par étudiant', icon: 'ti ti-chart-bar' },
 ];
 
 /**
  * « Statistiques » tab of Gestion des séances (27/10/2026) — présences /
  * absences of ONE group over a date window (default: the last month),
- * charted per date (« Statistiques de présence ») or per student (« Suivi de
- * la présence »), optionally narrowed to one student. Every figure comes from
+ * charted per date (« Évolution de la présence ») or per student (« Bilan
+ * par étudiant »), optionally narrowed to one student. Every figure comes from
  * GetStatistiquesPresence, itself derived from the « Absence par groupe »
  * matrix, so both screens always agree. No « Retard » series: that statut was
  * removed from the system and its legacy rows count as présences.
