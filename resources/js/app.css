@@ -339,6 +339,52 @@ input.gls-select2-search__field::-webkit-search-decoration {
     background-color: transparent;
     font-weight: 400;
 }
+/*
+ * Tinted rows (SelectOption.tone): a cancelled group in red, a finished one in
+ * orange (Lib/groupStatut.ts). The tint holds on hover and when selected —
+ * only the shade deepens — so the state never disappears under the cursor.
+ */
+.select2-results__option.gls-select2-option--danger {
+    background-color: rgba(232, 38, 70, 0.1);
+    color: #c81e3a;
+}
+.select2-results__option.gls-select2-option--danger.select2-results__option--highlighted,
+.select2-results__option.gls-select2-option--danger[aria-selected='true'] {
+    background-color: rgba(232, 38, 70, 0.2);
+    color: #c81e3a;
+}
+.select2-results__option.gls-select2-option--orange {
+    background-color: rgba(253, 126, 20, 0.12);
+    color: #b85a0c;
+}
+.select2-results__option.gls-select2-option--orange.select2-results__option--highlighted,
+.select2-results__option.gls-select2-option--orange[aria-selected='true'] {
+    background-color: rgba(253, 126, 20, 0.24);
+    color: #b85a0c;
+}
+.select2-results__option + .select2-results__option[class*='gls-select2-option--'] {
+    margin-top: 2px;
+}
+.select2-selection__rendered.gls-select2-tone--danger {
+    color: #c81e3a !important;
+}
+.select2-selection__rendered.gls-select2-tone--orange {
+    color: #b85a0c !important;
+}
+html[data-theme='dark'] .select2-results__option.gls-select2-option--danger,
+html[data-theme='dark'] .select2-selection__rendered.gls-select2-tone--danger {
+    color: #f07d90 !important;
+}
+html[data-theme='dark'] .select2-results__option.gls-select2-option--orange,
+html[data-theme='dark'] .select2-selection__rendered.gls-select2-tone--orange {
+    color: #f5a35c !important;
+}
+html[data-theme='dark'] .select2-results__option.gls-select2-option--danger {
+    background-color: rgba(232, 38, 70, 0.18);
+}
+html[data-theme='dark'] .select2-results__option.gls-select2-option--orange {
+    background-color: rgba(253, 126, 20, 0.18);
+}
 /* Statut dot in front of an option label (Active/Changement/Annulée…). */
 .gls-option-dot {
     width: 8px;

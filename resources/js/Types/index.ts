@@ -943,6 +943,12 @@ export interface SelectOption {
     disabled?: boolean;
     /** Why `disabled` — shown next to the label so the refusal explains itself. */
     disabledReason?: string;
+    /**
+     * Background tint of the row (and colour of the closed control when
+     * selected) — e.g. a cancelled group in red, a finished one in orange.
+     * Never the only signal: the label still names the state.
+     */
+    tone?: 'danger' | 'orange';
 }
 
 /**

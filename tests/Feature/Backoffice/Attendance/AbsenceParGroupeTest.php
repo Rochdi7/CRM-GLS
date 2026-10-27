@@ -419,6 +419,13 @@ final class AbsenceParGroupeTest extends TestCase
                 $this->assertContains($termine->id, $values);
                 $this->assertContains($annule->id, $values);
                 $this->assertContains($this->group->id, $values);
+
+                // The statut travels with each option so the page can tint
+                // Annulée red and Fin de formation orange (Lib/groupStatut.ts).
+                $statuts = array_column($page->toArray()['props']['groupOptions'], 'statut', 'value');
+                $this->assertSame(Group::STATUT_FIN_FORMATION, $statuts[$termine->id]);
+                $this->assertSame(Group::STATUT_ANNULEE, $statuts[$annule->id]);
+                $this->assertSame(Group::STATUT_EN_FORMATION, $statuts[$this->group->id]);
             });
     }
 

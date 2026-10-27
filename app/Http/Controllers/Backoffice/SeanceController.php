@@ -11,6 +11,7 @@ use App\Domain\Attendance\Queries\GetAbsencesParGroupe;
 use App\Domain\Attendance\Queries\GetSeanceDetails;
 use App\Domain\Attendance\Queries\GetSeanceFormOptions;
 use App\Domain\Attendance\Queries\GetSeancesList;
+use App\Domain\Attendance\Queries\GetStatistiquesPresence;
 use App\Domain\Groups\Support\PorteeEnseignant;
 use App\Http\Controllers\Backoffice\Concerns\AssertsContextScope;
 use App\Http\Controllers\Controller;
@@ -244,16 +245,57 @@ final class SeanceController extends Controller
     }
 
     /**
-     * « Statistiques » tab — placeholder only (21/10/2026): renders the tab
-     * bar with an « En cours de développement » notice. No read-model is
-     * called yet; when the real statistics land, they must follow the active
-     * context (centre + année) like every other screen.
+     * « Statistiques » tab (27/10/2026) — two charts of ONE group over a date
+     * window: présences / absences per séance date (`vue=presence`) and per
+     * student (`vue=suivi`), optionally narrowed to one student. Read-only;
+     * the group is scoped by GetAbsencesParGroupe (centre reach, active
+     * context, portée enseignant), which the read-model derives from.
      */
-    public function statistiques(): Response
-    {
+    public function statistiques(
+        Request $request,
+        GetStatistiquesPresence $getStatistiquesPresence,
+        GetSeanceFormOptions $formOptions,
+    ): Response|RedirectResponse {
         $this->authorize('viewAny', Seance::class);
 
-        return Inertia::render('Backoffice/Seances/Statistiques');
+        $user = $request->user();
+        $defaultDates = [
+            'dateFrom' => now()->subMonth()->toDateString(),
+            'dateTo' => now()->toDateString(),
+        ];
+
+        $filters = [
+            'vue' => $request->string('vue')->toString() === 'suivi' ? 'suivi' : 'presence',
+            'groupFilter' => (string) $request->string('groupFilter'),
+            'studentFilter' => (string) $request->string('studentFilter'),
+            'dateFrom' => (string) $request->string('dateFrom'),
+            'dateTo' => (string) $request->string('dateTo'),
+        ];
+
+        foreach (['dateFrom', 'dateTo'] as $key) {
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $filters[$key]) !== 1) {
+                $filters[$key] = '';
+            }
+        }
+
+        // Fenêtre par défaut : le dernier mois, posée UNE fois par une
+        // redirection vers l'URL canonique — une date que l'utilisateur a
+        // effacée arrive en clé vide et reste effacée.
+        if (! $request->has('dateFrom') && ! $request->has('dateTo')) {
+            return redirect()->route('backoffice.seances.statistiques', [...$filters, ...$defaultDates]);
+        }
+
+        $statistiques = $getStatistiquesPresence($user, $filters);
+        $filters['studentFilter'] = $statistiques['studentFilter'];
+
+        return Inertia::render('Backoffice/Seances/Statistiques', [
+            'statistiques' => $statistiques,
+            'filters' => $filters,
+            'defaultDates' => $defaultDates,
+            // Same dropdown as « Absence par groupe »: a finished group's
+            // attendance is still worth charting.
+            'groupOptions' => $formOptions->allGroups($user),
+        ]);
     }
 
     /**

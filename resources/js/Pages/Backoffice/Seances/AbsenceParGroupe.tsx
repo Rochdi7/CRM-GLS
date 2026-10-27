@@ -5,10 +5,12 @@ import SelectField from '@/Components/Forms/SelectField';
 import DateField from '@/Components/Forms/DateField';
 import TableToolbar from '@/Components/Tables/TableToolbar';
 import { useFilterReset } from '@/Hooks/useFilterReset';
+import { withGroupStatutTone } from '@/Lib/groupStatut';
 import type { SelectOption } from '@/Types';
 
 interface GroupOption extends SelectOption {
     enseignantId: number | null;
+    statut: string;
 }
 
 interface MatriceSeance {
@@ -210,7 +212,8 @@ export default function AbsenceParGroupe({
                             </label>
                             <SelectField
                                 id="abs-f-groupe"
-                                options={groupOptions}
+                                // Annulée in red, Fin de formation in orange.
+                                options={withGroupStatutTone(groupOptions)}
                                 placeholder="Choisir un groupe"
                                 value={filters.groupFilter}
                                 // Dates RETIRÉES (pas vidées) : le serveur pose alors la
