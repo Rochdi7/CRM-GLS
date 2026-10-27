@@ -15,6 +15,7 @@ import Pagination from '@/Components/Tables/Pagination';
 import TableLengthRow from '@/Components/Tables/TableLengthRow';
 import TableToolbar from '@/Components/Tables/TableToolbar';
 import { useFilterReset } from '@/Hooks/useFilterReset';
+import { withGroupStatutTone } from '@/Lib/groupStatut';
 import SearchInput from '@/Components/Tables/SearchInput';
 import DateField from '@/Components/Forms/DateField';
 import RowActions, { RowActionItem } from '@/Components/Tables/RowActions';
@@ -38,6 +39,8 @@ interface SeancesIndexProps {
     };
     perPageOptions: number[];
     groupOptions: GroupOption[];
+    /** Every group (closed ones included) for the list's Groupe filter. */
+    filterGroupOptions: (SelectOption & { statut: string })[];
     enseignants: SelectOption[];
     statuts: string[];
     /** Filtre « Statut du groupe » : Active / Terminé / Annulée. */
@@ -72,6 +75,7 @@ export default function SeancesIndex({
     seances,
     filters,
     groupOptions,
+    filterGroupOptions,
     enseignants,
     statuts,
     groupStatuts,
@@ -291,8 +295,9 @@ export default function SeancesIndex({
                             </label>
                             <SelectField
                                 id="seance-f-groupe"
-                                options={groupOptions}
-                                placeholder="Choisir un niveau scolaire"
+                                // Annulée in red, Fin de formation in orange.
+                                options={withGroupStatutTone(filterGroupOptions)}
+                                placeholder="Choisir un groupe"
                                 value={filters.groupFilter}
                                 onChange={(event) => reload({ groupFilter: event.target.value })}
                             />
