@@ -74,19 +74,19 @@ export default function BackofficeLayout({ title, breadcrumbs = [], actions, chi
 
             <WelcomeVideo
                 show={flash.bienvenue === true}
-                src="/videos/bienvenue-gls.mp4"
+                src="/videos/bienvenue-gls-2026-10.mp4"
                 text={auth.user?.name ? t('Welcome :name to GLS CRM', { name: auth.user.name }) : t('Welcome to GLS CRM')}
             />
 
             <WelcomeVideo
                 show={flash.annulationVideo === true}
-                src="/videos/inscription-annulation.mp4"
+                src="/videos/inscription-annulation-2026-10.jpg"
                 text={t('Registration cancelled.')}
             />
 
             <WelcomeVideo
                 show={flash.inscriptionVideo === true}
-                src="/videos/inscription-creee.mp4"
+                src="/videos/inscription-creee-2026-10.mp4"
                 text={t('Registration created.')}
             />
 

@@ -4,7 +4,7 @@ import { t } from '@/Lib/i18n';
 interface WelcomeVideoProps {
     /** One-time flash flag (pulled server-side): true only on the render that should play the clip. */
     show: boolean;
-    /** Clip under `public/videos/`. */
+    /** Clip (or still image — .jpg/.png/.webp/.gif) under `public/videos/`. */
     src: string;
     /** Caption under the clip. */
     text: string;
@@ -12,6 +12,11 @@ interface WelcomeVideoProps {
 
 /** Fallback ceiling until the clip's duration is known (decode error, tab in background). */
 const SAFETY_MS = 7000;
+
+/** A still image has no end of its own: shown this long. */
+const IMAGE_MS = 4000;
+
+const IMAGE_SRC = /\.(jpe?g|png|webp|gif)$/i;
 
 /**
  * One-shot clip overlay — the welcome clip after a login, the cancellation
@@ -24,6 +29,7 @@ export default function WelcomeVideo({ show, src, text }: WelcomeVideoProps) {
     const [leaving, setLeaving] = useState(false);
     const videoRef = useRef<HTMLVideoElement>(null);
     const timerRef = useRef<number | undefined>(undefined);
+    const isImage = IMAGE_SRC.test(src);
 
     useEffect(() => {
         if (show) setOpen(true);
@@ -36,9 +42,9 @@ export default function WelcomeVideo({ show, src, text }: WelcomeVideoProps) {
             if (event.key === 'Escape') close();
         }
         document.addEventListener('keydown', onKey);
-        timerRef.current = window.setTimeout(close, SAFETY_MS);
+        timerRef.current = window.setTimeout(close, isImage ? IMAGE_MS : SAFETY_MS);
         // Autoplay can still be refused (data saver, policy): never leave a frozen overlay.
-        videoRef.current?.play().catch(close);
+        if (!isImage) videoRef.current?.play().catch(close);
 
         return () => {
             document.removeEventListener('keydown', onKey);
@@ -68,17 +74,21 @@ export default function WelcomeVideo({ show, src, text }: WelcomeVideoProps) {
     return (
         <div className={`gls-welcome${leaving ? ' is-leaving' : ''}`} role="dialog" aria-label={text} onClick={close}>
             <div className="gls-welcome-box">
-                <video
-                    ref={videoRef}
-                    className="gls-welcome-video"
-                    src={src}
-                    autoPlay
-                    muted
-                    playsInline
-                    preload="auto"
-                    onLoadedMetadata={onLoadedMetadata}
-                    onEnded={close}
-                />
+                {isImage ? (
+                    <img className="gls-welcome-video" src={src} alt="" />
+                ) : (
+                    <video
+                        ref={videoRef}
+                        className="gls-welcome-video"
+                        src={src}
+                        autoPlay
+                        muted
+                        playsInline
+                        preload="auto"
+                        onLoadedMetadata={onLoadedMetadata}
+                        onEnded={close}
+                    />
+                )}
                 <p className="gls-welcome-text">{text}</p>
                 <button type="button" className="gls-welcome-close" aria-label={t('Close')} onClick={close}>
                     <i className="ti ti-x" />
