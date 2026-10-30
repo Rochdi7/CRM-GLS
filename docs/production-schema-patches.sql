@@ -627,3 +627,19 @@ ALTER TABLE students DROP COLUMN IF EXISTS archive_le;
 ALTER TABLE students DROP COLUMN IF EXISTS archive_date_retour;
 ALTER TABLE students DROP COLUMN IF EXISTS archive_motif;
 -- ---------------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------------
+-- 30/10/2026 — Une demande de virement DÉCIDÉE ne retient plus son
+-- inscription : `virements.inscription_id` devient NULLABLE + ON DELETE SET
+-- NULL (INS-8146, Rabat, bloquée par VIR-201/VIR-202 validés). Une demande
+-- en attente bloque toujours la suppression, dans SupprimerInscription.
+--
+-- ⚠ RIEN À FAIRE À LA MAIN : la migration
+-- `2026_10_30_120000_make_virements_inscription_id_nullable.php` est jouée
+-- par le `php artisan migrate --force` du déploiement. SQL conservé pour
+-- mémoire (idempotent). Aucun solde de caisse ne bouge.
+ALTER TABLE virements ALTER COLUMN inscription_id DROP NOT NULL;
+ALTER TABLE virements DROP CONSTRAINT IF EXISTS virements_inscription_id_foreign;
+ALTER TABLE virements ADD CONSTRAINT virements_inscription_id_foreign
+    FOREIGN KEY (inscription_id) REFERENCES inscriptions(id) ON DELETE SET NULL;
+-- ---------------------------------------------------------------------------

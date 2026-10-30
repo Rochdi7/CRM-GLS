@@ -107,6 +107,16 @@ final class GetGroupDetails
             'canReopen' => $isTerminal && $user->can('groups.reopen') && $this->centerAccess->canAccessCenter($user, $group->etablissement_id),
             'reopenUrl' => route('backoffice.groups.rouvrir', $group),
             'anneeScolaireId' => $group->annee_scolaire_id,
+            // « Modifier » : le modal d'édition vit sur la liste, ouvert par
+            // `?edit=<id>` (GroupController@index → editGroup). Même règle que
+            // le bouton de ligne de la liste : un groupe clos ne se modifie que
+            // par le compte de maintenance (GroupPolicy@updateClosed).
+            'canEdit' => $user->can('update', $group)
+                && (! $isTerminal || $user->can('updateClosed', $group)),
+            'editUrl' => route('backoffice.groups.index', [
+                'statutFilter' => $isTerminal ? Group::STATUT_FIN_FORMATION : $group->statut,
+                'edit' => $group->id,
+            ]),
             'canMoveYear' => $user->can('groups.move-year') && $this->centerAccess->canAccessCenter($user, $group->etablissement_id),
             'moveYearUrl' => route('backoffice.groups.move-year', $group),
             'fees' => $group->frais->map(fn ($fee): array => [
