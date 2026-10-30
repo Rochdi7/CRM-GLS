@@ -120,7 +120,7 @@ final class RemiseFraisPartiellementPayeTest extends TestCase
      */
     private function putFee(Inscription $inscription, InscriptionFee $fee, array $overrides)
     {
-        return $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
+        return $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees', 'registrations.update-fee-amount'))
             ->put(route('backoffice.inscriptions.fees.update', $inscription), [
                 'fee_lines' => [array_merge([
                     'id' => $fee->id,

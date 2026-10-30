@@ -2051,6 +2051,8 @@ export interface InscriptionsPageProps {
     frais: InscriptionFraisOption[];
     /** UI convenience only — hides the edit-modal fee controls; real enforcement is registrations.manage-fees on the server (InscriptionController::updateFees). */
     canManageFees: boolean;
+    /** `registrations.update-fee-amount` — super-admin only: unlocks the « Initial (DH) » column. UI convenience only — InscriptionController::assertMontantsInitiauxInchanges() refuses a changed amount (422). */
+    canUpdateFeeAmount: boolean;
     /** UI convenience only — hides the "Changement de groupe" row action; real enforcement is registrations.change-group on the server (InscriptionController::changeGroup). */
     canChangeGroup: boolean;
     /** Active cancellation reasons (« Changement de groupe » excluded) for the "Annuler l'inscription" form. */

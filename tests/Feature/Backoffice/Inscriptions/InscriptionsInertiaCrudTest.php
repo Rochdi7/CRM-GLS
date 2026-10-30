@@ -174,7 +174,7 @@ final class InscriptionsInertiaCrudTest extends TestCase
 
     public function test_a_registration_bills_the_selected_group_fees_with_discount(): void
     {
-        $this->actingAs($this->userWith('registrations.view', 'registrations.create'));
+        $this->actingAs($this->userWith('registrations.view', 'registrations.create', 'registrations.update-fee-amount'));
         $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
         $group = $this->groupWithFees();
 
@@ -212,7 +212,7 @@ final class InscriptionsInertiaCrudTest extends TestCase
 
     public function test_fees_endpoint_returns_the_inscriptions_billed_fees(): void
     {
-        $this->actingAs($this->userWith('registrations.view', 'registrations.create'));
+        $this->actingAs($this->userWith('registrations.view', 'registrations.create', 'registrations.update-fee-amount'));
         $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
         $group = $this->groupWithFees();
 
@@ -312,7 +312,7 @@ final class InscriptionsInertiaCrudTest extends TestCase
     {
         [$inscription, $fee] = $this->inscriptionWithFee();
 
-        $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
+        $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees', 'registrations.update-fee-amount'))
             ->put(route('backoffice.inscriptions.fees.update', $inscription), [
                 'fee_lines' => [
                     ['id' => $fee->id, 'nom' => $fee->nom, 'montant_initial' => '1300'],
@@ -390,7 +390,7 @@ final class InscriptionsInertiaCrudTest extends TestCase
         ]);
 
         // Lowering the fee to exactly what's already been paid should flip it to Payé.
-        $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees'))
+        $this->actingAs($this->userWith('registrations.view', 'registrations.manage-fees', 'registrations.update-fee-amount'))
             ->put(route('backoffice.inscriptions.fees.update', $inscription), [
                 'fee_lines' => [['id' => $fee->id, 'nom' => $fee->nom, 'montant_initial' => '400']],
             ])
@@ -401,7 +401,7 @@ final class InscriptionsInertiaCrudTest extends TestCase
 
     public function test_dh_discount_takes_effect_when_percentage_is_absent(): void
     {
-        $this->actingAs($this->userWith('registrations.view', 'registrations.create'));
+        $this->actingAs($this->userWith('registrations.view', 'registrations.create', 'registrations.update-fee-amount'));
         $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
         $group = $this->groupWithFees();
 
@@ -422,7 +422,7 @@ final class InscriptionsInertiaCrudTest extends TestCase
 
     public function test_percentage_discount_takes_priority_over_fixed_amount_when_both_present(): void
     {
-        $this->actingAs($this->userWith('registrations.view', 'registrations.create'));
+        $this->actingAs($this->userWith('registrations.view', 'registrations.create', 'registrations.update-fee-amount'));
         $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
         $group = $this->groupWithFees();
 

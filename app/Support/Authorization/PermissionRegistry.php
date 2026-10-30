@@ -157,6 +157,13 @@ final class PermissionRegistry
                 'registrations.update' => 'Modifier une inscription',
                 'registrations.delete' => 'Supprimer une inscription',
                 'registrations.manage-fees' => 'Gérer les frais d\'inscription',
+                // Le PRIX de base d'une ligne de frais (colonne « Initial
+                // (DH) ») : il vient du catalogue du groupe et ne se
+                // négocie pas au guichet — une remise passe par la colonne
+                // Remise / les semaines (30/10/2026). Super-admin uniquement
+                // (superAdminOnly() ci-dessous) ; un montant changé sans ce
+                // droit est REFUSÉ (422), jamais ignoré en silence.
+                'registrations.update-fee-amount' => "Modifier le montant initial d'un frais d'inscription (super-admin)",
                 'registrations.change-group' => 'Changer le groupe d\'une inscription',
                 // Mettre un dossier en PAUSE (19/10/2026) : l'étudiant
                 // interrompt ce cours et reviendra — motif + date de retour,
@@ -725,6 +732,9 @@ final class PermissionRegistry
             // La corbeille des inscriptions dit QUI a supprimé QUOI : un
             // écran de contrôle du staff, réservé au propriétaire (19/10/2026).
             'registrations.trash',
+            // Le prix de base d'un frais d'inscription : il vient du
+            // catalogue du groupe, seule la remise se négocie (30/10/2026).
+            'registrations.update-fee-amount',
             // Le graphique du chiffre d'affaire du tableau de bord
             // (21/10/2026) — le CA n'est pas une donnée de guichet.
             'dashboard.revenue-chart',

@@ -33,6 +33,7 @@ use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionFeesRequest;
 use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionLivresRequest;
 use App\Http\Requests\Backoffice\Inscriptions\UpdateInscriptionRequest;
 use App\Models\Encaissement;
+use App\Models\Frais;
 use App\Models\Group;
 use App\Domain\Settings\Support\FraisEcheanceResolver;
 use App\Domain\Students\Support\GardeEtudiantTransfere;
@@ -164,6 +165,9 @@ final class InscriptionController extends Controller
             ),
             'frais' => $getInscriptionFormOptions->frais(),
             'canManageFees' => $request->user()->can('registrations.manage-fees'),
+            // UI only (§5) — dégrise la colonne « Initial (DH) » ;
+            // assertMontantsInitiauxInchanges() décide.
+            'canUpdateFeeAmount' => $request->user()->can('registrations.update-fee-amount'),
             'canChangeGroup' => $request->user()->can('registrations.change-group'),
             // « Ajouter un paiement » (row menu + the post-creation prompt):
             // the modal posts to encaissements.store, so it is gated on the
@@ -421,6 +425,7 @@ final class InscriptionController extends Controller
                 array_values(array_filter($lines, fn (array $l): bool => empty($l['id']))),
             );
         }
+        $this->assertMontantsInitiauxInchanges($request, $inscription->group, $lines, $inscription);
 
         $action->handle($inscription, $lines);
 
@@ -492,6 +497,52 @@ final class InscriptionController extends Controller
             throw ValidationException::withMessages([
                 'fee_lines' => __('One of the selected fees is no longer assigned to this group. Reopen the form to reload its fees.'),
             ]);
+        }
+    }
+
+    /**
+     * « Initial (DH) » is the fee's base PRICE — the group's tariff, not a
+     * front-desk negotiation (a reduction goes through Remise / semaines).
+     * Only a holder of `registrations.update-fee-amount` (super-admin) may
+     * change it (30/10/2026). Anyone else must submit the reference value:
+     * the STORED one for an existing line (NULL legacy rows read 0), the
+     * group's tariff — else the catalogue default — for a new catalog line.
+     * A different value is REFUSED (422 on the field), never silently
+     * replaced: the user would otherwise believe a price they typed was saved.
+     *
+     * @param  array<int, array<string, mixed>>  $lines
+     */
+    private function assertMontantsInitiauxInchanges(Request $request, ?Group $group, array $lines, ?Inscription $inscription = null): void
+    {
+        if ($lines === [] || $request->user()->can('registrations.update-fee-amount')) {
+            return;
+        }
+
+        $fraisIds = collect($lines)->pluck('frais_id')->filter()->map(fn ($id): int => (int) $id)->unique();
+        $existants = $inscription?->fees()->pluck('montant_initial', 'id') ?? collect();
+        $tarifs = $group?->frais()->whereIn('frais.id', $fraisIds)->get()
+            ->mapWithKeys(fn (Frais $frais): array => [$frais->id => $frais->pivot->montant]) ?? collect();
+        $defauts = Frais::query()->whereIn('id', $fraisIds)->pluck('montant_defaut', 'id');
+
+        foreach ($lines as $index => $line) {
+            if (! empty($line['id'])) {
+                $connu = $existants->has((int) $line['id']);
+                $reference = $existants->get((int) $line['id']);
+            } else {
+                $fraisId = (int) ($line['frais_id'] ?? 0);
+                $reference = $tarifs->get($fraisId) ?? $defauts->get($fraisId);
+                $connu = $reference !== null;
+            }
+
+            $soumis = (float) ($line['montant_initial'] ?? 0);
+
+            if (! $connu || abs($soumis - (float) $reference) >= 0.005) {
+                throw ValidationException::withMessages([
+                    "fee_lines.{$index}.montant_initial" => __('The initial amount of « :fee » cannot be changed - it comes from the group tariff. Use the discount instead.', [
+                        'fee' => $line['nom'] ?? '',
+                    ]),
+                ]);
+            }
         }
     }
 
@@ -606,6 +657,7 @@ final class InscriptionController extends Controller
             GardeEtudiantTransfere::assertNonTransfere($student);
         }
         $this->assertFeeLinesBelongToGroup($group, $data['fee_lines'] ?? []);
+        $this->assertMontantsInitiauxInchanges($request, $group, $data['fee_lines'] ?? []);
 
         $livreIds = array_map('intval', $data['livre_ids'] ?? []);
 
