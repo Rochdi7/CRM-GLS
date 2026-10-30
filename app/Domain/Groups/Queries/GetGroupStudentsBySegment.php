@@ -24,6 +24,11 @@ final class GetGroupStudentsBySegment
 
     public const SEGMENT_CHANGEMENT = 'changement';
 
+    public const SEGMENT_ARCHIVEE = 'archivee';
+
+    /** Every statut without a badge of its own (Expirée, Transférée…). */
+    public const SEGMENT_AUTRES = 'autres';
+
     public const SEGMENT_ETUDIANTS = 'etudiants';
 
     public const SEGMENTS = [
@@ -31,7 +36,23 @@ final class GetGroupStudentsBySegment
         self::SEGMENT_ACTIVE,
         self::SEGMENT_ANNULEE,
         self::SEGMENT_CHANGEMENT,
+        self::SEGMENT_ARCHIVEE,
+        self::SEGMENT_AUTRES,
         self::SEGMENT_ETUDIANTS,
+    ];
+
+    /**
+     * Statuts that have their OWN badge — « autres » is everything else, so
+     * the badges always add up to the group's inscriptions whatever statut is
+     * added later. Shared with GetGroupsList / GetGroupDetails counts.
+     *
+     * @var list<string>
+     */
+    public const STATUTS_BADGES = [
+        Inscription::STATUT_ACTIVE,
+        Inscription::STATUT_CHANGEMENT,
+        Inscription::STATUT_ANNULEE,
+        Inscription::STATUT_ARCHIVEE,
     ];
 
     /**
@@ -51,6 +72,8 @@ final class GetGroupStudentsBySegment
             self::SEGMENT_ACTIVE => $query->where('statut', Inscription::STATUT_ACTIVE),
             self::SEGMENT_ANNULEE => $query->where('statut', Inscription::STATUT_ANNULEE),
             self::SEGMENT_CHANGEMENT => $query->where('statut', Inscription::STATUT_CHANGEMENT),
+            self::SEGMENT_ARCHIVEE => $query->where('statut', Inscription::STATUT_ARCHIVEE),
+            self::SEGMENT_AUTRES => $query->whereNotIn('statut', self::STATUTS_BADGES),
             // "total" and "étudiants" both start from every inscription in
             // the group; étudiants additionally dedupes by student below.
             default => null,

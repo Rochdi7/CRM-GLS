@@ -86,6 +86,11 @@ final class GetGroupsList
                 'inscriptions as inscriptions_actives_count' => fn ($q) => $q->where('statut', Inscription::STATUT_ACTIVE),
                 'inscriptions as inscriptions_annulees_count' => fn ($q) => $q->where('statut', Inscription::STATUT_ANNULEE),
                 'inscriptions as inscriptions_changement_count' => fn ($q) => $q->where('statut', Inscription::STATUT_CHANGEMENT),
+                // Les badges doivent couvrir TOUS les statuts, sinon leur somme
+                // ne retombe pas sur le total (30 étudiants, 28 + 0 + 1 badgés,
+                // l'inscription Archivée nulle part — signalé le 30/10/2026).
+                'inscriptions as inscriptions_archivees_count' => fn ($q) => $q->where('statut', Inscription::STATUT_ARCHIVEE),
+                'inscriptions as inscriptions_autres_count' => fn ($q) => $q->whereNotIn('statut', GetGroupStudentsBySegment::STATUTS_BADGES),
                 'inscriptions as etudiants_distincts_count' => fn ($q) => $q->select(DB::raw('COUNT(DISTINCT student_id)')),
                 // Emploi du temps : total des créneaux vs ceux encore OUVERTS.
                 // Des créneaux existants mais aucun ouvert = emploi du temps
@@ -142,6 +147,8 @@ final class GetGroupsList
             'inscriptionsActivesCount' => $group->inscriptions_actives_count,
             'inscriptionsAnnuleesCount' => $group->inscriptions_annulees_count,
             'inscriptionsChangementCount' => $group->inscriptions_changement_count,
+            'inscriptionsArchiveesCount' => $group->inscriptions_archivees_count,
+            'inscriptionsAutresCount' => $group->inscriptions_autres_count,
             'etudiantsDistinctsCount' => $group->etudiants_distincts_count,
             'fraisCount' => $group->frais_count,
             // Voir le commentaire du withCount ci-dessus : la cause exacte est

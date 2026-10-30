@@ -485,12 +485,18 @@ export interface GroupDetails {
     reopenUrl: string;
     anneeScolaireId: number | null;
     /** Super-admin only (groups.move-year): move the group + its inscriptions/séances/payments to another année. */
+    /** « Modifier » : ouvre le modal d'édition de la liste via `editUrl` (`?edit=<id>`). */
+    canEdit: boolean;
+    editUrl: string;
     canMoveYear: boolean;
     moveYearUrl: string;
     etudiantsDistinctsCount: number;
     inscriptionsActivesCount: number;
     inscriptionsChangementCount: number;
     inscriptionsAnnuleesCount: number;
+    inscriptionsArchiveesCount: number;
+    /** Statuts sans badge propre (Expirée, Transférée…) — badge affiché seulement si > 0. */
+    inscriptionsAutresCount: number;
     fees: GroupFeeRow[];
     inscriptions: GroupInscriptionRow[];
     /** Full teaching-assignment history — the Actif period first, then the archived ones. */
@@ -1631,6 +1637,9 @@ export interface GroupRow {
     inscriptionsActivesCount: number;
     inscriptionsAnnuleesCount: number;
     inscriptionsChangementCount: number;
+    inscriptionsArchiveesCount: number;
+    /** Statuts sans badge propre (Expirée, Transférée…) — badge affiché seulement si > 0. */
+    inscriptionsAutresCount: number;
     etudiantsDistinctsCount: number;
     fraisCount: number;
     /**
@@ -1829,6 +1838,12 @@ export interface GroupsPageProps {
      * revérifie côté serveur (CLAUDE.md §5).
      */
     canEditClosedGroups: boolean;
+    /**
+     * La ligne du groupe à éditer quand l'URL porte `?edit=<id>` — le bouton
+     * « Modifier » de la fiche du groupe ouvre ce modal (GetGroupsList::ligne).
+     * Null sans paramètre ou hors portée.
+     */
+    editGroup: GroupRow | null;
     [key: string]: unknown;
 }
 
@@ -2307,6 +2322,12 @@ export interface EncaissementRow {
     agent: string | null;
     /** Only populated on the Avances tab — how much of this advance has already been applied to a fee. */
     montantUtilise: MoneyDisplay | null;
+    /**
+     * Part of this advance that left for ANOTHER student's record (student
+     * transfer to another centre) — out of the advance, but not used here,
+     * so it is NOT included in montantUtilise.
+     */
+    montantTransfere: MoneyDisplay | null;
     /** Only populated on the Avances tab — montant minus montantUtilise. */
     montantRestant: MoneyDisplay | null;
     /**

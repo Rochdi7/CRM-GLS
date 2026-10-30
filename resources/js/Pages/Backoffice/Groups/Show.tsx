@@ -1,4 +1,4 @@
-import { router, useForm, usePage } from '@inertiajs/react';
+import { Link, router, useForm, usePage } from '@inertiajs/react';
 import { useState, type FormEvent } from 'react';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import StatusBadge from '@/Components/Details/StatusBadge';
@@ -277,10 +277,12 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                                     Rouvrir le groupe
                                 </button>
                             )}
-                            <a href="/backoffice/groups" className="btn btn-primary d-flex align-items-center">
-                                <i className="ti ti-edit me-2" />
-                                Modifier
-                            </a>
+                            {group.canEdit && (
+                                <Link href={group.editUrl} className="btn btn-primary d-flex align-items-center">
+                                    <i className="ti ti-edit me-2" />
+                                    Modifier
+                                </Link>
+                            )}
                             <a href="/backoffice/groups" className="btn btn-outline-secondary d-flex align-items-center">
                                 <i className="ti ti-arrow-left me-2" />
                                 Retour
@@ -565,6 +567,22 @@ export default function GroupShow({ group, enseignants }: GroupShowProps) {
                                             {group.inscriptionsAnnuleesCount}
                                             <i className="ti ti-user" aria-hidden="true" />
                                         </span>
+                                        <span
+                                            className="badge badge-soft-dark d-inline-flex align-items-center gap-1"
+                                            title="Inscriptions archivées"
+                                        >
+                                            {group.inscriptionsArchiveesCount}
+                                            <i className="ti ti-archive" aria-hidden="true" />
+                                        </span>
+                                        {group.inscriptionsAutresCount > 0 && (
+                                            <span
+                                                className="badge badge-soft-info d-inline-flex align-items-center gap-1"
+                                                title="Autres inscriptions (expirées, transférées…)"
+                                            >
+                                                {group.inscriptionsAutresCount}
+                                                <i className="ti ti-dots" aria-hidden="true" />
+                                            </span>
+                                        )}
                                     </div>
                                 </td>
                                 <td>

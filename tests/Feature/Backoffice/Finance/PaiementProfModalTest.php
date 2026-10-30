@@ -200,6 +200,39 @@ final class PaiementProfModalTest extends TestCase
         $this->assertSame('2025-09-30', $depense->periode_fin->toDateString());
     }
 
+    /**
+     * « Enregistrer la dépense » depuis le calcul embarqué (30/10/2026) : la
+     * redirection gardait les paramètres `pp*` du referer et rouvrait le
+     * calcul qu'on venait d'enregistrer. Elle mène désormais à la LISTE de
+     * l'onglet Paiements prof, filtres de liste conservés.
+     */
+    public function test_saving_from_the_calcul_lands_on_the_paiements_prof_list(): void
+    {
+        $group = $this->group();
+        $referer = route('backoffice.depenses.index', [
+            'tab' => 'paiements-prof',
+            'search' => 'moussa',
+            'ppGroup' => $group->id,
+            'ppDebut' => '2025-09-01',
+            'ppFin' => '2025-09-30',
+        ]);
+
+        $response = $this->actingAs($this->actor())
+            ->withHeader('referer', $referer)
+            ->post(route('backoffice.depenses.store'), $this->profPayload(['group_id' => $group->id]))
+            ->assertSessionDoesntHaveErrors()
+            ->assertRedirect();
+
+        $location = (string) $response->headers->get('Location');
+        parse_str((string) parse_url($location, PHP_URL_QUERY), $query);
+
+        $this->assertSame('paiements-prof', $query['tab'] ?? null);
+        $this->assertSame('moussa', $query['search'] ?? null);
+        $this->assertArrayNotHasKey('ppGroup', $query);
+        $this->assertArrayNotHasKey('ppDebut', $query);
+        $this->assertArrayNotHasKey('ppFin', $query);
+    }
+
     public function test_a_valid_ordinary_depense_still_stores_without_a_group(): void
     {
         $this->actingAs($this->actor())

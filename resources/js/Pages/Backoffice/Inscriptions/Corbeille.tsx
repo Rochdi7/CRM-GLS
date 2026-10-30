@@ -10,8 +10,6 @@ import SearchInput from '@/Components/Tables/SearchInput';
 import Pagination from '@/Components/Tables/Pagination';
 import SelectField from '@/Components/Forms/SelectField';
 import DateField from '@/Components/Forms/DateField';
-import StatusBadge from '@/Components/Details/StatusBadge';
-import { statutVariant } from '@/Lib/inscriptionStatut';
 import { formatMontant } from '@/Lib/money';
 import { useInertiaLoading } from '@/Hooks/useInertiaLoading';
 import { useFilterReset } from '@/Hooks/useFilterReset';
@@ -158,7 +156,6 @@ export default function InscriptionsCorbeille({
                                     <th>Étudiant</th>
                                     <th>Groupe</th>
                                     <th>Année</th>
-                                    <th>Statut</th>
                                     <th>Inscrit le</th>
                                     <th className="text-end">Montant</th>
                                     <th>Supprimé par</th>
@@ -187,7 +184,6 @@ export default function InscriptionsCorbeille({
                                     </td>
                                     <td>{row.groupe ?? '-'}</td>
                                     <td>{row.anneeScolaire ?? '-'}</td>
-                                    <td>{row.statut ? <StatusBadge label={row.statut} variant={statutVariant(row.statut)} /> : '-'}</td>
                                     <td>{row.dateInscription ?? '-'}</td>
                                     <td className="text-end">{row.montantTotal !== null ? `${formatMontant(row.montantTotal)} MAD` : '-'}</td>
                                     <td className="text-normal-case">{row.supprimePar ?? <span className="text-muted">Compte inconnu</span>}</td>

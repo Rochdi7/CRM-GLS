@@ -62,6 +62,8 @@ final class GetGroupDetails
             'inscriptionsActivesCount' => $group->inscriptions->where('statut', Inscription::STATUT_ACTIVE)->count(),
             'inscriptionsChangementCount' => $group->inscriptions->where('statut', Inscription::STATUT_CHANGEMENT)->count(),
             'inscriptionsAnnuleesCount' => $group->inscriptions->where('statut', Inscription::STATUT_ANNULEE)->count(),
+            'inscriptionsArchiveesCount' => $group->inscriptions->where('statut', Inscription::STATUT_ARCHIVEE)->count(),
+            'inscriptionsAutresCount' => $group->inscriptions->whereNotIn('statut', GetGroupStudentsBySegment::STATUTS_BADGES)->count(),
             // Its own ability since 31/08/2026 — every role may fix a group's
             // teacher without holding `groups.update` (GroupPolicy@changeTeacher).
             // ⚠ Pourquoi ce groupe ne génère plus de séances — les quatre

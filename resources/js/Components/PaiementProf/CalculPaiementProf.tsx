@@ -519,13 +519,31 @@ export default function CalculPaiementProf({
     return (
         <>
             <style>{`
+                /* Palette en variables : en dur, le survol (#F7F9FC) peignait la ligne
+                   en BLANC en mode sombre et le texte clair y disparaissait (30/10/2026).
+                   Le mode sombre (html[data-theme=dark], Header.tsx) ne fait que les
+                   redéfinir. */
+                .pp-wrap {
+                    --pp-head-bg: #F2F4F8; --pp-head-color: #202C4B; --pp-hover-bg: #F7F9FC;
+                    --pp-present-bg: #E7F7EF; --pp-present-color: #0F7A43;
+                    --pp-absent-bg: #FDECEE;  --pp-absent-color: #C32232;
+                    --pp-ignore-bg: #EEF0F3;  --pp-ignore-color: #6C757D;
+                    --pp-modifie-bg: #FFFBF0;
+                }
+                html[data-theme='dark'] .pp-wrap {
+                    --pp-head-bg: #1B1632; --pp-head-color: #E2E4EA; --pp-hover-bg: #1E1A36;
+                    --pp-present-bg: rgba(34, 197, 94, .18); --pp-present-color: #4ADE80;
+                    --pp-absent-bg: rgba(239, 68, 68, .2);  --pp-absent-color: #F87171;
+                    --pp-ignore-bg: rgba(173, 181, 189, .15); --pp-ignore-color: #ADB5BD;
+                    --pp-modifie-bg: rgba(255, 193, 7, .12);
+                }
                 .pp-wrap { overflow: auto; max-height: 70vh; }
                 .pp-wrap.pp-compact { max-height: 60vh; }
                 .pp-wrap.pp-compact td, .pp-wrap.pp-compact th { font-size: 12px; }
                 .pp-wrap table { margin: 0; border-collapse: separate; border-spacing: 0; white-space: nowrap; }
                 .pp-wrap thead th {
                     position: sticky; top: 0; z-index: 10;
-                    background: #F2F4F8; color: #202C4B;
+                    background: var(--pp-head-bg); color: var(--pp-head-color);
                     padding: 8px 4px; text-align: center; font-size: 12px; font-weight: 600;
                     border-bottom: 1px solid var(--bs-border-color);
                 }
@@ -533,15 +551,15 @@ export default function CalculPaiementProf({
                 .pp-nom  { position: sticky; left: 40px; z-index: 4; min-width: 190px; max-width: 190px;
                            overflow: hidden; text-overflow: ellipsis; background: var(--bs-body-bg);
                            box-shadow: 4px 0 6px -4px rgba(0,0,0,.2); }
-                .pp-wrap thead .pp-num, .pp-wrap thead .pp-nom { z-index: 12; background: #F2F4F8; }
+                .pp-wrap thead .pp-num, .pp-wrap thead .pp-nom { z-index: 12; background: var(--pp-head-bg); }
                 .pp-compte { min-width: 78px; text-align: center; white-space: nowrap; }
                 .pp-jour { width: 38px; min-width: 38px; text-align: center; padding: 4px 0 !important; }
                 .pp-pastille { display: inline-flex; align-items: center; justify-content: center;
                                width: 24px; height: 24px; border-radius: 50%;
                                font-size: 11px; font-weight: 600; line-height: 1; }
-                .pp-present .pp-pastille { background: #E7F7EF; color: #0F7A43; }
-                .pp-absent  .pp-pastille { background: #FDECEE; color: #C32232; }
-                .pp-ignore  .pp-pastille { background: #EEF0F3; color: #6C757D; }
+                .pp-present .pp-pastille { background: var(--pp-present-bg); color: var(--pp-present-color); }
+                .pp-absent  .pp-pastille { background: var(--pp-absent-bg); color: var(--pp-absent-color); }
+                .pp-ignore  .pp-pastille { background: var(--pp-ignore-bg); color: var(--pp-ignore-color); }
                 /* Opacity on the dot only: on the <td> it also faded the
                    week divider (border-left), which then alternated bold/pale. */
                 .pp-vide .pp-point { color: var(--bs-secondary-color); opacity: .3; }
@@ -551,14 +569,14 @@ export default function CalculPaiementProf({
                 .pp-total { position: sticky; right: 0; z-index: 4; min-width: 130px; text-align: right;
                             font-weight: 600; background: var(--bs-body-bg);
                             box-shadow: -4px 0 6px -4px rgba(0,0,0,.2); }
-                .pp-wrap thead .pp-total { z-index: 12; background: #F2F4F8; }
+                .pp-wrap thead .pp-total { z-index: 12; background: var(--pp-head-bg); }
                 .pp-reste { text-transform: none; font-weight: 500; cursor: help; margin-top: 2px; }
                 .pp-ajust { width: 100px; text-align: right; font-weight: 600; }
-                .pp-ajust.pp-modifie { border-color: var(--bs-warning) !important; background: #FFFBF0; }
-                .pp-wrap tbody tr:hover td { background: #F7F9FC; }
+                .pp-ajust.pp-modifie { border-color: var(--bs-warning) !important; background: var(--pp-modifie-bg); }
+                .pp-wrap tbody tr:hover td { background: var(--pp-hover-bg); }
                 .pp-wrap tbody tr:hover td.pp-num,
                 .pp-wrap tbody tr:hover td.pp-nom,
-                .pp-wrap tbody tr:hover td.pp-total { background: #F7F9FC; }
+                .pp-wrap tbody tr:hover td.pp-total { background: var(--pp-hover-bg); }
                 /* Dossiers clos : mêmes couleurs que « Absence par groupe »
                    (gris = changement / expirée / archivée, rouge = annulée). */
                 .pp-wrap tbody td.pp-nom.pp-clos,
@@ -566,7 +584,7 @@ export default function CalculPaiementProf({
                 .pp-wrap tbody td.pp-nom.pp-annulee,
                 .pp-wrap tbody tr:hover td.pp-nom.pp-annulee { background: rgb(246, 45, 81); color: #fff; }
                 .pp-wrap tfoot td { position: sticky; bottom: 0; z-index: 9;
-                                    background: #F2F4F8; font-weight: 600;
+                                    background: var(--pp-head-bg); font-weight: 600;
                                     border-top: 1px solid var(--bs-border-color); }
                 .pp-legende { font-size: 12px; }
             `}</style>

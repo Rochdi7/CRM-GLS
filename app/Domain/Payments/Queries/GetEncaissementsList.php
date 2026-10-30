@@ -349,7 +349,7 @@ final class GetEncaissementsList
         // avance is listed on the Encaissements tab too (it is money
         // received), and the question "applied to what?" is the same there.
         $fraisAppliques = $view !== 'cheque'
-            ? $this->fraisAppliques($encaissements->getCollection()->pluck('id')->all())
+            ? $this->fraisAppliques($encaissements->getCollection()->pluck('student_id', 'id')->all())
             : [];
 
         // The cheque behind every row on the page, read THROUGH the
@@ -366,7 +366,13 @@ final class GetEncaissementsList
 
         $encaissements->through(function (Encaissement $e) use ($view, $anciensFrais, $fraisAppliques, $chequesOrigine, $peutOutrepasser): array {
             $isAvance = $e->inscription_fee_id === null;
-            $utilise = $isAvance && $view !== 'cheque' ? (float) ($e->applications_sum_montant ?? 0) : null;
+            // Part de l'avance partie sur une AUTRE fiche (30/10/2026) :
+            // transfert d'étudiant vers un autre centre. Elle est sortie de
+            // l'avance — le reste ne change pas — mais elle n'a pas été
+            // UTILISÉE ici : la compter dans « Montant utilisé » faisait lire
+            // 1 300 DH utilisés à Marrakech quand 1 000 seulement l'étaient.
+            $transfere = $isAvance && $view !== 'cheque' ? (float) ($fraisAppliques[$e->id]['transfere'] ?? 0) : 0.0;
+            $utilise = $isAvance && $view !== 'cheque' ? round((float) ($e->applications_sum_montant ?? 0) - $transfere, 2) : null;
 
             // ⚠ Having a remaining balance is NOT the same as being
             // applicable. AppliquerAvance refuses an avance funded by a
@@ -406,7 +412,7 @@ final class GetEncaissementsList
                 'ancienFraisGroupe' => $anciensFrais[$e->id]['groupe'] ?? null,
                 // The fee lines this avance was applied to (empty when none),
                 // so the list can name them instead of only totalling them.
-                'fraisAppliques' => $isAvance ? ($fraisAppliques[$e->id] ?? []) : [],
+                'fraisAppliques' => $isAvance ? ($fraisAppliques[$e->id]['lignes'] ?? []) : [],
                 'feeMontantTotal' => $feeTotal !== null ? number_format($feeTotal, 2, '.', '') : null,
                 'feeReste' => $feeTotal !== null ? number_format(max(0.0, $feeTotal - $feePaye), 2, '.', '') : null,
                 'caisse' => $e->caisse?->nom,
@@ -421,7 +427,8 @@ final class GetEncaissementsList
                 'note' => $e->note,
                 'agent' => $e->agent?->nomComplet(),
                 'montantUtilise' => $utilise !== null ? number_format($utilise, 2, '.', '') : null,
-                'montantRestant' => $utilise !== null ? number_format(max(0.0, (float) $e->montant - $utilise), 2, '.', '') : null,
+                'montantTransfere' => $utilise !== null ? number_format($transfere, 2, '.', '') : null,
+                'montantRestant' => $utilise !== null ? number_format(max(0.0, (float) $e->montant - $utilise - $transfere), 2, '.', '') : null,
                 // Whether AppliquerAvance would accept this row at all.
                 'applicable' => $isAvance && ! $chequeRejete && (! $expiree || $peutOutrepasser),
                 'chequeRejete' => $chequeRejete,
@@ -592,12 +599,19 @@ final class GetEncaissementsList
      * anciensFrais() above) — never a relation read per row, which is exactly
      * the N+1 the read-model rule forbids (CLAUDE.md §17).
      *
-     * @param  list<int>  $encaissementIds
-     * @return array<int, list<array{frais: string, groupe: ?string, montant: string, date: ?string}>>
+     * Une allocation posée sur une AUTRE fiche que celle de l'avance
+     * (30/10/2026 — transfert d'étudiant vers un autre centre : la part
+     * transférée est appliquée ou attend sur la fiche du centre d'arrivée) est
+     * nommée comme telle (« Transférée → GLS Online (IMANE HAMDANI) ») et
+     * totalisée à part dans `transfere` : elle a quitté l'avance, mais n'a pas
+     * été UTILISÉE sur cette fiche — la liste la retire de « Montant utilisé ».
+     *
+     * @param  array<int, int|null>  $studentIdParEncaissement  encaissement id => student_id
+     * @return array<int, array{lignes: list<array{frais: string, groupe: ?string, montant: string, date: ?string}>, transfere: float}>
      */
-    private function fraisAppliques(array $encaissementIds): array
+    private function fraisAppliques(array $studentIdParEncaissement): array
     {
-        if ($encaissementIds === []) {
+        if ($studentIdParEncaissement === []) {
             return [];
         }
 
@@ -608,13 +622,28 @@ final class GetEncaissementsList
         // single definition shared with the detail page and the receipt.
         $result = [];
 
-        foreach (ResoudreAllocationsAvance::terminales($encaissementIds) as $avanceId => $allocations) {
+        foreach (ResoudreAllocationsAvance::terminales(array_keys($studentIdParEncaissement)) as $avanceId => $allocations) {
+            $result[$avanceId] = ['lignes' => [], 'transfere' => 0.0];
+
             foreach ($allocations as $allocation) {
                 /** @var Encaissement $row */
                 $row = $allocation['row'];
+                $libelle = ResoudreAllocationsAvance::libelle($allocation);
 
-                $result[$avanceId][] = [
-                    'frais' => ResoudreAllocationsAvance::libelle($allocation),
+                $autreFiche = $allocation['kind'] !== ResoudreAllocationsAvance::KIND_REMBOURSE
+                    && $row->student_id !== null
+                    && (int) $row->student_id !== (int) ($studentIdParEncaissement[$avanceId] ?? 0);
+
+                if ($autreFiche) {
+                    $result[$avanceId]['transfere'] = round($result[$avanceId]['transfere'] + $allocation['montant'], 2);
+                    $destination = trim(($row->student?->etablissement?->nom_centre ?? '').' ('.($row->student?->nomComplet() ?? '?').')');
+                    $libelle = $allocation['kind'] === ResoudreAllocationsAvance::KIND_FRAIS
+                        ? __('Transferred → :destination', ['destination' => $destination]).' - '.$libelle
+                        : __('Transferred → :destination', ['destination' => $destination]);
+                }
+
+                $result[$avanceId]['lignes'][] = [
+                    'frais' => $libelle,
                     'groupe' => $allocation['kind'] === ResoudreAllocationsAvance::KIND_FRAIS
                         ? $row->fee?->inscription?->group?->nom
                         : null,
