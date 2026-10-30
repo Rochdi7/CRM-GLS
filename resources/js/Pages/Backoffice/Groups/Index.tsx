@@ -1,6 +1,6 @@
 import { router, useForm, usePage } from '@inertiajs/react';
 import { pageWindow } from '@/Components/Tables/Pagination';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAutoOpenCreate } from '@/Hooks/useAutoOpenCreate';
 import BackofficeLayout from '@/Layouts/BackofficeLayout';
 import Card from '@/Components/Shared/Card';
@@ -34,7 +34,7 @@ import type {
     SharedProps,
 } from '@/Types';
 
-type StatsSegment = 'total' | 'active' | 'annulee' | 'changement' | 'etudiants';
+type StatsSegment = 'total' | 'active' | 'annulee' | 'changement' | 'archivee' | 'autres' | 'etudiants';
 
 /** Rows per page of the "Frais du groupe" table — client-side only, no server round trip for this in-memory list. */
 const GROUP_FRAIS_PER_PAGE = 5;
@@ -44,6 +44,8 @@ const STATS_SEGMENT_LABELS: Record<StatsSegment, string> = {
     active: 'Inscriptions actives',
     annulee: 'Inscriptions annulées',
     changement: 'Inscriptions en changement',
+    archivee: 'Inscriptions archivées',
+    autres: 'Autres inscriptions (expirées, transférées…)',
     etudiants: 'Étudiants',
 };
 
@@ -297,6 +299,7 @@ export default function GroupsIndex({
     enseignants,
     fraisCatalog,
     canEditClosedGroups,
+    editGroup,
 }: GroupsPageProps) {
     const { auth, flash } = usePage<SharedProps>().props;
     // Same banner as Groups/Show.tsx: a teacher swap made from the edit modal
@@ -481,6 +484,34 @@ export default function GroupsIndex({
         setFraisPage(1);
         setShowModal(true);
     }
+
+    // « Modifier » depuis la fiche du groupe : `?edit=<id>` amène ici et le
+    // serveur sert la ligne à part (`editGroup`), le groupe pouvant être sur
+    // une autre page de la liste. Le paramètre est retiré de l'URL dès qu'il
+    // est consommé — sinon la redirection après l'enregistrement, qui
+    // reconstruit la liste depuis le referer, rouvrirait le modal (même
+    // mécanisme que useAutoOpenCreate). Confort d'UI seulement (§5).
+    const editConsumed = useRef(false);
+    useEffect(() => {
+        if (editConsumed.current) {
+            return;
+        }
+
+        const url = new URL(window.location.href);
+
+        if (!url.searchParams.has('edit')) {
+            return;
+        }
+
+        editConsumed.current = true;
+        url.searchParams.delete('edit');
+        window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+
+        if (editGroup && canUpdateGroups && (!GROUP_STATUTS_CLOS.includes(editGroup.statut) || canEditClosedGroups)) {
+            openEdit(editGroup);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     function closeModal() {
         setShowModal(false);
@@ -1002,6 +1033,26 @@ export default function GroupsIndex({
                                                 {group.inscriptionsAnnuleesCount}
                                                 <i className="ti ti-user" aria-hidden="true" />
                                             </button>
+                                            <button
+                                                type="button"
+                                                className="badge badge-soft-dark border-0 d-inline-flex align-items-center gap-1 fw-bold"
+                                                title={STATS_SEGMENT_LABELS.archivee}
+                                                onClick={() => openStudentsSegment(group, 'archivee')}
+                                            >
+                                                {group.inscriptionsArchiveesCount}
+                                                <i className="ti ti-archive" aria-hidden="true" />
+                                            </button>
+                                            {group.inscriptionsAutresCount > 0 && (
+                                                <button
+                                                    type="button"
+                                                    className="badge badge-soft-info border-0 d-inline-flex align-items-center gap-1 fw-bold"
+                                                    title={STATS_SEGMENT_LABELS.autres}
+                                                    onClick={() => openStudentsSegment(group, 'autres')}
+                                                >
+                                                    {group.inscriptionsAutresCount}
+                                                    <i className="ti ti-dots" aria-hidden="true" />
+                                                </button>
+                                            )}
                                         </div>
                                     </td>
                                     <td>

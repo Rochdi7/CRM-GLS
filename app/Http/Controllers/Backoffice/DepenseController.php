@@ -437,10 +437,7 @@ final class DepenseController extends Controller
 
         // When approval is ON the money has NOT left the till yet — say so,
         // otherwise staff assume the expense is already settled.
-        return $this->backToListPreservingFilters(
-            $request,
-            'backoffice.depenses.index',
-        )->with('success', $depense->isEnAttente()
+        return $this->backToDepensesList($request, $depense)->with('success', $depense->isEnAttente()
             ? __('Expense submitted - awaiting approval.')
             : __('Expense recorded.'));
     }
@@ -787,10 +784,33 @@ final class DepenseController extends Controller
         // storeJustificatifs() regardless of the create/edit branch.
         $this->storeJustificatifs($request, $depense);
 
-        return $this->backToListPreservingFilters(
-            $request,
-            'backoffice.depenses.index',
-        )->with('success', __('Expense updated.'));
+        return $this->backToDepensesList($request, $depense)->with('success', __('Expense updated.'));
+    }
+
+    /**
+     * Back to the list after saving a dépense. A « Paiement prof » saved from
+     * the embedded calcul lands on the Paiements prof LIST: the `pp*` keys
+     * (and the `ppEdit` recalcul target) are dropped — kept, they reopened
+     * the calcul the user had just recorded, as if nothing had been saved
+     * (signalé 30/10/2026). Null values vanish from the built URL; the list
+     * filters still survive (CLAUDE.md §5).
+     */
+    private function backToDepensesList(Request $request, Depense $depense): RedirectResponse
+    {
+        if (! $depense->estPaiementProf()) {
+            return $this->backToListPreservingFilters($request, 'backoffice.depenses.index');
+        }
+
+        return $this->backToListPreservingFilters($request, 'backoffice.depenses.index', [
+            'tab' => 'paiements-prof',
+            'ppGroup' => null,
+            'ppEnseignant' => null,
+            'ppMois' => null,
+            'ppDebut' => null,
+            'ppFin' => null,
+            'ppHeures' => null,
+            'ppEdit' => null,
+        ]);
     }
 
     /** Detach one stored receipt while editing (the expense itself stays). */

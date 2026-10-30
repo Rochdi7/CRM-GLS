@@ -1525,7 +1525,20 @@ export default function EncaissementsIndex({ encaissements, montantTotal, vireme
                                         <td>{row.caisse ?? '-'}</td>
                                         <td>{row.agent ?? '-'}</td>
                                         <td>{row.datePaiement ?? '-'}</td>
-                                        <td className="text-end">{Number(row.montantUtilise ?? 0).toFixed(2)} MAD</td>
+                                        <td className="text-end">
+                                            {Number(row.montantUtilise ?? 0).toFixed(2)} MAD
+                                            {Number(row.montantTransfere ?? 0) > 0 && (
+                                                <div
+                                                    className="text-muted fs-12 text-normal-case"
+                                                    title={row.fraisAppliques
+                                                        .map((a) => `${a.frais} : ${Number(a.montant).toFixed(2)} MAD`)
+                                                        .join('\n')}
+                                                >
+                                                    <i className="ti ti-arrows-exchange me-1" aria-hidden="true" />
+                                                    {t('Transferred')} : {Number(row.montantTransfere).toFixed(2)} MAD
+                                                </div>
+                                            )}
+                                        </td>
                                         <td className="text-end fw-medium">
                                             {Number(row.montantRestant ?? row.montant).toFixed(2)} MAD
                                             {row.chequeRejete && (
@@ -1646,7 +1659,7 @@ export default function EncaissementsIndex({ encaissements, montantTotal, vireme
                                             {row.isAvance ? (
                                                 <>
                                                     <span className="badge badge-soft-warning">Avance</span>
-                                                    {Number(row.montantUtilise ?? 0) > 0 ? (
+                                                    {Number(row.montantUtilise ?? 0) + Number(row.montantTransfere ?? 0) > 0 ? (
                                                         // « Appliquée : X MAD » alone says money left the avance
                                                         // but not where it went. The title attribute names every
                                                         // fee it paid (frais, groupe, montant, date) so a cashier
@@ -1666,6 +1679,13 @@ export default function EncaissementsIndex({ encaissements, montantTotal, vireme
                                                             }
                                                         >
                                                             Appliquée : {Number(row.montantUtilise).toFixed(2)} MAD
+                                                            {Number(row.montantTransfere ?? 0) > 0 && (
+                                                                <>
+                                                                    {' '}
+                                                                    · {t('Transferred')} :{' '}
+                                                                    {Number(row.montantTransfere).toFixed(2)} MAD
+                                                                </>
+                                                            )}
                                                             {row.fraisAppliques.length > 0 && (
                                                                 <i className="ti ti-info-circle ms-1" aria-hidden="true" />
                                                             )}

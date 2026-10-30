@@ -71,7 +71,11 @@ final class ResoudreAllocationsAvance
         for ($profondeur = 0; $profondeur < self::PROFONDEUR_MAX && $frontiere !== []; $profondeur++) {
             $applications = Encaissement::query()
                 ->whereIn('applied_from_encaissement_id', $frontiere)
-                ->with(['fee.inscription.group'])
+                // `student.etablissement` : une ligne peut appartenir à une
+                // AUTRE fiche que l'avance racine (transfert d'étudiant entre
+                // centres, correction de transfert) — la liste le dit au lieu
+                // de compter cet argent comme utilisé sur place.
+                ->with(['fee.inscription.group', 'student:id,nom,prenom,etablissement_id', 'student.etablissement:id,nom_centre'])
                 ->withSum('applications', 'montant')
                 ->withSum('remboursements', 'montant')
                 ->orderBy('date_paiement')

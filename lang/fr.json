@@ -1290,6 +1290,8 @@
     "Payment detached from its fee - the amount is available as an advance again.": "Paiement détaché de son frais - le montant est de nouveau disponible en avance.",
     "Merge students & reassign payments": "Fusion de fiches & réaffectation des paiements",
     "Merge records": "Fusion de fiches",
+    "Transferred": "Transférée",
+    "Transferred → :destination": "Transférée → :destination",
     "Due today": "Échéance aujourd'hui",
     ":count book(s) « :book » assigned.": ":count livre(s) « :book » attribué(s).",
     ":count student(s) already had this book and were skipped.": ":count étudiant(s) avaient déjà ce livre et ont été ignorés.",
