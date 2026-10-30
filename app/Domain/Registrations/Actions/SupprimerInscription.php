@@ -10,6 +10,7 @@ use App\Models\Inscription;
 use App\Models\InscriptionCorbeille;
 use App\Models\Remboursement;
 use App\Models\User;
+use App\Models\Virement;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -37,7 +38,10 @@ use Illuminate\Validation\ValidationException;
  *    l'argent sur ce dossier ;
  *  - une ligne d'APPLICATION d'avance — son argent appartient à l'avance
  *    parente ;
- *  - un paiement qui a lui-même financé des applications.
+ *  - un paiement qui a lui-même financé des applications ;
+ *  - une demande de virement encore « En attente de vérification » (30/10/2026).
+ *    Une demande DÉCIDÉE (validée / refusée) est détachée du dossier et reste
+ *    lisible sur la page Virements.
  *
  * Le contrôle et le détachement ont lieu dans la MÊME transaction, sur des
  * lignes verrouillées FOR UPDATE (§11) : un paiement saisi entre-temps fait
@@ -73,6 +77,44 @@ final class SupprimerInscription
                         'delete' => __('This registration has payments that were not fully refunded and cannot be deleted. Cancel it instead.'),
                     ]);
                 }
+            }
+
+            // Demandes de virement (30/10/2026). Une demande EN ATTENTE porte
+            // de l'argent que le comptable n'a pas encore vérifié : elle se
+            // valide ou se refuse d'abord, jamais elle ne perd son dossier en
+            // silence. Une demande DÉCIDÉE n'a plus rien à faire ici — son
+            // argent, s'il est entré, est l'encaissement contrôlé ci-dessus —
+            // elle est détachée (journalisée) et reste lisible sur la page
+            // Virements. Sans ce détachement, la contrainte RESTRICT d'origine
+            // bloquait le dossier pour toujours (INS-8146).
+            $virements = Virement::query()
+                ->where('inscription_id', $inscription->id)
+                ->lockForUpdate()
+                ->get();
+
+            $enAttente = $virements->filter(fn (Virement $v): bool => $v->isEnAttente());
+
+            if ($enAttente->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'delete' => __('This registration has bank transfer requests awaiting verification (:refs). Validate or refuse them first.', [
+                        'refs' => $enAttente->pluck('reference')->implode(', '),
+                    ]),
+                ]);
+            }
+
+            $virementsDetaches = [];
+
+            foreach ($virements as $virement) {
+                $virementsDetaches[] = [
+                    'reference' => $virement->reference,
+                    'statut' => $virement->statut,
+                    'montant' => number_format((float) $virement->montant, 2, '.', ''),
+                    'encaissement_id' => $virement->encaissement_id,
+                ];
+
+                $virement->inscription_id = null;
+                $virement->inscription_fee_id = null;
+                $virement->save();
             }
 
             $detaches = [];
@@ -124,6 +166,7 @@ final class SupprimerInscription
                         ? number_format((float) $inscription->montant_total, 2, '.', '')
                         : null,
                     'paiements_detaches' => $detaches,
+                    'virements_detaches' => $virementsDetaches,
                 ])
                 ->log($detaches === []
                     ? sprintf('Inscription %s supprimée', $inscription->reference)

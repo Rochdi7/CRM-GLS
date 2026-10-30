@@ -59,6 +59,7 @@ final class GetGroupsList
         string $dateFrom = '',
         string $dateTo = '',
         string $sort = self::DEFAULT_SORT,
+        ?int $groupId = null,
     ): LengthAwarePaginator {
         if (! in_array($perPage, self::PER_PAGE_OPTIONS, true)) {
             $perPage = self::DEFAULT_PER_PAGE;
@@ -111,6 +112,7 @@ final class GetGroupsList
             ->when($dateFrom !== '', fn ($q) => $q->whereDate('date_debut_formation', '>=', $dateFrom))
             ->when($dateTo !== '', fn ($q) => $q->whereDate('date_debut_formation', '<=', $dateTo))
             ->when($search !== '', fn ($q) => $q->where('nom', 'ilike', "%{$search}%"))
+            ->when($groupId !== null, fn ($q) => $q->whereKey($groupId))
             ->tap(fn ($q) => $this->applySort($q, $sort))
             ->paginate($perPage)
             ->withQueryString();
@@ -185,6 +187,20 @@ final class GetGroupsList
         ]);
 
         return $groups;
+    }
+
+    /**
+     * ONE row of the list, in the exact shape the edit modal reads — what
+     * « Modifier » on the group's detail page opens (`?edit=<id>`). Same
+     * query, same centre/year/teacher scope as the list itself, every other
+     * filter off: null when the group is out of the user's reach or of the
+     * active context, exactly where update() would refuse it anyway.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function ligne(User $user, int $groupId): ?array
+    {
+        return $this($user, '', '', self::DEFAULT_PER_PAGE, '', '', '', self::DEFAULT_SORT, $groupId)->items()[0] ?? null;
     }
 
     /**

@@ -119,6 +119,12 @@ final class GroupController extends Controller
             // GroupPolicy@updateClosed, revérifiée dans update().
             'canEditClosedGroups' => $request->user() !== null
                 && $request->user()->can('updateClosed', new Group),
+            // « Modifier » depuis la fiche du groupe (`?edit=<id>`) : la ligne
+            // est servie à part, le groupe pouvant être sur une autre page de
+            // la liste. Null hors portée — le modal ne s'ouvre simplement pas.
+            'editGroup' => $request->filled('edit')
+                ? $getGroupsList->ligne($request->user(), $request->integer('edit'))
+                : null,
         ]);
     }
 
