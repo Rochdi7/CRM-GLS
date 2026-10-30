@@ -295,6 +295,7 @@ export default function InscriptionsIndex({
     changeGroupAnnees,
     frais,
     canManageFees,
+    canUpdateFeeAmount,
     canChangeGroup,
     motifsAnnulation,
     canCreatePayment,
@@ -2214,12 +2215,16 @@ export default function InscriptionsIndex({
 
                                                         return (
                                                             <tr key={line.fraisId ?? index}>
-                                                                <td className="fw-medium text-wrap-cell" style={{ minWidth: 220 }}>{line.nom}</td>
-                                                                <td style={{ width: 110 }}>
+                                                                <td className="fw-medium text-wrap-cell" style={{ minWidth: 180 }}>{line.nom}</td>
+                                                                <td style={{ width: 110, minWidth: 110 }}>
                                                                     <input
                                                                         type="number"
                                                                         step="0.01"
                                                                         min="0"
+                                                                        // Prix du tarif du groupe : seul le super-admin
+                                                                        // le change, la remise reste ouverte (§5 — le
+                                                                        // serveur refuse de toute façon).
+                                                                        disabled={!canUpdateFeeAmount}
                                                                         className={`form-control form-control-sm${montantError ? ' is-invalid' : ''}`}
                                                                         value={line.montantInitial}
                                                                         onChange={(event) => setLine(index, 'montantInitial', event.target.value)}
@@ -2250,7 +2255,7 @@ export default function InscriptionsIndex({
                                                                         <span className="input-group-text">DH</span>
                                                                     </div>
                                                                 </td>
-                                                                <td style={{ width: 150 }}>
+                                                                <td style={{ width: 130, minWidth: 120 }}>
                                                                     <input
                                                                         type="text"
                                                                         className="form-control form-control-sm"
@@ -2258,7 +2263,7 @@ export default function InscriptionsIndex({
                                                                         onChange={(event) => setLine(index, 'note', event.target.value)}
                                                                     />
                                                                 </td>
-                                                                <td className="text-end fw-semibold" style={{ width: 110 }}>
+                                                                <td className="text-end fw-semibold text-nowrap" style={{ width: 110 }}>
                                                                     {final.toFixed(2)} DH
                                                                 </td>
                                                                 {/*
@@ -2267,10 +2272,10 @@ export default function InscriptionsIndex({
                                                                  * with the edit modal's — the same fee reads the same way
                                                                  * before and after saving.
                                                                  */}
-                                                                <td className="text-end fw-semibold text-danger" style={{ width: 110 }}>
+                                                                <td className="text-end fw-semibold text-danger text-nowrap" style={{ width: 110 }}>
                                                                     {final.toFixed(2)} DH
                                                                 </td>
-                                                                <td style={{ width: 150 }}>
+                                                                <td style={{ width: 160, minWidth: 160 }}>
                                                                     <DateField
                                                                         id={`ins-fee-date-${index}`}
                                                                         value={line.dateEcheance}
@@ -2418,7 +2423,7 @@ export default function InscriptionsIndex({
 
                                                         return (
                                                             <tr key={line.id ?? `new-${index}`}>
-                                                                <td style={{ width: 240, minWidth: 240 }}>
+                                                                <td style={{ width: 200, minWidth: 180 }}>
                                                                     {canManageFees ? (
                                                                         <input
                                                                             type="text"
@@ -2430,12 +2435,12 @@ export default function InscriptionsIndex({
                                                                         <span className="fw-medium">{line.nom}</span>
                                                                     )}
                                                                 </td>
-                                                                <td style={{ width: 110 }}>
+                                                                <td style={{ width: 110, minWidth: 110 }}>
                                                                     <input
                                                                         type="number"
                                                                         step="0.01"
                                                                         min="0"
-                                                                        disabled={!canManageFees}
+                                                                        disabled={!canManageFees || !canUpdateFeeAmount}
                                                                         className={`form-control form-control-sm${montantError ? ' is-invalid' : ''}`}
                                                                         value={line.montantInitial}
                                                                         onChange={(event) => setEditingLine(index, 'montantInitial', event.target.value)}
@@ -2476,7 +2481,7 @@ export default function InscriptionsIndex({
                                                                         <span className="input-group-text">DH</span>
                                                                     </div>
                                                                 </td>
-                                                                <td style={{ width: 150 }}>
+                                                                <td style={{ width: 130, minWidth: 120 }}>
                                                                     <input
                                                                         type="text"
                                                                         disabled={!canManageFees}
@@ -2489,20 +2494,20 @@ export default function InscriptionsIndex({
                                                                     l'argent déjà reçu : le serveur refusera, autant
                                                                     le voir pendant la frappe. */}
                                                                 <td
-                                                                    className={`text-end fw-semibold${sousLePaye ? ' text-danger' : ''}`}
+                                                                    className={`text-end fw-semibold text-nowrap${sousLePaye ? ' text-danger' : ''}`}
                                                                     style={{ width: 110 }}
                                                                     title={sousLePaye ? remiseBloqueeTitre : undefined}
                                                                 >
                                                                     {final.toFixed(2)} DH
                                                                 </td>
                                                                 <td
-                                                                    className={`text-end fw-semibold${reste > 0 ? ' text-danger' : ' text-success'}`}
+                                                                    className={`text-end fw-semibold text-nowrap${reste > 0 ? ' text-danger' : ' text-success'}`}
                                                                     style={{ width: 110 }}
                                                                     title={`Payé : ${paye.toFixed(2)} DH`}
                                                                 >
                                                                     {reste.toFixed(2)} DH
                                                                 </td>
-                                                                <td style={{ width: 150 }}>
+                                                                <td style={{ width: 160, minWidth: 160 }}>
                                                                     <DateField
                                                                         id={`ins-edit-fee-date-${index}`}
                                                                         value={line.dateEcheance}
@@ -2511,7 +2516,7 @@ export default function InscriptionsIndex({
                                                                         panelAlign="right"
                                                                     />
                                                                 </td>
-                                                                <td style={{ width: 110 }}>
+                                                                <td className="text-nowrap" style={{ width: 110, minWidth: 110 }}>
                                                                     {line.statut && (
                                                                         <span
                                                                             className={`badge badge-soft-${line.statut === 'Payé' ? 'success' : line.statut === 'Payé partiellement' ? 'warning' : 'secondary'}`}

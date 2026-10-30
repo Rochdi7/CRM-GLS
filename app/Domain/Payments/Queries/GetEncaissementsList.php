@@ -193,7 +193,11 @@ final class GetEncaissementsList
             // défaut les ferait disparaître de l'écran où on les cherche.
             ->when($view === 'avance' && $soldeFilter === 'expire', fn ($q) => $q
                 ->whereRaw(self::AVANCE_RESTANT_SQL.' > 0')
-                ->whereRaw(ValiditeAvance::SQL_EXPIRE_LE.' <= current_date'))
+                // La date du jour vient de l'APPLICATION, comme dans
+                // ValiditeAvance::estExpiree() : `current_date` de PostgreSQL
+                // suit le fuseau du serveur de base, et la liste pouvait
+                // badger « valable » une ligne que ce filtre classait expirée.
+                ->whereRaw(ValiditeAvance::SQL_EXPIRE_LE.' <= ?', [now()->toDateString()]))
             // Default "Encaissements" tab = money RECEIVED: every original
             // row, whether allocated to a fee or still an avance (the Frais
             // column then reads « Avance » so a cashier sees at a glance that

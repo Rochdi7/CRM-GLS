@@ -95,7 +95,7 @@ final class InscriptionPaiementPromptTest extends TestCase
 
     public function test_creating_a_registration_flashes_it_for_the_payment_prompt(): void
     {
-        $this->actingAs($this->userWith('registrations.view', 'registrations.create', 'payments.create'));
+        $this->actingAs($this->userWith('registrations.view', 'registrations.create', 'payments.create', 'registrations.update-fee-amount'));
         $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
         $group = $this->groupWithFees();
 
@@ -122,7 +122,7 @@ final class InscriptionPaiementPromptTest extends TestCase
 
     public function test_the_flash_reaches_the_list_page_once_and_never_again(): void
     {
-        $this->actingAs($this->userWith('registrations.view', 'registrations.create', 'payments.create'));
+        $this->actingAs($this->userWith('registrations.view', 'registrations.create', 'payments.create', 'registrations.update-fee-amount'));
         $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
         $group = $this->groupWithFees();
 
@@ -158,7 +158,7 @@ final class InscriptionPaiementPromptTest extends TestCase
         // lands on encaissements.store (and is refused without payments.create)
         // is what ties the two pages together — the money rules themselves are
         // asserted in the Finance suite.
-        $this->actingAs($this->userWith('registrations.view', 'registrations.create'));
+        $this->actingAs($this->userWith('registrations.view', 'registrations.create', 'registrations.update-fee-amount'));
         $student = Student::factory()->create(['etablissement_id' => $this->centre->id]);
         $group = $this->groupWithFees();
 
