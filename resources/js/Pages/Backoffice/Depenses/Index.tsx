@@ -2259,19 +2259,9 @@ export default function DepensesIndex({
                             <span className="fw-medium">{editingRemboursement.caisse ?? '-'}</span>
                         </div>
                     ) : refundApprovalEnabled ? (
-                        /* Demande : RIEN n'est débité maintenant. On dit qui
-                           décide et d'où l'argent sortira, au lieu de laisser
-                           croire qu'une caisse bouge à l'enregistrement. */
-                        <div className="alert alert-info mb-3">
-                            Cette demande doit être approuvée par un directeur du centre ou un
-                            super-administrateur. Aucun montant ne sort de la caisse avant l&apos;approbation ;
-                            l&apos;argent sortira alors en espèces de votre caisse
-                            {remboursementCaisseParDefaut !== null ? ` (${remboursementCaisseParDefaut.nom})` : ''}, sauf
-                            si le super-administrateur choisit TPE ou virement (compte du centre).
-                            {remboursementForm.errors.caisse_id && (
-                                <div className="text-danger mt-1">{remboursementForm.errors.caisse_id}</div>
-                            )}
-                        </div>
+                        remboursementForm.errors.caisse_id ? (
+                            <div className="text-danger mb-3">{remboursementForm.errors.caisse_id}</div>
+                        ) : null
                     ) : canChooseRemboursementCaisse ? (
                         <div className="row">
                             <div className="col-md-8">
